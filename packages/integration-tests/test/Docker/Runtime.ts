@@ -134,6 +134,52 @@ export const authenticatedRegistry = Effect.fn(function* () {
   return { host, credentials, hasManifest };
 });
 
+/**
+ * Run an anonymous `registry:2` on a free localhost port for the current
+ * scope, so plain `docker pull` (no credentials) can fetch what was pushed.
+ */
+export const localRegistry = Effect.fn(function* () {
+  const docker = yield* Docker;
+  const client = yield* HttpClient.HttpClient;
+  const port = yield* findAvailablePort();
+  const host = `localhost:${port}`;
+  const name = `alchemy-test-registry-${port}`;
+  yield* Effect.addFinalizer(() => docker.run(["rm", "-f", name]).pipe(Effect.ignore));
+  yield* docker.run(["run", "-d", "--name", name, "-p", `${port}:5000`, "registry:2"]);
+  yield* client
+    .get(`http://${host}/v2/`)
+    .pipe(Effect.retry({ schedule: Schedule.exponential("250 millis"), times: 7 }));
+
+  const credentials = {
+    server: host,
+    username: "alchemy",
+    password: Redacted.make("ignored-by-insecure-registry"),
+  };
+
+  /** The published manifest digest of `repository:tag`, read over the registry API. */
+  const manifestDigest = (repository: string, tag: string) =>
+    client
+      .execute(
+        HttpClientRequest.head(`http://${host}/v2/${repository}/manifests/${tag}`).pipe(
+          HttpClientRequest.setHeader(
+            "accept",
+            [
+              "application/vnd.oci.image.index.v1+json",
+              "application/vnd.oci.image.manifest.v1+json",
+              "application/vnd.docker.distribution.manifest.list.v2+json",
+              "application/vnd.docker.distribution.manifest.v2+json",
+            ].join(", "),
+          ),
+        ),
+      )
+      .pipe(
+        Effect.flatMap(HttpClientResponse.filterStatusOk),
+        Effect.map((response) => response.headers["docker-content-digest"]),
+      );
+
+  return { host, credentials, manifestDigest };
+});
+
 const buildxAsset = (version: string) =>
   Effect.sync(() => {
     const os = process.platform === "win32" ? "windows" : process.platform;

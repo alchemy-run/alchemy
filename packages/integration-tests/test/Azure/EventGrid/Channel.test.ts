@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as eventgrid from "@distilled.cloud/azure/eventgrid";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { logLevel, partnerChain, subscription, tags, waitGone } from "./partner.ts";
 

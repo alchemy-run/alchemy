@@ -1,7 +1,7 @@
 import * as files from "@distilled.cloud/azure/storage-file";
 import * as Layer from "effect/Layer";
-import { makeFileShareOperationBinding } from "./FileShareHttp.ts";
 import { BreakShareLease } from "./BreakShareLease.ts";
+import { makeFileShareOperationBinding } from "./FileShareHttp.ts";
 
 /**
  * Implementation of {@link BreakShareLease} over the distilled `storage-file`

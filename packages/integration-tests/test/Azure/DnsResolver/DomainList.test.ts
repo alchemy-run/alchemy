@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as dnsresolver from "@distilled.cloud/azure/dnsresolver";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import { subscription, untilGone } from "./network.ts";
@@ -64,10 +64,7 @@ test.provider(
       expect(updated.list.domainListName).toEqual(list.domainListName);
       const reobserved = yield* getList(rg, list.domainListName);
       const domains = [...(reobserved.properties?.domains ?? [])].sort();
-      expect(domains).toEqual([
-        "contoso.com.",
-        "fabrikam.net.",
-      ]);
+      expect(domains).toEqual(["contoso.com.", "fabrikam.net."]);
       expect(reobserved.tags?.env).toEqual("prod");
 
       // Replacement: an explicit name.

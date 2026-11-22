@@ -344,7 +344,12 @@ const desiredProperties = (news: AfdCustomDomainProps) => {
       cipherSuiteSetType: tls.cipherSuiteSetType,
       secret: ref(tls.secretId),
     },
-    mtlsSettings: news.mtlsScenario === undefined ? undefined : { scenario: news.mtlsScenario },
+    mtlsSettings:
+      news.mtlsScenario === undefined
+        ? undefined
+        : // The `...Validated` and `...ValidatedIfPresented` arms require
+          // `secrets`, which these props do not take: only the scenario is sent.
+          ({ scenario: news.mtlsScenario } as cdn.AFDDomainMtlsParameters),
     azureDnsZone: ref(news.azureDnsZoneId),
     preValidatedCustomDomainResourceId: ref(news.preValidatedCustomDomainResourceId),
   };

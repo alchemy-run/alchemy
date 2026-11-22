@@ -1,11 +1,13 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as netapp from "@distilled.cloud/gcp/netapp_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
+import { entitled, missingTag } from "./entitlement.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -45,15 +47,18 @@ test.provider(
           name: `projects/${project}/locations/us-central1/volumes/alchemy-netapp-missing/replications/alchemy-repl-missing`,
         }),
       );
-      expect(error._tag).toEqual("NotFound");
+      expect(error._tag).toEqual(missingTag);
 
-      const page = yield* netapp.listProjectsLocationsVolumesReplications({
-        parent: `projects/${project}/locations/us-central1/volumes/-`,
-        pageSize: 10,
-      });
-      expect((page.replications ?? []).map((item) => item.name)).not.toContain(
-        `projects/${project}/locations/us-central1/volumes/alchemy-netapp-missing/replications/alchemy-repl-missing`,
-      );
+      // Listing is refused too until NetApp accepts the billing account.
+      if (entitled) {
+        const page = yield* netapp.listProjectsLocationsVolumesReplications({
+          parent: `projects/${project}/locations/us-central1/volumes/-`,
+          pageSize: 10,
+        });
+        expect((page.replications ?? []).map((item) => item.name)).not.toContain(
+          `projects/${project}/locations/us-central1/volumes/alchemy-netapp-missing/replications/alchemy-repl-missing`,
+        );
+      }
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -104,6 +109,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { sourcePool, destPool, volume, replication };
         }),
+      );
+      yield* expectFound(
+        GCP.NetApp.VolumesReplication.lookup({
+          replicationId: created.replication.replicationId,
+          location: created.replication.location,
+          volume: created.replication.volume,
+        }),
+        created.replication,
       );
 
       expect(created.replication.name).toContain("/replications/");

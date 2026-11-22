@@ -1,9 +1,9 @@
 import * as Azure from "@alchemy.run/azure";
 import { ensureRegistered } from "@alchemy.run/azure/Arm";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as dataprotection from "@distilled.cloud/azure/dataprotection";
 import * as backup from "@distilled.cloud/azure/recoveryservicesbackup";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import {
   createVault,

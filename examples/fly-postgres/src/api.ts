@@ -23,10 +23,6 @@ export default class Api extends Fly.Service<Api>()(
     region: "iad",
     port: API_PORT,
     guest: { cpuKind: "shared", cpus: 1, memoryMb: 256 },
-    // `pg` is CommonJS — bundling it breaks `Client` under Rolldown's
-    // interop. Install it into the image so `@effect/sql-pg` /
-    // `Drizzle.Postgres` load it with Node's CJS semantics.
-    build: { install: ["pg"] },
   },
   Effect.gen(function* () {
     const conn = yield* Fly.ConnectPostgres(Db);

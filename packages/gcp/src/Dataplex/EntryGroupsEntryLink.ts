@@ -214,13 +214,13 @@ const toAttrs = (link: dataplex.GoogleCloudDataplexV1EntryLink, project: string)
 
 const getByName = (name: string) =>
   retryQuota(dataplex.getProjectsLocationsEntryGroupsEntryLinks({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const getGroup = (name: string) =>
   dataplex
     .getProjectsLocationsEntryGroups({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const lookupLinks = (locationParent: string, entry: string, project: string) =>
   collectPages(
@@ -361,13 +361,11 @@ export const EntryGroupsEntryLinkProvider = () =>
       if (current === undefined) {
         const created = yield* dataplex
           .createProjectsLocationsEntryGroupsEntryLinks({
+            entryLinkType,
+            entryReferences,
+            aspects: news.aspects,
             parent: resolved.parent,
             entryLinkId,
-            body: {
-              entryLinkType,
-              entryReferences,
-              aspects: news.aspects,
-            },
           })
           .pipe(
             retryQuota,
@@ -380,7 +378,7 @@ export const EntryGroupsEntryLinkProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataplexNotResolved({ name });
+        return yield* new DataplexNotResolved({ resourceName: name });
       }
 
       const aspectsChanged =
@@ -389,11 +387,8 @@ export const EntryGroupsEntryLinkProvider = () =>
       if (aspectsChanged) {
         current = yield* retryQuota(
           dataplex.patchProjectsLocationsEntryGroupsEntryLinks({
+            aspects: news.aspects,
             name: current.name ?? name,
-            body: {
-              name: current.name ?? name,
-              aspects: news.aspects,
-            },
           }),
         );
       }

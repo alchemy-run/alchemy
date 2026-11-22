@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudhealth from "@distilled.cloud/azure/cloudhealth";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { gone, logLevel, modelProgram, modelWhere, tags } from "./util.ts";
 
@@ -13,6 +13,9 @@ const getRule = (rg: string, model: string, discoveryRuleName: string) =>
   );
 
 const QUERY = "resources | where type =~ 'microsoft.cloudhealth/healthmodels' | project id";
+
+const graphQueryOf = (spec: cloudhealth.DiscoveryRuleSpecification | undefined) =>
+  typeof spec === "object" && spec.kind === "ResourceGraphQuery" ? spec : undefined;
 
 const program = (props: {
   name: string;
@@ -57,8 +60,8 @@ test.provider(
       const observed = yield* getRule(rg, hm, "rule-a");
       expect(observed.properties?.displayName).toEqual("v1");
       expect(observed.properties?.authenticationSetting).toEqual(auth.authenticationSettingName);
-      expect(observed.properties?.specification.kind).toEqual("ResourceGraphQuery");
-      expect(observed.properties?.specification.resourceGraphQuery).toEqual(QUERY);
+      expect(graphQueryOf(observed.properties?.specification)?.kind).toEqual("ResourceGraphQuery");
+      expect(graphQueryOf(observed.properties?.specification)?.resourceGraphQuery).toEqual(QUERY);
       expect(observed.properties?.discoverRelationships).toEqual("Disabled");
       expect(observed.properties?.addRecommendedSignals).toEqual("Disabled");
 
@@ -70,7 +73,7 @@ test.provider(
       const reobserved = yield* getRule(rg, hm, "rule-a");
       expect(reobserved.properties?.displayName).toEqual("v2");
       expect(reobserved.properties?.addRecommendedSignals).toEqual("Enabled");
-      expect(reobserved.properties?.specification.resourceGraphQuery).toEqual(QUERY);
+      expect(graphQueryOf(reobserved.properties?.specification)?.resourceGraphQuery).toEqual(QUERY);
 
       // Replacement: the name is the identity.
       const replaced = yield* stack.deploy(

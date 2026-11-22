@@ -194,7 +194,7 @@ export class CustomersConfigurationNotResolved extends Data.TaggedError(
   "GCP.AndroidDeviceProvisioning.CustomersConfigurationNotResolved",
 )<{
   parent: string;
-  name: string;
+  resourceName: string;
 }> {}
 
 const lookupName = (
@@ -312,12 +312,12 @@ export const CustomersConfigurationProvider = () =>
       if (current === undefined) {
         const created = yield* androiddeviceprovisioning
           .createCustomersConfigurations({
-            parent,
-            body: desiredBody({
+            ...desiredBody({
               news,
               configurationName,
               dpcResourcePath,
             }),
+            parent,
           })
           .pipe(
             Effect.catchTag("Conflict", () => findConfigurationByName(configurationName, parent)),
@@ -328,7 +328,7 @@ export const CustomersConfigurationProvider = () =>
       if (current === undefined) {
         return yield* new CustomersConfigurationNotResolved({
           parent,
-          name: name || configurationName,
+          resourceName: name || configurationName,
         });
       }
 
@@ -369,9 +369,9 @@ export const CustomersConfigurationProvider = () =>
 
       if (updateMask.length > 0 && currentName.length > 0) {
         current = yield* androiddeviceprovisioning.patchCustomersConfigurations({
+          ...desired,
           name: currentName,
           updateMask,
-          body: desired,
         });
       }
 

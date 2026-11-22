@@ -20,6 +20,12 @@
     { "path": "../docker/tsconfig.json" },
     { "path": "../kubernetes/tsconfig.json" },
     {
+      "path": "../../submodules/distilled/packages/aws/tsconfig.json"
+    },
+    {
+      "path": "../../submodules/distilled/packages/aws4signer/tsconfig.json"
+    },
+    {
       "path": "../../submodules/distilled/packages/core/tsconfig.json"
     },
     {

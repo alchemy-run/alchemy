@@ -1,11 +1,13 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as netapp from "@distilled.cloud/gcp/netapp_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
+import { entitled, missingTag } from "./entitlement.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -35,14 +37,14 @@ test.provider(
           name: `projects/${project}/locations/us-central1/backupPolicies/alchemy-netapp-missing`,
         }),
       );
-      expect(error._tag).toEqual("NotFound");
+      expect(error._tag).toEqual(missingTag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:netapp", "live"], timeout: 90_000 },
 );
 
-test.provider(
+test.provider.skipIf(!entitled)(
   "create, update, and delete a backup policy",
   (stack) =>
     Effect.gen(function* () {
@@ -59,6 +61,13 @@ test.provider(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetApp.BackupPolicy.lookup({
+          backupPolicyId: created.backupPolicyId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/backupPolicies/");

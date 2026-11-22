@@ -13,7 +13,7 @@ import {
 } from "../Workers/Worker.ts";
 
 export interface ViteProps<Bindings extends WorkerBindingProps = {}>
-  extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets">, ViteOptions {
+  extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets" | "rules">, ViteOptions {
   /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
@@ -136,9 +136,9 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  *   },
  * });
  * ```
- * {@link Foldkit | Cloudflare.Website.Foldkit} drives the same build and
- * derives asset routing from Foldkit's completed build metadata. It also
- * supplies SPA fallback for client-only apps.
+ * {@link Foldkit | Cloudflare.Website.Foldkit} derives asset routing from
+ * the app's rendering mode instead, including SPA fallback for client-only
+ * apps in dev and on deploy.
  *
  * **Example:** Octane SPA
  * A client-only [OctaneJS](https://octanejs.dev) app (no `octane.config.ts`
@@ -176,6 +176,28 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * ```typescript
  * const docs = yield* Cloudflare.Website.Vite("Docs", {
  *   routes: [{ pattern: "example.com/docs*", zoneName: "example.com" }],
+ * });
+ * ```
+ *
+ * ### Proxying to a Local Backend in Dev
+ * Under `alchemy dev`, Vite's `server.proxy` runs in front of the Worker.
+ * Paths it matches go to its target, WebSockets included with
+ * `ws: true`, and every other path goes to the Worker. HTTP paths in
+ * `assets.runWorkerFirst` reach the Worker before the proxy, as they do
+ * with `@cloudflare/vite-plugin`. `server.proxy` only applies in dev; the
+ * deployed Worker serves every path.
+ *
+ * **Example:** vite.config.ts
+ * ```typescript
+ * import { defineConfig } from "vite";
+ *
+ * export default defineConfig({
+ *   server: {
+ *     proxy: {
+ *       "/api": "http://localhost:3000",
+ *       "/socket": { target: "http://localhost:3000", ws: true },
+ *     },
+ *   },
  * });
  * ```
  *
@@ -274,7 +296,7 @@ export const Vite: {
         id,
         Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
           ...props,
-          main: undefined!,
+          main: null,
           vite: {
             main: props?.main,
             rootDir: props?.rootDir,

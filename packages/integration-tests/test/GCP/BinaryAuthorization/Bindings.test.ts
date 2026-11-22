@@ -1,11 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as binaryauthorization from "@distilled.cloud/gcp/binaryauthorization_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import { currentProject, TEST_ATTESTATION, TEST_POD, TEST_RESOURCE_URI } from "./common.ts";
 import BinaryAuthorizationBindingsHost, {
   GkePolicy,
@@ -28,8 +28,8 @@ const projectGrantsOf = (account: string) =>
   Effect.gen(function* () {
     const project = yield* currentProject;
     const policy = yield* resourcemanager.getIamPolicyProjects({
+      options: { requestedPolicyVersion: 3 },
       resource: `projects/${project}`,
-      body: { options: { requestedPolicyVersion: 3 } },
     });
     return (policy.bindings ?? [])
       .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${account}`))
@@ -64,7 +64,7 @@ const attestorRolesOf = (attestor: string, account: string) =>
       ),
     );
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "BinaryAuthorization Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:binaryauthorization", "provider:gcp:run", "live"],
@@ -139,12 +139,10 @@ describe.skipIf(!dockerAvailable)(
             expect(result.result).toEqual("ATTESTATION_NOT_VERIFIABLE");
             const expected =
               yield* binaryauthorization.validateAttestationOccurrenceProjectsAttestors({
+                occurrenceResourceUri: TEST_RESOURCE_URI,
+                occurrenceNote: verifier.noteReference,
+                attestation: TEST_ATTESTATION,
                 attestor: verifier.name,
-                body: {
-                  occurrenceResourceUri: TEST_RESOURCE_URI,
-                  occurrenceNote: verifier.noteReference,
-                  attestation: TEST_ATTESTATION,
-                },
               });
             expect(result.result).toEqual(expected.result);
 
@@ -190,8 +188,8 @@ describe.skipIf(!dockerAvailable)(
           Effect.gen(function* () {
             const live = yield* expectProbe<{ verdict?: string }>(baseUrl, "evaluateGkePolicy");
             const expected = yield* binaryauthorization.evaluateProjectsPlatformsGkePolicies({
+              resource: TEST_POD,
               name: policyName,
-              body: { resource: TEST_POD },
             });
             expect(live.verdict).toEqual(expected.verdict);
             expect(live.verdict).toEqual(expect.any(String));

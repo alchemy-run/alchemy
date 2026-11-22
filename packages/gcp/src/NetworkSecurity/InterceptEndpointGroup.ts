@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -107,8 +108,34 @@ export type InterceptEndpointGroup = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InterceptEndpointGroupLookup
 >;
+
+/**
+ * Props for {@link InterceptEndpointGroup.lookup}: find an intercept
+ * endpoint group this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface InterceptEndpointGroupLookup {
+  /**
+   * Endpoint group id (the `{interceptEndpointGroup}` segment of
+   * `projects/{
+   * project}/locations/{location}/interceptEndpointGroups/{interceptEndpoint
+   * Group}`).
+   */
+  interceptEndpointGroupId: string;
+  /**
+   * Location of the group. Endpoint groups are global — always `"global"`.
+   * `GLOBAL` is accepted and normalized to `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Security Integration intercept endpoint group — the consumer
@@ -147,6 +174,19 @@ export type InterceptEndpointGroup = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing intercept endpoint group
+ * `InterceptEndpointGroup.lookup` references an intercept endpoint group
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared intercept endpoint group.
+ *
+ * **Example:** Reference an existing intercept endpoint group
+ * ```typescript
+ * const interceptEndpointGroup = GCP.NetworkSecurity.InterceptEndpointGroup.lookup({
+ *   interceptEndpointGroupId: "my-intercept-endpoint-group",
+ * });
+ * ```
+ *
  * @resource
  * @category NetworkSecurity
  */
@@ -157,20 +197,20 @@ export const InterceptEndpointGroup = Resource<InterceptEndpointGroup>(
 export class InterceptEndpointGroupNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.InterceptEndpointGroupNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InterceptEndpointGroupFailed extends Data.TaggedError(
   "GCP.NetworkSecurity.InterceptEndpointGroupFailed",
 )<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class InterceptEndpointGroupStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.InterceptEndpointGroupStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const isPendingState = (state: string | undefined) =>
@@ -221,21 +261,21 @@ const toAttrs = (group: networksecurity.InterceptEndpointGroup, project: string)
 const getByName = (name: string) =>
   networksecurity
     .getProjectsLocationsInterceptEndpointGroups({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (group): group is networksecurity.InterceptEndpointGroup => group !== undefined,
-      () => new InterceptEndpointGroupNotResolved({ name }),
+      () => new InterceptEndpointGroupNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (group) => group.state !== "DELETE_FAILED",
-      (group) => new InterceptEndpointGroupFailed({ name, state: group.state }),
+      (group) => new InterceptEndpointGroupFailed({ resourceName: name, state: group.state }),
     ),
     Effect.filterOrFail(
       (group) => !isPendingState(group.state),
-      () => new InterceptEndpointGroupNotResolved({ name }),
+      () => new InterceptEndpointGroupNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.InterceptEndpointGroupNotResolved",
@@ -249,7 +289,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((group) =>
       group === undefined
         ? Effect.void
-        : Effect.fail(new InterceptEndpointGroupStillExists({ name })),
+        : Effect.fail(new InterceptEndpointGroupStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.InterceptEndpointGroupStillExists",
@@ -304,6 +344,15 @@ export const InterceptEndpointGroupProvider = () =>
       return { action: "replace" as const };
     }),
 
+    lookup: Effect.fn(function* ({ interceptEndpointGroupId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, COLLECTION, interceptEndpointGroupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const interceptEndpointGroupId = yield* toId(
@@ -348,13 +397,11 @@ export const InterceptEndpointGroupProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsInterceptEndpointGroups({
+            interceptDeploymentGroup,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             interceptEndpointGroupId,
-            body: {
-              interceptDeploymentGroup,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -362,7 +409,7 @@ export const InterceptEndpointGroupProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -371,7 +418,7 @@ export const InterceptEndpointGroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new InterceptEndpointGroupNotResolved({ name });
+        return yield* new InterceptEndpointGroupNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -385,13 +432,10 @@ export const InterceptEndpointGroupProvider = () =>
           descriptionChanged ? "description" : undefined,
         ].filter((field): field is string => field !== undefined);
         const operation = yield* networksecurity.patchProjectsLocationsInterceptEndpointGroups({
+          labels: desiredLabels,
+          description: news.description,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);
@@ -411,7 +455,7 @@ export const InterceptEndpointGroupProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

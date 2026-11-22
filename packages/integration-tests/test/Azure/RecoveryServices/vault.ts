@@ -1,8 +1,8 @@
 import * as Azure from "@alchemy.run/azure";
 import { ensureRegistered, stackAndStage } from "@alchemy.run/azure/Arm";
+import { expect } from "@alchemy.run/test";
 import type { AzureOpError } from "@distilled.cloud/azure";
 import * as recoveryservices from "@distilled.cloud/azure/recoveryservices";
-import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";

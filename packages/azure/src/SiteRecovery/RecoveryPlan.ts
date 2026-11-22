@@ -276,14 +276,18 @@ const groupsKey = (
     ]),
   );
 
-/** ASR always keeps the Shutdown and Failover groups; compare user-visible ones. */
-const withImplicitGroups = (groups: readonly RecoveryPlanGroup[]) => {
+/**
+ * ASR always keeps the Shutdown and Failover groups; compare user-visible ones.
+ * Each action's `customDetails.instanceType` is only known at runtime and
+ * decides its arm, so the groups are asserted rather than narrowed.
+ */
+const withImplicitGroups = (groups: readonly RecoveryPlanGroup[]): asr.RecoveryPlanGroup[] => {
   const hasShutdown = groups.some((g) => g.groupType === "Shutdown");
   const hasFailover = groups.some((g) => g.groupType === "Failover");
   return [
     ...(hasShutdown ? [] : [{ groupType: "Shutdown" as const }]),
     ...(hasFailover ? [] : [{ groupType: "Failover" as const }]),
-    ...groups,
+    ...(groups as readonly asr.RecoveryPlanGroup[]),
   ];
 };
 

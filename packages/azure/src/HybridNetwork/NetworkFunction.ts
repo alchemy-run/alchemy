@@ -221,6 +221,11 @@ const hashSecret = (value: string | Redacted.Redacted<string>) =>
 const typeOf = (props: { secretDeploymentValues?: unknown }): "Open" | "Secret" =>
   props.secretDeploymentValues !== undefined ? "Secret" : "Open";
 
+/** The observed deployment values of an `Open` function (secret values are write-only). */
+const openDeploymentValuesOf = (
+  properties: hybridnetwork.NetworkFunctionPropertiesFormat | undefined,
+) => (properties?.configurationType === "Open" ? properties.deploymentValues : undefined);
+
 const toAttrs = (
   resourceGroup: string,
   name: string,
@@ -238,7 +243,7 @@ const toAttrs = (
     nfviType: fn.properties?.nfviType,
     nfviId: fn.properties?.nfviId,
     configurationType,
-    deploymentValues: configurationType === "Open" ? fn.properties?.deploymentValues : undefined,
+    deploymentValues: openDeploymentValuesOf(fn.properties),
     secretValueHash: configurationType === "Secret" ? secretValueHash : undefined,
     principalId: fn.identity?.principalId,
     tags: userTags(fn.tags),
@@ -333,7 +338,10 @@ export const NetworkFunctionProvider = () =>
       const deploymentDiffers = (observed: hybridnetwork.GetNetworkFunctionResponse) =>
         (configurationType === "Secret"
           ? output?.secretValueHash !== secretValueHash
-          : !sameJson(observed.properties?.deploymentValues, news.deploymentValues ?? "{}")) ||
+          : !sameJson(
+              openDeploymentValuesOf(observed.properties),
+              news.deploymentValues ?? "{}",
+            )) ||
         (news.allowSoftwareUpdate !== undefined &&
           observed.properties?.allowSoftwareUpdate !== news.allowSoftwareUpdate) ||
         (news.roleOverrideValues !== undefined &&

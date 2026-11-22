@@ -1,17 +1,8 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials } from "@distilled.cloud/stripe";
-import {
-  deferUntilFirstUse,
-  orDieCredentialsUnavailable,
-  resolveProviderConfig,
-} from "alchemy/Auth/Resolve";
-import * as Effect from "effect/Effect";
+import { lazyCredentials } from "alchemy/Auth/Resolve";
 import * as Layer from "effect/Layer";
-import {
-  STRIPE_AUTH_PROVIDER_NAME,
-  type StripeAuthConfig,
-  type StripeResolvedCredentials,
-} from "./AuthProvider.ts";
+import { STRIPE_AUTH_PROVIDER_NAME, type StripeResolvedCredentials } from "./AuthProvider.ts";
 
 export {
   Credentials,
@@ -34,30 +25,11 @@ export {
 export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
-    Effect.gen(function* () {
-      // Defer profile lookup and credential resolution until first use, so
-      // building the provider layers never requires a configured profile.
-      const resolve = yield* resolveProviderConfig<StripeAuthConfig, StripeResolvedCredentials>(
-        STRIPE_AUTH_PROVIDER_NAME,
-      ).pipe(
-        Effect.flatMap(({ profileName, resolve }) =>
-          resolve.pipe(
-            Effect.map((creds) => ({
-              apiKey: creds.apiKey,
-              apiBaseUrl: creds.apiBaseUrl,
-            })),
-            Effect.mapError((e) =>
-              ConfigError.make({
-                message: `Failed to resolve Stripe credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-              }),
-            ),
-          ),
-        ),
-        deferUntilFirstUse,
-      );
-      return yield* resolve.pipe(
-        orDieCredentialsUnavailable(STRIPE_AUTH_PROVIDER_NAME),
-        Effect.cached,
-      );
-    }),
+    lazyCredentials<StripeResolvedCredentials, ConfigError>()(
+      STRIPE_AUTH_PROVIDER_NAME,
+      (creds) => ({
+        apiKey: creds.apiKey,
+        apiBaseUrl: creds.apiBaseUrl,
+      }),
+    ),
   );

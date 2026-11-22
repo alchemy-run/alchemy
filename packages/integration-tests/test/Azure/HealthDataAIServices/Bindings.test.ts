@@ -1,12 +1,12 @@
 import * as Azure from "@alchemy.run/azure";
-import { Credentials, type Config } from "@distilled.cloud/azure";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import { armScopeFor, ARM_SCOPE, Credentials, type Config } from "@distilled.cloud/azure";
 import * as authorization from "@distilled.cloud/azure/authorization";
 import * as deid from "@distilled.cloud/azure/healthdataaiservices-data";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -51,10 +51,10 @@ describe("De-identification request encoding", { tags: ["provider:azure"] }, () 
       const credentials = Layer.succeed(
         Credentials,
         Effect.succeed<Config>({
-          bearerToken: Redacted.make("arm-token"),
           subscriptionId: "00000000-0000-0000-0000-000000000001",
           apiBaseUrl: "https://management.azure.com",
-          tokenFor: (scope: string) => Effect.succeed(Redacted.make(`aad:${scope}`)),
+          token: (scope: string) =>
+            Effect.succeed(Redacted.make(scope === ARM_SCOPE ? "arm-token" : `aad:${scope}`)),
         }),
       );
       const result = yield* operation.pipe(
@@ -92,7 +92,7 @@ const DEID_BATCH_DATA_READER = "b73a14ee-91f5-41b7-bd81-920e12466be9";
 /** Object ID (`oid` claim) of the identity running the tests. */
 const callerObjectId = Effect.gen(function* () {
   const config = yield* yield* Credentials;
-  const token = Redacted.value(config.bearerToken);
+  const token = Redacted.value(yield* config.token(armScopeFor(config.apiBaseUrl)));
   return yield* Effect.sync(
     () =>
       JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"))

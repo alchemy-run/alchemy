@@ -89,6 +89,7 @@ export const stackConfigLayer = (
           // gets a pinned view of the final result.
           const profile =
             overrides.profile ??
+            // oxlint-disable-next-line effecttsgo/process-env-in-effect -- ALCHEMY_PROFILE must come from the real shell while the ConfigProvider is being built
             (yield* Effect.sync(() => process.env.ALCHEMY_PROFILE || undefined));
           const pinned = ConfigProvider.fromEnv({
             env: profile === undefined ? {} : { ALCHEMY_PROFILE: profile },

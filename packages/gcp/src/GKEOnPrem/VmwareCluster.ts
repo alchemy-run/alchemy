@@ -349,7 +349,7 @@ const toAttrs = (item: gkeonprem.VmwareCluster, project: string, region: string)
 const getByName = (name: string) =>
   gkeonprem
     .getProjectsLocationsVmwareClusters({ name, view: "FULL" })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
@@ -471,11 +471,11 @@ export const VmwareClusterProvider = () =>
       if (current === undefined) {
         const created = yield* gkeonprem
           .createProjectsLocationsVmwareClusters({
+            ...body,
             parent: parentOf(env.project, location),
             vmwareClusterId,
-            body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -483,7 +483,7 @@ export const VmwareClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const mask = fieldMask([
@@ -517,19 +517,17 @@ export const VmwareClusterProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* gkeonprem.patchProjectsLocationsVmwareClusters({
+          ...body,
+          etag: current.etag,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            ...body,
-            etag: current.etag,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
       return toAttrs(current, env.project, env.region);
     }),
@@ -548,7 +546,7 @@ export const VmwareClusterProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -1,5 +1,5 @@
 import * as aiops from "@distilled.cloud/aws/aiops";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -224,7 +224,7 @@ export const InvestigationGroupProvider = () =>
       const observeByArn = (arn: string) =>
         aiops
           .getInvestigationGroup({ identifier: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // At most one investigation group exists per Region, so scanning the
       // list for our name is a single cheap call.
@@ -284,7 +284,7 @@ export const InvestigationGroupProvider = () =>
             }
             return groups;
           }),
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const name = output?.name ?? (yield* createName(id, olds ?? {}));
           const live = yield* observe(name, output?.arn);
           if (live?.arn === undefined || live.name === undefined) {
@@ -292,7 +292,9 @@ export const InvestigationGroupProvider = () =>
           }
           const attrs = toAttributes(live);
           const tags = yield* observedTags(live.arn);
-          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tags))
+            ? attrs
+            : unownedUnlessPrevious(attrs, previous, "name");
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -413,7 +415,7 @@ export const InvestigationGroupProvider = () =>
               .getInvestigationGroupPolicy({ identifier: arn })
               .pipe(
                 Effect.map((r) => r.policy),
-                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
               );
             if (news.policy.length === 0) {
               if (observedPolicy !== undefined) {

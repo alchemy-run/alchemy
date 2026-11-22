@@ -50,8 +50,14 @@ export interface UploadFileRangeFromUrl extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UploadFileRangeFromUrlRequest,
-    ) => Effect.Effect<files.UploadFileRangeFromURLResponse, files.UploadFileRangeFromURLError, RuntimeContext>
+    ) => Effect.Effect<
+      files.UploadFileRangeFromURLResponse,
+      files.UploadFileRangeFromURLError,
+      RuntimeContext
+    >
   >
 > {}
 
-export const UploadFileRangeFromUrl = Binding.Service<UploadFileRangeFromUrl>("Azure.Storage.UploadFileRangeFromUrl");
+export const UploadFileRangeFromUrl = Binding.Service<UploadFileRangeFromUrl>(
+  "Azure.Storage.UploadFileRangeFromUrl",
+);

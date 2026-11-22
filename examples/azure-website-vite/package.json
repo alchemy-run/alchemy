@@ -21,9 +21,9 @@
   "dependencies": {
     "@alchemy.run/azure": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@distilled.cloud/azure": "workspace:*",
     "alchemy": "workspace:*",
-    "alchemy-test": "workspace:*",
     "effect": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"

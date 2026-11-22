@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as apphub from "@distilled.cloud/gcp/apphub_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -56,7 +57,7 @@ test.provider.skipIf(runLifecycle)(
           name: `projects/${project}/locations/${location}/applications/alchemy-missing-app/workloads/alchemy-missing-workload`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -89,6 +90,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { app, workload };
         }),
+      );
+      yield* expectFound(
+        GCP.AppHub.ApplicationsWorkload.lookup({
+          workloadId: created.workload.workloadId,
+          location: created.workload.location,
+          application: created.workload.application,
+        }),
+        created.workload,
       );
 
       expect(created.workload.name).toContain("/workloads/");

@@ -128,10 +128,10 @@ const toAttrs = (schema: documentai.GoogleCloudDocumentaiV1NextSchema, project: 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : documentai
         .getProjectsLocationsSchemas({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findOwned = (id: string, project: string, parent: string, hinted?: string) =>
   Effect.gen(function* () {
@@ -200,13 +200,7 @@ export const SchemaProvider = () =>
 
       if (current === undefined) {
         current = yield* retryTransient(
-          documentai.createProjectsLocationsSchemas({
-            parent,
-            body: {
-              displayName,
-              labels: desiredLabels,
-            },
-          }),
+          documentai.createProjectsLocationsSchemas({ displayName, labels: desiredLabels, parent }),
         ).pipe(
           Effect.catchTag("Conflict", (error) =>
             findOwned(id, env.project, parent, hinted).pipe(
@@ -220,7 +214,7 @@ export const SchemaProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: hinted || `${parent}/schemas`,
+          resourceName: hinted || `${parent}/schemas`,
         });
       }
 
@@ -233,15 +227,13 @@ export const SchemaProvider = () =>
       if (labelsChanged || displayChanged) {
         current = yield* retryTransient(
           documentai.patchProjectsLocationsSchemas({
+            displayName,
+            labels: desiredLabels,
             name: currentName,
             updateMask: updateMaskOf(
               displayChanged ? "displayName" : undefined,
               labelsChanged ? "labels" : undefined,
             ),
-            body: {
-              displayName,
-              labels: desiredLabels,
-            },
           }),
         );
       }
@@ -256,7 +248,7 @@ export const SchemaProvider = () =>
           name: output.name,
           force: true,
         }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.
         yield* waitForOperation(operation).pipe(

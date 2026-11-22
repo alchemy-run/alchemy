@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as botservice from "@distilled.cloud/azure/botservice";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -38,15 +38,10 @@ const channelGone = (
     }),
   );
 
-interface SiteView {
-  siteName?: string;
-  isEnabled?: boolean;
-  isV3Enabled?: boolean;
-}
-
-const sitesOf = (channel: { properties?: { properties?: unknown } }) =>
-  ((channel.properties?.properties as { sites?: SiteView[] } | undefined)?.sites ??
-    []) as SiteView[];
+const sitesOf = (channel: botservice.GetChannelResponse) =>
+  channel.properties?.channelName === "DirectLineChannel"
+    ? (channel.properties.properties?.sites ?? [])
+    : [];
 
 const program = (directLine?: { isEnabled: boolean }) =>
   Effect.gen(function* () {

@@ -102,15 +102,16 @@ Subsequent runs detect the existing Worker and use it.
 
 In CI (`CI=true`) a missing store fails the run instead: a deploy there
 should find its store provisioned, not create one as a side effect.
-Provision it once ahead of time:
+Provision it once ahead of time. Without `--backend`, the command
+provisions the store your `alchemy.run.ts` configures:
 
 ```sh
-alchemy state bootstrap --backend cloudflare --profile <your-ci-profile>
+alchemy state bootstrap --profile <your-ci-profile>
 ```
 
-`AWS.state()` behaves the same way: it creates its S3 bucket on first
-use, except in CI, where `alchemy state bootstrap --backend aws`
-provisions it.
+`AWS.state()` behaves the same way: it creates its DynamoDB table on
+first use, except in CI, where `alchemy state bootstrap --backend aws`
+provisions it. See [AWS state store](#aws-state-store).
 
 `GCP.state()` does the same with a Cloud Storage bucket in your project,
 `alchemy-state-<project>`. In CI, provision it with
@@ -128,24 +129,122 @@ needs to be persisted to disk.
 ### More than one store per account
 
 By default the state-store Worker is named `alchemy-state-store`. Pass
-`name` for a separate store, for example one per team. It gets its own
-Worker, its own secrets in the Secrets Store, and its own cached
-credentials:
+`workerName` for a separate store, for example one per team. It gets its own
+Worker, its own secrets in the Secrets Store, and its own cached credentials:
 
 ```typescript
-state: Cloudflare.state({ name: "team-a" }), // Worker alchemy-state-store-team-a
+state: Cloudflare.state({ workerName: "team-a-state" }),
 ```
 
-Address it from the CLI with `--name`:
+Address it from the CLI with `--name`, which takes the Worker name:
 
 ```sh
-alchemy state list --backend cloudflare --name team-a
+alchemy state list --backend cloudflare --name team-a-state
 ```
 
-`AWS.state({ name })` does the same with a separate S3 bucket
-(`alchemy-state-<name>-<account>-<region>-an`). Pass `bucketName` to
-choose the full bucket name yourself. `GCP.state({ name })` uses
-`alchemy-state-<name>-<project>`.
+`AWS.state({ name })` does the same with a separate DynamoDB table,
+`alchemy-state-<name>`; pass `tableName` to choose the full table name
+yourself. `GCP.state({ name })` uses `alchemy-state-<name>-<project>`.
+
+### Pin the account
+
+The store lives in the Cloudflare account your profile resolves. If your
+credentials reach several accounts, pin it, so logging in to a different one
+fails instead of reading or deploying the store there:
+
+```typescript
+state: Cloudflare.state({ accountId: "c8eeff0e..." }),
+```
+
+### Serve it on your own domain
+
+The store answers on its `workers.dev` URL. Some networks can't reach
+`workers.dev`, so give it a hostname in one of your zones instead. Alchemy
+attaches it to the store's Worker as a custom domain and uses it from then on:
+
+```typescript
+state: Cloudflare.state({ domain: "alchemy-state.example.com" }),
+```
+
+Commands that don't load the stack file take the same hostname as
+`--domain`, so they reach the store where deploys do:
+
+```sh
+alchemy state list --backend cloudflare --domain alchemy-state.example.com
+```
+
+## AWS state store
+
+`AWS.state()` keeps state in one on-demand DynamoDB table per account and region, `alchemy-state`. A deploy loads a stage's records with one query instead of reading an object per resource.
+
+```typescript
+Alchemy.Stack(
+  "MyApp",
+  {
+    providers: AWS.providers(),
+    state: AWS.state(),
+  },
+  Effect.gen(function* () {
+    // ...
+  }),
+);
+```
+
+A DynamoDB item holds at most 400 KB. A record larger than `overflowThreshold` (300 KiB by default) is written to an S3 overflow bucket, `alchemy-state-overflow-<account>-<region>-an`, and its item keeps the object's key.
+
+The store creates its table, with deletion protection, and the overflow bucket on first use, except in CI. Provision them ahead of time with:
+
+```sh
+alchemy state bootstrap --backend aws --profile <your-ci-profile>
+```
+
+`AWS.state({ name: "team-a" })` uses a separate table, `alchemy-state-team-a`.
+
+The credentials that deploy need DynamoDB access to the table, S3 access to the overflow bucket, and `kms:GenerateDataKey`, `kms:Decrypt` and `kms:DescribeKey` on the store's key. The first deploy of a stage also lists the old S3 store's bucket, to check the stage isn't still there; `migrateFrom: false` skips that.
+
+### Encryption
+
+The store has its own KMS key, `alias/alchemy-state` (`alias/alchemy-state-<name>` for a named store), created with the table. The table and the overflow bucket are encrypted at rest with it, and every secret in state is [encrypted](#encrypting-secrets) with it before it leaves your machine. Provide `AWS.stateEncryption()` to use a key of your own for both:
+
+```typescript
+state: AWS.state().pipe(Layer.provide(AWS.stateEncryption({ kmsKeyId: "alias/my-state-key" }))),
+```
+
+Any other `StateEncryption` layer works too; it encrypts the secrets, and the store's own key still encrypts the table and buckets. A table an earlier version created with `kmsKeyId` keeps that key: the store seals with it and creates no key of its own.
+
+A store created before encryption moves over on its own. The first deploy or plan outside CI creates the key, switches the table and bucket to it, and encrypts the secrets of each stage it loads. DynamoDB re-encrypts the table in the background without downtime. In CI the store only does this with `--yes`, so run `alchemy state bootstrap --backend aws` once, or deploy from your machine first.
+
+Once a stage's secrets are encrypted, versions of alchemy from before encryption fail to read the stage instead of reading the ciphertext as the secret, and write nothing to it. A stage the new version hasn't deployed yet still works with the old one, so upgrade every machine and CI job that deploys a stage before you deploy it with the new version. Copies of old plaintext stay in DynamoDB's point-in-time backups for up to 35 days, and in the overflow bucket's old object versions.
+
+To go back to an older version, deploy every stage with encryption turned off first, so each decrypts its secrets:
+
+```typescript
+state: AWS.state().pipe(Layer.provide(AWS.stateEncryption({ disable: true }))),
+```
+
+### Migrating from the S3 store
+
+Earlier versions kept AWS state in an S3 bucket, `alchemy-state-<account>-<region>-an`. A stage still there fails to deploy until you move it. Run this in the project, so it migrates the store your entrypoint configures:
+
+```sh
+alchemy state migrate --profile <your-profile>
+```
+
+The command moves every stage, or the ones `--stack` and `--stage` select. It closes each moved stage's S3 objects in the bucket policy, so every older alchemy, say in a CI job you haven't upgraded, fails at its first read instead of deploying from the old copy. The S3 objects stay where they are. A stage you create in DynamoDB afterwards is locked in S3 too, so a teammate still on the S3 store can't create it a second time.
+
+A stage another deploy is running is skipped and reported. Run the command again once that deploy finishes; it picks up where it stopped, including after a crash.
+
+To go back to an older alchemy, move the stages back first:
+
+```sh
+alchemy state migrate --rollback
+```
+
+Roll back with the version you migrated with, before downgrading. State written by a newer version may use fields an older one can't read. The migration encrypts secrets as it copies them into DynamoDB, and the rollback decrypts them as it copies them back, since older versions can't.
+
+### Keeping state in S3
+
+`AWS.state({ backend: "s3" })` keeps using the S3 bucket. So does any config that passes `bucketName`, `prefix` or `encryption`, which only the S3 store takes. Bootstrap it with `--backend aws-s3`. The S3 store encrypts the same way, with SSE-KMS and the same key, shared by the S3 and DynamoDB stores of one name so stages stay readable when they move between them. An `encryption` that names a customer-managed key seals secrets with that key instead.
 
 ## Postgres state store
 
@@ -167,7 +266,9 @@ Alchemy.Stack(
 );
 ```
 
-It is imported from `@alchemy.run/sql/PostgresState` rather than the `State` barrel because it depends on the optional `pg` driver, which must stay out of bundled worker code. Install `pg` and `@effect/sql-pg` to use it.
+It is imported from `@alchemy.run/sql/PostgresState` rather than the `State` barrel because it depends on the optional `@effect/sql-pg` driver, which must stay out of bundled worker code. Install `@effect/sql-pg` to use it.
+
+The store records its format in an `alchemy_state_store` table and keeps records in a `data` column. The first run of a version with [secret encryption](#encrypting-secrets) renames the `value` column earlier versions used. Those versions then fail to query the store, so they can't deploy from state they would misread; upgrade every machine and CI job that uses the database together.
 
 ## State and lifecycle
 
@@ -187,13 +288,78 @@ because state is persisted before the cloud operation completes. If
 the process crashes mid-operation, Alchemy uses the intermediate
 state to recover on the next deploy.
 
+## Encrypting secrets
+
+A record can hold secrets: a minted API token, a `Random` value, any `Redacted` output. Provide a `StateEncryption` layer to a state store and it encrypts each secret before writing, so the store only ever holds ciphertext. Everything else in a record stays readable, so plans and `alchemy state` still show it:
+
+```json
+alchemy:sealed:1:aws-kms:AQIDAHh…
+{"status":"created","attr":{"name":"db","password":{"__sealed__":"m9Yq…"}}}
+```
+
+`AWS.stateEncryption()` encrypts with AWS KMS. A deploy asks KMS for one data key per stage and encrypts each secret under it with AES-256-GCM. The layer works with any store, so a cloud without a KMS can borrow one. Here Cloudflare keeps the state and AWS holds the key:
+
+```typescript
+Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Cloudflare.providers(),
+    state: Cloudflare.state().pipe(Layer.provide(AWS.stateEncryption())),
+  },
+  Effect.gen(function* () {
+    // ...
+  }),
+);
+```
+
+The AWS state store encrypts this way with its own key already. Local state does too once you provide a layer:
+
+```typescript
+state: localState().pipe(Layer.provide(AWS.stateEncryption({ kmsKeyId: "alias/dev-state" }))),
+```
+
+Reading a stage's secrets takes `kms:Decrypt` on the key, and writing them takes `kms:GenerateDataKey`. Each data key is bound to its stack and stage, so a role's IAM policy can grant decrypt for one stage only:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["kms:Decrypt", "kms:GenerateDataKey"],
+  "Resource": "arn:aws:kms:us-east-1:123456789012:key/<state-key-id>",
+  "Condition": { "StringEquals": { "kms:EncryptionContext:alchemy:stage": "staging" } }
+}
+```
+
+Encryption happens in the client, so every store supports it, including Postgres, and none of them ever sees a plaintext secret. A record names the layer that encrypted it, and a store refuses a record another layer encrypted. Records written before you added a layer still read, and are encrypted as each stage loads.
+
+To turn encryption off, keep the layer and set `disable`, since decrypting needs the key. Deploy every stage once, so each decrypts its secrets as it loads, then remove the layer:
+
+```typescript
+state: Cloudflare.state().pipe(Layer.provide(AWS.stateEncryption({ disable: true }))),
+```
+
+A stage that still holds encrypted secrets fails to load without the layer, and says how to fix it. The AWS stores encrypt by default, so keep `disable` on them to store secrets in plaintext.
+
+Every store records the format of what it holds, and a version of alchemy refuses a store in a newer format than it knows. Versions from before the format record are kept out of an encrypted store too: text records aren't valid JSON to them, the Cloudflare store reports a newer version, and Postgres renames the column they read.
+
+Without a key service, `passphraseEncryption()` encrypts with a passphrase. It reads `ALCHEMY_STATE_PASSPHRASE` and wraps each stage's data key with a key derived from it by scrypt:
+
+```typescript
+import { passphraseEncryption } from "alchemy/State/PassphraseEncryption";
+
+state: Cloudflare.state().pipe(Layer.provide(passphraseEncryption())),
+```
+
+Whoever has the passphrase can read every secret, and losing it loses them. A key service like AWS KMS is the safer choice: nobody holds the key, access is an IAM grant that can be scoped to one stage, and every decrypt is logged.
+
+To encrypt with another key service, implement `StateEncryption` from `alchemy/State/StateEncryption`: an `id`, `generate` for a stage's data key, and `unwrap` to recover it.
+
 ## In-memory state (testing)
 
 For tests, Alchemy provides an in-memory state store so tests don't
 touch the filesystem:
 
 ```typescript
-import * as TestState from "alchemy/Test/TestState";
+import * as TestState from "@alchemy.run/test/TestState";
 
 // Seed with existing resource state
 const state = TestState.state({
@@ -203,8 +369,55 @@ const state = TestState.state({
 });
 ```
 
-The test harness (`alchemy/Test/Bun` and `alchemy/Test/Vitest`)
+The test harness (`@alchemy.run/test/Bun` and `@alchemy.run/test/Vitest`)
 handles state setup automatically.
+
+## Use a store without a stack file
+
+A provider's store is reachable from your profile alone, so scripts, CI jobs
+and one-off tools can read and manage state with no `alchemy.run.ts`. From the
+CLI, pass `--backend` to any `state` command:
+
+```sh
+alchemy state bootstrap --backend cloudflare --profile prod   # create or upgrade it
+alchemy state list --backend cloudflare --profile prod
+alchemy state logs --backend cloudflare --name team-a --tail
+```
+
+From code, use the `provider` source of [`Alchemist.State`](/cli/api#state):
+
+```typescript
+import * as Alchemist from "alchemy/Alchemist";
+import * as Effect from "effect/Effect";
+
+const source = { type: "provider", backend: "cloudflare", profile: "prod" } as const;
+
+const program = Effect.gen(function* () {
+  yield* Alchemist.State.bootstrap(source);
+  const state = yield* Alchemist.State.store(source);
+  return yield* state.listStacks();
+}).pipe(Effect.provide(Alchemist.layer()), Effect.scoped);
+```
+
+`Alchemist.State.layer(source)` provides the same store as a `State` layer.
+The backend is the provider's name: `cloudflare`, `aws` or `gcp`. Next to
+it go the store's options, for what the profile can't tell it, the same ones
+the CLI takes as flags: `name` for a [named store](#more-than-one-store-per-account),
+and `domain` for a Cloudflare store on a
+[custom domain](#serve-it-on-your-own-domain):
+
+```typescript
+const source = {
+  type: "provider",
+  backend: "cloudflare",
+  name: "team-a-state",
+  domain: "alchemy-state.example.com",
+} as const;
+```
+
+Options set in the stack file aren't read, such as a
+[pinned account](#pin-the-account); use the `configured` source (the CLI
+default, without `--backend`) when they matter.
 
 ## Writing your own state store
 

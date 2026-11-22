@@ -1,13 +1,13 @@
 import * as NodePath from "node:path";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
-import * as Semaphore from "effect/Semaphore";
 import type * as ViteModule from "vite";
 import type { Config as WakuConfig } from "waku/config";
-import type * as WakuInternals from "waku/internals";
 import type * as WakuVitePlugins from "waku/vite-plugins";
 import * as FrameworkCore from "../core/index.ts";
 import type {
@@ -19,9 +19,8 @@ import type {
   DeployTargetServices,
 } from "../core/index.ts";
 
-type WakuInternalsModule = typeof WakuInternals;
 type WakuVitePluginsModule = typeof WakuVitePlugins;
-type ResolvedWakuConfig = ReturnType<WakuInternalsModule["unstable_resolveConfig"]>;
+type ResolvedWakuConfig = ReturnType<WakuVitePluginsModule["unstable_resolveConfig"]>;
 
 /**
  * Waku's rsc-environment worker entry, relative to the installed `waku`
@@ -398,45 +397,6 @@ export const makeWakuConfigInput = (inputs: WakuConfigInputs): WakuConfig => {
  */
 const INITIAL_NODE_ENV = process.env.NODE_ENV;
 
-/**
- * Serializes cwd swaps across concurrent builds in one process (the same
- * discipline as the source provider's dev-server startup lock).
- */
-const cwdLock = Semaphore.makeUnsafe(1);
-
-/**
- * Run `effect` with `process.cwd()` set to the project root, restoring the
- * previous cwd afterwards. Waku's toolchain assumes cwd == root: the
- * html-shell plugin declares a cwd-relative `index.html` client input (a
- * root outside the cwd makes `vite:build-html` emit an invalid
- * `../index.html` asset name) and reads the html shell with bare relative
- * paths. A no-op when the cwd already is the root.
- */
-const withRootCwd = <A, E, R>(
-  root: string,
-  effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
-  Effect.flatMap(
-    Effect.sync(() => process.cwd() === NodePath.resolve(root)),
-    (isRoot) =>
-      isRoot
-        ? effect
-        : Semaphore.withPermits(
-            cwdLock,
-            1,
-          )(
-            Effect.acquireUseRelease(
-              Effect.sync(() => {
-                const previous = process.cwd();
-                process.chdir(root);
-                return previous;
-              }),
-              () => effect,
-              (previous) => Effect.sync(() => process.chdir(previous)),
-            ),
-          ),
-  );
-
 const PREVIEW_SERVER_GLOBAL = "__WAKU_START_PREVIEW_SERVER__";
 
 /** The shape waku's `unstable_startPreviewServer` expects the global to produce. */
@@ -497,7 +457,6 @@ const clearPreviewServerGlobal = (): void => {
 
 interface ProjectModules {
   readonly vite: typeof ViteModule;
-  readonly internals: WakuInternalsModule;
   readonly vitePlugins: WakuVitePluginsModule;
   readonly wakuDirectory: string;
 }
@@ -578,13 +537,10 @@ export const make = (
     ) => Effect.Effect<ProjectModules, FrameworkCore.FrameworkError> = Effect.fn(function* (
       root: string,
     ) {
-      const [vite, internals, vitePlugins, wakuDirectory] = yield* Effect.all(
+      const [vite, vitePlugins, wakuDirectory] = yield* Effect.all(
         [
           FrameworkCore.loadProjectModule<typeof ViteModule>(root, "vite").pipe(
             Effect.mapError(fail("Failed to load the project's vite")),
-          ),
-          FrameworkCore.loadProjectModule<WakuInternalsModule>(root, "waku/internals").pipe(
-            Effect.mapError(fail("Failed to load the project's waku/internals")),
           ),
           FrameworkCore.loadProjectModule<WakuVitePluginsModule>(root, "waku/vite-plugins").pipe(
             Effect.mapError(fail("Failed to load the project's waku/vite-plugins")),
@@ -595,7 +551,7 @@ export const make = (
         ],
         { concurrency: "unbounded" },
       );
-      return { vite, internals, vitePlugins, wakuDirectory };
+      return { vite, vitePlugins, wakuDirectory };
     });
 
     /**
@@ -672,7 +628,7 @@ export const make = (
             "deploy target to the integration instead.",
         )(undefined);
       }
-      return project.internals.unstable_resolveConfig(
+      return project.vitePlugins.unstable_resolveConfig(
         makeWakuConfigInput({
           adapterPath: inputs.adapterPath,
           // The server-entry resolver goes first so
@@ -715,6 +671,7 @@ export const make = (
         // waku's CLI sets this before loading anything; waku's
         // environmentsPlugin bakes `process.env.NODE_ENV` into `define`.
         yield* Effect.sync(() => {
+          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- sets NODE_ENV for waku, not config reading
           process.env.NODE_ENV = INITIAL_NODE_ENV ?? "production";
         });
         const wakuConfig = yield* makeConfig(project, root, hooks);
@@ -735,11 +692,10 @@ export const make = (
               ? FrameworkCore.selectEntryByFacade(userEntry)
               : (chunk) => chunk.name === WAKU_SERVER_ENTRY_MODULE,
         }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
-        // The whole build runs under the project root cwd: waku's
-        // html-shell plugin declares a cwd-relative `index.html` client
-        // input and reads the shell with bare relative paths (see
-        // withRootCwd).
-        yield* withRootCwd(
+        // Waku resolves its html shell and relative inputs from the cwd,
+        // which the build child sets to the project root.
+        yield* FrameworkCore.inProjectCwd(
+          "waku",
           root,
           Effect.tryPromise({
             try: async () => {
@@ -774,6 +730,9 @@ export const make = (
             },
             catch: fail("Failed to build"),
           }),
+        ).pipe(
+          Effect.provideService(FileSystem.FileSystem, fs),
+          Effect.provideService(Path.Path, path),
         );
         // Disk re-read: waku writes `__waku_build_metadata.js` and prunes
         // static-only server chunks during `buildApp` hooks, after the
@@ -800,6 +759,7 @@ export const make = (
           phase: "dev",
         });
         yield* Effect.sync(() => {
+          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- sets NODE_ENV for waku, not config reading
           process.env.NODE_ENV = INITIAL_NODE_ENV ?? "development";
         });
         const wakuConfig = yield* makeConfig(project, root, hooks);
@@ -810,11 +770,11 @@ export const make = (
         const explicitPort = devOptions?.port || options?.port;
         const port = yield* FrameworkCore.resolveViteDevPort(project.vite.version, explicitPort);
         const host = devOptions?.host;
-        // The dev server *starts* under the project root cwd (waku
-        // resolves its html shell and relative inputs from the cwd at
-        // startup); the cwd is restored once the server is listening.
+        // Waku resolves its html shell and relative inputs from the cwd,
+        // which the dev child sets to the project root.
         const server = yield* Effect.acquireRelease(
-          withRootCwd(
+          FrameworkCore.inProjectCwd(
+            "waku",
             root,
             Effect.tryPromise({
               try: async () => {
@@ -832,6 +792,9 @@ export const make = (
               },
               catch: fail("Failed to start the waku dev server"),
             }),
+          ).pipe(
+            Effect.provideService(FileSystem.FileSystem, fs),
+            Effect.provideService(Path.Path, path),
           ),
           (server) => Effect.promise(async () => await server.close()),
         );
@@ -845,46 +808,18 @@ export const make = (
         const url = resolved.replace(/\/+$/, "");
         // Bounded readiness probe: any HTTP response counts (waku's
         // first RSC compile is lazy; we only need the listener to answer).
-        yield* Effect.tryPromise({
-          try: async () => {
-            const response = await fetch(`${url}/`, { redirect: "manual" });
-            await response.arrayBuffer().catch(() => {});
-          },
-          catch: fail("The waku dev server did not become reachable"),
-        }).pipe(Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }));
+        yield* HttpClient.get(`${url}/`).pipe(
+          Effect.flatMap((response) => Effect.ignore(response.arrayBuffer)),
+          Effect.provide(FetchHttpClient.layer),
+          Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+          Effect.mapError(fail("The waku dev server did not become reachable")),
+          Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }),
+        );
         return { url };
       }),
     });
 
-    // Waku's toolchain assumes `cwd === root` at dev startup (the html shell
-    // and relative inputs resolve from the cwd), so its startup window
-    // chdirs — which must not happen in a process hosting other sites' dev
-    // servers (the alchemy dev sidecar). Run the dev server in a dedicated
-    // child whose cwd IS the root instead (see core/DevChild.ts). Inside
-    // that child — or when the options cannot cross the process boundary
-    // (e.g. a deploy-target VALUE from the e2e harness) — the in-process
-    // path runs directly.
-    const dev: FrameworkCore.Framework["Service"]["dev"] = (devOptions) => {
-      if (FrameworkCore.isInsideDevChild() || !FrameworkCore.isJsonSerializable(options)) {
-        return inProcess.dev(devOptions);
-      }
-      const root = devOptions?.root ?? options?.root ?? process.cwd();
-      const port = devOptions?.port ?? options?.port;
-      return FrameworkCore.runDevChild({
-        framework: "waku",
-        module: "@alchemy.run/frontend-frameworks/waku",
-        callerUrl: import.meta.url,
-        rootDir: root,
-        makeOptions: { ...options, root },
-        devOptions: {
-          root,
-          ...(port !== undefined ? { port } : {}),
-          ...(devOptions?.host !== undefined ? { host: devOptions.host } : {}),
-        },
-      });
-    };
-
-    return FrameworkCore.Framework.of({ build: inProcess.build, dev });
+    return inProcess;
   });
 
 /**

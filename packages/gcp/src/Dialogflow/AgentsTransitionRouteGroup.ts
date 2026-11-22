@@ -160,7 +160,7 @@ export const AgentsTransitionRouteGroup = Resource<AgentsTransitionRouteGroup>(
 export class AgentsTransitionRouteGroupNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsTransitionRouteGroupNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (agent: string, transitionRouteGroupId: string) =>
@@ -211,10 +211,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsTransitionRouteGroups({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   dialogflow.listProjectsLocationsAgentsTransitionRouteGroups.pages({ parent, pageSize: 100 }).pipe(
@@ -232,7 +232,7 @@ const findByDisplayName = (parent: string, displayName: string) =>
     Stream.filter((group) => group.displayName === displayName),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const AgentsTransitionRouteGroupProvider = () =>
@@ -327,16 +327,16 @@ export const AgentsTransitionRouteGroupProvider = () =>
       if (current === undefined) {
         const created = yield* dialogflow
           .createProjectsLocationsAgentsTransitionRouteGroups({
+            ...body,
             parent: agent,
             languageCode: news.languageCode,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => findByDisplayName(agent, displayName)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new AgentsTransitionRouteGroupNotResolved({ name });
+        return yield* new AgentsTransitionRouteGroupNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -346,13 +346,13 @@ export const AgentsTransitionRouteGroupProvider = () =>
 
       if (displayChanged || routesChanged) {
         current = yield* dialogflow.patchProjectsLocationsAgentsTransitionRouteGroups({
+          ...body,
           name: currentName,
           languageCode: news.languageCode,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
             routesChanged ? "transition_routes" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
       }
 

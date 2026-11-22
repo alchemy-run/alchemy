@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -212,8 +213,32 @@ export type StoragePool = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  StoragePoolLookup
 >;
+
+/**
+ * Props for {@link StoragePool.lookup}: find a storage pool this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface StoragePoolLookup {
+  /**
+   * Storage pool id (the `{storagePool}` segment of
+   * `projects/{project}/locations/{location}/storagePools/{storagePool}`).
+   */
+  storagePoolId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud NetApp Volumes storage pool — billed capacity that hosts
@@ -255,6 +280,19 @@ export type StoragePool = Resource<
  *   capacityGib: 4096,
  *   description: "app volumes v2",
  *   labels: { env: "prod", team: "storage" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing storage pool
+ * `StoragePool.lookup` references a storage pool Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * storage pool.
+ *
+ * **Example:** Reference an existing storage pool
+ * ```typescript
+ * const storagePool = GCP.NetApp.StoragePool.lookup({
+ *   storagePoolId: "my-storage-pool",
  * });
  * ```
  *
@@ -309,7 +347,7 @@ const toAttrs = (item: netapp.StoragePool, project: string, region: string) => {
 const getByName = (name: string) =>
   netapp
     .getProjectsLocationsStoragePools({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   listAtLocation(project, (parent) =>
@@ -377,6 +415,15 @@ export const StoragePoolProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ storagePoolId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, storagePoolId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const storagePoolId = yield* toPhysicalId(
@@ -431,32 +478,30 @@ export const StoragePoolProvider = () =>
       if (current === undefined) {
         const created = yield* netapp
           .createProjectsLocationsStoragePools({
+            network,
+            serviceLevel,
+            capacityGib,
+            zone: news.zone,
+            replicaZone: news.replicaZone,
+            kmsConfig,
+            activeDirectory,
+            ldapEnabled: news.ldapEnabled,
+            allowAutoTiering: news.allowAutoTiering,
+            type: news.type,
+            mode: news.mode,
+            qosType: news.qosType,
+            customPerformanceEnabled: news.customPerformanceEnabled,
+            totalThroughputMibps: gibOf(news.totalThroughputMibps),
+            totalIops: gibOf(news.totalIops),
+            hotTierSizeGib: gibOf(news.hotTierSizeGib),
+            enableHotTierAutoResize: news.enableHotTierAutoResize,
+            scaleType: news.scaleType,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             storagePoolId,
-            body: {
-              network,
-              serviceLevel,
-              capacityGib,
-              zone: news.zone,
-              replicaZone: news.replicaZone,
-              kmsConfig,
-              activeDirectory,
-              ldapEnabled: news.ldapEnabled,
-              allowAutoTiering: news.allowAutoTiering,
-              type: news.type,
-              mode: news.mode,
-              qosType: news.qosType,
-              customPerformanceEnabled: news.customPerformanceEnabled,
-              totalThroughputMibps: gibOf(news.totalThroughputMibps),
-              totalIops: gibOf(news.totalIops),
-              hotTierSizeGib: gibOf(news.hotTierSizeGib),
-              enableHotTierAutoResize: news.enableHotTierAutoResize,
-              scaleType: news.scaleType,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -464,7 +509,7 @@ export const StoragePoolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -499,22 +544,18 @@ export const StoragePoolProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* netapp.patchProjectsLocationsStoragePools({
+          labels: desiredLabels,
+          description: news.description,
+          capacityGib,
+          activeDirectory: desiredAd,
+          allowAutoTiering: news.allowAutoTiering ?? current.allowAutoTiering,
+          qosType: news.qosType ?? current.qosType,
+          totalThroughputMibps: gibOf(news.totalThroughputMibps) ?? current.totalThroughputMibps,
+          totalIops: gibOf(news.totalIops) ?? current.totalIops,
+          hotTierSizeGib: gibOf(news.hotTierSizeGib) ?? current.hotTierSizeGib,
+          enableHotTierAutoResize: news.enableHotTierAutoResize ?? current.enableHotTierAutoResize,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            capacityGib,
-            activeDirectory: desiredAd,
-            allowAutoTiering: news.allowAutoTiering ?? current.allowAutoTiering,
-            qosType: news.qosType ?? current.qosType,
-            totalThroughputMibps: gibOf(news.totalThroughputMibps) ?? current.totalThroughputMibps,
-            totalIops: gibOf(news.totalIops) ?? current.totalIops,
-            hotTierSizeGib: gibOf(news.hotTierSizeGib) ?? current.hotTierSizeGib,
-            enableHotTierAutoResize:
-              news.enableHotTierAutoResize ?? current.enableHotTierAutoResize,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
@@ -537,7 +578,7 @@ export const StoragePoolProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

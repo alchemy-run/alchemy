@@ -91,7 +91,7 @@ export const DataStoresConversation = Resource<DataStoresConversation>(
 export class DataStoresConversationNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresConversationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -115,10 +115,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsDataStoresConversations({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DataStoresConversationProvider = () =>
   Provider.succeed(DataStoresConversation, {
@@ -152,19 +152,17 @@ export const DataStoresConversationProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsDataStoresConversations({
+            userPseudoId,
+            state: news.state,
             parent,
-            body: {
-              userPseudoId,
-              state: news.state,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
         return yield* new DataStoresConversationNotResolved({
-          name: output?.name ?? `${parent}/conversations`,
+          resourceName: output?.name ?? `${parent}/conversations`,
         });
       }
 
@@ -173,6 +171,8 @@ export const DataStoresConversationProvider = () =>
 
       if (userChanged || stateChanged) {
         current = yield* discoveryengine.patchProjectsLocationsDataStoresConversations({
+          userPseudoId,
+          state: news.state,
           name: current.name ?? "",
           updateMask: [
             userChanged ? "user_pseudo_id" : undefined,
@@ -180,11 +180,6 @@ export const DataStoresConversationProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name: current.name,
-            userPseudoId,
-            state: news.state,
-          },
         });
       }
 

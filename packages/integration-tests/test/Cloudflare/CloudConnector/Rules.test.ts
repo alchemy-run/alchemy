@@ -1,11 +1,11 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudConnector from "@distilled.cloud/cloudflare/cloud-connector";
-import { describe, expect } from "alchemy-test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -179,6 +179,57 @@ describe.sequential(
           const second = yield* deployOnce;
           expect(second.rules).toHaveLength(1);
           expect(second.rules[0].id).toEqual(firstId);
+
+          yield* stack.destroy();
+
+          const liveGone = yield* listLiveRules(zoneId);
+          expect(liveGone).toHaveLength(0);
+        }).pipe(logLevel),
+      { timeout: 180_000 },
+    );
+
+    test.provider(
+      "routes to S3, GCS, Azure and OCI hosts",
+      (stack) =>
+        Effect.gen(function* () {
+          const zoneId = yield* resolveZoneId;
+
+          yield* stack.destroy();
+          yield* purgeRules(zoneId);
+
+          // cloudflare_r2 needs a live custom domain bound to an R2 bucket in
+          // this zone, so this case does not deploy one.
+          const providerRules = [
+            { provider: "aws_s3", host: HOST_A },
+            { provider: "gcp_storage", host: "storage.googleapis.com" },
+            { provider: "azure_storage", host: "alchemycc.blob.core.windows.net" },
+            {
+              provider: "oci_storage",
+              host: "alchemycc.compat.objectstorage.us-ashburn-1.oraclecloud.com",
+            },
+          ] as const;
+
+          const deployed = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.CloudConnector.Rules("Rules", {
+                zoneId,
+                rules: providerRules.map(({ provider, host }) => ({
+                  provider,
+                  host,
+                  expression: `http.request.uri.path wildcard "/alchemy-cc-${provider}/*"`,
+                })),
+              }).pipe(adopt(true));
+            }),
+          );
+
+          expect(deployed.rules.map((rule) => rule.provider)).toEqual(
+            providerRules.map((rule) => rule.provider),
+          );
+
+          const live = yield* listLiveRules(zoneId);
+          expect(live.map((rule) => [rule.provider, rule.parameters?.host])).toEqual(
+            providerRules.map((rule) => [rule.provider, rule.host]),
+          );
 
           yield* stack.destroy();
 

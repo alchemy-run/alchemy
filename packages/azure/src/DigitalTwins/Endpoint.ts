@@ -229,7 +229,6 @@ const desiredProperties = (
   const authenticationType = news.authenticationType ?? "KeyBased";
   const identityBased = authenticationType === "IdentityBased";
   const base = {
-    endpointType: news.endpointType,
     authenticationType,
     deadLetterUri: news.deadLetterUri,
     deadLetterSecret: secretValue(news.deadLetterSecret),
@@ -237,15 +236,19 @@ const desiredProperties = (
   };
   switch (news.endpointType) {
     case "EventGrid":
+      // The props leave `topicEndpoint` and `accessKey1` optional; they are
+      // sent as given.
       return {
         ...base,
+        endpointType: "EventGrid",
         TopicEndpoint: news.topicEndpoint,
         accessKey1: secretValue(news.accessKey1),
         accessKey2: secretValue(news.accessKey2),
-      };
+      } as digitaltwins.EventGridInput;
     case "EventHub":
       return {
         ...base,
+        endpointType: "EventHub",
         endpointUri: news.endpointUri,
         entityPath: news.entityPath,
         connectionStringPrimaryKey: secretValue(news.primaryConnectionString),
@@ -254,6 +257,7 @@ const desiredProperties = (
     case "ServiceBus":
       return {
         ...base,
+        endpointType: "ServiceBus",
         endpointUri: news.endpointUri,
         entityPath: news.entityPath,
         primaryConnectionString: secretValue(news.primaryConnectionString),
@@ -264,17 +268,29 @@ const desiredProperties = (
 
 const norm = (value: string | null | undefined) => (value ?? "").replace(/\/+$/, "").toLowerCase();
 
+/** The target fields of an endpoint; which apply depends on `endpointType`. */
+const targetOf = (
+  p:
+    | digitaltwins.DigitalTwinsEndpointResourceProperties
+    | digitaltwins.DigitalTwinsEndpointResourcePropertiesInput,
+) =>
+  p.endpointType === "EventGrid"
+    ? { endpointUri: undefined, entityPath: undefined, topicEndpoint: p.TopicEndpoint }
+    : { endpointUri: p.endpointUri, entityPath: p.entityPath, topicEndpoint: undefined };
+
 /** Whether the observed non-secret configuration matches the desired one. */
 const observedMatches = (
   observed: ObservedEndpoint,
   desired: digitaltwins.DigitalTwinsEndpointResourcePropertiesInput,
 ) => {
   const p = observed.properties;
+  const observedTarget = targetOf(p);
+  const desiredTarget = targetOf(desired);
   return (
     (p.authenticationType ?? "KeyBased") === desired.authenticationType &&
-    norm(p.endpointUri) === norm(desired.endpointUri) &&
-    (p.entityPath ?? "") === (desired.entityPath ?? "") &&
-    norm(p.TopicEndpoint) === norm(desired.TopicEndpoint) &&
+    norm(observedTarget.endpointUri) === norm(desiredTarget.endpointUri) &&
+    (observedTarget.entityPath ?? "") === (desiredTarget.entityPath ?? "") &&
+    norm(observedTarget.topicEndpoint) === norm(desiredTarget.topicEndpoint) &&
     norm(p.deadLetterUri) === norm(desired.deadLetterUri) &&
     sameIdentityReference(
       p.identity,

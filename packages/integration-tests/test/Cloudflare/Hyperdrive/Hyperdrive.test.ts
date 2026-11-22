@@ -2,11 +2,14 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone";
 import * as Neon from "@alchemy.run/neon";
+import { assert, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
-import { assert, expect } from "alchemy-test";
+import * as Drift from "alchemy/Drift";
+import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
+import type { State } from "alchemy/State";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -15,6 +18,7 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import { testName } from "../../names.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 import HyperdriveAccessEffectWorker from "./fixtures/access-effect-worker.ts";
 import {
@@ -39,6 +43,15 @@ import {
 } from "./fixtures/vpc-origin.ts";
 
 const { test } = Test.make({ providers: Layer.merge(Cloudflare.providers(), Neon.providers()) });
+
+/** The drift action `Drift.detect` reports for one resource of the stack. */
+const driftOf = Effect.fn(function* (
+  stack: { name: string; stage: string; state: Layer.Layer<State> },
+  logicalId: string,
+) {
+  const result = yield* Drift.detect(stack).pipe(Effect.provide(stack.state));
+  return result.resources[logicalId]?.action;
+});
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 test.provider(
@@ -66,6 +79,9 @@ test.provider(
       expect(actual.id).toEqual(hd.hyperdriveId);
       assert("host" in actual.origin, "db.origin must have a host");
       expect(actual.origin.host).toEqual(db.origin.host);
+      // Omitted caching and connection limit take Cloudflare's defaults,
+      // which are no drift.
+      expect(yield* driftOf(stack, "DefaultHyperdrive")).toBe("unchanged");
 
       yield* stack.destroy();
 
@@ -128,6 +144,139 @@ test.provider(
       "provider:neon:project",
       "live",
     ],
+  },
+);
+
+// #2986: caching and the connection limit are attributes, so `drift` sees
+// them change outside Alchemy.
+test.provider(
+  "drift detects caching and connection-limit changes made outside alchemy",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const hd = yield* stack.deploy(
+        Effect.gen(function* () {
+          const project = yield* Neon.Project("DriftProject");
+          return yield* Cloudflare.Hyperdrive.Connection("DriftHyperdrive", {
+            // Without `port`: Cloudflare fills in 5432, which is no drift.
+            origin: project.origin.pipe(Output.map(({ port: _, ...origin }) => origin)),
+            caching: { disabled: true },
+            originConnectionLimit: 15,
+          });
+        }),
+      );
+      expect(hd.caching).toEqual({ disabled: true });
+      expect(hd.originConnectionLimit).toEqual(15);
+
+      const detectDrift = () => Drift.detect(stack).pipe(Effect.provide(stack.state));
+      const unchanged = yield* detectDrift();
+      expect(unchanged.resources.DriftHyperdrive?.action).toBe("unchanged");
+
+      yield* hyperdrive.patchConfig({
+        accountId,
+        hyperdriveId: hd.hyperdriveId,
+        caching: { disabled: false },
+        originConnectionLimit: 10,
+      });
+      const changed = yield* detectDrift();
+      expect(changed.resources.DriftHyperdrive?.action).toBe("drifted");
+      expect(changed.resources.DriftHyperdrive?.attr.caching).toEqual({
+        disabled: false,
+        maxAge: 60,
+        staleWhileRevalidate: 15,
+      });
+      expect(changed.resources.DriftHyperdrive?.attr.originConnectionLimit).toEqual(10);
+
+      // A change to enabled caching's settings is drift too.
+      yield* hyperdrive.patchConfig({
+        accountId,
+        hyperdriveId: hd.hyperdriveId,
+        caching: { disabled: false, maxAge: 120 },
+      });
+      const maxAge = yield* detectDrift();
+      expect(maxAge.resources.DriftHyperdrive?.attr.caching).toEqual({
+        disabled: false,
+        maxAge: 120,
+        staleWhileRevalidate: 15,
+      });
+
+      yield* stack.destroy();
+
+      yield* waitForConfigToBeDeleted(hd.hyperdriveId, accountId);
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:neon",
+      "provider:neon:project",
+      "live",
+    ],
+  },
+);
+
+// #1807: every `updateConfig` opens a new origin pool, so a redeploy that
+// plans an update without changing the config must not call it.
+test.provider(
+  "an update with an unchanged config leaves the live config untouched",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      // Updating the project leaves its `origin` unresolved at plan time,
+      // so Hyperdrive is planned as an update without any change of its own.
+      const program = (historyRetentionSeconds: number, originConnectionLimit: number) =>
+        Effect.gen(function* () {
+          const project = yield* Neon.Project("NoopProject", { historyRetentionSeconds });
+          return yield* Cloudflare.Hyperdrive.Connection("NoopHyperdrive", {
+            origin: project.origin,
+            originConnectionLimit,
+          });
+        });
+
+      const hd = yield* stack.deploy(program(21600, 5));
+      const before = yield* hyperdrive.getConfig({ accountId, hyperdriveId: hd.hyperdriveId });
+
+      const plan = yield* stack.plan(program(3600, 5));
+      expect(plan.resources.NoopHyperdrive!.action).toEqual("update");
+      yield* stack.deploy(program(3600, 5));
+
+      const unchanged = yield* hyperdrive.getConfig({ accountId, hyperdriveId: hd.hyperdriveId });
+      expect(unchanged.modifiedOn).toEqual(before.modifiedOn);
+
+      // Drift on a readable field is still corrected.
+      yield* hyperdrive.patchConfig({
+        accountId,
+        hyperdriveId: hd.hyperdriveId,
+        originConnectionLimit: 7,
+      });
+      yield* stack.deploy(program(21600, 5));
+      const corrected = yield* hyperdrive.getConfig({ accountId, hyperdriveId: hd.hyperdriveId });
+      expect(corrected.originConnectionLimit).toEqual(5);
+
+      // A real change is applied.
+      yield* stack.deploy(program(21600, 6));
+      const changed = yield* hyperdrive.getConfig({ accountId, hyperdriveId: hd.hyperdriveId });
+      expect(changed.originConnectionLimit).toEqual(6);
+
+      yield* stack.destroy();
+
+      yield* waitForConfigToBeDeleted(hd.hyperdriveId, accountId);
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:neon",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 240_000,
   },
 );
 
@@ -217,6 +366,17 @@ test.provider(
         hyperdriveId: pinned.hd.hyperdriveId,
       });
       expect(before.mtls?.caCertificateId).toEqual(pinned.ca.mtlsCertificateId);
+      expect(yield* driftOf(stack, "PinnedHyperdrive")).toBe("unchanged");
+
+      // An mTLS change made outside Alchemy is drift.
+      yield* hyperdrive.patchConfig({
+        accountId,
+        hyperdriveId: pinned.hd.hyperdriveId,
+        mtls: { caCertificateId: pinned.ca.mtlsCertificateId, sslmode: "verify-full" },
+      });
+      const sslmode = yield* Drift.detect(stack).pipe(Effect.provide(stack.state));
+      expect(sslmode.resources.PinnedHyperdrive?.action).toBe("drifted");
+      expect(sslmode.resources.PinnedHyperdrive?.attr.mtls.sslmode).toEqual("verify-full");
 
       // Keep the CA deployed so the replacement doesn't also remove a
       // dependency in the same step.
@@ -240,6 +400,7 @@ test.provider(
       const after = yield* hyperdrive.getConfig({ accountId, hyperdriveId: unpinned.hyperdriveId });
       expect(after.mtls?.caCertificateId ?? undefined).toBeUndefined();
       expect(after.mtls?.sslmode).toEqual("require");
+      expect(yield* driftOf(stack, "PinnedHyperdrive")).toBe("unchanged");
       yield* waitForConfigToBeDeleted(pinned.hd.hyperdriveId, accountId);
 
       yield* stack.destroy();
@@ -293,7 +454,7 @@ test.provider(
 );
 
 // ── Existing configuration (#1343) ─────────────────────────────────────────
-// `Hyperdrive.lookup` binds a configuration the stack does not own: deploys
+// `Hyperdrive.Connection.lookup` binds a configuration the stack does not own: deploys
 // only read it and destroy leaves it untouched.
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
@@ -337,7 +498,11 @@ test.provider(
 
       const deployed = yield* Effect.scoped(
         Effect.gen(function* () {
-          const created = yield* outOfBandConfig(accountId, lookupConfigName("live"), origin);
+          const created = yield* outOfBandConfig(
+            accountId,
+            lookupConfigName("live", stack.stage),
+            origin,
+          );
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
@@ -348,7 +513,7 @@ test.provider(
               const asyncWorker = yield* Cloudflare.Worker("HyperdriveLookupAsyncWorker", {
                 main: pathe.resolve(import.meta.dirname, "fixtures/async-worker.ts"),
                 env: {
-                  HD: Cloudflare.Hyperdrive.lookup("HyperdriveLookupById", {
+                  HD: Cloudflare.Hyperdrive.Connection.lookup({
                     hyperdriveId: created.id,
                   }),
                 },
@@ -400,7 +565,7 @@ test.provider(
 
 const cloudflaredBin = Bun.which("cloudflared");
 const dockerBin = Bun.which("docker");
-const ACCESS_ORIGIN_CONTAINER = "alchemy-test-hyperdrive-access-origin";
+const ACCESS_ORIGIN_CONTAINER = testName("alchemy-test-hyperdrive-access-origin");
 
 const run = (cmd: string[]) =>
   Effect.sync(() => Bun.spawnSync(cmd, { stdout: "pipe", stderr: "pipe" }));
@@ -556,6 +721,7 @@ test.provider.skipIf(!cloudflaredBin || !dockerBin)(
           });
           assert("accessClientId" in actual.origin, "origin must be Access-protected");
           expect(actual.origin.host).toEqual(ACCESS_ORIGIN_HOST);
+          expect(yield* driftOf(stack, "HyperdriveAccessConnection")).toBe("unchanged");
 
           // Both binding flavors reach Postgres through Access + the tunnel.
           expect(yield* queryThroughOrigin(deployed.effectWorker.url!)).toEqual({
@@ -592,7 +758,7 @@ test.provider.skipIf(!cloudflaredBin || !dockerBin)(
 // inside an AWS VPC with `cloudflared` running in the VPC. Both binding
 // flavors must query through it.
 
-const VPC_ORIGIN_CONTAINER = "alchemy-test-hyperdrive-vpc-origin";
+const VPC_ORIGIN_CONTAINER = testName("alchemy-test-hyperdrive-vpc-origin");
 
 test.provider.skipIf(!cloudflaredBin || !dockerBin)(
   "deploys and queries a private origin through a Workers VPC Service",
@@ -634,6 +800,7 @@ test.provider.skipIf(!cloudflaredBin || !dockerBin)(
           assert("serviceId" in actual.origin, "origin must be a VPC Service origin");
           expect(actual.origin.serviceId).toEqual(deployed.service.serviceId);
           expect(actual.origin.database).toEqual("postgres");
+          expect(yield* driftOf(stack, "HyperdriveVpcConnection")).toBe("unchanged");
 
           // Both binding flavors reach Postgres through the VPC Service.
           expect(yield* queryThroughOrigin(deployed.effectWorker.url!)).toEqual({

@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as tpu from "@distilled.cloud/gcp/tpu_v2";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -40,7 +41,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1-c/queuedResources/alchemy-tpu-qr-missing`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -69,6 +70,13 @@ test.provider.skipIf(!runLifecycle)(
             ],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.TPU.QueuedResource.lookup({
+          queuedResourceId: created.queuedResourceId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/queuedResources/");

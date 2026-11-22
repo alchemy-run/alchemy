@@ -3,9 +3,9 @@ import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { ClassificationJob } from "@alchemy.run/aws/Macie2/ClassificationJob";
 import { Session } from "@alchemy.run/aws/Macie2/Session";
 import { Bucket } from "@alchemy.run/aws/S3/Bucket";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as macie2 from "@distilled.cloud/aws/macie2";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { makeMacie2TestLease } from "./TestLease.ts";
 

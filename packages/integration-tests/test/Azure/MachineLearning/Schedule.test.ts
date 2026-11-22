@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ml from "@distilled.cloud/azure/machinelearningservices";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { baseProject, logLevel, subscription, tags, waitGone } from "./util.ts";
 
@@ -16,6 +16,8 @@ const getSchedule = (resourceGroupName: string, workspaceName: string, name: str
       name,
     });
   });
+
+const cronOf = (trigger: ml.TriggerBase) => (trigger.triggerType === "Cron" ? trigger : undefined);
 
 const jobDefinition = {
   jobType: "Command",
@@ -64,7 +66,7 @@ test.provider(
         getSchedule(group.resourceGroupName, workspace.workspaceName, name);
       expect(schedule.isEnabled).toEqual(false);
       const observed = yield* get(schedule.scheduleName);
-      expect(observed.properties.trigger.expression).toEqual("0 2 * * *");
+      expect(cronOf(observed.properties.trigger)?.expression).toEqual("0 2 * * *");
       expect(observed.properties.action.actionType).toEqual("CreateJob");
       expect(observed.properties.description).toEqual("v1");
       expect(observed.properties.tags?.env).toEqual("test");
@@ -79,7 +81,7 @@ test.provider(
       );
       expect(updated.schedule.scheduleId).toEqual(schedule.scheduleId);
       const reobserved = yield* get(schedule.scheduleName);
-      expect(reobserved.properties.trigger.expression).toEqual("0 3 * * *");
+      expect(cronOf(reobserved.properties.trigger)?.expression).toEqual("0 3 * * *");
       expect(reobserved.properties.description).toEqual("v2");
       expect(reobserved.properties.tags?.env).toEqual("prod");
 

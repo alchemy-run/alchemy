@@ -1,23 +1,24 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials } from "@distilled.cloud/prisma";
-import { AuthProviders } from "alchemy/Auth/AuthProvider";
-import { ProfileStore } from "alchemy/Auth/Profile";
-import * as Context from "effect/Context";
+import {
+  type CredentialsUnavailable,
+  deferUntilFirstUse,
+  lazyCredentials,
+  orDieCredentialsUnavailable,
+} from "alchemy/Auth/Resolve";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { PrismaEnvironment, fromProfile } from "../PrismaEnvironment.ts";
+import { PRISMA_AUTH_PROVIDER_NAME, type PrismaResolvedCredentials } from "../AuthProvider.ts";
+import { PrismaEnvironment } from "../PrismaEnvironment.ts";
+import { resolveBaseUrl } from "./BaseUrl.ts";
 
 export { Credentials } from "@distilled.cloud/prisma";
 
-const toConfigError = (cause: unknown) =>
-  ConfigError.make({
-    message: `Failed to resolve Prisma credentials: ${
-      (cause as { message?: string })?.message ?? String(cause)
-    }`,
-  });
+const toConfigError = (cause: { readonly message: string }) =>
+  ConfigError.make({ message: `Invalid Prisma Management API URL: ${cause.message}` });
 
 /**
- * Bridge an already-resolved {@link PrismaEnvironment} into the distilled
+ * Bridge a caller-provided {@link PrismaEnvironment} into the distilled
  * `Credentials` service. Use this when the environment is provided by the
  * caller (tests, standalone operation helpers).
  */
@@ -25,11 +26,11 @@ export const fromEnvironment = () =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
-      const env = yield* PrismaEnvironment;
-      return Effect.succeed({
+      const environment = yield* PrismaEnvironment;
+      return Effect.map(environment, (env) => ({
         apiToken: env.serviceToken,
         apiBaseUrl: env.baseUrl,
-      });
+      }));
     }),
   );
 
@@ -38,36 +39,49 @@ export const fromEnvironment = () =>
  *
  * The `Credentials` service holds an *effect*, so nothing is resolved until
  * the first API operation runs. That keeps `alchemy dev` — which only
- * exercises local providers — from ever needing a Prisma token, matching the
- * deferred behavior of the client layer this replaces.
+ * exercises local providers — from ever needing a Prisma token.
  */
 export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
-      const scope = yield* Effect.scope;
-      const authProviders = yield* AuthProviders;
-      const profile = yield* ProfileStore;
-      const environment = Layer.buildWithScope(
-        fromProfile().pipe(
-          Layer.provide(
-            Layer.mergeAll(
-              Layer.succeed(AuthProviders, authProviders),
-              Layer.succeed(ProfileStore, profile),
-            ),
-          ),
-        ),
-        scope,
-      ).pipe(Effect.map((context) => Context.get(context, PrismaEnvironment)));
+      const credentials = yield* lazyCredentials<PrismaResolvedCredentials, ConfigError>()(
+        PRISMA_AUTH_PROVIDER_NAME,
+        (creds) => creds.serviceToken,
+      );
+      const baseUrl = yield* resolveBaseUrl.pipe(
+        Effect.mapError(toConfigError),
+        deferUntilFirstUse,
+        Effect.flatMap(Effect.cached),
+      );
+      return Effect.all({ apiToken: credentials, apiBaseUrl: baseUrl });
+    }),
+  );
 
-      return yield* Effect.cached(
-        environment.pipe(
-          Effect.map((env) => ({
-            apiToken: env.serviceToken,
-            apiBaseUrl: env.baseUrl,
-          })),
-          Effect.mapError(toConfigError),
-        ),
+/**
+ * A {@link PrismaEnvironment} resolved lazily from the configured auth
+ * profile, for the stack's management client.
+ *
+ * The client resolves its environment on every request, so deferring the
+ * environment is all it takes to build the client without credentials: the
+ * profile is read on the first API operation, after `alchemy profile edit`
+ * has had a chance to configure the registered Prisma auth provider.
+ *
+ * The environment has no error channel, so a failed resolution dies with
+ * `CredentialsUnavailable`, which the engine reports as `CredentialsRequired`.
+ */
+export const environmentFromAuthProvider = () =>
+  Layer.effect(
+    PrismaEnvironment,
+    Effect.gen(function* () {
+      const credentials = yield* lazyCredentials<
+        PrismaResolvedCredentials,
+        CredentialsUnavailable
+      >()(PRISMA_AUTH_PROVIDER_NAME, (creds) => creds);
+      const baseUrl = yield* resolveBaseUrl.pipe(deferUntilFirstUse, Effect.flatMap(Effect.cached));
+      return Effect.all({ credentials, baseUrl }).pipe(
+        Effect.map(({ credentials, baseUrl }) => ({ ...credentials, baseUrl })),
+        orDieCredentialsUnavailable(PRISMA_AUTH_PROVIDER_NAME),
       );
     }),
   );

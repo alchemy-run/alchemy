@@ -13,6 +13,9 @@ import * as Sink from "effect/Sink";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import type { HttpEffect } from "./Http.ts";
+import { decodeRpcArgs, encodeRpcArgs, RpcDecodeError } from "./RpcArgs.ts";
+
+export { decodeRpcArgs, encodeRpcArgs, RpcDecodeError };
 
 export type Rpc<Shape> = {
   "~alchemy/rpc": Shape;
@@ -66,17 +69,11 @@ export type RpcStreamErrorMarker = {
   error: unknown;
 };
 
-export class RpcDecodeError extends Data.TaggedError("RpcDecodeError")<{
-  readonly cause: unknown;
-}> {
-  override get message() {
-    return this.cause instanceof Error ? this.cause.message : String(this.cause);
-  }
-}
-
 export class RpcCallError extends Data.TaggedError("RpcCallError")<{
   readonly method: string;
   readonly cause: unknown;
+  /** The HTTP status the transport answered with, when the failure was a response. */
+  readonly status?: number | undefined;
 }> {
   override get message() {
     return `RPC call to "${this.method}" failed: ${
@@ -255,6 +252,40 @@ export const makeRpcErrorReviver = (
       return error;
     }
   };
+};
+
+/**
+ * Wrap a finished RPC stub so every method's failure channel runs through
+ * {@link makeRpcErrorReviver}: engines whose stub factory does not decode
+ * with a reviver itself (fetch-RPC, an engine gateway client) get declared
+ * error classes reconstructed uniformly. Without declared errors the stub
+ * is returned as-is.
+ */
+export const reviveRpcStubErrors = <Shape>(
+  stub: Shape,
+  errors: ReadonlyArray<RpcErrorClass> | undefined,
+): Shape => {
+  if (errors === undefined || errors.length === 0) {
+    return stub;
+  }
+  const revive = makeRpcErrorReviver(errors);
+  return new Proxy(stub as object, {
+    get: (target, prop) => {
+      const member = Reflect.get(target, prop);
+      if (typeof member !== "function") {
+        return member;
+      }
+      return (...args: readonly unknown[]) => {
+        const result = member.apply(target, args);
+        return Effect.isEffect(result)
+          ? asEffectOrStream(
+              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- an untyped remote stub's result; failures are revived below
+              (result as Effect.Effect<unknown, unknown>).pipe(Effect.mapError(revive)),
+            )
+          : result;
+      };
+    },
+  }) as Shape;
 };
 
 /**
@@ -485,6 +516,27 @@ export const RPC_PATH_PREFIX = "/__rpc__/";
 export const RPC_STREAM_HEADER = "x-alchemy-rpc-stream";
 
 /**
+ * The RPC method a request addresses, or `undefined` when the request is
+ * not an RPC call. Matches the {@link RPC_PATH_PREFIX} on the URL's
+ * *pathname* only — a query string or fragment containing the prefix is
+ * not a dispatch.
+ */
+export const rpcMethodOf = (request: { readonly url: string }): string | undefined => {
+  // String scanning, not `new URL`: this runs on every RPC request.
+  const { url } = request;
+  let end = url.length;
+  for (const delimiter of ["?", "#"]) {
+    const at = url.indexOf(delimiter);
+    if (at !== -1 && at < end) end = at;
+  }
+  const prefixAt = url.indexOf(RPC_PATH_PREFIX);
+  if (prefixAt === -1 || prefixAt + RPC_PATH_PREFIX.length > end) {
+    return undefined;
+  }
+  return decodeURIComponent(url.slice(prefixAt + RPC_PATH_PREFIX.length, end));
+};
+
+/**
  * Build a typed RPC stub over a plain `fetch` transport. Any property that
  * isn't an own property of `base` is treated as a remote method: calling it
  * `POST`s `{baseUrl}{RPC_PATH_PREFIX}{name}` with the JSON-encoded arguments
@@ -511,10 +563,18 @@ export const makeFetchRpcStub = <Shape>(options: {
           Effect.gen(function* () {
             const request = HttpClientRequest.post(
               `${baseUrl}${RPC_PATH_PREFIX}${encodeURIComponent(prop)}`,
-            ).pipe(HttpClientRequest.bodyText(JSON.stringify(args), "application/json"));
+            ).pipe(HttpClientRequest.bodyText(encodeRpcArgs(args), "application/json"));
             const response = yield* options
               .fetch(request)
               .pipe(Effect.mapError((cause) => new RpcCallError({ method: prop, cause })));
+
+            if (response.status < 200 || response.status >= 300) {
+              return yield* new RpcCallError({
+                method: prop,
+                cause: `HTTP ${response.status}`,
+                status: response.status,
+              });
+            }
 
             const headers = response.headers as Record<string, string | undefined>;
             if (headers[RPC_STREAM_HEADER] !== undefined) {
@@ -544,17 +604,14 @@ export const serveRpc = <Req = never>(
 ): HttpEffect<Req> =>
   Effect.gen(function* () {
     const request = yield* HttpServerRequest;
-    const prefixAt = request.url.indexOf(RPC_PATH_PREFIX);
-    if (prefixAt === -1) {
+    const name = rpcMethodOf(request);
+    if (name === undefined) {
       return yield* fallback;
     }
 
-    let name = request.url.slice(prefixAt + RPC_PATH_PREFIX.length);
-    const queryAt = name.indexOf("?");
-    if (queryAt !== -1) name = name.slice(0, queryAt);
-    name = decodeURIComponent(name);
-
-    const method = shape[name];
+    // A name like `constructor`, `toString` or `__proto__` must not reach
+    // `Object.prototype`.
+    const method = name in Object.prototype ? undefined : shape[name];
     if (typeof method !== "function") {
       return HttpServerResponse.text(`Unknown RPC method "${name}"`, {
         status: 404,
@@ -564,12 +621,7 @@ export const serveRpc = <Req = never>(
     const text = yield* request.text;
     // Keep arg-decode failures out of the handler's error channel — a
     // malformed argument payload is a client error, so answer 400.
-    const argsResult = yield* Effect.result(
-      Effect.try({
-        try: () => (text.length > 0 ? (JSON.parse(text) as unknown[]) : []),
-        catch: (cause) => new RpcDecodeError({ cause }),
-      }),
-    );
+    const argsResult = yield* Effect.result(decodeRpcArgs(text));
     if (Result.isFailure(argsResult)) {
       return HttpServerResponse.text(
         `Invalid RPC arguments for "${name}": ${argsResult.failure.message}`,

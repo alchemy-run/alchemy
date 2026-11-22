@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 /**
  * Floci local-emulator smoke test.
  *
@@ -33,25 +32,15 @@ import * as AWS from "@alchemy.run/aws";
 import { Table } from "@alchemy.run/aws/DynamoDB";
 import { Bucket } from "@alchemy.run/aws/S3";
 import { Queue } from "@alchemy.run/aws/SQS";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import { AwsV4Signer } from "aws4fetch";
 import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
 const FLOCI_ENDPOINT = "http://localhost:4566";
-
-// skipIf gate: floci runs as a Docker container. `docker info` proves the
-// daemon is reachable (a mere `docker --version` would pass with the daemon
-// down). Sync probe at collection time — skipIf needs a plain boolean.
-const dockerAvailable = (() => {
-  try {
-    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-  } catch {
-    return false;
-  }
-})();
 
 const providers = AWS.providers();
 
@@ -61,9 +50,9 @@ const { test } = Test.make({ providers, dev: true });
 
 /**
  * Raw (non-distilled) call against the emulator gateway — out-of-band proof
- * that a resource exists IN THE EMULATOR, not the real cloud. The dummy
- * SigV4 Authorization header is never verified by the emulator; it only
- * carries the service/region/account scoping the gateway routes by.
+ * that a resource exists IN THE EMULATOR, not the real cloud. The emulator
+ * does not verify this dummy SigV4 Authorization header for SQS or DynamoDB;
+ * it only carries the service/region/account scoping the gateway routes by.
  */
 const rawAwsJson = Effect.fn(function* (options: {
   service: string;
@@ -86,16 +75,27 @@ const rawAwsJson = Effect.fn(function* (options: {
   );
 });
 
-/** Path-style S3 GET against the gateway (list the bucket's objects). */
+/**
+ * Path-style S3 GET against the gateway (list the bucket's objects). S3, like
+ * real S3 when the emulator enforces auth, checks the signature, so this one
+ * is signed for the emulator's dummy `test`/`test` credentials.
+ */
 const rawS3GetBucket = Effect.fn(function* (bucketName: string) {
   const client = yield* HttpClient.HttpClient;
+  const url = `${FLOCI_ENDPOINT}/${bucketName}`;
+  const signed = yield* Effect.tryPromise(() =>
+    new AwsV4Signer({
+      url,
+      method: "GET",
+      accessKeyId: "test",
+      secretAccessKey: "test",
+      service: "s3",
+      region: "us-east-1",
+    }).sign(),
+  );
   return yield* client.execute(
-    HttpClientRequest.get(`${FLOCI_ENDPOINT}/${bucketName}`).pipe(
-      HttpClientRequest.setHeaders({
-        "x-amz-date": "20260101T000000Z",
-        authorization:
-          "AWS4-HMAC-SHA256 Credential=test/20260101/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-date, Signature=dummy",
-      }),
+    HttpClientRequest.get(url).pipe(
+      HttpClientRequest.setHeaders(Object.fromEntries(signed.headers.entries())),
     ),
   );
 });
@@ -103,7 +103,7 @@ const rawS3GetBucket = Effect.fn(function* (bucketName: string) {
 /** Region segment of an ARN (`arn:aws:sqs:REGION:ACCOUNT:name`). */
 const regionOfArn = (arn: string) => arn.split(":")[3]!;
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "deploys S3 + SQS + DynamoDB into floci and destroys them",
   (stack) =>
     Effect.gen(function* () {

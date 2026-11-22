@@ -301,7 +301,7 @@ export const SchemaProvider = () =>
 const getSchema = (zoneId: string, schemaId: string) =>
   schemaValidation
     .getSchema({ zoneId, schemaId, omitSource: false })
-    .pipe(Effect.catchTag("SchemaNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("SchemaNotFound", () => Effect.undefined));
 
 /**
  * Find a schema by exact name (meta-data only — sources omitted). If several

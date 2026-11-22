@@ -3,11 +3,18 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
+
+export class LexiconNotReady extends Data.TaggedError("LexiconNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface LexiconProps {
   /**
@@ -50,8 +57,18 @@ export interface Lexicon extends Resource<
     lexemesCount: number | undefined;
   },
   never,
-  Providers
+  Providers,
+  LexiconLookup
 > {}
+
+/**
+ * Props for {@link Lexicon.lookup}: find a lexicon this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface LexiconLookup {
+  /** The lexicon name of the existing lexicon. */
+  lexiconName: string;
+}
 
 /**
  * An Amazon Polly pronunciation lexicon — a W3C PLS document stored in a
@@ -81,6 +98,16 @@ export interface Lexicon extends Resource<
  *   Text: "The W3C maintains the PLS standard.",
  *   LexiconNames: [lexicon.lexiconName],
  * });
+ * ```
+ *
+ * ### Looking up an existing lexicon
+ * `Lexicon.lookup` references a lexicon Alchemy doesn't manage (created in the
+ * console or by another stack), found by `lexiconName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing lexicon
+ * ```typescript
+ * const existing = AWS.Polly.Lexicon.lookup({ lexiconName: "my-lexicon" });
  * ```
  *
  * @resource
@@ -149,12 +176,12 @@ export const LexiconProvider = () =>
       const lexiconArn = (name: string) =>
         Effect.gen(function* () {
           const { accountId, region } = yield* AWSEnvironment.current;
-          return `arn:aws:polly:${region}:${accountId}:lexicon/${name}`;
+          return `arn:${partitionOf(region)}:polly:${region}:${accountId}:lexicon/${name}`;
         });
 
       const getOne = (name: string) =>
         retryTransient(polly.getLexicon({ Name: name })).pipe(
-          Effect.catchTag("LexiconNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("LexiconNotFoundException", () => Effect.undefined),
         );
 
       const waitForContent = (name: string, desired: string) =>
@@ -174,9 +201,9 @@ export const LexiconProvider = () =>
             }
             yield* Effect.sleep("500 millis");
           }
-          return yield* Effect.fail(
-            new Error(`Polly lexicon '${name}' did not converge to the desired content`),
-          );
+          return yield* new LexiconNotReady({
+            message: `Polly lexicon '${name}' did not converge to the desired content`,
+          });
         });
 
       const waitUntilGone = (name: string) =>
@@ -192,9 +219,9 @@ export const LexiconProvider = () =>
             }
             yield* Effect.sleep("500 millis");
           }
-          return yield* Effect.fail(
-            new Error(`Polly lexicon '${name}' is still observable after deletion`),
-          );
+          return yield* new LexiconNotReady({
+            message: `Polly lexicon '${name}' is still observable after deletion`,
+          });
         });
 
       return {
@@ -204,6 +231,15 @@ export const LexiconProvider = () =>
           if ((yield* toName(id, olds ?? { content: "" })) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ lexiconName: name }) {
+          const found = yield* getOne(name);
+          if (!found) return undefined;
+          return toAttributes(
+            name,
+            found.LexiconAttributes?.LexiconArn ?? (yield* lexiconArn(name)),
+            found.LexiconAttributes,
+          );
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.lexiconName ?? (yield* toName(id, olds ?? { content: "" }));

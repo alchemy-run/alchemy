@@ -92,8 +92,27 @@ export interface AnomalyDetector extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  AnomalyDetectorLookup
 > {}
+
+/**
+ * Props for {@link AnomalyDetector.lookup}: find an anomaly detector this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type AnomalyDetectorLookup =
+  | {
+      /** The workspace the detector belongs to. */
+      workspaceId: string;
+      /** The id of the existing detector. */
+      anomalyDetectorId: string;
+    }
+  | {
+      /** The workspace the detector belongs to. */
+      workspaceId: string;
+      /** The alias of the existing detector. */
+      alias: string;
+    };
 
 /**
  * A Random Cut Forest anomaly detector inside an Amazon Managed Service for
@@ -111,6 +130,16 @@ export interface AnomalyDetector extends Resource<
  *   evaluationInterval: "1 minute",
  *   missingDataAction: { skip: true },
  * });
+ * ```
+ *
+ * ### Looking up an existing anomaly detector
+ * `AnomalyDetector.lookup` references an anomaly detector Alchemy doesn't manage (created in the
+ * console or by another stack), found by `workspaceId` with `anomalyDetectorId` or `alias`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing anomaly detector
+ * ```typescript
+ * const latency = AWS.AMP.AnomalyDetector.lookup({ workspaceId, alias: "latency" });
  * ```
  *
  * @resource
@@ -133,7 +162,7 @@ export const AnomalyDetectorProvider = () =>
       const describe = Effect.fn(function* (workspaceId: string, anomalyDetectorId: string) {
         const response = yield* amp
           .describeAnomalyDetector({ workspaceId, anomalyDetectorId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.anomalyDetector;
       });
 
@@ -146,7 +175,7 @@ export const AnomalyDetectorProvider = () =>
           Stream.filter((s) => s.alias === alias),
           Stream.runHead,
           Effect.map(Option.getOrUndefined),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         return summary === undefined
           ? undefined
@@ -227,6 +256,13 @@ export const AnomalyDetectorProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* (props) {
+          const detector =
+            "anomalyDetectorId" in props
+              ? yield* describe(props.workspaceId, props.anomalyDetectorId)
+              : yield* findByAlias(props.workspaceId, props.alias);
+          return detector === undefined ? undefined : toAttrs(props.workspaceId, detector);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const workspaceId = output?.workspaceId ?? olds?.workspaceId;
           if (!workspaceId) return undefined;

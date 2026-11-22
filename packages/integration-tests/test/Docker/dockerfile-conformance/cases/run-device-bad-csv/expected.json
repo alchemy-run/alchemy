@@ -1,0 +1,27 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "RUN",
+          "line": 2,
+          "flags": [
+            {
+              "name": "device",
+              "value": "/dev/x true"
+            }
+          ],
+          "command": {
+            "form": "shell",
+            "script": ""
+          }
+        }
+      ]
+    }
+  ]
+}

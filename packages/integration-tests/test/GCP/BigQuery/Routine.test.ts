@@ -1,10 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -50,6 +51,10 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(
+        GCP.BigQuery.Routine.lookup({ routineId: created.routineId, datasetId: created.datasetId }),
+        created,
+      );
 
       expect(created.routineId).toEqual(expect.any(String));
       expect(created.routineId).toMatch(/^[a-zA-Z0-9_]+$/);
@@ -83,12 +88,10 @@ test.provider(
       expect(fetched.returnType?.typeKind).toEqual("INT64");
 
       const queried = yield* bigquery.queryJobs({
+        query: `SELECT \`${created.project}.${created.datasetId}.${created.routineId}\`(2) AS n`,
+        useLegacySql: false,
+        location: "US-CENTRAL1",
         projectId: created.project,
-        body: {
-          query: `SELECT \`${created.project}.${created.datasetId}.${created.routineId}\`(2) AS n`,
-          useLegacySql: false,
-          location: "US-CENTRAL1",
-        },
       });
       expect(queried.jobComplete).toEqual(true);
       expect(queried.rows?.[0]?.f?.[0]?.v).toEqual("6");
@@ -128,12 +131,10 @@ test.provider(
       expect(fetchedUpdate.description).toContain("multiply by four");
 
       const queriedUpdate = yield* bigquery.queryJobs({
+        query: `SELECT \`${created.project}.${created.datasetId}.${created.routineId}\`(2) AS n`,
+        useLegacySql: false,
+        location: "US-CENTRAL1",
         projectId: created.project,
-        body: {
-          query: `SELECT \`${created.project}.${created.datasetId}.${created.routineId}\`(2) AS n`,
-          useLegacySql: false,
-          location: "US-CENTRAL1",
-        },
       });
       expect(queriedUpdate.jobComplete).toEqual(true);
       expect(queriedUpdate.rows?.[0]?.f?.[0]?.v).toEqual("8");

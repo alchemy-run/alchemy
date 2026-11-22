@@ -635,7 +635,7 @@ export const PoolProvider = () =>
       // Sync: compare each mutable aspect against observed state and PUT
       // only when something differs.
       const current = observed.properties;
-      const delta: mdp.PoolUpdateProperties = {
+      const delta: mdp.PoolUpdatePropertiesInput = {
         devCenterProjectResourceId: sameArm(
           current?.devCenterProjectResourceId,
           properties.devCenterProjectResourceId,

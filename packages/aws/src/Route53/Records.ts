@@ -198,7 +198,7 @@ export const RecordsProvider = () =>
             StartRecordType: type,
             MaxItems: 10,
           })
-          .pipe(Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchHostedZone", () => Effect.undefined));
 
         return (response?.ResourceRecordSets ?? []).find(
           (recordSet) =>

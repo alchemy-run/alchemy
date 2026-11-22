@@ -1,12 +1,11 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import { Journal } from "../../../../Workflows/conformance/journal.ts";
 
-/**
- * What the test workflows did, outside the engine: each activity appends an
- * entry here, so a test can check an activity ran once even though its
- * workflow replayed several times.
- */
-export class Journal extends Cloudflare.DurableObject<Journal>()(
+/** One run's journal, in a Durable Object named after the run. */
+export class JournalObject extends Cloudflare.DurableObject<JournalObject>()(
   "DurableWorkflowJournal",
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
@@ -28,3 +27,18 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
     });
   }),
 ) {}
+
+// Right after a deploy, a call to the journal can fail in transit.
+const inTransit = Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 20 });
+
+/** The conformance journal over `JournalObject`. */
+export const JournalLive = Layer.effect(
+  Journal,
+  Effect.gen(function* () {
+    const journals = yield* JournalObject;
+    return {
+      append: (id, entry) => journals.getByName(id).append(entry).pipe(inTransit, Effect.orDie),
+      list: (id) => journals.getByName(id).list().pipe(inTransit, Effect.orDie),
+    };
+  }),
+);

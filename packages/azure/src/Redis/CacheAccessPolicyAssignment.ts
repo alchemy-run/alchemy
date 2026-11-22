@@ -194,9 +194,7 @@ export const CacheAccessPolicyAssignmentProvider = () =>
       const cache = output?.cache ?? olds?.cache;
       if (resourceGroup === undefined || cache === undefined) return undefined;
       const name =
-        output?.accessPolicyAssignmentName ??
-        olds?.name ??
-        (yield* createAlphanumericName(id, 60));
+        output?.accessPolicyAssignmentName ?? olds?.name ?? (yield* createAlphanumericName(id, 60));
       const observed = yield* getAssignment(subscriptionId, resourceGroup, cache, name);
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, cache, name, observed);
@@ -282,10 +280,6 @@ export const CacheAccessPolicyAssignmentProvider = () =>
     }),
 
     nuke: {
-      dependsOn: [
-        "Azure.Redis.AccessPolicy",
-        "Azure.Redis.Cache",
-        "Azure.Resources.ResourceGroup",
-      ],
+      dependsOn: ["Azure.Redis.AccessPolicy", "Azure.Redis.Cache", "Azure.Resources.ResourceGroup"],
     },
   });

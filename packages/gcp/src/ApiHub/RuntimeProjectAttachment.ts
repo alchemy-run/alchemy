@@ -117,10 +117,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apihub
         .getProjectsLocationsRuntimeProjectAttachments({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const RuntimeProjectAttachmentProvider = () =>
   Provider.succeed(RuntimeProjectAttachment, {
@@ -217,18 +217,16 @@ export const RuntimeProjectAttachmentProvider = () =>
       if (current === undefined) {
         const created = yield* apihub
           .createProjectsLocationsRuntimeProjectAttachments({
+            runtimeProject,
             parent,
             runtimeProjectAttachmentId: attachmentId,
-            body: {
-              runtimeProject,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? (yield* getByName(name));
       }
 
       if (current === undefined) {
-        return yield* new ApihubNotResolved({ name });
+        return yield* new ApihubNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);

@@ -251,13 +251,25 @@ export const InputProvider = () =>
       const { resourceGroup, streamingJob } = news;
       yield* checkResourceGroup(resourceGroup);
       const name = news.name ?? output?.inputName ?? (yield* createStreamAnalyticsName(id));
-      const properties: streamanalytics.InputPropertiesInput = {
-        type: news.type ?? "Stream",
-        datasource: news.datasource,
-        serialization: news.serialization,
+      // A data source's or serialization's `type` is only known at runtime
+      // and decides its arm, so those documents are asserted.
+      const common = {
+        serialization: news.serialization as streamanalytics.Serialization,
         compression: news.compression === undefined ? undefined : { type: news.compression },
         partitionKey: news.partitionKey,
       };
+      const properties: streamanalytics.InputPropertiesInput =
+        (news.type ?? "Stream") === "Stream"
+          ? {
+              type: "Stream",
+              datasource: news.datasource as streamanalytics.StreamInputDataSource,
+              ...common,
+            }
+          : {
+              type: "Reference",
+              datasource: news.datasource as streamanalytics.ReferenceInputDataSource,
+              ...common,
+            };
       const where = {
         subscriptionId,
         resourceGroupName: resourceGroup,

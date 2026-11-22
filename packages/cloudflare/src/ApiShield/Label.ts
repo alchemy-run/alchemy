@@ -233,7 +233,7 @@ type ObservedLabel = Pick<
 const getLabel = (zoneId: string, name: string) =>
   apiGateway.getLabelUser({ zoneId, name }).pipe(
     Effect.map((label): ObservedLabel | undefined => label),
-    Effect.catchTag("LabelNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("LabelNotFound", () => Effect.undefined),
   );
 
 /**

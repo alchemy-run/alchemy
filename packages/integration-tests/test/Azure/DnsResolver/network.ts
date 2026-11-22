@@ -1,8 +1,8 @@
 import * as Azure from "@alchemy.run/azure";
 import { ensureRegistered } from "@alchemy.run/azure/Arm";
+import { expect } from "@alchemy.run/test";
 import type { AzureOpError } from "@distilled.cloud/azure";
 import * as network from "@distilled.cloud/azure/network";
-import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

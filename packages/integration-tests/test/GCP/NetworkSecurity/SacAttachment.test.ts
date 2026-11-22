@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -80,12 +81,20 @@ test.provider.skipIf(!process.env.GCP_TEST_SLOW || !!process.env.FAST)(
           return { realm, gateway };
         }),
       );
+      yield* expectFound(
+        GCP.NetworkSecurity.SacRealm.lookup({
+          sacRealmId: realm.sacRealmId,
+          location: realm.location,
+        }),
+        realm,
+      );
 
       const error = yield* Effect.flip(
         networksecurity.createProjectsLocationsSacAttachments({
+          sacRealm: realm.name,
+          nccGateway: gateway.name,
           parent: `projects/${project}/locations/us-central1`,
           sacAttachmentId: "alchemy-unpaired-probe",
-          body: { sacRealm: realm.name, nccGateway: gateway.name },
         }),
       );
       expect(error._tag).toEqual("SacRealmNotPaired");
@@ -126,6 +135,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { hub, gateway, attachment };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkSecurity.SacAttachment.lookup({
+          sacAttachmentId: created.attachment.sacAttachmentId,
+          location: created.attachment.location,
+        }),
+        created.attachment,
       );
 
       expect(created.attachment.name).toContain("/sacAttachments/");

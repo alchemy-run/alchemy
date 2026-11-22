@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -94,8 +95,18 @@ export interface DeploymentConfig extends Resource<
     computePlatform: string;
   },
   never,
-  Providers
+  Providers,
+  DeploymentConfigLookup
 > {}
+
+/**
+ * Props for {@link DeploymentConfig.lookup}: find a deployment config this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DeploymentConfigLookup {
+  /** The name of the existing deployment config. */
+  deploymentConfigName: string;
+}
 
 /**
  * A custom AWS CodeDeploy deployment configuration — the rules for how
@@ -124,13 +135,23 @@ export interface DeploymentConfig extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing deployment config
+ * `DeploymentConfig.lookup` references a deployment config Alchemy doesn't manage (created in the
+ * console or by another stack), found by `deploymentConfigName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing deployment config
+ * ```typescript
+ * const existing = AWS.CodeDeploy.DeploymentConfig.lookup({ deploymentConfigName: "..." });
+ * ```
+ *
  * @resource
  */
 export const DeploymentConfig = Resource<DeploymentConfig>("AWS.CodeDeploy.DeploymentConfig");
 
 /** Build the ARN for a CodeDeploy deployment configuration. */
 const deploymentConfigArn = (region: string, account: string, name: string): string =>
-  `arn:aws:codedeploy:${region}:${account}:deploymentconfig:${name}`;
+  `arn:${partitionOf(region)}:codedeploy:${region}:${account}:deploymentconfig:${name}`;
 
 export const DeploymentConfigProvider = () =>
   Provider.effect(
@@ -144,11 +165,7 @@ export const DeploymentConfigProvider = () =>
       const getConfig = Effect.fn(function* (name: string) {
         const response = yield* codedeploy
           .getDeploymentConfig({ deploymentConfigName: name })
-          .pipe(
-            Effect.catchTag("DeploymentConfigDoesNotExistException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DeploymentConfigDoesNotExistException", () => Effect.undefined));
         return response?.deploymentConfigInfo;
       });
 
@@ -174,6 +191,18 @@ export const DeploymentConfigProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ deploymentConfigName }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const name = deploymentConfigName;
+          const config = yield* getConfig(name);
+          if (config?.deploymentConfigId === undefined) return undefined;
+          return {
+            deploymentConfigName: config.deploymentConfigName ?? name,
+            deploymentConfigId: config.deploymentConfigId,
+            deploymentConfigArn: deploymentConfigArn(region, accountId, name),
+            computePlatform: config.computePlatform ?? "Server",
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.deploymentConfigName ?? (yield* toName(id, olds ?? {}));
@@ -209,9 +238,7 @@ export const DeploymentConfigProvider = () =>
                 zonalConfig: toWireZonalConfig(news.zonalConfig),
               })
               .pipe(
-                Effect.catchTag("DeploymentConfigAlreadyExistsException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("DeploymentConfigAlreadyExistsException", () => Effect.undefined),
               );
             config = yield* getConfig(name);
           }

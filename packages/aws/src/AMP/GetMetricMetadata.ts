@@ -1,6 +1,7 @@
 import type * as Credentials from "@distilled.cloud/aws/Credentials";
 import type * as SigV4 from "@distilled.cloud/aws/SigV4";
 import * as Binding from "alchemy/Binding";
+import type { SourceError } from "effect/ConfigProvider";
 import type * as Effect from "effect/Effect";
 import type { PrometheusApiError, PrometheusMetricMetadata } from "./PrometheusTypes.ts";
 import type { Workspace } from "./Workspace.ts";
@@ -38,7 +39,7 @@ export interface GetMetricMetadata extends Binding.Service<
       request: GetMetricMetadataRequest,
     ) => Effect.Effect<
       Record<string, PrometheusMetricMetadata[]>,
-      PrometheusApiError | Credentials.CredentialsError | SigV4.SigningError
+      PrometheusApiError | Credentials.CredentialsError | SourceError | SigV4.SigningError
     >
   >
 > {}

@@ -1,15 +1,15 @@
 import * as Azure from "@alchemy.run/azure";
-import { Credentials } from "@distilled.cloud/azure";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import { armScopeFor, Credentials } from "@distilled.cloud/azure";
 import * as authorization from "@distilled.cloud/azure/authorization";
 import * as contentSafety from "@distilled.cloud/azure/cognitiveservices-content-safety";
 import * as conversations from "@distilled.cloud/azure/cognitiveservices-language-analyze-conversations";
 import * as documents from "@distilled.cloud/azure/cognitiveservices-language-analyze-documents";
 import * as lang from "@distilled.cloud/azure/cognitiveservices-language-analyze-text";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -34,7 +34,7 @@ const BLOCKLIST = "alchemy-lang-bindings";
 /** Object ID (`oid` claim) of the identity running the tests. */
 const callerObjectId = Effect.gen(function* () {
   const config = yield* yield* Credentials;
-  const token = Redacted.value(config.bearerToken);
+  const token = Redacted.value(yield* config.token(armScopeFor(config.apiBaseUrl)));
   return yield* Effect.sync(
     () =>
       JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"))

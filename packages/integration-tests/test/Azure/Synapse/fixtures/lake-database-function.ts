@@ -57,16 +57,19 @@ export const DATABASE = "alchemybindings";
 export const DDL_DATABASE = "alchemyddl";
 
 /** Lake database properties SyMS accepts (a CSV database on a lake path). */
+/**
+ * SyMS database properties. The SDK sends them in SyMS's PascalCase
+ * (`Source.Location`, `PublishStatus`); SyMS sets `ObjectId` and
+ * `ObjectVersion` itself.
+ */
 export const databaseProperties = (name: string) => ({
-  Source: {
-    Provider: "ADLS",
-    Location: `abfss://lake@example.dfs.core.windows.net/${name}`,
-    Properties: { FormatType: "csv", LinkedServiceName: "lake" },
+  source: {
+    provider: "ADLS",
+    location: `abfss://lake@example.dfs.core.windows.net/${name}`,
+    properties: { FormatType: "csv", LinkedServiceName: "lake" },
   },
-  Properties: {},
-  PublishStatus: "PUBLISHED",
-  ObjectVersion: 1,
-  ObjectId: "00000000-0000-0000-0000-000000000001",
+  properties: {},
+  publishStatus: "PUBLISHED",
 });
 
 /** Answer `{ ok, result }`, or `{ ok: false, error }` with a 500 so callers retry. */

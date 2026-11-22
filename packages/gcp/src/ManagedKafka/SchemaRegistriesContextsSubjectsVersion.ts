@@ -153,7 +153,7 @@ export const SchemaRegistriesContextsSubjectsVersion =
 export class SchemaRegistriesContextsSubjectsVersionNotResolved extends Data.TaggedError(
   "GCP.ManagedKafka.SchemaRegistriesContextsSubjectsVersionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const registryOf = (value: string, project: string, location: string) =>
@@ -382,29 +382,25 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
         const created = yield* retryTransient(
           kafka
             .createProjectsLocationsSchemaRegistriesContextsSubjectsVersions({
+              schemaType: news.schemaType,
+              version: news.version,
+              normalize: news.normalize,
+              id: news.id,
+              schema: news.schema,
+              references: news.references,
               parent,
-              body: {
-                schemaType: news.schemaType,
-                version: news.version,
-                normalize: news.normalize,
-                id: news.id,
-                schema: news.schema,
-                references: news.references,
-              },
             })
-            .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined))),
+            .pipe(Effect.catchTag("Conflict", () => Effect.undefined)),
         );
         const lookedUp = yield* kafka
           .lookupVersionProjectsLocationsSchemaRegistriesContextsSubjects({
+            schema: news.schema,
+            schemaType: news.schemaType,
+            normalize: news.normalize,
+            references: news.references,
             parent,
-            body: {
-              schema: news.schema,
-              schemaType: news.schemaType,
-              normalize: news.normalize,
-              references: news.references,
-            },
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         current =
           lookedUp ??
           (yield* getContextSchemaVersion(versionName(parent, news.version ?? "latest")));
@@ -413,7 +409,7 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
 
       if (current === undefined) {
         return yield* new SchemaRegistriesContextsSubjectsVersionNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

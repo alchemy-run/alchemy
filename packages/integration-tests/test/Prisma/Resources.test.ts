@@ -26,7 +26,7 @@ import {
   SourceRepositoryProvider,
 } from "@alchemy.run/prisma/SourceRepository";
 import type { Database as ApiDatabase } from "@alchemy.run/prisma/Types";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Output from "alchemy/Output";
@@ -286,7 +286,7 @@ const makeClient = () => {
       calls.push(["listAppDomains", appId]);
       return Effect.succeed([]);
     },
-    createAppDomain: (appId: string, input: unknown) => {
+    createAppDomain: (appId: string, input: { hostname: string }) => {
       calls.push(["createAppDomain", { appId, input }]);
       return Effect.succeed({
         status: 201 as const,
@@ -294,7 +294,7 @@ const makeClient = () => {
           id: "domain-1",
           type: "custom-domain" as const,
           url: "https://api.prisma.test/v1/domains/domain-1",
-          hostname: "api.example.com",
+          hostname: input.hostname,
           appId: appId,
           status: "pending_dns" as const,
           foundryStatus: "pending_dns",
@@ -304,7 +304,7 @@ const makeClient = () => {
           dnsRecords: [
             {
               type: "CNAME" as const,
-              name: "api.example.com",
+              name: input.hostname,
               value: "service-1.prisma.build",
               ttl: null,
             },
@@ -900,9 +900,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           .pipe(Effect.flip);
 
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain(
-          "branchId and branchGitName are mutually exclusive",
-        );
+        expect(error.message).toContain("branchId and branchGitName are mutually exclusive");
       }).pipe(Effect.provide(providerLayer(client)), Effect.provide(managementApi(client).layer));
     },
     {
@@ -939,9 +937,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           .pipe(Effect.flip);
 
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain(
-          "branchId and branchGitName are mutually exclusive",
-        );
+        expect(error.message).toContain("branchId and branchGitName are mutually exclusive");
       }).pipe(Effect.provide(providerLayer(client)), Effect.provide(managementApi(client).layer));
     },
     {
@@ -1063,7 +1059,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
               { project: Output.asOutput("project-1"), name: "main", region: "us-west-2" },
             ),
           ),
-        ).toEqual({ action: "replace" });
+        ).toEqual({ action: "replace", deleteFirst: true });
         expect(
           yield* databaseProvider.diff!(
             diffInput(
@@ -1076,7 +1072,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
               },
             ),
           ),
-        ).toEqual({ action: "replace" });
+        ).toEqual({ action: "replace", deleteFirst: true });
 
         expect(
           yield* connectionProvider.diff!(
@@ -2054,19 +2050,17 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
       return Effect.gen(function* () {
         const domainProvider = yield* PrismaCustomDomain.Provider;
         const domain = yield* domainProvider.reconcile(
-          reconcileInput("CustomDomain", { app: "service-1", hostname: "api.example.com" }),
+          reconcileInput("CustomDomain", { app: "service-1", hostname: "api.custom.test" }),
         );
 
         expect(domain.customDomainId).toBe("domain-1");
-        expect(domain.hostname).toBe("api.example.com");
+        expect(domain.hostname).toBe("api.custom.test");
         expect(domain.appId).toBe("service-1");
         expect(domain.foundryStatus).toBe("pending_dns");
         expect(domain.dnsRecords[0]?.type).toBe("CNAME");
         expect(calls).toEqual([
           ["listAppDomains", "service-1"],
-          ["getApp", "service-1"],
-          ["getBranch", "branch-1"],
-          ["createAppDomain", { appId: "service-1", input: { hostname: "api.example.com" } }],
+          ["createAppDomain", { appId: "service-1", input: { hostname: "api.custom.test" } }],
         ]);
       }).pipe(Effect.provide(providerLayer(client)), Effect.provide(managementApi(client).layer));
     },
@@ -2093,7 +2087,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         id: "domain-existing",
         type: "custom-domain" as const,
         url: "https://api.prisma.test/v1/domains/domain-existing",
-        hostname: "api.example.com",
+        hostname: "api.custom.test",
         appId: "service-1",
         status: "active" as const,
         foundryStatus: "ready",
@@ -2117,11 +2111,11 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         const domainProvider = yield* PrismaCustomDomain.Provider;
         const error = yield* domainProvider
           .reconcile(
-            reconcileInput("CustomDomain", { app: "service-1", hostname: "api.example.com" }),
+            reconcileInput("CustomDomain", { app: "service-1", hostname: "api.custom.test" }),
           )
           .pipe(Effect.flip);
 
-        expect((error as Error).message).toContain("explicit adoption");
+        expect(error.message).toContain("explicit adoption");
         expect(calls).toEqual([["listAppDomains", "service-1"]]);
       }).pipe(Effect.provide(providerLayer(client)), Effect.provide(managementApi(client).layer));
     },
@@ -2149,7 +2143,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         id: "domain-raced",
         type: "custom-domain" as const,
         url: "https://api.prisma.test/v1/domains/domain-raced",
-        hostname: "api.example.com",
+        hostname: "api.custom.test",
         appId: "service-1",
         status: "pending_dns" as const,
         foundryStatus: "pending",
@@ -2180,7 +2174,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           .reconcile(reconcileInput("CustomDomain", { app: "service-1", hostname: raced.hostname }))
           .pipe(Effect.flip);
 
-        expect((error as Error).message).toContain("explicit adoption");
+        expect(error.message).toContain("explicit adoption");
         expect(calls).toContainEqual([
           "createAppDomain",
           { appId: "service-1", input: { hostname: raced.hostname } },
@@ -2221,7 +2215,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
                 id: "domain-1",
                 type: "custom-domain" as const,
                 url: "https://api.prisma.test/v1/domains/domain-1",
-                hostname: "api.example.com",
+                hostname: "api.custom.test",
                 appId: appId,
                 status: "pending_dns" as const,
                 foundryStatus: "pending",
@@ -2231,7 +2225,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
                 dnsRecords: [
                   {
                     type: "CNAME" as const,
-                    name: "api.example.com",
+                    name: "api.custom.test",
                     value: "service-1.prisma.build",
                     ttl: null,
                   },
@@ -2246,11 +2240,11 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
       return Effect.gen(function* () {
         const domainProvider = yield* Provider.findProvider(PrismaCustomDomain);
         const domain = yield* domainProvider.read!(
-          readInput("CustomDomain", { app: "service-1", hostname: "API.EXAMPLE.COM." }),
+          readInput("CustomDomain", { app: "service-1", hostname: "API.CUSTOM.TEST." }),
         );
 
         expect(domain?.customDomainId).toBe("domain-1");
-        expect(domain?.hostname).toBe("api.example.com");
+        expect(domain?.hostname).toBe("api.custom.test");
         expect(Unowned.is(domain!)).toBe(true);
         expect(calls).toEqual([["listAppDomains", "service-1"]]);
       }).pipe(Effect.provide(providerLayer(client)), Effect.provide(managementApi(client).layer));
@@ -2271,7 +2265,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
   );
 
   it.effect(
-    "rejects Prisma custom domains on non-default branches",
+    "attaches Prisma custom domains to apps on non-default branches",
     () => {
       const { client, calls } = makeClient();
       Object.assign(client, {
@@ -2293,20 +2287,16 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
 
       return Effect.gen(function* () {
         const domainProvider = yield* PrismaCustomDomain.Provider;
-        const error = yield* domainProvider
-          .reconcile(
-            reconcileInput("CustomDomain", { app: "service-1", hostname: "api.example.com" }),
-          )
-          .pipe(Effect.flip);
-
-        expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain(
-          "custom domains can only be attached to apps on the default Branch",
+        const domain = yield* domainProvider.reconcile(
+          reconcileInput("CustomDomain", { app: "service-1", hostname: "api.preview.test" }),
         );
-        expect(calls).toEqual([
-          ["listAppDomains", "service-1"],
-          ["getApp", "service-1"],
-          ["getBranch", "branch-1"],
+
+        expect(domain.customDomainId).toBe("domain-1");
+        expect(domain.hostname).toBe("api.preview.test");
+        expect(domain.appId).toBe("service-1");
+        expect(calls).toContainEqual([
+          "createAppDomain",
+          { appId: "service-1", input: { hostname: "api.preview.test" } },
         ]);
       }).pipe(Effect.provide(providerLayer(client)), Effect.provide(managementApi(client).layer));
     },
@@ -2612,9 +2602,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           .pipe(Effect.flip);
 
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain(
-          "is managed by Prisma and cannot be managed by Alchemy",
-        );
+        expect(error.message).toContain("is managed by Prisma and cannot be managed by Alchemy");
         expect(calls).toEqual([
           [
             "listEnvironmentVariables",
@@ -2930,9 +2918,9 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           .pipe(Effect.flip);
 
         expect(invalidKey).toBeInstanceOf(Error);
-        expect((invalidKey as Error).message).toContain("must match POSIX env-var key shape");
+        expect(invalidKey.message).toContain("must match POSIX env-var key shape");
         expect(emptyValue).toBeInstanceOf(Error);
-        expect((emptyValue as Error).message).toContain("value must be non-empty");
+        expect(emptyValue.message).toContain("value must be non-empty");
         expect(calls).toEqual([]);
       }).pipe(Effect.provide(providerLayer(client)), Effect.provide(managementApi(client).layer));
     },
@@ -3634,8 +3622,8 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           )
           .pipe(Effect.flip);
 
-        expect((error as Error).message).toContain("immutable source");
-        expect((error as Error).message).toContain('"replica"');
+        expect(error.message).toContain("immutable source");
+        expect(error.message).toContain('"replica"');
       }).pipe(Effect.provide(providerLayer(client)), Effect.provide(managementApi(client).layer));
     },
     {
@@ -3809,9 +3797,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           )
           .pipe(Effect.flip);
 
-        expect((error as Error).message).toContain(
-          "cannot be distinguished from a foreign database",
-        );
+        expect(error.message).toContain("cannot be distinguished from a foreign database");
         expect(created).toBe(false);
       }).pipe(Effect.provide(providerLayer(client)), Effect.provide(managementApi(client).layer));
     },
@@ -4038,7 +4024,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           )
           .pipe(Effect.flip);
 
-        expect((error as Error).message).toContain("created unexpected default database");
+        expect(error.message).toContain("created unexpected default database");
         expect(routesOf(fake.captured)).toEqual(["POST /v1/projects"]);
         expect(fake.captured[0]?.bodyJson).toEqual({
           name: "app",
@@ -4396,7 +4382,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         getCustomDomain: (id: string) =>
           Effect.sync(() => {
             calls.push(["getCustomDomain", id]);
-            return { id, appId: "service-1", hostname: "api.example.com" };
+            return { id, appId: "service-1", hostname: "api.custom.test" };
           }),
         getEnvironmentVariable: (id: string) =>
           Effect.sync(() => {
@@ -4472,7 +4458,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           deleteInput("CustomDomain", {
             customDomainId: "domain-1",
             appId: "service-1",
-            hostname: "api.example.com",
+            hostname: "api.custom.test",
           }),
         );
         yield* envProvider.delete(
@@ -5246,17 +5232,17 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           )
           .pipe(Effect.flip);
 
-        expect((projectError as Error).message).toContain("appeared after the adoption check");
-        expect((databaseError as Error).message).toContain("appeared after the adoption check");
+        expect(projectError.message).toContain("appeared after the adoption check");
+        expect(databaseError.message).toContain("appeared after the adoption check");
         expect(connectionOut.connectionId).toBe("connection-1");
         expect(Redacted.value(connectionOut.directConnectionString!)).toBe(
           "postgres://app:rotated-password@db.prisma.test/database-1",
         );
         expect(Redacted.value(connectionOut.password!)).toBe("rotated-password");
-        expect((branchError as Error).message).toContain("appeared after the adoption check");
-        expect((serviceError as Error).message).toContain("not owned by this App resource");
-        expect((envError as Error).message).toContain("appeared after the adoption check");
-        expect((repoError as Error).message).toContain("appeared after the adoption check");
+        expect(branchError.message).toContain("appeared after the adoption check");
+        expect(serviceError.message).toContain("not owned by this App resource");
+        expect(envError.message).toContain("appeared after the adoption check");
+        expect(repoError.message).toContain("appeared after the adoption check");
         expect(
           fake.captured
             .filter((request) => request.method === "POST")

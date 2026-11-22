@@ -9,12 +9,13 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
-import { readFraudDetectorTags, syncFraudDetectorTags } from "./internal.ts";
+import { readFraudDetectorTags, snakeName, syncFraudDetectorTags } from "./internal.ts";
 
 export interface ListProps {
   /**
-   * Name of the list. If omitted, a unique lowercase name is generated from
-   * the app, stage, and logical ID. Changing the name replaces the list.
+   * Name of the list: lowercase letters, digits and underscores. If omitted,
+   * a unique name is generated from the app, stage, and logical ID. Changing
+   * the name replaces the list.
    */
   name?: string;
   /**
@@ -52,8 +53,18 @@ export interface List extends Resource<
     arn: string;
   },
   never,
-  Providers
+  Providers,
+  ListLookup
 > {}
+
+/**
+ * Props for {@link List.lookup}: find a list this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ListLookup {
+  /** The name of the existing list. */
+  name: string;
+}
 
 /**
  * An Amazon Fraud Detector list — a set of input values for a variable (an
@@ -87,6 +98,16 @@ export interface List extends Resource<
  * // )))
  * ```
  *
+ * ### Looking up an existing list
+ * `List.lookup` references a list Alchemy doesn't manage (created in the
+ * console or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing list
+ * ```typescript
+ * const existing = AWS.FraudDetector.List.lookup({ name: "my-list" });
+ * ```
+ *
  * @resource
  */
 export const List = Resource<List>("AWS.FraudDetector.List");
@@ -100,14 +121,19 @@ export const ListProvider = () =>
     List,
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: ListProps) {
-        return props.name ?? (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }));
+        return (
+          props.name ??
+          snakeName(
+            yield* createPhysicalName({ id, maxLength: 64, lowercase: true, delimiter: "_" }),
+          )
+        );
       });
 
       /** Look a list's metadata up by name; typed not-found → undefined. */
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getListsMetadata({ name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.lists?.find((list) => list.name === name);
       });
 
@@ -137,6 +163,13 @@ export const ListProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ name }) {
+          const list = yield* get(name);
+          if (list === undefined) return undefined;
+          const attrs = toAttrs(list);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

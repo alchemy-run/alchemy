@@ -35,7 +35,7 @@ export function proxyRequestHeaders(
   proxySharedSecret: string,
 ): IncomingHttpHeaders {
   const original = new URL(target);
-  const protocol = firstHeaderValue(request.headers["x-forwarded-proto"]);
+  const protocol = firstHeaderValue(request.headers["x-forwarded-proto"])?.toLowerCase();
   original.protocol =
     protocol === "https" || protocol === "http"
       ? `${protocol}:`
@@ -44,10 +44,16 @@ export function proxyRequestHeaders(
         : "http:";
   original.port = "";
   original.host = resolveForwardedHost(request.headers, target.host);
+  // The runtime derives `CF-Connecting-IP` from the connection it accepts,
+  // which is the proxy's over TCP and has no address over a Unix socket. The
+  // client's address is the one production reports.
+  const clientAddress = request.socket.remoteAddress?.replace(/^::ffff:/, "");
   return {
     // The Worker sees the dev server's host in `X-Forwarded-Host` when the
     // client sent none, as under `@cloudflare/vite-plugin`.
     "x-forwarded-host": firstHeaderValue(request.headers.host) ?? target.host,
+    // A header the client sent wins, as it does without the proxy.
+    ...(clientAddress ? { "cf-connecting-ip": clientAddress } : {}),
     ...request.headers,
     host: original.host,
     [HEADER_ORIGINAL_URL.toLowerCase()]: original.href,

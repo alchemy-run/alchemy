@@ -1,10 +1,10 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as servicedirectory from "@distilled.cloud/gcp/servicedirectory_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import ServiceDirectoryBindingsHost, {
   Api,
   ENDPOINT_ADDRESS,
@@ -26,8 +26,8 @@ let namespaceName: string;
 /** Roles the host's service account holds on the bound service. */
 const hostRolesOnService = Effect.gen(function* () {
   const policy = yield* servicedirectory.getIamPolicyProjectsLocationsNamespacesServices({
+    options: { requestedPolicyVersion: 3 },
     resource: serviceName,
-    body: { options: { requestedPolicyVersion: 3 } },
   });
   return (policy.bindings ?? [])
     .filter((binding) => (binding.members ?? []).includes(member))
@@ -38,15 +38,15 @@ const hostRolesOnService = Effect.gen(function* () {
 /** Roles the host's service account holds on the parent namespace. */
 const hostRolesOnNamespace = Effect.gen(function* () {
   const policy = yield* servicedirectory.getIamPolicyProjectsLocationsNamespaces({
+    options: { requestedPolicyVersion: 3 },
     resource: namespaceName,
-    body: { options: { requestedPolicyVersion: 3 } },
   });
   return (policy.bindings ?? [])
     .filter((binding) => (binding.members ?? []).includes(member))
     .map((binding) => binding.role);
 });
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "ServiceDirectory Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:servicedirectory", "provider:gcp:run", "live"],

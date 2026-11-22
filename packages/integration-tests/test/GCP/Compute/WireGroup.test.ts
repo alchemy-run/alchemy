@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -89,6 +90,13 @@ test.provider.skipIf(!runLifecycle)(
             },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.WireGroup.lookup({
+          wireGroupName: created.wireGroupName,
+          crossSiteNetwork: created.crossSiteNetwork,
+        }),
+        created,
       );
 
       expect(created.wireGroupName).toEqual(expect.any(String));

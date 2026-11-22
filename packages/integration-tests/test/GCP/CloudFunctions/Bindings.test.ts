@@ -1,12 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as cloudfunctions from "@distilled.cloud/gcp/cloudfunctions_v2";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import CloudFunctionsBindingsHost from "./fixtures/bindings-host.ts";
 import TargetFunction from "./fixtures/target-function.ts";
 
@@ -28,8 +28,8 @@ let project: string;
  */
 const expectFunctionGrants = Effect.gen(function* () {
   const policy = yield* crm.getIamPolicyProjects({
+    options: { requestedPolicyVersion: 3 },
     resource: `projects/${project}`,
-    body: { options: { requestedPolicyVersion: 3 } },
   });
   const condition = `resource.name == "${functionName}" || resource.name.startsWith("${functionName}/")`;
   const grants = (policy.bindings ?? [])
@@ -46,7 +46,7 @@ const expectFunctionGrants = Effect.gen(function* () {
 });
 
 // The target function's gen2 build takes 2-4 minutes.
-describe.skipIf(!dockerAvailable || !!process.env.FAST)(
+describe.skipIf(!!process.env.FAST)(
   "CloudFunctions Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:cloudfunctions", "provider:gcp:run", "live"],

@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
-import { describe, expect } from "alchemy-test";
-import * as Core from "alchemy/Test/Core";
+import { describe, expect } from "@alchemy.run/test";
+import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";

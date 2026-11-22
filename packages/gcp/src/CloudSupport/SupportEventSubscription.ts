@@ -143,7 +143,7 @@ export const SupportEventSubscription = Resource<SupportEventSubscription>(
 export class SupportEventSubscriptionNotResolved extends Data.TaggedError(
   "GCP.CloudSupport.SupportEventSubscriptionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lookupName = (
@@ -291,12 +291,7 @@ export const SupportEventSubscriptionProvider = () =>
 
       if (current === undefined || isDeleted(current)) {
         const created = yield* cloudsupport
-          .createOrganizationsSupportEventSubscriptions({
-            parent,
-            body: {
-              pubSubTopic: topicName,
-            },
-          })
+          .createOrganizationsSupportEventSubscriptions({ pubSubTopic: topicName, parent })
           .pipe(
             Effect.catchTag("Conflict", () => findOwnedSubscription(parent, id, lookup, topicName)),
           );
@@ -308,7 +303,7 @@ export const SupportEventSubscriptionProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new SupportEventSubscriptionNotResolved({
-          name: lookup || `${parent}/${COLLECTION}`,
+          resourceName: lookup || `${parent}/${COLLECTION}`,
         });
       }
 
@@ -321,18 +316,16 @@ export const SupportEventSubscriptionProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new SupportEventSubscriptionNotResolved({
-          name: lookup || `${parent}/${COLLECTION}`,
+          resourceName: lookup || `${parent}/${COLLECTION}`,
         });
       }
 
       const name = current.name;
       if (!sameTopic(current.pubSubTopic, topicName)) {
         current = yield* cloudsupport.patchOrganizationsSupportEventSubscriptions({
+          pubSubTopic: topicName,
           name,
           updateMask: "pub_sub_topic",
-          body: {
-            pubSubTopic: topicName,
-          },
         });
       }
 

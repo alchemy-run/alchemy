@@ -24,7 +24,7 @@ import {
 /** A filter on a CloudEvent attribute of a namespace subscription. */
 export interface NamespaceSubscriptionFilter {
   /** Operator, e.g. `StringIn`, `StringBeginsWith`, `NumberGreaterThan`, `BoolEquals`. */
-  operatorType: eventgrid.FilterOperatorType;
+  operatorType: eventgrid.Filter["operatorType"];
   /** CloudEvent attribute to filter on, e.g. `source`, `subject`, `data.region`. */
   key: string;
   /**
@@ -311,7 +311,9 @@ const desiredFilters = (
   props: NamespaceTopicEventSubscriptionProps,
 ): eventgrid.FiltersConfiguration => ({
   includedEventTypes: props.includedEventTypes,
-  filters: props.filters,
+  // Filters take one shape for every `operatorType`; the SDK types each
+  // operator as its own union arm.
+  filters: props.filters as eventgrid.Filter[] | undefined,
 });
 
 const normalizeFilters = (filters: eventgrid.FiltersConfiguration | undefined) =>
@@ -320,8 +322,8 @@ const normalizeFilters = (filters: eventgrid.FiltersConfiguration | undefined) =
     filters: (filters?.filters ?? []).map((f) => ({
       operatorType: f.operatorType,
       key: f.key,
-      value: f.value,
-      values: f.values,
+      value: "value" in f ? f.value : undefined,
+      values: "values" in f ? f.values : undefined,
     })),
   });
 
@@ -459,7 +461,7 @@ export const NamespaceTopicEventSubscriptionProvider = () =>
 
       // Sync against observed state; PATCH only the delta.
       const props = observed.properties ?? {};
-      const patch: eventgrid.SubscriptionUpdateParametersProperties = {};
+      const patch: eventgrid.SubscriptionUpdateParametersPropertiesInput = {};
       if (deliveryDiffers(props.deliveryConfiguration, delivery)) {
         const have = props.deliveryConfiguration;
         patch.deliveryConfiguration =

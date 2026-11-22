@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
 import type { AzureOpError } from "@distilled.cloud/azure";
 import * as servicePrincipals from "@distilled.cloud/microsoft-graph/servicePrincipals";
-import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";

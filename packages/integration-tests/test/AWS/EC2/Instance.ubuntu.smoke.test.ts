@@ -1,5 +1,5 @@
 import * as AWS from "@alchemy.run/aws";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
@@ -68,9 +68,13 @@ test.provider.skipIf(!!process.env.FAST)(
       const readTicks = getJson("/ticks").pipe(
         Effect.map((value) => (value as { ticks: number }).ticks),
       );
-      const first = yield* readTicks;
-      yield* Effect.sleep("3 seconds");
-      const second = yield* readTicks;
+      // A restart of the hosted process between the two reads resets the
+      // counter, so a pair that doesn't climb is read again.
+      const [first, second] = yield* Effect.gen(function* () {
+        const first = yield* readTicks;
+        yield* Effect.sleep("3 seconds");
+        return [first, yield* readTicks] as const;
+      }).pipe(Effect.repeat({ until: ([first, second]) => second > first, times: 5 }));
       expect(second).toBeGreaterThan(first);
 
       yield* stack.destroy();

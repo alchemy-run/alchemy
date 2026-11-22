@@ -1,12 +1,15 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as vmware from "@distilled.cloud/azure/vmware";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runPaidOnly } from "../gates.ts";
 import { AVS_TIMEOUT, logLevel, privateCloud, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
+
+const vrOf = (properties: vmware.AddonProperties | undefined) =>
+  properties?.addonType === "VR" ? properties : undefined;
 
 const program = (props: { vrsCount: number }) =>
   Effect.gen(function* () {
@@ -42,11 +45,11 @@ test.provider.skip(
         });
       const observed = yield* get();
       expect(observed.properties?.addonType).toEqual("VR");
-      expect(observed.properties?.vrsCount).toEqual(1);
+      expect(vrOf(observed.properties)?.vrsCount).toEqual(1);
 
       // In-place: add a replication server.
       yield* stack.deploy(program({ vrsCount: 2 }));
-      expect((yield* get()).properties?.vrsCount).toEqual(2);
+      expect(vrOf((yield* get()).properties)?.vrsCount).toEqual(2);
 
       yield* stack.destroy();
       expect(yield* waitGone(get())).toEqual("gone");

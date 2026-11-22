@@ -146,7 +146,7 @@ export const Customer = Resource<Customer>("GCP.CloudControlsPartner.Customer");
 export class CustomerNotResolved extends Data.TaggedError(
   "GCP.CloudControlsPartner.CustomerNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -272,11 +272,7 @@ export const CustomerProvider = () =>
 
       if (current === undefined) {
         const created = yield* cloudcontrolspartner
-          .createOrganizationsLocationsCustomers({
-            parent,
-            customerId,
-            body: { displayName },
-          })
+          .createOrganizationsLocationsCustomers({ displayName, parent, customerId })
           .pipe(
             Effect.catchTag("Conflict", () =>
               getCustomer(name).pipe(
@@ -290,15 +286,15 @@ export const CustomerProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CustomerNotResolved({ name });
+        return yield* new CustomerNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
       if (!sameText(current.displayName, displayName) && currentName.length > 0) {
         current = yield* cloudcontrolspartner.patchOrganizationsLocationsCustomers({
+          displayName,
           name: currentName,
           updateMask: "display_name",
-          body: { displayName },
         });
       }
 

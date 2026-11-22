@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as kafka from "@distilled.cloud/gcp/managedkafka_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withKafkaClusterSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -79,6 +80,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { cluster, connect, connector };
         }),
+      );
+      yield* expectFound(
+        GCP.ManagedKafka.ConnectClustersConnector.lookup({
+          connectorId: created.connector.connectorId,
+          location: created.connector.location,
+          connectCluster: created.connector.connectCluster,
+        }),
+        created.connector,
       );
 
       expect(created.connector.name).toContain("/connectors/");

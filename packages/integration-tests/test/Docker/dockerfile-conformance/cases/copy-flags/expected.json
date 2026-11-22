@@ -1,0 +1,43 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "COPY",
+          "line": 2,
+          "flags": [
+            {
+              "name": "chown",
+              "value": "node:node"
+            },
+            {
+              "name": "chmod",
+              "value": "644"
+            },
+            {
+              "name": "link",
+              "value": null
+            },
+            {
+              "name": "parents",
+              "value": null
+            },
+            {
+              "name": "exclude",
+              "value": "*.md"
+            }
+          ],
+          "sources": [
+            "src/"
+          ],
+          "destination": "/app/"
+        }
+      ]
+    }
+  ]
+}

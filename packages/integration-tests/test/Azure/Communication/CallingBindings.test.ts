@@ -1,4 +1,6 @@
 import * as Azure from "@alchemy.run/azure";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as callAutomation from "@distilled.cloud/azure/communication-call-automation";
 import * as identity from "@distilled.cloud/azure/communication-identity";
 import * as jobRouter from "@distilled.cloud/azure/communication-job-router";
@@ -6,10 +8,8 @@ import * as phoneNumbers from "@distilled.cloud/azure/communication-phone-number
 import * as rooms from "@distilled.cloud/azure/communication-rooms";
 import * as sipRouting from "@distilled.cloud/azure/communication-sip-routing";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -885,7 +885,7 @@ describe(
       );
     });
 
-    const exceptionRules = [
+    const exceptionRules: jobRouter.ExceptionRuleInput[] = [
       {
         id: "wait-5m",
         trigger: { kind: "waitTime", thresholdSeconds: 300 },
@@ -907,9 +907,10 @@ describe(
             exceptionPolicyId: "alchemy-upsert-ep",
           });
           const rule = observed.exceptionRules![0]!;
+          const action = rule.actions[0];
           expect({
             trigger: rule.trigger,
-            action: { ...rule.actions[0], id: undefined },
+            action: typeof action === "object" ? { ...action, id: undefined } : action,
           }).toEqual({
             trigger: { kind: "waitTime", thresholdSeconds: 300 },
             action: {

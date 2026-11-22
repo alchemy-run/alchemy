@@ -1,0 +1,140 @@
+{
+  "name": "@alchemy.run/ai",
+  "version": "2.0.0-beta.87",
+  "description": "What Alchemy's AI harnesses share: models, tools, skills, MCP servers and sandboxes, declared once and run on any harness.",
+  "keywords": [
+    "agents",
+    "ai",
+    "alchemy",
+    "effect",
+    "harness"
+  ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/ai"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./Archil": "./src/Archil/index.ts",
+    "./Boat": "./src/Boat/index.ts",
+    "./Cloudflare": "./src/Cloudflare/index.ts",
+    "./Daytona": "./src/Daytona/index.ts",
+    "./E2B": "./src/E2B/index.ts",
+    "./Modal": "./src/Modal/index.ts",
+    "./*": "./src/*.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "worker": "./src/index.ts",
+        "default": "./lib/index.js"
+      },
+      "./Archil": {
+        "types": "./lib/Archil/index.d.ts",
+        "bun": "./src/Archil/index.ts",
+        "worker": "./src/Archil/index.ts",
+        "default": "./lib/Archil/index.js"
+      },
+      "./Boat": {
+        "types": "./lib/Boat/index.d.ts",
+        "bun": "./src/Boat/index.ts",
+        "worker": "./src/Boat/index.ts",
+        "default": "./lib/Boat/index.js"
+      },
+      "./Cloudflare": {
+        "types": "./lib/Cloudflare/index.d.ts",
+        "bun": "./src/Cloudflare/index.ts",
+        "worker": "./src/Cloudflare/index.ts",
+        "default": "./lib/Cloudflare/index.js"
+      },
+      "./Daytona": {
+        "types": "./lib/Daytona/index.d.ts",
+        "bun": "./src/Daytona/index.ts",
+        "worker": "./src/Daytona/index.ts",
+        "default": "./lib/Daytona/index.js"
+      },
+      "./E2B": {
+        "types": "./lib/E2B/index.d.ts",
+        "bun": "./src/E2B/index.ts",
+        "worker": "./src/E2B/index.ts",
+        "default": "./lib/E2B/index.js"
+      },
+      "./Modal": {
+        "types": "./lib/Modal/index.d.ts",
+        "bun": "./src/Modal/index.ts",
+        "worker": "./src/Modal/index.ts",
+        "default": "./lib/Modal/index.js"
+      },
+      "./*": {
+        "types": "./lib/*.d.ts",
+        "bun": "./src/*.ts",
+        "worker": "./src/*.ts",
+        "default": "./lib/*.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts"
+  },
+  "devDependencies": {
+    "@alchemy.run/archil": "workspace:*",
+    "@alchemy.run/boat": "workspace:*",
+    "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/daytona": "workspace:*",
+    "@alchemy.run/e2b": "workspace:*",
+    "@alchemy.run/modal": "workspace:*",
+    "@types/bun": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "@alchemy.run/archil": "workspace:*",
+    "@alchemy.run/boat": "workspace:*",
+    "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/daytona": "workspace:*",
+    "@alchemy.run/e2b": "workspace:*",
+    "@alchemy.run/modal": "workspace:*",
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@alchemy.run/archil": {
+      "optional": true
+    },
+    "@alchemy.run/boat": {
+      "optional": true
+    },
+    "@alchemy.run/cloudflare": {
+      "optional": true
+    },
+    "@alchemy.run/daytona": {
+      "optional": true
+    },
+    "@alchemy.run/e2b": {
+      "optional": true
+    },
+    "@alchemy.run/modal": {
+      "optional": true
+    }
+  }
+}

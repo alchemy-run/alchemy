@@ -1,0 +1,238 @@
+---
+/**
+ * `<Queue />` — what's inside a message queue right now. Messages waiting,
+ * messages in flight to a consumer (received but hidden, not yet deleted), and
+ * the consumers holding them. Use it to show how a queue hands out work:
+ *
+ * - a standard queue: `messages`, in no particular order, consumers taking any
+ *   of them;
+ * - a FIFO queue: `groups`, one lane per message group, oldest on the right,
+ *   at most one message in flight per group.
+ *
+ *   <Queue
+ *     title="Jobs · SQS Queue"
+ *     producer={{ label: "Api", send: "SendMessage" }}
+ *     consumers={[{ id: "w1", label: "Worker 1" }]}
+ *     messages={[{ label: "job 4" }, { label: "job 1", to: "w1" }]}
+ *   />
+ *
+ * A message with `to` is in flight to that consumer. `note` labels the hidden
+ * state ("hidden · 30s").
+ */
+import "./diagram.css";
+
+interface Message {
+  label: string;
+  to?: string;
+}
+interface Props {
+  title: string;
+  producer?: { label: string; type?: string; send?: string };
+  consumers: { id: string; label: string; type?: string }[];
+  messages?: Message[];
+  groups?: { label: string; messages: Message[] }[];
+  note?: string;
+  caption?: string;
+}
+
+const { title, producer, consumers, messages = [], groups = [], note, caption } = Astro.props as Props;
+// Marker ids are per figure: a page can hold several, and a hidden layout's markers don't render.
+const uid = Math.random().toString(36).slice(2, 8);
+
+const MW = Math.max(64, ...[...messages, ...groups.flatMap((g) => g.messages)].map((m) => m.label.length * 6.6 + 20));
+const MH = 30;
+const GAPX = 14;
+const PW = producer ? Math.max(100, producer.label.length * 8 + 28, (producer.type ?? "").length * 6.6 + 28) : 0;
+const CW = Math.max(112, ...consumers.map((c) => Math.max(c.label.length * 8, (c.type ?? "").length * 6.6) + 28));
+const SEND_GAP = producer ? Math.max(70, (producer.send ?? "").length * 6.6 + 24) : 0;
+
+const X_Q = 8 + PW + SEND_GAP;
+const Q_PAD = 16;
+const GROUP_LABEL = groups.length ? Math.max(...groups.map((g) => g.label.length * 6.6)) + 16 : 0;
+const QTOP = 30;
+
+type Placed = Message & { x: number; y: number };
+let placed: Placed[] = [];
+let QW = 0;
+let QH = 0;
+if (groups.length) {
+  const most = Math.max(...groups.map((g) => g.messages.length));
+  QW = Q_PAD * 2 + GROUP_LABEL + most * MW + (most - 1) * GAPX;
+  const ROW = MH + 26;
+  groups.forEach((g, gi) => {
+    // Oldest on the right, nearest the consumers.
+    const n = g.messages.length;
+    g.messages.forEach((m, i) => {
+      placed.push({ ...m, x: X_Q + QW - Q_PAD - (i + 1) * MW - i * GAPX, y: QTOP + 12 + gi * ROW });
+    });
+  });
+  QH = 12 + groups.length * ROW + 4;
+} else {
+  // A loose grid with a vertical jitter: a standard queue keeps no order.
+  const cols = Math.ceil(messages.length / 2);
+  QW = Q_PAD * 2 + cols * MW + (cols - 1) * GAPX;
+  messages.forEach((m, i) => {
+    const col = Math.floor(i / 2);
+    const row = i % 2;
+    const jitter = [0, 14, 6, 18, 2, 12][col % 6]!;
+    placed.push({ ...m, x: X_Q + Q_PAD + col * (MW + GAPX), y: QTOP + 14 + row * (MH + 30) + (row ? -jitter / 2 : jitter) });
+  });
+  QH = 14 + 2 * MH + 30 + 26;
+}
+const X_C = X_Q + QW + 90;
+const W = X_C + CW + 8;
+const CH = 46;
+const cy = (i: number) => {
+  const span = QH - CH;
+  return consumers.length === 1 ? QTOP + span / 2 : QTOP + (i * span) / (consumers.length - 1);
+};
+const H = QTOP + QH + 10;
+const qMid = QTOP + QH / 2;
+
+// Phones get the queue turned upright: producer on top, the queue's messages
+// wrapped to the width, consumers underneath, so text keeps its size.
+const N_FIT = 318;
+const N_PW = producer ? Math.min(N_FIT, PW) : 0;
+const N_PH = producer ? 46 : 0;
+const N_QTOP = producer ? N_PH + 44 : 22;
+const N_GAP = 10;
+type NPlaced = Message & { x: number; y: number };
+const nPlaced: NPlaced[] = [];
+const nGroupLabels: { label: string; y: number }[] = [];
+let N_QH = 0;
+if (groups.length) {
+  const labelW = Math.max(...groups.map((g) => g.label.length * 6.6)) + 12;
+  const per = Math.max(1, Math.floor((N_FIT - 24 - labelW + N_GAP) / (MW + N_GAP)));
+  let y = N_QTOP + 12;
+  for (const g of groups) {
+    nGroupLabels.push({ label: g.label, y });
+    const shown = g.messages.slice(0, per);
+    shown.forEach((m, i) => nPlaced.push({ ...m, x: N_FIT - 12 - (i + 1) * MW - i * N_GAP, y }));
+    y += MH + (note && shown.some((m) => m.to) ? 26 : 12);
+  }
+  N_QH = y - N_QTOP;
+} else {
+  const per = Math.max(1, Math.floor((N_FIT - 24 + N_GAP) / (MW + N_GAP)));
+  messages.forEach((m, i) => {
+    const r = Math.floor(i / per);
+    const c = i % per;
+    nPlaced.push({ ...m, x: 12 + c * (MW + N_GAP), y: N_QTOP + 12 + r * (MH + (note ? 26 : 12)) });
+  });
+  N_QH = 12 + Math.ceil(messages.length / per) * (MH + (note ? 26 : 12));
+}
+const N_CTOP = N_QTOP + N_QH + 56;
+const N_CW = Math.min(CW, (N_FIT - (consumers.length - 1) * N_GAP) / consumers.length);
+const ncx = (i: number) => (N_FIT - (consumers.length * N_CW + (consumers.length - 1) * N_GAP)) / 2 + i * (N_CW + N_GAP);
+const N_H = N_CTOP + CH + 6;
+---
+
+<figure class="alc-fig not-content" data-nosnippet>
+  <div class="alc-fig__panel">
+  <svg class="alc-fig__svg alc-fig__svg--wide" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? title}>
+    <defs>
+      <marker id={`alc-q-arrow-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
+      </marker>
+    </defs>
+
+    {producer && (
+      <g>
+        <rect x={8} y={qMid - 23} width={PW} height={46} rx="8" class="alc-fig__box" />
+        <text x={8 + PW / 2} y={qMid + (producer.type ? -3 : 4)} text-anchor="middle" class="alc-fig__label">{producer.label}</text>
+        {producer.type && <text x={8 + PW / 2} y={qMid + 13} text-anchor="middle" class="alc-fig__type">{producer.type}</text>}
+        <line x1={8 + PW} y1={qMid} x2={X_Q - 2} y2={qMid} class="alc-fig__line" marker-end={`url(#alc-q-arrow-${uid})`} />
+        {producer.send && <text x={8 + PW + SEND_GAP / 2} y={qMid - 8} text-anchor="middle" class="alc-fig__small">{producer.send}</text>}
+      </g>
+    )}
+
+    <rect x={X_Q} y={QTOP} width={QW} height={QH} rx="10" class="alc-fig__box alc-q__queue" />
+    <text x={X_Q + 4} y={QTOP - 10} class="alc-fig__strong">{title}</text>
+
+    {groups.map((g, gi) => (
+      <text x={X_Q + Q_PAD} y={QTOP + 12 + gi * (MH + 26) + MH / 2 + 4} class="alc-fig__type">{g.label}</text>
+    ))}
+
+    {
+      placed.map((m) => {
+        const ci = consumers.findIndex((c) => c.id === m.to);
+        const inFlight = ci >= 0;
+        const ty = cy(ci) + CH / 2;
+        return (
+          <g>
+            {inFlight && (
+              <path
+                d={`M ${m.x + MW} ${m.y + MH / 2} C ${X_C - 40} ${m.y + MH / 2}, ${X_C - 50} ${ty}, ${X_C - 2} ${ty}`}
+                class="alc-fig__line alc-fig__line--dashed"
+                marker-end={`url(#alc-q-arrow-${uid})`}
+              />
+            )}
+            <rect x={m.x} y={m.y} width={MW} height={MH} rx="5" class:list={["alc-fig__box", inFlight ? "alc-fig__box--muted" : "alc-fig__box--accent"]} />
+            <text x={m.x + MW / 2} y={m.y + 19} text-anchor="middle" class="alc-fig__small" opacity={inFlight ? 0.75 : 1}>{m.label}</text>
+            {inFlight && note && <text x={m.x + MW / 2} y={m.y + MH + 12} text-anchor="middle" class="alc-fig__type">{note}</text>}
+          </g>
+        );
+      })
+    }
+
+    {consumers.map((c, i) => (
+      <g>
+        <rect x={X_C} y={cy(i)} width={CW} height={CH} rx="8" class="alc-fig__box" />
+        <text x={X_C + CW / 2} y={cy(i) + CH / 2 + (c.type ? -3 : 4)} text-anchor="middle" class="alc-fig__label">{c.label}</text>
+        {c.type && <text x={X_C + CW / 2} y={cy(i) + CH / 2 + 13} text-anchor="middle" class="alc-fig__type">{c.type}</text>}
+      </g>
+    ))}
+  </svg>
+  <svg class="alc-fig__svg alc-fig__svg--narrow" viewBox={`0 0 ${N_FIT} ${N_H}`} style={`max-width: ${Math.round(N_FIT * 1.15)}px`} role="img" aria-label={caption ?? title}>
+    <defs>
+      <marker id={`alc-q-arrow-n-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
+      </marker>
+    </defs>
+    {producer && (
+      <g>
+        <rect x={(N_FIT - N_PW) / 2} y={0} width={N_PW} height={N_PH} rx="8" class="alc-fig__box" />
+        <text x={N_FIT / 2} y={N_PH / 2 + (producer.type ? -3 : 4)} text-anchor="middle" class="alc-fig__label">{producer.label}</text>
+        {producer.type && <text x={N_FIT / 2} y={N_PH / 2 + 13} text-anchor="middle" class="alc-fig__type">{producer.type}</text>}
+        <line x1={N_FIT / 2} y1={N_PH} x2={N_FIT / 2} y2={N_QTOP - 22} class="alc-fig__line" marker-end={`url(#alc-q-arrow-n-${uid})`} />
+        {producer.send && <text x={N_FIT / 2 + 8} y={N_PH + 18} class="alc-fig__small">{producer.send}</text>}
+      </g>
+    )}
+    <text x={4} y={N_QTOP - 8} class="alc-fig__strong">{title}</text>
+    <rect x={0} y={N_QTOP} width={N_FIT} height={N_QH} rx="10" class="alc-fig__box alc-q__queue" />
+    {nGroupLabels.map((g) => <text x={12} y={g.y + MH / 2 + 4} class="alc-fig__type">{g.label}</text>)}
+    {nPlaced.map((m) => {
+      const ci = consumers.findIndex((c) => c.id === m.to);
+      if (ci < 0) return null;
+      const tx = ncx(ci) + N_CW / 2;
+      const qb = N_QTOP + N_QH;
+      return (
+        <path d={`M ${m.x + MW / 2} ${m.y + MH} V ${qb + 6} C ${m.x + MW / 2} ${qb + 30}, ${tx} ${qb + 20}, ${tx} ${N_CTOP - 2}`} class="alc-fig__line alc-fig__line--dashed" marker-end={`url(#alc-q-arrow-n-${uid})`} />
+      );
+    })}
+    {nPlaced.map((m) => {
+      const inFlight = consumers.some((c) => c.id === m.to);
+      return (
+        <g>
+          <rect x={m.x} y={m.y} width={MW} height={MH} rx="5" class:list={["alc-fig__box", inFlight ? "alc-fig__box--muted" : "alc-fig__box--accent"]} style={inFlight ? "fill: var(--alc-bg-elev-1)" : ""} />
+          <text x={m.x + MW / 2} y={m.y + 19} text-anchor="middle" class="alc-fig__small" opacity={inFlight ? 0.75 : 1}>{m.label}</text>
+          {inFlight && note && <text x={m.x + MW / 2} y={m.y + MH + 12} text-anchor="middle" class="alc-fig__type alc-fig__haloed">{note}</text>}
+        </g>
+      );
+    })}
+    {consumers.map((c, i) => (
+      <g>
+        <rect x={ncx(i)} y={N_CTOP} width={N_CW} height={CH} rx="8" class="alc-fig__box" />
+        <text x={ncx(i) + N_CW / 2} y={N_CTOP + CH / 2 + (c.type ? -3 : 4)} text-anchor="middle" class="alc-fig__label">{c.label}</text>
+        {c.type && <text x={ncx(i) + N_CW / 2} y={N_CTOP + CH / 2 + 13} text-anchor="middle" class="alc-fig__type">{c.type}</text>}
+      </g>
+    ))}
+  </svg>
+  </div>
+  {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
+</figure>
+
+<style>
+  .alc-q__queue {
+    fill: color-mix(in srgb, var(--alc-hairline) 40%, transparent);
+  }
+</style>

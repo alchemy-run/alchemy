@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { CERT_A_PEM, CERT_B_PEM, KEY_A_PEM, KEY_B_PEM } from "./fixtures/https-proxy-cert.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -67,6 +68,16 @@ test.provider(
           });
           return { map, cert, proxy };
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.TargetHttpsProxy.lookup({
+          targetHttpsProxyName: created.proxy.targetHttpsProxyName,
+        }),
+        created.proxy,
+      );
+      yield* expectFound(
+        GCP.Compute.UrlMap.lookup({ urlMapName: created.map.urlMapName }),
+        created.map,
       );
 
       expect(created.proxy.targetHttpsProxyName).toEqual(expect.any(String));

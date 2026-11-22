@@ -5,11 +5,22 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags } from "alchemy/Tags";
 import { toWireSeconds } from "alchemy/Util/Duration";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
+
+export class KxClusterInvalidProps extends Data.TaggedError("KxClusterInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class KxClusterUnexpectedResponse extends Data.TaggedError("KxClusterUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type KxClusterStatus = finspace.KxClusterStatus;
 export type KxClusterType = finspace.KxClusterType;
@@ -187,8 +198,20 @@ export interface KxCluster extends Resource<
     azMode: KxAzMode | undefined;
   },
   never,
-  Providers
+  Providers,
+  KxClusterLookup
 > {}
+
+/**
+ * Props for {@link KxCluster.lookup}: find a kdb cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface KxClusterLookup {
+  /** The environment the cluster runs in. */
+  environmentId: string;
+  /** The name of the existing cluster. */
+  clusterName: string;
+}
 
 /**
  * A kdb cluster inside an Amazon FinSpace Managed kdb environment — the
@@ -221,6 +244,16 @@ export interface KxCluster extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing kdb cluster
+ * `KxCluster.lookup` references a kdb cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `environmentId` and `clusterName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing kdb cluster
+ * ```typescript
+ * const hdb = AWS.FinSpace.KxCluster.lookup({ environmentId, clusterName: "hdb" });
+ * ```
+ *
  * @resource
  */
 export const KxCluster = Resource<KxCluster>("AWS.FinSpace.KxCluster");
@@ -234,7 +267,7 @@ const isGone = (status: KxClusterStatus | undefined) =>
 const readCluster = Effect.fn(function* (environmentId: string, clusterName: string) {
   const response = yield* finspace
     .getKxCluster({ environmentId, clusterName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!response || isGone(response.status)) return undefined;
   return response;
 });
@@ -294,7 +327,7 @@ const waitForClusterStatus = (
     Effect.gen(function* () {
       const response = yield* finspace
         .getKxCluster({ environmentId, clusterName })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       const status = response?.status;
       if (target === "DELETED") {
         if (response === undefined || status === "DELETED") return;
@@ -333,6 +366,10 @@ export const KxClusterProvider = () =>
         // Clusters are keyed by their parent kdb environment — there is no
         // account-wide enumeration without an environment id.
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* ({ environmentId, clusterName }) {
+          const cluster = yield* readCluster(environmentId, clusterName);
+          return cluster ? toAttributes(cluster, environmentId, clusterName) : undefined;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const environmentId = output?.environmentId ?? olds?.environmentId;
           if (environmentId === undefined) return undefined;
@@ -374,13 +411,16 @@ export const KxClusterProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("FinSpace KxCluster requires props"));
+            return yield* new KxClusterInvalidProps({
+              message: "FinSpace KxCluster requires props",
+            });
           }
           const environmentId = news.environmentId;
           const clusterName = output?.clusterName ?? (yield* createClusterName(id, news));
           const internalTags = yield* createInternalTags(id);
           // One idempotency token per reconcile.
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
 
           // Observe — cloud state is authoritative.
           let cluster = yield* readCluster(environmentId, clusterName);
@@ -413,14 +453,14 @@ export const KxClusterProvider = () =>
                 executionRole: news.executionRole,
                 tags: { ...internalTags, ...news.tags },
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             yield* session.note(`Creating kdb cluster ${clusterName}...`);
             yield* waitForClusterStatus(environmentId, clusterName, "RUNNING");
             cluster = yield* readCluster(environmentId, clusterName);
             if (cluster === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created kdb cluster ${clusterName}`),
-              );
+              return yield* new KxClusterUnexpectedResponse({
+                message: `failed to read created kdb cluster ${clusterName}`,
+              });
             }
           }
 
@@ -461,9 +501,9 @@ export const KxClusterProvider = () =>
 
           const final = yield* readCluster(environmentId, clusterName);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled kdb cluster ${clusterName}`),
-            );
+            return yield* new KxClusterUnexpectedResponse({
+              message: `failed to read reconciled kdb cluster ${clusterName}`,
+            });
           }
           return toAttributes(final, environmentId, clusterName);
         }),

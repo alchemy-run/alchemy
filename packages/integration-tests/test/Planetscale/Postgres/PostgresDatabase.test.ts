@@ -1,15 +1,16 @@
 import * as Planetscale from "@alchemy.run/planetscale";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ps from "@distilled.cloud/planetscale";
-import { describe, expect } from "alchemy-test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import { Data, Schedule } from "effect";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { MinimumLogLevel } from "effect/References";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: Planetscale.providers() });
 
@@ -88,6 +89,14 @@ describe
 
                 return { database };
               }),
+            );
+            yield* expectFound(
+              Planetscale.PostgresDatabase.lookup({ name: database.name }),
+              database,
+              {
+                // Migrations are this stack's record.
+                ignore: ["migrationsDir", "migrationsTable", "migrationsHashes", "importHashes"],
+              },
             );
 
             expect(database).toMatchObject({

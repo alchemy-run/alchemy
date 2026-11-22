@@ -4,11 +4,13 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitGlobalOperation } from "./operations.ts";
@@ -83,8 +85,26 @@ export type GlobalVmExtensionPolicy = Resource<
     scopedResourceStatus: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  GlobalVmExtensionPolicyLookup
 >;
+
+/**
+ * Props for {@link GlobalVmExtensionPolicy.lookup}: find a global vm
+ * extension policy this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface GlobalVmExtensionPolicyLookup {
+  /**
+   * Policy name (RFC1035, 1-63 chars).
+   */
+  policyName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A project-level Compute Engine VM extension policy.
@@ -113,6 +133,19 @@ export type GlobalVmExtensionPolicy = Resource<
  *     { labelSelector: { inclusionLabels: { role: "web" } } },
  *   ],
  *   priority: 100,
+ * });
+ * ```
+ *
+ * ### Looking up an existing global vm extension policy
+ * `GlobalVmExtensionPolicy.lookup` references a global vm extension policy
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared global vm extension policy.
+ *
+ * **Example:** Reference an existing global vm extension policy
+ * ```typescript
+ * const globalVmExtensionPolicy = GCP.Compute.GlobalVmExtensionPolicy.lookup({
+ *   policyName: "my-policy",
  * });
  * ```
  *
@@ -269,7 +302,7 @@ const needsUpdate = (
 const getByName = (project: string, globalVmExtensionPolicy: string) =>
   compute
     .getGlobalVmExtensionPolicies({ project, globalVmExtensionPolicy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, policyName: string) =>
   getByName(project, policyName).pipe(
@@ -293,6 +326,13 @@ export const GlobalVmExtensionPolicyProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ policyName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, policyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -329,19 +369,14 @@ export const GlobalVmExtensionPolicyProvider = () =>
       let current = yield* getByName(env.project, policyName);
 
       if (current === undefined) {
-        yield* compute
-          .insertGlobalVmExtensionPolicies({
-            project: env.project,
-            body: desired,
-          })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation, {
-                ignore: ["RESOURCE_ALREADY_EXISTS"],
-              }),
-            ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-          );
+        yield* compute.insertGlobalVmExtensionPolicies({ ...desired, project: env.project }).pipe(
+          Effect.flatMap((operation) =>
+            waitGlobalOperation(env.project, operation, {
+              ignore: ["RESOURCE_ALREADY_EXISTS"],
+            }),
+          ),
+          Effect.catchTag("Conflict", () => Effect.undefined),
+        );
         current = yield* awaitResource(env.project, policyName);
       }
 
@@ -352,9 +387,9 @@ export const GlobalVmExtensionPolicyProvider = () =>
       if (needsUpdate(current, desired)) {
         yield* compute
           .updateGlobalVmExtensionPolicies({
+            ...desired,
             project: env.project,
             globalVmExtensionPolicy: policyName,
-            body: desired,
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, policyName);
@@ -373,9 +408,10 @@ export const GlobalVmExtensionPolicyProvider = () =>
       const requestDelete = (retryUuid?: string) =>
         compute
           .deleteGlobalVmExtensionPolicies({
+            predefinedRolloutPlan: "FAST_ROLLOUT",
+            retryUuid,
             project: env.project,
             globalVmExtensionPolicy: output.policyName,
-            body: { predefinedRolloutPlan: "FAST_ROLLOUT", retryUuid },
           })
           .pipe(
             Effect.retry({
@@ -383,7 +419,7 @@ export const GlobalVmExtensionPolicyProvider = () =>
               schedule: Schedule.spaced("2 seconds"),
               times: 8,
             }),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void
@@ -399,7 +435,7 @@ export const GlobalVmExtensionPolicyProvider = () =>
       if (observed === undefined) return;
       const retryUuid =
         observed.scopedResourceStatus === "SCOPED_RESOURCE_STATUS_DELETING"
-          ? yield* Effect.sync(() => crypto.randomUUID())
+          ? yield* SecureRandom.SecureRandom.pipe(Effect.flatMap((random) => random.uuidV4()))
           : undefined;
       yield* requestDelete(retryUuid);
       // Deletion is itself a rollout; the policy stays readable until the

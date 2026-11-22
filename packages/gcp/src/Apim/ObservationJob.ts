@@ -137,10 +137,10 @@ const toAttrs = (location: string, item: apim.ObservationJob, project: string) =
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apim
         .getProjectsLocationsObservationJobs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
@@ -233,13 +233,11 @@ export const ObservationJobProvider = () =>
       if (current === undefined) {
         const created = yield* apim
           .createProjectsLocationsObservationJobs({
+            sources: sources.length > 0 ? sources : undefined,
             parent: parentOf(env.project, location),
             observationJobId,
-            body: {
-              sources: sources.length > 0 ? sources : undefined,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -247,7 +245,7 @@ export const ObservationJobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const resource = current.name ?? name;
@@ -260,7 +258,7 @@ export const ObservationJobProvider = () =>
             name: resource,
             body: {},
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         yield* runAndWait(operation);
         current = yield* waitUntilReady(
           getByName(resource),
@@ -274,7 +272,7 @@ export const ObservationJobProvider = () =>
             name: resource,
             body: {},
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         yield* runAndWait(operation);
         current = yield* waitUntilReady(
           getByName(resource),
@@ -296,7 +294,7 @@ export const ObservationJobProvider = () =>
             name: output.name,
             body: {},
           })
-          .pipe(Effect.catchTag(["NotFound", "Conflict"], () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag(["NotFound", "Conflict"], () => Effect.undefined));
         if (disable !== undefined) {
           yield* waitForOperation(disable, { notFoundOk: true });
         }
@@ -324,7 +322,7 @@ export const ObservationJobProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

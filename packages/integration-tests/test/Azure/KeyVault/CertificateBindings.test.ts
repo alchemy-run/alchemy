@@ -1,12 +1,12 @@
 import * as Azure from "@alchemy.run/azure";
-import { type AzureOpError, Credentials } from "@distilled.cloud/azure";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import { armScopeFor, Credentials } from "@distilled.cloud/azure";
 import * as authorization from "@distilled.cloud/azure/authorization";
 import * as certificates from "@distilled.cloud/azure/keyvault-certificates";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -29,7 +29,7 @@ const KEY_VAULT_CERTIFICATES_OFFICER = "a4417e6f-fecd-4de8-b567-7b0420556985";
 /** Object ID (`oid` claim) of the identity running the tests. */
 const callerObjectId = Effect.gen(function* () {
   const config = yield* yield* Credentials;
-  const token = Redacted.value(config.bearerToken);
+  const token = Redacted.value(yield* config.token(armScopeFor(config.apiBaseUrl)));
   return yield* Effect.sync(
     () =>
       JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"))
@@ -167,7 +167,7 @@ const deployerOperation = (certificateName: string) =>
 
 /** `"found"` once a read succeeds, or the typed not-found tag it keeps failing with. */
 const outcome = <A, E, R>(
-  read: Effect.Effect<A, AzureOpError | E, R>,
+  read: Effect.Effect<A, certificates.GetCertificateError | E, R>,
   until: "found" | "gone",
 ) =>
   read.pipe(

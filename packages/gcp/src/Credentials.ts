@@ -1,10 +1,7 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials, type Config as CredentialsConfig } from "@distilled.cloud/gcp/Credentials";
-import {
-  deferUntilFirstUse,
-  orDieCredentialsUnavailable,
-  resolveProviderConfig,
-} from "alchemy/Auth/Resolve";
+import { GCPCredentialsError } from "@distilled.cloud/gcp/Errors";
+import { lazyCredentials } from "alchemy/Auth/Resolve";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -12,11 +9,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import {
-  GCP_AUTH_PROVIDER_NAME,
-  type GcpAuthConfig,
-  type GcpResolvedCredentials,
-} from "./AuthProvider.ts";
+import { GCP_AUTH_PROVIDER_NAME, type GcpResolvedCredentials } from "./AuthProvider.ts";
 import {
   cacheCredentials,
   fetchMetadataProject,
@@ -43,32 +36,17 @@ export {
 export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
-    Effect.gen(function* () {
-      // Defer the profile lookup until first use, so building the provider
-      // layers never requires a configured profile. Only the lookup is
-      // cached: distilled yields `Credentials` then the inner Effect on
-      // every call so SA tokens can refresh from AuthProvider's cache.
-      const lookup = yield* resolveProviderConfig<GcpAuthConfig, GcpResolvedCredentials>(
-        GCP_AUTH_PROVIDER_NAME,
-      ).pipe(deferUntilFirstUse, Effect.flatMap(Effect.cached));
-      return lookup.pipe(
-        Effect.flatMap(({ profileName, resolve }) =>
-          resolve.pipe(
-            Effect.map((creds) => ({
-              accessToken: creds.accessToken,
-              project: creds.project,
-              region: creds.region,
-            })),
-            Effect.mapError((e) =>
-              ConfigError.make({
-                message: `Failed to resolve GCP credentials from ${profileName === undefined ? "the environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-              }),
-            ),
-          ),
-        ),
-        orDieCredentialsUnavailable(GCP_AUTH_PROVIDER_NAME),
-      );
-    }),
+    // Minted service-account tokens are re-resolved shortly before they
+    // expire; supplied access tokens are cached for the process.
+    lazyCredentials<GcpResolvedCredentials, GCPCredentialsError>()(
+      GCP_AUTH_PROVIDER_NAME,
+      (creds) => ({
+        accessToken: creds.accessToken,
+        project: creds.project,
+        region: creds.region,
+      }),
+      { expiresAt: (creds) => creds.expiresAt },
+    ),
   );
 
 /**

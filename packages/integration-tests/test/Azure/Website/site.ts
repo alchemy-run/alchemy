@@ -1,10 +1,10 @@
 import * as Azure from "@alchemy.run/azure";
 import { orUndefinedIfNotFound } from "@alchemy.run/azure/Arm";
+import { expect } from "@alchemy.run/test";
 import * as cdn from "@distilled.cloud/azure/cdn";
 import * as resources from "@distilled.cloud/azure/resources";
 import * as storage from "@distilled.cloud/azure/storage";
 import * as blob from "@distilled.cloud/azure/storage-blob";
-import { expect } from "alchemy-test";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";

@@ -1,10 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -35,6 +37,7 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(GCP.SecretManager.Secret.lookup({ secretId: created.secretId }), created);
 
       expect(created.name).toContain("/secrets/");
       expect(created.secretId).toEqual(expect.any(String));
@@ -55,8 +58,8 @@ test.provider(
         Buffer.from("alchemy-secret-payload", "utf8").toString("base64"),
       );
       const version = yield* secretmanager.addVersionProjectsSecrets({
+        payload: { data: payload },
         parent: created.name,
-        body: { payload: { data: payload } },
       });
       expect(version.name).toContain("/versions/");
 
@@ -142,6 +145,52 @@ test.provider(
 
       const gone = yield* waitUntilGone(replaced.name);
       expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: ["provider:gcp", "provider:gcp:secretmanager", "live"],
+    timeout: 90_000,
+  },
+);
+
+test.provider(
+  "a secret's value is written at deploy, as a new version only when it changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const secret = (value: string) =>
+        GCP.SecretManager.Secret("Token", { value: Redacted.make(value) });
+      const valueOf = (name: string) =>
+        secretmanager
+          .accessProjectsSecretsVersions({ name })
+          .pipe(
+            Effect.flatMap((response) =>
+              Effect.sync(() =>
+                Buffer.from(response.payload?.data ?? "", "base64").toString("utf8"),
+              ),
+            ),
+          );
+
+      const first = yield* stack.deploy(secret("first"));
+      expect(first.version).toMatch(/\/versions\/\d+$/);
+      expect(yield* valueOf(first.version!)).toEqual("first");
+
+      // The same value plans no change and adds no version.
+      expect((yield* stack.plan(secret("first"))).resources.Token).toMatchObject({
+        action: "noop",
+      });
+      expect((yield* stack.deploy(secret("first"))).version).toEqual(first.version);
+
+      const second = yield* stack.deploy(secret("second"));
+      expect(second.name).toEqual(first.name);
+      expect(second.version).not.toEqual(first.version);
+      expect(yield* valueOf(second.version!)).toEqual("second");
+      expect(yield* valueOf(`${second.name}/versions/latest`)).toEqual("second");
+      // The earlier version still holds what it held.
+      expect(yield* valueOf(first.version!)).toEqual("first");
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(second.name)).toEqual("gone");
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:secretmanager", "live"],

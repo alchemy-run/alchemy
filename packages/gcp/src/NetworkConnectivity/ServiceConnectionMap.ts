@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -142,8 +143,31 @@ export type ServiceConnectionMap = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ServiceConnectionMapLookup
 >;
+
+/**
+ * Props for {@link ServiceConnectionMap.lookup}: find a service connection
+ * map this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface ServiceConnectionMapLookup {
+  /**
+   * Map id (the `{service_connection_map}` segment).
+   */
+  serviceConnectionMapId: string;
+  /**
+   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A PSC Service Connection Map that pairs producer service attachments
@@ -170,6 +194,19 @@ export type ServiceConnectionMap = Resource<
  *   serviceClass: "gcp-cloud-sql",
  *   description: "sql psc map v2",
  *   labels: { env: "prod", role: "psc" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing service connection map
+ * `ServiceConnectionMap.lookup` references a service connection map Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared service connection map.
+ *
+ * **Example:** Reference an existing service connection map
+ * ```typescript
+ * const serviceConnectionMap = GCP.NetworkConnectivity.ServiceConnectionMap.lookup({
+ *   serviceConnectionMapId: "my-service-connection-map",
  * });
  * ```
  *
@@ -263,7 +300,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   networkconnectivity
     .getProjectsLocationsServiceConnectionMaps({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ServiceConnectionMapProvider = () =>
   Provider.succeed(ServiceConnectionMap, {
@@ -289,6 +326,15 @@ export const ServiceConnectionMapProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ serviceConnectionMapId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, serviceConnectionMapId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -345,16 +391,14 @@ export const ServiceConnectionMapProvider = () =>
       if (current === undefined) {
         const created = yield* networkconnectivity
           .createProjectsLocationsServiceConnectionMaps({
+            serviceClass: news.serviceClass,
+            token: news.token,
+            producerPscConfigs,
+            consumerPscConfigs,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             serviceConnectionMapId,
-            body: {
-              serviceClass: news.serviceClass,
-              token: news.token,
-              producerPscConfigs,
-              consumerPscConfigs,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -362,7 +406,7 @@ export const ServiceConnectionMapProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -371,7 +415,7 @@ export const ServiceConnectionMapProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NetworkConnectivityNotResolved({ name });
+        return yield* new NetworkConnectivityNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -399,17 +443,14 @@ export const ServiceConnectionMapProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkconnectivity.patchProjectsLocationsServiceConnectionMaps({
+          labels: desiredLabels,
+          description: news.description,
+          token: news.token,
+          producerPscConfigs,
+          consumerPscConfigs,
+          etag: current.etag,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            token: news.token,
-            producerPscConfigs,
-            consumerPscConfigs,
-            etag: current.etag,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
@@ -430,7 +471,7 @@ export const ServiceConnectionMapProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

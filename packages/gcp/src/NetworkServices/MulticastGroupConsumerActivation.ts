@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -69,11 +70,6 @@ export type MulticastGroupConsumerActivationProps = {
    */
   multicastGroupRangeActivation: string;
   /**
-   * Deprecated multicast group resource name. Prefer
-   * `multicastGroupRangeActivation`.
-   */
-  multicastGroup?: string;
-  /**
    * Human-readable description.
    */
   description?: string;
@@ -103,8 +99,6 @@ export type MulticastGroupConsumerActivation = Resource<
     multicastConsumerAssociation: string | undefined;
     /** Attached multicast group range activation. */
     multicastGroupRangeActivation: string | undefined;
-    /** Deprecated multicast group name, if set. */
-    multicastGroup: string | undefined;
     /** User-provided description. */
     description: string | undefined;
     /** Logging configuration. */
@@ -123,8 +117,34 @@ export type MulticastGroupConsumerActivation = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MulticastGroupConsumerActivationLookup
 >;
+
+/**
+ * Props for {@link MulticastGroupConsumerActivation.lookup}: find a
+ * multicast group consumer activation this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface MulticastGroupConsumerActivationLookup {
+  /**
+   * Activation id (the `{multicastGroupConsumerActivation}` segment of
+   * `proj
+   * ects/{project}/locations/{location}/multicastGroupConsumerActivations/{m
+   * ulticastGroupConsumerActivation}`). Must be at most 48 characters.
+   */
+  multicastGroupConsumerActivationId: string;
+  /**
+   * Zone of the activation (`us-central1-a`, …). `US-CENTRAL1-A` is
+   * accepted and normalized to `us-central1-a`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A multicast group consumer activation lets VMs in an associated
@@ -150,6 +170,19 @@ export type MulticastGroupConsumerActivation = Resource<
  * );
  * ```
  *
+ * ### Looking up an existing multicast group consumer activation
+ * `MulticastGroupConsumerActivation.lookup` references a multicast group
+ * consumer activation Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared multicast group consumer activation.
+ *
+ * **Example:** Reference an existing multicast group consumer activation
+ * ```typescript
+ * const multicastGroupConsumerActivation = GCP.NetworkServices.MulticastGroupConsumerActivation.lookup({
+ *   multicastGroupConsumerActivationId: "my-multicast-group-consumer-activation",
+ * });
+ * ```
+ *
  * @resource
  * @category NetworkServices
  */
@@ -162,9 +195,6 @@ const toAssociation = (project: string, location: string, value: string | undefi
 
 const toRangeActivation = (project: string, location: string, value: string | undefined) =>
   value ? toNamedResource(project, location, "multicastGroupRangeActivations", value) : undefined;
-
-const toGroup = (project: string, location: string, value: string | undefined) =>
-  value ? toNamedResource(project, location, "multicastGroups", value) : undefined;
 
 const toLogConfig = (
   config: MulticastLogConfig | networkservices.MulticastLogConfig | undefined,
@@ -193,7 +223,6 @@ const toAttrs = (activation: networkservices.MulticastGroupConsumerActivation, p
       location,
       activation.multicastGroupRangeActivation,
     ),
-    multicastGroup: toGroup(proj, location, activation.multicastGroup),
     description: activation.description,
     logConfig: toLogConfig(activation.logConfig),
     resourceState: activation.resourceState,
@@ -208,7 +237,7 @@ const toAttrs = (activation: networkservices.MulticastGroupConsumerActivation, p
 const getByName = (name: string) =>
   networkservices
     .getProjectsLocationsMulticastGroupConsumerActivations({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const MulticastGroupConsumerActivationProvider = () =>
   Provider.succeed(MulticastGroupConsumerActivation, {
@@ -253,6 +282,20 @@ export const MulticastGroupConsumerActivationProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ multicastGroupConsumerActivationId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_ZONE);
+      const name = resourceName(
+        env.project,
+        location,
+        COLLECTION,
+        multicastGroupConsumerActivationId,
+      );
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -318,7 +361,6 @@ export const MulticastGroupConsumerActivationProvider = () =>
         location,
         news.multicastGroupRangeActivation,
       );
-      const multicastGroup = toGroup(env.project, location, news.multicastGroup);
       const logConfig = toLogConfig(news.logConfig);
 
       let current = yield* getByName(name);
@@ -326,16 +368,13 @@ export const MulticastGroupConsumerActivationProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsMulticastGroupConsumerActivations({
+            description: news.description,
+            labels: desiredLabels,
+            multicastConsumerAssociation,
+            multicastGroupRangeActivation,
+            logConfig,
             parent: parentOf(env.project, location),
             multicastGroupConsumerActivationId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              multicastConsumerAssociation,
-              multicastGroupRangeActivation,
-              multicastGroup,
-              logConfig,
-            },
           })
           .pipe(
             Effect.retry({
@@ -343,7 +382,7 @@ export const MulticastGroupConsumerActivationProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -364,14 +403,11 @@ export const MulticastGroupConsumerActivationProvider = () =>
       if (updateMask.length > 0) {
         const operation =
           yield* networkservices.patchProjectsLocationsMulticastGroupConsumerActivations({
+            labels: desiredLabels,
+            description: news.description,
+            logConfig,
             name: current.name ?? name,
             updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              logConfig,
-            },
           });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
@@ -391,7 +427,7 @@ export const MulticastGroupConsumerActivationProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

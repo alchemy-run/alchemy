@@ -59,6 +59,7 @@ describe("proxyRequestHeaders", () => {
       false,
       "https://public.example",
     ],
+    [{ host: "localhost:5173", "x-forwarded-proto": "HTTPS" }, false, "https://localhost:5173"],
   ])("signs the original URL including protocol and port", (headers, encrypted, origin) => {
     const result = proxyRequestHeaders(
       {
@@ -67,7 +68,7 @@ describe("proxyRequestHeaders", () => {
           "alchemy-runtime-original-url": "https://forged.example/",
           "alchemy-runtime-proxy-shared-secret": "forged",
         },
-        socket: { encrypted },
+        socket: { encrypted, remoteAddress: "::ffff:192.0.2.1" },
       } as unknown as IncomingMessage,
       new URL("http://127.0.0.1:9999//callback/%2F?x=1&x=2"),
       proxySharedSecret,
@@ -80,5 +81,6 @@ describe("proxyRequestHeaders", () => {
     expect(result["x-forwarded-host"]).toBe(
       "x-forwarded-host" in headers ? headers["x-forwarded-host"] : headers.host,
     );
+    expect(result["cf-connecting-ip"]).toBe("192.0.2.1");
   });
 });

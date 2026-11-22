@@ -57,6 +57,8 @@ interface BaseResourceState {
   removalPolicy?: RemovalPolicy["Service"];
   /** Attr-less lookup could recover the predecessor migrated away from this FQN. */
   adoptionBlocked?: "migrated-fqn";
+  /** Unresolved props were stripped from this attr-less checkpoint; they cannot identify it. */
+  propsIncomplete?: true;
   /**
    * The {@link ProviderMode} this resource was last reconciled with.
    *
@@ -105,6 +107,8 @@ export interface UpdatingReourceState extends BaseResourceState {
     bindings: any[];
     /** The old output properties that have been successfully applied. */
     attr: Attr;
+    /** The removal policy of the last successful deploy. */
+    removalPolicy?: RemovalPolicy["Service"];
     // TODO(sam): do I need to track the old downstream edges?
     // downstream: string[];
   };

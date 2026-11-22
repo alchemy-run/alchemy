@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as nc from "@distilled.cloud/azure/networkcloud";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runPaidOnly } from "../gates.ts";
 import {
@@ -84,9 +84,7 @@ test.provider.skipIf(!runPaidOnly || !hasWorkloadNetworks || !nexus.vmImage)(
       // Replacement (the CPU count is immutable).
       const replaced = yield* stack.deploy(program({ cpuCores: 4, env: "b" }));
       expect(replaced.res.virtualMachineName).not.toEqual(res.virtualMachineName);
-      expect(yield* waitGone(get(group.resourceGroupName, res.virtualMachineName))).toEqual(
-        "gone",
-      );
+      expect(yield* waitGone(get(group.resourceGroupName, res.virtualMachineName))).toEqual("gone");
       const final = yield* get(group.resourceGroupName, replaced.res.virtualMachineName);
       expect(final.properties.cpuCores).toEqual(4);
 

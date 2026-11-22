@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as spanner from "@distilled.cloud/gcp/spanner_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -66,6 +67,14 @@ test.provider(
           });
           return { instance, database, schedule };
         }),
+      );
+      yield* expectFound(
+        GCP.Spanner.InstancesDatabasesBackupSchedule.lookup({
+          backupScheduleId: created.schedule.backupScheduleId,
+          instance: created.schedule.instanceId,
+          database: created.schedule.databaseId,
+        }),
+        created.schedule,
       );
 
       expect(created.schedule.name).toContain("/backupSchedules/");

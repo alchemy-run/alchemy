@@ -170,14 +170,14 @@ export const MountTargetProvider = () =>
       const findById = Effect.fn(function* (mountTargetId: string) {
         return yield* efs.describeMountTargets({ MountTargetId: mountTargetId }).pipe(
           Effect.map((r) => r.MountTargets?.[0]),
-          Effect.catchTag("MountTargetNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("MountTargetNotFound", () => Effect.undefined),
         );
       });
 
       const findBySubnet = Effect.fn(function* (fileSystemId: string, subnetId: string) {
         return yield* efs.describeMountTargets({ FileSystemId: fileSystemId }).pipe(
           Effect.map((r) => r.MountTargets?.find((mt) => mt.SubnetId === subnetId)),
-          Effect.catchTag("FileSystemNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("FileSystemNotFound", () => Effect.undefined),
         );
       });
 

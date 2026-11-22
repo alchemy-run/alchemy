@@ -45,8 +45,14 @@ export interface CreateFileHardLink extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreateFileHardLinkRequest,
-    ) => Effect.Effect<files.CreateFileHardLinkResponse, files.CreateFileHardLinkError, RuntimeContext>
+    ) => Effect.Effect<
+      files.CreateFileHardLinkResponse,
+      files.CreateFileHardLinkError,
+      RuntimeContext
+    >
   >
 > {}
 
-export const CreateFileHardLink = Binding.Service<CreateFileHardLink>("Azure.Storage.CreateFileHardLink");
+export const CreateFileHardLink = Binding.Service<CreateFileHardLink>(
+  "Azure.Storage.CreateFileHardLink",
+);

@@ -216,24 +216,29 @@ const toAttrs = (
 
 const lower = (value: string | undefined) => (value ?? "").toLowerCase();
 
-const toProperties = (news: TargetProps) => ({
-  targetType: news.targetType,
-  targetAuthenticationType: news.targetAuthenticationType ?? "Aad",
-  targetVault: news.targetVault,
-  connectionServerName: news.connectionServerName,
-  sqlDbResourceId: news.sqlDbResourceId,
-  sqlEpResourceId: news.sqlEpResourceId,
-  anchorDatabaseResourceId: news.anchorDatabaseResourceId,
-  sqlMiResourceId: news.sqlMiResourceId,
-  connectionTcpPort: news.connectionTcpPort,
-  readIntent: news.readIntent,
-});
+// `targetType` and the per-type resource IDs are separate props, so
+// TypeScript cannot pick the SDK union arm.
+const toProperties = (news: TargetProps) =>
+  ({
+    targetType: news.targetType,
+    targetAuthenticationType: news.targetAuthenticationType ?? "Aad",
+    targetVault: news.targetVault,
+    connectionServerName: news.connectionServerName,
+    sqlDbResourceId: news.sqlDbResourceId,
+    sqlEpResourceId: news.sqlEpResourceId,
+    anchorDatabaseResourceId: news.anchorDatabaseResourceId,
+    sqlMiResourceId: news.sqlMiResourceId,
+    connectionTcpPort: news.connectionTcpPort,
+    readIntent: news.readIntent,
+  }) as databasewatcher.TargetPropertiesInput;
 
 const differs = (observed: databasewatcher.TargetProperties | undefined, news: TargetProps) =>
   observed === undefined ||
   observed.targetAuthenticationType !== (news.targetAuthenticationType ?? "Aad") ||
   lower(observed.connectionServerName) !== lower(news.connectionServerName) ||
-  (news.connectionTcpPort !== undefined && observed.connectionTcpPort !== news.connectionTcpPort) ||
+  (news.connectionTcpPort !== undefined &&
+    (observed.targetType === "SqlMi" ? observed.connectionTcpPort : undefined) !==
+      news.connectionTcpPort) ||
   lower(observed.targetVault?.akvResourceId) !== lower(news.targetVault?.akvResourceId) ||
   (observed.targetVault?.akvTargetUser ?? "") !== (news.targetVault?.akvTargetUser ?? "");
 

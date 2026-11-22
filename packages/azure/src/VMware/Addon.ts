@@ -223,9 +223,16 @@ export const AddonProvider = () =>
       // when the add-on is missing or an observable/secret field drifted.
       if (
         observed === undefined ||
-        (news.vrsCount !== undefined && props?.vrsCount !== news.vrsCount) ||
-        (news.offer !== undefined && props?.offer !== news.offer) ||
-        (news.vCenter !== undefined && !sameName(props?.vCenter, news.vCenter)) ||
+        (news.vrsCount !== undefined &&
+          (props !== undefined && "vrsCount" in props ? props.vrsCount : undefined) !==
+            news.vrsCount) ||
+        (news.offer !== undefined &&
+          (props !== undefined && "offer" in props ? props.offer : undefined) !== news.offer) ||
+        (news.vCenter !== undefined &&
+          !sameName(
+            props !== undefined && "vCenter" in props ? props.vCenter : undefined,
+            news.vCenter,
+          )) ||
         !sameFingerprint(fingerprint, output?.secretFingerprint)
       ) {
         yield* vmware.AddonsCreateOrUpdate({
@@ -233,13 +240,16 @@ export const AddonProvider = () =>
           resourceGroupName: resourceGroup,
           privateCloudName: privateCloud,
           addonName: name,
+          // Each arm's required field (`vrsCount`, `offer`) is optional in the
+          // props and the unset fields of other arms are left out of the
+          // request, so the arm is asserted rather than built.
           properties: {
             addonType: news.addonType,
             licenseKey: unredact(news.licenseKey),
             vrsCount: news.vrsCount,
             offer: news.offer,
             vCenter: news.vCenter,
-          },
+          } as vmware.AddonPropertiesInput,
         });
       }
       const fresh = yield* wait();

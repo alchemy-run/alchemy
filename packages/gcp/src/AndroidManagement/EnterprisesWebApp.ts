@@ -131,7 +131,7 @@ export const EnterprisesWebApp = Resource<EnterprisesWebApp>(
 export class EnterprisesWebAppNotResolved extends Data.TaggedError(
   "GCP.AndroidManagement.EnterprisesWebAppNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (app: androidmanagement.WebApp, project: string) => {
@@ -196,17 +196,14 @@ export const EnterprisesWebAppProvider = () =>
 
       if (current === undefined) {
         const created = yield* androidmanagement
-          .createEnterprisesWebApps({
-            parent,
-            body: desired,
-          })
+          .createEnterprisesWebApps({ ...desired, parent })
           .pipe(Effect.catchTag("Conflict", () => findWebAppByTitle(parent, title)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
         return yield* new EnterprisesWebAppNotResolved({
-          name: toWebAppName(parent, output?.name) || news.startUrl,
+          resourceName: toWebAppName(parent, output?.name) || news.startUrl,
         });
       }
 
@@ -225,9 +222,9 @@ export const EnterprisesWebAppProvider = () =>
 
       if (updateMask.length > 0 && name.length > 0) {
         current = yield* androidmanagement.patchEnterprisesWebApps({
+          ...desired,
           name,
           updateMask,
-          body: desired,
         });
       }
 

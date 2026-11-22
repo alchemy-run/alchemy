@@ -212,7 +212,9 @@ export type GatewayProps = {
    */
   rateLimitingTechnique?: GatewayRateLimitingTechnique;
   /**
-   * Whether gateway authentication is enabled.
+   * Whether gateway authentication is enabled. Cloudflare requires it on new
+   * gateways. When omitted, a new gateway enables it and an existing one
+   * keeps its current setting.
    */
   authentication?: boolean;
   /**
@@ -262,7 +264,16 @@ export type GatewayProps = {
    * Whether Zero Data Retention is enabled.
    */
   zdr?: boolean;
+  /**
+   * How Workers AI inference routed through this gateway is billed.
+   * `"postpaid"` (Standard billing) bills the account directly through
+   * Workers AI; `"unified"` deducts Unified Billing credits through AI
+   * Gateway. When omitted, the gateway keeps its current setting.
+   */
+  workersAiBillingMode?: GatewayWorkersAiBillingMode;
 };
+
+export type GatewayWorkersAiBillingMode = "postpaid" | "unified";
 
 export type Gateway = Resource<
   "Cloudflare.AI.Gateway",
@@ -290,10 +301,23 @@ export type Gateway = Resource<
     stripe: GatewayStripe | undefined;
     spendLimits: GatewaySpendLimits | undefined;
     zdr: boolean;
+    workersAiBillingMode: GatewayWorkersAiBillingMode | undefined;
   },
   never,
-  Providers
+  Providers,
+  GatewayLookup
 >;
+
+/**
+ * Props for {@link Gateway.lookup}: find an AI Gateway this stack doesn't
+ * manage, by its id.
+ */
+export type GatewayLookup = {
+  /**
+   * The ID of the existing gateway.
+   */
+  id: string;
+};
 
 // Cloudflare's AI Gateway API uses 0 to mean "disabled" for cache TTL and
 // rate limiting fields. Normalize back to null so user-facing semantics
@@ -464,6 +488,28 @@ export const isAiGateway = (value: unknown): value is Gateway =>
  * });
  * ```
  *
+ * ### Looking up an existing gateway
+ * `Gateway.lookup` binds a gateway Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by its `id`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** By ID
+ * ```typescript
+ * const gateway = yield* Cloudflare.AI.QueryGateway(
+ *   Cloudflare.AI.Gateway.lookup({ id: "prod-gateway" }),
+ * );
+ * ```
+ *
+ * ### Workers AI Billing
+ * **Example:** Bill Workers AI on Standard billing
+ * `workersAiBillingMode` only affects Workers AI models; third-party
+ * providers keep using Unified Billing or your own provider keys.
+ * ```typescript
+ * const gateway = yield* Cloudflare.AI.Gateway("Gateway", {
+ *   workersAiBillingMode: "postpaid",
+ * });
+ * ```
+ *
  * @resource
  * @product AI Gateway
  * @category AI
@@ -490,7 +536,11 @@ export const GatewayResourceProvider = () =>
       }
 
       const oldMutable = mutable(output ?? ((yield* desired(id, olds)) as Gateway["Attributes"]));
-      const nextMutable = mutable(next as Gateway["Attributes"]);
+      const nextMutable = mutable({
+        ...next,
+        authentication: next.authentication ?? oldMutable.authentication,
+        workersAiBillingMode: next.workersAiBillingMode ?? oldMutable.workersAiBillingMode,
+      } as Gateway["Attributes"]);
       if (!deepEqual(oldMutable, nextMutable)) {
         return { action: "update" } as const;
       }
@@ -509,7 +559,7 @@ export const GatewayResourceProvider = () =>
           accountId: acct,
           id: gatewayId,
         })
-        .pipe(Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("GatewayNotFound", () => Effect.undefined));
 
       // Ensure — create if missing. Tolerate `GatewayAlreadyExists` for
       // idempotency: a peer reconciler may have created it concurrently,
@@ -533,7 +583,7 @@ export const GatewayResourceProvider = () =>
       // Prefer the deployed id: regenerating would target a different
       // resource if the generator's output for this id ever drifts.
       const update = {
-        ...(yield* updateRequest(id, news, acct)),
+        ...(yield* updateRequest(id, news, acct, observed?.authentication)),
         id: gatewayId,
       };
       const gateway = yield* aiGateway.updateAiGateway(update);
@@ -547,6 +597,13 @@ export const GatewayResourceProvider = () =>
         })
         .pipe(Effect.catchTag("GatewayNotFound", () => Effect.void));
     }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* aiGateway.getAiGateway({ accountId, id: props.id }).pipe(
+        Effect.map((gateway) => mapGateway(gateway, accountId)),
+        Effect.catchTag("GatewayNotFound", () => Effect.undefined),
+      );
+    }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
@@ -559,7 +616,7 @@ export const GatewayResourceProvider = () =>
         })
         .pipe(
           Effect.map((gateway) => mapGateway(gateway, acct)),
-          Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("GatewayNotFound", () => Effect.undefined),
         );
     }),
     // AI Gateways are account-scoped; the list API returns the full gateway
@@ -598,10 +655,9 @@ const desired = (id: string, props: GatewayProps | undefined) =>
       rateLimitingInterval: props?.rateLimitingInterval ?? null,
       rateLimitingLimit: props?.rateLimitingLimit ?? null,
       rateLimitingTechnique: props?.rateLimitingTechnique ?? "fixed",
-      // Defaults align with what Cloudflare's API returns for an
-      // unconfigured gateway, so the reconciler converges to noop
-      // when the user didn't explicitly set the field.
-      authentication: props?.authentication ?? false,
+      // Unmanaged when omitted: Cloudflare requires it on new gateways, and
+      // an existing gateway keeps its current setting.
+      authentication: props?.authentication,
       dlp: props?.dlp ?? undefined,
       isDefault: props?.isDefault ?? false,
       logManagement: props?.logManagement ?? 100_000,
@@ -613,6 +669,8 @@ const desired = (id: string, props: GatewayProps | undefined) =>
       stripe: props?.stripe ?? undefined,
       spendLimits: resolveSpendLimits(props?.spendLimits),
       zdr: props?.zdr ?? false,
+      // Unmanaged when omitted: an existing gateway keeps its current mode.
+      workersAiBillingMode: props?.workersAiBillingMode,
     };
   });
 
@@ -671,6 +729,9 @@ const mapGateway = (
   stripe: gateway.stripe ?? undefined,
   spendLimits: normalizeSpendLimits(gateway.spendLimits),
   zdr: gateway.zdr ?? false,
+  workersAiBillingMode: (gateway.workersAiBillingMode ?? undefined) as
+    | GatewayWorkersAiBillingMode
+    | undefined,
 });
 
 // Normalize spend limits into the user-facing shape and drop server-managed
@@ -739,6 +800,7 @@ const mutable = (gateway: Gateway["Attributes"]) => ({
   stripe: gateway.stripe,
   spendLimits: spendLimitsForDiff(gateway.spendLimits),
   zdr: gateway.zdr,
+  workersAiBillingMode: gateway.workersAiBillingMode,
 });
 
 // Compare spend limits by their user-meaningful shape: drop the
@@ -776,12 +838,14 @@ const createRequest = Effect.fn(function* (id: string, props: GatewayProps | und
     rateLimitingInterval: next.rateLimitingInterval,
     rateLimitingLimit: next.rateLimitingLimit,
     rateLimitingTechnique: next.rateLimitingTechnique,
-    authentication: next.authentication,
+    // Cloudflare rejects new gateways without authentication (code 7001).
+    authentication: next.authentication ?? true,
     logManagement: next.logManagement,
     logManagementStrategy: next.logManagementStrategy,
     logpush: next.logpush,
     logpushPublicKey: next.logpushPublicKey,
     zdr: next.zdr,
+    workersAiBillingMode: next.workersAiBillingMode,
   } satisfies aiGateway.CreateAiGatewayRequest;
 });
 
@@ -789,6 +853,7 @@ const updateRequest = Effect.fn(function* (
   id: string,
   props: GatewayProps | undefined,
   accountId: string,
+  observedAuthentication: boolean | null | undefined,
 ) {
   const next = yield* desired(id, props);
   return {
@@ -800,7 +865,8 @@ const updateRequest = Effect.fn(function* (
     rateLimitingInterval: next.rateLimitingInterval,
     rateLimitingLimit: next.rateLimitingLimit,
     rateLimitingTechnique: next.rateLimitingTechnique,
-    authentication: next.authentication,
+    // The update is a full PATCH: an omitted prop keeps what the gateway has.
+    authentication: next.authentication ?? observedAuthentication ?? true,
     dlp: next.dlp,
     logManagement: next.logManagement,
     logManagementStrategy: next.logManagementStrategy,
@@ -811,5 +877,6 @@ const updateRequest = Effect.fn(function* (
     stripe: next.stripe,
     spendLimits: next.spendLimits,
     zdr: next.zdr,
+    workersAiBillingMode: next.workersAiBillingMode,
   } satisfies aiGateway.UpdateAiGatewayRequest;
 });

@@ -220,7 +220,8 @@ export interface DataSet extends Resource<
  */
 export const DataSet = GroupedResource<DataSet>("Azure.DataShare.DataSet");
 
-type ObservedDataSet = datashare.GetDataSetResponse | datashare.CreateDataSetResponse;
+/** What GET and PUT return. */
+type ObservedDataSet = datashare.DataSet;
 
 const getDataSet = (
   subscriptionId: string,
@@ -332,8 +333,9 @@ export const DataSetProvider = () =>
         accountName: account,
         shareName: share,
         dataSetName: name,
-        kind: news.kind,
-        properties: news.source,
+        // `kind` and `source` are separate props, so TypeScript cannot pick
+        // the SDK union arm.
+        body: { kind: news.kind, properties: news.source } as datashare.DataSetInput,
       });
       return toAttrs(resourceGroup, account, share, name, created);
     }),

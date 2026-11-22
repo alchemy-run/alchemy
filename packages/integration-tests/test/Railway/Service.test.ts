@@ -1,19 +1,27 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Railway from "@alchemy.run/railway";
 import { activeReplicaRegions, serviceRegionPlacement } from "@alchemy.run/railway/ServiceRegion";
 import { withEnvironmentConfigLock } from "@alchemy.run/railway/transient";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Query } from "@distilled.cloud/core/query";
 import { Railway as RailwayApi } from "@distilled.cloud/railway";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../Utils/Telemetry.ts";
+import TracedApi from "./fixtures/traced-api.ts";
+import { railwayApi } from "./limit.ts";
 import { suitePartition } from "./suiteProject.ts";
 
-const { test } = Test.make({ providers: Railway.providers() });
+const { test } = Test.make({
+  limit: railwayApi,
+  providers: Layer.mergeAll(Railway.providers(), Cloudflare.providers()),
+});
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -41,6 +49,7 @@ const readServiceInstance = Query.fn((environmentId: string, serviceId: string) 
     ),
     healthcheckPath: instance.healthcheckPath,
     preDeployCommand: instance.preDeployCommand,
+    startCommand: instance.startCommand,
     numReplicas: instance.numReplicas,
     dockerfilePath: instance.dockerfilePath,
   };
@@ -125,6 +134,7 @@ test.provider(
             port: 80,
             healthcheckPath: "/",
             preDeploy: { command: "echo predeploy" },
+            startCommand: "nginx -g 'daemon off;'",
           });
           return { project, environment, api };
         }),
@@ -162,6 +172,7 @@ test.provider(
             instance.preDeployCommand.length === 1 &&
             instance.preDeployCommand[0] === "echo predeploy"),
       ).toEqual(true);
+      expect(instance.startCommand).toEqual("nginx -g 'daemon off;'");
       // Railway omits numReplicas until you scale; default is one replica.
       expect(instance.numReplicas === null || instance.numReplicas === 1).toEqual(true);
       expect(created.api.healthcheckPath).toEqual("/");
@@ -209,6 +220,7 @@ test.provider(
             name: nextName,
             healthcheckPath: "/",
             preDeploy: { command: null },
+            startCommand: null,
           });
           return { project, environment, api };
         }),
@@ -229,6 +241,10 @@ test.provider(
           (Array.isArray(updatedInstance.preDeployCommand) &&
             updatedInstance.preDeployCommand.length === 0),
       ).toEqual(true);
+      // Railway ignores a `null` start command; the provider sends `""` to clear it.
+      expect(updatedInstance.startCommand == null || updatedInstance.startCommand === "").toEqual(
+        true,
+      );
 
       const fetchedUpdate = yield* readService(updated.api.serviceId);
       expect(fetchedUpdate.id).toEqual(updated.api.serviceId);
@@ -785,5 +801,41 @@ test.provider(
       "live",
     ],
     timeout: 180_000,
+  },
+);
+
+test.provider(
+  "a Service program exports spans to the bound OTLP destination",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // The traced program binds the collector url at deploy, so it deploys first.
+      const collector = yield* stack.deploy(OtelCollector());
+      const api = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* OtelCollector();
+            return yield* TracedApi;
+          }),
+        )
+        .pipe(withCollectorUrl(collector.url!));
+
+      expect(yield* doWork(api.url!, "railway")).toBe("did work railway");
+      const traces = yield* waitForWorkSpan(collector.url!, "railway");
+      expect(traces).toContain("work:railway");
+      expect(traces).toContain("railway-service-e2e");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:service",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 600_000,
   },
 );

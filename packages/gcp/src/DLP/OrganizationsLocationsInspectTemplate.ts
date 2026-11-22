@@ -166,10 +166,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getOrganizationsLocationsInspectTemplates({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, organization: string, project: string) =>
   dlp.listOrganizationsLocationsInspectTemplates.pages({ parent, pageSize: 100 }).pipe(
@@ -250,23 +250,21 @@ export const OrganizationsLocationsInspectTemplateProvider = () =>
       if (current === undefined) {
         const created = yield* dlp
           .createOrganizationsLocationsInspectTemplates({
-            parent,
-            body: {
-              templateId,
-              inspectTemplate: {
-                displayName,
-                description,
-                inspectConfig,
-                allowLimitedAvailabilityInfoTypes,
-              },
+            templateId,
+            inspectTemplate: {
+              displayName,
+              description,
+              inspectConfig,
+              allowLimitedAvailabilityInfoTypes,
             },
+            parent,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new DlpNotResolved({ name });
+        return yield* new DlpNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -284,16 +282,14 @@ export const OrganizationsLocationsInspectTemplateProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* dlp.patchOrganizationsLocationsInspectTemplates({
-          name: currentName,
-          body: {
-            updateMask,
-            inspectTemplate: {
-              displayName,
-              description,
-              inspectConfig,
-              allowLimitedAvailabilityInfoTypes,
-            },
+          updateMask,
+          inspectTemplate: {
+            displayName,
+            description,
+            inspectConfig,
+            allowLimitedAvailabilityInfoTypes,
           },
+          name: currentName,
         });
       }
 

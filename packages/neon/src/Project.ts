@@ -5,7 +5,7 @@ import {
   stampedOf,
   type MigrationsInput,
 } from "@alchemy.run/sql/Migrations";
-import { hashImports, readSqlFile } from "@alchemy.run/sql/SqlFile";
+import { hashImports } from "@alchemy.run/sql/SqlFile";
 import {
   deleteProject,
   getConnectionURI,
@@ -29,7 +29,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import { runPgMigrations, runSql } from "./Migrations.ts";
+import { runImports, runPgMigrations } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -116,6 +116,13 @@ export type ProjectProps = {
    * one-way conversion on first deploy: the old tool's applied history is
    * copied into Alchemy's table and the old table is left frozen. No
    * baselining required.
+   *
+   * History is forward-only and linear. A new file must sort after every
+   * applied one, or the deploy fails with `NonLinearMigrationHistoryError`;
+   * an edited or deleted applied file fails with
+   * `RewrittenMigrationHistoryError`. Renaming an applied file without
+   * changing its contents keeps it applied. See
+   * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
    */
   migrations?: MigrationsInput;
   /**
@@ -176,8 +183,18 @@ export type Project = Resource<
     importHashes: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ProjectLookup
 >;
+
+/**
+ * Props for {@link Project.lookup}: find a project this stack
+ * doesn't manage by its id.
+ */
+export interface ProjectLookup {
+  /** Neon project id, e.g. `"plain-wave-12345678"`. */
+  projectId: string;
+}
 
 type ProjectAttributes = Project["Attributes"];
 
@@ -226,6 +243,18 @@ type ProjectAttributes = Project["Attributes"];
  *
  * @see https://neon.tech/docs/manage/projects/
  *
+ * ### Looking up an existing project
+ * `Project.lookup` references a project Alchemy doesn't manage (created in
+ * the Neon Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ * Its connection URIs point at the default branch's first database.
+ *
+ * **Example:** Connect to an existing project
+ * ```typescript
+ * const db = Neon.Project.lookup({ projectId: "plain-wave-12345678" });
+ * const url = db.connectionUri;
+ * ```
+ *
  * @resource
  * @product Project
  */
@@ -245,7 +274,7 @@ export const ProjectProvider = () =>
           hydrateProjectAttributes(project).pipe(
             // A project can be deleted between the list call and
             // hydration — skip it rather than fail the whole enumeration.
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -296,11 +325,19 @@ export const ProjectProvider = () =>
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, output, olds }) {
+    lookup: Effect.fn(function* ({ projectId }) {
+      const found = yield* getProject({ project_id: projectId }).pipe(
+        Effect.map(({ project }) => project),
+        Effect.catchTag("NotFound", () => Effect.undefined),
+      );
+      return found === undefined ? undefined : yield* hydrateProjectAttributes(found);
+    }),
+
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       if (output?.projectId) {
         return yield* getProject({ project_id: output.projectId }).pipe(
           Effect.flatMap(({ project }) => hydrateProjectAttributes(project, output)),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       }
       const name = yield* createProjectName(id, olds?.name);
@@ -317,6 +354,8 @@ export const ProjectProvider = () =>
         migrationsDir: (olds && migrationsInputOf(olds))?.dir,
         migrationsTable: (olds && migrationsInputOf(olds))?.table,
       });
+      // The generation a delete-first replacement is about to free is ours.
+      if (attrs && attrs.projectId === previous?.projectId) return attrs;
       return attrs && Unowned(attrs);
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, output }) {
@@ -338,7 +377,7 @@ export const ProjectProvider = () =>
       let observed: ObservedProject | undefined = output?.projectId
         ? yield* getProject({ project_id: output.projectId }).pipe(
             Effect.map(({ project }) => project),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           )
         : undefined;
       if (!observed) {
@@ -468,7 +507,7 @@ export const ProjectProvider = () =>
     }),
   });
 
-const rootDir = Effect.sync(process.cwd);
+const rootDir = Effect.sync(() => process.cwd());
 
 const createProjectName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
@@ -511,7 +550,11 @@ export class OperationFailed extends Data.TaggedError("NeonOperationFailed")<{
   operationId: string;
   action: string;
   status: string;
-}> {}
+}> {
+  override get message() {
+    return `Neon operation ${this.operationId} (${this.action}) ended ${this.status}`;
+  }
+}
 
 export class OperationPending extends Data.TaggedError("NeonOperationPending")<{
   operationId: string;
@@ -675,28 +718,4 @@ const hydrateProjectAttributes = (
       migrationsHashes: opts.migrationsHashes ?? {},
       importHashes: opts.importHashes ?? {},
     } satisfies ProjectAttributes;
-  });
-
-const runImports = (
-  connectionUri: Redacted.Redacted<string>,
-  importFiles: ReadonlyArray<string>,
-  rootDir: string,
-  previous: Record<string, string>,
-) =>
-  Effect.gen(function* () {
-    const hashes: Record<string, string> = { ...previous };
-    for (const filePath of importFiles) {
-      const file = yield* readSqlFile(rootDir, filePath);
-      if (previous[filePath] === file.hash) {
-        hashes[filePath] = file.hash;
-        continue;
-      }
-      yield* runSql(connectionUri, file.sql);
-      hashes[filePath] = file.hash;
-    }
-    const tracked = new Set(importFiles);
-    for (const key of Object.keys(hashes)) {
-      if (!tracked.has(key)) delete hashes[key];
-    }
-    return hashes;
   });

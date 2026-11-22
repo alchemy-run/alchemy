@@ -1,8 +1,9 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as saasservicemgmt from "@distilled.cloud/gcp/saasservicemgmt_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import { location, logLevel, currentProject, runLifecycle, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -49,6 +50,20 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { product, tenant };
         }),
+      );
+      yield* expectFound(
+        GCP.SaasServiceManagement.Saa.lookup({
+          saasId: created.product.saasId,
+          location: created.product.location,
+        }),
+        created.product,
+      );
+      yield* expectFound(
+        GCP.SaasServiceManagement.Tenant.lookup({
+          tenantId: created.tenant.tenantId,
+          location: created.tenant.location,
+        }),
+        created.tenant,
       );
 
       expect(created.tenant.name).toContain("/tenants/");

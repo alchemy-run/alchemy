@@ -44,8 +44,24 @@ export type Folder = Resource<
     selfLink: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FolderLookup
 >;
+
+/**
+ * Props for {@link Folder.lookup}: find a folder this stack doesn't manage
+ * by its identifiers.
+ */
+export interface FolderLookup {
+  /**
+   * Folder path.
+   */
+  folderName: string;
+  /**
+   * Name of the hierarchical-namespace bucket that contains this folder.
+   */
+  bucketName: string;
+}
 
 /**
  * A Cloud Storage folder in a hierarchical-namespace bucket.
@@ -77,6 +93,19 @@ export type Folder = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing folder
+ * `Folder.lookup` references a folder Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared folder.
+ *
+ * **Example:** Reference an existing folder
+ * ```typescript
+ * const folder = GCP.Storage.Folder.lookup({
+ *   folderName: "my-folder",
+ *   bucketName: "my-bucket",
+ * });
+ * ```
+ *
  * @resource
  * @category Storage
  */
@@ -100,7 +129,7 @@ const toAttrs = (folder: storage.Folder, bucketName: string) => ({
 const getByName = (bucketName: string, folderName: string) =>
   storage
     .getFolders({ bucket: bucketName, folder: folderName })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOnBucket = (bucketName: string) =>
   storage.listFolders.items({ bucket: bucketName, pageSize: 1000 }).pipe(
@@ -149,6 +178,13 @@ export const FolderProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ folderName, bucketName }) {
+      if (!bucketName) return undefined;
+      const existing = yield* getByName(bucketName, folderName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, bucketName);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const bucketName = olds?.bucketName ?? output?.bucketName;
       if (!bucketName) return undefined;
@@ -185,11 +221,7 @@ export const FolderProvider = () =>
 
       if (current === undefined) {
         const created = yield* storage
-          .insertFolders({
-            bucket: bucketName,
-            recursive: true,
-            body: { name: folderName },
-          })
+          .insertFolders({ name: folderName, bucket: bucketName, recursive: true })
           .pipe(Effect.catchTag("Conflict", () => getByName(bucketName, folderName)));
         current = created ?? undefined;
       }

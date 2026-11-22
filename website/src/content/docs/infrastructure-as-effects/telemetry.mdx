@@ -139,16 +139,27 @@ flushed when that scope closes:
   happens after the response is sent and never adds latency.
 - On Lambda, the flush settles inline before the invocation returns —
   the response isn't released until the invoke completes anyway. An
-  invocation still running 500 ms before its timeout (`timeoutMargin`
-  on the Function) gets an early flush: the root span is ended with a
-  timeout error and the exporters drained, so the trace arrives
-  instead of dying with the killed invocation. The handler itself is
-  left alone.
+  invocation that runs past its `timeout` is interrupted, so its
+  finalizers run and its spans end, and Lambda's extra `timeoutMargin`
+  gives the flush time to finish. If cleanup is still running 500 ms
+  before Lambda kills the invocation, the root span is ended and the
+  exporters drained early, so the trace arrives anyway.
 
 This per-event lifecycle is what makes export work on workerd, where
 timers and fetches are pinned to the request that created them: a
 process-global batching exporter would be killed the moment its
 creating request ended.
+
+A Durable Object also gets trace and log exporters of its own, built
+once when the object starts. Fibers its instance phase forks (a tick
+loop, a subscription) record into them. They have no export interval,
+so an idle object can still hibernate. Each event flushes them as it
+ends, so a record made between events waits for the next one. Metrics
+stay per event.
+
+Don't call `provideProcessTelemetry` inside a Durable Object. Its
+exporters keep a timer pending, and Cloudflare keeps the object in
+memory, and bills it, while one is pending.
 
 Server runtimes — Cloudflare Containers, ECS Tasks, EC2 hosts,
 Lambda microVMs — are long-lived processes, so they build the

@@ -1,12 +1,12 @@
 import * as Azure from "@alchemy.run/azure";
-import { Credentials } from "@distilled.cloud/azure";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import { armScopeFor, Credentials } from "@distilled.cloud/azure";
 import * as authorization from "@distilled.cloud/azure/authorization";
 import * as web from "@distilled.cloud/azure/web";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -88,8 +88,7 @@ const restartEvents = (siteId: string, since: string) =>
   Effect.gen(function* () {
     const { subscriptionId } = yield* Azure.AzureEnvironment.current;
     const config = yield* yield* Credentials;
-    // `bearerToken` is the ARM token.
-    const token = config.bearerToken;
+    const token = yield* config.token(armScopeFor(config.apiBaseUrl));
     const filter = `eventTimestamp ge '${since}' and resourceUri eq '${siteId}'`;
     const response = yield* HttpClient.execute(
       HttpClientRequest.get(

@@ -1,8 +1,8 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -76,15 +76,13 @@ const ensureEnterpriseDatabase = Effect.gen(function* () {
 
   const created = yield* firestore
     .createProjectsDatabases({
+      locationId: "us-central1",
+      type: "FIRESTORE_NATIVE",
+      databaseEdition: "ENTERPRISE",
+      mongodbCompatibleDataAccessMode: "DATA_ACCESS_MODE_ENABLED",
+      deleteProtectionState: "DELETE_PROTECTION_DISABLED",
       parent: `projects/${project}`,
       databaseId: enterpriseDatabaseId,
-      body: {
-        locationId: "us-central1",
-        type: "FIRESTORE_NATIVE",
-        databaseEdition: "ENTERPRISE",
-        mongodbCompatibleDataAccessMode: "DATA_ACCESS_MODE_ENABLED",
-        deleteProtectionState: "DELETE_PROTECTION_DISABLED",
-      },
     })
     .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
   if (created !== undefined) {
@@ -133,7 +131,6 @@ test.provider.skipIf(!!process.env.FAST)(
         firestore.createProjectsDatabasesUserCreds({
           parent: created.name,
           userCredsId: "alchemyusercreds",
-          body: {},
         }),
       );
       expect(error._tag).toEqual("EnterpriseDatabaseRequired");

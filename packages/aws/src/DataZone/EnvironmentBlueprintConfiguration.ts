@@ -263,8 +263,8 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              ResourceNotFoundException: () => Effect.succeed(undefined),
-              AccessDeniedException: () => Effect.succeed(undefined),
+              ResourceNotFoundException: () => Effect.undefined,
+              AccessDeniedException: () => Effect.undefined,
             }),
           );
       });
@@ -287,11 +287,11 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
             : olds?.environmentBlueprint
               ? yield* resolveBlueprint(domainId, olds.environmentBlueprint).pipe(
                   Effect.catchTags({
-                    "AWS.DataZone.EnvironmentBlueprintNotFound": () => Effect.succeed(undefined),
+                    "AWS.DataZone.EnvironmentBlueprintNotFound": () => Effect.undefined,
                     // the domain itself may already be gone (reported as
                     // NotFound or as AccessDenied — auth precedes existence)
-                    ResourceNotFoundException: () => Effect.succeed(undefined),
-                    AccessDeniedException: () => Effect.succeed(undefined),
+                    ResourceNotFoundException: () => Effect.undefined,
+                    AccessDeniedException: () => Effect.undefined,
                   }),
                 )
               : undefined;

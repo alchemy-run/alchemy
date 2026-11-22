@@ -1,12 +1,13 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as storagetransfer from "@distilled.cloud/gcp/storagetransfer_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -41,13 +42,7 @@ const grantBucketRole = (bucket: string, member: string, role: string) =>
     } else {
       bindings.push({ role, members: [member] });
     }
-    yield* storage.setIamPolicyBuckets({
-      bucket,
-      body: {
-        ...policy,
-        bindings,
-      },
-    });
+    yield* storage.setIamPolicyBuckets({ ...policy, bindings, bucket });
   }).pipe(
     Effect.retry({
       while: (error) => error._tag === "Conflict",
@@ -123,6 +118,7 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(GCP.StorageTransfer.TransferJob.lookup({ jobId: created.jobId }), created);
 
       expect(created.jobId).toEqual(expect.any(String));
       expect(created.name).toEqual(`transferJobs/${created.jobId}`);

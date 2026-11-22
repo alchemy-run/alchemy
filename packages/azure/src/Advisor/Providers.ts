@@ -6,4 +6,5 @@ import {
 import { Suppression, SuppressionProvider } from "./Suppression.ts";
 
 export const resources = [ResourceGroupConfiguration, Suppression];
-export const layers = () => Layer.mergeAll(ResourceGroupConfigurationProvider(), SuppressionProvider());
+export const layers = () =>
+  Layer.mergeAll(ResourceGroupConfigurationProvider(), SuppressionProvider());

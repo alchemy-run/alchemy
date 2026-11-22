@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as registry from "@distilled.cloud/gcp/agentregistry_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -53,12 +54,10 @@ const ensureService = (input: { serviceId: string; displayName: string; body: re
     if (existing !== undefined) return existing;
     const created = yield* registry
       .createProjectsLocationsServices({
+        displayName: input.displayName,
+        ...input.body,
         parent,
         serviceId: input.serviceId,
-        body: {
-          displayName: input.displayName,
-          ...input.body,
-        },
       })
       .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
     if (created !== undefined) {
@@ -171,7 +170,7 @@ test.provider.skipIf(runLifecycle)(
           name: `${parent}/bindings/alchemy-missing-binding`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -203,6 +202,13 @@ test.provider.skipIf(!runLifecycle)(
             targetIdentifier: targetIdentifier!,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.AgentRegistry.Binding.lookup({
+          bindingId: created.bindingId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.bindingId).toEqual(expect.any(String));

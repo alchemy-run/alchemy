@@ -167,7 +167,11 @@ export const getStorageContainer = (
   ).pipe(Effect.catchTag("InvalidResourceType", () => Effect.succeed(undefined)));
 
 const storeResourceId = (store: discovery.StorageStore | undefined) =>
-  store?.storageAccountId ?? store?.netAppVolumeId;
+  store === undefined
+    ? undefined
+    : store.kind === "AzureStorageBlob"
+      ? store.storageAccountId
+      : store.netAppVolumeId;
 
 const toAttrs = (
   resourceGroup: string,

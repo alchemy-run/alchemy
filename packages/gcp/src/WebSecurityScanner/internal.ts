@@ -49,7 +49,7 @@ export const toUserDisplayName = (
 
 export const getScanConfig = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : websecurityscanner
         .getProjectsScanConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));

@@ -2,7 +2,7 @@ import {
   fromDurableObjectState,
   type DurableObjectAbortOptions,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 

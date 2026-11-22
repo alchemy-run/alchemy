@@ -671,30 +671,28 @@ export const ingestPack = <E, R>(
         window = yield* source.read(offset, size);
         return true;
       });
-      let header;
-      try {
-        header = decodeTypeSize(window, 0);
-      } catch (error) {
-        return yield* PackFormatError.make({
-          reason: Schema.is(ObjectParseError)(error)
-            ? `entry ${i}: ${error.reason}`
-            : `entry ${i}: ${String(error)}`,
-        });
-      }
+      const header = yield* Effect.try({
+        try: () => decodeTypeSize(window, 0),
+        catch: (error) =>
+          PackFormatError.make({
+            reason: Schema.is(ObjectParseError)(error)
+              ? `entry ${i}: ${error.reason}`
+              : `entry ${i}: ${String(error)}`,
+          }),
+      });
       let pos = header.next;
       let baseOffset: number | undefined;
       let baseOid: Oid | undefined;
       if (header.type === 6) {
-        let ofs;
-        try {
-          ofs = decodeOfsDeltaOffset(window, pos);
-        } catch (error) {
-          return yield* PackFormatError.make({
-            reason: Schema.is(ObjectParseError)(error)
-              ? `entry ${i}: ${error.reason}`
-              : `entry ${i}: ${String(error)}`,
-          });
-        }
+        const ofs = yield* Effect.try({
+          try: () => decodeOfsDeltaOffset(window, pos),
+          catch: (error) =>
+            PackFormatError.make({
+              reason: Schema.is(ObjectParseError)(error)
+                ? `entry ${i}: ${error.reason}`
+                : `entry ${i}: ${String(error)}`,
+            }),
+        });
         pos = ofs.next;
         baseOffset = offset - ofs.value;
         if (baseOffset < 12) {

@@ -3,6 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -10,6 +11,16 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { extractValue } from "./common.ts";
+
+export class PublicKeyConflict extends Data.TaggedError("PublicKeyConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class PublicKeyUnexpectedResponse extends Data.TaggedError("PublicKeyUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface PublicKeyProps {
   /**
@@ -62,8 +73,23 @@ export interface PublicKey extends Resource<
     comment: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PublicKeyLookup
 > {}
+
+/**
+ * Props for {@link PublicKey.lookup}: find a public key this stack doesn't
+ * manage, in the ambient account.
+ */
+export type PublicKeyLookup =
+  | {
+      /** The id of the existing public key. */
+      publicKeyId: string;
+    }
+  | {
+      /** The name of the existing public key. */
+      name: string;
+    };
 
 /**
  * A CloudFront public key.
@@ -82,6 +108,17 @@ export interface PublicKey extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing public key
+ * `PublicKey.lookup` references a public key Alchemy doesn't manage (created in the
+ * console or by another stack), found by `publicKeyId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Sign URLs with an existing public key
+ * ```typescript
+ * const signers = AWS.CloudFront.PublicKey.lookup({ name: "signers" });
+ * const publicKeyId = signers.publicKeyId;
+ * ```
+ *
  * @resource
  */
 export const PublicKey = Resource<PublicKey>("AWS.CloudFront.PublicKey");
@@ -93,7 +130,7 @@ export const PublicKeyProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const config = yield* cloudfront
           .getPublicKeyConfig({ Id: id })
-          .pipe(Effect.catchTag("NoSuchPublicKey", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchPublicKey", () => Effect.undefined));
         if (!config?.PublicKeyConfig) return undefined;
         return { config: config.PublicKeyConfig, etag: config.ETag };
       });
@@ -179,6 +216,16 @@ export const PublicKeyProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* (props) {
+          const found =
+            "publicKeyId" in props
+              ? Option.fromUndefinedOr(yield* getById(props.publicKeyId)).pipe(
+                  Option.map((f) => ({ ...f, id: props.publicKeyId })),
+                  Option.getOrUndefined,
+                )
+              : yield* getByName(props.name);
+          return found ? toAttrs(found.id, found.config, found.etag) : undefined;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           if (output?.publicKeyId) {
             const found = yield* getById(output.publicKeyId);
@@ -226,16 +273,18 @@ export const PublicKeyProvider = () =>
                             Location: undefined,
                           })
                         : Effect.fail(
-                            new Error(
-                              `Public key '${name}' already exists but could not be recovered`,
-                            ),
+                            new PublicKeyConflict({
+                              message: `Public key '${name}' already exists but could not be recovered`,
+                            }),
                           ),
                     ),
                   ),
                 ),
               );
             if (!created.PublicKey?.Id) {
-              return yield* Effect.fail(new Error("createPublicKey returned no identifier"));
+              return yield* new PublicKeyUnexpectedResponse({
+                message: "createPublicKey returned no identifier",
+              });
             }
             yield* session.note(created.PublicKey.Id);
             return toAttrs(created.PublicKey.Id, created.PublicKey.PublicKeyConfig, created.ETag);
@@ -256,7 +305,9 @@ export const PublicKeyProvider = () =>
             ),
           });
           if (!updated.PublicKey?.Id) {
-            return yield* Effect.fail(new Error("updatePublicKey returned no identifier"));
+            return yield* new PublicKeyUnexpectedResponse({
+              message: "updatePublicKey returned no identifier",
+            });
           }
           yield* session.note(observed.id);
           return toAttrs(updated.PublicKey.Id, updated.PublicKey.PublicKeyConfig, updated.ETag);

@@ -163,7 +163,7 @@ export const AnalysisRule = Resource<AnalysisRule>("GCP.ContactCenterInsights.An
 export class AnalysisRuleNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.AnalysisRuleNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, analysisRuleId: string) =>
@@ -209,10 +209,10 @@ const toAttrs = (rule: cci.GoogleCloudContactcenterinsightsV1AnalysisRule, proje
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsAnalysisRules({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   cci.listProjectsLocationsAnalysisRules.pages({ parent, pageSize: 100 }).pipe(
@@ -230,7 +230,7 @@ const findByDisplayName = (parent: string, displayName: string) =>
     Stream.filter((rule) => rule.displayName === displayName),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 /** Analysis rules reject display names over 64 characters ("Request contains an invalid argument"). */
@@ -310,21 +310,19 @@ export const AnalysisRuleProvider = () =>
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsAnalysisRules({
+            displayName,
+            conversationFilter: news.conversationFilter,
+            active,
+            analysisPercentage,
+            annotatorSelector,
             parent,
-            body: {
-              displayName,
-              conversationFilter: news.conversationFilter,
-              active,
-              analysisPercentage,
-              annotatorSelector,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? (yield* findByDisplayName(parent, displayName));
       }
 
       if (current === undefined) {
-        return yield* new AnalysisRuleNotResolved({ name });
+        return yield* new AnalysisRuleNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -342,6 +340,11 @@ export const AnalysisRuleProvider = () =>
         selectorChanged
       ) {
         current = yield* cci.patchProjectsLocationsAnalysisRules({
+          displayName,
+          conversationFilter: news.conversationFilter,
+          active,
+          analysisPercentage,
+          annotatorSelector,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
@@ -350,14 +353,6 @@ export const AnalysisRuleProvider = () =>
             percentageChanged ? "analysis_percentage" : undefined,
             selectorChanged ? "annotator_selector" : undefined,
           ),
-          body: {
-            name: currentName,
-            displayName,
-            conversationFilter: news.conversationFilter,
-            active,
-            analysisPercentage,
-            annotatorSelector,
-          },
         });
       }
 

@@ -27,17 +27,13 @@ export default DsqlDrizzleFunction.make(
     main,
     functionUrl: true,
     timeout: Duration.seconds(30),
-    // `pg` is CommonJS and Rolldown's bundled interop turns its Client export
-    // into a namespace object under Node. Install it intact in the Lambda
-    // artifact so @effect/sql-pg loads the package with Node's CJS semantics.
-    build: { install: ["pg"] },
   },
   Effect.gen(function* () {
     const cluster = yield* Db;
     const conn = yield* DSQL.Connect(cluster, { admin: true });
-    // `proxyChain` defers the connect to the first query, so the pool (and
-    // the IAM token backing it) is built inside the invocation, per
-    // execution — a fresh token can never outlive its pool.
+    // The database connects on its first query, so the pool (and the IAM
+    // token backing it) is built inside the invocation, per execution — a
+    // fresh token can never outlive its pool.
     const db = yield* Drizzle.Postgres(conn.pipe(Effect.map((info) => info.url)));
 
     return {

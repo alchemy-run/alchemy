@@ -4,7 +4,7 @@
  *
  * Discord renders neither HTML entities nor the `<samp>` tag, and only
  * honors `#`, `##`, and `###` headings. The CHANGELOG entries produced by
- * `render.ts` / `changelogithub` use:
+ * `render.ts` use:
  *
  *   - `&nbsp;` sequences to visually indent `###`/`#####` headings and
  *     author/PR separators (`&nbsp;-&nbsp;`)

@@ -52,7 +52,7 @@ export interface AnalyzeConversations extends Binding.Service<
     (
       request: AnalyzeConversationsRequest,
     ) => Effect.Effect<
-      conversations.AnalyzeConversationTaskResult,
+      conversations.AnalyzeConversationsResponse,
       conversations.AnalyzeConversationsError,
       RuntimeContext
     >

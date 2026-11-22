@@ -13,7 +13,6 @@
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import * as nodePath from "node:path";
-import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import { buildVinextPrerenderKVPairs, type VinextPrerenderKVPair } from "../PrerenderCache.ts";
 import type { DataCacheStore } from "./handler.ts";
@@ -69,7 +68,7 @@ export const seedPrerenderTo = <E, R>(
 ): Effect.Effect<{ readonly count: number; readonly routeCount: number }, E, R> =>
   Effect.gen(function* () {
     const loaded = yield* Effect.promise(() => loadPrerenderPairs(options.rootDir));
-    for (const warning of loaded.warnings) yield* Console.warn(warning);
+    for (const warning of loaded.warnings) yield* Effect.logWarning(warning);
     if (loaded.pairs.length === 0) {
       return { count: 0, routeCount: loaded.routeCount };
     }
@@ -78,7 +77,7 @@ export const seedPrerenderTo = <E, R>(
       (pair) => sink.putText(pair.key, pair.value, ttlMsOf(pair)),
       { concurrency: 8 },
     );
-    yield* Console.log(
+    yield* Effect.logInfo(
       `[vinext] seeded ${loaded.pairs.length} prerender cache ${
         loaded.pairs.length === 1 ? "entry" : "entries"
       } into ${options.label} (${loaded.routeCount} route${loaded.routeCount === 1 ? "" : "s"})`,

@@ -14,7 +14,7 @@ export const MAX_ID_LENGTH = 63;
 export const MAX_ITEM_LENGTH = 100;
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.Speech.ResourceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const parseOwnershipMarker = (
@@ -266,17 +266,17 @@ const collectPages = <Page, Item, E, R>(
 
 export const getCustomClass = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : speech
         .getProjectsLocationsCustomClasses({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const getPhraseSet = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : speech
         .getProjectsLocationsPhraseSets({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const listCustomClassesAt = (parent: string) =>
   parent.length === 0

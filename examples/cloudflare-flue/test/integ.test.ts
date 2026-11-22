@@ -1,7 +1,7 @@
 import { expect } from "bun:test";
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Test from "@alchemy.run/test/Bun";
 import { createFlueClient } from "@flue/sdk";
-import * as Test from "alchemy/Test/Bun";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

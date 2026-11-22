@@ -1,19 +1,20 @@
 import * as Railway from "@alchemy.run/railway";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Query } from "@distilled.cloud/core/query";
 import {
   Railway as RailwayApi,
   type SandboxCheckpoint as RailwaySandboxCheckpoint,
 } from "@distilled.cloud/railway";
-import { expect } from "alchemy-test";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import { State, type UpdatingReourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import { railwayApi } from "./limit.ts";
 import { suitePartition } from "./suiteProject.ts";
 
-const { test } = Test.make({ providers: Railway.providers() });
+const { test } = Test.make({ limit: railwayApi, providers: Railway.providers() });
 
 const Base = Effect.gen(function* () {
   const { environment } = yield* suitePartition;

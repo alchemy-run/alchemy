@@ -1,10 +1,12 @@
 import * as AWS from "@alchemy.run/aws";
 import { LogGroup } from "@alchemy.run/aws/Logs/LogGroup";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import { expectDeleteRefused } from "../../expectDeleteRefused.ts";
+import { driftOf, repairDrift, waitForDrift } from "../drift.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -86,6 +88,22 @@ test.provider(
       expect(observedUpdated?.deletionProtectionEnabled).toBe(true);
       expect(observedUpdated?.retentionInDays).toBe(14);
 
+      // Deletion protection refuses the destroy (and a replacement): the
+      // provider never lifts it. Turn it off and deploy before replacing.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "ConfiguredLogGroup",
+        tag: "LogGroupDeletionProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* LogGroup("ConfiguredLogGroup", {
+            retention: "14 days",
+            logGroupClass: "INFREQUENT_ACCESS",
+            deletionProtectionEnabled: false,
+          });
+        }),
+      );
+
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* LogGroup("ConfiguredLogGroup", {
@@ -109,5 +127,37 @@ test.provider(
       yield* stack.destroy();
       expect(yield* describeLogGroup(replaced.logGroupName)).toBeUndefined();
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags: ["provider:aws", "provider:aws:logs", "live"] },
+);
+
+// #2688: `read` must observe the live tags, not carry the persisted ones.
+test.provider(
+  "drift detects and repairs out-of-band log group tags",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const group = yield* stack.deploy(
+        LogGroup("DriftLogGroup", { retention: "1 day", tags: { team: "declared" } }),
+      );
+      expect((yield* driftOf(stack, "DriftLogGroup"))?.action).toBe("unchanged");
+
+      yield* logs.tagResource({
+        resourceArn: group.logGroupArn,
+        tags: { team: "out-of-band" },
+      });
+
+      const drifted = yield* waitForDrift(stack, "DriftLogGroup", "drifted");
+      expect(drifted?.attr?.tags?.team).toBe("out-of-band");
+
+      const repaired = yield* repairDrift(stack);
+      expect(repaired.resources.DriftLogGroup?.action).toBe("repaired");
+      expect((yield* driftOf(stack, "DriftLogGroup"))?.action).toBe("unchanged");
+      const tags = yield* logs.listTagsForResource({ resourceArn: group.logGroupArn });
+      expect(tags.tags?.team).toBe("declared");
+
+      yield* stack.destroy();
+      expect(yield* describeLogGroup(group.logGroupName)).toBeUndefined();
+    }),
   { tags: ["provider:aws", "provider:aws:logs", "live"] },
 );

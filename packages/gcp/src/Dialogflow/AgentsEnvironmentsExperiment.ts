@@ -139,7 +139,7 @@ export const AgentsEnvironmentsExperiment = Resource<AgentsEnvironmentsExperimen
 export class AgentsEnvironmentsExperimentNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsEnvironmentsExperimentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const definitionOf = (
@@ -180,10 +180,10 @@ const toAttrs = (experiment: dialogflow.GoogleCloudDialogflowCxV3Experiment, pro
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsEnvironmentsExperiments({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findOwned = (id: string, environment: string, hinted?: string) =>
   Effect.gen(function* () {
@@ -284,17 +284,15 @@ export const AgentsEnvironmentsExperimentProvider = () =>
 
       if (current === undefined) {
         const created = yield* dialogflow
-          .createProjectsLocationsAgentsEnvironmentsExperiments({
-            parent: environment,
-            body,
-          })
+          .createProjectsLocationsAgentsEnvironmentsExperiments({ ...body, parent: environment })
           .pipe(Effect.catchTag("Conflict", () => findOwned(id, environment, output?.name)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
         return yield* new AgentsEnvironmentsExperimentNotResolved({
-          name: output?.name ?? `${environment}/experiments/${news.experimentId ?? "unknown"}`,
+          resourceName:
+            output?.name ?? `${environment}/experiments/${news.experimentId ?? "unknown"}`,
         });
       }
 
@@ -306,6 +304,7 @@ export const AgentsEnvironmentsExperimentProvider = () =>
 
       if (displayChanged || descriptionChanged || definitionChanged || lengthChanged) {
         current = yield* dialogflow.patchProjectsLocationsAgentsEnvironmentsExperiments({
+          ...body,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
@@ -313,7 +312,6 @@ export const AgentsEnvironmentsExperimentProvider = () =>
             definitionChanged ? "definition" : undefined,
             lengthChanged ? "experiment_length" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
       }
 

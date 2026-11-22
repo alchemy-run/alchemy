@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -61,6 +62,13 @@ test.provider.skipIf(!process.env.GCP_TEST_CCAI_QUALITY || !!process.env.FAST)(
             scheduleInfo: { schedule: "every 1 hours", timeZone: "UTC" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.ContactCenterInsights.AssessmentRule.lookup({
+          assessmentRuleId: created.assessmentRuleId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.assessmentRuleId).toEqual(expect.any(String));

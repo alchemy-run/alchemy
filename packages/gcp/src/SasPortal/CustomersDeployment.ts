@@ -127,7 +127,7 @@ export class CustomersDeploymentNotResolved extends Data.TaggedError(
   "GCP.SasPortal.CustomersDeploymentNotResolved",
 )<{
   parent: string;
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (deployment: sasportal.SasPortalDeployment, parent: string, project: string) => {
@@ -220,10 +220,7 @@ export const CustomersDeploymentProvider = () =>
 
       if (current === undefined) {
         const created = yield* sasportal
-          .createCustomersDeployments({
-            parent,
-            body: desired,
-          })
+          .createCustomersDeployments({ ...desired, parent })
           .pipe(
             Effect.catchTag("Conflict", () =>
               findOwnedCustomerDeployment(id, parent).pipe(Effect.map((found) => found?.row)),
@@ -235,7 +232,7 @@ export const CustomersDeploymentProvider = () =>
       if (current === undefined) {
         return yield* new CustomersDeploymentNotResolved({
           parent,
-          name: news.name ?? output?.name ?? displayName,
+          resourceName: news.name ?? output?.name ?? displayName,
         });
       }
 
@@ -245,12 +242,12 @@ export const CustomersDeploymentProvider = () =>
         news.sasUserIds !== undefined && !sameStringList(current.sasUserIds, news.sasUserIds);
       if (nameChanged || usersChanged) {
         current = yield* sasportal.patchCustomersDeployments({
+          ...desired,
           name,
           updateMask: updateMaskOf(
             "displayName",
             news.sasUserIds !== undefined ? "sasUserIds" : undefined,
           ),
-          body: desired,
         });
       }
 

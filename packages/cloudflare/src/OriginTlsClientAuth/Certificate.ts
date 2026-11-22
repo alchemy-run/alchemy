@@ -299,7 +299,7 @@ const isLive = (status: string | null | undefined): boolean =>
 const observeById = (zoneId: string, certificateId: string) =>
   originTls.getOriginTlsClientAuth({ zoneId, certificateId }).pipe(
     Effect.map((cert) => (isLive(cert.status) ? cert : undefined)),
-    Effect.catchTag("CertificateNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("CertificateNotFound", () => Effect.undefined),
   );
 
 // Locate a live certificate by exact PEM content. Tombstoned certificates

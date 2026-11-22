@@ -14,7 +14,7 @@ export interface GetRouteOperationResultRequest extends Omit<
 export type GetRouteOperationResultClient = (
   request: GetRouteOperationResultRequest,
 ) => Effect.Effect<
-  route.RouteOperationResponse,
+  route.GetRouteRouteOperationsResultResponse,
   route.GetRouteRouteOperationsResultError,
   RuntimeContext
 >;

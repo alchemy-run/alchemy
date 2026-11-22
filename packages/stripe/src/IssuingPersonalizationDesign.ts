@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetIssuingPersonalizationDesigns,
   GetIssuingPersonalizationDesign,
@@ -165,8 +164,18 @@ export type IssuingPersonalizationDesign = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  IssuingPersonalizationDesignLookup
 >;
+
+/**
+ * Props for {@link IssuingPersonalizationDesign.lookup}: find a personalization design this stack
+ * doesn't manage by its id.
+ */
+export interface IssuingPersonalizationDesignLookup {
+  /** Stripe personalization design id, e.g. `"pd_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Issuing Personalization Design — a physical bundle, optional
@@ -233,6 +242,16 @@ export type IssuingPersonalizationDesign = Resource<
  *   physicalBundle: "ics_Fiiwz3T83opOUd",
  *   name: "Metal Card",
  * });
+ * ```
+ *
+ * ### Looking up an existing personalization design
+ * `IssuingPersonalizationDesign.lookup` references a personalization design Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing personalization design
+ * ```typescript
+ * const ref = Stripe.IssuingPersonalizationDesign.lookup({ id: "pd_1A2b3C4d5E6f7G8h" });
  * ```
  *
  * @resource
@@ -336,7 +355,7 @@ const isMissingDesign = isMissingStripeResource;
 const getById = (personalizationDesign: string) =>
   GetIssuingPersonalizationDesign({
     personalization_design: personalizationDesign,
-  }).pipe(Effect.catchIf(isMissingDesign, () => Effect.succeed(undefined)));
+  }).pipe(Effect.catchIf(isMissingDesign, () => Effect.undefined));
 
 const findByLookupKey = Effect.fn(function* (lookupKey: string) {
   const response = yield* GetIssuingPersonalizationDesigns({
@@ -420,6 +439,11 @@ export const IssuingPersonalizationDesignProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ id, output }) {
       const existing = yield* observe({
         id: output?.id,
@@ -468,11 +492,8 @@ export const IssuingPersonalizationDesignProvider = () =>
             ? { carrier_text: toWireCarrierText(desiredCarrierText) }
             : {}),
           ...(desiredIsDefault ? { preferences: { is_default: true } } : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-issuing-personalization-design-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-issuing-personalization-design-${instanceId}`,
+        });
       }
 
       const observedMetadata = tagRecord(current.metadata);

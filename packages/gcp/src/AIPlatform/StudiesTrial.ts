@@ -93,7 +93,7 @@ export const StudiesTrial = Resource<StudiesTrial>("GCP.AIPlatform.StudiesTrial"
 export class StudiesTrialNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.StudiesTrialNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (trial: aiplatform.GoogleCloudAiplatformV1Trial, project: string) => {
@@ -118,10 +118,10 @@ const toAttrs = (trial: aiplatform.GoogleCloudAiplatformV1Trial, project: string
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsStudiesTrials({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listStudies = (parent: string) =>
   aiplatform.listProjectsLocationsStudies.pages({ parent, pageSize: 100 }).pipe(
@@ -207,24 +207,18 @@ export const StudiesTrialProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsStudiesTrials({
+            clientId,
+            state: "ACTIVE",
+            parameters: news.parameters?.map((parameter) => ({
+              parameterId: parameter.parameterId,
+              value: parameter.value,
+            })),
             parent: news.parent,
-            body: {
-              clientId,
-              // Vizier rejects user trials without a status ("Can not add
-              // trial with status: UNKNOWN").
-              state: "ACTIVE",
-              parameters: news.parameters?.map((parameter) => ({
-                parameterId: parameter.parameterId,
-                value: parameter.value,
-              })),
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
               findByClientId(news.parent, clientId, env.project).pipe(
-                Effect.flatMap((match) =>
-                  match ? getByName(match.name) : Effect.succeed(undefined),
-                ),
+                Effect.flatMap((match) => (match ? getByName(match.name) : Effect.undefined)),
               ),
             ),
           );
@@ -233,7 +227,7 @@ export const StudiesTrialProvider = () =>
 
       if (current === undefined) {
         return yield* new StudiesTrialNotResolved({
-          name: output?.name ?? `${news.parent}/trials/-`,
+          resourceName: output?.name ?? `${news.parent}/trials/-`,
         });
       }
 

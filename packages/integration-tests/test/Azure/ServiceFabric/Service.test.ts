@@ -1,12 +1,15 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as sf from "@distilled.cloud/azure/servicefabricmanagedclusters";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runPaidOnly, withPublicIps, withVcpus } from "../gates.ts";
 import { appPackage, clusterWithNodes, logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
+
+const statelessOf = (properties: sf.ServiceResourceProperties | undefined) =>
+  properties?.serviceKind === "Stateless" ? properties : undefined;
 
 const getService = (
   resourceGroupName: string,
@@ -87,7 +90,7 @@ test.provider.skipIf(!runPaidOnly || appPackage.url === undefined)(
             );
           expect(service.serviceKind).toEqual("Stateless");
           const observed = yield* get(service.serviceName);
-          expect(observed.properties?.instanceCount).toEqual(1);
+          expect(statelessOf(observed.properties)?.instanceCount).toEqual(1);
 
           // In-place: instance count and tags.
           const updated = yield* stack.deploy(
@@ -95,7 +98,7 @@ test.provider.skipIf(!runPaidOnly || appPackage.url === undefined)(
           );
           expect(updated.service.serviceId).toEqual(service.serviceId);
           const reobserved = yield* get(service.serviceName);
-          expect(reobserved.properties?.instanceCount).toEqual(2);
+          expect(statelessOf(reobserved.properties)?.instanceCount).toEqual(2);
           expect(reobserved.tags?.env).toEqual("prod");
 
           // Replacement: rename.

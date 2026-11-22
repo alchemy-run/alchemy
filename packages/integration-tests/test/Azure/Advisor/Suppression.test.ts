@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as advisor from "@distilled.cloud/azure/advisor";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -117,7 +117,9 @@ test.provider(
       expect(2 * DAY - secondLeft).toBeLessThan(10 * MINUTE);
 
       // In place: dismiss with no expiry.
-      const dismissed = yield* stack.deploy(program({ resourceUri: scope, recommendationId: first }));
+      const dismissed = yield* stack.deploy(
+        program({ resourceUri: scope, recommendationId: first }),
+      );
       expect(dismissed.suppression.suppressionResourceId).toEqual(
         created.suppression.suppressionResourceId,
       );

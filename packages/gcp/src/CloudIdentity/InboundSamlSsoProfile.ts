@@ -107,7 +107,7 @@ export const InboundSamlSsoProfile = Resource<InboundSamlSsoProfile>(
 export class InboundSamlSsoProfileNotResolved extends Data.TaggedError(
   "GCP.CloudIdentity.InboundSamlSsoProfileNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (profile: cloudidentity.InboundSamlSsoProfile) => {
@@ -182,12 +182,8 @@ export const InboundSamlSsoProfileProvider = () =>
 
       if (current === undefined) {
         const created = yield* cloudidentity
-          .createInboundSamlSsoProfiles({ body: desired })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              Effect.succeed<cloudidentity.Operation | undefined>(undefined),
-            ),
-          );
+          .createInboundSamlSsoProfiles({ ...desired })
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created).pipe(
             Effect.catchTag("GCP.CloudIdentity.OperationPending", () => Effect.void),
@@ -209,7 +205,7 @@ export const InboundSamlSsoProfileProvider = () =>
 
       if (current === undefined) {
         return yield* new InboundSamlSsoProfileNotResolved({
-          name: output?.name ?? displayName,
+          resourceName: output?.name ?? displayName,
         });
       }
 
@@ -223,12 +219,10 @@ export const InboundSamlSsoProfileProvider = () =>
 
       if (updateMask.length > 0 && name.length > 0) {
         const patched = yield* cloudidentity.patchInboundSamlSsoProfiles({
+          displayName,
+          idpConfig: news.idpConfig,
           name,
           updateMask,
-          body: {
-            displayName,
-            idpConfig: news.idpConfig,
-          },
         });
         yield* waitForOperation(patched).pipe(
           Effect.catchTag("GCP.CloudIdentity.OperationPending", () => Effect.void),
@@ -243,11 +237,7 @@ export const InboundSamlSsoProfileProvider = () =>
       if (output.name.length === 0) return;
       const deleted = yield* cloudidentity
         .deleteInboundSamlSsoProfiles({ name: output.name })
-        .pipe(
-          Effect.catchTag("NotFound", () =>
-            Effect.succeed<cloudidentity.Operation | undefined>(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (deleted !== undefined) {
         yield* waitForOperation(deleted, { notFoundOk: true });
       }

@@ -75,8 +75,18 @@ export interface Task extends Resource<
     destinationLocationArn: string;
   },
   {},
-  Providers
+  Providers,
+  TaskLookup
 > {}
+
+/**
+ * Props for {@link Task.lookup}: find a task this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TaskLookup {
+  /** The task arn of the existing task. */
+  taskArn: string;
+}
 
 /**
  * A DataSync task — the transfer definition binding a source location to a
@@ -109,6 +119,16 @@ export interface Task extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing task
+ * `Task.lookup` references a task Alchemy doesn't manage (created in the
+ * console or by another stack), found by `taskArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing task
+ * ```typescript
+ * const existing = AWS.DataSync.Task.lookup({ taskArn: "my-task" });
+ * ```
+ *
  * @resource
  */
 export const Task = Resource<Task>("AWS.DataSync.Task");
@@ -126,7 +146,7 @@ export const TaskProvider = () =>
       const describe = Effect.fn(function* (taskArn: string) {
         return yield* datasync
           .describeTask({ TaskArn: taskArn })
-          .pipe(Effect.catchTag("TaskNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("TaskNotFound", () => Effect.undefined));
       });
 
       const findByName = Effect.fn(function* (name: string) {
@@ -164,6 +184,12 @@ export const TaskProvider = () =>
               ),
             );
           }),
+
+        lookup: Effect.fn(function* ({ taskArn: arn }) {
+          if (arn === undefined) return undefined;
+          const t = yield* describe(arn);
+          return t === undefined ? undefined : attrsOf(t);
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const arn = output?.taskArn ?? (yield* findByName(yield* createName(id, olds)));

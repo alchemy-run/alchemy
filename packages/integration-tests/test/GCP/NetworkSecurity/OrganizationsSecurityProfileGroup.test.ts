@@ -1,12 +1,13 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -73,9 +74,9 @@ test.provider.skipIf(!!process.env.GCP_TEST_ORG_NETWORKSECURITY)(
         : "0";
       const error = yield* Effect.flip(
         networksecurity.createOrganizationsLocationsSecurityProfileGroups({
+          description: "probe",
           parent: `organizations/${organization}/locations/global`,
           securityProfileGroupId: "alchemy-org-secprofilegroup-probe",
-          body: { description: "probe" },
         }),
       );
       expect(error._tag).toBe("Forbidden");
@@ -110,6 +111,14 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_ORG_NETWORKSECU
           });
           return { profile, group };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkSecurity.OrganizationsSecurityProfileGroup.lookup({
+          securityProfileGroupId: created.group.securityProfileGroupId,
+          organization: created.group.organization,
+          location: created.group.location,
+        }),
+        created.group,
       );
 
       expect(created.group.name).toContain("/securityProfileGroups/");

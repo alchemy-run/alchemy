@@ -1,4 +1,4 @@
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { initialCwd } from "alchemy/Util/Node";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

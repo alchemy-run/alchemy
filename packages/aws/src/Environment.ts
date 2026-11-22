@@ -1,9 +1,5 @@
 import type { CredentialsError, ResolvedCredentials } from "@distilled.cloud/aws/Credentials";
-import {
-  deferUntilFirstUse,
-  orDieCredentialsUnavailable,
-  resolveProviderConfig,
-} from "alchemy/Auth/Resolve";
+import { lazyCredentials } from "alchemy/Auth/Resolve";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -13,9 +9,9 @@ import * as Option from "effect/Option";
 import {
   AWS_AUTH_PROVIDER_NAME,
   LOCAL_ACCOUNT_ID,
-  type AwsAuthConfig,
   type AwsResolvedCredentials,
 } from "./AuthProvider.ts";
+import { partitionOf, type Partition } from "./Partition.ts";
 
 export const AWS_PROFILE = Config.String("AWS_PROFILE").pipe(Config.withDefault("default"));
 
@@ -55,7 +51,17 @@ export class AWSEnvironment extends Context.Service<
   AWSEnvironment,
   Effect.Effect<AWSEnvironmentShape>
 >()("AWS::Environment") {
-  static current = AWSEnvironment.use((env) => env);
+  /**
+   * The resolved environment, plus the `partition` its region belongs to.
+   * The partition is derived on read, so an environment rebuilt with another
+   * `region` can never carry a stale partition.
+   */
+  static current = AWSEnvironment.use((env) =>
+    Effect.map(env, (env): AWSEnvironmentShape & { readonly partition: Partition } => ({
+      ...env,
+      partition: partitionOf(env.region),
+    })),
+  );
   /**
    * Whether this environment is the floci emulator
    * (dummy account {@link LOCAL_ACCOUNT_ID}). A set `endpoint` is not
@@ -74,21 +80,20 @@ export const isLocalEmulator = AWSEnvironment.isLocalEmulator;
 
 export const Default = Layer.effect(
   AWSEnvironment,
-  Effect.gen(function* () {
-    // Provider layers are built on every run — before any profile may be
-    // configured — so nothing may resolve at construction. A dev run with
-    // zero AWS credentials builds this layer too (the ambient environment
-    // is the emulator; only `Alchemy.remote()` rows ever need it), so the
-    // profile/CI precedence is captured here and evaluated on first use,
-    // exactly once.
-    const resolve = yield* resolveProviderConfig<AwsAuthConfig, AwsResolvedCredentials>(
-      AWS_AUTH_PROVIDER_NAME,
-    ).pipe(
-      Effect.flatMap(({ resolve }) => resolve),
-      deferUntilFirstUse,
-    );
-    return yield* resolve.pipe(orDieCredentialsUnavailable(AWS_AUTH_PROVIDER_NAME), Effect.cached);
-  }),
+  // Provider layers are built on every run — before any profile may be
+  // configured — so nothing may resolve at construction. A dev run with
+  // zero AWS credentials builds this layer too (the ambient environment
+  // is the emulator; only `Alchemy.remote()` rows ever need it), so the
+  // profile/CI precedence is captured here and evaluated on first use.
+  // Suspended: `AuthProvider.ts` imports this module, so its exports are not
+  // initialized yet when this module evaluates.
+  Effect.suspend(() =>
+    // `AWSEnvironment` is typed as never failing, so a credentials failure
+    // dies here; the engine still reports it as `CredentialsRequired`.
+    lazyCredentials<AwsResolvedCredentials>()(AWS_AUTH_PROVIDER_NAME, (creds) => creds).pipe(
+      Effect.map(Effect.orDie),
+    ),
+  ),
 ).pipe(Layer.orDie);
 
 /**

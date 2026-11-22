@@ -6,12 +6,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-  sanitizeLabelValue,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, sanitizeLabelValue } from "../Labels.ts";
 import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const SUBSCRIPTION_PREFIX = "subscriptions/";
@@ -52,13 +47,13 @@ export const LIST_EVENT_TYPES = [
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.WorkspaceEvents.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError(
   "GCP.WorkspaceEvents.ResourceStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -217,7 +212,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
   effect.pipe(
     Effect.catchIf(
       (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
 
@@ -233,25 +228,22 @@ export const ignoreMissing = <E extends { readonly _tag: string }, R>(
 
 export const getSubscription = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(we.getSubscriptions({ name: toSubscriptionName(name) }));
 
 export const getTopic = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : pubsub
         .getProjectsTopics({ topic: name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ensureTopic = (name: string, labels: Record<string, string>) =>
   Effect.gen(function* () {
     let current = yield* getTopic(name);
     if (current === undefined) {
       const created = yield* pubsub
-        .createProjectsTopics({
-          name,
-          body: { labels },
-        })
+        .createProjectsTopics({ labels, name })
         .pipe(Effect.catchTag("Conflict", () => getTopic(name)));
       current = created ?? undefined;
     }
@@ -261,13 +253,7 @@ export const ensureTopic = (name: string, labels: Record<string, string>) =>
     const changed = Object.entries(desired).some(([key, value]) => observed[key] !== value);
     if (!changed) return current;
     return yield* pubsub
-      .patchProjectsTopics({
-        name,
-        body: {
-          topic: { name, labels: desired },
-          updateMask: "labels",
-        },
-      })
+      .patchProjectsTopics({ topic: { name, labels: desired }, updateMask: "labels", name })
       .pipe(Effect.catchTag(["NotFound", "Conflict"], () => Effect.succeed(current)));
   });
 
@@ -302,7 +288,7 @@ export const waitUntilExists = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value != null,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceNotResolved,
@@ -318,7 +304,7 @@ export const waitUntilGone = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new ResourceStillExists({ name }),
+      () => new ResourceStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceStillExists,

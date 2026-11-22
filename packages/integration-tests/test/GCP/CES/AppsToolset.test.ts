@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ces from "@distilled.cloud/gcp/ces_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -76,6 +77,14 @@ test.provider(
           });
           return { app, toolset };
         }),
+      );
+      yield* expectFound(
+        GCP.CES.AppsToolset.lookup({
+          toolsetId: created.toolset.toolsetId,
+          location: created.toolset.location,
+          app: created.toolset.app,
+        }),
+        created.toolset,
       );
 
       expect(created.toolset.name).toContain("/toolsets/");

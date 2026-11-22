@@ -1,17 +1,18 @@
+import { expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 import {
   AuthProvider,
-  AuthProviders,
+  AuthProvidersLive,
   describeEnvironment,
   getAuthProvider,
 } from "@/Auth/AuthProvider.ts";
 import { getEnvRedactedRequired } from "@/Auth/Env.ts";
-import { Interaction } from "@/Interaction.ts";
+import { Interaction, makeNonInteractive } from "@/Interaction.ts";
 
 const implementation = {
   configSchema: Schema.Struct({ method: Schema.Literal("custom") }),
@@ -42,7 +43,11 @@ it.effect(
       expect(describeEnvironment(provider.environment)).toBe(
         "CUSTOM_PROVIDER_TOKEN, [CUSTOM_PROVIDER_REGION | CUSTOM_PROVIDER_DEFAULT_REGION]",
       );
-    }).pipe(Effect.provideService(AuthProviders, {}), Effect.provide(NodeServices.layer)),
+    }).pipe(
+      Effect.provide(AuthProvidersLive),
+      Effect.provide(NodeServices.layer),
+      Effect.provide(SecureRandom.layerWebCrypto),
+    ),
   { tags: ["unit", "local"] },
 );
 
@@ -56,7 +61,11 @@ it.effect(
 
       expect(provider.readEnvironment).toBeUndefined();
       expect(provider.environment).toEqual([]);
-    }).pipe(Effect.provideService(AuthProviders, {}), Effect.provide(NodeServices.layer)),
+    }).pipe(
+      Effect.provide(AuthProvidersLive),
+      Effect.provide(NodeServices.layer),
+      Effect.provide(SecureRandom.layerWebCrypto),
+    ),
   { tags: ["unit", "local"] },
 );
 
@@ -74,7 +83,11 @@ it.effect(
       if (Exit.isFailure(exit)) {
         expect(String(Cause.squash(exit.cause))).toContain("declare its `environment` variables");
       }
-    }).pipe(Effect.provideService(AuthProviders, {}), Effect.provide(NodeServices.layer)),
+    }).pipe(
+      Effect.provide(AuthProvidersLive),
+      Effect.provide(NodeServices.layer),
+      Effect.provide(SecureRandom.layerWebCrypto),
+    ),
   { tags: ["unit", "local"] },
 );
 
@@ -83,14 +96,12 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const answered: string[] = [];
+      const sink = { write: () => true } as never;
+      const quiet = makeNonInteractive({ stdout: sink, stderr: sink });
       const scripted = (name: string): Interaction["Service"] => ({
-        output: {
-          info: () => Effect.void,
-          success: () => Effect.void,
-          warning: () => Effect.void,
-          error: () => Effect.void,
-        },
+        ...quiet,
         prompt: {
+          ...quiet.prompt,
           text: () =>
             Effect.sync(() => {
               answered.push(name);
@@ -98,9 +109,6 @@ it.effect(
             }),
           password: () => Effect.succeed(name),
           confirm: () => Effect.succeed(true),
-          select: () => Effect.die("unused"),
-          multiSelect: () => Effect.die("unused"),
-          awaitExternal: () => Effect.succeed(name),
         },
         task: (_options, effect) => effect,
       });
@@ -124,6 +132,10 @@ it.effect(
         .pipe(Effect.provideService(Interaction, scripted("call-time")));
 
       expect(answered).toEqual(["call-time"]);
-    }).pipe(Effect.provideService(AuthProviders, {}), Effect.provide(NodeServices.layer)),
+    }).pipe(
+      Effect.provide(AuthProvidersLive),
+      Effect.provide(NodeServices.layer),
+      Effect.provide(SecureRandom.layerWebCrypto),
+    ),
   { tags: ["unit", "local"] },
 );

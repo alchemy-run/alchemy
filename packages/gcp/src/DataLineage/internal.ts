@@ -13,13 +13,13 @@ export const MAX_DISPLAY_NAME_LENGTH = 200;
 export class DatalineageNotResolved extends Data.TaggedError(
   "GCP.DataLineage.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class DatalineageStillExists extends Data.TaggedError(
   "GCP.DataLineage.ResourceStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -181,7 +181,7 @@ export const desiredAttributes = (
   attributes: Record<string, unknown> | undefined,
   ownership: Record<string, string>,
 ): datalineage.DocumentMap => ({
-  ...(attributes ?? {}),
+  ...attributes,
   ...ownership,
 });
 
@@ -323,7 +323,7 @@ export const waitUntilGone = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new DatalineageStillExists({ name }),
+      () => new DatalineageStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof DatalineageStillExists,

@@ -9,5 +9,6 @@ export const InvokeWithResponseStreamHttp = Layer.effect(
     tag: "AWS.Lambda.InvokeWithResponseStream",
     operation: Lambda.invokeWithResponseStream,
     actions: ["lambda:InvokeFunction"],
+    qualified: true,
   }),
 );

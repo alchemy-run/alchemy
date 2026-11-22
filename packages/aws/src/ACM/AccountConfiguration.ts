@@ -1,12 +1,18 @@
 import * as acm from "@distilled.cloud/aws/acm";
-import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { toWireDays } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
+import { withGlobalRegion } from "../Region.ts";
+
+export class AccountConfigurationNotReady extends Data.TaggedError("AccountConfigurationNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface AccountConfigurationProps {
   /**
@@ -47,7 +53,7 @@ export interface AccountConfiguration extends Resource<
  * threshold to the AWS default of 45 days.
  *
  * Like the {@link Certificate} resource, the provider pins its API calls to
- * `us-east-1`.
+ * the partition's global region, `us-east-1` in `aws`.
  *
  * ### Configuring Expiry Events
  * **Example:** Start Expiry Events 30 Days Before Expiration
@@ -76,12 +82,7 @@ export const AccountConfiguration = Resource<AccountConfiguration>("AWS.ACM.Acco
 /** The AWS account default for `DaysBeforeExpiry`. */
 const DEFAULT_DAYS_BEFORE_EXPIRY = 45;
 
-const ACM_REGION = "us-east-1" as const;
-
-const withAcmRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  // `AwsRegion`'s service value is an `Effect<RegionName>`, so it must be
-  // provided as an effect, not a bare string.
-  effect.pipe(Effect.provideService(AwsRegion, Effect.succeed(ACM_REGION)));
+const withAcmRegion = withGlobalRegion;
 
 /**
  * ACM treats a repeated `IdempotencyToken` within one hour as the SAME
@@ -131,11 +132,9 @@ export const AccountConfigurationProvider = () =>
             return observed;
           }
         }
-        return yield* Effect.fail(
-          new Error(
-            `ACM account configuration did not converge to ${desiredDays} days before expiry`,
-          ),
-        );
+        return yield* new AccountConfigurationNotReady({
+          message: `ACM account configuration did not converge to ${desiredDays} days before expiry`,
+        });
       });
 
       return {

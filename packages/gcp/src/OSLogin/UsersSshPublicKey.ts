@@ -114,7 +114,7 @@ export const UsersSshPublicKey = Resource<UsersSshPublicKey>("GCP.OSLogin.UsersS
 export class UsersSshPublicKeyNotResolved extends Data.TaggedError(
   "GCP.OSLogin.UsersSshPublicKeyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (key: oslogin.SshPublicKey, user: string, project: string) => {
@@ -183,11 +183,9 @@ export const UsersSshPublicKeyProvider = () =>
       if (current === undefined) {
         const created = yield* retryConflict(
           oslogin.createUsersSshPublicKeys({
+            key: desiredKey,
+            expirationTimeUsec: news.expirationTimeUsec,
             parent: toUserParent(user),
-            body: {
-              key: desiredKey,
-              expirationTimeUsec: news.expirationTimeUsec,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => findKeyByText(user, desiredKey, env.project)));
         current = created ?? undefined;
@@ -195,7 +193,7 @@ export const UsersSshPublicKeyProvider = () =>
 
       if (current === undefined) {
         return yield* new UsersSshPublicKeyNotResolved({
-          name: output?.name ?? resourceName(user, output?.fingerprint ?? ""),
+          resourceName: output?.name ?? resourceName(user, output?.fingerprint ?? ""),
         });
       }
 
@@ -208,11 +206,9 @@ export const UsersSshPublicKeyProvider = () =>
       if (expirationChanged) {
         current = yield* retryConflict(
           oslogin.patchUsersSshPublicKeys({
+            expirationTimeUsec: news.expirationTimeUsec,
             name,
             updateMask: "expirationTimeUsec",
-            body: {
-              expirationTimeUsec: news.expirationTimeUsec,
-            },
           }),
         );
       }

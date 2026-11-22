@@ -98,7 +98,7 @@ export const IssueModelsIssue = Resource<IssueModelsIssue>(
 export class IssueModelsIssueNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.IssueModelsIssueNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (issue: cci.GoogleCloudContactcenterinsightsV1Issue, project: string) => {
@@ -120,15 +120,17 @@ const toAttrs = (issue: cci.GoogleCloudContactcenterinsightsV1Issue, project: st
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsIssueModelsIssues({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((issue) =>
-      issue ? Effect.succeed(issue) : Effect.fail(new IssueModelsIssueNotResolved({ name })),
+      issue
+        ? Effect.succeed(issue)
+        : Effect.fail(new IssueModelsIssueNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ContactCenterInsights.IssueModelsIssueNotResolved",
@@ -164,7 +166,7 @@ const findOwned = (parent: string, displayDescription: string, displayName: stri
           (displayName !== undefined && issue.displayName === displayName),
       ),
     ),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const IssueModelsIssueProvider = () =>
@@ -221,13 +223,11 @@ export const IssueModelsIssueProvider = () =>
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsIssueModelsIssues({
+            displayName,
+            displayDescription,
             parent: news.parent,
-            body: {
-              displayName,
-              displayDescription,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
           const createdName = resourceNameFromOperation(done) ?? "";
@@ -242,7 +242,7 @@ export const IssueModelsIssueProvider = () =>
 
       if (current === undefined) {
         return yield* new IssueModelsIssueNotResolved({
-          name: output?.name ?? `${news.parent}/issues/-`,
+          resourceName: output?.name ?? `${news.parent}/issues/-`,
         });
       }
 
@@ -252,6 +252,8 @@ export const IssueModelsIssueProvider = () =>
 
       if (displayChanged || descriptionChanged) {
         current = yield* cci.patchProjectsLocationsIssueModelsIssues({
+          displayName,
+          displayDescription,
           name,
           updateMask: [
             displayChanged ? "display_name" : undefined,
@@ -259,11 +261,6 @@ export const IssueModelsIssueProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            displayDescription,
-          },
         });
       }
 

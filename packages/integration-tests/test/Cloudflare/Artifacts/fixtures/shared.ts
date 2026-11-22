@@ -6,9 +6,10 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
  * namespace marker (`{ kind, name, namespace }`); both workers bind this same
  * namespace so they operate over one shared repo namespace.
  *
- * Namespace name is deterministic and constant (lowercase, 3–63 chars) per the
- * test conventions — never `Date.now()`.
+ * Namespace name is deterministic and constant per the test conventions —
+ * never `Date.now()`. It uses mixed case, `.` and `_` so the deploy covers the
+ * full documented naming rule.
  */
 export const Repos = Cloudflare.Artifacts.Namespace("ArtifactsBindingRepos", {
-  namespace: "alchemy-artifacts-binding-test",
+  namespace: "Alchemy.Artifacts_Binding-Test",
 });

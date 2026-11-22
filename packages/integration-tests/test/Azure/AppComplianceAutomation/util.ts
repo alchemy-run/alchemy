@@ -1,5 +1,5 @@
 import * as Azure from "@alchemy.run/azure";
-import { type AzureOpError, Credentials } from "@distilled.cloud/azure";
+import { type AzureOpError, armScopeFor, Credentials } from "@distilled.cloud/azure";
 import * as acat from "@distilled.cloud/azure/appcomplianceautomation";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -16,9 +16,8 @@ export const tags = ["provider:azure", "provider:azure:appcomplianceautomation",
 /** The `x-ms-aad-user-token` header every App Compliance Automation call needs. */
 export const userToken = Effect.gen(function* () {
   const credentials = yield* yield* Credentials;
-  return yield* Effect.sync(() =>
-    Redacted.make(`Bearer ${Redacted.value(credentials.bearerToken)}`),
-  );
+  const token = yield* credentials.token(armScopeFor(credentials.apiBaseUrl));
+  return yield* Effect.sync(() => Redacted.make(`Bearer ${Redacted.value(token)}`));
 });
 
 /** Repeat a GET until it reports a typed not-found; `"gone"` or `"found"`. */

@@ -29,6 +29,7 @@ import type * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
@@ -139,7 +140,7 @@ const onEmulator = <A, E>(effect: Effect.Effect<A, E, Credentials | HttpClient.H
   effect.pipe(
     Effect.provide(
       Layer.mergeAll(
-        fromStaticToken({ bearerToken: "azurite", subscriptionId: "" }),
+        fromStaticToken({ bearerToken: Redacted.make("azurite"), subscriptionId: "" }),
         FetchHttpClient.layer,
       ),
     ),

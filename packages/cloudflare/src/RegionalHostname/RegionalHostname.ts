@@ -225,8 +225,9 @@ const getHostname = (zoneId: string, hostname: string) =>
   addressing
     .getRegionalHostname({ zoneId, hostname })
     .pipe(
-      Effect.catchTag(["RegionalHostnameNotFound", "RegionalHostnameEmpty"], () =>
-        Effect.succeed(undefined),
+      Effect.catchTag(
+        ["RegionalHostnameNotFound", "RegionalHostnameEmpty"],
+        () => Effect.undefined,
       ),
     );
 

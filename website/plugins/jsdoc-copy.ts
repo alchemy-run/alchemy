@@ -110,7 +110,7 @@ export const jsdocCopyHandler = (): CopyEditHandler => {
 
   const runGenerator = () =>
     new Promise<void>((resolve, reject) => {
-      const child = spawn("bun", [generator], {
+      const child = spawn("node", [generator], {
         cwd: repoRoot,
         env: { ...process.env, API_REFERENCE_COPY_MARKERS: "1" },
         stdio: ["ignore", "ignore", "pipe"],

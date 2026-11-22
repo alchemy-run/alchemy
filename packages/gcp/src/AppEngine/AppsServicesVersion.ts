@@ -219,7 +219,7 @@ export const AppsServicesVersion = Resource<AppsServicesVersion>(
 export class AppsServicesVersionNotResolved extends Data.TaggedError(
   "GCP.AppEngine.AppsServicesVersionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -253,7 +253,7 @@ const toAttrs = (
 
 const getById = (appsId: string, servicesId: string, versionsId: string) =>
   versionsId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(
         appengine.getAppsServicesVersions({
           appsId,
@@ -402,11 +402,7 @@ export const AppsServicesVersionProvider = () =>
 
       if (current === undefined) {
         const operation = yield* appengine
-          .createAppsServicesVersions({
-            appsId,
-            servicesId: serviceId,
-            body,
-          })
+          .createAppsServicesVersions({ ...body, appsId, servicesId: serviceId })
           .pipe(
             Effect.catchTag("Conflict", () => Effect.succeed<appengine.Operation>({ done: true })),
           );
@@ -418,7 +414,7 @@ export const AppsServicesVersionProvider = () =>
 
       if (current === undefined) {
         return yield* new AppsServicesVersionNotResolved({
-          name: `apps/${appsId}/services/${serviceId}/versions/${versionId}`,
+          resourceName: `apps/${appsId}/services/${serviceId}/versions/${versionId}`,
         });
       }
 
@@ -443,17 +439,15 @@ export const AppsServicesVersionProvider = () =>
       );
       if (updateMask.length > 0) {
         const operation = yield* appengine.patchAppsServicesVersions({
+          servingStatus: news.servingStatus,
+          instanceClass: news.instanceClass,
+          automaticScaling: news.automaticScaling,
+          basicScaling: news.basicScaling,
+          manualScaling: news.manualScaling,
           appsId,
           servicesId: serviceId,
           versionsId: observedId,
           updateMask,
-          body: {
-            servingStatus: news.servingStatus,
-            instanceClass: news.instanceClass,
-            automaticScaling: news.automaticScaling,
-            basicScaling: news.basicScaling,
-            manualScaling: news.manualScaling,
-          },
         });
         yield* waitForOperation(operation, { appsId });
         current = (yield* getById(appsId, serviceId, observedId)) ?? current;
@@ -470,7 +464,7 @@ export const AppsServicesVersionProvider = () =>
           servicesId: output.serviceId || DEFAULT_SERVICE,
           versionsId: output.versionId,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation === undefined) return;
       yield* waitForOperation(operation, {
         appsId: output.appsId,

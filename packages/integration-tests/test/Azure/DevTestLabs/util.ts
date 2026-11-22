@@ -1,5 +1,5 @@
 import * as Azure from "@alchemy.run/azure";
-import { Credentials, type AzureOpError } from "@distilled.cloud/azure";
+import { armScopeFor, Credentials, type AzureOpError } from "@distilled.cloud/azure";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
@@ -47,7 +47,7 @@ export const labFixture = (location = "eastus") =>
  */
 export const caller = Effect.gen(function* () {
   const config = yield* yield* Credentials;
-  const token = Redacted.value(config.bearerToken);
+  const token = Redacted.value(yield* config.token(armScopeFor(config.apiBaseUrl)));
   return yield* Effect.sync(
     () =>
       JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")) as {

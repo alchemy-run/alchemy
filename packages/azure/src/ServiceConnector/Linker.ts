@@ -19,6 +19,8 @@ import {
   type ConnectionProps,
   connectionPropsDiffer,
   observedDiffers,
+  targetEndpointOf,
+  targetIdOf,
   targetChanged,
   toLinkerInput,
 } from "./ConnectionProperties.ts";
@@ -157,7 +159,10 @@ const toAttrs = (
   linkerId: linker.id ?? `${source}/providers/Microsoft.ServiceLinker/linkers/${name}`,
   source,
   targetType: linker.properties?.targetService?.type ?? "",
-  target: linker.properties?.targetService?.id ?? linker.properties?.targetService?.endpoint ?? "",
+  target:
+    targetIdOf(linker.properties?.targetService) ??
+    targetEndpointOf(linker.properties?.targetService) ??
+    "",
   authType: linker.properties?.authInfo?.authType ?? "",
   clientType: linker.properties?.clientType ?? "none",
   provisioningState: linker.properties?.provisioningState,

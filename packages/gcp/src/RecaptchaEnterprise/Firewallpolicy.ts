@@ -159,7 +159,7 @@ export const Firewallpolicy = Resource<Firewallpolicy>("GCP.RecaptchaEnterprise.
 export class FirewallpolicyNotResolved extends Data.TaggedError(
   "GCP.RecaptchaEnterprise.FirewallpolicyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_ACTIONS: FirewallAction[] = [{ allow: {} }];
@@ -289,8 +289,8 @@ export const FirewallpolicyProvider = () =>
       if (current === undefined) {
         const created = yield* recaptchaenterprise
           .createProjectsFirewallpolicies({
+            ...toBody(path, description, condition, actions),
             parent: `projects/${env.project}`,
-            body: toBody(path, description, condition, actions),
           })
           .pipe(Effect.catchTag("Conflict", () => getFirewallPolicy(lookupName)));
         current = created ?? undefined;
@@ -298,7 +298,7 @@ export const FirewallpolicyProvider = () =>
 
       if (current === undefined) {
         return yield* new FirewallpolicyNotResolved({
-          name: lookupName.length > 0 ? lookupName : path,
+          resourceName: lookupName.length > 0 ? lookupName : path,
         });
       }
 
@@ -318,9 +318,9 @@ export const FirewallpolicyProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* recaptchaenterprise.patchProjectsFirewallpolicies({
+          ...toBody(path, description, condition, actions),
           name,
           updateMask,
-          body: { ...toBody(path, description, condition, actions), name },
         });
       }
 

@@ -52,8 +52,20 @@ export type SearchNamespace = Resource<
   SearchNamespaceProps,
   SearchNamespaceAttributes,
   never,
-  Providers
+  Providers,
+  SearchNamespaceLookup
 >;
+
+/**
+ * Props for {@link SearchNamespace.lookup}: find an AI Search namespace this
+ * stack doesn't manage, by its name.
+ */
+export interface SearchNamespaceLookup {
+  /**
+   * The name of the existing namespace.
+   */
+  name: string;
+}
 
 /**
  * A Cloudflare.AI. Search namespace — a logical grouping for AI Search
@@ -169,6 +181,19 @@ export type SearchNamespace = Resource<
  * };
  * ```
  *
+ * ### Looking up an existing namespace
+ * `SearchNamespace.lookup` binds a namespace Alchemy doesn't manage (created
+ * in the dashboard or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** In an async Worker's `env`
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   env: { DOCS: Cloudflare.AI.SearchNamespace.lookup({ name: "docs" }) },
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/ai-search/
  *
  * @resource
@@ -209,6 +234,11 @@ export const SearchNamespaceProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+    lookup: Effect.fn(function* ({ name }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed = yield* getNamespace(accountId, name);
+      return observed ? toAttributes(observed, accountId) : undefined;
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -337,7 +367,7 @@ type ObservedNamespace = aisearch.ReadNamespaceResponse;
 const getNamespace = (accountId: string, name: string) =>
   aisearch
     .readNamespace({ accountId, name })
-    .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.undefined));
 
 const createNamespaceName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

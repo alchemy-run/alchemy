@@ -1,20 +1,21 @@
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
-import type * as Duration from "effect/Duration";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as OtlpExporter from "effect/observability/OtlpExporter";
 import * as OtlpLogger from "effect/observability/OtlpLogger";
 import * as OtlpMetrics from "effect/observability/OtlpMetrics";
 import * as OtlpSerialization from "effect/observability/OtlpSerialization";
 import * as OtlpTracer from "effect/observability/OtlpTracer";
 import * as Predicate from "effect/Predicate";
-import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import type * as Scope from "effect/Scope";
+import * as Tracer from "effect/Tracer";
 import { unpackEnvValue } from "./RuntimeContext.ts";
-import type { layer, layerOtlp } from "./Telemetry.ts";
 
 /**
  * The shape of the {@link Telemetry} reference: a Layer of telemetry
@@ -25,57 +26,55 @@ import type { layer, layerOtlp } from "./Telemetry.ts";
 export type TelemetryLayer = Layer.Layer<never, any, any>;
 
 /**
- * Read one bound value back at runtime. `rc.set` packs values for the env
- * var wire (plain values JSON-stringified, `Redacted` as a marker routed
- * through the secret channel), so the raw env string must be unpacked with
- * {@link unpackEnvValue} — it handles all three shapes (packed JSON,
- * Redacted marker, and a raw string set directly in the environment).
+ * Read one string variable (`OTEL_*`, `ALCHEMY_*`) through the ambient
+ * `ConfigProvider` (`runtimeConfigProvider` on every runtime host), so a
+ * user's `OTEL_SERVICE_NAME=1.0` stays `"1.0"`. `undefined` when unset or
+ * empty.
  */
-const readBoundValue = (key: string): Effect.Effect<unknown> =>
+const readString = (key: string): Effect.Effect<string | undefined> =>
   Effect.flatMap(ConfigProvider.ConfigProvider, (provider) => provider.load([key])).pipe(
     // Missing optional bindings are normal on every event. Read their scalar
     // directly instead of constructing a Config/Schema error for each absence.
     Effect.orDie,
     Effect.catchDefect((defect) =>
-      Predicate.isTagged(defect, "SourceError") ? Effect.succeed(undefined) : Effect.die(defect),
+      Predicate.isTagged(defect, "SourceError") ? Effect.undefined : Effect.die(defect),
     ),
-    Effect.map((node) => {
-      const raw = node?.value;
-      if (raw === undefined || raw === "") {
-        return undefined;
-      }
-      const value = unpackEnvValue<unknown>(raw);
-      return Redacted.isRedacted(value) ? Redacted.value(value) : value;
-    }),
-  );
-
-const readBound = (key: string): Effect.Effect<string | undefined> =>
-  readBoundValue(key).pipe(
-    Effect.map((inner) =>
-      inner === undefined ? undefined : typeof inner === "string" ? inner : String(inner),
-    ),
+    // Record and Array nodes can carry a scalar too (`A=x` beside `A_B=y`).
+    Effect.map((node) => (node?.value === undefined || node.value === "" ? undefined : node.value)),
   );
 
 /**
- * `service.name` fallback chain for the default exporter: the standard
- * OTEL variable, then the physical Function/Worker name, then the stack
- * name. `OtlpResource.fromConfig` dies without a service name, so the
- * chain must always produce one.
+ * Read a value `layerOtlp` bound with `rc.set` under an Alchemy-owned key.
+ * `rc.set` packs it, so it is unpacked with {@link unpackEnvValue}; no user
+ * sets these keys, so nothing verbatim is misread. A bound `Redacted` value
+ * arrives already unwrapped by the runtime provider.
+ */
+const readPackedValue = (key: string): Effect.Effect<unknown> =>
+  readString(key).pipe(Effect.map((raw) => unpackEnvValue<unknown>(raw)));
+
+/**
+ * `service.name` fallback chain for the default exporter: `layerOtlp`'s
+ * `serviceName`, the standard OTEL variable, then the physical
+ * Function/Worker name, then the stack name. `OtlpResource.fromConfig`
+ * dies without a service name, so the chain must always produce one.
  */
 const defaultServiceName = Effect.gen(function* () {
   return (
-    (yield* readBound("OTEL_SERVICE_NAME")) ??
-    (yield* readBound("ALCHEMY_WORKER_NAME")) ??
-    (yield* readBound("AWS_LAMBDA_FUNCTION_NAME")) ??
-    (yield* readBound("ALCHEMY_STACK_NAME")) ??
+    (yield* readPackedValue(SERVICE_NAME_KEY).pipe(
+      Effect.map((name) => (typeof name === "string" ? name : undefined)),
+    )) ??
+    (yield* readString("OTEL_SERVICE_NAME")) ??
+    (yield* readString("ALCHEMY_WORKER_NAME")) ??
+    (yield* readString("AWS_LAMBDA_FUNCTION_NAME")) ??
+    (yield* readString("ALCHEMY_STACK_NAME")) ??
     "alchemy"
   );
 });
 
 const defaultResource = Effect.gen(function* () {
   const serviceName = yield* defaultServiceName;
-  const stack = yield* readBound("ALCHEMY_STACK_NAME");
-  const stage = yield* readBound("ALCHEMY_STAGE");
+  const stack = yield* readString("ALCHEMY_STACK_NAME");
+  const stage = yield* readString("ALCHEMY_STAGE");
   return {
     serviceName,
     attributes: {
@@ -141,6 +140,14 @@ export interface ResolvedDestination {
 export const EXPORTERS_KEY = "ALCHEMY_OTEL_EXPORTERS";
 
 /**
+ * The `service.name` `layerOtlp({ serviceName })` binds. It has its own
+ * Alchemy-owned key, not `OTEL_SERVICE_NAME`, so a value Alchemy packs never
+ * shares a key with a value a user set verbatim. It wins over
+ * `OTEL_SERVICE_NAME`.
+ */
+export const SERVICE_NAME_KEY = "ALCHEMY_OTEL_SERVICE_NAME";
+
+/**
  * Resolve one signal's endpoint + headers from the standard OpenTelemetry
  * env vars (`OTEL_EXPORTER_OTLP_{SIGNAL}_ENDPOINT` as-is, or the base
  * endpoint with `/v1/{signal}` appended; headers per-signal → base). This
@@ -149,7 +156,7 @@ export const EXPORTERS_KEY = "ALCHEMY_OTEL_EXPORTERS";
  */
 const signalConfig = (signal: "TRACES" | "LOGS" | "METRICS", base: string | undefined) =>
   Effect.gen(function* () {
-    const specific = yield* readBound(`OTEL_EXPORTER_OTLP_${signal}_ENDPOINT`);
+    const specific = yield* readString(`OTEL_EXPORTER_OTLP_${signal}_ENDPOINT`);
     const url =
       specific !== undefined && specific !== ""
         ? specific
@@ -160,8 +167,8 @@ const signalConfig = (signal: "TRACES" | "LOGS" | "METRICS", base: string | unde
       return undefined;
     }
     const rawHeaders =
-      (yield* readBound(`OTEL_EXPORTER_OTLP_${signal}_HEADERS`)) ??
-      (yield* readBound("OTEL_EXPORTER_OTLP_HEADERS"));
+      (yield* readString(`OTEL_EXPORTER_OTLP_${signal}_HEADERS`)) ??
+      (yield* readString("OTEL_EXPORTER_OTLP_HEADERS"));
     return { url, headers: parseOtlpHeaders(rawHeaders) } as ResolvedSignal;
   });
 
@@ -198,8 +205,9 @@ const fanoutClient = (
           return effect;
         }
         return Effect.gen(function* () {
-          const results = yield* Effect.all(
-            targets.map((target) =>
+          const results = yield* Effect.forEach(
+            targets,
+            (target) =>
               Effect.result(
                 base.execute(
                   request.pipe(
@@ -208,7 +216,6 @@ const fanoutClient = (
                   ),
                 ),
               ),
-            ),
             { concurrency: "unbounded" },
           );
           const healthy = results.find(
@@ -246,13 +253,13 @@ export const configuredDestinations: Effect.Effect<ResolvedDestination[]> = Effe
   function* () {
     // Depending on the secret/plain packing path, the bound list arrives
     // as a JSON string or already parsed into an array.
-    const rawList = yield* readBoundValue(EXPORTERS_KEY);
+    const rawList = yield* readPackedValue(EXPORTERS_KEY);
     const bound: ResolvedDestination[] = Array.isArray(rawList)
       ? (rawList as ResolvedDestination[])
       : typeof rawList === "string" && rawList !== ""
         ? yield* Effect.try(() => JSON.parse(rawList) as ResolvedDestination[]).pipe(Effect.orDie)
         : [];
-    const baseEndpoint = yield* readBound("OTEL_EXPORTER_OTLP_ENDPOINT");
+    const baseEndpoint = yield* readString("OTEL_EXPORTER_OTLP_ENDPOINT");
     const [stdTraces, stdLogs, stdMetrics] = yield* Effect.all([
       signalConfig("TRACES", baseEndpoint),
       signalConfig("LOGS", baseEndpoint),
@@ -270,6 +277,10 @@ export const configuredDestinations: Effect.Effect<ResolvedDestination[]> = Effe
 const makeExporterLayer = (options?: {
   exportInterval?: Duration.Input;
   shutdownTimeout?: Duration.Input;
+  /** Leave the metrics exporter out even when a destination configures it. */
+  withoutMetrics?: boolean;
+  /** Export early once this many records are buffered. @default 1000 */
+  maxBatchSize?: number;
 }): TelemetryLayer =>
   Layer.unwrap(
     Effect.gen(function* () {
@@ -281,7 +292,7 @@ const makeExporterLayer = (options?: {
         });
       const traces = targets("traces");
       const logs = targets("logs");
-      const metrics = targets("metrics");
+      const metrics = options?.withoutMetrics ? [] : targets("metrics");
       if (traces.length === 0 && logs.length === 0 && metrics.length === 0) {
         return Layer.empty;
       }
@@ -295,6 +306,7 @@ const makeExporterLayer = (options?: {
             url: SENTINEL.traces,
             resource,
             exportInterval: options?.exportInterval,
+            maxBatchSize: options?.maxBatchSize,
             shutdownTimeout: options?.shutdownTimeout,
           }),
         );
@@ -306,6 +318,7 @@ const makeExporterLayer = (options?: {
             url: SENTINEL.logs,
             resource,
             exportInterval: options?.exportInterval,
+            maxBatchSize: options?.maxBatchSize,
             shutdownTimeout: options?.shutdownTimeout,
           }),
         );
@@ -372,6 +385,22 @@ export const fromBoundConfig: TelemetryLayer = makeExporterLayer({
 const fromBoundConfigProcess: TelemetryLayer = makeExporterLayer();
 
 /**
+ * The Durable Object instance half: the bound trace and log exporters with
+ * no export interval, so a pending export timer never keeps the object out
+ * of hibernation. Records wait in the buffer until the bridge flushes them
+ * at the end of the next event. Metrics are left out: their exporter
+ * reports cumulative values on every interval.
+ */
+const fromBoundConfigInstance: TelemetryLayer = makeExporterLayer({
+  exportInterval: Duration.infinity,
+  // Never export on a full buffer either: a record pushed between events
+  // would start an export outside any event's I/O context.
+  maxBatchSize: Number.POSITIVE_INFINITY,
+  shutdownTimeout: "10 seconds",
+  withoutMetrics: true,
+});
+
+/**
  * The per-event telemetry exporters, as a `Context.Reference` holding the
  * Layer the runtime bridges build into every event's request scope.
  * Provide it via {@link layerOtlp} / {@link layer} rather than directly —
@@ -411,8 +440,8 @@ const reference = Telemetry;
 export const buildEventTelemetry = (
   context: Context.Context<never>,
   scope: Scope.Scope,
-  override?: TelemetryLayer | undefined,
-  base?: TelemetryLayer | undefined,
+  override?: TelemetryLayer,
+  base?: TelemetryLayer,
 ): Effect.Effect<Context.Context<never>> =>
   Effect.suspend(() => {
     const bound = base ?? Context.get(context, reference);
@@ -440,6 +469,11 @@ export const buildEventTelemetry = (
  * field carries the custom Layer(s) registered by {@link layer}
  * during init, composed with the bound OTLP destinations (read with the
  * standard periodic export intervals).
+ *
+ * Not for Durable Objects: the periodic exporters keep a timer pending, and
+ * workerd won't hibernate an object while one is. The Durable Object bridge
+ * gives each instance interval-free exporters of its own, flushed per event
+ * (see {@link buildInstanceTelemetry}).
  */
 export const provideProcessTelemetry =
   (runtimeContext?: { telemetry?: TelemetryLayer | undefined }) =>
@@ -455,3 +489,91 @@ export const provideProcessTelemetry =
       );
       return yield* Effect.provideContext(effect, telemetry);
     });
+
+/**
+ * Telemetry built once for a Durable Object instance: the services to
+ * provide to its initializer, and the flush the bridge runs at the end of
+ * every event.
+ *
+ * @internal
+ */
+export interface InstanceTelemetry {
+  readonly context: Context.Context<never>;
+  readonly flush: Effect.Effect<void>;
+}
+
+/**
+ * Build the bound trace and log exporters into a Durable Object instance's
+ * scope, which never closes (workerd gives an instance no shutdown hook).
+ * Fibers the initializer forks (a tick loop, a subscription) record into
+ * them. The exporters have no export interval, so nothing keeps the object
+ * awake while it is idle; `flush` delivers what they hold, and the bridge
+ * runs it at the end of every event, inside that event's I/O context.
+ *
+ * Custom {@link layer} exporters stay per event: their intervals aren't
+ * ours to turn off.
+ *
+ * @internal
+ */
+export const buildInstanceTelemetry = (
+  context: Context.Context<never>,
+  scope: Scope.Scope,
+): Effect.Effect<InstanceTelemetry> =>
+  buildEventTelemetry(context, scope, undefined, fromBoundConfigInstance).pipe(
+    Effect.map((built) => {
+      const flusher = Context.getOption(built, OtlpExporter.Flusher);
+      return {
+        context: built,
+        flush:
+          flusher._tag === "Some"
+            ? flusher.value.flush.pipe(Effect.timeoutOption("10 seconds"), Effect.asVoid)
+            : Effect.void,
+      };
+    }),
+  );
+
+/**
+ * An event's telemetry, handing off to the instance's once the event has
+ * ended. A fiber the event forked and left running (`Effect.forkDetach`)
+ * keeps the event's Tracer and loggers, whose exporters flushed and stopped
+ * when the event's scope closed. Spans it starts and logs it writes after
+ * that go to the instance's exporters instead, which the next event
+ * flushes. Only services both contexts carry are switched.
+ *
+ * @internal
+ */
+export const handOffAfterEvent = (
+  event: Context.Context<never>,
+  instance: Context.Context<never>,
+  ended: () => boolean,
+): Context.Context<never> => {
+  let context = event;
+  const tracer = Context.getOption(event, Tracer.Tracer);
+  const instanceTracer = Context.getOption(instance, Tracer.Tracer);
+  if (tracer._tag === "Some" && instanceTracer._tag === "Some") {
+    context = Context.add(
+      context,
+      Tracer.Tracer,
+      Tracer.make({
+        span: (options) => (ended() ? instanceTracer.value : tracer.value).span(options),
+        context: tracer.value.context,
+      }),
+    );
+  }
+  const loggers = Context.getOption(event, Logger.CurrentLoggers);
+  const instanceLoggers = Context.getOption(instance, Logger.CurrentLoggers);
+  if (loggers._tag === "Some" && instanceLoggers._tag === "Some") {
+    context = Context.add(
+      context,
+      Logger.CurrentLoggers,
+      new Set([
+        Logger.make((options) => {
+          for (const logger of ended() ? instanceLoggers.value : loggers.value) {
+            logger.log(options);
+          }
+        }),
+      ]),
+    );
+  }
+  return context;
+};

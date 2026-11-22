@@ -1,13 +1,14 @@
 import * as AWS from "@alchemy.run/aws";
 import { DBParameterGroup } from "@alchemy.run/aws/RDS/DBParameterGroup";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as rds from "@distilled.cloud/aws/rds";
-import { expect } from "alchemy-test";
 import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { stageIdentifier } from "./names.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -101,7 +102,6 @@ test.provider(
       const group = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* DBParameterGroup("ListDBParameterGroup", {
-            dbParameterGroupName: "alchemy-test-dbpg-list",
             family: "aurora-postgresql16",
             description: "Alchemy list() test parameter group",
           });
@@ -133,12 +133,10 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-dbpg-params";
       const deploy = (parameters: Record<string, string>) =>
         stack.deploy(
           Effect.gen(function* () {
             return yield* DBParameterGroup("ParamsDBParameterGroup", {
-              dbParameterGroupName: name,
               family: "mysql8.4",
               description: "Alchemy parameters test parameter group",
               parameters,
@@ -147,6 +145,7 @@ test.provider(
         );
 
       const created = yield* deploy({ time_zone: "Australia/Sydney", max_connections: "150" });
+      const name = created.dbParameterGroupName;
       expect(created.parameters.time_zone).toBe("Australia/Sydney");
 
       const afterCreate = yield* userParameters(name);
@@ -171,7 +170,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const name = "alchemy-test-pr1589-adopt-parameters";
+      const name = stageIdentifier(stack.stage, "dbpg-adopt-1589");
       yield* rds.createDBParameterGroup({
         DBParameterGroupName: name,
         DBParameterGroupFamily: "postgres16",
@@ -350,7 +349,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const name = "alchemy-test-pr1590-adopt-parameters";
+      const name = stageIdentifier(stack.stage, "dbpg-adopt-1590");
       yield* rds.createDBParameterGroup({
         DBParameterGroupName: name,
         DBParameterGroupFamily: "postgres16",

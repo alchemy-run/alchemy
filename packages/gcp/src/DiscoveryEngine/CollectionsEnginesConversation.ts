@@ -95,13 +95,13 @@ export const CollectionsEnginesConversation = Resource<CollectionsEnginesConvers
 export class CollectionsEnginesConversationNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEnginesConversationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const getByName = (name: string) =>
   discoveryengine
     .getProjectsLocationsCollectionsEnginesConversations({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAttrs = (
   conversation: discoveryengine.GoogleCloudDiscoveryengineV1Conversation,
@@ -163,20 +163,18 @@ export const CollectionsEnginesConversationProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsCollectionsEnginesConversations({
+            userPseudoId,
+            state: news.state,
+            messages: news.messages,
             parent: news.engine,
-            body: {
-              userPseudoId,
-              state: news.state,
-              messages: news.messages,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
         return yield* new CollectionsEnginesConversationNotResolved({
-          name: fallbackName,
+          resourceName: fallbackName,
         });
       }
 
@@ -187,6 +185,9 @@ export const CollectionsEnginesConversationProvider = () =>
 
       if (userChanged || stateChanged || messagesChanged) {
         current = yield* discoveryengine.patchProjectsLocationsCollectionsEnginesConversations({
+          userPseudoId,
+          state: news.state,
+          messages: news.messages,
           name,
           updateMask: [
             userChanged ? "user_pseudo_id" : undefined,
@@ -195,12 +196,6 @@ export const CollectionsEnginesConversationProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            userPseudoId,
-            state: news.state,
-            messages: news.messages,
-          },
         });
       }
 

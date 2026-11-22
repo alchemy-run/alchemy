@@ -162,7 +162,7 @@ export const AgentsPlaybooksExample = Resource<AgentsPlaybooksExample>(
 export class AgentsPlaybooksExampleNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsPlaybooksExampleNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_STATE: ExampleConversationState = "OUTPUT_STATE_OK";
@@ -229,10 +229,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsPlaybooksExamples({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   dialogflow.listProjectsLocationsAgentsPlaybooksExamples.pages({ parent, pageSize: 100 }).pipe(
@@ -261,7 +261,7 @@ const findByDisplayName = (parent: string, displayName: string) =>
     Stream.filter((example) => example.displayName === displayName),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const AgentsPlaybooksExampleProvider = () =>
@@ -355,16 +355,13 @@ export const AgentsPlaybooksExampleProvider = () =>
 
       if (current === undefined) {
         const created = yield* dialogflow
-          .createProjectsLocationsAgentsPlaybooksExamples({
-            parent: playbook,
-            body,
-          })
+          .createProjectsLocationsAgentsPlaybooksExamples({ ...body, parent: playbook })
           .pipe(Effect.catchTag("Conflict", () => findByDisplayName(playbook, displayName)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new AgentsPlaybooksExampleNotResolved({ name });
+        return yield* new AgentsPlaybooksExampleNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -387,10 +384,8 @@ export const AgentsPlaybooksExampleProvider = () =>
         outputChanged
       ) {
         current = yield* dialogflow.patchProjectsLocationsAgentsPlaybooksExamples({
-          // Repeated fields named in an update mask (`actions`) are
-          // silently ignored; the body is complete, so replace it whole.
+          ...body,
           name: currentName,
-          body: { ...body, name: currentName },
         });
       }
 

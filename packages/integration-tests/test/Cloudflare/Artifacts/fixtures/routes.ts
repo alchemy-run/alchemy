@@ -14,6 +14,11 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
  * - `GET  /list`         — list repos, returns `{ names: string[], total }`
  * - `GET  /get?name=`    — fetch a repo handle, returns `{ found: boolean }`
  * - `DELETE /delete?name=` — delete a repo, returns `{ deleted: boolean }`
+ * - `POST /import?name=&url=&branch=` — shallow-import a public Git remote
+ * - `POST /token?name=&scope=` — mint a repo token, returns `{ id, plaintext, remote }`
+ * - `POST /revoke?name=&id=` — revoke a repo token, returns `{ revoked: boolean }`
+ *
+ * The import and token routes exist only on the Effect-native worker.
  *
  * Returns `undefined` for unknown paths so the worker shell can 404.
  */
@@ -64,6 +69,47 @@ export const artifactsRoutes = (client: ReadWriteNamespaceClient, url: URL) =>
     if (url.pathname === "/delete") {
       return yield* client.delete(name).pipe(
         Effect.flatMap((deleted) => HttpServerResponse.json({ deleted })),
+        Effect.catchTag("ArtifactsError", failWith),
+      );
+    }
+
+    if (url.pathname === "/import") {
+      return yield* client
+        .import({
+          source: {
+            url: url.searchParams.get("url") ?? "",
+            branch: url.searchParams.get("branch") ?? undefined,
+            depth: 1,
+          },
+          target: { name },
+        })
+        .pipe(
+          Effect.flatMap((repo) =>
+            HttpServerResponse.json({ name: repo.name, defaultBranch: repo.defaultBranch }),
+          ),
+          Effect.catchTag("ArtifactsError", failWith),
+        );
+    }
+
+    if (url.pathname === "/token") {
+      const scope = url.searchParams.get("scope") === "write" ? "write" : "read";
+      return yield* client.get(name).pipe(
+        Effect.flatMap((repo) => Effect.all([repo.createToken(scope, 600), repo.info()])),
+        Effect.flatMap(([token, info]) =>
+          HttpServerResponse.json({
+            id: token.id,
+            plaintext: token.plaintext,
+            remote: info.remote,
+          }),
+        ),
+        Effect.catchTag("ArtifactsError", failWith),
+      );
+    }
+
+    if (url.pathname === "/revoke") {
+      return yield* client.get(name).pipe(
+        Effect.flatMap((repo) => repo.revokeToken(url.searchParams.get("id") ?? "")),
+        Effect.flatMap((revoked) => HttpServerResponse.json({ revoked })),
         Effect.catchTag("ArtifactsError", failWith),
       );
     }

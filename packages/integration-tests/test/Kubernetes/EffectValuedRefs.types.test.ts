@@ -1,7 +1,7 @@
 import * as Container from "@alchemy.run/gcp/Container";
 import * as Kubernetes from "@alchemy.run/kubernetes";
 import * as Neon from "@alchemy.run/neon";
-import { expect, test } from "alchemy-test";
+import { expect, test } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 
 // Resource Effects declared at module scope, as in a typical stack file.

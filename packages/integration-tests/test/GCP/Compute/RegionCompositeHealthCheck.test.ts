@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { DEFAULT_NETWORK, defaultNetworkSelfLink } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -63,14 +64,12 @@ test.provider(
       const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         compute.insertRegionCompositeHealthChecks({
+          name: "alchemy-chc-probe",
+          description: "alchemy entitlement probe",
+          healthDestination: `projects/${project}/regions/${region}/forwardingRules/does-not-exist`,
+          healthSources: [`projects/${project}/regions/${region}/healthSources/does-not-exist`],
           project,
           region,
-          body: {
-            name: "alchemy-chc-probe",
-            description: "alchemy entitlement probe",
-            healthDestination: `projects/${project}/regions/${region}/forwardingRules/does-not-exist`,
-            healthSources: [`projects/${project}/regions/${region}/healthSources/does-not-exist`],
-          },
         }),
       );
       expect(error._tag).toEqual("NotFound");
@@ -141,6 +140,34 @@ test.provider(
             composite,
           };
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.RegionCompositeHealthCheck.lookup({
+          healthCheckName: created.composite.healthCheckName,
+          region: created.composite.region,
+        }),
+        created.composite,
+      );
+      yield* expectFound(
+        GCP.Compute.RegionHealthAggregationPolicy.lookup({
+          policyName: created.policy.policyName,
+          region: created.policy.region,
+        }),
+        created.policy,
+      );
+      yield* expectFound(
+        GCP.Compute.RegionHealthCheck.lookup({
+          healthCheckName: created.check.healthCheckName,
+          region: created.check.region,
+        }),
+        created.check,
+      );
+      yield* expectFound(
+        GCP.Compute.RegionHealthSource.lookup({
+          sourceName: created.source.sourceName,
+          region: created.source.region,
+        }),
+        created.source,
       );
 
       expect(created.composite.healthCheckName).toEqual(expect.any(String));

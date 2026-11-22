@@ -20,7 +20,9 @@ A Resource Provider implements the following Lifecycle Operations:
 - **Diff** - compares new props with old props and determines if the Resource needs to be updated or replaced. For updates, it can also specify a list of Stable Properties that will not be changed by the update.
 - **Read** - reads the current state of a Resource and returns the current Output Attributes. May return `Unowned(attrs)` to signal an existing-but-foreign resource that the engine should refuse to take over unless `--adopt` is set.
 - **Pre-Create** - an optional operation that creates a stub of a Resource before reconcile runs. Used to resolve circular dependencies — e.g. Function A and B depend on each other, so we create a stub of Function A first and then `reconcile` later wires up the real dependency.
+- **Observe** - an optional, read-only companion to Pre-Create. A cycle pre-creates on unresolved props, before Read can check ownership, so the engine first asks Observe what exists at the identity Pre-Create would claim. It returns the same shape as Read (`undefined`, attributes, or `Unowned(attrs)`), or `Unresolved` when that identity depends on props that haven't resolved yet; the engine refuses an `Unowned` result unless `--adopt` is set, and checks an `Unresolved` identity once it resolves, before Reconcile. Implement it whenever Pre-Create can write to a resource that already exists.
 - **Reconcile** - converges a Resource's actual cloud state to the desired state described by the new Input Properties. Called for both first-time provisioning and subsequent updates. The provider receives `output` (current Attributes) and `olds` (previous Props) which may both be `undefined` on a greenfield create, both defined on an update, or `output !== undefined && olds === undefined` on an adoption. See the **Reconciler doctrine** section below for the required shape.
+- **Lookup** - an optional, read-only operation that finds a resource this stack doesn't manage by the key the Resource type declares as its sixth type parameter (a Worker's `name`, a VPC service's `serviceId` or `name`), returning its Attributes or `undefined`. It backs `Resource.lookup(props)`, which resolves at plan time, binds like a declared resource, and never writes state. Opt-in today; every resource should eventually implement it.
 - **Delete** - deletes an existing Resource. It must be designed as idempotent because it is always possible for state persistence to fail after the delete operation is called. If the resource doesn't exist during deletion, it should not be considered an error.
 - **Capability** - a runtime requirement of a Function (e.g. require read access to an `R2Bucket`, or `SQS.SendMessage` on a `SQS.Queue`). A Capability is modeled as one or more `Binding.Service`s. Where the underlying API distinguishes access levels, split it into `Read` / `Write` / `ReadWrite` services (see the **Read/Write/ReadWrite binding convention** below); otherwise a single service suffices. Each service typically ships two interchangeable implementations: a native **binding** (`*Binding`) and a token-scoped **HTTP** client (`*Http`).
 - **Binding.Service** - an Effect Service that exposes a `.bind(resource)` method returning a typed runtime client. Its outer (init) Effect resolves the host Function/Worker and its environment, then registers the deploy-time binding — environment variables, IAM policy statements (AWS), or a native Cloudflare binding — by calling ``host.bind`${resource}`(data)``, guarded by `!globalThis.__ALCHEMY_RUNTIME__` so it is a no-op once running inside the deployed Function/Worker. Provided as a Layer on the **Function/Worker** Effect so it gets bundled into the Lambda/Worker. See [Binding](./packages/alchemy/src/Binding.ts).
@@ -50,7 +52,7 @@ A Resource Provider implements the following Lifecycle Operations:
 
 First-class sibling repositories we maintain live in `submodules/`:
 
-- `submodules/distilled` — generated Effect SDKs (workspace packages). Initialized by `git submodule update --init`.
+- `submodules/distilled` — generated Effect SDKs (workspace packages). Initialized by `git submodule update --init`. In a linked Alchemy worktree, the `post-checkout` hook (`scripts/bootstrap-distilled.mjs`) adds it as a worktree of the primary checkout's distilled and clones unchanged files from there, so on APFS, btrfs or XFS it shares their disk blocks (about 1.1 GB saved per worktree). `ALCHEMY_DISTILLED_CLONE=0` writes a full copy instead.
 - `submodules/floci` — our fork of the local AWS emulator. Skipped by default; fetch with `git submodule update --init --checkout -- submodules/floci`.
 
 Each Service's Resources follow the same pattern. Resource contract and provider are co-located in the same file. Each Capability lives in its own file(s) named after the capability and access level (`Binding.Service` contract + the `*Binding` / `*Http` implementations).
@@ -147,7 +149,7 @@ Alchemy resource coverage is produced as a **software factory**: fleets of agent
 
 ## Speed doctrine: never wait on a hang
 
-- Run tests with `pnpm test` (works from the repo root or `packages/alchemy`; suite paths are relative to `packages/alchemy`, e.g. `test/Cloudflare/...`). Wrap **every** test invocation in a hard kill: `timeout 240 pnpm test <suite> --profile testing`. Hitting the wall **is** the failure — read the partial output (and the run's log under `.alchemy/log/test/`), find the hang (unbounded retry, infinite pagination, the engine deadlock below), fix the root cause. Never just re-run hoping. The runner also prints the currently-running tests whenever nothing finishes for 10s — use that list to identify the hang.
+- Run tests with `pnpm test` (works from the repo root or `packages/alchemy`; suite paths are relative to `packages/alchemy`, e.g. `test/Cloudflare/...`). The runner enforces per-test timeouts — to identify a hang, read the run's log under `.alchemy/log/test/`, find the cause (unbounded retry, infinite pagination, the engine deadlock below), and fix the root cause. Never just re-run hoping.
 - Per-test timeout ≤ 90–120s (`{ timeout: ... }` on the test, or `--timeout` for the whole run). A suite needing more than ~3–5 minutes total is a bug.
 - Every `Effect.retry`/`Effect.repeat` is bounded: `times ≤ 8–10`, total backoff under ~45–60s. Never poll for asynchronous provisioning slower than ~90s — skipIf-gate instead.
 - **Known engine bug**: a deploy that *replaces* a resource while simultaneously *removing* its old dependency deadlocks. Keep both dependencies deployed across replacement steps in tests (see `test/Cloudflare/R2/BucketEventNotification.test.ts`).
@@ -198,7 +200,7 @@ pnpm docs:gen   # -> website/src/content/docs/providers/{Cloud}/{Resource}.md
 This is the only doc generator that produces user-facing output. ([scripts/generate-api-reference.ts](./scripts/generate-api-reference.ts)) does the following:
 
 1. Discovers documented files across its configured source roots — `packages/{cloud}/src/{Service}/` plus flat single-provider packages like `packages/better-auth/src/` (mapped onto a synthetic provider directory, e.g. `BetterAuth/`)
-2. Parses TypeScript with the TypeScript 7 API shipped by `tsrs` (`tsrs/unstable/*`)
+2. Parses TypeScript with the TypeScript 7 API shipped by `tsrs` (`tsrs/ast`, `tsrs/async`)
 3. Extracts the page-level summary plus Markdown section/example blocks from JSDoc on the export tagged `@resource`, `@binding`, `@layer`, or `@primitive` (a building block exported as its module's `make`, e.g. `Domain.Event`; its page is named after the file)
 4. Writes one markdown file per page at `website/src/content/docs/providers/{Provider}/{Name}.md`
 
@@ -439,6 +441,85 @@ The canonical reference reconcilers cover the common shapes:
 
 Existence-only resources (Lambda Permission, EC2 Route, EC2 RouteTableAssociation, IAM AccessKey, etc.) have nothing mutable beyond their identity. Their reconciler is just observe → if missing, create. There is no sync step.
 
+# Container image sources
+
+Every resource that runs a container takes its image from the same three props, so moving a workload between clouds changes the resource, not its source. Exactly one source is set:
+
+```ts
+// a prebuilt image
+yield* AWS.ECS.Task("Api", { image: "ghcr.io/acme/api@sha256:…" });
+// your own Dockerfile, built by the platform
+yield* Cloudflare.Container("Api", { context: "./api", dockerfile: "./api/Dockerfile.prod" });
+// a bundled program, optionally on a base image
+yield* AWS.ECS.Task("Api", { main: import.meta.url, image: "oven/bun:1" }, impl);
+```
+
+Rules:
+
+- **Use the shared shapes** from `@alchemy.run/docker/ImageSource`: `RegistryImageSource` (`image`), `DockerfileImageSource` (`context`, `dockerfile`) and `BundledImageSource` (`main`). A package that has `@alchemy.run/docker` only as an optional peer declares the same keys structurally instead of importing them into its root types.
+- **Same semantics everywhere.** `context` defaults to `.` and is relative to where the deploy runs. `dockerfile` is a path relative to where the deploy runs (default `${context}/Dockerfile`), or inline content (`Dockerfile.inline`) built in an empty context. `image` beside `main` is the base the program runs on (`FROM`); alone, it runs as is.
+- **`image` is a reference, not a pull policy.** A tag is resolved once per reference (ECS and Kubernetes mirror content-addressed on the ref), so docs tell users to pin a digest. `Cloudflare.Container` is the one exception: it re-pulls `image` on every deploy.
+- **Accept Outputs.** `image: someImage.imageRef` from a `Docker.Image` in the same stack must work, with the dependency ordering that implies. Resource props get this for free; a constructor taking plain props declares `Input<string>`.
+- **Align names, not options.** Build options (`build.args`, `secrets`, cache) are offered only where the platform's builder supports them. A platform-specific source (Rivet's `crate`) sits beside the three, never instead of one.
+
+References: [AWS.ECS.Task](./packages/aws/src/ECS/Task.ts), [Cloudflare.Container](./packages/cloudflare/src/Containers/ContainerApplication.ts), [Kubernetes.Deployment](./packages/kubernetes/src/Deployment.ts), [Rivet.DurableObject](./packages/rivet/src/DurableObject.ts).
+
+# SQL database migrations
+
+Every SQL database resource applies schema migrations at deploy time through a `migrations` prop. A database resource without it is a gap to fill. Users get the same DX on every cloud:
+
+```ts
+const db = yield* GCP.SQL.Database("App", {
+  instance: instance.instanceName,
+  migrations: "./migrations", // a directory, { dir, table }, or a Drizzle.Schema
+  migrationsUser: user.userName,
+  migrationsPassword: password.text,
+});
+```
+
+The shared engine lives in `@alchemy.run/sql/Migrations`. It reads the directory (flat `.sql` files, drizzle-kit, or Prisma layouts) and keeps history in Alchemy's `__alchemy_migrations` table. It converts a foreign drizzle-kit/Prisma/wrangler table once, and fails with `RewrittenMigrationHistoryError` when an applied file is edited or removed. The provider never reimplements any of this. It supplies one thing, a `SqlExecutor` for its database:
+
+```ts
+// Props
+migrations?: MigrationsInput;
+// Attributes
+migrationsDir: string | undefined;
+migrationsTable: string | undefined;
+migrationsHashes: Record<string, string>;
+
+// diff: pending files or a table move update in place, never replace
+if (yield* diffMigrations({ news, output })) return { action: "update" } as const;
+
+// reconcile: last, once the database is ready and every other aspect is synced
+const migrationsInput = migrationsInputOf(news);
+const run = migrationsInput
+  ? yield* runMigrations({
+      input: migrationsInput,
+      stamped: stampedOf(output),
+      withExecutor: (apply) => withExecutor(apply), // acquire a SqlExecutor, apply, release
+    })
+  : undefined;
+return { ...attrs, ...migrationsAttrs({ input: migrationsInput, run, output }) };
+```
+
+Rules:
+
+- **Where the prop goes.** Put it on the resource that owns one database's schema: the database (`GCP.SQL.Database`, Cloudflare D1, Turso), the branch (Neon, PlanetScale), or the instance or cluster when it serves exactly one database (`AWS.RDS.DBInstance`, `AWS.DSQL.Cluster`, the primary `GCP.AlloyDB.Instance`). Migrations need a running endpoint, so they go on the resource that is reconciled after the endpoint is ready, not on a parent that is created before it.
+- **Transport, in order of preference.** First, an HTTPS data API, which needs no network route from the deploying machine (D1 HTTP, the RDS Data API, Cloud SQL and AlloyDB `executeSql`). Second, a direct driver connection over a public endpoint or the cloud's connector. Third, a runner inside the private network (`AWS.RDS.MigrationRunner`). When there is more than one, expose `migrationsTransport`, and default to the data API whenever the target has it enabled.
+- **Credentials.** Use the platform's own credentials when it has them: RDS managed secrets, Neon and PlanetScale minted roles, D1 API tokens. Otherwise take `migrationsUser` and `migrationsPassword` (`string | Redacted<string>`). Never ask the user to stage a secret just for the transport; when an API only reads passwords from a secret store, the provider stages and removes one itself.
+- **Executors — reuse, don't rewrite.** `@alchemy.run/sql/Migrations` has the transport pieces; a provider writes only the call that is specific to its cloud:
+  - `withPgExecutor(config, use)` / `withMySqlExecutor(config, use)` — open a `pg`/`mysql2` connection (connection string, TLS, or a pre-connected `stream`), run, always close.
+  - `makeStatementExecutor({ dialect, execute, batch })` — any API that runs a SQL string and returns rows (Cloud SQL and AlloyDB `executeSql`). The provider supplies `execute`, failing on SQL errors inside a 200; `batch: "transaction"` wraps each migration in `BEGIN`/`COMMIT`, `"atomic"` relies on the API committing a call as a unit. `rowsFromCells` maps GCP-style `columns` + `rows[].values[]`.
+  - `splitSqlScript` / `scanSqlScript` — split a script into statements for APIs that take one at a time (PostgreSQL, MySQL, GoogleSQL quoting and comment rules; `scanSqlScript` adds an offset-aligned literal mask for capability checks).
+  - `migrationError(context)`, `retryLogin` / `probeExecutor` (a just-created user's login delay, retried before any batch), `migrationAttributesOf` / `MigrationAttributes`.
+
+  Targets that can't commit DDL atomically set `transactionalDdl: false` and override `applyMigration`: DSQL checkpoints each statement, and Spanner runs each DDL statement as an operation named after the migration and statement, so a crashed or fixed deploy resumes instead of rerunning applied statements.
+- **Errors.** Every transport failure surfaces as `MigrationError` with the database's own message. A SQL error inside a 200 response, as the data APIs return it, is a failure, not a success.
+- **Tests.** Write one live test per transport. Deploy one migration and verify the table and `__alchemy_migrations` out-of-band. Add a file and redeploy; only the new file runs. Redeploy unchanged and assert that `stack.plan` reports no update. Destroy and verify the database is gone. Write migration files into a scoped temp directory (`fs.makeTempDirectoryScoped`) and pass it as `migrations`.
+- **Docs.** Add a `### Migrations` section to the resource JSDoc, with one example per transport and credential source.
+
+References: [AWS.RDS.DBInstance](./packages/aws/src/RDS/DBInstance.ts) + [Migrations.ts](./packages/aws/src/RDS/Migrations.ts) (three transports), [Turso Database](./packages/turso/src/Database.ts) (one HTTP executor), [GCP.SQL.Database](./packages/gcp/src/SQL/Database.ts) (data API with a staged secret, plus the Cloud SQL connector), [GCP.Spanner.Database](./packages/gcp/src/Spanner/Database.ts) (non-transactional DDL, a GoogleSQL dialect in the shared engine).
+
 5. Research and design the test cases for each resource. Test cases can be single or multi-step. Single-step test cases are just testing a single create success or failure mode. Multi-step cases are testing a sequence of operations, starting with create and then updating or replacing the resource multiple times. Test cases should be designed to be exhaustive and cover all possible success and failure modes, starting from simple happy paths to long, complicated aggregate (including other resources) smoke tests.
 6. Implement the Resource contract and Provider in `packages/{cloud}/src/{Service}/{Resource}.ts`.
 
@@ -610,6 +691,24 @@ Why this matters: consumers can build cloud-agnostic services on top of bindings
 
 After implementing, re-export the contract and implementation layers from the service's `index.ts` (but keep the shared `{Cap}Binding.ts`/`{Cap}Http.ts` scaffolding un-exported).
 
+### Federated identity over keys
+
+When a binding, a runtime-to-runtime call, or a CI deploy needs credentials, look for an identity the platform already signs before minting a key. A long-lived key or shared random token is the last resort. In order of preference:
+
+1. **The host runs as the target cloud's own identity** (a Lambda's role, a Cloud Run service account): grant on that identity. No credential moves.
+2. **The host's platform issues signed identity tokens**: federate. Create a trust in the target cloud scoped to that one workload, and exchange the token at runtime.
+   - Google ID tokens from the metadata server (Cloud Run, Cloud Functions) → AWS `AssumeRoleWithWebIdentity`.
+   - An AWS role's signed `GetCallerIdentity` → GCP workload identity federation (Lambda, ECS, EC2, App Runner, Batch, EKS Pod Identity).
+   - Fly Machine OIDC tokens from `/.fly/api` → AWS (an IAM OIDC provider) and GCP (a workload identity pool).
+   - CI tokens (GitHub Actions, GitLab, Vercel) → see `alchemy/Auth/OidcToken`.
+
+   A host exposes its platform's tokens to bindings through `BaseRuntimeContext.oidcToken(audience)`, and its bundler sets `__ALCHEMY_HOST_IDENTITY__` so bindings keep only the exchange path. References: the federated branches of [AWSBindings.ts](./packages/aws/src/AWSBindings.ts) and [GCPBindings.ts](./packages/gcp/src/GCPBindings.ts), and [Fly internal/Oidc.ts](./packages/fly/src/internal/Oidc.ts).
+3. **The platform issues nothing** (Cloudflare Workers, Railway, Fly Sprites today): create a key for an identity that may do only what this one host needs, keep it `Redacted` so it deploys as a secret, and say in the binding's JSDoc why no federated path exists.
+
+The same order applies when one runtime calls another. Authorize the caller by an identity the platform signs: IAM for Lambda invokes, a Google ID token checked by Cloud Run's invoker role, Fly's signed `Fly-Src` header naming the calling App ([Fly rpc.ts](./packages/fly/src/rpc.ts)). Use a shared random token only where the platform signs nothing (Railway's private network).
+
+Scope every trust to the one workload: match the token's subject, App, or role, never just the issuer or the organization. An account-level trust anchor that many stacks share (one IAM OIDC provider per issuer per account) is declared with `RemovalPolicy.retain()`, so destroying one stack never breaks another. Before writing a key path for a new host or provider, check the platform's docs for workload identity, OIDC, or signed-request support, and record the answer in the catalog.
+
 ### Isolate scope vs request scope (runtime bridges)
 
 **Layer construction is isolate-scoped; the effects built services expose are request-scoped.**
@@ -663,7 +762,7 @@ Build an engine from the shared pieces, never a private copy:
 - The cloud's own primitives map onto Effect's: activities → durable steps (replayed, not re-run, once finished), `DurableClock.sleep` → the runtime's durable wait (no compute billed while waiting), `DurableDeferred` → the runtime's external-event/callback mechanism, interrupt → fail the pending wait so compensations run, child workflows → runs on the same engine.
 - Respect platform limits in the engine (instance-id length and charset, max wait, propagation after deploy) and retry only the typed transient errors.
 
-Every engine passes the same conformance cases, each driven over HTTP against a deployed fixture: runs a workflow and returns its result; starting the same execution twice runs it once; sleeps durably between activities; waits for a signal from outside; a typed failure runs compensations; a successful workflow keeps its steps; interrupting a waiting workflow finishes it; runs a child workflow. Copy the fixtures in `packages/integration-tests/test/Cloudflare/Workers/fixtures/durable-workflow/` (`workflows.ts`, `app.ts`) and the suites [WorkflowEngines.test.ts](./packages/integration-tests/test/Cloudflare/Workers/WorkflowEngines.test.ts) and [WorkflowFunction.test.ts](./packages/integration-tests/test/AWS/Lambda/WorkflowFunction.test.ts). An engine with a local provider runs the cases in dev too.
+Every engine passes one shared conformance suite, [`test/Workflows/conformance/`](./packages/integration-tests/test/Workflows/conformance/), driven over HTTP against a deployed fixture. Don't copy it. The suite owns the workflows (`workflows.ts`), the routes (`app.ts`), and the cases (`conformance.ts`), drawn from Effect's own engine tests and from bugs found here: results, idempotent starts, durable sleeps that wake on time (between and inside activities), signals (early, repeated, late), compensations (on failures and interrupts), defects (captured, caught, retried, `SuspendOnFailure` with resume), `Activity.retry`, `Activity.raceAll`, finalizers and `ensuring` across suspensions, parallel activities, interrupts (while waiting, sleeping, on the way to a wait, after finishing), and child workflows (waiting and failing). An engine supplies a fixture that serves `app` over `WorkflowsLive` with its engine and a `Journal` layer over its cloud's storage, then calls `conformance({ test, url, napsWithinMillis, recoveryWithinMillis, timeout, unsupported })` from its suite. See [WorkflowEngines.test.ts](./packages/integration-tests/test/Cloudflare/Workers/WorkflowEngines.test.ts) (a Durable Object journal) and [WorkflowFunction.test.ts](./packages/integration-tests/test/AWS/Lambda/WorkflowFunction.test.ts) (a DynamoDB journal). A case an engine fails is an engine bug, not a reason to skip it. What the platform genuinely can't do goes in `unsupported`, and the engine dies with a clear defect the case checks for, never a hang: Cloudflare Workflows and Lambda durable functions can't look a step's result up before running it, so neither supports `raceAll`. An engine with a local provider runs the cases in dev too.
 
 Each engine gets a docs page at `website/src/content/docs/{cloud}/compute/effect-workflows.mdx` with the same headings as the AWS and Cloudflare pages (define a workflow, implement its steps, run it on the engine, start and read a run, sleep durably, wait for a signal, undo a step, use bindings in a step), and an `examples/{cloud}-effect-workflows` example.
 
@@ -704,6 +803,7 @@ Do not use `Effect.orDie` in the lifecycle operations since this will crash the 
 | `await fetch(...)`                                   | `yield* HttpClient.HttpClient` + `HttpClientRequest`        |
 | `Effect.promise(() => listSqlFiles(dir))`            | Make `listSqlFiles` itself return `Effect` and `yield*` it |
 | `new Promise((res) => setTimeout(res, ms))`          | `yield* Effect.sleep(Duration.millis(ms))`                  |
+| `process.env.DOCKER_CONFIG`                          | `yield* Config.String("DOCKER_CONFIG")` (`Config.withDefault` / `Config.option` when optional) |
 
 Sync, CPU-only Node APIs (e.g. `crypto.createHash().update().digest()`, `process.cwd()`, `Buffer`, `TextEncoder`) must still be wrapped in `Effect.sync(() => ...)` (or `Effect.try` if they can throw) so the call participates in the Effect runtime — tracing, interruption, and error channels. Don't call them as bare expressions inside `Effect.gen`.
 
@@ -713,6 +813,8 @@ const hash = yield* Effect.sync(() =>
 );
 const cwd = yield* Effect.sync(() => process.cwd());
 ```
+
+Environment variables are configuration: read them through `effect/Config`, never `process.env`, so a provided `ConfigProvider` (`.env` files, profiles, tests) is honored. `Effect.sync` is only for process facts `Config` can't express, like `process.platform` or `process.cwd()`. Module-scope test gates (`test.skipIf(!!process.env.FAST)`) run outside Effect and are exempt.
 
 This applies to **lifecycle operations, helpers, AND tests**. Tests must use `FileSystem.FileSystem`/`Path.Path` for any file/path access (see [Database.test.ts](./packages/integration-tests/test/Cloudflare/D1/Database.test.ts) for the pattern).
 :::
@@ -762,6 +864,8 @@ Choose the deployment-based pattern that fits the behavior under test:
 
 Keep regression cases in the relevant existing resource or binding suite. A Worker lifecycle feature belongs in `test/Cloudflare/Workers/Worker.test.ts`; binding fixtures belong beside their owning suite in `fixtures/`.
 
+- Assume Docker is installed. Never `skipIf`-gate a test on Docker availability; a missing daemon fails the test.
+- Tag every test with its kind — `unit` (no I/O beyond the machine), `local` (runs on this machine: emulators, `dev: true`, Docker) or `live` (touches a real cloud, including `stack.plan`, which reads) — on the test or an enclosing `describe`, alongside `provider:<cloud>` / `provider:<cloud>:<service>`. `pnpm lint:tests` enforces it.
 - Start and end `test.provider` cases with `stack.destroy()`. Fixture suites deploy in `beforeAll` and destroy in `afterAll`. Use deterministic resource identities and verify deletion through the cloud API.
 - Exercise create, update, redeploy, and removal through the stack. **Do not mock HTTP or SDK responses, invoke provider lifecycle methods directly, or call extracted reconciliation helpers as a substitute for a deployment.**
 - Verify the resulting cloud state through distilled and exercise the deployed runtime when relevant. Use real SDK calls on test-owned resources to establish out-of-band state or verify API update semantics. Keep provider behavior assertions driven by `stack.deploy`.
@@ -781,10 +885,11 @@ Read through the established test cases before continuing so that you understand
 - [Subnet Test Cases](./packages/integration-tests/test/AWS/EC2/Subnet.test.ts)
 
 :::warning
-Never use `Date.now()` when constructing the physical name of a resource. You should either:
+Never use `Date.now()`, UUIDs or other random values when constructing the physical name of a resource. Every run must be deterministic and leave no orphaned resources. You should either:
 
-1. Do not proide a name and rely on the resource provider to generate a unique name for you from the app, stage and logical ID.
-2. Construct a deterministic one unique to each test case. But it should be the same on each subsequent run of the test case.
+1. Not provide a name, and rely on the resource provider to generate one from the app, stage and logical ID. This is the default for every test.
+2. Only when the test is about explicitly provided names, construct a deterministic one unique to each test case and to the user running it: derive it from `stack.stage` (`test_$USER` by default). It must be the same on each subsequent run of the test case.
+3. Only for a resource the API can never delete (RealtimeKit apps, Intel indicator feeds), use one shared constant name that every run adopts, so the suite owns a single standing instance instead of leaking one per user.
    :::
 
 3. Consider implementing an aggregate Smoke test that brings together multiple resources that are often used together.
@@ -971,8 +1076,8 @@ Compose a `Stack` that deploys the fixture, share one deploy across the file wit
 // Service.test.ts
 import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import { expect } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
@@ -1087,7 +1192,7 @@ pnpm build          # in a package: builds it and its workspace dependencies
 
 ## Running tests
 
-Tests run on **alchemy-test** (`packages/alchemy-test`), our own single-process, Effect-native test runner. The CLI is vitest/bun-test compatible: positional paths (files or directories) and `-t` work the same way.
+Tests run on **alchemy-test** (`@alchemy.run/test`, in `packages/alchemy-test`), our own single-process, Effect-native test runner. The CLI is vitest/bun-test compatible: positional paths (files or directories) and `-t` work the same way.
 
 There are two entry points, one per test package, both working identically from the repo root and from the package directory:
 
@@ -1137,6 +1242,7 @@ Additional flags beyond vitest:
 | ----------------- | ------- | ------------------------------------------------------------- |
 | `-t <regex>`      | —       | Test-name pattern (regex, like bun/vitest) tested against the full nested title (`file > describes > name`), so any fragment matches regardless of nesting. An invalid regex degrades to a literal substring instead of erroring. Remember to escape regex metacharacters when filtering literally: `-t "create \(default\)"` |
 | `--profile <name>` | —      | Sets `ALCHEMY_PROFILE` before any test module is imported. Use `--profile testing` for live-cloud suites instead of an `ALCHEMY_PROFILE=testing` env prefix |
+| `--stage <name>`  | —       | Sets `ALCHEMY_TEST_STAGE` before any test module is imported, replacing `Test.make`'s default stage for the run. The default is `test_$USER` in a main checkout and `test_$USER_<worktree>` in a linked git worktree, so two worktrees running the same suite never share deployments |
 | `--fast`          | off     | Sets `FAST=1` before imports — suites `skipIf(process.env.FAST)` their slow tests (long-provisioning resources, smoke tests). Replaces the `FAST=1` env prefix |
 | `--timeout <ms>`  | 120000  | Default per-test timeout                                      |
 | `--retry <n>`     | 2       | Re-runs of a failing test body (use `--retry 0` when debugging) |
@@ -1149,14 +1255,13 @@ Output behavior (plain mode, the default):
 - The collection phase (importing every test file, ~45s for the full suite) reports `collecting N/TOTAL test files (elapsed) <current file>` — repainted in place on a TTY, printed every 5s otherwise. A run that appears stuck before any test starts is almost always just collecting; if it really is stuck, the line names the file whose import hangs.
 - One line per test as it finishes, prefixed with a `[done/total]` progress counter so the remaining count is visible; a **failing test prints its error and captured output inline** immediately.
 - Passing tests' output is swallowed on the console — but **every** test's output (passes included) is streamed to a per-run log at **`.alchemy/log/test/{timestamp}-pid{pid}.log`** (relative to the cwd), so concurrent runs in different terminals never trample each other. The absolute path (with line/KB counts) is printed at the end of every run (`Full log: …`) — read that file when you need the complete record, e.g. a passing test's deploy output or a hang's partial log. The file is appended live, so it's readable mid-run; logs older than a week are pruned automatically (by stat mtime).
-- If nothing finishes for 10s, the runner prints the list of currently-running tests with elapsed times — the first place to look when a run seems hung.
 - Exit code is non-zero if any test failed.
 
 Runner semantics to know:
 
 - Everything runs in ONE bun process: files run concurrently (respecting `describe.sequential`), imports of all test files happen up-front (they must be lazy and pure — registration only, no top-level side effects beyond `Test.make`/`describe`/`test`).
-- Tests that mutate process-global state (e.g. `process.env.PATH`) must pass `{ exclusive: true }` in the test options to take the whole-process write lock.
-- The harness (`alchemy-test` package) provides `describe`, `it`/`test` (incl. `it.effect`/`it.live`), hooks, `layer`, `expect`, and `assert` — the codemod `scripts/codemod-alchemy-test.ts` migrates vitest imports and is idempotent.
+- Tests that mutate process-global state (e.g. `process.env.PATH`, `process.chdir`, `globalThis.__ALCHEMY_RUNTIME__`) must pass `{ exclusive: true }` in the test options to take the whole-process write lock. Tests that only contend for a shared cloud resource (an account singleton, a quota) pass a label instead — `{ exclusive: "aws:ses-account" }` serializes them with other holders of that label while the rest of the run continues. The same option works on `beforeAll`/`afterAll` hooks.
+- The harness (`@alchemy.run/test` package) provides `describe`, `it`/`test` (incl. `it.effect`/`it.live`), hooks, `layer`, `expect`, and `assert`.
 - The runner runs in plain bun, so distilled resolves from `src/*.ts` via the `bun` export condition — a regenerated service is test-visible immediately, no `lib/` rebuild required.
 
 ## The convergence loop: nuke → test → census → fix-fleet
@@ -1165,10 +1270,10 @@ Ironing out the AWS suite is an iterative loop, driven by a coordinator, that te
 
 Each iteration:
 
-0. **Clean slate** — first run `aws sso login` (the alchemy `testing` profile and the raw `aws` CLI ride the same SSO session; an expired token mid-round breaks the pipeline with auth errors — only escalate to a human if the login doesn't complete automatically). Then `pnpm nuke --yes` (deletes every alchemy-tagged cloud resource; `scripts/nuke.sh` already spares state buckets, SSO roles, and AWS-managed singletons) then `pnpm alchemy state delete Nuke --config ./stacks/nuke.ts --profile testing --recursive`. Never overlap nuke with a running suite. Plain `pnpm clear:state` lacks the profile and dies on expired Cloudflare OAuth; nuke without `--yes` hangs on an interactive confirm in non-interactive shells.
+0. **Clean slate** — first run `aws sso login` (the alchemy `testing` profile and the raw `aws` CLI ride the same SSO session; an expired token mid-round breaks the pipeline with auth errors — only escalate to a human if the login doesn't complete automatically). Then `pnpm nuke --yes` (deletes every alchemy-tagged cloud resource; `scripts/nuke.sh` already spares state buckets, SSO roles, and AWS-managed singletons) then `pnpm -C stacks alchemy state delete Nuke --config ./src/nuke.ts --profile testing --recursive`. Never overlap nuke with a running suite. Plain `pnpm clear:state` lacks the profile and dies on expired Cloudflare OAuth; nuke without `--yes` hangs on an interactive confirm in non-interactive shells.
 1. **Full suite, bounded** — `pnpm test:integration test/AWS --profile testing`. The runner defaults to `--concurrency 32`; NEVER override it to `unbounded` on a full-suite run: all ~775 files' `beforeAll` deploys start at once, the event loop saturates, and hundreds of fake 0ms `beforeAll TimeoutError` failures drown the real signal (heap is ~8.5 GB regardless of N — the constraint is CPU, not memory). Target ≤10 min wall-clock, hard cap 128; measured 32 → ~21 min clean. The saturation tell is `beforeAll` failures at 0ms; real failures fail slow. If the cap can't reach 10 min, the residual is individual slow files — skipIf-gate them per the speed doctrine.
 2. **Leak census** — `pnpm nuke --dry-run` after the suite; diff against the pre-suite baseline. Worklist = **failed services ∪ leaking services** (a service can pass green and still leak). Leave the leaked resources LIVE as forensic evidence for the fix agents; carry-over holdouts that survive repeated nuke passes (stuck deletes) go on the worklist too — their delete path is the bug.
-3. **Fix-fleet workflow** — one agent per service on the worklist (account-singleton services — CloudTrail, Config, SecurityHub, GuardDuty, ControlTower, IdentityCenter — run as a sequential chain; everything else fans out). Each agent gets its exact failures, its leak inventory, and this root-cause priority: **provider bug > distilled patch > test fix** — never paper over a provider leak in the test. Each agent runs ONLY its own suite (`timeout 240 pnpm test:integration test/AWS/{Service} --profile testing`), audits its tests for non-deterministic names (rely on PhysicalName auto-naming; random data in message payloads/idempotency tokens is fine), verifies zero orphans from its service via out-of-band distilled list/describe calls, and reports a structured result. Agents never run tsc/build and never run the account-wide nuke.
+3. **Fix-fleet workflow** — one agent per service on the worklist (account-singleton services — CloudTrail, Config, SecurityHub, GuardDuty, ControlTower, IdentityCenter — run as a sequential chain; everything else fans out). Each agent gets its exact failures, its leak inventory, and this root-cause priority: **provider bug > distilled patch > test fix** — never paper over a provider leak in the test. Each agent runs ONLY its own suite (`pnpm test:integration test/AWS/{Service} --profile testing`), audits its tests for non-deterministic names (rely on PhysicalName auto-naming; random data in message payloads/idempotency tokens is fine), verifies zero orphans from its service via out-of-band distilled list/describe calls, and reports a structured result. Agents never run tsc/build and never run the account-wide nuke.
 4. **Gate** — the coordinator runs the one-shot `pnpm exec tsrs -b`, fixes cross-cutting fallout, commits the iteration (+ distilled submodule bump when patches were made), and loops back to 0. Terminate on two consecutive iterations of green-suite + census reduced to documented-undeletable residue (e.g. BackupSearch terminal records, Contributor-Insights rules with no delete API, keys in scheduled deletion).
 
 ## Multi-agent sessions: the coordinator owns type-checking
@@ -1264,6 +1369,21 @@ Rules of thumb:
 - Bullet/numbered lists are fine when they describe a recap, prerequisites, or genuinely list-shaped content (e.g. "the Worker now handles two routes: PUT and GET" at the end). They are **not** fine as a substitute for splitting a compound snippet.
 - A single API call that internally does several things (e.g. `Cloudflare.upgrade()`) doesn't need splitting — describe its behavior in prose.
 - Use `diff lang="typescript"` blocks so each step shows what's added on top of the previous step.
+
+# Package Skills
+
+A package can ship an agent skill under `packages/{package}/skills/{name}/` (e.g. [alchemy-domain](./packages/domain/skills/alchemy-domain/SKILL.md)): a `SKILL.md` plus `references/*.md`. The skill is an **entrypoint**, not a second copy of the docs. It gives an agent the workflow, the rules, and a short template per topic. The website holds the depth.
+
+- **`SKILL.md` links the docs hub and `https://alchemy.run/llms.txt`**, which lists every page, so an agent can find what the skill leaves out.
+- **Every `##`/`###` section ends with a `More:` line** linking the docs page, or the exact `#section`, that covers it in depth:
+
+  ```md
+  More: [Saga: Undo a step when a later one fails](https://alchemy.run/domain/saga#undo-a-step-when-a-later-one-fails).
+  ```
+
+- **Links must resolve.** Use absolute `https://alchemy.run/...` URLs (the skill is read outside the website), not `website/...` paths. After `pnpm --filter website build`, check that each linked page exists under `website/dist/` and that each `#anchor` is an `id` on it.
+- **Keep the skill in step with the docs.** Renaming a docs page or heading means updating the skill links to it. Adding a docs page a skill covers means adding a `More:` link from its section.
+- **Keep sections short.** If a section grows into an explanation, move the explanation to the docs page and link it.
 
 # Pull Request Conventions
 

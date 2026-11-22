@@ -28,7 +28,7 @@ export const LIST_LOCATIONS = [
 const OWNERSHIP_MARKER = "+alc.";
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.PubSubLite.NotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -270,7 +270,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
   effect.pipe(
     Effect.catchIf(
       (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
 
@@ -362,17 +362,17 @@ const listAcross = <Item, E, R>(listAt: (parent: string) => Effect.Effect<readon
 
 export const getReservation = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(pubsublite.getAdminProjectsLocationsReservations({ name }));
 
 export const getTopic = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(pubsublite.getAdminProjectsLocationsTopics({ name }));
 
 export const getSubscription = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(pubsublite.getAdminProjectsLocationsSubscriptions({ name }));
 
 export const listReservationsAt = (parent: string) =>

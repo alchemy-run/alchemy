@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -153,8 +154,32 @@ export type TcpRoute = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TcpRouteLookup
 >;
+
+/**
+ * Props for {@link TcpRoute.lookup}: find a tcp route this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface TcpRouteLookup {
+  /**
+   * Route id (the `{tcpRoute}` segment of
+   * `projects/{project}/locations/{location}/tcpRoutes/{tcpRoute}`).
+   */
+  tcpRouteId: string;
+  /**
+   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A TcpRoute describes how a Mesh or Gateway routes TCP traffic.
@@ -190,6 +215,18 @@ export type TcpRoute = Resource<
  *       },
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing tcp route
+ * `TcpRoute.lookup` references a tcp route Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared tcp route.
+ *
+ * **Example:** Reference an existing tcp route
+ * ```typescript
+ * const tcpRoute = GCP.NetworkServices.TcpRoute.lookup({
+ *   tcpRouteId: "my-tcp-route",
  * });
  * ```
  *
@@ -263,7 +300,7 @@ const toAttrs = (route: networkservices.TcpRoute, project: string) => {
 const getByName = (name: string) =>
   networkservices
     .getProjectsLocationsTcpRoutes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const TcpRouteProvider = () =>
   Provider.succeed(TcpRoute, {
@@ -289,6 +326,15 @@ export const TcpRouteProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ tcpRouteId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, COLLECTION, tcpRouteId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -335,15 +381,13 @@ export const TcpRouteProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsTcpRoutes({
+            description: news.description,
+            labels: desiredLabels,
+            rules: desiredRules,
+            meshes: desiredMeshes,
+            gateways: desiredGateways,
             parent: parentOf(env.project, location),
             tcpRouteId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              rules: desiredRules,
-              meshes: desiredMeshes,
-              gateways: desiredGateways,
-            },
           })
           .pipe(
             Effect.retry({
@@ -351,7 +395,7 @@ export const TcpRouteProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -373,16 +417,13 @@ export const TcpRouteProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkservices.patchProjectsLocationsTcpRoutes({
+          labels: desiredLabels,
+          description: news.description,
+          rules: desiredRules,
+          meshes: desiredMeshes,
+          gateways: desiredGateways,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            rules: desiredRules,
-            meshes: desiredMeshes,
-            gateways: desiredGateways,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
@@ -400,7 +441,7 @@ export const TcpRouteProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

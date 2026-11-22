@@ -86,3 +86,32 @@ export const labelSelector = (labels: Record<string, string>): string =>
   Object.entries(labels)
     .map(([key, value]) => `${key}=${value}`)
     .join(",");
+
+/**
+ * Whether a resource `read` found is the generation a replacement replaces,
+ * rather than the replacement's own identity. Ownership labels name the
+ * logical resource, not a generation, so a label lookup during a
+ * replacement's identity check (`previous` set) finds the old generation.
+ * It is the replacement's identity only when the replacement claims the
+ * same explicit name; otherwise `read` reports nothing there and reconcile
+ * creates the new generation.
+ */
+export const isReplacedGeneration = (args: {
+  readonly previousId: unknown;
+  readonly foundId: unknown;
+  readonly claimedName?: string | undefined;
+  readonly foundName?: string | undefined;
+}): boolean =>
+  args.previousId !== undefined &&
+  args.previousId === args.foundId &&
+  (args.claimedName === undefined || args.claimedName !== args.foundName);
+
+/**
+ * Whether a replacement keeps the explicit name of the generation it
+ * replaces. Hetzner names are unique per project, so such a replacement
+ * can't be created next to the old generation: it deletes it first.
+ */
+export const keepsName = (
+  news: { readonly name?: string | undefined },
+  output: { readonly name: string },
+): boolean => news.name !== undefined && news.name === output.name;

@@ -1,8 +1,8 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -46,13 +46,11 @@ const ensureDataset = ({ locationParent, datasetName }: ReturnType<typeof namesO
   cci.getProjectsLocationsDatasets({ name: datasetName }).pipe(
     Effect.catchTag("NotFound", () =>
       cci.createProjectsLocationsDatasets({
+        displayName: "alchemy-cci-label-ds",
+        type: "EVAL",
+        description: "alchemy test dataset",
         parent: locationParent,
         datasetId,
-        body: {
-          displayName: "alchemy-cci-label-ds",
-          type: "EVAL",
-          description: "alchemy test dataset",
-        },
       }),
     ),
   );
@@ -61,13 +59,11 @@ const ensureConversation = ({ datasetName, conversationName }: ReturnType<typeof
   cci.getProjectsLocationsDatasetsConversations({ name: conversationName }).pipe(
     Effect.catchTag("NotFound", () =>
       cci.createProjectsLocationsConversations({
+        medium: "CHAT",
+        languageCode: "en-US",
+        labels: { "alchemy-test": "cci" },
         parent: datasetName,
         conversationId,
-        body: {
-          medium: "CHAT",
-          languageCode: "en-US",
-          labels: { "alchemy-test": "cci" },
-        },
       }),
     ),
   );

@@ -1,9 +1,9 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { Document, DocumentProvider } from "@alchemy.run/gcp/Firestore/Document";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
@@ -64,10 +64,10 @@ test.provider(
 
       const error = yield* Effect.flip(
         firestore.createDocumentProjectsDatabasesDocuments({
+          fields: { env: { stringValue: "probe" } },
           parent: `projects/${project}/databases/(default)/documents`,
           collectionId: "_alchemy",
           documentId: "alchemy-probe",
-          body: { fields: { env: { stringValue: "probe" } } },
         }),
       );
       expect(error._tag).toEqual("DatastoreModeDatabase");

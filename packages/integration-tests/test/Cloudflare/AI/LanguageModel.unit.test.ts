@@ -1,6 +1,6 @@
 import { makeLanguageModel } from "@alchemy.run/cloudflare/AI/LanguageModel";
 /// <reference types="@cloudflare/workers-types" />
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { LanguageModel, Tool, Toolkit } from "effect/ai";
 import * as Effect from "effect/Effect";

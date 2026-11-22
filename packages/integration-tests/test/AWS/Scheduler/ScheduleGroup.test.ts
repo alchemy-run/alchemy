@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { ScheduleGroup } from "@alchemy.run/aws/Scheduler";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

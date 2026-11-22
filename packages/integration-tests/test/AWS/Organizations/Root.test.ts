@@ -1,5 +1,5 @@
 import * as AWS from "@alchemy.run/aws";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as OrganizationLease from "./OrganizationLease.ts";
@@ -34,6 +34,34 @@ test.provider(
         expect(Array.isArray(root.policyTypes)).toBe(true);
         expect(typeof root.tags).toBe("object");
       }
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:organizations", "live"] },
+);
+
+// `rootId` and `name` only select which root to adopt, so adding, removing, or
+// pinning one that matches the adopted root plans an update, never a replace.
+test.provider(
+  "pinning or dropping the lookup id of the adopted root updates in place",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const root = yield* stack.deploy(AWS.Organizations.Root("Root", {}));
+
+      const pinned = yield* stack.plan(
+        AWS.Organizations.Root("Root", { rootId: root.rootId, name: root.rootName }),
+      );
+      expect(pinned.resources.Root?.action).toBe("update");
+
+      yield* stack.deploy(AWS.Organizations.Root("Root", { rootId: root.rootId }));
+
+      const dropped = yield* stack.plan(AWS.Organizations.Root("Root", {}));
+      expect(dropped.resources.Root?.action).toBe("update");
+
+      const other = yield* stack.plan(AWS.Organizations.Root("Root", { rootId: "r-zzzz" }));
+      expect(other.resources.Root?.action).toBe("replace");
 
       yield* stack.destroy();
     }),

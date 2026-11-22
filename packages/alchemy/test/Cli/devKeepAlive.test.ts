@@ -1,10 +1,10 @@
 import { fileURLToPath } from "node:url";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
-import { importStack } from "@/Alchemist/Session.ts";
+import * as Alchemist from "@/Alchemist/index.ts";
 import { devKeepAlive } from "../../src/Cli/exec";
 import { PlatformServices } from "../../src/Util/PlatformServices";
 
@@ -67,9 +67,9 @@ describe("devKeepAlive", { tags: ["unit", "local"] }, () => {
     expect(
       parks(
         devKeepAlive(
-          importStack(fileURLToPath(import.meta.resolve("./fixtures/import-stack-throws.ts"))).pipe(
-            Effect.provide(PlatformServices),
-          ),
+          Alchemist.importStack(
+            fileURLToPath(import.meta.resolve("./fixtures/import-stack-throws.ts")),
+          ).pipe(Effect.provide(PlatformServices)),
         ),
       ),
     ).resolves.toBe(true));

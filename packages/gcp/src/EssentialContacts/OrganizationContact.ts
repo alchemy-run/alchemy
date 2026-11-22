@@ -140,15 +140,15 @@ export const OrganizationContact = Resource<OrganizationContact>(
 export class OrganizationContactNotResolved extends Data.TaggedError(
   "GCP.EssentialContacts.OrganizationContactNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : essentialcontacts
         .getOrganizationsContacts({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string) =>
   parent.length === 0
@@ -257,7 +257,7 @@ export const OrganizationContactProvider = () =>
 
       if (current === undefined) {
         const created = yield* essentialcontacts
-          .createOrganizationsContacts({ parent, body })
+          .createOrganizationsContacts({ ...body, parent })
           .pipe(
             Effect.catchTag("Conflict", () =>
               listAt(parent).pipe(
@@ -273,7 +273,7 @@ export const OrganizationContactProvider = () =>
 
       if (current === undefined) {
         return yield* new OrganizationContactNotResolved({
-          name: output?.name ?? `${parent}/contacts`,
+          resourceName: output?.name ?? `${parent}/contacts`,
         });
       }
 
@@ -284,12 +284,10 @@ export const OrganizationContactProvider = () =>
       );
       if (languageChanged || categoriesChanged) {
         current = yield* essentialcontacts.patchOrganizationsContacts({
+          languageTag,
+          notificationCategorySubscriptions: categories,
           name: current.name ?? "",
           updateMask: UPDATE_MASK,
-          body: {
-            languageTag,
-            notificationCategorySubscriptions: categories,
-          },
         });
       }
 

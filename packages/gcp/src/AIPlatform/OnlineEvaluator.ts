@@ -136,7 +136,7 @@ export const OnlineEvaluator = Resource<OnlineEvaluator>("GCP.AIPlatform.OnlineE
 export class OnlineEvaluatorNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.OnlineEvaluatorNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const defaultConfig = (
@@ -168,14 +168,14 @@ const toAttrs = (evaluator: aiplatform.GoogleCloudAiplatformV1OnlineEvaluator, p
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsOnlineEvaluators({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (evaluator): evaluator is aiplatform.GoogleCloudAiplatformV1OnlineEvaluator =>
         evaluator !== undefined,
-      () => new AiPlatformNotResolved({ name }),
+      () => new AiPlatformNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.NotResolved",
@@ -188,7 +188,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (evaluator) => evaluator === undefined,
-      () => new AiPlatformStillExists({ name }),
+      () => new AiPlatformStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -280,14 +280,12 @@ export const OnlineEvaluatorProvider = () =>
 
       if (current === undefined) {
         const created = yield* aiplatform.createProjectsLocationsOnlineEvaluators({
+          displayName,
+          agentResource: news.agentResource,
+          metricSources: news.metricSources,
+          config,
+          cloudObservability: news.cloudObservability,
           parent,
-          body: {
-            displayName,
-            agentResource: news.agentResource,
-            metricSources: news.metricSources,
-            config,
-            cloudObservability: news.cloudObservability,
-          },
         });
         yield* waitForOperation(created, { alreadyExistsOk: true });
         const createdName = resourceNameFromOperation(created);
@@ -299,7 +297,7 @@ export const OnlineEvaluatorProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new OnlineEvaluatorNotResolved({
-          name: output?.name ?? parent,
+          resourceName: output?.name ?? parent,
         });
       }
 
@@ -316,21 +314,18 @@ export const OnlineEvaluatorProvider = () =>
           metricsChanged ? "metric_sources" : undefined,
         ].filter((field): field is string => field !== undefined);
         const patched = yield* aiplatform.patchProjectsLocationsOnlineEvaluators({
+          displayName,
+          config,
+          metricSources: news.metricSources,
           name: observedName,
           updateMask: updateMask.join(","),
-          body: {
-            name: observedName,
-            displayName,
-            config,
-            metricSources: news.metricSources,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* getByName(observedName);
       }
 
       if (current === undefined) {
-        return yield* new OnlineEvaluatorNotResolved({ name: observedName });
+        return yield* new OnlineEvaluatorNotResolved({ resourceName: observedName });
       }
       return toAttrs(current, env.project);
     }),
@@ -338,7 +333,7 @@ export const OnlineEvaluatorProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* aiplatform
         .deleteProjectsLocationsOnlineEvaluators({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

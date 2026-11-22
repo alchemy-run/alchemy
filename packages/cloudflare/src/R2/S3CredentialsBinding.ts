@@ -99,6 +99,7 @@ export type BucketInput = Bucket | Effect.Effect<Bucket, never, any>;
 
 /** Resolve a {@link BucketInput} to the bucket resource. */
 export const resolveBucket = (bucket: BucketInput) =>
+  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- a declaration Effect's requirement is resolved when the credentials are bound; the cast drops it on purpose
   (Effect.isEffect(bucket) ? bucket : Effect.succeed(bucket)) as Effect.Effect<Bucket>;
 
 /**
@@ -127,7 +128,7 @@ const PERMISSION_GROUPS: Record<S3CredentialsAccess, PermissionGroupRef[]> = {
   "read-write": ["Workers R2 Storage Bucket Item Read", "Workers R2 Storage Bucket Item Write"],
 };
 
-const liveEndpoint = (accountId: string, jurisdiction: Bucket.Jurisdiction): string =>
+export const liveEndpoint = (accountId: string, jurisdiction: Bucket.Jurisdiction): string =>
   jurisdiction === "default"
     ? `https://${accountId}.r2.cloudflarestorage.com`
     : `https://${accountId}.${jurisdiction}.r2.cloudflarestorage.com`;

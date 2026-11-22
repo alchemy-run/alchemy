@@ -115,7 +115,7 @@ export const InboundOidcSsoProfile = Resource<InboundOidcSsoProfile>(
 export class InboundOidcSsoProfileNotResolved extends Data.TaggedError(
   "GCP.CloudIdentity.InboundOidcSsoProfileNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const rpOf = (rp: cloudidentity.OidcRpConfig | undefined) => {
@@ -196,12 +196,8 @@ export const InboundOidcSsoProfileProvider = () =>
 
       if (current === undefined) {
         const created = yield* cloudidentity
-          .createInboundOidcSsoProfiles({ body: desired })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              Effect.succeed<cloudidentity.Operation | undefined>(undefined),
-            ),
-          );
+          .createInboundOidcSsoProfiles({ ...desired })
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created).pipe(
             Effect.catchTag("GCP.CloudIdentity.OperationPending", () => Effect.void),
@@ -223,7 +219,7 @@ export const InboundOidcSsoProfileProvider = () =>
 
       if (current === undefined) {
         return yield* new InboundOidcSsoProfileNotResolved({
-          name: output?.name ?? displayName,
+          resourceName: output?.name ?? displayName,
         });
       }
 
@@ -242,13 +238,11 @@ export const InboundOidcSsoProfileProvider = () =>
 
       if (updateMask.length > 0 && name.length > 0) {
         const patched = yield* cloudidentity.patchInboundOidcSsoProfiles({
+          displayName,
+          idpConfig: news.idpConfig,
+          rpConfig: news.rpConfig,
           name,
           updateMask,
-          body: {
-            displayName,
-            idpConfig: news.idpConfig,
-            rpConfig: news.rpConfig,
-          },
         });
         yield* waitForOperation(patched).pipe(
           Effect.catchTag("GCP.CloudIdentity.OperationPending", () => Effect.void),
@@ -263,11 +257,7 @@ export const InboundOidcSsoProfileProvider = () =>
       if (output.name.length === 0) return;
       const deleted = yield* cloudidentity
         .deleteInboundOidcSsoProfiles({ name: output.name })
-        .pipe(
-          Effect.catchTag("NotFound", () =>
-            Effect.succeed<cloudidentity.Operation | undefined>(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (deleted !== undefined) {
         yield* waitForOperation(deleted, { notFoundOk: true });
       }

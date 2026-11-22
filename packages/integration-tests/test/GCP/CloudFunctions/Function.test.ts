@@ -1,14 +1,15 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudfunctions from "@distilled.cloud/gcp/cloudfunctions_v2";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import { zipFiles } from "alchemy/Util/zip";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -50,8 +51,8 @@ const uploadSource = Effect.fn(function* () {
     },
   ]);
   const uploaded = yield* cloudfunctions.generateUploadUrlProjectsLocationsFunctions({
+    environment: "GEN_2",
     parent: `projects/${project}/locations/${LOCATION}`,
-    body: { environment: "GEN_2" },
   });
   if (uploaded.uploadUrl === undefined) {
     return yield* Effect.die(new Error("generateUploadUrl did not return uploadUrl"));
@@ -119,6 +120,13 @@ test.provider.skipIf(!runLifecycle)(
             },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.CloudFunctions.Function.lookup({
+          functionId: created.functionId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/functions/");

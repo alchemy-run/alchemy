@@ -1,5 +1,5 @@
-import type { TestOptions } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import type { TestOptions } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { makeApiGatewayTestLease } from "./TestLease.ts";
 
 const apiGatewayOptions = (options: TestOptions | undefined): TestOptions => {

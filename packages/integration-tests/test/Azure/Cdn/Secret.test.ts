@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cdn from "@distilled.cloud/azure/cdn";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runPaidOnly } from "../gates.ts";
 import {
@@ -34,6 +34,9 @@ const getSecret = (resourceGroupName: string, profileName: string, secretName: s
     });
   });
 
+const useLatestVersionOf = (parameters: cdn.SecretParameters | undefined) =>
+  parameters?.type === "CustomerCertificate" ? parameters.useLatestVersion : undefined;
+
 const program = (props: { useLatestVersion: boolean }) =>
   Effect.gen(function* () {
     const { group, profile } = yield* profileStack;
@@ -63,13 +66,13 @@ test.provider.skipIf(!runPaidOnly || !certificateSecretId)(
       const get = (name: string) => getSecret(group.resourceGroupName, profile.profileName, name);
       expect(secret.type).toEqual("CustomerCertificate");
       const observed = yield* get(secret.secretName);
-      expect(observed.properties?.parameters?.useLatestVersion).toEqual(true);
+      expect(useLatestVersionOf(observed.properties?.parameters)).toEqual(true);
 
       // Replacement: parameters are immutable.
       const replaced = yield* stack.deploy(program({ useLatestVersion: false }));
       expect(replaced.secret.secretId).not.toEqual(secret.secretId);
       const reobserved = yield* get(replaced.secret.secretName);
-      expect(reobserved.properties?.parameters?.useLatestVersion).toEqual(false);
+      expect(useLatestVersionOf(reobserved.properties?.parameters)).toEqual(false);
 
       yield* stack.destroy();
       expect(yield* waitGone(get(replaced.secret.secretName))).toEqual("gone");

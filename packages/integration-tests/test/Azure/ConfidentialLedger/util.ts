@@ -1,5 +1,5 @@
 import * as Azure from "@alchemy.run/azure";
-import { Credentials, type AzureOpError } from "@distilled.cloud/azure";
+import { armScopeFor, Credentials, type AzureOpError } from "@distilled.cloud/azure";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
@@ -31,7 +31,7 @@ export const waitGone = <A, E, R>(get: Effect.Effect<A, AzureOpError | E, R>) =>
 /** Object ID (`oid` claim) of the identity running the tests. */
 export const callerObjectId = Effect.gen(function* () {
   const config = yield* yield* Credentials;
-  const token = Redacted.value(config.bearerToken);
+  const token = Redacted.value(yield* config.token(armScopeFor(config.apiBaseUrl)));
   return yield* Effect.sync(
     () =>
       JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"))

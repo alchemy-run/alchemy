@@ -7,10 +7,12 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
 import { DeleteNotConfirmed } from "../Errors.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -122,6 +124,13 @@ export type SecretProps = {
    * `"86400s"`).
    */
   versionDestroyTtl?: string;
+  /**
+   * The secret's value. Each deploy that changes it adds a new version, and
+   * `version` names the one holding it; older versions are kept, so a
+   * reader pinned to one keeps working until it moves on. Unset, Alchemy
+   * never writes a version: add them with `AddSecretVersion`.
+   */
+  value?: string | Redacted.Redacted<string>;
 };
 
 export type Secret = Resource<
@@ -154,10 +163,36 @@ export type Secret = Resource<
     versionAliases: Record<string, string>;
     /** Delayed-destroy TTL, if set. */
     versionDestroyTtl: string | undefined;
+    /**
+     * The version holding `value`
+     * (`projects/{project}/secrets/{secret}/versions/{n}`), or `undefined`
+     * when `value` is unset.
+     */
+    version: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SecretLookup
 >;
+
+/**
+ * Props for {@link Secret.lookup}: find a secret this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface SecretLookup {
+  /**
+   * Secret id (the `{secret}` segment of
+   * `projects/{project}/secrets/{secret}`). Max 255 characters; letters,
+   * numbers, hyphens, and underscores.
+   */
+  secretId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud Secret Manager secret (metadata and replication). Secret
@@ -194,12 +229,31 @@ export type Secret = Resource<
  * ```
  *
  * ### Secret Versions
- * **Example:** Add and access a version
+ * **Example:** A value written at deploy
+ * ```typescript
+ * const token = yield* Alchemy.Random("Token", { bytes: 32 });
+ * const secret = yield* GCP.SecretManager.Secret("Token", {
+ *   value: token.text,
+ * });
+ * // secret.version: projects/acme/secrets/…/versions/1, a new one per changed value
+ * ```
+ *
+ * **Example:** Add and access a version at runtime
  * ```typescript
  * const addVersion = yield* GCP.SecretManager.AddSecretVersion(secret);
  * yield* addVersion({ payload: { data: btoa("hello") } });
  * const access = yield* GCP.SecretManager.AccessSecretVersion(secret);
  * const { payload } = yield* access();
+ * ```
+ *
+ * ### Looking up an existing secret
+ * `Secret.lookup` references a secret Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared secret.
+ *
+ * **Example:** Reference an existing secret
+ * ```typescript
+ * const secret = GCP.SecretManager.Secret.lookup({ secretId: "my-secret" });
  * ```
  *
  * @resource
@@ -208,7 +262,7 @@ export type Secret = Resource<
 export const Secret = Resource<Secret>("GCP.SecretManager.Secret");
 
 export class SecretNotResolved extends Data.TaggedError("GCP.SecretManager.SecretNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_REPLICATION: Replication = { automatic: {} };
@@ -325,7 +379,7 @@ const rotationEqual = (left: Rotation | undefined, right: Rotation | undefined) 
   (left?.nextRotationTime ?? "") === (right?.nextRotationTime ?? "") &&
   (left?.rotationPeriod ?? "") === (right?.rotationPeriod ?? "");
 
-const toAttrs = (secret: secretmanager.Secret, project: string) => {
+const toAttrs = (secret: secretmanager.Secret, project: string, version?: string) => {
   const name = secret.name ?? "";
   return {
     name,
@@ -341,13 +395,41 @@ const toAttrs = (secret: secretmanager.Secret, project: string) => {
     rotation: toRotation(secret.rotation),
     versionAliases: userAliases(secret.versionAliases),
     versionDestroyTtl: secret.versionDestroyTtl,
+    version,
   };
 };
+
+/** The latest enabled version and its value, or `undefined` when there is none. */
+const latestVersion = (name: string) =>
+  secretmanager.accessProjectsSecretsVersions({ name: `${name}/versions/latest` }).pipe(
+    Effect.map((response) => ({
+      name: response.name,
+      value: Buffer.from(response.payload?.data ?? "", "base64").toString("utf8"),
+    })),
+    Effect.catchTag(["NotFound", "SecretVersionNotEnabled"], () => Effect.undefined),
+  );
+
+/**
+ * Make the latest version hold `value`: read it, and add a version only
+ * when it holds something else. Returns the version's name.
+ */
+const syncValue = Effect.fn(function* (name: string, value: string | Redacted.Redacted<string>) {
+  const desired = Redacted.isRedacted(value) ? Redacted.value(value) : value;
+  const latest = yield* latestVersion(name);
+  if (latest !== undefined && latest.value === desired && latest.name !== undefined) {
+    return latest.name;
+  }
+  const added = yield* secretmanager.addVersionProjectsSecrets({
+    parent: name,
+    payload: { data: Buffer.from(desired, "utf8").toString("base64") },
+  });
+  return added.name;
+});
 
 const getByName = (name: string) =>
   secretmanager
     .getProjectsSecrets({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilMissing = (name: string) =>
   getByName(name).pipe(
@@ -395,13 +477,23 @@ export const SecretProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ secretId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, secretId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const secretId = yield* toId(id, olds?.secretId, output?.secretId);
       const name = output?.name ?? resourceName(env.project, secretId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      // A secret given a value reports the version holding it now.
+      const version = olds?.value === undefined ? undefined : (yield* latestVersion(name))?.name;
+      const attrs = toAttrs(existing, env.project, version);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
@@ -457,9 +549,9 @@ export const SecretProvider = () =>
       if (current === undefined) {
         const created = yield* secretmanager
           .createProjectsSecrets({
+            ...toCreateBody(news, desiredLabels),
             parent: `projects/${env.project}`,
             secretId,
-            body: toCreateBody(news, desiredLabels),
           })
           .pipe(
             // A just-deleted secret (replacement) keeps its id reserved for
@@ -475,11 +567,11 @@ export const SecretProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecretNotResolved({ name });
+        return yield* new SecretNotResolved({ resourceName: name });
       }
 
       if (replicationFingerprint(toReplication(current.replication)) !== desiredReplicationFp) {
-        return yield* new SecretNotResolved({ name });
+        return yield* new SecretNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -514,6 +606,14 @@ export const SecretProvider = () =>
         ttlChanged
       ) {
         current = yield* secretmanager.patchProjectsSecrets({
+          labels: desiredLabels,
+          annotations: desiredAnnotations,
+          versionAliases: desiredAliases,
+          topics: desiredTopics,
+          rotation: desiredRotation,
+          versionDestroyTtl: desiredDestroyTtl,
+          expireTime: news.expireTime,
+          ttl: ttlChanged ? news.ttl : undefined,
           name,
           updateMask: [
             labelsChanged ? "labels" : undefined,
@@ -527,21 +627,11 @@ export const SecretProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            annotations: desiredAnnotations,
-            versionAliases: desiredAliases,
-            topics: desiredTopics,
-            rotation: desiredRotation,
-            versionDestroyTtl: desiredDestroyTtl,
-            expireTime: news.expireTime,
-            ttl: ttlChanged ? news.ttl : undefined,
-          },
         });
       }
 
-      return toAttrs(current, env.project);
+      const version = news.value === undefined ? undefined : yield* syncValue(name, news.value);
+      return toAttrs(current, env.project, version);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -1,13 +1,13 @@
 import * as Azure from "@alchemy.run/azure";
-import { Credentials } from "@distilled.cloud/azure";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import { armScopeFor, Credentials } from "@distilled.cloud/azure";
 import * as authorization from "@distilled.cloud/azure/authorization";
 import * as dt from "@distilled.cloud/azure/digitaltwins-data";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -41,7 +41,7 @@ const DIGITAL_TWINS_DATA_OWNER = "bcd981a7-7f74-457b-83e1-cceb9e632ffe";
 /** Object ID (`oid` claim) of the identity running the tests. */
 const callerObjectId = Effect.gen(function* () {
   const config = yield* yield* Credentials;
-  const token = Redacted.value(config.bearerToken);
+  const token = Redacted.value(yield* config.token(armScopeFor(config.apiBaseUrl)));
   return yield* Effect.sync(
     () =>
       JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"))

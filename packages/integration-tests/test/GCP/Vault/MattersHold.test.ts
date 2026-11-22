@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as vault from "@distilled.cloud/gcp/vault_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { logLevel, runAccountLifecycle, vaultAccount } from "./common.ts";
@@ -46,12 +46,10 @@ test.provider.skipIf(!!process.env.GCP_TEST_VAULT)(
 
       const error = yield* Effect.flip(
         vault.createMattersHolds({
+          name: "Alchemy Vault Hold Probe",
+          corpus: "MAIL",
+          accounts: [{ email: "probe@example.com" }],
           matterId: "alchemy-missing-matter",
-          body: {
-            name: "Alchemy Vault Hold Probe",
-            corpus: "MAIL",
-            accounts: [{ email: "probe@example.com" }],
-          },
         }),
       );
       expect(error._tag).toEqual("VaultScopeInsufficient");

@@ -46,7 +46,7 @@ export const TopicEventSource = Layer.effect(
           Effect.gen(function* () {
             yield* Permission(`AWS.Lambda.InvokeFunction(${topic.LogicalId})`, {
               action: "lambda:InvokeFunction",
-              functionName: host.functionName,
+              functionName: Lambda.qualifiedNameOf(host),
               principal: "sns.amazonaws.com",
               sourceArn: topic.topicArn,
             });
@@ -54,7 +54,7 @@ export const TopicEventSource = Layer.effect(
             yield* Subscription(`AWS.SNS.Subscription(${topic.LogicalId}, ${host.LogicalId})`, {
               topicArn: topic.topicArn,
               protocol: "lambda",
-              endpoint: host.functionArn,
+              endpoint: Lambda.qualifiedArnOf(host),
               attributes: props.attributes,
               returnSubscriptionArn: true,
             });

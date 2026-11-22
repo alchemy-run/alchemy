@@ -149,7 +149,7 @@ export const SettingsDatasource = Resource<SettingsDatasource>(
 export class SettingsDatasourceNotResolved extends Data.TaggedError(
   "GCP.CloudSearch.SettingsDatasourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (source: cloudsearch.DataSource, project: string) => {
@@ -248,16 +248,14 @@ export const SettingsDatasourceProvider = () =>
 
       if (current === undefined) {
         const created = yield* cloudsearch
-          .createSettingsDatasources({ body: desired })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .createSettingsDatasources({ ...desired })
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
           const createdName = operationResourceName(done);
           if (createdName !== undefined) {
             current = yield* waitUntilExists(getDatasource(createdName), createdName).pipe(
-              Effect.catchTag("GCP.CloudSearch.ResourceNotResolved", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("GCP.CloudSearch.ResourceNotResolved", () => Effect.undefined),
             );
           }
         }
@@ -268,7 +266,7 @@ export const SettingsDatasourceProvider = () =>
 
       if (current === undefined) {
         return yield* new SettingsDatasourceNotResolved({
-          name: name || displayName,
+          resourceName: name || displayName,
         });
       }
 
@@ -299,9 +297,9 @@ export const SettingsDatasourceProvider = () =>
 
       if (updateMask.length > 0) {
         const patched = yield* cloudsearch.patchSettingsDatasources({
+          ...desired,
           name: toDatasourceName(resourceName),
           updateMask,
-          body: desired,
         });
         yield* waitForOperation(patched);
         const refreshed = yield* waitUntilExists(getDatasource(resourceName), resourceName);
@@ -318,7 +316,7 @@ export const SettingsDatasourceProvider = () =>
       const name = toDatasourceName(output.name || output.datasourceId);
       const operation = yield* cloudsearch
         .deleteSettingsDatasources({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

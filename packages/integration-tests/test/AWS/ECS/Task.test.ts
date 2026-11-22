@@ -1,12 +1,15 @@
 import * as AWS from "@alchemy.run/aws";
 import { Task } from "@alchemy.run/aws/ECS/Task";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as iam from "@distilled.cloud/aws/iam";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { reclaimTaskDefinitionFamily } from "./reclaimTaskDefinitionFamily.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -305,5 +308,115 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:ecs", "provider:aws:iam", "live"],
     timeout: 240_000,
+  },
+);
+
+// https://github.com/alchemy-run/alchemy/issues/3117: a Task built from a
+// `context` subfolder must not plan an update when only the project lockfile
+// above that folder changes — Docker never receives it. A file inside the
+// context still does. This is the deploy diff: under the emulator
+// (`ALCHEMY_TEST_DEV=1`) the dev provider never builds in its diff, and its
+// file watcher rebuilds the image instead.
+test.provider.skipIf(process.env.ALCHEMY_TEST_DEV === "1")(
+  "a lockfile outside the build context does not plan an update",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-ecs-task-context-" });
+      const context = path.join(root, "app");
+      yield* fs.makeDirectory(context, { recursive: true });
+      yield* fs.writeFileString(path.join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+      yield* fs.writeFileString(
+        path.join(context, "Dockerfile"),
+        'FROM public.ecr.aws/docker/library/busybox:1.36\nCOPY hello.txt /\nCMD ["cat", "/hello.txt"]\n',
+      );
+      yield* fs.writeFileString(path.join(context, "hello.txt"), "hello\n");
+
+      const task = Task("ContextTask", {
+        context,
+        cpu: 256,
+        memory: 512,
+        // Matches an image built on an Apple Silicon host to Graviton.
+        runtimePlatform: { cpuArchitecture: "ARM64", operatingSystemFamily: "LINUX" },
+      });
+      yield* stack.deploy(task);
+
+      yield* fs.writeFileString(
+        path.join(root, "pnpm-lock.yaml"),
+        "lockfileVersion: '9.0'\nsettings: {}\n",
+      );
+      expect((yield* stack.plan(task)).resources.ContextTask?.action).toBe("noop");
+
+      yield* fs.writeFileString(path.join(context, "hello.txt"), "hello again\n");
+      expect((yield* stack.plan(task)).resources.ContextTask?.action).toBe("update");
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ecs", "provider:docker", "live"],
+    timeout: 300_000,
+  },
+);
+
+// An Effect-native task carries its runtime `exports` as an unevaluated
+// Effect. The diff must still reach the image hash, so an edit to a module
+// the entrypoint imports plans an update even though no prop changed. Dev
+// mode (`ALCHEMY_TEST_DEV=1`) rebuilds from its file watcher instead.
+test.provider.skipIf(process.env.ALCHEMY_TEST_DEV === "1")(
+  "Effect-native task updates when an imported module changes",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      yield* stack.destroy();
+
+      // Work on a temp copy so editing the source never touches the
+      // checked-in fixture. The copy lives under packages/integration-tests/.tmp
+      // so its imports resolve exactly like the original's.
+      const fixtureDir = yield* cloneFixture(
+        yield* path.fromFileUrl(new URL("./fixtures/source-change", import.meta.url)),
+        {
+          prefix: "alchemy-ecs-task-source-change-",
+          tempRoot: yield* path.fromFileUrl(new URL("../../../.tmp", import.meta.url)),
+        },
+      );
+      const marker = path.join(fixtureDir, "marker.ts");
+      const entry = path.join(fixtureDir, "task.ts");
+      const fixture = yield* Effect.promise(
+        () => import(entry) as Promise<typeof import("./fixtures/source-change/task.ts")>,
+      );
+      const declaration = Effect.gen(function* () {
+        return yield* fixture.SourceChangeTask;
+      }).pipe(Effect.provide(fixture.default));
+
+      yield* Effect.gen(function* () {
+        const created = yield* stack.deploy(declaration);
+
+        expect((yield* stack.plan(declaration)).resources.SourceChangeTask?.action).toBe("noop");
+
+        yield* fs.writeFileString(marker, 'export const sourceChangeMarker = "source-v2";\n');
+        expect((yield* stack.plan(declaration)).resources.SourceChangeTask?.action).toBe("update");
+
+        const updated = yield* stack.deploy(declaration);
+        expect(updated.taskFamily).toBe(created.taskFamily);
+        expect(updated.code.hash).not.toBe(created.code.hash);
+        expect(updated.taskDefinitionArn).not.toBe(created.taskDefinitionArn);
+
+        // Out-of-band: the new revision runs the rebuilt image.
+        const described = yield* ecs.describeTaskDefinition({
+          taskDefinition: updated.taskDefinitionArn,
+        });
+        expect(described.taskDefinition?.containerDefinitions?.[0]?.image).toBe(updated.imageUri);
+        expect(updated.imageUri).not.toBe(created.imageUri);
+      }).pipe(Effect.ensuring(fs.remove(fixtureDir, { recursive: true }).pipe(Effect.ignore)));
+
+      yield* stack.destroy();
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:ecs", "provider:docker", "live"],
+    timeout: 600_000,
   },
 );

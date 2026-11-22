@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import * as Hetzner from "@distilled.cloud/hetzner";
+import * as SshKeys from "@distilled.cloud/hetzner/ssh_keys";
 import type { GetSshKeyResponseSshKey } from "@distilled.cloud/hetzner/ssh_keys";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
@@ -17,6 +17,7 @@ import {
   hasAlchemyLabels,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -55,8 +56,18 @@ export type SshKey = Resource<
     created: string;
   },
   never,
-  Providers
+  Providers,
+  SshKeyLookup
 >;
+
+/**
+ * Props for {@link SshKey.lookup}: find a SSH key this stack
+ * doesn't manage by its name.
+ */
+export interface SshKeyLookup {
+  /** SSH key name (unique in the project). */
+  name: string;
+}
 
 /**
  * A Hetzner Cloud SSH key. Public keys are injected into Servers at create
@@ -81,13 +92,23 @@ export type SshKey = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing SSH key
+ * `SshKey.lookup` references a SSH key Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing key
+ * ```typescript
+ * const key = Hetzner.SshKey.lookup({ name: "laptop" });
+ * ```
+ *
  * @resource
  * @product Server
  */
 export const SshKey = Resource<SshKey>("Hetzner.SshKey");
 
 export class SshKeyNotResolved extends Data.TaggedError("Hetzner.SshKeyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const userLabels = (
@@ -117,20 +138,20 @@ const fingerprintOf = (publicKey: string) =>
   });
 
 const getById = (id: number) =>
-  Hetzner.sshKeys.getSshKey({ id }).pipe(
+  SshKeys.getSshKey({ id }).pipe(
     Effect.map(({ ssh_key }) => ssh_key),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const findByName = (name: string) =>
-  Hetzner.sshKeys
-    .listSshKeys({ name, per_page: 50 })
-    .pipe(Effect.map(({ ssh_keys }) => ssh_keys.find((key) => key.name === name)));
+  SshKeys.listSshKeys({ name, per_page: 50 }).pipe(
+    Effect.map(({ ssh_keys }) => ssh_keys.find((key) => key.name === name)),
+  );
 
 const findByFingerprint = (fingerprint: string) =>
-  Hetzner.sshKeys
-    .listSshKeys({ fingerprint, per_page: 50 })
-    .pipe(Effect.map(({ ssh_keys }) => ssh_keys[0]));
+  SshKeys.listSshKeys({ fingerprint, per_page: 50 }).pipe(
+    Effect.map(({ ssh_keys }) => ssh_keys[0]),
+  );
 
 const observe = Effect.fn(function* (input: { id?: number; name: string; publicKey: string }) {
   if (input.id !== undefined) {
@@ -162,7 +183,12 @@ export const SshKeyProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* findByName(name);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const name = yield* toName(id, olds?.name, output?.name);
       const publicKey = olds?.publicKey ?? output?.publicKey ?? "";
       const existing = yield* observe({
@@ -171,17 +197,25 @@ export const SshKeyProvider = () =>
         publicKey,
       });
       if (existing === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: existing.id,
+          claimedName: olds?.name,
+          foundName: existing.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(existing);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
-      Hetzner.sshKeys.listSshKeys
-        .items({ label_selector: alchemyStackSelector, per_page: 50 })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk, toAttrs)),
-        ),
+      SshKeys.listSshKeys.items({ label_selector: alchemyStackSelector, per_page: 50 }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk, toAttrs)),
+      ),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const name = yield* toName(id, news.name, output?.name);
@@ -197,13 +231,11 @@ export const SshKeyProvider = () =>
       });
 
       if (current === undefined) {
-        const created = yield* Hetzner.sshKeys
-          .createSshKey({
-            name,
-            public_key: news.publicKey,
-            labels: desiredLabels,
-          })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        const created = yield* SshKeys.createSshKey({
+          name,
+          public_key: news.publicKey,
+          labels: desiredLabels,
+        }).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current =
           created?.ssh_key ??
           (yield* observe({
@@ -214,7 +246,7 @@ export const SshKeyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SshKeyNotResolved({ name });
+        return yield* new SshKeyNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -222,7 +254,7 @@ export const SshKeyProvider = () =>
       const nameChanged = current.name !== name;
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       if (nameChanged || labelsChanged) {
-        const updated = yield* Hetzner.sshKeys.updateSshKey({
+        const updated = yield* SshKeys.updateSshKey({
           id: current.id,
           name: nameChanged ? name : undefined,
           labels: labelsChanged ? desiredLabels : undefined,
@@ -234,8 +266,8 @@ export const SshKeyProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* Hetzner.sshKeys
-        .deleteSshKey({ id: output.id })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* SshKeys.deleteSshKey({ id: output.id }).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
     }),
   });

@@ -7,7 +7,6 @@ import type { Actor } from "../Actor.ts";
 import { CurrentActor } from "../CurrentActor.context.ts";
 import { CustomerId } from "../Customer/Customer.id.ts";
 import { Cents } from "../Money.ts";
-import { Session } from "../Session.middleware.ts";
 import { AccountId } from "./Account.id.ts";
 import { ChangeOwner, NotPermitted, OwnerChanged } from "./ChangeOwner.command.ts";
 import { AccountClosed, BalanceNotZero, CloseAccount } from "./CloseAccount.command.ts";
@@ -17,7 +16,6 @@ import { DepositMoney, MoneyDeposited } from "./DepositMoney.command.ts";
 import { AccountFrozen, FreezeAccount } from "./FreezeAccount.command.ts";
 import { Frozen } from "./Frozen.rejection.ts";
 import { InsufficientFunds } from "./InsufficientFunds.rejection.ts";
-import { mustOwn } from "./mustOwn.ts";
 import { NotOpen } from "./NotOpen.rejection.ts";
 import { NotOwner } from "./NotOwner.rejection.ts";
 import { AccountOpened, AlreadyOpen, OpenAccount } from "./OpenAccount.command.ts";
@@ -50,9 +48,12 @@ const AccountState = Schema.Union([
 ]);
 type AccountState = typeof AccountState.Type;
 
-// Lenses on the narrowed Open state: they cannot miss, so nothing is hidden.
-const balance = Optic.id<Open>().key("balance");
-const frozen = Optic.id<Open>().key("frozen");
+// Optics that focus on the Open account. decide refuses every command on an
+// account that is not open, so these events only follow an Open state; on any
+// other state an optic leaves it unchanged, which keeps evolve total.
+const open = Optic.id<AccountState>().tag("Open");
+const balance = open.key("balance");
+const frozen = open.key("frozen");
 
 // Authorization: customers may act on their own accounts; agents and the system on any.
 const openFor = (s: AccountState, actor: Actor): Open | NotOpen | NotOwner =>
@@ -69,12 +70,6 @@ const authorized = Effect.fn(function* (s: AccountState) {
   return o;
 });
 
-// evolve guard: an event in the wrong state is a bug, so the command rolls back.
-const mustBeOpen = (s: AccountState, what: string): Open => {
-  if (s._tag !== "Open") throw new Error(`${what} in state ${s._tag}`);
-  return s;
-};
-
 const dayOf = (t: DateTime.Utc) => DateTime.formatIsoDate(t);
 
 /**
@@ -87,6 +82,26 @@ export class Account extends Domain.Aggregate("Account", {
   id: AccountId,
   state: AccountState,
   initial: { _tag: "Unopened" },
+  invariants: {
+    NeverOverdrawn: (account) => account._tag !== "Open" || account.balance >= 0,
+    WithinDailyLimit: (account) =>
+      account._tag !== "Open" || account.today.withdrawn <= DAILY_LIMIT,
+  },
+  transitions: {
+    AClosedAccountStaysClosed: ({ before, after }) =>
+      before._tag !== "Closed" || after._tag === "Closed",
+    MoneyLeavesOnlyByWithdrawalOrTransfer: ({ before, after, command }) =>
+      before._tag !== "Open" ||
+      after._tag !== "Open" ||
+      after.balance >= before.balance ||
+      command._tag === "WithdrawMoney" ||
+      command._tag === "DebitTransfer",
+    OnlyAnAgentChangesTheOwner: Effect.fn(function* ({ before, after }) {
+      if (before._tag !== "Open" || after._tag !== "Open") return true;
+      if (before.customerId === after.customerId) return true;
+      return (yield* CurrentActor)._tag === "Agent";
+    }),
+  },
   commands: [
     OpenAccount,
     ChangeOwner,
@@ -99,26 +114,31 @@ export class Account extends Domain.Aggregate("Account", {
     RefundTransfer,
     RecordSettlement,
   ],
+  keyOf: (command) => command.accountId,
   decide: {
-    OpenAccount: (s, cmd) =>
-      s._tag !== "Unopened"
+    OpenAccount: (account, cmd) =>
+      account._tag !== "Unopened"
         ? new AlreadyOpen()
         : [new AccountOpened({ customerId: cmd.customerId, owner: cmd.owner })],
 
-    ChangeOwner: Effect.fn(function* (s, cmd) {
-      if (s._tag !== "Open") return yield* new NotOpen();
+    ChangeOwner: Effect.fn(function* (account, cmd) {
+      if (account._tag !== "Open") return yield* new NotOpen();
       const actor = yield* CurrentActor;
       if (actor._tag !== "Agent") return yield* new NotPermitted();
-      return [new OwnerChanged({ previous: s.customerId, customerId: cmd.customerId, by: actor })];
+      return [
+        new OwnerChanged({ previous: account.customerId, customerId: cmd.customerId, by: actor }),
+      ];
     }),
 
-    DepositMoney: Effect.fn(function* (s, cmd) {
-      const o = yield* authorized(s);
+    DepositMoney: Effect.fn(function* (account, cmd) {
+      const o = yield* authorized(account);
       return [new MoneyDeposited({ amount: cmd.amount, balanceAfter: o.balance + cmd.amount })];
     }),
 
-    WithdrawMoney: Effect.fn(function* (s, cmd, { now }) {
-      const o = yield* authorized(s);
+    WithdrawMoney: Effect.fn(function* (account, cmd, { now }) {
+      // Recorded on this command's decide span; nothing else from it is.
+      yield* Effect.annotateCurrentSpan("bank.amount", cmd.amount);
+      const o = yield* authorized(account);
       if (o.frozen) return yield* new Frozen({ reason: o.frozen });
       if (cmd.amount > o.balance)
         return yield* new InsufficientFunds({ balance: o.balance, requested: cmd.amount });
@@ -128,20 +148,20 @@ export class Account extends Domain.Aggregate("Account", {
       return [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: o.balance - cmd.amount })];
     }),
 
-    FreezeAccount: Effect.fn(function* (s, cmd) {
-      const o = yield* authorized(s);
+    FreezeAccount: Effect.fn(function* (account, cmd) {
+      const o = yield* authorized(account);
       const actor = yield* CurrentActor;
       return o.frozen ? [] : [new AccountFrozen({ reason: cmd.reason, by: actor })];
     }),
 
-    CloseAccount: Effect.fn(function* (s) {
-      const o = yield* authorized(s);
+    CloseAccount: Effect.fn(function* (account) {
+      const o = yield* authorized(account);
       if (o.balance !== 0) return yield* new BalanceNotZero({ balance: o.balance });
       return [new AccountClosed()];
     }),
 
-    DebitTransfer: (s, cmd) => {
-      const o = openFor(s, cmd.requestedBy);
+    DebitTransfer: (account, cmd) => {
+      const o = openFor(account, cmd.requestedBy);
       if (o._tag !== "Open") return o;
       if (o.frozen) return new Frozen({ reason: o.frozen });
       if (cmd.amount > o.balance)
@@ -155,35 +175,35 @@ export class Account extends Domain.Aggregate("Account", {
       ];
     },
 
-    CreditTransfer: (s, cmd) =>
-      s._tag !== "Open"
+    CreditTransfer: (account, cmd) =>
+      account._tag !== "Open"
         ? new NotOpen()
         : [
             new TransferCredited({
               transferId: cmd.transferId,
               amount: cmd.amount,
-              balanceAfter: s.balance + cmd.amount,
+              balanceAfter: account.balance + cmd.amount,
             }),
           ],
 
-    RefundTransfer: (s, cmd) =>
-      s._tag === "Open"
+    RefundTransfer: (account, cmd) =>
+      account._tag === "Open"
         ? [
             new TransferRefunded({
               transferId: cmd.transferId,
               amount: cmd.amount,
-              balanceAfter: s.balance + cmd.amount,
+              balanceAfter: account.balance + cmd.amount,
             }),
           ]
         : [new RefundStranded({ transferId: cmd.transferId, amount: cmd.amount })],
 
-    RecordSettlement: (s, cmd) =>
-      s._tag === "Open"
+    RecordSettlement: (account, cmd) =>
+      account._tag === "Open"
         ? [
             new SettlementReceived({
               settlementId: cmd.settlementId,
               amount: cmd.amount,
-              balanceAfter: s.balance + cmd.amount,
+              balanceAfter: account.balance + cmd.amount,
             }),
           ]
         : [new SettlementOnClosedAccount({ settlementId: cmd.settlementId, amount: cmd.amount })],
@@ -198,36 +218,26 @@ export class Account extends Domain.Aggregate("Account", {
       frozen: null,
       today: { day: "", withdrawn: 0 },
     }),
-    OwnerChanged: (s, e) => ({ ...mustBeOpen(s, "OwnerChanged"), customerId: e.customerId }),
-    MoneyDeposited: (s, e) => balance.replace(e.balanceAfter, mustBeOpen(s, "MoneyDeposited")),
-    TransferDebited: (s, e) => balance.replace(e.balanceAfter, mustBeOpen(s, "TransferDebited")),
-    TransferCredited: (s, e) => balance.replace(e.balanceAfter, mustBeOpen(s, "TransferCredited")),
-    TransferRefunded: (s, e) => balance.replace(e.balanceAfter, mustBeOpen(s, "TransferRefunded")),
-    SettlementReceived: (s, e) =>
-      balance.replace(e.balanceAfter, mustBeOpen(s, "SettlementReceived")),
-    MoneyWithdrawn: (s, e, { at }) => {
-      const o = mustBeOpen(s, "MoneyWithdrawn");
-      const day = dayOf(at);
-      const withdrawn = (o.today.day === day ? o.today.withdrawn : 0) + e.amount;
-      return { ...balance.replace(e.balanceAfter, o), today: { day, withdrawn } };
-    },
-    AccountFrozen: (s, e) => frozen.replace(e.reason, mustBeOpen(s, "AccountFrozen")),
+    OwnerChanged: (s, e) => open.modify((o) => ({ ...o, customerId: e.customerId }))(s),
+    MoneyDeposited: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    TransferDebited: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    TransferCredited: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    TransferRefunded: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    SettlementReceived: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    MoneyWithdrawn: (s, e, { at }) =>
+      open.modify((o) => {
+        const day = dayOf(at);
+        const withdrawn = (o.today.day === day ? o.today.withdrawn : 0) + e.amount;
+        return { ...o, balance: e.balanceAfter, today: { day, withdrawn } };
+      })(s),
+    AccountFrozen: (s, e) => Optic.replace(s, frozen, e.reason),
     AccountClosed: () => ({ _tag: "Closed" as const }),
     RefundStranded: (s) => s,
     SettlementOnClosedAccount: (s) => s,
   },
 
   reply: {
-    DepositMoney: (s) => ({ balance: balance.get(mustBeOpen(s, "DepositMoney reply")) }),
-    WithdrawMoney: (s) => ({ balance: balance.get(mustBeOpen(s, "WithdrawMoney reply")) }),
-  },
-  // Clients may read and watch the account itself (its state and committed
-  // events) through an Api, judged like a view against its current state.
-  read: {
-    middleware: [Session],
-    rejects: [NotOwner],
-    validate: Effect.fn(function* (_request, s) {
-      yield* mustOwn(s._tag === "Open" ? s.customerId : null);
-    }),
+    DepositMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
+    WithdrawMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
   },
 }) {}

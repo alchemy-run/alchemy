@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   catchMissing,
@@ -92,8 +93,30 @@ export type AppsDomainMapping = Resource<
     resourceRecords: AppsDomainMappingResourceRecord[];
   },
   never,
-  Providers
+  Providers,
+  AppsDomainMappingLookup
 >;
+
+/**
+ * Props for {@link AppsDomainMapping.lookup}: find an apps domain mapping
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface AppsDomainMappingLookup {
+  /**
+   * Domain name served by the application (for example `www.example.com`).
+   */
+  domain: string;
+  /**
+   * App Engine application id.
+   */
+  appsId?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A custom domain serving an App Engine application.
@@ -135,6 +158,19 @@ export type AppsDomainMapping = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing apps domain mapping
+ * `AppsDomainMapping.lookup` references an apps domain mapping Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared apps domain mapping.
+ *
+ * **Example:** Reference an existing apps domain mapping
+ * ```typescript
+ * const appsDomainMapping = GCP.AppEngine.AppsDomainMapping.lookup({
+ *   domain: "my-domain",
+ * });
+ * ```
+ *
  * @resource
  * @category AppEngine
  */
@@ -143,7 +179,7 @@ export const AppsDomainMapping = Resource<AppsDomainMapping>("GCP.AppEngine.Apps
 export class AppsDomainMappingNotResolved extends Data.TaggedError(
   "GCP.AppEngine.AppsDomainMappingNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (mapping: appengine.DomainMapping, appsId: string, project: string) => {
@@ -167,7 +203,7 @@ const toAttrs = (mapping: appengine.DomainMapping, appsId: string, project: stri
 
 const getByDomain = (appsId: string, domain: string) =>
   domain.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(
         appengine.getAppsDomainMappings({
           appsId,
@@ -209,6 +245,16 @@ export const AppsDomainMappingProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ domain: lookupDomain, appsId: lookupAppsId }) {
+      const env = yield* GcpEnvironment.current;
+      const appsId = yield* resolveAppsId(lookupAppsId, undefined);
+      const domain = lookupDomain ?? "";
+      const existing = yield* getByDomain(appsId, domain);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, appsId, env.project);
+      return attrs;
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const appsId = yield* resolveAppsId(olds?.appsId, output?.appsId);
@@ -241,12 +287,10 @@ export const AppsDomainMappingProvider = () =>
       if (current === undefined) {
         const operation = yield* appengine
           .createAppsDomainMappings({
+            id: domain,
+            sslSettings,
             appsId,
             overrideStrategy: news.overrideStrategy,
-            body: {
-              id: domain,
-              sslSettings,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -259,7 +303,7 @@ export const AppsDomainMappingProvider = () =>
                       })
                     : Effect.fail(
                         new AppsDomainMappingNotResolved({
-                          name: `apps/${appsId}/domainMappings/${domain}`,
+                          resourceName: `apps/${appsId}/domainMappings/${domain}`,
                         }),
                       ),
                 ),
@@ -274,7 +318,7 @@ export const AppsDomainMappingProvider = () =>
 
       if (current === undefined) {
         return yield* new AppsDomainMappingNotResolved({
-          name: `apps/${appsId}/domainMappings/${domain}`,
+          resourceName: `apps/${appsId}/domainMappings/${domain}`,
         });
       }
 
@@ -284,10 +328,10 @@ export const AppsDomainMappingProvider = () =>
       const updateMask = updateMaskOf(typeChanged || certChanged ? "sslSettings" : undefined);
       if (updateMask.length > 0 && !jsonEqual(observedSsl, sslSettings)) {
         const operation = yield* appengine.patchAppsDomainMappings({
+          sslSettings,
           appsId,
           domainMappingsId: domain,
           updateMask,
-          body: { sslSettings },
         });
         yield* waitForOperation(operation, { appsId });
         current = (yield* getByDomain(appsId, domain)) ?? current;
@@ -303,7 +347,7 @@ export const AppsDomainMappingProvider = () =>
           appsId: output.appsId,
           domainMappingsId: output.domain,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation === undefined) return;
       yield* waitForOperation(operation, {
         appsId: output.appsId,

@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { ownershipMarkers, sameValue, withoutMarkers } from "./Common.ts";
 
-export type ConnectionAuthType = cognitiveservices.ConnectionAuthType;
+export type ConnectionAuthType = cognitiveservices.ConnectionPropertiesV2Input["authType"];
 export type ConnectionCategory = cognitiveservices.ConnectionCategory;
 
 type Secret = string | Redacted.Redacted<string>;
@@ -132,7 +132,7 @@ export const desiredConnection = Effect.fn(function* (id: string, settings: Conn
  * compared through the hash stored in metadata.
  */
 export const connectionMatches = (
-  observed: cognitiveservices.ConnectionPropertiesV2,
+  observed: cognitiveservices.ConnectionPropertiesV2Read,
   desired: cognitiveservices.ConnectionPropertiesV2Input,
 ) =>
   observed.authType === desired.authType &&
@@ -152,7 +152,7 @@ export const connectionAttrs = (
   name: string,
   connection: {
     readonly id?: string;
-    readonly properties: cognitiveservices.ConnectionPropertiesV2;
+    readonly properties: cognitiveservices.ConnectionPropertiesV2Read;
   },
 ): ConnectionAttrs => ({
   connectionName: name,

@@ -108,7 +108,7 @@ export {
 } from "./local-context.ts";
 
 export class ServiceNotCreated extends Data.TaggedError("Railway.ServiceNotCreated")<{
-  name: string;
+  resourceName: string;
   projectId: string;
 }> {}
 
@@ -179,13 +179,13 @@ const readInstance = Query.fn((environmentId: string, serviceId: string) =>
 const getById = (serviceId: string) =>
   readService(serviceId).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const getInstance = (environmentId: string, serviceId: string) =>
   readInstance(environmentId, serviceId).pipe(
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listProjectServices = (projectId: string) =>
@@ -228,6 +228,10 @@ const samePreDeployCommand = (observed: unknown, desired: string | null | undefi
     : observed === desired ||
       (Array.isArray(observed) && observed.length === 1 && observed[0] === desired));
 
+const sameStartCommand = (observed: unknown, desired: string | null | undefined) =>
+  desired === undefined ||
+  (desired === null ? observed == null || observed === "" : observed === desired);
+
 const assignIfChanged = <K extends keyof InstanceSettingsDelta>(
   input: InstanceSettingsDelta,
   key: K,
@@ -251,7 +255,7 @@ const instanceSettingsDelta = (input: {
     rootDirectory?: string;
     buildCommand?: string;
     preDeploy?: { command: string | null };
-    startCommand?: string;
+    startCommand?: string | null;
     healthcheckPath?: string;
     healthcheck?: string;
     healthcheckTimeout?: number;
@@ -306,9 +310,12 @@ const instanceSettingsDelta = (input: {
     delta.preDeployCommand = preDeployCommand === null ? [] : [preDeployCommand];
     changed = true;
   }
-  changed =
-    assignIfChanged(delta, "startCommand", input.props.startCommand, instance?.startCommand) ||
-    changed;
+  const startCommand = input.props.startCommand;
+  if (startCommand !== undefined && !sameStartCommand(instance?.startCommand, startCommand)) {
+    // Railway treats a `null` start command as no change; `""` clears it.
+    delta.startCommand = startCommand === null ? "" : startCommand;
+    changed = true;
+  }
   changed =
     assignIfChanged(
       delta,
@@ -595,8 +602,8 @@ const listUploadedDeployment = (input: {
     Stream.take(1),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)[0]),
-    Effect.timeoutOrElse({ duration: "8 seconds", orElse: () => Effect.succeed(undefined) }),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.timeoutOrElse({ duration: "8 seconds", orElse: () => Effect.undefined }),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const waitForDeploymentById = (input: {
@@ -1130,12 +1137,12 @@ export const ServiceProvider = () =>
               ...(sourceRepo !== undefined && props.branch !== undefined
                 ? { branch: props.branch }
                 : {}),
-            }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+            }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
             current = created ?? (yield* findByName(projectId, name));
           }
 
           if (current === undefined || isGoneService(current)) {
-            return yield* new ServiceNotCreated({ name, projectId });
+            return yield* new ServiceNotCreated({ resourceName: name, projectId });
           }
 
           if (current.name !== name) {

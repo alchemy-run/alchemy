@@ -372,8 +372,8 @@ const definitionKey = (properties: {
         actions: branch.actions.map((action) => ({
           type: action.type,
           name: action.name,
-          duration: action.duration,
-          selectorId: action.selectorId,
+          duration: action.type === "discrete" ? undefined : action.duration,
+          selectorId: action.type === "delay" ? undefined : action.selectorId,
           parameters: action.type === "delay" ? undefined : (action.parameters ?? []),
         })),
       })),
@@ -381,12 +381,15 @@ const definitionKey = (properties: {
     selectors: properties.selectors.map((selector) => ({
       type: selector.type,
       id: selector.id,
-      targets: selector.targets?.map((target) => ({
-        type: target.type,
-        id: target.id.toLowerCase(),
-      })),
-      queryString: selector.queryString,
-      subscriptionIds: selector.subscriptionIds,
+      targets:
+        selector.type === "List"
+          ? selector.targets?.map((target) => ({
+              type: target.type,
+              id: target.id.toLowerCase(),
+            }))
+          : undefined,
+      queryString: selector.type === "Query" ? selector.queryString : undefined,
+      subscriptionIds: selector.type === "Query" ? selector.subscriptionIds : undefined,
       filter: selector.filter,
     })),
   });

@@ -267,13 +267,18 @@ export const FabricProvider = () =>
       // Observe.
       let observed = yield* get;
 
+      // `instanceType` is any subtype, so TypeScript cannot pick the SDK
+      // union arm.
+      const customProperties =
+        news.customProperties as unknown as dr.FabricModelCustomPropertiesInput;
+
       // Ensure.
       if (observed === undefined) {
         yield* dr.CreateFabric({
           ...where,
           location,
           tags,
-          properties: { customProperties: news.customProperties },
+          properties: { customProperties },
         });
         observed = yield* settle;
       }
@@ -283,7 +288,7 @@ export const FabricProvider = () =>
         yield* dr.UpdateFabric({
           ...where,
           tags,
-          properties: { customProperties: news.customProperties },
+          properties: { customProperties },
         });
         observed = yield* settle;
       }

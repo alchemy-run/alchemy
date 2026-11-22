@@ -1,12 +1,13 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as networkmanagement from "@distilled.cloud/gcp/networkmanagement_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -72,13 +73,11 @@ test.provider.skipIf(runOrgLifecycle)(
       const organization = yield* resolveOrganization();
       const error = yield* Effect.flip(
         networkmanagement.createOrganizationsLocationsVpcFlowLogsConfigs({
+          state: "ENABLED",
+          aggregationInterval: "INTERVAL_5_SEC",
+          flowSampling: 1,
           parent: `organizations/${organization}/locations/global`,
           vpcFlowLogsConfigId: "alchemy-org-flow-logs-probe",
-          body: {
-            state: "ENABLED",
-            aggregationInterval: "INTERVAL_5_SEC",
-            flowSampling: 1,
-          },
         }),
       );
       expect(error._tag).toEqual("Forbidden");
@@ -105,6 +104,14 @@ test.provider.skipIf(!runOrgLifecycle)(
             aggregationInterval: "INTERVAL_5_SEC",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkManagement.OrganizationsVpcFlowLogsConfig.lookup({
+          vpcFlowLogsConfigId: created.vpcFlowLogsConfigId,
+          organization: created.organization,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/vpcFlowLogsConfigs/");

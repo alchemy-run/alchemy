@@ -1,5 +1,7 @@
 import * as Prisma from "@alchemy.run/prisma";
 import { AmbiguousBucketAccessKeyError } from "@alchemy.run/prisma/BucketAccessKey";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import {
   createBucketKey,
   deleteBucket,
@@ -8,10 +10,8 @@ import {
   getBucketKeys,
   updateBucket,
 } from "@distilled.cloud/prisma/management";
-import { expect } from "alchemy-test";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -22,6 +22,7 @@ import {
   markCreating,
   patchStateAttr,
 } from "./fixtures/Live.ts";
+import { expectFound } from "./lookup.ts";
 
 const live = Test.make({ providers: Prisma.providers() });
 
@@ -83,6 +84,7 @@ live.test.provider(
     yield* stack.destroy();
 
     const initial = yield* stack.deploy(bucketStack({ name: "uploads" }));
+    yield* expectFound(Prisma.Bucket.lookup({ bucketId: initial.bucket.bucketId }), initial.bucket);
     expect(initial.bucket.logicalId).toBe("Uploads");
     const created = yield* observeBucket(initial.bucket.bucketId);
     expect(created.project.id).toBe(initial.project.projectId);

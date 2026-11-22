@@ -1,5 +1,8 @@
+import * as NodeCrypto from "node:crypto";
 import * as NodeHttp from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import * as NodeOs from "node:os";
+import * as NodePath from "node:path";
 import { finished } from "node:stream";
 import { URL as NodeURL } from "node:url";
 import type * as vite from "vite";
@@ -34,6 +37,21 @@ export function workerRequestUrl(
 }
 
 /**
+ * A fresh path for the Worker runtime's Unix socket (`entrySocketPath`), or
+ * `undefined` where the proxy must use TCP: workerd listens on no Unix socket
+ * on Windows, and a path past the platform limit (104 bytes on macOS) can't be
+ * bound.
+ */
+export function workerSocketPath(): string | undefined {
+  if (process.platform === "win32") return undefined;
+  const path = NodePath.join(
+    NodeOs.tmpdir(),
+    `alchemy-${NodeCrypto.randomBytes(6).toString("hex")}.sock`,
+  );
+  return Buffer.byteLength(path) < 100 ? path : undefined;
+}
+
+/**
  * Forwards a dev or preview server request to the Worker runtime at `target`
  * and relays the Worker's response.
  *
@@ -45,6 +63,8 @@ export function forwardWorkerRequest(
   request: IncomingMessage,
   response: ServerResponse,
   target: NodeURL,
+  /** The runtime's Unix socket, which replaces `target`'s host and port. */
+  socketPath: string | undefined,
   proxySharedSecret: string,
   logger: vite.Logger,
   /** Receives the Worker's uncaught error, for Vite's error page. */
@@ -55,15 +75,27 @@ export function forwardWorkerRequest(
   if (client.destroyed) {
     return;
   }
-  // A connection per request, as a defense: with a pooled connection, requests
-  // were reported to fail with a 502 under load after workerd cut a stream
-  // short (#1869). We couldn't reproduce that against workerd, but a fresh
-  // loopback connection costs next to nothing. See
-  // https://github.com/alchemy-run/alchemy/pull/2242.
+  // A connection per request, since pooled ones race workerd's 5 s idle close
+  // (#1869). Over TCP each one holds an ephemeral port in TIME_WAIT, which
+  // runs out under load (#3194), so the runtime's Unix socket is preferred.
+  //
+  // A request with a body asks workerd for `100 Continue` first, and the body
+  // is only forwarded once workerd sends it, which it does when the Worker
+  // starts reading. A Worker that answers without reading (a 413 for an
+  // oversized upload) then never receives the body: workerd closes the
+  // connection after such a response, and an upload still in flight races the
+  // response, which macOS can lose to the connection reset.
+  const hasBody =
+    request.headers["transfer-encoding"] !== undefined ||
+    Number(request.headers["content-length"] ?? 0) > 0;
   const upstream = NodeHttp.request(target, {
+    socketPath,
     agent: false,
     method: request.method,
-    headers: proxyRequestHeaders(request, target, proxySharedSecret),
+    headers: {
+      ...proxyRequestHeaders(request, target, proxySharedSecret),
+      ...(hasBody ? { expect: "100-continue" } : {}),
+    },
   });
   // Watch the socket, not the response: Bun's `ServerResponse` emits no `close`
   // on a hang-up. Once the request body has been read, Bun reports no hang-up
@@ -99,10 +131,10 @@ export function forwardWorkerRequest(
   // takes down the server. Requests in flight while the Worker runtime is
   // being replaced hit exactly that.
   //
-  // The Worker may answer before reading the whole request body (a 413 for an
-  // oversized upload). workerd then closes the connection, so forwarding the
-  // rest of the body fails. That is no failure of the response, which
-  // `workerResponse` reports on its own.
+  // The Worker may also answer part-way through reading the body. workerd
+  // then closes the connection, so forwarding the rest of the body fails.
+  // That is no failure of the response, which `workerResponse` reports on its
+  // own.
   let answered = false;
   upstream.on("error", (error) => {
     if (!answered) {
@@ -135,7 +167,13 @@ export function forwardWorkerRequest(
       });
       return;
     }
-    response.writeHead(workerResponse.statusCode ?? 500, workerResponse.headers);
+    // The Worker's status text (`new Response(body, { statusText })`) is
+    // relayed as written, as `@cloudflare/vite-plugin` does since 1.65.
+    response.writeHead(
+      workerResponse.statusCode ?? 500,
+      workerResponse.statusMessage,
+      workerResponse.headers,
+    );
     workerResponse.pipe(response);
     // `pipe` alone would leave the client's response open forever when the
     // Worker's is cut short.
@@ -147,7 +185,22 @@ export function forwardWorkerRequest(
       }
     });
   });
-  request.pipe(upstream);
+  let forwarding = !hasBody;
+  if (hasBody) {
+    upstream.once("continue", () => {
+      forwarding = true;
+      request.pipe(upstream);
+    });
+  } else {
+    request.pipe(upstream);
+  }
+  // Answered without the body: drain the client's (see above), and close the
+  // upstream request, which never sent one.
+  upstream.once("response", (workerResponse) => {
+    if (forwarding) return;
+    request.resume();
+    finished(workerResponse, () => upstream.destroy());
+  });
 }
 
 interface ReducedError {

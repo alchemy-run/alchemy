@@ -106,7 +106,7 @@ export const makeTigrisS3Binding = <I extends { Bucket?: string }, A, E>(options
           resolvedEndpoint === undefined
         ) {
           return yield* new TigrisCredentialsMissing({
-            name: resolvedName ?? bucket.LogicalId,
+            resourceName: resolvedName ?? bucket.LogicalId,
           });
         }
         const scope = {

@@ -1,5 +1,5 @@
 import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -125,7 +125,7 @@ export const ConversationsFeedbackLabel = Resource<ConversationsFeedbackLabel>(
 export class ConversationsFeedbackLabelNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.ConversationsFeedbackLabelNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, feedbackLabelId: string) =>
@@ -164,10 +164,10 @@ const toAttrs = (label: cci.GoogleCloudContactcenterinsightsV1FeedbackLabel, pro
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsConversationsFeedbackLabels({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAll = (parent: string, project: string) =>
   cci.listAllFeedbackLabelsProjectsLocations.pages({ parent, pageSize: 100 }).pipe(
@@ -201,7 +201,7 @@ export const ConversationsFeedbackLabelProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const feedbackLabelId = yield* toResourceId(
         id,
@@ -214,7 +214,9 @@ export const ConversationsFeedbackLabelProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.label)) ? attrs : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.label))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -239,20 +241,18 @@ export const ConversationsFeedbackLabelProvider = () =>
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsConversationsFeedbackLabels({
+            label,
+            labeledResource: news.labeledResource,
+            qaAnswerLabel: news.qaAnswerLabel,
             parent: news.parent,
             feedbackLabelId,
-            body: {
-              label,
-              labeledResource: news.labeledResource,
-              qaAnswerLabel: news.qaAnswerLabel,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new ConversationsFeedbackLabelNotResolved({ name });
+        return yield* new ConversationsFeedbackLabelNotResolved({ resourceName: name });
       }
 
       const labelChanged = (current.label ?? "") !== label;
@@ -261,6 +261,9 @@ export const ConversationsFeedbackLabelProvider = () =>
 
       if (labelChanged || resourceChanged || qaChanged) {
         current = yield* cci.patchProjectsLocationsConversationsFeedbackLabels({
+          label,
+          labeledResource: news.labeledResource,
+          qaAnswerLabel: news.qaAnswerLabel,
           name: current.name ?? name,
           updateMask: [
             labelChanged ? "label" : undefined,
@@ -269,12 +272,6 @@ export const ConversationsFeedbackLabelProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name: current.name ?? name,
-            label,
-            labeledResource: news.labeledResource,
-            qaAnswerLabel: news.qaAnswerLabel,
-          },
         });
       }
 

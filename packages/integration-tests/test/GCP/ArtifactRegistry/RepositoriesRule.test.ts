@@ -1,10 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -41,6 +42,14 @@ test.provider(
           });
           return { images, rule };
         }),
+      );
+      yield* expectFound(
+        GCP.ArtifactRegistry.RepositoriesRule.lookup({
+          ruleId: created.rule.ruleId,
+          location: created.rule.location,
+          repository: created.rule.repository,
+        }),
+        created.rule,
       );
 
       expect(created.rule.name).toContain("/rules/");

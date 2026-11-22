@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as vault from "@distilled.cloud/gcp/vault_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { logLevel, runLifecycle } from "./common.ts";
@@ -40,12 +40,7 @@ test.provider.skipIf(!!process.env.GCP_TEST_VAULT)(
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
-        vault.createMatters({
-          body: {
-            name: "Alchemy Vault Probe",
-            description: "alchemy probe",
-          },
-        }),
+        vault.createMatters({ name: "Alchemy Vault Probe", description: "alchemy probe" }),
       );
       expect(error._tag).toEqual("VaultScopeInsufficient");
 

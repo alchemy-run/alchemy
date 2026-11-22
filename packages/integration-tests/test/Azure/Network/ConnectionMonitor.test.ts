@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as network from "@distilled.cloud/azure/network";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runExpensive, withVcpus } from "../gates.ts";
 import { logLevel, subscriptionId, tags, untilGone } from "./helpers.ts";

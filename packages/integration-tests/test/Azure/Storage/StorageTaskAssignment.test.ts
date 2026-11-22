@@ -1,10 +1,10 @@
 import * as Azure from "@alchemy.run/azure";
 import { ensureRegistered } from "@alchemy.run/azure/Arm";
-import { Credentials } from "@distilled.cloud/azure/Credentials";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import { armScopeFor, Credentials } from "@distilled.cloud/azure/Credentials";
 import * as storage from "@distilled.cloud/azure/storage";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -59,7 +59,9 @@ const taskRequest = (method: "GET" | "PUT" | "DELETE", rg: string, body?: unknow
     const client = yield* HttpClient.HttpClient;
     const url = `${credentials.apiBaseUrl}/subscriptions/${subscriptionId}/resourceGroups/${rg}/providers/Microsoft.StorageActions/storageTasks/${TASK_NAME}?api-version=${TASK_API_VERSION}`;
     let request = HttpClientRequest.make(method)(url).pipe(
-      HttpClientRequest.bearerToken(Redacted.value(credentials.bearerToken)),
+      HttpClientRequest.bearerToken(
+        Redacted.value(yield* credentials.token(armScopeFor(credentials.apiBaseUrl))),
+      ),
     );
     if (body !== undefined) {
       request = request.pipe(HttpClientRequest.bodyJsonUnsafe(body));

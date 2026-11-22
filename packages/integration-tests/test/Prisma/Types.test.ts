@@ -4,7 +4,7 @@ import type {
   DatabaseConnectionWithOptionalSecrets,
   DatabaseSourceInput,
 } from "@alchemy.run/prisma/Types";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 
 const nullableDatabaseSource: Database["source"] = null;
 const endpointSecretMayBeAbsent: DatabaseConnectionWithOptionalSecrets["endpoints"] = {

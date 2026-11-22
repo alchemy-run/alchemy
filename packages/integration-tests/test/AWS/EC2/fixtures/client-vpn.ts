@@ -1,11 +1,11 @@
 import * as AWS from "@alchemy.run/aws";
 import { Subnet, Vpc } from "@alchemy.run/aws/EC2";
 import type { ClientVpnEndpointProps } from "@alchemy.run/aws/EC2/ClientVpnEndpoint";
+import { expect } from "@alchemy.run/test";
+import { withProviders } from "@alchemy.run/test/Core";
 import * as acm from "@distilled.cloud/aws/acm";
 import * as ec2 from "@distilled.cloud/aws/ec2";
-import { expect } from "alchemy-test";
 import { createInternalTags, createTagsList } from "alchemy/Tags";
-import { withProviders } from "alchemy/Test/Core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

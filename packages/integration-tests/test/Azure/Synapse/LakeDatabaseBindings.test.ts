@@ -1,11 +1,11 @@
 import * as Azure from "@alchemy.run/azure";
-import { Credentials, type Config } from "@distilled.cloud/azure";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import { ARM_SCOPE, Credentials, type Config } from "@distilled.cloud/azure";
 import * as syms from "@distilled.cloud/azure/synapse-data";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -53,10 +53,10 @@ describe("Synapse lake database request encoding", { tags: ["provider:azure"] },
       const credentials = Layer.succeed(
         Credentials,
         Effect.succeed<Config>({
-          bearerToken: Redacted.make("arm-token"),
           subscriptionId: "00000000-0000-0000-0000-000000000001",
           apiBaseUrl: "https://management.azure.com",
-          tokenFor: (scope: string) => Effect.succeed(Redacted.make(`aad:${scope}`)),
+          token: (scope: string) =>
+            Effect.succeed(Redacted.make(scope === ARM_SCOPE ? "arm-token" : `aad:${scope}`)),
         }),
       );
       const result = yield* operation.pipe(
@@ -125,16 +125,20 @@ describe("Synapse lake database request encoding", { tags: ["provider:azure"] },
   test(
     "DDL responses decode from SyMS's PascalCase",
     Effect.gen(function* () {
-      const { result } = yield* captured(
+      const { calls, result } = yield* captured(
         syms.PutDatabase({
           endpoint,
           databaseName: "sales",
           name: "sales",
           type: "DATABASE",
-          properties: {},
+          properties: { source: { location: "abfss://lake@example.dfs.core.windows.net/sales" } },
         }),
         '{"DDLType":"CREATE","EntityName":"sales","EntityType":"DATABASE","PublishStatus":"PUBLISHED","OriginObjectId":null,"ObjectId":"o-1","ObjectVersion":1}',
       );
+      // SyMS reads the database properties in PascalCase.
+      expect(JSON.parse(calls[0]?.body ?? "{}").properties).toEqual({
+        Source: { Location: "abfss://lake@example.dfs.core.windows.net/sales" },
+      });
       expect(result._tag).toEqual("Success");
       if (result._tag === "Success") {
         expect(result.success).toMatchObject({

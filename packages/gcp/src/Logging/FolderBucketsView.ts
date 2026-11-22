@@ -67,8 +67,26 @@ export type FolderBucketsView = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FolderBucketsViewLookup
 >;
+
+/**
+ * Props for {@link FolderBucketsView.lookup}: find a folder buckets view
+ * this stack doesn't manage by its identifiers.
+ */
+export interface FolderBucketsViewLookup {
+  /**
+   * View id (the `{view}` segment of `{bucket}/views/{view}`). Limited to
+   * 100 characters: letters, digits, underscores, hyphens.
+   */
+  viewId: string;
+  /**
+   * Full resource name of the parent log bucket
+   * (`{parent}/locations/{location}/buckets/{bucket}`).
+   */
+  bucketName: string;
+}
 
 /**
  * A Cloud Logging view over log entries in a folder (or project) log bucket.
@@ -98,6 +116,20 @@ export type FolderBucketsView = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing folder buckets view
+ * `FolderBucketsView.lookup` references a folder buckets view Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared folder buckets view.
+ *
+ * **Example:** Reference an existing folder buckets view
+ * ```typescript
+ * const folderBucketsView = GCP.Logging.FolderBucketsView.lookup({
+ *   viewId: "my-view",
+ *   bucketName: "my-bucket",
+ * });
+ * ```
+ *
  * @resource
  * @category Logging
  */
@@ -106,7 +138,7 @@ export const FolderBucketsView = Resource<FolderBucketsView>("GCP.Logging.Folder
 export class FolderBucketsViewNotResolved extends Data.TaggedError(
   "GCP.Logging.FolderBucketsViewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (bucketName: string, viewId: string) => `${bucketName}/views/${viewId}`;
@@ -129,7 +161,7 @@ const toAttrs = (view: logging.LogView, bucketName: string) => {
 const getByName = (name: string) =>
   logging
     .getFoldersLocationsBucketsViews({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const FolderBucketsViewProvider = () =>
   Provider.succeed(FolderBucketsView, {
@@ -144,6 +176,14 @@ export const FolderBucketsViewProvider = () =>
       const bucketChanged = previousBucket !== undefined && news.bucketName !== previousBucket;
       if (!idChanged && !bucketChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
+    }),
+
+    lookup: Effect.fn(function* ({ viewId, bucketName }) {
+      if (bucketName === undefined) return undefined;
+      const name = resourceName(bucketName, viewId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, bucketName);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -203,19 +243,17 @@ export const FolderBucketsViewProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createFoldersLocationsBucketsViews({
+            filter: news.filter,
+            description: desiredDescription,
             parent: news.bucketName,
             viewId,
-            body: {
-              filter: news.filter,
-              description: desiredDescription,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new FolderBucketsViewNotResolved({ name });
+        return yield* new FolderBucketsViewNotResolved({ resourceName: name });
       }
 
       const filterChanged = (current.filter ?? "") !== (news.filter ?? "");
@@ -227,12 +265,10 @@ export const FolderBucketsViewProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* logging.patchFoldersLocationsBucketsViews({
+          filter: news.filter ?? "",
+          description: desiredDescription,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            filter: news.filter ?? "",
-            description: desiredDescription,
-          },
         });
       }
 

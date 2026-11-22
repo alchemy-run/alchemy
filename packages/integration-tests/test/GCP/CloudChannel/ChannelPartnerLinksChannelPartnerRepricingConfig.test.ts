@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudchannel from "@distilled.cloud/gcp/cloudchannel_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import {
   logLevel,
@@ -44,19 +44,17 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         cloudchannel.createAccountsChannelPartnerLinksChannelPartnerRepricingConfigs({
-          parent: probePartner,
-          body: {
-            repricingConfig: {
-              effectiveInvoiceMonth: probeMonth,
-              rebillingBasis: "COST_AT_LIST",
-              adjustment: {
-                percentageAdjustment: { percentage: { value: "0.00" } },
-              },
-              entitlementGranularity: {
-                entitlement: `${probeAccountName}/customers/alchemy-missing/entitlements/alchemy-missing`,
-              },
+          repricingConfig: {
+            effectiveInvoiceMonth: probeMonth,
+            rebillingBasis: "COST_AT_LIST",
+            adjustment: {
+              percentageAdjustment: { percentage: { value: "0.00" } },
+            },
+            entitlementGranularity: {
+              entitlement: `${probeAccountName}/customers/alchemy-missing/entitlements/alchemy-missing`,
             },
           },
+          parent: probePartner,
         }),
       );
       expect(error._tag).toEqual("Forbidden");

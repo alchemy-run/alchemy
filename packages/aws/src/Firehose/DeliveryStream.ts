@@ -19,12 +19,13 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type DeliveryStreamName = string;
 export type DeliveryStreamArn =
-  `arn:aws:firehose:${RegionID}:${AccountID}:deliverystream/${DeliveryStreamName}`;
+  `arn:${Partition}:firehose:${RegionID}:${AccountID}:deliverystream/${DeliveryStreamName}`;
 
 export type DeliveryStreamStatus =
   | "CREATING"
@@ -233,8 +234,18 @@ export interface DeliveryStream extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DeliveryStreamLookup
 > {}
+
+/**
+ * Props for {@link DeliveryStream.lookup}: find a delivery stream this stack doesn't
+ * manage, in the ambient account and region, by name.
+ */
+export interface DeliveryStreamLookup {
+  /** The name of the existing delivery stream. */
+  deliveryStreamName: string;
+}
 
 /**
  * An Amazon Data Firehose delivery stream that buffers records and delivers
@@ -323,6 +334,19 @@ export interface DeliveryStream extends Resource<
  *     Data: new TextEncoder().encode(`${line}\n`),
  *   })),
  * });
+ * ```
+ *
+ * ### Looking up an existing delivery stream
+ * `DeliveryStream.lookup` references a delivery stream Alchemy doesn't manage (created in the
+ * console or by another stack), found by `deliveryStreamName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Write records to an existing delivery stream
+ * ```typescript
+ * const stream = AWS.Firehose.DeliveryStream.lookup({ deliveryStreamName: "clicks" });
+ *
+ * // init
+ * const putRecord = yield* AWS.Firehose.PutRecord(stream);
  * ```
  *
  * @resource
@@ -478,7 +502,7 @@ const toAttrs = ({
 const describeDeliveryStream = Effect.fn(function* (deliveryStreamName: string) {
   const response = yield* firehose
     .describeDeliveryStream({ DeliveryStreamName: deliveryStreamName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return response?.DeliveryStreamDescription;
 });
 
@@ -498,7 +522,7 @@ const readDeliveryStream = Effect.fn(function* ({
   // means it's gone.
   const tagsResponse = yield* firehose
     .listTagsForDeliveryStream({ DeliveryStreamName: deliveryStreamName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!tagsResponse) {
     return undefined;
   }
@@ -694,6 +718,13 @@ export const DeliveryStreamProvider = () =>
             );
           }),
 
+        lookup: Effect.fn(function* ({ deliveryStreamName }) {
+          const attrs = yield* readDeliveryStream({ deliveryStreamName, roleName: undefined });
+          // The stream's destination role names the role a declared stream
+          // records, so a lookup of a managed stream matches its state.
+          return attrs && { ...attrs, roleName: attrs.roleArn.split("/").at(-1) || undefined };
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const deliveryStreamName =
             output?.deliveryStreamName ?? (yield* createDeliveryStreamName(id, olds ?? {}));
@@ -725,7 +756,7 @@ export const DeliveryStreamProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const { accountId } = yield* AWSEnvironment.current;
+          const { accountId, partition } = yield* AWSEnvironment.current;
 
           if (!news?.destination?.bucketArn) {
             return yield* new DeliveryStreamValidationError({
@@ -756,7 +787,7 @@ export const DeliveryStreamProvider = () =>
             ? (output?.roleName ?? (yield* createRoleName(id)))
             : undefined;
           const synthesizedRoleArn = roleName
-            ? `arn:aws:iam::${accountId}:role/${roleName}`
+            ? `arn:${partition}:iam::${accountId}:role/${roleName}`
             : undefined;
           const destinationRoleArn = news.destination.roleArn ?? synthesizedRoleArn!;
           const sourceRoleArn = news.source
@@ -940,7 +971,7 @@ export const DeliveryStreamProvider = () =>
             .listTagsForDeliveryStream({
               DeliveryStreamName: deliveryStreamName,
             })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           const observedTags = toTagRecord(observedTagsResponse?.Tags);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (removed.length > 0) {

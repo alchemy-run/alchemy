@@ -1,11 +1,26 @@
 import type { Server } from "node:http";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Scope from "effect/Scope";
+
+export class ManagedHttpShutdownInvalidProps extends Data.TaggedError(
+  "ManagedHttpShutdownInvalidProps",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ManagedHttpShutdownOperationFailed extends Data.TaggedError(
+  "ManagedHttpShutdownOperationFailed",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /** Internal HTTP and dependency lifetimes, separate from managed run fibers. */
 export class ManagedHttpShutdown extends Context.Service<
@@ -59,9 +74,9 @@ export const withManagedHttpShutdown = (
 ) =>
   Effect.gen(function* () {
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 300_000) {
-      return yield* Effect.fail(
-        new Error("ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS must be a positive integer at most 300000"),
-      );
+      return yield* new ManagedHttpShutdownInvalidProps({
+        message: "ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS must be a positive integer at most 300000",
+      });
     }
 
     const signal = yield* Deferred.make<void>();
@@ -117,6 +132,7 @@ export const withManagedHttpShutdown = (
     yield* Effect.addFinalizer((exit) => Scope.close(dependencies, exit));
     yield* Effect.addFinalizer((exit) => Scope.close(scope, exit));
 
+    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the host runs the user's program and re-raises its first failure as-is
     const fiber = yield* program.pipe(
       Effect.provideService(ManagedHttpShutdown, {
         scope,
@@ -179,9 +195,12 @@ export const withManagedHttpShutdown = (
     for (const cause of failures) {
       yield* Effect.logError("Managed process cleanup failed", cause);
     }
+    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the host runs the user's program and re-raises its first failure as-is
     if (failures.length > 0) return yield* Effect.failCause(failures[0]!);
     if (timedOut) {
-      return yield* Effect.fail(new Error("Managed process drain deadline exceeded"));
+      return yield* new ManagedHttpShutdownOperationFailed({
+        message: "Managed process drain deadline exceeded",
+      });
     }
     return interrupted;
   }).pipe(Effect.scoped);

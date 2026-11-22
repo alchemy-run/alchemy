@@ -1,13 +1,14 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { waitForOperation } from "@alchemy.run/gcp/Operation";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as container from "@distilled.cloud/gcp/container_v1";
-import { expect } from "alchemy-test";
 import { adopt } from "alchemy/AdoptPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { CAPACITY_ZONE, withGkeClusterSlot } from "../zones.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -102,25 +103,23 @@ const withHostCluster = <A, E, R>(
     if (existing?.status === "RUNNING") return;
     if (existing !== undefined) yield* deleteHost;
     const created = yield* container.createProjectsLocationsClusters({
-      parent: `projects/${project}/locations/${HOST_LOCATION}`,
-      body: {
-        cluster: {
-          name: HOST_CLUSTER_ID,
-          ipAllocationPolicy: { useIpAliases: true },
-          nodePools: [
-            {
-              name: "default-pool",
-              initialNodeCount: 1,
-              config: {
-                machineType: "e2-medium",
-                diskSizeGb: 20,
-                diskType: "pd-standard",
-                spot: true,
-              },
+      cluster: {
+        name: HOST_CLUSTER_ID,
+        ipAllocationPolicy: { useIpAliases: true },
+        nodePools: [
+          {
+            name: "default-pool",
+            initialNodeCount: 1,
+            config: {
+              machineType: "e2-medium",
+              diskSizeGb: 20,
+              diskType: "pd-standard",
+              spot: true,
             },
-          ],
-        },
+          },
+        ],
       },
+      parent: `projects/${project}/locations/${HOST_LOCATION}`,
     });
     yield* waitClusterOp(project, created);
   });
@@ -161,6 +160,14 @@ test.provider.skipIf(!runLifecycle)(
                   advancedMachineFeatures: { enableNestedVirtualization: false },
                 });
               }),
+            );
+            yield* expectFound(
+              GCP.Container.NodePool.lookup({
+                nodePoolId: created.nodePoolId,
+                location: created.location,
+                cluster: created.clusterId,
+              }),
+              created,
             );
 
             expect(created.name).toContain("/nodePools/");
@@ -249,14 +256,12 @@ test.provider.skipIf(!runLifecycle)(
               .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
             if (existingForeign === undefined) {
               const op = yield* container.createProjectsLocationsClustersNodePools({
-                parent: `projects/${project}/locations/${hostLocation}/clusters/${hostId}`,
-                body: {
-                  nodePool: {
-                    name: foreignId,
-                    initialNodeCount: POOL_NODE_COUNT,
-                    config: { machineType: "e2-medium", diskSizeGb: 20, spot: true },
-                  },
+                nodePool: {
+                  name: foreignId,
+                  initialNodeCount: POOL_NODE_COUNT,
+                  config: { machineType: "e2-medium", diskSizeGb: 20, spot: true },
                 },
+                parent: `projects/${project}/locations/${hostLocation}/clusters/${hostId}`,
               });
               yield* waitClusterOp(project, op);
             }

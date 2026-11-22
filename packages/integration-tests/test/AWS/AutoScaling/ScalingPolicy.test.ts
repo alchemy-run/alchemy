@@ -1,12 +1,12 @@
 import * as AWS from "@alchemy.run/aws";
 import { AutoScalingGroup, LaunchTemplate, ScalingPolicy } from "@alchemy.run/aws/AutoScaling";
 import { amazonLinux2023, Subnet, Vpc } from "@alchemy.run/aws/EC2";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as ec2 from "@distilled.cloud/aws/ec2";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
 import { isResourceState, State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { getAutoScalingTestSubnetId, getTestAmiId } from "./TestNetwork.ts";

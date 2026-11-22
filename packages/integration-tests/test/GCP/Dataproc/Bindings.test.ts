@@ -1,11 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as dataproc from "@distilled.cloud/gcp/dataproc_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import { CAPACITY_REGION } from "../zones.ts";
 import DataprocBindingsHost, { Jobs } from "./fixtures/bindings-host.ts";
 
@@ -30,13 +30,13 @@ const rolesOf = (bindings: ReadonlyArray<{ role?: string; members?: ReadonlyArra
 
 const projectRoles = Effect.gen(function* () {
   const policy = yield* crm.getIamPolicyProjects({
+    options: { requestedPolicyVersion: 3 },
     resource: `projects/${project}`,
-    body: { options: { requestedPolicyVersion: 3 } },
   });
   return rolesOf(policy.bindings ?? []);
 });
 
-describe.skipIf(!dockerAvailable || !runLifecycle)(
+describe.skipIf(!runLifecycle)(
   "Dataproc Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:dataproc", "provider:gcp:run", "live"],

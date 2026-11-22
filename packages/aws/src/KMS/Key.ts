@@ -12,11 +12,12 @@ import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
 import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type KeyId = string;
-export type KeyArn = `arn:aws:kms:${RegionID}:${AccountID}:key/${KeyId}`;
+export type KeyArn = `arn:${Partition}:kms:${RegionID}:${AccountID}:key/${KeyId}`;
 
 export type { KeySpec, KeyState, KeyUsageType } from "@distilled.cloud/aws/kms";
 
@@ -101,8 +102,21 @@ export interface Key extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  KeyLookup
 > {}
+
+/**
+ * Props for {@link Key.lookup}: find a KMS key this stack doesn't manage, in
+ * the ambient account and region.
+ */
+export interface KeyLookup {
+  /**
+   * The key's id or ARN, or an alias pointing to it (`alias/app` or the
+   * alias ARN). An AWS managed key's alias (`alias/aws/s3`) finds it too.
+   */
+  keyId: string;
+}
 
 /**
  * A customer managed AWS KMS key.
@@ -164,6 +178,20 @@ export interface Key extends Resource<
  *   KeySpec: "AES_256",
  * });
  * ```
+ *
+ * ### Looking up an existing key
+ * `Key.lookup` references a key Alchemy doesn't manage (created in the
+ * console or by another stack, or an AWS managed key), found by `keyId`: its
+ * id, ARN or an alias. It is read during plan/deploy and never created,
+ * updated or deleted, and binds like a declared key.
+ *
+ * **Example:** Encrypt with an existing key
+ * ```typescript
+ * const key = AWS.KMS.Key.lookup({ keyId: "alias/app" });
+ *
+ * // init
+ * const encrypt = yield* AWS.KMS.Encrypt(key);
+ * ```
  */
 export const Key = Resource<Key>("AWS.KMS.Key");
 
@@ -201,6 +229,12 @@ export const KeyProvider = () =>
           (key): key is Key["Attributes"] =>
             key !== undefined && key.keyState !== "PendingDeletion",
         );
+      }),
+    lookup: ({ keyId }) =>
+      readKey({
+        keyId,
+        deletionWindowInDays: defaultDeletionWindowInDays,
+        includeAwsManaged: true,
       }),
     read: Effect.fn(function* ({ olds = {}, output }) {
       // KMS keys have no stable user-assignable identity — only a
@@ -273,7 +307,14 @@ export const KeyProvider = () =>
         if (!keyId) {
           return yield* Effect.die(new Error("createKey returned no key ID"));
         }
-        state = yield* readKey({ keyId, deletionWindowInDays });
+        // DescribeKey can answer NotFound for a moment after CreateKey.
+        state = yield* readKey({ keyId, deletionWindowInDays }).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (read) => read !== undefined,
+            times: 15,
+          }),
+        );
         if (!state) {
           return yield* Effect.die(new Error(`failed to read created KMS key ${keyId}`));
         }
@@ -413,7 +454,7 @@ export const KeyProvider = () =>
       const remaining = yield* Effect.repeat(
         kms.describeKey({ KeyId: output.keyId }).pipe(
           Effect.map((response) => response.KeyMetadata?.KeyState),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         ),
         {
           schedule: Schedule.fixed("250 millis"),
@@ -433,17 +474,24 @@ export const KeyProvider = () =>
 const readKey = Effect.fn(function* ({
   keyId,
   deletionWindowInDays,
+  includeAwsManaged = false,
 }: {
   keyId: string;
   deletionWindowInDays: number;
+  /** Find AWS managed keys too; only a lookup can refer to one. */
+  includeAwsManaged?: boolean;
 }) {
   const described = yield* kms
     .describeKey({ KeyId: keyId })
-    .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
   const metadata = described?.KeyMetadata;
   if (!metadata?.Arn) return undefined;
-  if (metadata.KeyManager !== undefined && metadata.KeyManager !== "CUSTOMER") {
+  if (
+    !includeAwsManaged &&
+    metadata.KeyManager !== undefined &&
+    metadata.KeyManager !== "CUSTOMER"
+  ) {
     return undefined;
   }
 
@@ -552,9 +600,9 @@ const readKeyRotation = Effect.fn(function* (keyId: string) {
       periodInDays: response.RotationPeriodInDays,
     })),
     Effect.catchTags({
-      UnsupportedOperationException: () => Effect.succeed(undefined),
-      KMSInvalidStateException: () => Effect.succeed(undefined),
-      NotFoundException: () => Effect.succeed(undefined),
+      UnsupportedOperationException: () => Effect.undefined,
+      KMSInvalidStateException: () => Effect.undefined,
+      NotFoundException: () => Effect.undefined,
     }),
   );
 });
@@ -563,8 +611,8 @@ const readKeyPolicy = Effect.fn(function* (keyId: string) {
   return yield* kms.getKeyPolicy({ KeyId: keyId, PolicyName: "default" }).pipe(
     Effect.map((response) => response.Policy),
     Effect.catchTags({
-      KMSInvalidStateException: () => Effect.succeed(undefined),
-      NotFoundException: () => Effect.succeed(undefined),
+      KMSInvalidStateException: () => Effect.undefined,
+      NotFoundException: () => Effect.undefined,
     }),
   );
 });

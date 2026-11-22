@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { AccountID } from "../Environment.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -15,7 +16,7 @@ export type {
 
 export type ApiDestinationName = string;
 export type ApiDestinationArn =
-  `arn:aws:events:${RegionID}:${AccountID}:api-destination/${ApiDestinationName}/${string}`;
+  `arn:${Partition}:events:${RegionID}:${AccountID}:api-destination/${ApiDestinationName}/${string}`;
 
 export interface ApiDestinationProps {
   /**
@@ -103,8 +104,28 @@ export interface ApiDestination extends Resource<
     apiDestinationState: eventbridge.ApiDestinationState;
   },
   never,
-  Providers
+  Providers,
+  ApiDestinationLookup
 > {}
+
+/**
+ * Props for {@link ApiDestination.lookup}: find an API destination this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ApiDestinationLookup {
+  /** The name of the existing API destination. *
+   * ### Looking up an existing API destination
+   * `ApiDestination.lookup` references an API destination Alchemy doesn't manage (created in the
+   * console or by another stack), found by `apiDestinationName`. It is read during
+   * plan/deploy and never created, updated or deleted.
+   *
+   * **Example:** Reference an existing API destination
+   * ```typescript
+   * const existing = AWS.EventBridge.ApiDestination.lookup({ apiDestinationName: "..." });
+   * ```
+   */
+  apiDestinationName: string;
+}
 export const ApiDestination = Resource<ApiDestination>("AWS.EventBridge.ApiDestination");
 
 export const ApiDestinationProvider = () =>
@@ -129,13 +150,26 @@ export const ApiDestinationProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ apiDestinationName: name }) {
+          const described = yield* eventbridge
+            .describeApiDestination({ Name: name })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (!described?.Name || !described.ApiDestinationArn) {
+            return undefined;
+          }
+          return {
+            apiDestinationName: described.Name,
+            apiDestinationArn: described.ApiDestinationArn as ApiDestinationArn,
+            apiDestinationState: described.ApiDestinationState ?? "ACTIVE",
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           // API destinations don't support tags; the deterministic physical
           // name is the ownership signal (it embeds app/stage/logical id).
           const name = output?.apiDestinationName ?? (yield* createDestinationName(id, olds ?? {}));
           const described = yield* eventbridge
             .describeApiDestination({ Name: name })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (!described?.Name || !described.ApiDestinationArn) {
             return undefined;
           }
@@ -178,7 +212,7 @@ export const ApiDestinationProvider = () =>
           // destination falls through to create.
           const observed = yield* eventbridge
             .describeApiDestination({ Name: name })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (!observed?.ApiDestinationArn) {
             // Ensure — create the destination; tolerate an AlreadyExists

@@ -1,9 +1,11 @@
+import { RuntimeConfigProviderLive } from "alchemy/Runtime";
 import {
   entrypointLayer,
   resolveProgram,
   runProcess,
   stackConstant,
 } from "alchemy/Runtime/Bootstrap";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 /**
  * Process bootstrap core for `AWS.Lambda.MicrovmImage` images. The runtime
  * (`bun` | `node`) is chosen at deploy time, and each is an optional peer,
@@ -45,15 +47,17 @@ export const bootstrapMicrovm = (
   const platform = Layer.mergeAll(
     runtime.services,
     FetchHttpClient.layer,
+    SecureRandom.layerWebCrypto,
     Logger.layer([Logger.consolePretty()]),
   );
 
-  const program = resolveProgram("default", { telemetry: true }).pipe(
+  const program = resolveProgram("default").pipe(
     Effect.provide(
       entrypointLayer(entrypoint).pipe(
         Layer.provideMerge(stackConstant(options.stack.name, options.stack.stage)),
         Layer.provideMerge(runtime.httpServer),
         Layer.provideMerge(platform),
+        Layer.provideMerge(RuntimeConfigProviderLive),
         Layer.provideMerge(Layer.succeed(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info")),
       ),
     ),

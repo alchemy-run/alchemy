@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudbuild from "@distilled.cloud/gcp/cloudbuild_v2";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -101,9 +102,9 @@ test.provider(
 
       const error = yield* Effect.flip(
         cloudbuild.createProjectsLocationsConnectionsRepositories({
+          remoteUri,
           parent: connection.name,
           repositoryId: "alchemy-probe-source",
-          body: { remoteUri },
         }),
       );
       expect(error._tag).toBe("BadRequest");
@@ -134,6 +135,14 @@ test.provider.skipIf(!runLifecycle)(
             annotations: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.CloudBuild.Repository.lookup({
+          repositoryId: created.repositoryId,
+          connection: created.connection,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/repositories/");

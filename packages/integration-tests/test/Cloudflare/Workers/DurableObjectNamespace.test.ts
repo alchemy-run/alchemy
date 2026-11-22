@@ -1,13 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { CloudflareApiLive } from "@alchemy.run/cloudflare/Providers";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { describe, expect } from "alchemy-test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Output from "alchemy/Output";
 import { State } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -16,6 +16,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 import { getWorkerTags } from "../Utils/Worker.ts";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import Stack from "./fixtures/do-rpc/stack.ts";
@@ -483,6 +484,37 @@ export default {
 };
 `;
 
+/**
+ * A Worker hosting counter classes named `classes`; its fetch reads and
+ * writes the first, and answers with that class's name too.
+ */
+const counterClassesScript = (
+  ...classes: string[]
+) => `import { DurableObject } from "cloudflare:workers";
+${classes
+  .map(
+    (className) => `export class ${className} extends DurableObject {
+  async increment() {
+    const next = ((await this.ctx.storage.get("count")) ?? 0) + 1;
+    await this.ctx.storage.put("count", next);
+    return next;
+  }
+  async get() {
+    return (await this.ctx.storage.get("count")) ?? 0;
+  }
+}`,
+  )
+  .join("\n")}
+export default {
+  async fetch(request, env) {
+    const stub = env.${classes[0]}.getByName("shared");
+    const url = new URL(request.url);
+    const value = url.pathname === "/increment" ? await stub.increment() : await stub.get();
+    return Response.json({ value, className: "${classes[0]}" });
+  },
+};
+`;
+
 const consumerWorkerScript = `export default {
   async fetch(request, env) {
     const stub = env.Counter.getByName("shared");
@@ -882,7 +914,7 @@ export default { async fetch() { return new Response("v4"); } };
           // leave the worker behind, and `putScript` would then reject the
           // `newSqliteClasses` migration ("class already exists"), so purge any
           // leftover first.
-          const physicalName = "alchemy-test-do-adopt";
+          const physicalName = testName("alchemy-test-do-adopt");
 
           yield* workers
             .deleteScript({ accountId, scriptName: physicalName, force: true })
@@ -950,9 +982,7 @@ export default { async fetch() { return new Response("v4"); } };
       (scratch) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const physicalName = `alchemy-test-do-exports-${scratch.stage
-            .toLowerCase()
-            .replace(/[^a-z0-9-]/g, "-")}`;
+          const physicalName = testName("alchemy-test-do-exports");
           const script = `${hostWorkerScript}\nexport class Unbound extends DurableObject {}\n`;
 
           yield* workers
@@ -1017,6 +1047,106 @@ export default { async fetch() { return new Response("v4"); } };
 
           yield* scratch.destroy();
           expect(yield* namespacesOf).toEqual({});
+        }).pipe(logLevel),
+      { timeout: 180_000 },
+    );
+
+    // `renamedFrom` gives a class under a new binding the objects of the class
+    // it was called before: the deploy ships a `renamed_classes` migration, so
+    // the namespace (and its id) carries over. Once renamed, it is inert.
+    test.provider(
+      "renamedFrom carries a class's objects to a class under a new binding",
+      (scratch) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const namespacesOf = (scriptName: string) =>
+            durableObjects.listNamespaces.items({ accountId }).pipe(
+              Stream.filter((ns) => ns.script === scriptName),
+              Stream.runCollect,
+              Effect.map((namespaces) =>
+                Object.fromEntries(Array.from(namespaces).map((ns) => [ns.class, ns.id])),
+              ),
+            );
+          const readUntil = (url: string, className: string) =>
+            fetchJsonReady<{ value: number; className: string }>(`${url}/get`).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("2 seconds"),
+                until: (body) => body.className === className,
+                times: 30,
+              }),
+            );
+
+          const v1 = yield* scratch.deploy(
+            Cloudflare.Worker("worker", {
+              script: counterClassesScript("Counter"),
+              env: { Counter: Cloudflare.DurableObject("Counter") },
+            }),
+          );
+          const written = yield* fetchJsonReady<{ value: number }>(`${v1.url}/increment`);
+          expect(written.value).toBe(1);
+          const before = yield* namespacesOf(v1.workerName);
+          expect(Object.keys(before)).toEqual(["Counter"]);
+
+          const renamed = Cloudflare.Worker("worker", {
+            script: counterClassesScript("Meter"),
+            env: { Meter: Cloudflare.DurableObject("Meter", { renamedFrom: "Counter" }) },
+          });
+          const v2 = yield* scratch.deploy(renamed);
+          expect(yield* namespacesOf(v2.workerName)).toEqual({ Meter: before.Counter });
+          expect((yield* readUntil(v2.url!, "Meter")).value).toBe(1);
+
+          // The old class is gone: deploying again renames nothing.
+          const v3 = yield* scratch.deploy(renamed);
+          expect(yield* namespacesOf(v3.workerName)).toEqual({ Meter: before.Counter });
+          expect((yield* readUntil(v3.url!, "Meter")).value).toBe(1);
+
+          yield* scratch.destroy();
+          expect(yield* namespacesOf(v1.workerName)).toEqual({});
+        }).pipe(logLevel),
+      { timeout: 180_000 },
+    );
+
+    // One class's objects can move to one class only: a deploy where two
+    // classes are renamed from the class the Worker hosts fails before upload.
+    test.provider(
+      "renamedFrom on two classes for one hosted class fails the deploy",
+      (scratch) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const namespacesOf = (scriptName: string) =>
+            durableObjects.listNamespaces.items({ accountId }).pipe(
+              Stream.filter((ns) => ns.script === scriptName),
+              Stream.runCollect,
+              Effect.map((namespaces) =>
+                Object.fromEntries(Array.from(namespaces).map((ns) => [ns.class, ns.id])),
+              ),
+            );
+
+          const v1 = yield* scratch.deploy(
+            Cloudflare.Worker("worker", {
+              script: counterClassesScript("Counter"),
+              env: { Counter: Cloudflare.DurableObject("Counter") },
+            }),
+          );
+          const before = yield* namespacesOf(v1.workerName);
+
+          const conflict = yield* scratch
+            .deploy(
+              Cloudflare.Worker("worker", {
+                script: counterClassesScript("Meter", "Gauge"),
+                env: {
+                  Meter: Cloudflare.DurableObject("Meter", { renamedFrom: "Counter" }),
+                  Gauge: Cloudflare.DurableObject("Gauge", { renamedFrom: "Counter" }),
+                },
+              }),
+            )
+            .pipe(Effect.exit);
+          expect(Exit.isFailure(conflict)).toBe(true);
+          expect(String(conflict)).toContain("DurableObjectRenameConflict");
+          // nothing changed on Cloudflare
+          expect(yield* namespacesOf(v1.workerName)).toEqual(before);
+
+          yield* scratch.destroy();
         }).pipe(logLevel),
       { timeout: 180_000 },
     );
@@ -1596,6 +1726,85 @@ export default { async fetch() { return new Response("${version}"); } };
           yield* scratch.destroy();
         }).pipe(logLevel),
       { timeout: 120_000 },
+    );
+
+    // #3300: removing classes must not depend on finding their namespaces in
+    // the account-wide listing. Cloudflare pages that listing (20 per page)
+    // in an unstable order, so on an account with several pages of
+    // namespaces some rows never come back and removing such a class failed
+    // with an empty `MissingDurableObjects`. 60 classes spread this Worker's
+    // own namespaces across several pages; the Worker's settings still bind
+    // every class, which is proof enough that it hosts them.
+    test.provider(
+      "removes durable object classes the paged namespace listing skips",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const classes = Array.from({ length: 60 }, (_, i) => `Paged${i}`);
+          const makeWorker = (hosted: string[], version: string) =>
+            Cloudflare.Worker("worker", {
+              script: `import { DurableObject } from "cloudflare:workers";
+${hosted.map((c) => `export class ${c} extends DurableObject {}`).join("\n")}
+export default { async fetch() { return new Response("${version}"); } };
+`,
+              env: Object.fromEntries(
+                hosted.map((c) => [c, Cloudflare.DurableObject(c, { className: c })]),
+              ),
+            });
+
+          const v1 = yield* scratch.deploy(
+            Effect.gen(function* () {
+              return { worker: yield* makeWorker(classes, "v1") };
+            }),
+          );
+          expect(yield* fetchReady(v1.worker.url!, "v1")).toBe("v1");
+          expect(Object.keys(v1.worker.durableObjectNamespaces)).toHaveLength(60);
+          const removedIds = Object.values(v1.worker.durableObjectNamespaces);
+
+          // Remove every class but one in a single update.
+          const v2 = yield* scratch.deploy(
+            Effect.gen(function* () {
+              return { worker: yield* makeWorker(classes.slice(0, 1), "v2") };
+            }),
+          );
+          expect(yield* fetchReady(v2.worker.url!, "v2")).toBe("v2");
+          expect(Object.keys(v2.worker.durableObjectNamespaces)).toEqual(["Paged0"]);
+
+          // Out-of-band: the Worker's settings bind only the kept class.
+          const settings = yield* workers.getScriptScriptAndVersionSetting({
+            accountId,
+            scriptName: v2.worker.workerName,
+          });
+          expect(
+            (settings.bindings ?? [])
+              .filter((binding) => binding.type === "durable_object_namespace")
+              .map((binding) => ("className" in binding ? binding.className : undefined)),
+          ).toEqual(["Paged0"]);
+
+          // The removed namespaces are deleted (checked by id, so a skipped
+          // page can't make a surviving namespace look gone).
+          const survivors = yield* Effect.forEach(
+            removedIds.slice(1),
+            (namespaceId) =>
+              durableObjects.listNamespaceObjects({ accountId, id: namespaceId }).pipe(
+                Effect.as([namespaceId]),
+                Effect.catchTag("NamespaceNotFound", () => Effect.succeed([] as string[])),
+              ),
+            { concurrency: 10 },
+          ).pipe(
+            Effect.map((ids) => ids.flat()),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (ids) => ids.length === 0,
+              times: 8,
+            }),
+          );
+          expect(survivors).toEqual([]);
+
+          yield* scratch.destroy();
+        }).pipe(logLevel),
+      { timeout: 180_000 },
     );
 
     // Roll-forward from the legacy tag format: a worker last deployed by an

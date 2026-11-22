@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readMemoryDbTags, sameStringSet } from "./internal.ts";
+
+export class MemoryDBSubnetGroupUnexpectedResponse extends Data.TaggedError(
+  "MemoryDBSubnetGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface SubnetGroupProps {
   /**
@@ -52,8 +60,18 @@ export interface SubnetGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  SubnetGroupLookup
 > {}
+
+/**
+ * Props for {@link SubnetGroup.lookup}: find a subnet group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface SubnetGroupLookup {
+  /** The subnet group name of the existing subnet group. */
+  subnetGroupName: string;
+}
 
 /**
  * A MemoryDB subnet group — the set of VPC subnets a MemoryDB cluster's nodes
@@ -68,6 +86,16 @@ export interface SubnetGroup extends Resource<
  *   description: "MemoryDB cluster subnets",
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
  * });
+ * ```
+ *
+ * ### Looking up an existing subnet group
+ * `SubnetGroup.lookup` references a subnet group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `subnetGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing subnet group
+ * ```typescript
+ * const existing = AWS.MemoryDB.SubnetGroup.lookup({ subnetGroupName: "my-subnet-group" });
  * ```
  *
  * @resource
@@ -86,13 +114,15 @@ export const SubnetGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* memorydb
           .describeSubnetGroups({ SubnetGroupName: name })
-          .pipe(Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.undefined));
         return response?.SubnetGroups?.[0];
       });
 
       const toAttrs = Effect.fn(function* (group: memorydb.SubnetGroup) {
         if (!group.Name || !group.ARN) {
-          return yield* Effect.fail(new Error(`Subnet group '${group.Name}' is missing its ARN`));
+          return yield* new MemoryDBSubnetGroupUnexpectedResponse({
+            message: `Subnet group '${group.Name}' is missing its ARN`,
+          });
         }
         return {
           subnetGroupName: group.Name,
@@ -117,6 +147,13 @@ export const SubnetGroupProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ subnetGroupName: name }) {
+          const group = yield* readGroup(name);
+          if (!group?.ARN) return undefined;
+          const attrs = yield* toAttrs(group);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -152,7 +189,9 @@ export const SubnetGroupProvider = () =>
             observed = yield* readGroup(name);
           }
           if (observed === undefined) {
-            return yield* Effect.fail(new Error(`Subnet group '${name}' not found after create`));
+            return yield* new MemoryDBSubnetGroupUnexpectedResponse({
+              message: `Subnet group '${name}' not found after create`,
+            });
           }
 
           // 3. Sync — apply description / subnet delta from OBSERVED state.

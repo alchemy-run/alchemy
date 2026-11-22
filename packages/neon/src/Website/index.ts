@@ -15,5 +15,6 @@ export type {
   FrameworkSiteProps,
   Website,
   FrameworkSiteOptions,
+  WebsiteDomain,
   WebsiteFunctionOptions,
 } from "./FrameworkSite.ts";

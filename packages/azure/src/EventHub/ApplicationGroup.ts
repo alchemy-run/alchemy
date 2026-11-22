@@ -109,7 +109,7 @@ export interface ApplicationGroup extends Resource<
     /** Whether clients of the group may connect. */
     isEnabled: boolean;
     /** Policies observed on the group. */
-    policies: eventhub.ApplicationGroupPolicy[];
+    policies: eventhub.ThrottlingPolicy[];
   },
   never,
   Providers

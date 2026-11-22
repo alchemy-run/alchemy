@@ -65,7 +65,9 @@ const inlineTemplateInOutput = (output: BuildOutput) =>
     return output;
   }).pipe(
     Effect.catchTag("PlatformError", (cause) =>
-      Effect.fail(fail(`Failed to inline ${TEMPLATE_FILE_NAME} into ${SERVER_ENTRY_FILE_NAME}`, cause)),
+      Effect.fail(
+        fail(`Failed to inline ${TEMPLATE_FILE_NAME} into ${SERVER_ENTRY_FILE_NAME}`, cause),
+      ),
     ),
   );
 

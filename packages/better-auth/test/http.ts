@@ -1,5 +1,8 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Cookies from "effect/http/Cookies";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
 
 /** Typed failure for the fixture-driving HTTP helpers. */
@@ -19,35 +22,38 @@ export interface AuthHttpResponse {
   readonly setCookies: ReadonlyArray<string>;
 }
 
-const request = (url: string, init: RequestInit): Effect.Effect<AuthHttpResponse, AuthHttpError> =>
-  Effect.tryPromise({
-    try: async (signal): Promise<AuthHttpResponse> => {
-      const response = await fetch(url, { ...init, signal });
-      return {
-        status: response.status,
-        body: await response.text(),
-        setCookies: response.headers.getSetCookie(),
-      };
-    },
-    catch: (cause) => new AuthHttpError({ url, status: 0, body: String(cause) }),
-  });
+const request = (
+  req: HttpClientRequest.HttpClientRequest,
+): Effect.Effect<AuthHttpResponse, AuthHttpError, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const response = yield* client.execute(req);
+    return {
+      status: response.status,
+      body: yield* response.text,
+      setCookies: Cookies.toSetCookieHeaders(response.cookies),
+    };
+  }).pipe(
+    Effect.mapError((cause) => new AuthHttpError({ url: req.url, status: 0, body: String(cause) })),
+  );
 
 export const postJson = (
   url: string,
   body: unknown,
   headers?: Record<string, string>,
-): Effect.Effect<AuthHttpResponse, AuthHttpError> =>
-  request(url, {
-    method: "POST",
-    headers: { "content-type": "application/json", ...headers },
-    body: JSON.stringify(body),
-  });
+): Effect.Effect<AuthHttpResponse, AuthHttpError, HttpClient.HttpClient> =>
+  request(
+    HttpClientRequest.post(url).pipe(
+      HttpClientRequest.setHeaders({ "content-type": "application/json", ...headers }),
+      HttpClientRequest.bodyText(JSON.stringify(body), "application/json"),
+    ),
+  );
 
 export const getJson = <T>(
   url: string,
   headers?: Record<string, string>,
-): Effect.Effect<T, AuthHttpError> =>
-  request(url, { method: "GET", headers }).pipe(
+): Effect.Effect<T, AuthHttpError, HttpClient.HttpClient> =>
+  request(HttpClientRequest.get(url).pipe(HttpClientRequest.setHeaders(headers ?? {}))).pipe(
     Effect.filterOrFail(
       (response) => response.status === 200,
       (response) => new AuthHttpError({ url, ...response }),

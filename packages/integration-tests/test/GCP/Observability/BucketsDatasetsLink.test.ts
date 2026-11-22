@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as observability from "@distilled.cloud/gcp/observability_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -62,7 +63,6 @@ test.provider.skipIf(!!spansDataset)(
         observability.createProjectsLocationsBucketsDatasetsLinks({
           parent: `projects/${project}/locations/us-central1/buckets/_Trace/datasets/Spans`,
           linkId: "alchemy_probe_link",
-          body: {},
         }),
       );
       expect(error._tag).toEqual("BadRequest");
@@ -93,6 +93,15 @@ test.provider.skipIf(!spansDataset)(
             displayName: "Trace analytics",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Observability.BucketsDatasetsLink.lookup({
+          linkId: created.linkId,
+          location: created.location,
+          dataset: created.dataset,
+          bucket: created.bucket,
+        }),
+        created,
       );
 
       expect(created.linkId).toEqual(expect.any(String));

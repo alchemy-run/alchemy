@@ -457,9 +457,7 @@ const toAttrs = (
   createdAt: hub.properties?.createdAt,
 });
 
-const toCapture = (
-  capture: EventHubCapture | undefined,
-): eventhub.CaptureDescription | undefined =>
+const toCapture = (capture: EventHubCapture | undefined): eventhub.CaptureDescription | undefined =>
   capture === undefined
     ? undefined
     : {

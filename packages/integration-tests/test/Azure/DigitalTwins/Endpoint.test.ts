@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as digitaltwins from "@distilled.cloud/azure/digitaltwins";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
@@ -16,6 +16,9 @@ const getEndpoint = (resourceGroupName: string, resourceName: string, endpointNa
       endpointName,
     });
   });
+
+const eventGridOf = (properties: digitaltwins.DigitalTwinsEndpointResourceProperties) =>
+  properties.endpointType === "EventGrid" ? properties : undefined;
 
 const program = (props: { topic: "A" | "B"; name?: string }) =>
   Effect.gen(function* () {
@@ -61,21 +64,23 @@ test.provider(
       const observed = yield* get(endpoint.endpointName);
       expect(observed.properties.endpointType).toEqual("EventGrid");
       expect(observed.properties.authenticationType).toEqual("KeyBased");
-      expect(observed.properties.TopicEndpoint).toEqual(topic.endpoint);
+      expect(eventGridOf(observed.properties)?.TopicEndpoint).toEqual(topic.endpoint);
 
       // In-place: point the endpoint at the other topic.
       const updated = yield* stack.deploy(program({ topic: "B" }));
       expect(updated.endpoint.endpointId).toEqual(endpoint.endpointId);
       const reobserved = yield* get(endpoint.endpointName);
-      expect(reobserved.properties.TopicEndpoint).toEqual(updated.topic.endpoint);
-      expect(reobserved.properties.TopicEndpoint).not.toEqual(topic.endpoint);
+      expect(eventGridOf(reobserved.properties)?.TopicEndpoint).toEqual(updated.topic.endpoint);
+      expect(eventGridOf(reobserved.properties)?.TopicEndpoint).not.toEqual(topic.endpoint);
       expect(reobserved.properties.provisioningState).toEqual("Succeeded");
 
       // Replacement: the name is immutable.
       const replaced = yield* stack.deploy(program({ topic: "B", name: "events-renamed" }));
       expect(replaced.endpoint.endpointName).toEqual("events-renamed");
       const replacedObserved = yield* get("events-renamed");
-      expect(replacedObserved.properties.TopicEndpoint).toEqual(updated.topic.endpoint);
+      expect(eventGridOf(replacedObserved.properties)?.TopicEndpoint).toEqual(
+        updated.topic.endpoint,
+      );
       expect(yield* waitGone(get(endpoint.endpointName))).toEqual("gone");
 
       yield* stack.destroy();

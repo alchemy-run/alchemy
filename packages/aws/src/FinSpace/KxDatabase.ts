@@ -5,8 +5,20 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+
+export class KxDatabaseInvalidProps extends Data.TaggedError("KxDatabaseInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class KxDatabaseUnexpectedResponse extends Data.TaggedError("KxDatabaseUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface KxDatabaseProps {
   /**
@@ -55,8 +67,20 @@ export interface KxDatabase extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  KxDatabaseLookup
 > {}
+
+/**
+ * Props for {@link KxDatabase.lookup}: find a kdb database this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface KxDatabaseLookup {
+  /** The environment the database belongs to. */
+  environmentId: string;
+  /** The name of the existing database. */
+  databaseName: string;
+}
 
 /**
  * A kdb database inside an Amazon FinSpace Managed kdb environment — the
@@ -74,6 +98,16 @@ export interface KxDatabase extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing kdb database
+ * `KxDatabase.lookup` references a kdb database Alchemy doesn't manage (created in the
+ * console or by another stack), found by `environmentId` and `databaseName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing kdb database
+ * ```typescript
+ * const ticks = AWS.FinSpace.KxDatabase.lookup({ environmentId, databaseName: "ticks" });
+ * ```
+ *
  * @resource
  */
 export const KxDatabase = Resource<KxDatabase>("AWS.FinSpace.KxDatabase");
@@ -87,8 +121,9 @@ const fetchDatabaseTags = Effect.fn(function* (arn: string) {
   const response = yield* finspace
     .listTagsForResource({ resourceArn: arn })
     .pipe(
-      Effect.catchTag(["ResourceNotFoundException", "InvalidRequestException"], () =>
-        Effect.succeed(undefined),
+      Effect.catchTag(
+        ["ResourceNotFoundException", "InvalidRequestException"],
+        () => Effect.undefined,
       ),
     );
   return Object.fromEntries(
@@ -101,7 +136,7 @@ const fetchDatabaseTags = Effect.fn(function* (arn: string) {
 const readDatabase = Effect.fn(function* (environmentId: string, databaseName: string) {
   const response = yield* finspace
     .getKxDatabase({ environmentId, databaseName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!response) return undefined;
   const databaseArn = response.databaseArn ?? "";
   const attrs: KxDatabase["Attributes"] = {
@@ -123,6 +158,7 @@ export const KxDatabaseProvider = () =>
         // Databases are keyed by their parent kdb environment — there is no
         // account-wide enumeration without an environment id.
         list: () => Effect.succeed([]),
+        lookup: ({ environmentId, databaseName }) => readDatabase(environmentId, databaseName),
         read: Effect.fn(function* ({ id, olds, output }) {
           const environmentId = output?.environmentId ?? olds?.environmentId;
           if (environmentId === undefined) return undefined;
@@ -142,14 +178,17 @@ export const KxDatabaseProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("FinSpace KxDatabase requires props"));
+            return yield* new KxDatabaseInvalidProps({
+              message: "FinSpace KxDatabase requires props",
+            });
           }
           const environmentId = news.environmentId;
           const databaseName = output?.databaseName ?? (yield* createDatabaseName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           // One idempotency token per reconcile, reused across create+update.
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
 
           // Observe — cloud state is authoritative.
           let attrs = yield* readDatabase(environmentId, databaseName);
@@ -164,15 +203,13 @@ export const KxDatabaseProvider = () =>
                 tags: desiredTags,
                 clientToken,
               })
-              .pipe(
-                Effect.catchTag("ResourceAlreadyExistsException", () => Effect.succeed(undefined)),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.undefined));
             yield* session.note(`Created kdb database ${databaseName}`);
             attrs = yield* readDatabase(environmentId, databaseName);
             if (attrs === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created kdb database ${databaseName}`),
-              );
+              return yield* new KxDatabaseUnexpectedResponse({
+                message: `failed to read created kdb database ${databaseName}`,
+              });
             }
           }
 
@@ -208,14 +245,15 @@ export const KxDatabaseProvider = () =>
 
           const final = yield* readDatabase(environmentId, databaseName);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled kdb database ${databaseName}`),
-            );
+            return yield* new KxDatabaseUnexpectedResponse({
+              message: `failed to read reconciled kdb database ${databaseName}`,
+            });
           }
           return final;
         }),
         delete: Effect.fn(function* ({ output }) {
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
           yield* finspace
             .deleteKxDatabase({
               environmentId: output.environmentId,

@@ -7,15 +7,16 @@ import { LocalRuntimeState } from "@alchemy.run/cloudflare/LocalRuntime";
 import { type Queue, QueueProvider } from "@alchemy.run/cloudflare/Queues/Queue";
 import { type Bucket, BucketProvider } from "@alchemy.run/cloudflare/R2/Bucket";
 import { type Index, IndexProvider } from "@alchemy.run/cloudflare/Vectorize/VectorizeIndex";
+import { describe, expect, it } from "@alchemy.run/test";
 import { apiTokenCredentials, Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import { NodeServices } from "@effect/platform-node";
-import { describe, expect, it } from "alchemy-test";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { Provider } from "alchemy/Provider";
 import { ResourceContext } from "alchemy/ResourceContext";
 import { Stack, type StackSpec } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -80,6 +81,7 @@ const env = Layer.mergeAll(
   ),
   NodeServices.layer,
   FetchHttpClient.layer,
+  SecureRandom.layerWebCrypto,
 );
 
 const diffInput = <Olds, News, Output>(id: string, olds: Olds, news: News, output: Output) => ({

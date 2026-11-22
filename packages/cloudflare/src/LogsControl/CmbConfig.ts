@@ -97,7 +97,7 @@ export const CmbConfigProvider = () =>
   Provider.succeed(CmbConfig, {
     stables: ["accountId"],
 
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ news = {}, output }) {
       if (!isResolved(news)) return undefined;
       const { accountId } = yield* yield* CloudflareEnvironment;
       const newAccountId = news.accountId ?? accountId;
@@ -130,7 +130,7 @@ export const CmbConfigProvider = () =>
       return observed === undefined ? [] : [toAttributes(accountId, observed)];
     }),
 
-    reconcile: Effect.fn(function* ({ news }) {
+    reconcile: Effect.fn(function* ({ news = {} }) {
       const { accountId: envAccountId } = yield* yield* CloudflareEnvironment;
       // Inputs were resolved to concrete values by Plan.
       const accountId = (news.accountId as string | undefined) ?? envAccountId;
@@ -163,7 +163,7 @@ export const CmbConfigProvider = () =>
       // there is nothing to delete; re-delete after a crashed run is a
       // no-op.
       const observed = yield* getCmbConfig(output.accountId).pipe(
-        Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+        Effect.catchTag("InvalidRoute", () => Effect.undefined),
       );
       if (observed === undefined) return;
       yield* logs
@@ -184,9 +184,7 @@ const getCmbConfig = (accountId: string) =>
     ),
     // Accounts without the Compliance/CMB entitlement get
     // `LogsControlNotAuthorized` — treat as unconfigured (nothing to manage).
-    Effect.catchTag(["CmbConfigNotFound", "LogsControlNotAuthorized"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["CmbConfigNotFound", "LogsControlNotAuthorized"], () => Effect.undefined),
   );
 
 const toAttributes = (

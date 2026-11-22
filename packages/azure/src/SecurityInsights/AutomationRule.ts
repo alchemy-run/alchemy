@@ -300,7 +300,9 @@ export const AutomationRuleProvider = () =>
           workspaceName: workspace,
           automationRuleId: ruleId,
           etag: observed?.etag,
-          properties: desired,
+          // Each condition's and action's type is only known at runtime and
+          // decides its arm, so the arms are asserted rather than narrowed.
+          properties: desired as securityinsights.AutomationRulePropertiesInput,
         });
       }
       return toAttrs(resourceGroup, workspace, ruleId, observed);

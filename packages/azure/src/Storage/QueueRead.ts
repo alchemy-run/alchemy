@@ -1,9 +1,9 @@
-import type { AzureOpError } from "@distilled.cloud/azure";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import type { Queue } from "./Queue.ts";
 import type { PeekStorageQueueClient } from "./QueueReceive.ts";
+import type { StorageQueueError } from "./QueueSend.ts";
 
 /** What {@link ReadStorageQueueClient.getProperties} returns. */
 export interface StorageQueueProperties {
@@ -16,7 +16,7 @@ export interface StorageQueueProperties {
 /** Read-only client for one storage queue: nothing it does hides or removes a message. */
 export interface ReadStorageQueueClient extends PeekStorageQueueClient {
   /** Read the queue's approximate message count and metadata. */
-  getProperties(): Effect.Effect<StorageQueueProperties, AzureOpError, RuntimeContext>;
+  getProperties(): Effect.Effect<StorageQueueProperties, StorageQueueError, RuntimeContext>;
 }
 
 /**

@@ -332,7 +332,9 @@ export const ProtectionContainerMappingProvider = () =>
           properties: {
             targetProtectionContainerId: news.targetProtectionContainerId,
             policyId: news.policyId,
-            providerSpecificInput: input,
+            // `instanceType` is only known at runtime and decides the arm, so
+            // the arm is asserted rather than narrowed.
+            providerSpecificInput: input as asr.ReplicationProviderSpecificContainerMappingInput,
           },
         });
       }
@@ -348,7 +350,10 @@ export const ProtectionContainerMappingProvider = () =>
       if (Object.keys(desired).length > 0 && !matchesDesired(detailsOf(observed), desired)) {
         yield* asr.UpdateReplicationProtectionContainerMapping({
           ...where,
-          properties: { providerSpecificInput: input },
+          properties: {
+            providerSpecificInput:
+              input as asr.ReplicationProviderSpecificUpdateContainerMappingInput,
+          },
         });
         observed = yield* waitForProvisioned(
           `site recovery container mapping ${name}`,

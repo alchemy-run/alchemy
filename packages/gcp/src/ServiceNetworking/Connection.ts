@@ -8,7 +8,9 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { waitGlobalOperation } from "../Compute/operations.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { waitForOperation as waitForLongRunning } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -71,8 +73,34 @@ export type Connection = Resource<
     projectNumber: string;
   },
   never,
-  Providers
+  Providers,
+  ConnectionLookup
 >;
+
+/**
+ * Props for {@link Connection.lookup}: find a connection this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ConnectionLookup {
+  /**
+   * Peering service that manages producer connectivity. For Google services
+   * this is `servicenetworking.googleapis.com`. A `services/` prefix is
+   * accepted.
+   */
+  service?: string;
+  /**
+   * Consumer VPC network. Accepts a name (`main`), a resource path
+   * (`projects/{project}/global/networks/{network}`), or a Compute
+   * self-link.
+   */
+  network: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A private services access connection (VPC Network Peering to a
@@ -110,6 +138,19 @@ export type Connection = Resource<
  *   network: network.networkName,
  *   service: "servicenetworking.googleapis.com",
  *   reservedPeeringRanges: [range.addressName, extra.addressName],
+ * });
+ * ```
+ *
+ * ### Looking up an existing connection
+ * `Connection.lookup` references a connection Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * connection.
+ *
+ * **Example:** Reference an existing connection
+ * ```typescript
+ * const connection = GCP.ServiceNetworking.Connection.lookup({
+ *   network: "my-network",
  * });
  * ```
  *
@@ -270,6 +311,15 @@ const waitForOperation = (
     ),
   );
 
+const removeConsumerPeering = (project: string, network: string, peering: string) =>
+  compute.removePeeringNetworks({ name: peering || DEFAULT_PEERING, project, network }).pipe(
+    Effect.flatMap((operation) =>
+      waitGlobalOperation(project, operation, { ignore: ["RESOURCE_NOT_FOUND"] }),
+    ),
+    Effect.catchTag("NotFound", () => Effect.void),
+    Effect.asVoid,
+  );
+
 const waitUntilPresent = (parent: string, consumerNetwork: string) =>
   getByNetwork(parent, consumerNetwork).pipe(
     Effect.filterOrFail(
@@ -313,13 +363,11 @@ const patchRanges = (
 ) =>
   Effect.gen(function* () {
     const operation = yield* servicenetworking.patchServicesConnections({
+      network: consumerNetwork,
+      reservedPeeringRanges: [...ranges],
       name: connectionNameOf(parent, peering),
       updateMask: "reservedPeeringRanges",
       force: true,
-      body: {
-        network: consumerNetwork,
-        reservedPeeringRanges: [...ranges],
-      },
     });
     yield* waitForOperation(operation);
   });
@@ -342,6 +390,18 @@ export const ConnectionProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ service, network }) {
+      const env = yield* GcpEnvironment.current;
+      const networkName = lastSegment(network ?? "");
+      if (networkName.length === 0) return undefined;
+      const parent = parentServiceOf(service);
+      const projectNumber = yield* getProjectNumber(env.project);
+      const consumerNetwork = consumerNetworkOf(projectNumber, networkName);
+      const existing = yield* getByNetwork(parent, consumerNetwork);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, projectNumber, consumerNetwork, parent);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -421,24 +481,16 @@ export const ConnectionProvider = () =>
         }
         const created = yield* servicenetworking
           .createServicesConnections({
+            network: consumerNetwork,
+            reservedPeeringRanges: [...desiredRanges],
             parent,
-            body: {
-              network: consumerNetwork,
-              reservedPeeringRanges: [...desiredRanges],
-            },
           })
-          .pipe(
-            Effect.catchTag(["Conflict", "ConnectionAlreadyExists"], () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag(["Conflict", "ConnectionAlreadyExists"], () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { ignoreRangeConflict: true });
         }
         current = yield* waitUntilPresent(parent, consumerNetwork).pipe(
-          Effect.catchTag("GCP.ServiceNetworking.ConnectionNotResolved", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("GCP.ServiceNetworking.ConnectionNotResolved", () => Effect.undefined),
         );
         if (
           current !== undefined &&
@@ -449,9 +501,7 @@ export const ConnectionProvider = () =>
             Effect.catchTag(["Conflict", "ConnectionAlreadyExists"], () => Effect.void),
           );
           current = yield* waitUntilPresent(parent, consumerNetwork).pipe(
-            Effect.catchTag("GCP.ServiceNetworking.ConnectionNotResolved", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("GCP.ServiceNetworking.ConnectionNotResolved", () => Effect.undefined),
           );
         }
       }
@@ -489,11 +539,11 @@ export const ConnectionProvider = () =>
       const consumerNetwork = output.network;
       const operation = yield* servicenetworking
         .deleteConnectionServicesConnections({
+          consumerNetwork,
           name: output.name || connectionNameOf(parent, output.peering),
-          body: { consumerNetwork },
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,
@@ -501,7 +551,16 @@ export const ConnectionProvider = () =>
           }),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        yield* waitForOperation(operation, { notFoundOk: true }).pipe(
+          // `FAILED_PRECONDITION`: a producer (Cloud SQL keeps its side for
+          // a while after the instance is deleted) still uses the
+          // connection. Removing the peering from the consumer VPC is
+          // always allowed and drops the connection with it.
+          Effect.catchIf(
+            (error) => error._tag === "GCP.OperationFailed" && error.code === 9,
+            () => removeConsumerPeering(output.project, output.networkName, output.peering),
+          ),
+        );
       }
       yield* waitUntilGone(parent, consumerNetwork);
     }),

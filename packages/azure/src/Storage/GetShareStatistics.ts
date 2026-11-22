@@ -45,8 +45,14 @@ export interface GetShareStatistics extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetShareStatisticsRequest,
-    ) => Effect.Effect<files.GetShareStatisticsResponse, files.GetShareStatisticsError, RuntimeContext>
+    ) => Effect.Effect<
+      files.GetShareStatisticsResponse,
+      files.GetShareStatisticsError,
+      RuntimeContext
+    >
   >
 > {}
 
-export const GetShareStatistics = Binding.Service<GetShareStatistics>("Azure.Storage.GetShareStatistics");
+export const GetShareStatistics = Binding.Service<GetShareStatistics>(
+  "Azure.Storage.GetShareStatistics",
+);

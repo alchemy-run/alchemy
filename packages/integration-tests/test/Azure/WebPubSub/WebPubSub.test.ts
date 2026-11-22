@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as webpubsub from "@distilled.cloud/azure/webpubsub";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
@@ -65,9 +65,7 @@ test.provider(
       expect(updated.service.primaryKey).toEqual(undefined);
       expect(updated.service.tags).toEqual({ env: "prod" });
       const reobserved = yield* getWebPubSub(group.resourceGroupName, service.webPubSubName);
-      expect(reobserved.properties?.liveTraceConfiguration?.enabled?.toLowerCase()).toEqual(
-        "true",
-      );
+      expect(reobserved.properties?.liveTraceConfiguration?.enabled?.toLowerCase()).toEqual("true");
       expect(
         reobserved.properties?.liveTraceConfiguration?.categories
           ?.find((c) => c.name === "ConnectivityLogs")
@@ -94,9 +92,9 @@ test.provider(
       expect(replacedObserved.kind).toEqual("SocketIO");
       expect(replacedObserved.sku?.name).toEqual("Standard_S1");
       expect(replacedObserved.properties?.socketIO?.serviceMode).toEqual("Serverless");
-      expect(
-        yield* waitGone(getWebPubSub(group.resourceGroupName, service.webPubSubName)),
-      ).toEqual("gone");
+      expect(yield* waitGone(getWebPubSub(group.resourceGroupName, service.webPubSubName))).toEqual(
+        "gone",
+      );
 
       yield* stack.destroy();
       expect(

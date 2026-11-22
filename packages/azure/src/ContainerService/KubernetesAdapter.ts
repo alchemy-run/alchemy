@@ -440,19 +440,9 @@ export const AksKubernetesAdapter = () =>
               headers: Effect.gen(function* () {
                 const resolve = yield* Credentials;
                 const config = yield* resolve;
-                if (config.tokenFor === undefined) {
-                  return yield* Effect.fail(
-                    new Error("the deployer's Azure credentials cannot mint an AKS token"),
-                  );
-                }
-                const token = yield* config.tokenFor(AKS_AAD_SERVER_SCOPE);
+                const token = yield* config.token(AKS_AAD_SERVER_SCOPE);
                 return { Authorization: `Bearer ${Redacted.value(token)}` };
-              }).pipe(
-                Effect.provideContext(credentialsContext),
-                Effect.mapError((error) =>
-                  error instanceof Error ? error : new Error(String(error)),
-                ),
-              ),
+              }).pipe(Effect.provideContext(credentialsContext)),
             } satisfies ClusterTransport;
           }
           const admin = yield* cs.ListManagedClusterClusterAdminCredentials(where);
@@ -479,18 +469,7 @@ export const AksKubernetesAdapter = () =>
                 : {},
             ),
           } satisfies ClusterTransport;
-        }).pipe(
-          withAzure,
-          Effect.mapError((error): ClusterNotFoundError | Error =>
-            error instanceof ClusterNotFoundError || error instanceof Error
-              ? error
-              : new Error(
-                  `connecting to the AKS cluster failed: ${
-                    (error as { message?: string }).message ?? String(error)
-                  }`,
-                ),
-          ),
-        );
+        }).pipe(withAzure);
 
       const identityReconcile = (
         options: WorkloadIdentityReconcileOptions,

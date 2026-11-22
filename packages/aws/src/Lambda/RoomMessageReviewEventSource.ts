@@ -10,6 +10,7 @@ import {
   type RoomMessageReviewHandlerFn,
   type RoomMessageReviewProps,
 } from "../IVSChat/RoomMessageReviewEventSource.ts";
+import { partitionOf } from "../Partition.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
@@ -84,10 +85,10 @@ export const RoomMessageReviewEventSource = Layer.effect(
               }>;
             const permission = yield* Permission(`${room.LogicalId}-MessageReview-Permission`, {
               action: "lambda:InvokeFunction",
-              functionName: host.functionArn,
+              functionName: Lambda.qualifiedArnOf(host),
               principal: "ivschat.amazonaws.com",
               sourceAccount: accountId,
-              sourceArn: `arn:aws:ivschat:${region}:${accountId}:room/*`,
+              sourceArn: `arn:${partitionOf(region)}:ivschat:${region}:${accountId}:room/*`,
             });
 
             // The Permission echoes the `functionName` prop (the function

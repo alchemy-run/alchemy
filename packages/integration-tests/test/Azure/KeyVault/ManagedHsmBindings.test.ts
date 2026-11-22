@@ -1,10 +1,10 @@
 import * as Azure from "@alchemy.run/azure";
-import { Credentials } from "@distilled.cloud/azure";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import { ARM_SCOPE, Credentials } from "@distilled.cloud/azure";
 import * as keyvault from "@distilled.cloud/azure/keyvault";
 import * as admin from "@distilled.cloud/azure/keyvault-administration";
 import * as securityDomain from "@distilled.cloud/azure/keyvault-security-domain";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
@@ -38,14 +38,15 @@ const recordingAzure = (sent: Sent[], reply: () => Response) => {
     Layer.succeed(
       Credentials,
       Effect.succeed({
-        bearerToken: Redacted.make("arm-token"),
         subscriptionId: "",
         apiBaseUrl: "https://management.azure.com",
-        tokenFor: (scope: string) =>
-          Effect.sync(() => {
-            audience = scope;
-            return Redacted.make("data-plane-token");
-          }),
+        token: (scope: string) =>
+          scope === ARM_SCOPE
+            ? Effect.succeed(Redacted.make("arm-token"))
+            : Effect.sync(() => {
+                audience = scope;
+                return Redacted.make("data-plane-token");
+              }),
       }),
     ),
     Layer.succeed(

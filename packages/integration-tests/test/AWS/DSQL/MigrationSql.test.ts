@@ -1,5 +1,5 @@
 import { prepareDsqlStatements } from "@alchemy.run/aws/DSQL/MigrationSql";
-import { expect, test } from "alchemy-test";
+import { expect, test } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 

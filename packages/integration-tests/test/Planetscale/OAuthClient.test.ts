@@ -1,5 +1,5 @@
 import { OAUTH_CLIENT_ID, exchange, usesCurrentClient } from "@alchemy.run/planetscale/OAuthClient";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Redacted from "effect/Redacted";

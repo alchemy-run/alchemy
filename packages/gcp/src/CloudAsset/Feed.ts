@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -125,8 +126,25 @@ export type Feed = Resource<
     condition: FeedCondition | undefined;
   },
   never,
-  Providers
+  Providers,
+  FeedLookup
 >;
+
+/**
+ * Props for {@link Feed.lookup}: find a feed this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface FeedLookup {
+  /**
+   * Feed id (the `{feed}` segment of `projects/{project}/feeds/{feed}`).
+   */
+  feedId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Asset Inventory feed that publishes asset updates to Pub/Sub.
@@ -176,13 +194,23 @@ export type Feed = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing feed
+ * `Feed.lookup` references a feed Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared feed.
+ *
+ * **Example:** Reference an existing feed
+ * ```typescript
+ * const feed = GCP.CloudAsset.Feed.lookup({ feedId: "my-feed" });
+ * ```
+ *
  * @resource
  * @category CloudAsset
  */
 export const Feed = Resource<Feed>("GCP.CloudAsset.Feed");
 
 export class FeedNotResolved extends Data.TaggedError("GCP.CloudAsset.FeedNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, feedId: string) => `${parent}/feeds/${feedId}`;
@@ -235,10 +263,8 @@ const toAttrs = (feed: cloudasset.Feed, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
-    : cloudasset
-        .getFeeds({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    ? Effect.undefined
+    : cloudasset.getFeeds({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const observe = (project: string, feedId: string, outputName?: string) =>
   Effect.gen(function* () {
@@ -277,6 +303,13 @@ export const FeedProvider = () =>
       );
     }),
 
+    lookup: Effect.fn(function* ({ feedId }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* observe(env.project, feedId, undefined);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const feedId = yield* toPhysicalId(id, olds?.feedId, output?.feedId);
@@ -309,24 +342,19 @@ export const FeedProvider = () =>
       let current = yield* observe(env.project, feedId, output?.name);
 
       if (current === undefined) {
-        const created = yield* cloudasset
-          .createFeeds({
-            parent,
-            body: { feedId, feed: body },
-          })
-          .pipe(
-            Effect.retry({
-              while: (error) => error._tag === "BadRequest",
-              times: 8,
-              schedule: Schedule.spaced("2 seconds"),
-            }),
-            Effect.catchTag("Conflict", () => observe(env.project, feedId, output?.name)),
-          );
+        const created = yield* cloudasset.createFeeds({ feedId, feed: body, parent }).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "BadRequest",
+            times: 8,
+            schedule: Schedule.spaced("2 seconds"),
+          }),
+          Effect.catchTag("Conflict", () => observe(env.project, feedId, output?.name)),
+        );
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new FeedNotResolved({ name });
+        return yield* new FeedNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -356,11 +384,9 @@ export const FeedProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* cloudasset.patchFeeds({
+          updateMask,
+          feed: { ...body, name: currentName },
           name: currentName,
-          body: {
-            updateMask,
-            feed: { ...body, name: currentName },
-          },
         });
       }
 

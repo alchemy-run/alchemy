@@ -46,6 +46,9 @@ export const isTransientDbError = (error: CliError): boolean => {
   );
 };
 
+const causeMessage = (cause: unknown): string =>
+  cause instanceof Error ? cause.message : String(cause);
+
 /**
  * Resolve the unified `prisma` CLI entrypoint (`prisma` v8 mounts the ORM
  * commands — `contract emit`, `migration plan`, `db migrate` — that the
@@ -60,14 +63,14 @@ export const resolvePrismaCliBin = Effect.gen(function* () {
     try: () => import.meta.resolve("prisma/package.json"),
     catch: (cause) =>
       new CliError({
-        message: `Failed to resolve the "prisma" CLI (is it installed? \`npm i -D prisma\`): ${cause}`,
+        message: `Failed to resolve the "prisma" CLI (is it installed? \`npm i -D prisma\`): ${causeMessage(cause)}`,
       }),
   });
   const manifestPath = yield* Effect.try({
     try: () => new URL(url),
     catch: (cause) =>
       new CliError({
-        message: `Failed to parse the "prisma" package URL: ${cause}`,
+        message: `Failed to parse the "prisma" package URL: ${causeMessage(cause)}`,
       }),
   }).pipe(
     Effect.flatMap((fileUrl) =>
@@ -75,7 +78,7 @@ export const resolvePrismaCliBin = Effect.gen(function* () {
         Effect.mapError(
           (cause) =>
             new CliError({
-              message: `Failed to convert the "prisma" package URL to a path: ${cause}`,
+              message: `Failed to convert the "prisma" package URL to a path: ${cause.message}`,
             }),
         ),
       ),
@@ -87,14 +90,14 @@ export const resolvePrismaCliBin = Effect.gen(function* () {
         try: () => JSON.parse(text) as { bin?: Record<string, string> | string },
         catch: (cause) =>
           new CliError({
-            message: `Failed to parse ${manifestPath}: ${cause}`,
+            message: `Failed to parse ${manifestPath}: ${causeMessage(cause)}`,
           }),
       }),
     ),
     Effect.mapError((cause) =>
       cause instanceof CliError
         ? cause
-        : new CliError({ message: `Failed to read ${manifestPath}: ${cause}` }),
+        : new CliError({ message: `Failed to read ${manifestPath}: ${cause.message}` }),
     ),
   );
   const bin = typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.prisma;
@@ -350,7 +353,7 @@ export const readMigrationPackages = (migrationsDirAbs: string) =>
               },
             catch: (cause) =>
               new CliError({
-                message: `Failed to parse ${metaPath}: ${cause}`,
+                message: `Failed to parse ${metaPath}: ${causeMessage(cause)}`,
               }),
           }),
         ),

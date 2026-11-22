@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as scc from "@distilled.cloud/gcp/securitycenter_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -40,7 +41,7 @@ test.provider(
           name: `projects/${project}/bigQueryExports/alchemy-missing`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "SecurityCommandCenterLegacyDisabled"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -71,6 +72,10 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { dataset, exp };
         }),
+      );
+      yield* expectFound(
+        GCP.SecurityCenter.BigQueryExport.lookup({ exportId: created.exp.exportId }),
+        created.exp,
       );
 
       expect(created.exp.exportId).toEqual(expect.any(String));

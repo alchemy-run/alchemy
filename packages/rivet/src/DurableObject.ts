@@ -1,0 +1,885 @@
+import * as nodePath from "node:path";
+import type { HttpEffect } from "alchemy/Http";
+import type { Input, InputProps } from "alchemy/Input";
+import type { Named } from "alchemy/Named";
+import * as Output from "alchemy/Output";
+import {
+  Platform,
+  type PlatformIdentity,
+  type PlatformProps,
+  type PlatformServices,
+} from "alchemy/Platform";
+import * as Provider from "alchemy/Provider";
+import type { Resource } from "alchemy/Resource";
+import { makeFetchRpcStub, type RpcCallError } from "alchemy/Rpc";
+import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
+import { packEnvValueKeepRedacted, RuntimeContext, sanitizeKey } from "alchemy/RuntimeContext";
+import type { Self } from "alchemy/Self";
+import type * as ConfigError from "effect/Config";
+import * as Config from "effect/Config";
+import type * as Context from "effect/Context";
+import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Effectable from "effect/Effectable";
+import type * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/http/HttpClientResponse";
+import type { HttpServerError } from "effect/http/HttpServerError";
+import type * as HttpServerRequest from "effect/http/HttpServerRequest";
+import type * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import type { Scope } from "effect/Scope";
+import type { DurableObjectState } from "./DurableObjectState.ts";
+import { PoolHost } from "./Host.ts";
+import { fromNativeFetcher } from "./internal/Fetcher.ts";
+import { gatewayFetcher, type GatewayTarget } from "./internal/Gateway.ts";
+import type { CargoBuild } from "./internal/RustProgram.ts";
+import type { Providers } from "./Providers.ts";
+import type { WebSocket } from "./WebSocket.ts";
+
+export const DurableObjectTypeId = "Rivet.DurableObject";
+export type DurableObjectTypeId = typeof DurableObjectTypeId;
+
+export interface DurableObjectProps extends PlatformProps {
+  /** The module that exports this Durable Object, usually `import.meta.url`. */
+  main: string;
+  /**
+   * The export of {@link main} that holds this Durable Object: the class,
+   * or the Layer its `.make(...)` returned.
+   * @default "default"
+   */
+  handler?: string;
+  /**
+   * How long an instance stays awake with no calls before it sleeps.
+   * @default "30 seconds"
+   */
+  sleepTimeout?: Duration.Input;
+  /**
+   * How long an instance has to wind down when it sleeps or is destroyed:
+   * `onSleep` or `onDestroy`, and the calls still running, must finish
+   * within it.
+   * @default "15 seconds"
+   */
+  sleepGracePeriod?: Duration.Input;
+  /**
+   * How long an instance's storage may take to migrate when it wakes.
+   * @default "30 seconds"
+   */
+  onMigrateTimeout?: Duration.Input;
+}
+
+const ACTOR_OPTIONS = ["sleepTimeout", "sleepGracePeriod", "onMigrateTimeout"] as const;
+
+/** The RivetKit actor options a class runs with, in milliseconds. @internal */
+export type ActorOptions = { readonly [K in (typeof ACTOR_OPTIONS)[number]]?: number };
+
+/** A class sets an actor option to something other than a duration above 0. */
+export class InvalidActorOptions extends Data.TaggedError("Rivet.InvalidActorOptions")<{
+  readonly message: string;
+}> {}
+
+/**
+ * The RivetKit actor options of class `id`, from its props, in
+ * milliseconds. Each one set must be a finite duration above 0; a class
+ * that sets none has none.
+ * @internal
+ */
+export const actorOptionsOf = (
+  id: string,
+  props: Partial<Record<(typeof ACTOR_OPTIONS)[number], unknown>> | undefined,
+): Effect.Effect<ActorOptions | undefined> => {
+  const options: Record<string, number> = {};
+  for (const name of ACTOR_OPTIONS) {
+    const value = props?.[name];
+    if (value === undefined) continue;
+    const duration = Output.isOutput(value)
+      ? Option.none()
+      : Duration.fromInput(value as Duration.Input);
+    const millis = Option.isSome(duration) ? Duration.toMillis(duration.value) : Number.NaN;
+    if (!Number.isFinite(millis) || millis <= 0) {
+      return Effect.die(
+        new InvalidActorOptions({
+          message: `Rivet.DurableObject '${id}' sets ${name} to ${JSON.stringify(value)}: it must be a duration above 0, such as "30 seconds".`,
+        }),
+      );
+    }
+    options[name] = Math.ceil(millis);
+  }
+  return Effect.succeed(Object.keys(options).length === 0 ? undefined : options);
+};
+
+export interface DurableObjectAttributes {
+  /** The actor name the control plane knows this class by. */
+  name: string;
+  /** The pool whose nodes host it. */
+  pool: string | undefined;
+  /** The control plane URL callers send requests to. */
+  endpoint: string | undefined;
+  /** The namespace its actors live in. */
+  namespace: string | undefined;
+  /** The token callers present to the gateway. */
+  token: Redacted.Redacted<string> | undefined;
+}
+
+/** Data a pool binds onto the Durable Objects it hosts. */
+export interface DurableObjectBindingContract {
+  /** The pool whose nodes host the Durable Object. */
+  pool?: string;
+  /** The control plane URL callers send requests to. */
+  endpoint?: string;
+  /** The namespace its actors live in. */
+  namespace?: string;
+  /** The token callers present to the gateway. */
+  token?: Redacted.Redacted<string>;
+}
+
+/** One instance of a Durable Object: its RPC methods and its `fetch`. */
+export type DurableObjectStub<Shape> = Shape & {
+  fetch(
+    request: HttpServerRequest.HttpServerRequest,
+  ): Effect.Effect<
+    HttpServerResponse.HttpServerResponse,
+    HttpServerError | RpcCallError,
+    RuntimeContext
+  >;
+};
+
+/** Every instance of one Durable Object class, addressed by name. */
+export interface DurableObjectNamespace<Shape> {
+  /** The actor name: the class's logical id. */
+  readonly name: string;
+  /** The instance called `name`, created on first use: its key is the one part `name`. */
+  getByName(name: string): DurableObjectStub<Shape>;
+  /**
+   * The instance whose key is `key`, created on first use. Each element is
+   * one part of the key RivetKit's `getOrCreate` takes, so an actor a
+   * RivetKit program created under `["a", "b"]` is reached with
+   * `getByKey(["a", "b"])`, and the instance reads the same parts from
+   * `DurableObjectState.key`.
+   */
+  getByKey(key: ReadonlyArray<string>): DurableObjectStub<Shape>;
+}
+
+export interface DurableObject extends Resource<
+  DurableObjectTypeId,
+  DurableObjectProps,
+  DurableObjectAttributes,
+  DurableObjectBindingContract,
+  Providers
+> {}
+
+/** The lifecycle handlers a Rivet Durable Object instance may implement. */
+export interface DurableObjectShape {
+  fetch?: HttpEffect<DurableObjectState | RuntimeContext>;
+  alarm?: () => Effect.Effect<void, never, RuntimeContext | DurableObjectState | Scope>;
+  /**
+   * Runs when the instance is about to sleep, within RivetKit's sleep grace
+   * period: finish or hand off work in flight. It does not run for an
+   * instance that took no call since it woke.
+   */
+  onSleep?: () => Effect.Effect<void, never, RuntimeContext | DurableObjectState | Scope>;
+  /**
+   * Runs when the instance is destroyed, after `DurableObjectState.destroy`
+   * or a delete from the control plane, so it can release what it owns
+   * outside its storage. It does not run for an instance that took no call
+   * since it woke.
+   */
+  onDestroy?: () => Effect.Effect<void, never, RuntimeContext | DurableObjectState | Scope>;
+  /** A message on a WebSocket this instance accepted with `Rivet.upgrade()`. */
+  webSocketMessage?: (
+    socket: WebSocket,
+    message: string | Uint8Array,
+  ) => Effect.Effect<void, never, RuntimeContext | DurableObjectState | Scope>;
+  /** A WebSocket this instance accepted closed. */
+  webSocketClose?: (
+    socket: WebSocket,
+    code: number,
+    reason: string,
+    wasClean: boolean,
+  ) => Effect.Effect<void, never, RuntimeContext | DurableObjectState | Scope>;
+  /** A WebSocket this instance accepted failed. */
+  webSocketError?: (
+    socket: WebSocket,
+    error: unknown,
+  ) => Effect.Effect<void, never, RuntimeContext | DurableObjectState | Scope>;
+}
+
+/** What an instance's constructor runs with: once per actor. */
+export type InstanceServices = RuntimeContext | DurableObjectState | Scope;
+
+/** Services the class phase may use without the caller providing them. */
+export type DurableObjectServices =
+  | DurableObject
+  | Providers
+  | RuntimeContext
+  | Self
+  | Self<DurableObject>;
+
+type ClassProps<PropsReq> =
+  | InputProps<DurableObjectProps>
+  | Effect.Effect<InputProps<DurableObjectProps>, ConfigError.ConfigError, PropsReq>;
+
+type ClassRequirements<Req> = Providers | Exclude<Req, DurableObjectServices | PlatformServices>;
+
+export type { CargoBuild } from "./internal/RustProgram.ts";
+
+/** Props of an external Durable Object: a RivetKit program, run as it is. */
+export interface ExternalDurableObjectProps {
+  /**
+   * The program's entry file, relative to where the deploy runs: a RivetKit
+   * registry that calls `registry.start()`, or a `@rivetkit/effect` program
+   * that launches `Registry.serve`. It is bundled and run on the pool's
+   * nodes unchanged, with `RIVET_ENDPOINT`, `RIVET_TOKEN`,
+   * `RIVET_NAMESPACE` and `RIVET_POOL` set.
+   */
+  main: string;
+  crate?: never;
+  image?: never;
+  context?: never;
+  dockerfile?: never;
+}
+
+/** Props of a Rust Durable Object: Actors written with RivetKit's Rust crate, run as they are. */
+export interface RustDurableObjectProps {
+  /**
+   * The crate, relative to where the deploy runs: its directory or its
+   * `Cargo.toml`. Its binary calls `registry().start()`, and is compiled
+   * into the pool's node image and run unchanged, with `RIVET_ENDPOINT`,
+   * `RIVET_TOKEN`, `RIVET_NAMESPACE` and `RIVET_POOL` set. A crate in a
+   * Cargo workspace is built from the workspace, as Cargo builds it.
+   */
+  crate: string;
+  /** How the crate is compiled. */
+  build?: CargoBuild;
+  main?: never;
+  image?: never;
+  context?: never;
+  dockerfile?: never;
+}
+
+/**
+ * Props of an image Durable Object: Actors in a prebuilt image, run as it
+ * is. The same `image` as every other container resource
+ * (`AWS.ECS.Task`, `Cloudflare.Container`, `Kubernetes.Deployment`).
+ */
+export interface ImageDurableObjectProps {
+  /**
+   * The image every node runs, such as
+   * `us-docker.pkg.dev/acme/app/actors@sha256:…`, or the `imageRef` of a
+   * `Docker.Image` in the same stack. Its `CMD` starts a RivetKit registry
+   * with `RIVET_ENDPOINT`, `RIVET_TOKEN`, `RIVET_NAMESPACE` and
+   * `RIVET_POOL` set. The image brings its own runtime and RivetKit, so a
+   * node installs nothing when it starts.
+   *
+   * The pool builds its node image `FROM` this one, wherever it builds
+   * images: the deploy's Docker for a Docker, Compute Engine, EC2 or
+   * Hetzner pool, the platform's builder on Fly, Railway or Rivet Cloud.
+   * That builder must be able to pull it. As on ECS and Kubernetes, a tag
+   * is resolved once per reference: pin a digest, so a new image is a new
+   * reference.
+   */
+  image: Input<string>;
+  main?: never;
+  crate?: never;
+  context?: never;
+  dockerfile?: never;
+}
+
+/**
+ * Props of a Dockerfile Durable Object: Actors in an image the pool builds
+ * from your own Dockerfile, run as it is. The same `context` and
+ * `dockerfile` as every other container resource (`AWS.ECS.Task`,
+ * `Cloudflare.Container`, `Kubernetes.Deployment`).
+ */
+export interface DockerfileDurableObjectProps {
+  /**
+   * The build context directory, relative to where the deploy runs.
+   * @default "."
+   */
+  context?: string;
+  /**
+   * The Dockerfile, as a path relative to where the deploy runs, or inline
+   * content (`Dockerfile.inline`), which builds in an empty context. Its
+   * `CMD` starts a RivetKit registry with `RIVET_ENDPOINT`, `RIVET_TOKEN`,
+   * `RIVET_NAMESPACE` and `RIVET_POOL` set.
+   *
+   * The pool builds it wherever it builds images: the deploy's Docker for a
+   * Docker, Compute Engine, EC2 or Hetzner pool, the platform's builder on
+   * Fly, Railway or Rivet Cloud.
+   * @default `${context}/Dockerfile`
+   */
+  dockerfile?: string | { readonly content: Input<string> };
+  main?: never;
+  crate?: never;
+  image?: never;
+}
+
+/** The class surface of {@link DurableObject}. */
+export interface DurableObjectClass {
+  /**
+   * An external Durable Object: Actors written with RivetKit, in its async
+   * or Effect form, deployed as they are. Provide a pool Layer to it.
+   */
+  <const Id extends string>(
+    id: Id,
+    props: ExternalDurableObjectProps,
+  ): Effect.Effect<DurableObject, never, PoolHost | Providers>;
+  /**
+   * A Rust Durable Object: Actors written with RivetKit's Rust crate,
+   * compiled into the node image. Provide a pool Layer to it.
+   */
+  <const Id extends string>(
+    id: Id,
+    props: RustDurableObjectProps,
+  ): Effect.Effect<DurableObject, never, PoolHost | Providers>;
+  /**
+   * An image Durable Object: Actors in a prebuilt image, run as it is on
+   * the pool's nodes. Provide a pool Layer to it.
+   */
+  <const Id extends string>(
+    id: Id,
+    props: ImageDurableObjectProps,
+  ): Effect.Effect<DurableObject, never, PoolHost | Providers>;
+  /**
+   * A Dockerfile Durable Object: Actors in an image the pool builds from
+   * your own Dockerfile, run as it is on the pool's nodes. Provide a pool
+   * Layer to it.
+   */
+  <const Id extends string>(
+    id: Id,
+    props: DockerfileDurableObjectProps,
+  ): Effect.Effect<DurableObject, never, PoolHost | Providers>;
+  <Self, Shape = {}>(): {
+    /** The class form with an inline implementation. */
+    <
+      const Id extends string,
+      // The index signature keeps the all-optional lifecycle shape from
+      // being a weak type that rejects every inferred RPC shape.
+      S extends Shape & DurableObjectShape & Record<string, unknown>,
+      PropsReq = never,
+      InitReq = never,
+    >(
+      id: Id,
+      props: ClassProps<PropsReq>,
+      impl: Effect.Effect<
+        Effect.Effect<S, never, InstanceServices>,
+        ConfigError.ConfigError,
+        InitReq
+      >,
+    ): Effect.Effect<DurableObjectNamespace<S>, never, ClassRequirements<PropsReq | InitReq>> &
+      Named<Id> &
+      PlatformIdentity<Id> & {
+        new (_: never): S;
+      };
+    /** A bare declaration, implemented by `.make(props, impl)`. */
+    <const Id extends string>(
+      id: Id,
+    ): Effect.Effect<DurableObjectNamespace<Shape>, never, Providers> &
+      Named<Id> &
+      PlatformIdentity<Id> & {
+        new (_: never): Shape;
+        make<PropsReq = never, InitReq = never>(
+          props: ClassProps<PropsReq>,
+          impl: Effect.Effect<
+            Effect.Effect<Shape & DurableObjectShape, never, InstanceServices>,
+            ConfigError.ConfigError,
+            InitReq
+          >,
+        ): Layer.Layer<Self, never, ClassRequirements<PropsReq | InitReq>>;
+      };
+  };
+}
+
+/** The Durable Object was deployed without a pool Layer, so nothing would host it. */
+export class DurableObjectHasNoPool extends Data.TaggedError("Rivet.DurableObjectHasNoPool")<{
+  readonly message: string;
+}> {}
+
+/**
+ * A Durable Object class as a node runs it: the instance constructor its
+ * class phase returned, and the services that phase ran with.
+ * @internal
+ */
+export interface HostedDurableObject {
+  readonly name: string;
+  readonly instance: Effect.Effect<DurableObjectShape & Record<string, unknown>, never, any>;
+  readonly context: Context.Context<never>;
+  readonly runtime: DurableObjectRuntimeContext;
+}
+
+/** Declares the pool resources for one Durable Object, given its collected env. @internal */
+export type DeployToPool = (env: Record<string, unknown>) => Effect.Effect<void, never, any>;
+
+export interface DurableObjectRuntimeContext extends HostRuntimeContext {
+  readonly Type: DurableObjectTypeId;
+  readonly alwaysServe: true;
+  /**
+   * Called by a pool Layer while the class phase runs: `deploy` declares the
+   * pool that hosts this class, once its env is collected.
+   * @internal
+   */
+  readonly registerPool: (deploy: DeployToPool) => Effect.Effect<void>;
+  /** At runtime, the built class, once its class phase has run. @internal */
+  readonly hosted: () => HostedDurableObject | undefined;
+}
+
+const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
+  const base = createHostRuntimeContext(DurableObjectTypeId)(id);
+  let deploy: DeployToPool | undefined;
+  let hosted: HostedDurableObject | undefined;
+
+  const ctx: DurableObjectRuntimeContext = {
+    ...base,
+    Type: DurableObjectTypeId,
+    // A Redacted the class reads stays Redacted in the pool's env, so a host
+    // that keeps secrets apart (a Kubernetes Secret, Secret Manager) can.
+    set: (bindingId: string, output: Output.Output) =>
+      Effect.sync(() => {
+        const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+        base.env[key] = output.pipe(Output.map(packEnvValueKeepRedacted));
+        return key;
+      }),
+    // The class phase returns the instance constructor rather than a
+    // handler shape: always hand it to `serve`.
+    alwaysServe: true,
+    registerPool: (next) =>
+      Effect.sync(() => {
+        deploy = next;
+      }),
+    hosted: () => hosted,
+    serve: (_handler, options) =>
+      Effect.gen(function* () {
+        // `shape` is what the class phase returned: the instance constructor.
+        const instance = options?.shape as unknown as HostedDurableObject["instance"];
+        if (globalThis.__ALCHEMY_RUNTIME__) {
+          hosted = {
+            name: id,
+            instance,
+            context: yield* Effect.context<never>(),
+            runtime: ctx,
+          };
+          return;
+        }
+        // The class phase has run, so every Config value it read is in `env`.
+        if (deploy === undefined) {
+          return yield* Effect.die(
+            new DurableObjectHasNoPool({
+              message:
+                `Rivet.DurableObject '${id}' has no pool. Provide a pool Layer to its Effect, ` +
+                `for example RivetDocker.SwarmPool("Default") or RivetAWS.EcsPool("Default").`,
+            }),
+          );
+        }
+        yield* deploy(base.env);
+      }),
+  };
+  return ctx;
+};
+
+/**
+ * A **Durable Object** on Rivet: a single-threaded, stateful instance per
+ * name, with its own SQLite database, key-value storage and alarm on the
+ * Rivet control plane. Each instance runs as a Rivet actor.
+ *
+ * The implementation has the same two phases as `Cloudflare.DurableObject`:
+ * the outer Effect runs once per node and resolves bindings, and the inner
+ * Effect runs once per instance and returns its RPC methods, `fetch` and
+ * `alarm`.
+ *
+ * Where it runs is a pool Layer provided to the outer Effect —
+ * `RivetDocker.SwarmPool("Default")`, `RivetAWS.EcsPool("Default")` — and the
+ * pool is given the control plane. Every Durable Object given the same pool
+ * runs on the same nodes.
+ *
+ * `yield* Counter` from any runtime — a Cloudflare Worker, a Lambda, a
+ * container, another Durable Object — returns its namespace. Calls go
+ * through the control plane's gateway over plain `fetch`, which creates the
+ * instance in its pool on first use, so callers need no RivetKit and no
+ * route to the nodes.
+ *
+ * Given only `main`, it is external: a RivetKit program, async or
+ * `@rivetkit/effect`, that its pool bundles and runs as it is. Given a
+ * `crate`, it is a Rust program that its pool compiles into the node image.
+ * Given an `image`, or a `context` and `dockerfile`, it is an image its
+ * pool's nodes run as it is, prebuilt or built from your own Dockerfile.
+ * Each needs a pool of its own, and has no bindings or `yield*` calls.
+ *
+ * An instance's calls run in parallel, storage included: unlike Cloudflare,
+ * there is no input gate. Make a read-then-write atomic with
+ * `state.storage.transaction(...)`, or provide `Workers.InputGate` (from
+ * `alchemy/Workers`) to run code written for Cloudflare's gate unchanged.
+ *
+ * ### Declaring a Durable Object
+ * **Example:** A counter on a local pool
+ * ```typescript
+ * export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
+ * export const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(Cluster));
+ *
+ * export default class Counter extends Rivet.DurableObject<Counter>()(
+ *   "Counter",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     return Effect.gen(function* () {
+ *       const state = yield* Rivet.DurableObjectState;
+ *       return {
+ *         // Calls run in parallel: the transaction keeps the read and
+ *         // the write together.
+ *         increment: () =>
+ *           state.storage.transaction(
+ *             Effect.gen(function* () {
+ *               const count = ((yield* state.storage.get<number>("count")) ?? 0) + 1;
+ *               yield* state.storage.put("count", count);
+ *               return count;
+ *             }),
+ *           ),
+ *       };
+ *     });
+ *   }).pipe(Effect.provide(Default)),
+ * ) {}
+ * ```
+ *
+ * ### Calling a Durable Object
+ * **Example:** From a Cloudflare Worker
+ * ```typescript
+ * export default class Api extends Cloudflare.Worker<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const counters = yield* Counter;
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const count = yield* counters.getByName("visits").increment();
+ *         return HttpServerResponse.text(String(count));
+ *       }),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * ### Tuning when it sleeps
+ * **Example:** Stay awake a minute after the last call
+ * ```typescript
+ * export default class Room extends Rivet.DurableObject<Room>()(
+ *   "Room",
+ *   { main: import.meta.url, sleepTimeout: "1 minute", sleepGracePeriod: "30 seconds" },
+ *   Effect.gen(function* () {
+ *     return Effect.gen(function* () {
+ *       return { ping: () => Effect.succeed("pong") };
+ *     });
+ *   }).pipe(Effect.provide(Default)),
+ * ) {}
+ * ```
+ *
+ * ### Declaring and implementing separately
+ * **Example:** A declaration callers import, and its implementation
+ * ```typescript
+ * export class Counter extends Rivet.DurableObject<Counter, CounterShape>()("Counter") {}
+ *
+ * export const CounterLive = Counter.make(
+ *   { main: import.meta.url, handler: "CounterLive" },
+ *   Effect.gen(function* () {
+ *     return Effect.gen(function* () {
+ *       const state = yield* Rivet.DurableObjectState;
+ *       return {
+ *         get: () => state.storage.get<number>("count").pipe(Effect.map((n) => n ?? 0)),
+ *       };
+ *     });
+ *   }).pipe(Effect.provide(Default)),
+ * );
+ * ```
+ *
+ * ### Deploying RivetKit Actors
+ * **Example:** Actors written with RivetKit, or `@rivetkit/effect`, run unchanged
+ * ```typescript
+ * export const Counters = RivetDocker.SwarmPool("Counters").pipe(Layer.provide(Cluster));
+ *
+ * export const Counter = Rivet.DurableObject("Counter", { main: "./src/actors.ts" }).pipe(
+ *   Effect.provide(Counters),
+ * );
+ * ```
+ *
+ * ### Deploying Rust Actors
+ * **Example:** A crate compiled into the pool's node image
+ * ```typescript
+ * export const Counters = RivetDocker.SwarmPool("Counters").pipe(Layer.provide(Cluster));
+ *
+ * export const Counter = Rivet.DurableObject("Counter", { crate: "./counter" }).pipe(
+ *   Effect.provide(Counters),
+ * );
+ * ```
+ *
+ * **Example:** Features, a pinned toolchain and system packages
+ * ```typescript
+ * export const Counter = Rivet.DurableObject("Counter", {
+ *   crate: "./crates/counter",
+ *   build: {
+ *     toolchain: "1.85",
+ *     features: ["metrics"],
+ *     packages: ["protobuf-compiler"],
+ *   },
+ * }).pipe(Effect.provide(Counters));
+ * ```
+ *
+ * ### Deploying an image
+ * An image Durable Object takes the same `image`, `context` and
+ * `dockerfile` as `AWS.ECS.Task` or `Cloudflare.Container`.
+ *
+ * **Example:** An image the app already builds and ships
+ * ```typescript
+ * export const Actors = Rivet.DurableObject("Actors", {
+ *   image: "us-docker.pkg.dev/acme/app/actors@sha256:…",
+ * }).pipe(Effect.provide(Default));
+ * ```
+ *
+ * **Example:** The app's own Dockerfile, built by the pool
+ * ```typescript
+ * export const Actors = Rivet.DurableObject("Actors", {
+ *   context: "./actors",
+ *   dockerfile: "./actors/Dockerfile.prod",
+ * }).pipe(Effect.provide(Default));
+ * ```
+ *
+ * **Example:** An image built in the same stack
+ * ```typescript
+ * export const Actors = Effect.gen(function* () {
+ *   const image = yield* Docker.Image("ActorsImage", {
+ *     build: { context: "./actors" },
+ *   });
+ *   return yield* Rivet.DurableObject("Actors", { image: image.imageRef }).pipe(
+ *     Effect.provide(Default),
+ *   );
+ * });
+ * ```
+ *
+ * @resource
+ */
+export const DurableObject: DurableObjectClass = ((
+  ...args:
+    | [
+        string,
+        (
+          | ExternalDurableObjectProps
+          | RustDurableObjectProps
+          | ImageDurableObjectProps
+          | DockerfileDurableObjectProps
+        ),
+      ]
+    | []
+) => {
+  if (args.length === 0) {
+    return (id: string, props?: unknown, impl?: unknown) =>
+      declare(id, (platform as any)()(id, props, impl));
+  }
+  const [id, props] = args;
+  if (props.main !== undefined) return external(id, props as ExternalDurableObjectProps);
+  if (props.crate !== undefined) return rust(id, props as RustDurableObjectProps);
+  if (props.image !== undefined) return image(id, props as ImageDurableObjectProps);
+  return dockerfile(id, props as DockerfileDurableObjectProps);
+}) as unknown as DurableObjectClass;
+
+/**
+ * An external Durable Object: declare its resource, then have the pool it
+ * was given run its program. The pool Layer is what provides `PoolHost`.
+ */
+const external = (id: string, props: ExternalDurableObjectProps) =>
+  Effect.gen(function* () {
+    const resource: DurableObject = yield* (platform as any)(id, { main: props.main });
+    if (globalThis.__ALCHEMY_RUNTIME__) return resource;
+    const host = yield* PoolHost;
+    const main = yield* Effect.sync(() => nodePath.resolve(props.main));
+    yield* host.deployExternal({ id, main, resource });
+    return resource;
+  });
+
+/**
+ * A Rust Durable Object: declare its resource, then have the pool it was
+ * given compile its crate into the node image. The pool Layer is what
+ * provides `PoolHost`.
+ */
+const rust = (id: string, props: RustDurableObjectProps) =>
+  Effect.gen(function* () {
+    const crate = yield* Effect.sync(() => nodePath.resolve(props.crate));
+    const resource: DurableObject = yield* (platform as any)(id, { main: crate });
+    if (globalThis.__ALCHEMY_RUNTIME__) return resource;
+    const host = yield* PoolHost;
+    yield* host.deployCrate({ id, crate, build: props.build, resource });
+    return resource;
+  });
+
+/**
+ * An image Durable Object: a Dockerfile Durable Object whose Dockerfile is
+ * `FROM <image>` and nothing else.
+ */
+const image = (id: string, props: ImageDurableObjectProps) =>
+  dockerfile(id, {
+    dockerfile: { content: Output.interpolate`FROM ${props.image}\n` },
+  });
+
+/**
+ * A Dockerfile Durable Object: declare its resource, then have the pool it
+ * was given build the Dockerfile into its node image. The pool Layer is
+ * what provides `PoolHost`.
+ */
+const dockerfile = (id: string, props: DockerfileDurableObjectProps) =>
+  Effect.gen(function* () {
+    const resource: DurableObject = yield* (platform as any)(id, { main: id });
+    if (globalThis.__ALCHEMY_RUNTIME__) return resource;
+    const host = yield* PoolHost;
+    yield* host.deployDockerfile({
+      id,
+      context: props.context,
+      dockerfile: props.dockerfile,
+      resource,
+    });
+    return resource;
+  });
+
+/** The engine-facing Platform behind {@link DurableObject}. */
+type DurableObjectPlatform = Platform<
+  DurableObject,
+  DurableObjectServices,
+  unknown,
+  DurableObjectRuntimeContext
+>;
+
+const platform = Platform(DurableObjectTypeId, { createRuntimeContext }) as DurableObjectPlatform;
+
+/** The resource type behind every class, which the providers register. @internal */
+export const DurableObjectResource = platform;
+
+/** The Platform declaration behind a class, which a node builds. @internal */
+export const PlatformDeclaration = Symbol.for("alchemy/Rivet/DurableObject/Platform");
+
+/**
+ * A class whose `yield*` is its namespace. While deploying it registers the
+ * class (through its Platform declaration) and binds what a caller needs into
+ * the caller's environment; at runtime it only reads them back, so the class
+ * phase never runs in a caller.
+ */
+const declare = (id: string, declaration: any) =>
+  Object.assign(
+    class {},
+    declaration.make === undefined ? {} : { make: declaration.make },
+    { LogicalId: id, [PlatformDeclaration]: declaration },
+    Effectable.Prototype({
+      label: `${DurableObjectTypeId}<${id}>`,
+      evaluate: () => namespaceOf(id, declaration),
+    }),
+  );
+
+const namespaceOf = (name: string, declaration: Effect.Effect<DurableObject, never, any>) =>
+  Effect.gen(function* () {
+    const ctx = Option.getOrUndefined(yield* Effect.serviceOption(RuntimeContext));
+    // Its own namespace, yielded from its own phase: it's already being
+    // built. It runs on its pool's nodes, which have the control plane in
+    // their environment; binding its own outputs into its environment would
+    // make it depend on itself.
+    if (ctx?.Type === DurableObjectTypeId && ctx.id === name) {
+      return makeNamespace(
+        name,
+        yield* Config.all({
+          endpoint: Config.String("RIVET_ENDPOINT").pipe(Config.withDefault("")),
+          token: Config.String("RIVET_TOKEN").pipe(Config.withDefault("")),
+          namespace: Config.String("RIVET_NAMESPACE").pipe(Config.withDefault("")),
+          pool: Config.String("RIVET_POOL").pipe(Config.withDefault("")),
+        }).pipe(Effect.orDie),
+      );
+    }
+    // Built on a memo map of its own: a class built inside another's phase
+    // would otherwise reuse the caller's already-built pool Layer, which
+    // then never registers the class.
+    const object = globalThis.__ALCHEMY_RUNTIME__
+      ? undefined
+      : yield* declaration.pipe(
+          Effect.provideServiceEffect(Layer.CurrentMemoMap, Layer.makeMemoMap),
+        );
+    // Outside a runtime (the stack itself) there is nothing to call from.
+    if (ctx === undefined) return makeNamespace(name, undefined);
+    // Bound as environment values while deploying; read back at runtime.
+    const bind = <T>(key: string, value: unknown) =>
+      ctx
+        .set(
+          sanitizeKey(`RIVET_${name}_${key}`),
+          Output.isOutput(value) ? value : Output.literal(value),
+        )
+        .pipe(Effect.flatMap((bound) => ctx.get<T>(bound)));
+    const token = yield* bind<Redacted.Redacted<string> | string>("TOKEN", object?.token);
+    return makeNamespace(name, {
+      endpoint: (yield* bind<string>("ENDPOINT", object?.endpoint)) ?? "",
+      namespace: (yield* bind<string>("NAMESPACE", object?.namespace)) ?? "",
+      pool: (yield* bind<string>("POOL", object?.pool)) ?? "",
+      token: token === undefined ? "" : Redacted.isRedacted(token) ? Redacted.value(token) : token,
+    });
+  });
+
+/** Stubs over the gateway; RPC crosses it as fetch-RPC over the actor's `fetch`. @internal */
+export const makeNamespace = (
+  name: string,
+  target: Omit<GatewayTarget, "name" | "key"> | undefined,
+): DurableObjectNamespace<any> => {
+  const getByKey = (key: ReadonlyArray<string>) => {
+    if (target === undefined) {
+      const outside = Effect.die(
+        new DurableObjectCalledOutsideRuntime({
+          message: `Rivet.DurableObject '${name}' can only be called inside a runtime.`,
+        }),
+      );
+      return makeFetchRpcStub<Record<string, unknown>>({
+        fetch: () => outside,
+        base: { fetch: () => outside },
+      }) as DurableObjectStub<any>;
+    }
+    const fetcher = fromNativeFetcher(gatewayFetcher({ ...target, name, key }));
+    return makeFetchRpcStub<Record<string, unknown>>({
+      fetch: (request: HttpClientRequest.HttpClientRequest) =>
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases RuntimeContext, which the caller's runtime provides at call time
+        fetcher.fetch(request) as Effect.Effect<HttpClientResponse.HttpClientResponse, unknown>,
+      base: {
+        fetch: (request: HttpServerRequest.HttpServerRequest) => fetcher.fetch(request),
+      },
+    }) as DurableObjectStub<any>;
+  };
+  return { name, getByName: (instance: string) => getByKey([instance]), getByKey };
+};
+
+/**
+ * The namespace of the Durable Object class named `name`, reached through the
+ * gateway at `target`: for callers Alchemy didn't build, which have no
+ * bindings to read it from.
+ */
+export const namespaceAt = <Shape>(
+  name: string,
+  target: Omit<GatewayTarget, "name" | "key">,
+): DurableObjectNamespace<Shape> => makeNamespace(name, target);
+
+/** A namespace yielded outside any runtime was called. */
+export class DurableObjectCalledOutsideRuntime extends Data.TaggedError(
+  "Rivet.DurableObjectCalledOutsideRuntime",
+)<{
+  readonly message: string;
+}> {}
+
+export const DurableObjectProvider = () =>
+  Provider.succeed(platform, {
+    stables: ["name"],
+    reconcile: ({ id, bindings }) =>
+      Effect.sync(() => {
+        const attrs: DurableObjectAttributes = {
+          name: id,
+          pool: undefined,
+          endpoint: undefined,
+          namespace: undefined,
+          token: undefined,
+        };
+        for (const { data } of bindings) {
+          attrs.pool = data.pool ?? attrs.pool;
+          attrs.endpoint = data.endpoint ?? attrs.endpoint;
+          attrs.namespace = data.namespace ?? attrs.namespace;
+          attrs.token = data.token ?? attrs.token;
+        }
+        return attrs;
+      }),
+    delete: () => Effect.void,
+  });

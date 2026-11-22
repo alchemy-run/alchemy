@@ -7,13 +7,14 @@ import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Region from "@distilled.cloud/aws/Region";
 import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
+import { RuntimeConfigProviderLive } from "alchemy/Runtime";
 import {
   entrypointLayer,
   resolveProgram,
   runProcess,
   stackFromEnv,
 } from "alchemy/Runtime/Bootstrap";
-import * as ConfigProvider from "effect/ConfigProvider";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -24,6 +25,7 @@ export const bootstrap = (entrypoint: unknown): Promise<void> => {
   const platform = Layer.mergeAll(
     BunServices.layer,
     FetchHttpClient.layer,
+    SecureRandom.layerWebCrypto,
     Logger.layer([Logger.consolePretty()]),
   );
 
@@ -37,7 +39,7 @@ export const bootstrap = (entrypoint: unknown): Promise<void> => {
         Layer.provideMerge(Region.fromEnv()),
         Layer.provideMerge(BunHttpServer()),
         Layer.provideMerge(platform),
-        Layer.provideMerge(Layer.succeed(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv())),
+        Layer.provideMerge(RuntimeConfigProviderLive),
       ),
     ),
     Effect.scoped,

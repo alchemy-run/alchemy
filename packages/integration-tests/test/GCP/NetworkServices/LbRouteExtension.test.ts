@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as networkservices from "@distilled.cloud/gcp/networkservices_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -53,29 +54,27 @@ test.provider(
 
       const error = yield* Effect.flip(
         networkservices.createProjectsLocationsLbRouteExtensions({
+          loadBalancingScheme: "INTERNAL_MANAGED",
+          forwardingRules: [
+            `//compute.googleapis.com/projects/${project}/regions/us-central1/forwardingRules/alchemy-missing-fr`,
+          ],
+          extensionChains: [
+            {
+              name: "chain1",
+              matchCondition: { celExpression: "true" },
+              extensions: [
+                {
+                  name: "ext1",
+                  authority: "ext1.example.com",
+                  service: `https://www.googleapis.com/compute/v1/projects/${project}/regions/us-central1/backendServices/alchemy-missing-be`,
+                  timeout: "0.1s",
+                  supportedEvents: ["REQUEST_HEADERS"],
+                },
+              ],
+            },
+          ],
           parent: `projects/${project}/locations/us-central1`,
           lbRouteExtensionId: "alchemy-missing-lb-route",
-          body: {
-            loadBalancingScheme: "INTERNAL_MANAGED",
-            forwardingRules: [
-              `//compute.googleapis.com/projects/${project}/regions/us-central1/forwardingRules/alchemy-missing-fr`,
-            ],
-            extensionChains: [
-              {
-                name: "chain1",
-                matchCondition: { celExpression: "true" },
-                extensions: [
-                  {
-                    name: "ext1",
-                    authority: "ext1.example.com",
-                    service: `https://www.googleapis.com/compute/v1/projects/${project}/regions/us-central1/backendServices/alchemy-missing-be`,
-                    timeout: "0.1s",
-                    supportedEvents: ["REQUEST_HEADERS"],
-                  },
-                ],
-              },
-            ],
-          },
         }),
       );
       expect(error._tag).toBe("BadRequest");
@@ -122,6 +121,13 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_LB_ROUTE_EXTENS
             ],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkServices.LbRouteExtension.lookup({
+          lbRouteExtensionId: created.lbRouteExtensionId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/lbRouteExtensions/");

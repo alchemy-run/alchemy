@@ -1,4 +1,5 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
+import * as NetworkActions from "@distilled.cloud/hetzner/network_actions";
+import * as Networks from "@distilled.cloud/hetzner/networks";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -19,14 +20,26 @@ import {
   labelSelector,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
+  keepsName,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
 export class NetworkNotCreated extends Data.TaggedError("Hetzner.NetworkNotCreated")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export type NetworkSubnetType = "cloud" | "server" | "vswitch";
+
+/**
+ * Deletion was refused because the network has delete protection on, set
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or
+ * turn it off in the Hetzner Console) before deleting it.
+ */
+export class NetworkDeleteProtected extends Data.TaggedError("Hetzner.NetworkDeleteProtected")<{
+  readonly id: number;
+  readonly message: string;
+}> {}
 
 export interface NetworkSubnet {
   /**
@@ -92,8 +105,9 @@ export interface NetworkProps {
    */
   exposeRoutesToVswitch?: boolean;
   /**
-   * Prevent the Network from being deleted in the Cloud Console / API
-   * until this is cleared. The provider disables protection before delete.
+   * Prevent the Network from being deleted in the Cloud Console / API.
+   * While it is on, `destroy` and replacement fail until it is turned off and
+   * deployed.
    * @default false
    */
   deleteProtection?: boolean;
@@ -137,8 +151,18 @@ export type Network = Resource<
     created: string;
   },
   never,
-  Providers
+  Providers,
+  NetworkLookup
 >;
+
+/**
+ * Props for {@link Network.lookup}: find a network this stack
+ * doesn't manage by its name.
+ */
+export interface NetworkLookup {
+  /** Network name (unique in the project). */
+  name: string;
+}
 
 /**
  * A Hetzner Cloud private Network — an isolated IPv4 range that Cloud
@@ -188,6 +212,22 @@ export type Network = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing network
+ * `Network.lookup` references a network Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Attach a Server to an existing network
+ * ```typescript
+ * const network = Hetzner.Network.lookup({ name: "private" });
+ * const server = yield* Hetzner.Server("Web", {
+ *   serverType: "cpx12",
+ *   image: "ubuntu-24.04",
+ *   location: "nbg1",
+ *   networks: [network],
+ * });
+ * ```
+ *
  * @resource
  * @product Network
  */
@@ -227,6 +267,9 @@ const busyRetry = {
 
 const alreadyThere = (e: { readonly _tag: string }): boolean =>
   e._tag === "Conflict" || e._tag === "UnprocessableEntity";
+
+/** Another Network already has the name (`uniqueness_error`). */
+const nameTaken = (e: { readonly _tag: string }): boolean => e._tag === "Conflict";
 
 const alreadyGone = (e: { readonly _tag: string }): boolean =>
   e._tag === "NotFound" || e._tag === "UnprocessableEntity";
@@ -316,23 +359,21 @@ const cidrContains = (outer: string, inner: string): boolean => {
 };
 
 const getById = (id: number) =>
-  Hetzner.networks.getNetwork({ id }).pipe(
+  Networks.getNetwork({ id }).pipe(
     Effect.map(({ network }) => network),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const findByName = (name: string) =>
-  Hetzner.networks
-    .listNetworks({ name, per_page: 50 })
-    .pipe(Effect.map(({ networks }) => networks.find((item) => item.name === name)));
+  Networks.listNetworks({ name, per_page: 50 }).pipe(
+    Effect.map(({ networks }) => networks.find((item) => item.name === name)),
+  );
 
 const findByLabels = (labels: Record<string, string>) =>
-  Hetzner.networks
-    .listNetworks({
-      label_selector: labelSelector(labels),
-      per_page: 50,
-    })
-    .pipe(Effect.map(({ networks }) => networks[0]));
+  Networks.listNetworks({
+    label_selector: labelSelector(labels),
+    per_page: 50,
+  }).pipe(Effect.map(({ networks }) => networks[0]));
 
 const observe = (networkId: number | undefined, name: string, id: string) =>
   Effect.gen(function* () {
@@ -357,7 +398,7 @@ const syncIpRange = (networkId: number, observed: string, desired: string) =>
   Effect.gen(function* () {
     if (observed === desired) return;
     yield* runAction(
-      Hetzner.networkActions.changeNetworkIpRange({
+      NetworkActions.changeNetworkIpRange({
         id: networkId,
         ip_range: desired,
       }),
@@ -378,14 +419,12 @@ const syncMetadata = (args: {
     const nameChanged = args.observed.name !== args.name;
     const exposeChanged = args.observed.expose_routes_to_vswitch !== args.exposeRoutesToVswitch;
     if (!labelsChanged && !nameChanged && !exposeChanged) return;
-    yield* Hetzner.networks
-      .updateNetwork({
-        id: args.networkId,
-        name: nameChanged ? args.name : undefined,
-        expose_routes_to_vswitch: exposeChanged ? args.exposeRoutesToVswitch : undefined,
-        labels: labelsChanged ? args.labels : undefined,
-      })
-      .pipe(Effect.retry(busyRetry));
+    yield* Networks.updateNetwork({
+      id: args.networkId,
+      name: nameChanged ? args.name : undefined,
+      expose_routes_to_vswitch: exposeChanged ? args.exposeRoutesToVswitch : undefined,
+      labels: labelsChanged ? args.labels : undefined,
+    }).pipe(Effect.retry(busyRetry));
   });
 
 const syncSubnets = (
@@ -400,14 +439,38 @@ const syncSubnets = (
       networkZone: subnet.network_zone,
       vswitchId: subnet.vswitch_id ?? undefined,
     }));
-    const observedKeys = new Set(observedMapped.map(subnetKey));
-    const desiredKeys = new Set(desired.map(subnetKey));
+    // A desired subnet without a range is satisfied by any observed one of
+    // the same type, zone and vSwitch that no ranged subnet claims —
+    // Hetzner picked its range when it was added.
+    const unranged = (subnet: { type: string; networkZone: string; vswitchId?: number | null }) =>
+      `${subnet.type}|${subnet.networkZone}|${subnet.vswitchId ?? ""}`;
+    const rangedKeys = new Set(
+      desired.filter((subnet) => subnet.ipRange !== undefined).map(subnetKey),
+    );
+    const kept = new Set<string>();
+    const satisfied = new Set<NetworkSubnet>();
+    for (const subnet of observedMapped) {
+      if (rangedKeys.has(subnetKey(subnet))) kept.add(subnetKey(subnet));
+    }
+    for (const want of desired) {
+      if (want.ipRange !== undefined) {
+        if (kept.has(subnetKey(want))) satisfied.add(want);
+        continue;
+      }
+      const match = observedMapped.find(
+        (subnet) => !kept.has(subnetKey(subnet)) && unranged(subnet) === unranged(want),
+      );
+      if (match !== undefined) {
+        kept.add(subnetKey(match));
+        satisfied.add(want);
+      }
+    }
 
     for (const subnet of observedMapped) {
-      if (desiredKeys.has(subnetKey(subnet))) continue;
+      if (kept.has(subnetKey(subnet))) continue;
       if (subnet.ipRange === undefined) continue;
       yield* runAction(
-        Hetzner.networkActions.deleteNetworkSubnet({
+        NetworkActions.deleteNetworkSubnet({
           id: networkId,
           ip_range: subnet.ipRange,
         }),
@@ -415,9 +478,9 @@ const syncSubnets = (
     }
 
     for (const subnet of desired) {
-      if (observedKeys.has(subnetKey(subnet))) continue;
+      if (satisfied.has(subnet)) continue;
       yield* runAction(
-        Hetzner.networkActions.addNetworkSubnet({
+        NetworkActions.addNetworkSubnet({
           id: networkId,
           type: subnet.type,
           ip_range: subnet.ipRange,
@@ -440,7 +503,7 @@ const syncRoutes = (
     for (const route of observed) {
       if (desiredKeys.has(routeKey(route))) continue;
       yield* runAction(
-        Hetzner.networkActions.deleteNetworkRoute({
+        NetworkActions.deleteNetworkRoute({
           id: networkId,
           destination: route.destination,
           gateway: route.gateway,
@@ -451,7 +514,7 @@ const syncRoutes = (
     for (const route of desired) {
       if (observedKeys.has(routeKey(route))) continue;
       yield* runAction(
-        Hetzner.networkActions.addNetworkRoute({
+        NetworkActions.addNetworkRoute({
           id: networkId,
           destination: route.destination,
           gateway: route.gateway,
@@ -464,7 +527,7 @@ const syncProtection = (networkId: number, observed: boolean, desired: boolean) 
   Effect.gen(function* () {
     if (observed === desired) return;
     yield* runAction(
-      Hetzner.networkActions.changeNetworkProtection({
+      NetworkActions.changeNetworkProtection({
         id: networkId,
         delete: desired,
       }),
@@ -476,7 +539,7 @@ export const NetworkProvider = () =>
     stables: ["networkId", "created"],
 
     list: Effect.fn(function* () {
-      return yield* Hetzner.networks.listNetworks
+      return yield* Networks.listNetworks
         .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,
@@ -491,21 +554,36 @@ export const NetworkProvider = () =>
         news.ipRange !== output.ipRange &&
         !cidrContains(news.ipRange, output.ipRange)
       ) {
-        return { action: "replace" } as const;
+        return { action: "replace", deleteFirst: keepsName(news, output) } as const;
       }
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* findByName(name);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const name = yield* createNetworkName(id, olds?.name ?? output?.name);
       const observed = yield* observe(output?.networkId, name, id);
       if (observed === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.networkId,
+          foundId: observed.id,
+          claimedName: olds?.name,
+          foundName: observed.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(observed);
       return (yield* hasAlchemyLabels(id, tagRecord(observed.labels))) ? attrs : Unowned(attrs);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
-      const name = yield* createNetworkName(
+      let name = yield* createNetworkName(
         id,
         news.name ?? (output === undefined ? undefined : output.name),
       );
@@ -530,38 +608,42 @@ export const NetworkProvider = () =>
         !cidrContains(news.ipRange, current.ip_range)
       ) {
         current = undefined;
+        // The outgoing generation keeps its name until it is deleted.
+        name = yield* createNetworkName(id, news.name);
       }
 
       // Ensure — create when missing. A name-collision race is treated as
       // the peer winning; we pick that row up and continue into sync.
       if (current === undefined) {
-        const created = yield* Hetzner.networks
-          .createNetwork({
-            name,
-            ip_range: news.ipRange,
-            labels: desiredLabels,
-            subnets: desiredSubnets.map((subnet) => ({
+        const created = yield* Networks.createNetwork({
+          name,
+          ip_range: news.ipRange,
+          labels: desiredLabels,
+          // Creating a Network takes ranged subnets only; the rest are
+          // added below, where Hetzner picks the first free `/24`.
+          subnets: desiredSubnets
+            .filter((subnet) => subnet.ipRange !== undefined)
+            .map((subnet) => ({
               type: subnet.type,
               ip_range: subnet.ipRange,
               network_zone: subnet.networkZone,
               vswitch_id: subnet.vswitchId,
             })),
-            routes: desiredRoutes.map((route) => ({
-              destination: route.destination,
-              gateway: route.gateway,
-            })),
-            expose_routes_to_vswitch: exposeRoutesToVswitch,
-          })
-          .pipe(
-            Effect.retry(busyRetry),
-            Effect.map((response) => response.network),
-            Effect.catchIf(alreadyThere, () => findByName(name)),
-          );
+          routes: desiredRoutes.map((route) => ({
+            destination: route.destination,
+            gateway: route.gateway,
+          })),
+          expose_routes_to_vswitch: exposeRoutesToVswitch,
+        }).pipe(
+          Effect.retry(busyRetry),
+          Effect.map((response) => response.network),
+          Effect.catchIf(nameTaken, () => findByName(name)),
+        );
         current = created;
       }
 
       if (current === undefined) {
-        return yield* new NetworkNotCreated({ name });
+        return yield* new NetworkNotCreated({ resourceName: name });
       }
 
       // Sync each mutable aspect from observed cloud state, not `olds`.
@@ -584,16 +666,26 @@ export const NetworkProvider = () =>
       return toAttrs(fresh ?? afterRoutes);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
-      if (output.deleteProtection) {
+    delete: Effect.fn(function* ({ output, force }) {
+      const current = yield* getById(output.networkId);
+      if (current === undefined) return;
+      // Delete protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
+      if (current.protection.delete) {
+        if (force !== true) {
+          return yield* new NetworkDeleteProtected({
+            id: output.networkId,
+            message: `Hetzner network '${output.networkId}' has delete protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* runAction(
-          Hetzner.networkActions.changeNetworkProtection({
+          NetworkActions.changeNetworkProtection({
             id: output.networkId,
             delete: false,
           }),
         ).pipe(Effect.catchIf(alreadyGone, () => Effect.void));
       }
-      yield* Hetzner.networks.deleteNetwork({ id: output.networkId }).pipe(
+      yield* Networks.deleteNetwork({ id: output.networkId }).pipe(
         Effect.retry(busyRetry),
         Effect.catchTag("NotFound", () => Effect.void),
       );

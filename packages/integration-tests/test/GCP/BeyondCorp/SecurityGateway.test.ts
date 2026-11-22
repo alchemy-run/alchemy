@@ -1,9 +1,10 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as beyondcorp from "@distilled.cloud/gcp/beyondcorp_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { logLevel, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -58,12 +59,10 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         beyondcorp.createProjectsLocationsSecurityGateways({
+          displayName: "probe",
+          hubs: { "us-central1": { internetGateway: {} } },
           parent: `projects/${project}/locations/global`,
           securityGatewayId: "alch-probe-sg",
-          body: {
-            displayName: "probe",
-            hubs: { "us-central1": { internetGateway: {} } },
-          },
         }),
       );
       expect(error._tag).toEqual("BadRequest");
@@ -91,6 +90,13 @@ test.provider.skipIf(!runLifecycle)(
             hubs: { "us-central1": { internetGateway: {} } },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.BeyondCorp.SecurityGateway.lookup({
+          securityGatewayId: created.securityGatewayId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/securityGateways/");

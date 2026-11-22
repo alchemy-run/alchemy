@@ -2,6 +2,7 @@
 title: Custom domains, TCP & private networks
 description: Reach a Railway Service on your own hostname, expose databases over public TCP, and name private-mesh DNS.
 ---
+import Tree from "../../../components/diagrams/Tree.astro";
 
 HTTP [Services](/railway/compute/services) already get a generated
 `*.up.railway.app` hostname. That is enough for most apps. Add a
@@ -10,6 +11,16 @@ control. Add a [`TcpProxy`](/providers/railway/tcpproxy) so a laptop
 or deploy-time migration can reach Postgres, MySQL, Mongo, or Redis.
 Named [`PrivateNetwork`](/providers/railway/privatenetwork)s add
 custom DNS on the default `*.railway.internal` mesh.
+
+<Tree
+  nodes={[
+    { id: "env", label: "production", type: "environment · private network *.railway.internal" },
+    { id: "api", label: "api", type: "Service", parent: "env", tone: "accent", specs: [["public", "api.up.railway.app"], ["private", "api.railway.internal"]] },
+    { id: "worker", label: "worker", type: "Service", parent: "env", specs: [["public", "none"], ["private", "worker.railway.internal"]] },
+    { id: "pg", label: "Postgres", type: "database", parent: "env", specs: [["public", "TCP proxy, if you add one"], ["private", "postgres.railway.internal"]] },
+  ]}
+  caption="Services in an environment reach each other by name on its private network. Only what you publish gets a public hostname, and a database is reachable from outside only through a TCP proxy."
+/>
 
 ## Publish the Service
 
@@ -68,10 +79,15 @@ const www = yield* Railway.CustomDomain("Www", {
 });
 ```
 
-Yield `Www` in the Stack. Point DNS at
-`www.verificationDnsHost` / `www.verificationToken`. `www.url` is
-`https://www.example.com`. `verified` flips once Railway sees the
+Yield `Www` in the Stack. Publish the records in `www.dnsRecords`
+(the `CNAME` and the verification `TXT`) with your DNS host. `www.url`
+is `https://www.example.com`. `verified` flips once Railway sees the
 record.
+
+`Railway.Website.*` composites can publish those records for you: pass
+`domain: { name: "www.example.com", dns: Cloudflare.DNS.Adapter() }` (or
+`AWS.Route53.Adapter()`, `Hetzner.DNS.Adapter()`). See
+[DNS Adapters](/infrastructure-as-code/dns-adapters).
 
 `targetPort` is optional and updates in place. Changing `domain`,
 `service`, or `environment` replaces the CustomDomain.

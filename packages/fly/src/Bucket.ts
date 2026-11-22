@@ -1,5 +1,7 @@
-import type { AddOnsResponseEdgesItemNode } from "@distilled.cloud/fly-io/addons";
-import * as addons from "@distilled.cloud/fly-io/addons";
+import { fromCredentials, type Credentials } from "@distilled.cloud/aws/Credentials";
+import * as AwsEndpoint from "@distilled.cloud/aws/Endpoint";
+import type { RegionName } from "@distilled.cloud/aws/Region";
+import * as S3 from "@distilled.cloud/aws/s3";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
@@ -9,11 +11,15 @@ import { createInternalTags } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { resolveOrgSlug } from "./Environment.ts";
 import { TigrisCredentialsMissing } from "./Errors.ts";
+import * as AddOns from "./internal/AddOns.ts";
 import { createFlyAppName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -133,8 +139,18 @@ export type Bucket = Resource<
     bucketName: Redacted.Redacted<string> | undefined;
   },
   never,
-  Providers
+  Providers,
+  BucketLookup
 >;
+
+/**
+ * Props for {@link Bucket.lookup}: find a Tigris bucket this stack
+ * doesn't manage by its name.
+ */
+export interface BucketLookup {
+  /** Tigris bucket / add-on name. */
+  name: string;
+}
 
 /**
  * A Fly.Bucket is Tigris S3-compatible object storage, billed through
@@ -245,13 +261,25 @@ export type Bucket = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing bucket
+ * `Bucket.lookup` references a bucket Alchemy doesn't manage (created with
+ * `fly storage create` or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted. Tigris returns a bucket's access keys
+ * only when it is created, so a looked-up bucket's credential attributes
+ * are `undefined` unless Fly still reports them.
+ *
+ * **Example:** Reference an existing bucket
+ * ```typescript
+ * const assets = Fly.Bucket.lookup({ name: "my-assets" });
+ * ```
+ *
  * @resource
  * @product Bucket
  */
 export const Bucket = Resource<Bucket>("Fly.Bucket");
 
 export class BucketNotCreated extends Data.TaggedError("Fly.BucketNotCreated")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class BucketOrgMissing extends Data.TaggedError("Fly.BucketOrgMissing")<{
@@ -259,17 +287,36 @@ export class BucketOrgMissing extends Data.TaggedError("Fly.BucketOrgMissing")<{
 }> {}
 
 export class BucketProvisionFailed extends Data.TaggedError("Fly.BucketProvisionFailed")<{
-  name: string;
+  resourceName: string;
   status: string | undefined;
   errorMessage: string | undefined;
 }> {}
 
 class BucketPending extends Data.TaggedError("Fly.BucketPending")<{
-  name: string;
+  resourceName: string;
   status: string;
-}> {}
+}> {
+  override get message() {
+    return `Tigris bucket ${this.resourceName} is still ${this.status}`;
+  }
+}
+
+/**
+ * Fly lists an add-on whose Tigris bucket is gone, and Fly's delete
+ * fails on the missing bucket.
+ */
+export class BucketRecordStale extends Data.TaggedError("Fly.BucketRecordStale")<{
+  resourceName: string;
+  reason: string;
+}> {
+  override get message() {
+    return `Fly keeps a stale add-on record for Tigris bucket ${this.resourceName}: ${this.reason}`;
+  }
+}
 
 const TIGRIS = "tigris" as const;
+
+const TIGRIS_ENDPOINT = "https://fly.storage.tigris.dev";
 
 const backoff = Schedule.min([
   Schedule.exponential(Duration.millis(500), 1.5),
@@ -332,20 +379,7 @@ const keepSecret = (
 const envString = (env: Record<string, unknown>, key: BucketSecretName): string | undefined =>
   asString(env[key]);
 
-type ObservedAddOn = Pick<
-  AddOnsResponseEdgesItemNode,
-  | "id"
-  | "name"
-  | "status"
-  | "errorMessage"
-  | "environment"
-  | "options"
-  | "metadata"
-  | "ssoLink"
-  | "createdAt"
-> & {
-  organization?: { slug?: string | null; rawSlug?: string } | null;
-};
+type ObservedAddOn = AddOns.AddOnRow;
 
 const unwrapSecret = (value: Redacted.Redacted<string> | string): string =>
   Redacted.isRedacted(value) ? Redacted.value(value) : value;
@@ -383,10 +417,7 @@ const toAttrs = (
   const env = asRecord(addOn.environment);
   const name = addOn.name ?? fallback?.name ?? previous?.name ?? "";
   const orgSlug =
-    asString(addOn.organization?.slug) ??
-    asString(addOn.organization?.rawSlug) ??
-    fallback?.orgSlug ??
-    previous?.orgSlug;
+    asString(addOn.orgSlug) ?? asString(addOn.orgRawSlug) ?? fallback?.orgSlug ?? previous?.orgSlug;
   return {
     addOnId: addOn.id,
     name,
@@ -425,24 +456,7 @@ const hasAlchemyMetadata = (metadata: unknown): boolean => {
 const isOwnedAddOn = (addOn: ObservedAddOn): boolean =>
   matchesAlchemyPhysicalName(addOn.name ?? undefined) || hasAlchemyMetadata(addOn.metadata);
 
-export const listTigrisAddOns = Effect.fn(function* () {
-  const rows: AddOnsResponseEdgesItemNode[] = [];
-  let after: string | undefined;
-  for (let i = 0; i < 8; i++) {
-    const page = yield* addons.addOns({
-      type: TIGRIS,
-      first: 50,
-      after,
-    });
-    for (const edge of page.edges ?? []) {
-      if (edge?.node != null) rows.push(edge.node);
-    }
-    if (!page.pageInfo.hasNextPage) break;
-    after = page.pageInfo.endCursor ?? undefined;
-    if (after === undefined || after.length === 0) break;
-  }
-  return rows;
-});
+export const listTigrisAddOns = () => AddOns.listAddOns(TIGRIS);
 
 const findById = (addOnId: string) =>
   listTigrisAddOns().pipe(Effect.map((addOns) => addOns.find((addOn) => addOn.id === addOnId)));
@@ -460,29 +474,25 @@ const pendingStatus = (status: string | undefined) =>
 
 const waitUntilReady = (name: string, addOnId: string) =>
   findById(addOnId).pipe(
-    Effect.flatMap(
-      (
-        addOn,
-      ): Effect.Effect<AddOnsResponseEdgesItemNode, BucketPending | BucketProvisionFailed> => {
-        if (addOn === undefined) {
-          return Effect.fail(new BucketPending({ name, status: "missing" }));
-        }
-        const status = addOn.status ?? undefined;
-        if (failedStatus(status)) {
-          return Effect.fail(
-            new BucketProvisionFailed({
-              name,
-              status,
-              errorMessage: addOn.errorMessage ?? undefined,
-            }),
-          );
-        }
-        if (pendingStatus(status)) {
-          return Effect.fail(new BucketPending({ name, status: status ?? "creating" }));
-        }
-        return Effect.succeed(addOn);
-      },
-    ),
+    Effect.flatMap((addOn): Effect.Effect<ObservedAddOn, BucketPending | BucketProvisionFailed> => {
+      if (addOn === undefined) {
+        return Effect.fail(new BucketPending({ resourceName: name, status: "missing" }));
+      }
+      const status = addOn.status ?? undefined;
+      if (failedStatus(status)) {
+        return Effect.fail(
+          new BucketProvisionFailed({
+            resourceName: name,
+            status,
+            errorMessage: addOn.errorMessage ?? undefined,
+          }),
+        );
+      }
+      if (pendingStatus(status)) {
+        return Effect.fail(new BucketPending({ resourceName: name, status: status ?? "creating" }));
+      }
+      return Effect.succeed(addOn);
+    }),
     Effect.retry({
       while: (e) => e._tag === "Fly.BucketPending",
       times: 8,
@@ -491,51 +501,221 @@ const waitUntilReady = (name: string, addOnId: string) =>
     Effect.catchTag("Fly.BucketPending", () => findById(addOnId)),
   );
 
-const waitUntilGone = (addOnId: string, name: string) =>
-  Effect.gen(function* () {
-    // Best-effort: Tigris often answers "The specified bucket does not
-    // exist" (untyped UnknownFlyIoError) for a delete that already
-    // succeeded. Never fail the wait on that — only on the add-on still
-    // showing up in list.
-    yield* Effect.result(
-      addons.deleteAddOn({
-        input: addOnId.length > 0 ? { addOnId } : { name, provider: TIGRIS },
-      }),
-    );
-    const still =
-      (yield* findById(addOnId)) ?? (name.length > 0 ? yield* findByName(name) : undefined);
-    if (still !== undefined) {
-      return yield* new BucketPending({
-        name,
-        status: still.status ?? "deleting",
-      });
-    }
-  }).pipe(
-    Effect.retry({
-      while: (e) => e._tag === "Fly.BucketPending",
-      schedule: Schedule.spaced("2 seconds"),
-      times: 20,
-    }),
+interface TigrisKeys {
+  accessKeyId: Redacted.Redacted<string>;
+  secretAccessKey: Redacted.Redacted<string>;
+  endpoint: string;
+}
+
+/** The bucket's own S3 keys. Fly returns them only from createAddOn. */
+const tigrisKeysOf = (
+  attrs: Pick<Bucket["Attributes"], "accessKeyId" | "secretAccessKey" | "endpoint">,
+): TigrisKeys | undefined =>
+  attrs.accessKeyId !== undefined && attrs.secretAccessKey !== undefined
+    ? {
+        accessKeyId: attrs.accessKeyId,
+        secretAccessKey: attrs.secretAccessKey,
+        endpoint: asString(attrs.endpoint) ?? TIGRIS_ENDPOINT,
+      }
+    : undefined;
+
+const withTigrisKeys = <A, E>(
+  keys: TigrisKeys,
+  operation: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
+) =>
+  operation.pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        fromCredentials(
+          { accessKeyId: keys.accessKeyId, secretAccessKey: keys.secretAccessKey },
+          "auto" as RegionName,
+        ),
+        AwsEndpoint.of(keys.endpoint),
+        FetchHttpClient.layer,
+      ),
+    ),
   );
 
-const resolveOrganization = (orgSlug: string) =>
-  addons
-    .organization({ slug: orgSlug })
-    .pipe(Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)));
+/**
+ * Signed HeadBucket. Tigris answers 404 for a name it has no bucket
+ * under and 403 for a bucket the keys don't own. After a delete it can
+ * keep answering 200 to the deleted bucket's own keys for minutes.
+ */
+const tigrisHasBucket = (keys: TigrisKeys, bucketName: string) =>
+  withTigrisKeys(keys, S3.headBucket({ Bucket: bucketName })).pipe(
+    Effect.as(true),
+    Effect.catchTag(["NotFound", "NoSuchBucket"], () => Effect.succeed(false)),
+  );
+
+const requestDelete = (addOnId: string, name: string) =>
+  AddOns.deleteAddOn(addOnId.length > 0 ? { addOnId } : { name, provider: TIGRIS }).pipe(
+    Effect.as("deleted" as const),
+    Effect.catchTag("TigrisBucketNotFound", () => Effect.succeed("missing" as const)),
+  );
+
+interface DeleteTarget {
+  addOnId: string;
+  /** Fly add-on name. */
+  name: string;
+  /** Tigris bucket name (the add-on name unless Fly said otherwise). */
+  bucketName: string;
+  keys: TigrisKeys | undefined;
+}
+
+const deleteTargetOf = (attrs: Bucket["Attributes"]): DeleteTarget => ({
+  addOnId: attrs.addOnId,
+  name: attrs.name,
+  bucketName: asString(attrs.bucketName) ?? attrs.name,
+  keys: tigrisKeysOf(attrs),
+});
+
+/**
+ * Delete through Fly (which also empties the bucket), then confirm.
+ * With the bucket's keys, Tigris decides (its missing-bucket answer to
+ * the delete, else HeadBucket): Fly's list lags it and can keep a stale
+ * record. Without keys, the add-on must leave Fly's list.
+ * Fails with BucketPending once the confirm runs out; `missing` reports
+ * whether Fly's last delete said Tigris has no such bucket while the
+ * record stayed listed (only without keys).
+ */
+const deleteVerified = (target: DeleteTarget) =>
+  Effect.suspend(() => {
+    const state = { missing: false };
+    return Effect.gen(function* () {
+      // Other delete failures (a bucket still attached to an App, a Fly
+      // 5xx) are transient; the confirm below decides.
+      const requested = yield* Effect.result(requestDelete(target.addOnId, target.name));
+      state.missing = Result.isSuccess(requested) && requested.success === "missing";
+      if (target.keys !== undefined) {
+        // Fly forwards Tigris's own "bucket does not exist" for the delete:
+        // the bucket is gone. HeadBucket can keep answering 200 to the
+        // deleted bucket's keys for minutes after that.
+        if (state.missing) return;
+        if (!(yield* tigrisHasBucket(target.keys, target.bucketName))) return;
+        return yield* new BucketPending({ resourceName: target.name, status: "deleting" });
+      }
+      const still =
+        (target.addOnId.length > 0 ? yield* findById(target.addOnId) : undefined) ??
+        (target.name.length > 0 ? yield* findByName(target.name) : undefined);
+      if (still !== undefined) {
+        return yield* new BucketPending({
+          resourceName: target.name,
+          status: still.status ?? "deleting",
+        });
+      }
+    }).pipe(
+      Effect.retry({
+        while: (e) => e._tag === "Fly.BucketPending",
+        schedule: Schedule.spaced("2 seconds"),
+        times: 20,
+      }),
+      Effect.as({ missing: false }),
+      Effect.catchTag("Fly.BucketPending", (pending) =>
+        state.missing && target.keys === undefined
+          ? Effect.succeed({ missing: true })
+          : Effect.fail(pending),
+      ),
+    );
+  });
+
+const randomBase32 = (length: number) =>
+  Effect.sync(() => {
+    const alphabet = "abcdefghijklmnopqrstuvwxyz234567";
+    return Array.from(crypto.getRandomValues(new Uint8Array(length)), (b) => alphabet[b % 32]).join(
+      "",
+    );
+  });
+
+/**
+ * A throwaway bucket, only for its keys. Its name matches the physical
+ * name shape, so a leaked one is listed and nuked like any other.
+ */
+const helperBucket = Effect.fn(function* (orgSlug: string) {
+  const org = yield* resolveOrganization(orgSlug);
+  if (org === undefined) {
+    return yield* new BucketOrgMissing({ orgSlug });
+  }
+  yield* ensureTos(orgSlug, org.id);
+  const name = `alchemy-fix-${yield* randomBase32(16)}`;
+  const created = yield* AddOns.createAddOn({
+    type: TIGRIS,
+    name,
+    organizationId: org.id,
+    options: desiredOptions({}),
+  });
+  if (created === undefined) {
+    return yield* new BucketNotCreated({ resourceName: name });
+  }
+  return toAttrs(created, undefined, { name, orgSlug });
+});
+
+/**
+ * Fly keeps an add-on record whose Tigris bucket is gone, and its
+ * delete fails on the missing bucket. Recreate the name in Tigris with a
+ * throwaway bucket's keys so Fly's delete has a bucket to remove.
+ * CreateBucket fails on a name Tigris still holds, so this never touches
+ * a live bucket. A name deleted in the last several minutes stays
+ * blocked (`BucketInaccessible`); the delete fails and a later one
+ * repairs it.
+ */
+const repairStaleRecord = Effect.fn(function* (target: DeleteTarget, orgSlug: string) {
+  yield* Effect.logWarning(
+    `Fly still lists Tigris bucket ${target.name} after Tigris reported it gone; repairing the stale record`,
+  );
+  yield* Effect.scoped(
+    Effect.gen(function* () {
+      const helper = yield* Effect.acquireRelease(helperBucket(orgSlug), (attrs) =>
+        deleteVerified(deleteTargetOf(attrs)).pipe(Effect.ignore),
+      );
+      const keys = tigrisKeysOf(helper);
+      if (keys === undefined) {
+        return yield* new BucketRecordStale({
+          resourceName: target.name,
+          reason: "Fly returned no keys for the temporary repair bucket",
+        });
+      }
+      const recreated = yield* Effect.result(
+        withTigrisKeys(keys, S3.createBucket({ Bucket: target.bucketName })),
+      );
+      if (Result.isFailure(recreated)) {
+        return yield* new BucketRecordStale({
+          resourceName: target.name,
+          reason: `Tigris would not recreate the name (${recreated.failure._tag}); a recently deleted name stays blocked for several minutes, so retry the delete later`,
+        });
+      }
+      const result = yield* deleteVerified({ ...target, keys: undefined });
+      if (result.missing) {
+        return yield* new BucketRecordStale({
+          resourceName: target.name,
+          reason: "Fly's delete still reported a missing bucket after the name was recreated",
+        });
+      }
+    }),
+  );
+});
+
+/**
+ * Delete and confirm. A stale Fly record is repaired only when there are
+ * no keys to ask Tigris with (nuke, adopted buckets): with keys, Tigris's
+ * 404 already proves the bucket is gone.
+ */
+const waitUntilGone = Effect.fn(function* (attrs: Bucket["Attributes"]) {
+  const target = deleteTargetOf(attrs);
+  const result = yield* deleteVerified(target);
+  if (!result.missing) return;
+  yield* repairStaleRecord(target, attrs.orgSlug ?? (yield* resolveOrgSlug()));
+});
+
+const resolveOrganization = (orgSlug: string) => AddOns.getOrganization(orgSlug);
 
 const ensureTos = (orgSlug: string, organizationId: string) =>
   Effect.gen(function* () {
-    const agreed = yield* addons.agreedToProviderTos({
-      slug: orgSlug,
-      providerName: TIGRIS,
-    });
+    const agreed = yield* AddOns.agreedToProviderTos(orgSlug, TIGRIS);
     if (agreed === true) return;
     const tos = yield* Effect.result(
-      addons.createExtensionTosAgreement({
-        input: {
-          addOnProviderName: TIGRIS,
-          organizationId,
-        },
+      AddOns.createExtensionTosAgreement({
+        addOnProviderName: TIGRIS,
+        organizationId,
       }),
     );
     if (Result.isFailure(tos)) return;
@@ -578,6 +758,17 @@ export const BucketProvider = () =>
         return { action: "replace" as const };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* findByName(name);
+      if (found === undefined) return undefined;
+      const detail = yield* AddOns.getAddOn({
+        id: found.id,
+        name: found.name ?? name,
+        provider: TIGRIS,
+      });
+      return toAttrs(detail ?? found, undefined, { name });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -623,21 +814,21 @@ export const BucketProvider = () =>
       if (current === undefined) {
         yield* ensureTos(orgSlug, org.id);
         const created = yield* Effect.result(
-          addons.createAddOn({
-            input: {
-              type: TIGRIS,
-              name,
-              organizationId: org.id,
-              options: desiredOptions(props),
-            },
+          AddOns.createAddOn({
+            type: TIGRIS,
+            name,
+            organizationId: org.id,
+            options: desiredOptions(props),
           }),
         );
-        if (Result.isSuccess(created)) {
-          current = created.success.addOn;
+        if (Result.isSuccess(created) && created.success !== undefined) {
+          current = created.success;
         } else {
           current = yield* findByName(name);
           if (current === undefined) {
-            return yield* created.failure;
+            return yield* Result.isFailure(created)
+              ? created.failure
+              : new BucketNotCreated({ resourceName: name });
           }
         }
         const createdSecrets = current;
@@ -650,13 +841,13 @@ export const BucketProvider = () =>
       }
 
       if (current === undefined || current.id.length === 0) {
-        return yield* new BucketNotCreated({ name });
+        return yield* new BucketNotCreated({ resourceName: name });
       }
 
       const status = current.status ?? undefined;
       if (failedStatus(status)) {
         return yield* new BucketProvisionFailed({
-          name,
+          resourceName: name,
           status,
           errorMessage: current.errorMessage ?? undefined,
         });
@@ -675,18 +866,16 @@ export const BucketProvider = () =>
           ...desired,
         };
         const updated = yield* Effect.result(
-          addons.updateAddOn({
-            input: {
-              addOnId: current.id,
-              options: optionsChanged ? nextOptions : undefined,
-              metadata: metaChanged ? nextMeta : undefined,
-            },
+          AddOns.updateAddOn({
+            addOnId: current.id,
+            options: optionsChanged ? nextOptions : undefined,
+            metadata: metaChanged ? nextMeta : undefined,
           }),
         );
         if (Result.isSuccess(updated)) {
           current = {
             ...current,
-            ...updated.success.addOn,
+            ...updated.success,
           };
         } else {
           current = (yield* findById(current.id)) ?? current;
@@ -714,15 +903,8 @@ export const BucketProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const addOnId = output.addOnId;
-      const name = output.name;
-      if (addOnId.length === 0 && name.length === 0) return;
-      // Always wait for the add-on to leave the list. A failed
-      // deleteAddOn plus a single list miss is not gone — Tigris
-      // list lags, and a bucket still attached to an App is a
-      // transient error. waitUntilGone retries delete and only
-      // succeeds once list (id and name) is empty.
-      yield* waitUntilGone(addOnId, name);
+      if (output.addOnId.length === 0 && output.name.length === 0) return;
+      yield* waitUntilGone(output);
     }),
   });
 
@@ -749,7 +931,7 @@ const requireBucketSecrets = Effect.fn(function* (appName: string, values: Recor
   ];
   if (required.some((key) => !values[key]?.trim())) {
     return yield* new TigrisCredentialsMissing({
-      name: values.BUCKET_NAME || appName,
+      resourceName: values.BUCKET_NAME || appName,
     });
   }
 });
@@ -820,17 +1002,15 @@ const findAttachedBucket = (input: { id?: string; name: string }) =>
           : undefined;
     if (listed === undefined) {
       return yield* new BucketPending({
-        name: input.name || input.id || "",
+        resourceName: input.name || input.id || "",
         status: "missing",
       });
     }
-    const detail = yield* addons
-      .addOn({
-        id: listed.id,
-        name: listed.name ?? input.name,
-        provider: TIGRIS,
-      })
-      .pipe(Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)));
+    const detail = yield* AddOns.getAddOn({
+      id: listed.id,
+      name: listed.name ?? input.name,
+      provider: TIGRIS,
+    });
     return detail ?? listed;
   });
 

@@ -11,7 +11,7 @@ export const MAX_DESCRIPTION_LENGTH = 1024;
 export const MAX_DISPLAY_NAME_LENGTH = 128;
 
 export class SecuritycenterNotResolved extends Data.TaggedError("GCP.SecurityCenter.NotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class OrganizationNotResolved extends Data.TaggedError(
@@ -293,14 +293,14 @@ const parentOf = (name: string) =>
   name.startsWith("projects/")
     ? resourcemanager.getProjects({ name }).pipe(
         Effect.map((resource) => resource.parent),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       )
     : name.startsWith("folders/")
       ? resourcemanager.getFolders({ name }).pipe(
           Effect.map((folder) => folder.parent),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         )
-      : Effect.succeed(undefined);
+      : Effect.undefined;
 
 export const tryResolveOrganization = () =>
   Effect.gen(function* () {

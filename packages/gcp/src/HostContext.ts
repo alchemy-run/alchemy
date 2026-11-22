@@ -1,5 +1,6 @@
 import type { HttpEffect } from "alchemy/Http";
 import * as Http from "alchemy/Http";
+import { serveRpc } from "alchemy/Rpc";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -35,8 +36,30 @@ export const isGcpListenHost = (
 
 const notFound = Effect.succeed(HttpServerResponse.text("Not Found", { status: 404 }));
 
+/** Env var a host's impl sets when it returns RPC methods. */
+export const RPC_METHODS_ENV = "ALCHEMY_RPC_METHODS";
+
+/** Methods on an impl shape that are served as RPC. */
+export const rpcMethodsOf = (shape: Record<string, unknown> | undefined) =>
+  Object.fromEntries(
+    Object.entries(shape ?? {}).filter(
+      ([key, value]) => key !== "fetch" && key !== "run" && typeof value === "function",
+    ),
+  );
+
 export const createGcpHostRuntimeContext =
-  (type: string) =>
+  (
+    type: string,
+    options?: {
+      /**
+       * Serve the impl's methods on `/__rpc__/*`. `true` for hosts no
+       * request reaches from outside the instance (sidecar containers).
+       * `"private"` also records {@link RPC_METHODS_ENV} in the host's env
+       * so its provider can refuse to deploy the methods on a public host.
+       */
+      rpc?: boolean | "private";
+    },
+  ) =>
   (id: string): GcpHostRuntimeContext => {
     const base = createHostRuntimeContext(type)(id);
     const listeners: GcpHttpListener[] = [];
@@ -62,9 +85,17 @@ export const createGcpHostRuntimeContext =
         Effect.sync(() => {
           listeners.push(listener);
         }),
-      serve: ((handler, options) => {
+      serve: ((handler, serveOptions) => {
         served = true;
-        return base.serve(route(handler as HttpEffect<any>), options);
+        const routed = route(handler as HttpEffect<any>);
+        const methods = options?.rpc ? rpcMethodsOf(serveOptions?.shape) : {};
+        if (options?.rpc === "private" && Object.keys(methods).length > 0) {
+          base.env[RPC_METHODS_ENV] = "1";
+        }
+        return base.serve(
+          Object.keys(methods).length > 0 ? serveRpc(methods, routed) : routed,
+          serveOptions,
+        );
       }) as HostRuntimeContext["serve"],
       // A host whose only job is consuming events has no `fetch`, so the
       // Platform never calls `serve`; start the server for the listeners.

@@ -329,7 +329,7 @@ const readMethodSnapshot = (p: { restApiId: string; resourceId: string; httpMeth
         resourceId: p.resourceId,
         httpMethod: p.httpMethod,
       })
-      .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
     if (!method?.httpMethod) return undefined;
 
     const integ = yield* ag
@@ -338,7 +338,7 @@ const readMethodSnapshot = (p: { restApiId: string; resourceId: string; httpMeth
         resourceId: p.resourceId,
         httpMethod: p.httpMethod,
       })
-      .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
     const integration: MethodIntegrationProps | undefined = integ?.type
       ? {

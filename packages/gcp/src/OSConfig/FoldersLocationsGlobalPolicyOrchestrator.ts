@@ -181,10 +181,10 @@ const toAttrs = (item: osconfig.GoogleCloudOsconfigV2__PolicyOrchestrator, proje
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : osconfig
         .getFoldersLocationsGlobalPolicyOrchestrators({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const desiredBody = (
   news: FoldersLocationsGlobalPolicyOrchestratorProps,
@@ -284,11 +284,11 @@ export const FoldersLocationsGlobalPolicyOrchestratorProvider = () =>
       if (current === undefined) {
         const created = yield* osconfig
           .createFoldersLocationsGlobalPolicyOrchestrators({
+            ...desired,
             parent,
             policyOrchestratorId,
-            body: desired,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -296,7 +296,7 @@ export const FoldersLocationsGlobalPolicyOrchestratorProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OsconfigNotResolved({ name });
+        return yield* new OsconfigNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -323,13 +323,10 @@ export const FoldersLocationsGlobalPolicyOrchestratorProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* osconfig.patchFoldersLocationsGlobalPolicyOrchestrators({
+          ...desired,
+          etag: current.etag,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            ...desired,
-            name: current.name ?? name,
-            etag: current.etag,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
@@ -351,7 +348,7 @@ export const FoldersLocationsGlobalPolicyOrchestratorProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

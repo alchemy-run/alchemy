@@ -1,11 +1,17 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as network from "@distilled.cloud/azure/network";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { logLevel, subscriptionId, tags, untilGone } from "./helpers.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
+
+const networkRuleOf = (rule: network.FirewallPolicyRule | undefined) =>
+  rule?.ruleType === "NetworkRule" ? rule : undefined;
+
+const applicationRuleOf = (rule: network.FirewallPolicyRule | undefined) =>
+  rule?.ruleType === "ApplicationRule" ? rule : undefined;
 
 const getGroup = (
   resourceGroupName: string,
@@ -88,10 +94,10 @@ test.provider(
       expect(observed.properties?.priority).toEqual(200);
       const collection = observed.properties?.ruleCollections?.[0];
       expect(collection?.action?.type).toEqual("Allow");
-      expect(collection?.rules?.[0]?.destinationPorts).toEqual(["53"]);
-      expect(observed.properties?.ruleCollections?.[1]?.rules?.[0]?.targetFqdns).toEqual([
-        "github.com",
-      ]);
+      expect(networkRuleOf(collection?.rules?.[0])?.destinationPorts).toEqual(["53"]);
+      expect(
+        applicationRuleOf(observed.properties?.ruleCollections?.[1]?.rules?.[0])?.targetFqdns,
+      ).toEqual(["github.com"]);
 
       const updated = yield* stack.deploy(program("5353"));
       expect(updated.rules.ruleCollectionGroupId).toEqual(rules.ruleCollectionGroupId);
@@ -100,9 +106,9 @@ test.provider(
         policy.firewallPolicyName,
         rules.ruleCollectionGroupName,
       );
-      expect(reobserved.properties?.ruleCollections?.[0]?.rules?.[0]?.destinationPorts).toEqual([
-        "5353",
-      ]);
+      expect(
+        networkRuleOf(reobserved.properties?.ruleCollections?.[0]?.rules?.[0])?.destinationPorts,
+      ).toEqual(["5353"]);
 
       yield* stack.destroy();
       expect(

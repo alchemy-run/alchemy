@@ -173,8 +173,9 @@ export const BackupSelectionProvider = () =>
               SelectionId: output.selectionId,
             })
             .pipe(
-              Effect.catchTag(["ResourceNotFoundException", "InvalidParameterValueException"], () =>
-                Effect.succeed(undefined),
+              Effect.catchTag(
+                ["ResourceNotFoundException", "InvalidParameterValueException"],
+                () => Effect.undefined,
               ),
             );
           if (!found?.SelectionId) return undefined;
@@ -216,7 +217,7 @@ export const BackupSelectionProvider = () =>
               .pipe(
                 Effect.catchTag(
                   ["ResourceNotFoundException", "InvalidParameterValueException"],
-                  () => Effect.succeed(undefined),
+                  () => Effect.undefined,
                 ),
               );
             if (existing?.SelectionId) {

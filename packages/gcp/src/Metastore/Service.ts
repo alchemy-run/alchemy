@@ -4,9 +4,11 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -192,8 +194,45 @@ export type Service = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ServiceLookup
 >;
+
+/**
+ * Props for {@link Service.lookup}: find a service this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+/**
+ * Deletion was refused because the Dataproc Metastore service has deletion protection on, set
+ * through `deletionProtection` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class ServiceDeletionProtected extends Data.TaggedError(
+  "GCP.Metastore.ServiceDeletionProtected",
+)<{
+  readonly resourceName: string;
+  readonly message: string;
+}> {}
+
+export interface ServiceLookup {
+  /**
+   * Service id (the `{service}` segment of
+   * `projects/{project}/locations/{location}/services/{service}`). Must be
+   * 2-63 characters, start with a letter, and end with a letter or number.
+   */
+  serviceId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataproc Metastore service — a managed Hive metastore.
@@ -232,6 +271,16 @@ export type Service = Resource<
  *   port: 9084,
  *   labels: { env: "prod" },
  * });
+ * ```
+ *
+ * ### Looking up an existing service
+ * `Service.lookup` references a service Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared service.
+ *
+ * **Example:** Reference an existing service
+ * ```typescript
+ * const service = GCP.Metastore.Service.lookup({ serviceId: "my-service" });
  * ```
  *
  * @resource
@@ -300,12 +349,12 @@ const toAttrs = (item: metastore.Service, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : metastore
         .getProjectsLocationsServices({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
-const listOwned = (project: string, region: string) =>
+const listOwned = (project: string) =>
   listAtLocation(project, (parent) =>
     listLabeledPages(
       metastore.listProjectsLocationsServices.pages({
@@ -370,6 +419,15 @@ export const ServiceProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ serviceId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, serviceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const serviceId = yield* toPhysicalId(id, olds?.serviceId, output?.serviceId, "service");
@@ -384,7 +442,7 @@ export const ServiceProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project, env.region);
+        const items = yield* listOwned(env.project);
         return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
@@ -404,27 +462,25 @@ export const ServiceProvider = () =>
       if (current === undefined) {
         const created = yield* metastore
           .createProjectsLocationsServices({
+            hiveMetastoreConfig: hive,
+            tier: news.tier,
+            port: news.port,
+            network: news.network,
+            databaseType: news.databaseType,
+            deletionProtection: news.deletionProtection,
+            releaseChannel: news.releaseChannel,
+            encryptionConfig: news.encryptionConfig,
+            networkConfig: news.networkConfig,
+            scalingConfig: news.scalingConfig,
+            telemetryConfig: news.telemetryConfig,
+            scheduledBackup: news.scheduledBackup,
+            metadataIntegration: news.metadataIntegration,
+            maintenanceWindow: news.maintenanceWindow,
+            labels: desiredLabels,
             parent: locationParent(env.project, location),
             serviceId,
-            body: {
-              hiveMetastoreConfig: hive,
-              tier: news.tier,
-              port: news.port,
-              network: news.network,
-              databaseType: news.databaseType,
-              deletionProtection: news.deletionProtection,
-              releaseChannel: news.releaseChannel,
-              encryptionConfig: news.encryptionConfig,
-              networkConfig: news.networkConfig,
-              scalingConfig: news.scalingConfig,
-              telemetryConfig: news.telemetryConfig,
-              scheduledBackup: news.scheduledBackup,
-              metadataIntegration: news.metadataIntegration,
-              maintenanceWindow: news.maintenanceWindow,
-              labels: desiredLabels,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -443,7 +499,7 @@ export const ServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -489,20 +545,18 @@ export const ServiceProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* metastore.patchProjectsLocationsServices({
+          labels: desiredLabels,
+          port: news.port,
+          tier: news.tier,
+          deletionProtection: news.deletionProtection,
+          scalingConfig: news.scalingConfig,
+          telemetryConfig: news.telemetryConfig,
+          scheduledBackup: news.scheduledBackup,
+          metadataIntegration: news.metadataIntegration,
+          maintenanceWindow: news.maintenanceWindow,
+          hiveMetastoreConfig: hive,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            labels: desiredLabels,
-            port: news.port,
-            tier: news.tier,
-            deletionProtection: news.deletionProtection,
-            scalingConfig: news.scalingConfig,
-            telemetryConfig: news.telemetryConfig,
-            scheduledBackup: news.scheduledBackup,
-            metadataIntegration: news.metadataIntegration,
-            maintenanceWindow: news.maintenanceWindow,
-            hiveMetastoreConfig: hive,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
@@ -514,23 +568,31 @@ export const ServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const existing = yield* getByName(output.name);
       if (existing === undefined) return;
+      // Deletion protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (existing.deletionProtection === true) {
+        if (force !== true) {
+          return yield* new ServiceDeletionProtected({
+            resourceName: output.name,
+            message: `Dataproc Metastore service '${output.name}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         const unlocked = yield* metastore
           .patchProjectsLocationsServices({
+            deletionProtection: false,
             name: output.name,
             updateMask: "deletionProtection",
-            body: { deletionProtection: false },
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (unlocked !== undefined) {
           // NOT_FOUND (5): already gone.
           yield* waitForOperation(unlocked).pipe(
@@ -548,7 +610,7 @@ export const ServiceProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.

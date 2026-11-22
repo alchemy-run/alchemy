@@ -127,7 +127,7 @@ export const AnalyticsDatastore = Resource<AnalyticsDatastore>("GCP.Apigee.Analy
 export class AnalyticsDatastoreNotResolved extends Data.TaggedError(
   "GCP.Apigee.AnalyticsDatastoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, datastoreId: string) =>
@@ -173,7 +173,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsAnalyticsDatastores({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const AnalyticsDatastoreProvider = () =>
   Provider.succeed(AnalyticsDatastore, {
@@ -246,20 +246,18 @@ export const AnalyticsDatastoreProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsAnalyticsDatastores({
+            displayName: desiredDisplayName,
+            targetType,
+            datastoreConfig,
             parent: orgParent(organizationId),
-            body: {
-              displayName: desiredDisplayName,
-              targetType,
-              datastoreConfig,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
         return yield* new AnalyticsDatastoreNotResolved({
-          name: output?.name ?? orgParent(organizationId),
+          resourceName: output?.name ?? orgParent(organizationId),
         });
       }
 
@@ -275,12 +273,10 @@ export const AnalyticsDatastoreProvider = () =>
 
       if (needsUpdate) {
         current = yield* apigee.updateOrganizationsAnalyticsDatastores({
+          displayName: desiredDisplayName,
+          targetType,
+          datastoreConfig,
           name,
-          body: {
-            displayName: desiredDisplayName,
-            targetType,
-            datastoreConfig,
-          },
         });
       }
 

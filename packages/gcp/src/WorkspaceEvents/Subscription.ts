@@ -194,7 +194,7 @@ export const Subscription = Resource<Subscription>("GCP.WorkspaceEvents.Subscrip
 export class SubscriptionNotResolved extends Data.TaggedError(
   "GCP.WorkspaceEvents.SubscriptionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const payloadOf = (options: we.PayloadOptions | undefined): PayloadOptions | undefined => {
@@ -341,17 +341,15 @@ export const SubscriptionProvider = () =>
       if (current === undefined) {
         const created = yield* we
           .createSubscriptions({
-            body: {
-              targetResource: news.targetResource,
-              eventTypes,
-              notificationEndpoint: { pubsubTopic: topicName },
-              payloadOptions: news.payloadOptions,
-              driveOptions: news.driveOptions,
-              expireTime: news.expireTime,
-              ttl: news.ttl,
-            },
+            targetResource: news.targetResource,
+            eventTypes,
+            notificationEndpoint: { pubsubTopic: topicName },
+            payloadOptions: news.payloadOptions,
+            driveOptions: news.driveOptions,
+            expireTime: news.expireTime,
+            ttl: news.ttl,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           const settled = yield* waitForOperation(created).pipe(
@@ -371,7 +369,7 @@ export const SubscriptionProvider = () =>
 
       if (current === undefined) {
         return yield* new SubscriptionNotResolved({
-          name: lookup || news.targetResource,
+          resourceName: lookup || news.targetResource,
         });
       }
 
@@ -388,13 +386,11 @@ export const SubscriptionProvider = () =>
       );
       if (mask.length > 0) {
         const patched = yield* we.patchSubscriptions({
+          eventTypes,
+          expireTime: news.expireTime,
+          ttl: news.ttl,
           name,
           updateMask: mask,
-          body: {
-            eventTypes,
-            expireTime: news.expireTime,
-            ttl: news.ttl,
-          },
         });
         yield* waitForOperation(patched);
         current = (yield* getSubscription(name)) ?? current;
@@ -403,11 +399,7 @@ export const SubscriptionProvider = () =>
       if (current.state === "SUSPENDED") {
         const reactivated = yield* we
           .reactivateSubscriptions({ name, body: {} })
-          .pipe(
-            Effect.catchTag(["NotFound", "BadRequest", "Conflict"], () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag(["NotFound", "BadRequest", "Conflict"], () => Effect.undefined));
         if (reactivated !== undefined) {
           yield* waitForOperation(reactivated);
           current = (yield* getSubscription(name)) ?? current;
@@ -423,7 +415,7 @@ export const SubscriptionProvider = () =>
       if (name.length > 0) {
         const operation = yield* we
           .deleteSubscriptions({ name, allowMissing: true })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (operation !== undefined) {
           // NOT_FOUND (5): already gone.
           yield* waitForOperation(operation).pipe(

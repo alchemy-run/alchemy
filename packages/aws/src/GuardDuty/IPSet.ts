@@ -8,6 +8,7 @@ import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /** File format of the hosted IP list. */
@@ -79,8 +80,27 @@ export interface IPSet extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  IPSetLookup
 > {}
+
+/**
+ * Props for {@link IPSet.lookup}: find an IP set this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type IPSetLookup =
+  | {
+      /** The detector it belongs to. */
+      detectorId: string;
+      /** The id of the existing IP set. */
+      ipSetId: string;
+    }
+  | {
+      /** The detector it belongs to. */
+      detectorId: string;
+      /** The name of the existing IP set. */
+      name: string;
+    };
 
 /**
  * A GuardDuty trusted IP set — an S3-hosted list of IP addresses GuardDuty
@@ -108,13 +128,23 @@ export interface IPSet extends Resource<
  *   activate: false,
  * });
  * ```
+ *
+ * ### Looking up an existing IP set
+ * `IPSet.lookup` references an IP set Alchemy doesn't manage (created in the
+ * console or by another stack), found by `detectorId` with `ipSetId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing IP set
+ * ```typescript
+ * const trusted = AWS.GuardDuty.IPSet.lookup({ detectorId, name: "trusted" });
+ * ```
  */
 const IPSetResource = Resource<IPSet>("AWS.GuardDuty.IPSet");
 
 export { IPSetResource as IPSet };
 
 const ipSetArn = (region: string, accountId: string, detectorId: string, ipSetId: string) =>
-  `arn:aws:guardduty:${region}:${accountId}:detector/${detectorId}/ipset/${ipSetId}`;
+  `arn:${partitionOf(region)}:guardduty:${region}:${accountId}:detector/${detectorId}/ipset/${ipSetId}`;
 
 /** Statuses that count as "the set is (becoming) active". */
 const ACTIVE_STATUSES = ["ACTIVE", "ACTIVATING"];
@@ -129,7 +159,7 @@ export const IPSetProvider = () =>
       const getIPSet = (detectorId: string, ipSetId: string) =>
         guardduty
           .getIPSet({ DetectorId: detectorId, IpSetId: ipSetId })
-          .pipe(Effect.catchTag("BadRequestException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("BadRequestException", () => Effect.undefined));
 
       // Recover the set id after state loss by matching the deterministic
       // name across the detector's IP sets.
@@ -171,6 +201,14 @@ export const IPSetProvider = () =>
           if (olds.detectorId !== news.detectorId || olds.format !== news.format) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          if ("ipSetId" in props) {
+            const set = yield* getIPSet(props.detectorId, props.ipSetId);
+            return set ? yield* buildAttrs(props.detectorId, props.ipSetId, set) : undefined;
+          }
+          const found = yield* findByName(props.detectorId, props.name);
+          return found ? yield* buildAttrs(props.detectorId, found.ipSetId, found.set) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const detectorId = output?.detectorId ?? olds?.detectorId;

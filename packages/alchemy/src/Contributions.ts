@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import type * as Command from "effect/cli/Command";
+import type * as Flag from "effect/cli/Flag";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -15,7 +16,6 @@ import type { ArtifactStore } from "./Artifacts.ts";
 import type { AuthProviders } from "./Auth/AuthProvider.ts";
 import type { CredentialsStore } from "./Auth/Credentials.ts";
 import type { ProfileStore } from "./Auth/Profile.ts";
-import type { CliKit } from "./Cli/CliKit/CliKit.ts";
 import type { Interaction } from "./Interaction.ts";
 import type { State } from "./State/State.ts";
 import { UserFacingError } from "./UserFacingError.ts";
@@ -87,8 +87,8 @@ export type HostServices =
 /** What auth layers and state stores run under: the host's services and the auth registry. */
 export type ContributionServices = HostServices | AuthProviders;
 
-/** What a CLI command runs under: the host's services and the terminal. */
-export type CliServices = HostServices | CliKit;
+/** What a CLI command runs under: the host's services, `Interaction` included. */
+export type CliServices = HostServices;
 
 /** A provider's own failure: any tagged error with a message for the user. */
 export type ContributionFailure = { readonly _tag: string; readonly message: string };
@@ -116,50 +116,86 @@ export const lazy = <M, A>(load: () => Promise<M>, pick: (module: M) => A): Lazy
 export interface StateStore {
   /** Shown when listing stores; no provider code loads to show it. */
   readonly description: string;
+  /**
+   * The flags `alchemy state` takes for this store with `--backend`, for what
+   * a profile alone can't tell it: a store other than the default, or where
+   * it is served. Each parses into the store's options under its key. Flags
+   * are built without loading the store, and the CLI makes each optional: one
+   * that isn't given is `undefined`, so the store applies its own default.
+   * A flag with a default would always be set, for every backend, so it is
+   * left out.
+   *
+   * ```ts
+   * flags: {
+   *   domain: Flag.String("domain").pipe(Flag.withDescription("Hostname the store is served on")),
+   * },
+   * ```
+   *
+   * Stores that set the same option with the same flag, parsed the same way,
+   * share it on the command line, and its help lists each store's
+   * description. A flag is left out, with a warning, when it is optional, has
+   * a default or an alias, when it conflicts with another store's flags, or when it
+   * clashes with one of `alchemy state`'s own.
+   *
+   * {@link make} checks the store's options interface against these: each
+   * flag's value must be what the store accepts under the same key.
+   */
+  readonly flags?: StateStoreFlags;
   /** The store itself, loaded when it's used. */
-  readonly load: Lazy<StateStoreImpl>;
+  readonly load: Lazy<StateStoreImpl<any>>;
 }
 
-export interface StateStoreImpl {
+/** A state store's CLI flags, by the option key each parses into. */
+export type StateStoreFlags = Readonly<Record<string, Flag.Flag<unknown>>>;
+
+/** What a store's {@link StateStoreFlags} parse into: each optional, by key. */
+export type StateStoreFlagValues<Flags> = {
+  readonly [K in keyof Flags]?: Flags[K] extends Flag.Flag<infer A> ? A : never;
+};
+
+/**
+ * A provider's state store. `Options` is the store's own options interface,
+ * what its layer and lifecycle accept; the CLI fills it from the store's
+ * {@link StateStore.flags}.
+ */
+export interface StateStoreImpl<Options = StateStoreOptions> {
   /** The store's `State` layer: the provider's own `state` function. */
   readonly layer: (
-    options: StateStoreOptions,
+    options?: Options,
   ) => Layer.Layer<State, ContributionFailure, ContributionServices>;
   /** Provisioning, teardown and logs, for the operations the store supports. */
-  readonly lifecycle?: StateStoreLifecycle;
+  readonly lifecycle?: StateStoreLifecycle<Options>;
 }
 
-/** The options every state store's `state(...)` takes. */
-export interface StateStoreOptions {
-  /** A store other than the account's default, by logical name. */
-  readonly name?: string;
-}
+/**
+ * Options given to a store, by key. Only keys the store has flags for appear,
+ * and only when they were set; the store uses its default for the rest.
+ */
+export type StateStoreOptions = Readonly<Record<string, unknown>>;
 
-/** Which store a lifecycle operation acts on, under the profile core resolved. */
-export interface StateStoreTarget {
-  /** A store other than the account's default, by logical name. */
-  readonly name?: string;
-}
-
-export interface StateStoreLifecycle {
+/**
+ * A store's lifecycle operations. Each takes the store's own options spread
+ * into its input, defaults for any not given.
+ */
+export interface StateStoreLifecycle<Options = StateStoreOptions> {
   /** Provision the store, or adopt it when it exists. Idempotent. */
   readonly bootstrap?: (
-    input: StateStoreTarget & {
+    input: Options & {
       /** Redeploy an existing store instead of adopting it. */
       readonly force?: boolean;
     },
   ) => Effect.Effect<StateStoreBootstrap, ContributionFailure, ContributionServices>;
   /** Delete the store and its backing resources. Idempotent. */
   readonly teardown?: (
-    input: StateStoreTarget,
+    input: Options,
   ) => Effect.Effect<StateStoreTeardown, ContributionFailure, ContributionServices>;
   /** The store's past log entries, oldest first. */
   readonly logs?: (
-    input: StateStoreTarget & { readonly limit?: number; readonly since?: Date },
+    input: Options & { readonly limit?: number; readonly since?: Date },
   ) => Effect.Effect<ReadonlyArray<StateStoreLogEntry>, ContributionFailure, ContributionServices>;
   /** The store's log entries as they happen. */
   readonly tailLogs?: (
-    input: StateStoreTarget,
+    input: Options,
   ) => Stream.Stream<StateStoreLogEntry, ContributionFailure, ContributionServices>;
 }
 
@@ -207,7 +243,49 @@ export interface TestServices {
 }
 
 /** Declare a provider; the identity function, keeping its literal type. */
-export const make = <const P extends Contributions>(provider: P): P => provider;
+/**
+ * Keys a store option can't take: the ones `Alchemist.State` sources and
+ * lifecycle inputs already use, which the options are spread next to.
+ */
+type ReservedStateStoreOptionKey =
+  | "type"
+  | "backend"
+  | "profile"
+  | "envFile"
+  | "force"
+  | "limit"
+  | "since";
+
+/**
+ * Each state store checked against its flags: every flag sets an option the
+ * store declares, under a key that isn't reserved, and the store accepts the
+ * value the flag parses into.
+ */
+type CheckedStateStores<P> = P extends { readonly stateStores: infer Stores }
+  ? {
+      readonly stateStores: {
+        readonly [K in keyof Stores]: Stores[K] extends {
+          readonly flags: infer Flags;
+          readonly load: Lazy<StateStoreImpl<infer Options>>;
+        }
+          ? {
+              readonly flags: {
+                readonly [F in keyof Flags]: F extends ReservedStateStoreOptionKey
+                  ? never
+                  : F extends keyof Options
+                    ? Flags[F]
+                    : never;
+              };
+              readonly load: Lazy<StateStoreImpl<StateStoreFlagValues<Flags>>>;
+            }
+          : unknown;
+      };
+    }
+  : unknown;
+
+export const make = <const P extends Contributions>(
+  provider: P & NoInfer<CheckedStateStores<P>>,
+): P => provider;
 
 export class ContributionError extends Data.TaggedError("ContributionError")<{
   readonly message: string;
@@ -223,7 +301,7 @@ const Manifest = Schema.Struct({
   dependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   devDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   alchemy: Schema.optional(
-    Schema.Struct({ contributes: Schema.optional(Schema.Array(Schema.String)) }),
+    Schema.Struct({ contributes: Schema.String.pipe(Schema.Array, Schema.optional) }),
   ),
 });
 
@@ -280,6 +358,31 @@ const candidatePackages = Effect.fn(function* (dir: string) {
     if (parent === current) return names;
     current = parent;
   }
+});
+
+/** The root `package.json` name of alchemy's own monorepo. */
+const MONOREPO_NAME = "@alchemy.run/monorepo";
+
+/**
+ * The `package.json` of every sibling package when alchemy runs from its own
+ * monorepo checkout (`packages/alchemy` under a root named
+ * {@link MONOREPO_NAME}). Empty for every installed copy of alchemy.
+ */
+const monorepoManifests = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const own = path.dirname(yield* path.fromFileUrl(new URL("../package.json", import.meta.url)));
+  const packages = path.dirname(own);
+  const root = yield* readManifest(path.join(path.dirname(packages), "package.json")).pipe(
+    Effect.orElseSucceed(() => undefined),
+  );
+  if (root?.name !== MONOREPO_NAME) return [];
+  const files: string[] = [];
+  for (const entry of yield* fs.readDirectory(packages)) {
+    const file = path.join(packages, entry, "package.json");
+    if (path.join(packages, entry) !== own && (yield* fs.exists(file))) files.push(file);
+  }
+  return files.sort();
 });
 
 /** The npm scope of alchemy's own provider packages. */
@@ -408,12 +511,10 @@ const discover = Effect.fn("Contributions.discover")(function* (cwd: string) {
   // The project's packages that declare providers, before alchemy's own: the
   // first provider with a name wins, so a provider that moved into its own
   // package replaces the copy still inside alchemy.
-  const dependencies = [...(yield* candidatePackages(cwd))].filter((name) => name !== own?.name);
-  for (const name of dependencies) {
-    const file = yield* findDependencyManifest(cwd, name);
-    if (file === undefined) continue;
+  const declare = Effect.fn(function* (file: string, fallback = false) {
     const manifest = yield* readManifest(file);
     for (const specifier of manifest?.alchemy?.contributes ?? []) {
+      if (fallback && declared.has(specifier)) continue;
       declared.set(specifier, {
         specifier,
         manifest: {
@@ -425,6 +526,18 @@ const discover = Effect.fn("Contributions.discover")(function* (cwd: string) {
         },
       });
     }
+  });
+  const dependencies = [...(yield* candidatePackages(cwd))].filter((name) => name !== own?.name);
+  for (const name of dependencies) {
+    const file = yield* findDependencyManifest(cwd, name);
+    if (file !== undefined) yield* declare(file);
+  }
+  // Developing alchemy itself: every package in the monorepo, so the CLI sees
+  // all providers without the root installing them. Installed copies win.
+  for (const file of yield* monorepoManifests) {
+    yield* declare(file, true).pipe(
+      Effect.catch((error) => Effect.logDebug(`Skipping ${file}: ${error.message}`)),
+    );
   }
   // alchemy's own: the providers that still live in this package.
   for (const specifier of own?.alchemy?.contributes ?? []) declared.set(specifier, { specifier });

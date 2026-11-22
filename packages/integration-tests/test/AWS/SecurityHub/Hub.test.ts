@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { Hub } from "@alchemy.run/aws/SecurityHub/Hub";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as securityhub from "@distilled.cloud/aws/securityhub";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { makeSecurityHubTestLease } from "./TestLease.ts";
 

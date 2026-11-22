@@ -18,7 +18,9 @@
     },
     { "path": "../sql/tsconfig.json" },
     { "path": "../docker/tsconfig.json" },
-    { "path": "../domain/tsconfig.json" },
+    {
+      "path": "../../submodules/distilled/packages/aws/tsconfig.json"
+    },
     {
       "path": "../../submodules/distilled/packages/cloudflare/tsconfig.json"
     },

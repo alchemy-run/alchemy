@@ -169,7 +169,7 @@ export const RepositoriesWorkflowConfig = Resource<RepositoriesWorkflowConfig>(
 export class RepositoriesWorkflowConfigNotResolved extends Data.TaggedError(
   "GCP.Dataform.RepositoriesWorkflowConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (repository: string, workflowConfigId: string) =>
@@ -211,10 +211,10 @@ const toAttrs = (config: dataform.WorkflowConfig, project: string, region: strin
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dataform
         .getProjectsLocationsRepositoriesWorkflowConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const RepositoriesWorkflowConfigProvider = () =>
   Provider.succeed(RepositoriesWorkflowConfig, {
@@ -262,7 +262,7 @@ export const RepositoriesWorkflowConfigProvider = () =>
       const attrs = toAttrs(existing, env.project, env.region);
       const parent = yield* dataform
         .getProjectsLocationsRepositories({ name: attrs.repository })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (parent === undefined) return Unowned(attrs);
       return hasAlchemyLabelMap(parent.labels) ? attrs : Unowned(attrs);
     }),
@@ -297,15 +297,13 @@ export const RepositoriesWorkflowConfigProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           dataform.createProjectsLocationsRepositoriesWorkflowConfigs({
+            releaseConfig: resolvedRelease,
+            cronSchedule: news.cronSchedule,
+            timeZone: news.timeZone,
+            disabled,
+            invocationConfig,
             parent: repository,
             workflowConfigId,
-            body: {
-              releaseConfig: resolvedRelease,
-              cronSchedule: news.cronSchedule,
-              timeZone: news.timeZone,
-              disabled,
-              invocationConfig,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -315,7 +313,7 @@ export const RepositoriesWorkflowConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RepositoriesWorkflowConfigNotResolved({ name });
+        return yield* new RepositoriesWorkflowConfigNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -327,6 +325,10 @@ export const RepositoriesWorkflowConfigProvider = () =>
       if (releaseChanged || cronChanged || zoneChanged || disabledChanged) {
         current = yield* retryTransient(
           dataform.patchProjectsLocationsRepositoriesWorkflowConfigs({
+            releaseConfig: resolvedRelease,
+            cronSchedule: news.cronSchedule,
+            timeZone: news.timeZone,
+            disabled,
             name: currentName,
             updateMask: updateMaskOf(
               releaseChanged ? "releaseConfig" : undefined,
@@ -334,12 +336,6 @@ export const RepositoriesWorkflowConfigProvider = () =>
               zoneChanged ? "timeZone" : undefined,
               disabledChanged ? "disabled" : undefined,
             ),
-            body: {
-              releaseConfig: resolvedRelease,
-              cronSchedule: news.cronSchedule,
-              timeZone: news.timeZone,
-              disabled,
-            },
           }),
         );
       }

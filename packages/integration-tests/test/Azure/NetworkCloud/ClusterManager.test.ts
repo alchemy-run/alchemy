@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as nc from "@distilled.cloud/azure/networkcloud";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runPaidOnly } from "../gates.ts";
 import { logLevel, nexus, subscription, tags, waitGone } from "./util.ts";
@@ -55,9 +55,7 @@ test.provider.skipIf(!runPaidOnly || !nexus.fabricControllerId)(
       expect(reobserved.tags?.env).toEqual("b");
 
       yield* stack.destroy();
-      expect(yield* waitGone(get(group.resourceGroupName, res.clusterManagerName))).toEqual(
-        "gone",
-      );
+      expect(yield* waitGone(get(group.resourceGroupName, res.clusterManagerName))).toEqual("gone");
     }).pipe(logLevel),
   { tags, timeout: 5_400_000 },
 );

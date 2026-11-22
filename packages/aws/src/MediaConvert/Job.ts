@@ -111,7 +111,7 @@ export const JobProvider = () =>
       const getJob = Effect.fn(function* (id: string) {
         const response = yield* mediaconvert
           .getJob({ Id: id })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
         return response?.Job;
       });
 

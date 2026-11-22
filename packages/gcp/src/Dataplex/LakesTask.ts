@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./operations.ts";
@@ -193,8 +194,36 @@ export type LakesTask = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LakesTaskLookup
 >;
+
+/**
+ * Props for {@link LakesTask.lookup}: find a lakes task this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface LakesTaskLookup {
+  /**
+   * Task id.
+   */
+  taskId: string;
+  /**
+   * Region used when `lake` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent lake. Full name
+   * `projects/{project}/locations/{location}/lakes/{lake}` or the lake id
+   * (combined with `location`).
+   */
+  lake: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataplex lake task — a Spark or notebook job scheduled against a lake.
@@ -223,17 +252,31 @@ export type LakesTask = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing lakes task
+ * `LakesTask.lookup` references a lakes task Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * lakes task.
+ *
+ * **Example:** Reference an existing lakes task
+ * ```typescript
+ * const lakesTask = GCP.Dataplex.LakesTask.lookup({
+ *   taskId: "my-task",
+ *   lake: "my-lake",
+ * });
+ * ```
+ *
  * @resource
  * @category Dataplex
  */
 export const LakesTask = Resource<LakesTask>("GCP.Dataplex.LakesTask");
 
 export class LakesTaskNotResolved extends Data.TaggedError("GCP.Dataplex.LakesTaskNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class LakesTaskStillExists extends Data.TaggedError("GCP.Dataplex.LakesTaskStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lakeOf = (lake: string, project: string, location: string) =>
@@ -284,20 +327,20 @@ const toAttrs = (task: dataplex.GoogleCloudDataplexV1Task, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dataplex
         .getProjectsLocationsLakesTasks({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (task): task is dataplex.GoogleCloudDataplexV1Task => task !== undefined,
-      () => new LakesTaskNotResolved({ name }),
+      () => new LakesTaskNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (task) => !isPendingState(task.state),
-      () => new DataplexNotResolved({ name }),
+      () => new DataplexNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) =>
@@ -312,7 +355,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((task) =>
-      task === undefined ? Effect.void : Effect.fail(new LakesTaskStillExists({ name })),
+      task === undefined
+        ? Effect.void
+        : Effect.fail(new LakesTaskStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.LakesTaskStillExists",
@@ -361,6 +406,16 @@ export const LakesTaskProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ taskId, location: lookupLocation, lake: lookupLake }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const lake = lakeOf(lookupLake ?? "", env.project, location);
+      const name = resourceName(lake, taskId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location, env.region);
@@ -401,19 +456,17 @@ export const LakesTaskProvider = () =>
       if (current === undefined) {
         const created = yield* dataplex
           .createProjectsLocationsLakesTasks({
+            description: news.description,
+            displayName: news.displayName,
+            labels: desiredLabels,
+            triggerSpec,
+            executionSpec,
+            spark: news.spark,
+            notebook: news.notebook,
             parent: lake,
             taskId,
-            body: {
-              description: news.description,
-              displayName: news.displayName,
-              labels: desiredLabels,
-              triggerSpec,
-              executionSpec,
-              spark: news.spark,
-              notebook: news.notebook,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -421,7 +474,7 @@ export const LakesTaskProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LakesTaskNotResolved({ name });
+        return yield* new LakesTaskNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -453,17 +506,15 @@ export const LakesTaskProvider = () =>
           notebookChanged ? "notebook" : undefined,
         ].filter((field): field is string => field !== undefined);
         const operation = yield* dataplex.patchProjectsLocationsLakesTasks({
+          description: news.description,
+          displayName: news.displayName,
+          labels: desiredLabels,
+          triggerSpec,
+          executionSpec,
+          spark: news.spark,
+          notebook: news.notebook,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            description: news.description,
-            displayName: news.displayName,
-            labels: desiredLabels,
-            triggerSpec,
-            executionSpec,
-            spark: news.spark,
-            notebook: news.notebook,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);
@@ -483,8 +534,8 @@ export const LakesTaskProvider = () =>
             schedule: Schedule.spaced("2 seconds"),
           }),
           Effect.catchTags({
-            NotFound: () => Effect.succeed(undefined),
-            BadRequest: () => Effect.succeed(undefined),
+            NotFound: () => Effect.undefined,
+            BadRequest: () => Effect.undefined,
           }),
         );
       if (operation !== undefined) {

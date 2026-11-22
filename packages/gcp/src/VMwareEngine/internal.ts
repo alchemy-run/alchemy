@@ -17,15 +17,15 @@ export const MAX_NAME_LENGTH = 63;
 export { createInternalLabels, hasAlchemyLabels };
 
 export class VmwareengineNotResolved extends Data.TaggedError("GCP.VMwareEngine.NotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class VmwareengineStillExists extends Data.TaggedError("GCP.VMwareEngine.StillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class VmwareengineFailed extends Data.TaggedError("GCP.VMwareEngine.Failed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -248,7 +248,7 @@ export const waitUntilPresent = <A extends object, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is A => value !== undefined,
-      () => new VmwareengineNotResolved({ name }),
+      () => new VmwareengineNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof VmwareengineNotResolved,
@@ -264,7 +264,7 @@ export const waitUntilGone = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is undefined => value === undefined,
-      () => new VmwareengineStillExists({ name }),
+      () => new VmwareengineStillExists({ resourceName: name }),
     ),
     Effect.as(undefined as void),
     Effect.retry({
@@ -297,11 +297,11 @@ export const waitUntilReady = <A extends object, E, R>(
         if (value === undefined) return false;
         return !PENDING_STATES.has(stateOf(value) ?? "");
       },
-      () => new VmwareengineNotResolved({ name }),
+      () => new VmwareengineNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (value) => !FAILED_STATES.has(stateOf(value) ?? ""),
-      (value) => new VmwareengineFailed({ name, state: stateOf(value) }),
+      (value) => new VmwareengineFailed({ resourceName: name, state: stateOf(value) }),
     ),
     Effect.retry({
       while: (error) => error instanceof VmwareengineNotResolved,

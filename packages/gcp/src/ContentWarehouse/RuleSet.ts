@@ -145,10 +145,10 @@ const toAttrs = (item: cw.GoogleCloudContentwarehouseV1RuleSet, project: string)
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cw
         .getProjectsLocationsRuleSets({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string) =>
   collectPages(
@@ -224,11 +224,8 @@ export const RuleSetProvider = () =>
 
       if (current === undefined) {
         const created = yield* cw
-          .createProjectsLocationsRuleSets({
-            parent,
-            body: { description, source, rules },
-          })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .createProjectsLocationsRuleSets({ description, source, rules, parent })
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current =
           created ??
           (yield* findInParent) ??
@@ -237,7 +234,7 @@ export const RuleSetProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: output?.name ?? resourceName(env.project, location, ruleSetId),
+          resourceName: output?.name ?? resourceName(env.project, location, ruleSetId),
         });
       }
 
@@ -247,15 +244,13 @@ export const RuleSetProvider = () =>
       const rulesChanged = !sameJson(current.rules, rules);
       if (descriptionChanged || sourceChanged || rulesChanged) {
         current = yield* cw.patchProjectsLocationsRuleSets({
-          name: currentName,
-          body: {
-            ruleSet: {
-              name: currentName,
-              description,
-              source,
-              rules,
-            },
+          ruleSet: {
+            name: currentName,
+            description,
+            source,
+            rules,
           },
+          name: currentName,
         });
       }
 

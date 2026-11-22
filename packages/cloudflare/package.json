@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/cloudflare",
-  "version": "2.0.0-beta.83",
+  "version": "2.0.0-beta.87",
   "description": "Cloudflare Workers, Durable Objects, storage, networking and the Cloudflare state store for Alchemy.",
   "keywords": [
     "alchemy",
@@ -62,7 +62,6 @@
     "./Diagnostics": "./src/Diagnostics/index.ts",
     "./Dlp": "./src/Dlp/index.ts",
     "./DNS": "./src/DNS/index.ts",
-    "./Domain": "./src/Domain/index.ts",
     "./Email": "./src/Email/index.ts",
     "./Firewall": "./src/Firewall/index.ts",
     "./Flagship": "./src/Flagship/index.ts",
@@ -338,12 +337,6 @@
         "bun": "./src/DNS/index.ts",
         "worker": "./src/DNS/index.ts",
         "default": "./lib/DNS/index.js"
-      },
-      "./Domain": {
-        "types": "./lib/Domain/index.d.ts",
-        "bun": "./src/Domain/index.ts",
-        "worker": "./src/Domain/index.ts",
-        "default": "./lib/Domain/index.js"
       },
       "./Email": {
         "types": "./lib/Email/index.d.ts",
@@ -754,6 +747,8 @@
         "default": "./lib/Zone/index.js"
       },
       "./Basin/internal/*": null,
+      "./R2/internal/*": null,
+      "./Workers/internal/*": null,
       "./*/internal": null,
       "./*": {
         "types": "./lib/*.d.ts",
@@ -767,48 +762,47 @@
   },
   "scripts": {
     "build": "pnpm -r --filter \"{.}...\" run build:package",
-    "build:package": "node scripts/build.ts"
+    "build:package": "node scripts/build.ts",
+    "sync:permission-groups": "bun scripts/sync-permission-groups.ts"
   },
   "dependencies": {
     "@alchemy.run/acme": "workspace:*",
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/docker": "workspace:*",
     "@alchemy.run/sql": "workspace:*",
+    "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/aws4signer": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/iceberg": "workspace:*",
     "@effect/sql-d1": "catalog:",
     "pathe": "catalog:",
+    "picomatch": "catalog:",
     "rolldown": "catalog:",
     "tinyglobby": "catalog:"
   },
   "devDependencies": {
-    "@alchemy.run/domain": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "@types/picomatch": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"
   },
   "peerDependencies": {
-    "@alchemy.run/domain": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:frontend-peer"
   },
   "peerDependenciesMeta": {
-    "@alchemy.run/domain": {
-      "optional": true
-    },
     "@alchemy.run/frontend-frameworks": {
       "optional": true
     },

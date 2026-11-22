@@ -1,5 +1,3 @@
-/** @effect-diagnostics anyUnknownInErrorContext:off */
-
 /**
  * The Lambda Function code-bundling machinery, extracted from the live
  * provider closure so it is reusable outside `FunctionProvider` — the floci
@@ -227,7 +225,11 @@ export default await bootstrap(entrypoint);
         ...buildOutput,
         format: "esm",
         sourcemap: rolldownSourcemap,
-        minify: buildOutput?.minify ?? false,
+        // Minified like Workers: source maps ship and `--enable-source-maps`
+        // is set (see `withNodeSourceMaps`), so stack traces still map back,
+        // and `keepNames` keeps class and function names for Effect spans.
+        minify: buildOutput?.minify ?? true,
+        keepNames: buildOutput?.keepNames ?? true,
         entryFileNames: "index.js",
         codeSplitting: buildOutput?.codeSplitting ?? false,
       },

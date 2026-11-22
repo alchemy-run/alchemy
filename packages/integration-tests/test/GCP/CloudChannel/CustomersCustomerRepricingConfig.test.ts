@@ -1,9 +1,10 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudchannel from "@distilled.cloud/gcp/cloudchannel_v1";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import {
   logLevel,
   probeAccountName,
@@ -45,19 +46,17 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         cloudchannel.createAccountsCustomersCustomerRepricingConfigs({
-          parent: probeParent,
-          body: {
-            repricingConfig: {
-              effectiveInvoiceMonth: probeMonth,
-              rebillingBasis: "COST_AT_LIST",
-              adjustment: {
-                percentageAdjustment: { percentage: { value: "0.00" } },
-              },
-              entitlementGranularity: {
-                entitlement: `${probeParent}/entitlements/alchemy-missing`,
-              },
+          repricingConfig: {
+            effectiveInvoiceMonth: probeMonth,
+            rebillingBasis: "COST_AT_LIST",
+            adjustment: {
+              percentageAdjustment: { percentage: { value: "0.00" } },
+            },
+            entitlementGranularity: {
+              entitlement: `${probeParent}/entitlements/alchemy-missing`,
             },
           },
+          parent: probeParent,
         }),
       );
       expect(error._tag).toEqual("Forbidden");
@@ -92,6 +91,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { customer, config };
         }),
+      );
+      yield* expectFound(
+        GCP.CloudChannel.CustomersCustomerRepricingConfig.lookup({
+          parent: created.config.parent,
+          configId: created.config.configId,
+        }),
+        created.config,
       );
 
       expect(created.config.name).toContain("/customerRepricingConfigs/");

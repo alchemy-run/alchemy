@@ -1,10 +1,10 @@
 import * as Azure from "@alchemy.run/azure";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -78,8 +78,10 @@ const untilState = (state: string) =>
         computeName: parts[10] ?? "",
       })
       .pipe(
-        Effect.map(
-          (compute) => (compute.properties?.properties as { state?: string } | undefined)?.state,
+        Effect.map((compute) =>
+          compute.properties?.computeType === "ComputeInstance"
+            ? compute.properties.properties?.state
+            : undefined,
         ),
         Effect.repeat({
           schedule: Schedule.spaced("15 seconds"),

@@ -1,11 +1,12 @@
 import { existsSync } from "node:fs";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import DockerfilePathWorker from "./fixtures/dockerfile-path/worker.ts";
 import FuseStack from "./fixtures/fuse/stack.ts";
 import LocalRemoteStack, { state } from "./fixtures/remote/local-stack.ts";
 
@@ -74,6 +75,41 @@ describe(
         expect(body).toContain("method");
       }).pipe(logLevel),
       { tags: ["local"], timeout: TEST_TIMEOUT },
+    );
+  },
+);
+
+/**
+ * #3320: a relative `dockerfile` resolves against `context` (it used to
+ * resolve against the working directory and failed with `NotFound`), and an
+ * absolute `dockerfile` is used as-is.
+ */
+describe(
+  "local container dockerfile path",
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:container",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+  },
+  () => {
+    test.provider(
+      "resolves a relative dockerfile against context",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          // The deploy is the assertion: before #3320 it failed resolving the Dockerfile.
+          const { worker } = yield* stack.deploy(
+            Effect.gen(function* () {
+              return { worker: yield* DockerfilePathWorker };
+            }),
+          );
+          expect(worker.url).toMatch(/^http:\/\/localhost:/);
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { timeout: 120_000 },
     );
   },
 );

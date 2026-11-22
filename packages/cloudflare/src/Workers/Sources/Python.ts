@@ -7,7 +7,6 @@ import { sha256 } from "alchemy/Util/sha256";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as ChildProcess from "effect/process/ChildProcess";
-import * as Stream from "effect/Stream";
 import path from "pathe";
 import { convertPathToPattern, glob } from "tinyglobby";
 import type { SourceContext, SourceProvider } from "../Source.ts";
@@ -186,7 +185,7 @@ const resolvePythonModulesDir = Effect.fn(function* (
   }
 
   yield* Effect.logDebug(
-    `[${options.fqn}] Vendoring Python dependencies for ${pythonVersion} (emscripten-wasm32) with uv`,
+    `Vendoring Python dependencies for ${pythonVersion} (emscripten-wasm32) with uv`,
   );
   yield* fs
     .makeDirectory(staging, { recursive: true })
@@ -255,8 +254,8 @@ const resolvePythonModulesDir = Effect.fn(function* (
   return vendorDir;
 });
 
-const orDefault = <A, B, R>(
-  effect: Effect.Effect<A, unknown, R>,
+const orDefault = <A, B, E, R>(
+  effect: Effect.Effect<A, E, R>,
   fallback: B,
 ): Effect.Effect<A | B, never, R> => Effect.catchCause(effect, () => Effect.succeed(fallback));
 

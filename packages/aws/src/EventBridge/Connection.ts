@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type { AccountID } from "../Environment.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -19,7 +20,7 @@ export type {
 
 export type ConnectionName = string;
 export type ConnectionArn =
-  `arn:aws:events:${RegionID}:${AccountID}:connection/${ConnectionName}/${string}`;
+  `arn:${Partition}:events:${RegionID}:${AccountID}:connection/${ConnectionName}/${string}`;
 
 export interface ConnectionApiKeyAuthParameters {
   /** Header name the API key is sent under (e.g. `x-api-key`). */
@@ -93,7 +94,27 @@ export interface ConnectionProps {
    * secret.
    */
   kmsKeyIdentifier?: string;
+
+  /**
+   * Invoke a private HTTPS endpoint (in a VPC or on premises) through a VPC
+   * Lattice resource configuration instead of the public internet. Removing
+   * it replaces the connection, since EventBridge cannot turn a private
+   * connection back into a public one.
+   */
+  invocationConnectivityParameters?: {
+    /** ARN of the VPC Lattice resource configuration for the endpoint. */
+    resourceConfigurationArn: string;
+  };
 }
+
+const toConnectivityParameters = (props: ConnectionProps) =>
+  props.invocationConnectivityParameters
+    ? {
+        ResourceParameters: {
+          ResourceConfigurationArn: props.invocationConnectivityParameters.resourceConfigurationArn,
+        },
+      }
+    : undefined;
 
 /**
  * An Amazon EventBridge connection holding the authorization used to invoke
@@ -135,6 +156,23 @@ export interface ConnectionProps {
  * });
  * ```
  *
+ * ### Connecting to Private APIs
+ * **Example:** Invoke an API Inside a VPC
+ * ```typescript
+ * const connection = yield* AWS.EventBridge.Connection("PrivateApi", {
+ *   authorizationType: "API_KEY",
+ *   authParameters: {
+ *     apiKeyAuthParameters: {
+ *       apiKeyName: "x-api-key",
+ *       apiKeyValue: Redacted.make(process.env.API_KEY!),
+ *     },
+ *   },
+ *   invocationConnectivityParameters: {
+ *     resourceConfigurationArn: "arn:aws:vpc-lattice:us-east-1:123456789012:resourceconfiguration/rcfg-0123456789abcdef0",
+ *   },
+ * });
+ * ```
+ *
  * @resource
  */
 export interface Connection extends Resource<
@@ -151,8 +189,28 @@ export interface Connection extends Resource<
     secretArn?: string;
   },
   never,
-  Providers
+  Providers,
+  ConnectionLookup
 > {}
+
+/**
+ * Props for {@link Connection.lookup}: find a connection this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ConnectionLookup {
+  /** The name of the existing connection. *
+   * ### Looking up an existing connection
+   * `Connection.lookup` references a connection Alchemy doesn't manage (created in the
+   * console or by another stack), found by `connectionName`. It is read during
+   * plan/deploy and never created, updated or deleted.
+   *
+   * **Example:** Reference an existing connection
+   * ```typescript
+   * const existing = AWS.EventBridge.Connection.lookup({ connectionName: "..." });
+   * ```
+   */
+  connectionName: string;
+}
 export const Connection = Resource<Connection>("AWS.EventBridge.Connection");
 
 const toCreateAuthParameters = (
@@ -230,6 +288,23 @@ export const ConnectionProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
+          if (olds.invocationConnectivityParameters && !news.invocationConnectivityParameters) {
+            return { action: "replace" } as const;
+          }
+        }),
+        lookup: Effect.fn(function* ({ connectionName }) {
+          const described = yield* eventbridge
+            .describeConnection({ Name: connectionName })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (!described?.Name || !described.ConnectionArn) {
+            return undefined;
+          }
+          return {
+            connectionName: described.Name,
+            connectionArn: described.ConnectionArn as ConnectionArn,
+            connectionState: described.ConnectionState ?? "AUTHORIZED",
+            secretArn: described.SecretArn,
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           // Connections don't support tags; the deterministic physical name
@@ -238,7 +313,7 @@ export const ConnectionProvider = () =>
             output?.connectionName ?? (yield* createConnectionName(id, olds ?? {}));
           const described = yield* eventbridge
             .describeConnection({ Name: connectionName })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (!described?.Name || !described.ConnectionArn) {
             return undefined;
           }
@@ -283,7 +358,7 @@ export const ConnectionProvider = () =>
           // connection falls through to create.
           const observed = yield* eventbridge
             .describeConnection({ Name: connectionName })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (!observed?.ConnectionArn) {
             // Ensure — create the connection; tolerate an AlreadyExists race
@@ -295,6 +370,7 @@ export const ConnectionProvider = () =>
                 AuthorizationType: news.authorizationType,
                 AuthParameters: toCreateAuthParameters(news.authParameters),
                 KmsKeyIdentifier: news.kmsKeyIdentifier,
+                InvocationConnectivityParameters: toConnectivityParameters(news),
               })
               .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
           } else {
@@ -308,6 +384,7 @@ export const ConnectionProvider = () =>
               AuthorizationType: news.authorizationType,
               AuthParameters: toCreateAuthParameters(news.authParameters),
               KmsKeyIdentifier: news.kmsKeyIdentifier,
+              InvocationConnectivityParameters: toConnectivityParameters(news),
             });
           }
 

@@ -227,7 +227,12 @@ export const ReplicationExtensionProvider = () =>
       if (observed === undefined || observed.properties?.provisioningState === "Failed") {
         yield* dr.CreateReplicationExtension({
           ...where,
-          properties: { customProperties: news.customProperties },
+          // `instanceType` is any subtype, so TypeScript cannot pick the SDK
+          // union arm.
+          properties: {
+            customProperties:
+              news.customProperties as unknown as dr.ReplicationExtensionModelCustomPropertiesInput,
+          },
         });
       }
       const fresh = yield* waitForProvisioned(

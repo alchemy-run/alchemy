@@ -270,7 +270,7 @@ const desiredBody = (news: RepositoriesPullRequestsPullRequestCommentProps): str
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(
         ssm.getProjectsLocationsRepositoriesPullRequestsPullRequestComments({
           name,
@@ -422,10 +422,10 @@ export const RepositoriesPullRequestsPullRequestCommentProvider = () =>
       if (current === undefined) {
         const created = yield* ssm
           .createProjectsLocationsRepositoriesPullRequestsPullRequestComments({
+            ...encoded,
             parent: pullRequest,
-            body: encoded,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const operation = yield* waitForOperation(created);
           const createdName = nameFromOperation(operation);
@@ -440,7 +440,7 @@ export const RepositoriesPullRequestsPullRequestCommentProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: name || pullRequest,
+          resourceName: name || pullRequest,
         });
       }
 
@@ -449,9 +449,9 @@ export const RepositoriesPullRequestsPullRequestCommentProvider = () =>
       if (!sameText(ownershipBodyOf(current), desiredBody(news))) {
         const operation =
           yield* ssm.patchProjectsLocationsRepositoriesPullRequestsPullRequestComments({
+            ...encoded,
             name: currentName,
             updateMask: "body",
-            body: encoded,
           });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(currentName), currentName);
@@ -466,7 +466,7 @@ export const RepositoriesPullRequestsPullRequestCommentProvider = () =>
           .deleteProjectsLocationsRepositoriesPullRequestsPullRequestComments({
             name: output.name,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined))),
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined)),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

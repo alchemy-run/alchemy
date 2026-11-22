@@ -126,8 +126,8 @@ export const SettingsProvider = () =>
             // still can't read (persistent 403) isn't ours to enumerate —
             // skip both rather than failing the whole listing.
             Effect.catchTags({
-              InvalidRoute: () => Effect.succeed(undefined),
-              Forbidden: () => Effect.succeed(undefined),
+              InvalidRoute: () => Effect.undefined,
+              Forbidden: () => Effect.undefined,
             }),
           ),
         { concurrency: 10 },
@@ -151,7 +151,7 @@ export const SettingsProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* waitingRooms.getSetting({ zoneId }).pipe(
         // Zone deleted out-of-band — the settings are gone with it.
-        Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+        Effect.catchTag("InvalidRoute", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The settings singleton always exists with a Cloudflare default —
@@ -195,7 +195,7 @@ export const SettingsProvider = () =>
       // Observe — if the zone itself is gone, so are the settings.
       const observed = yield* waitingRooms
         .getSetting({ zoneId })
-        .pipe(Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("InvalidRoute", () => Effect.undefined));
       if (observed === undefined) return;
       // Restore the pre-management value; skip the call when it already
       // matches (idempotent re-delete after a crashed run).

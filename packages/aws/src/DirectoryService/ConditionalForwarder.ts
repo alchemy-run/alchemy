@@ -2,10 +2,18 @@ import * as ds from "@distilled.cloud/aws/directory-service";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
 import { sameStringSet } from "./internal.ts";
+
+export class ConditionalForwarderUnexpectedResponse extends Data.TaggedError(
+  "ConditionalForwarderUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ConditionalForwarderProps {
   /**
@@ -92,7 +100,7 @@ export const ConditionalForwarderProvider = () =>
             DirectoryId: directoryId,
             RemoteDomainNames: [remoteDomainName],
           })
-          .pipe(Effect.catchTag("EntityDoesNotExistException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("EntityDoesNotExistException", () => Effect.undefined));
         return response?.ConditionalForwarders?.find(
           (forwarder) => forwarder.RemoteDomainName === remoteDomainName,
         );
@@ -168,11 +176,9 @@ export const ConditionalForwarderProvider = () =>
             observed = yield* readForwarder(props.directoryId, props.remoteDomainName);
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(
-                `conditional forwarder for '${props.remoteDomainName}' on '${props.directoryId}' not visible after create`,
-              ),
-            );
+            return yield* new ConditionalForwarderUnexpectedResponse({
+              message: `conditional forwarder for '${props.remoteDomainName}' on '${props.directoryId}' not visible after create`,
+            });
           }
 
           yield* session.note(`${props.directoryId}/${props.remoteDomainName}`);

@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -99,8 +100,32 @@ export type Tenant = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TenantLookup
 >;
+
+/**
+ * Props for {@link Tenant.lookup}: find a tenant this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface TenantLookup {
+  /**
+   * Tenant id (the `{tenant}` segment of
+   * `projects/{project}/locations/{location}/tenants/{tenant}`).
+   */
+  tenantId: string;
+  /**
+   * Region of the tenant (`us-central1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An App Lifecycle Manager tenant — the producer-side instance of a
@@ -131,6 +156,18 @@ export type Tenant = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing tenant
+ * `Tenant.lookup` references a tenant Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared tenant.
+ *
+ * **Example:** Reference an existing tenant
+ * ```typescript
+ * const tenant = GCP.SaasServiceManagement.Tenant.lookup({
+ *   tenantId: "my-tenant",
+ * });
+ * ```
+ *
  * @resource
  * @category SaasServiceManagement
  */
@@ -158,10 +195,10 @@ const toAttrs = (item: saasservicemgmt.Tenant, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : saasservicemgmt
         .getProjectsLocationsTenants({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, location: string) =>
   collectPages(
@@ -208,6 +245,15 @@ export const TenantProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ tenantId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, COLLECTION, tenantId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const tenantId = yield* toPhysicalId(id, olds?.tenantId, output?.tenantId, "tnt");
@@ -243,14 +289,12 @@ export const TenantProvider = () =>
       if (current === undefined) {
         const created = yield* saasservicemgmt
           .createProjectsLocationsTenants({
+            saas,
+            consumerResource: news.consumerResource,
+            labels: desiredLabels,
+            annotations,
             parent: parentOf(env.project, location),
             tenantId,
-            body: {
-              saas,
-              consumerResource: news.consumerResource,
-              labels: desiredLabels,
-              annotations,
-            },
           })
           .pipe(
             // A Saas created seconds earlier is unreadable here until it
@@ -266,7 +310,7 @@ export const TenantProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -279,14 +323,11 @@ export const TenantProvider = () =>
 
       if (mask.length > 0) {
         current = yield* saasservicemgmt.patchProjectsLocationsTenants({
+          etag: current.etag,
+          labels: desiredLabels,
+          annotations,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            etag: current.etag,
-            labels: desiredLabels,
-            annotations,
-          },
         });
       }
 

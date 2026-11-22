@@ -407,7 +407,9 @@ export const MoveResourceProvider = () =>
         properties: {
           sourceId: news.sourceId,
           existingTargetId: news.existingTargetId,
-          resourceSettings: news.resourceSettings,
+          // `resourceType` is only known at runtime and decides the arm, so
+          // the arm is asserted rather than narrowed.
+          resourceSettings: news.resourceSettings as resourcemover.ResourceSettings | undefined,
           dependsOnOverrides: news.dependsOnOverrides,
         },
       });

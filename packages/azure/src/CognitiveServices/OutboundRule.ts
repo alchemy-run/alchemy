@@ -267,11 +267,13 @@ export const OutboundRuleProvider = () =>
             accountName: account,
             managedNetworkName: MANAGED_NETWORK_NAME,
             ruleName: name,
+            // `type` and `destination` are separate props, so TypeScript
+            // cannot pick the union arm (`destination` follows `type`).
             properties: {
               type: news.type,
               category,
               destination: news.destination,
-            },
+            } as cognitiveservices.OutboundRuleInput,
           })
           .pipe(
             Effect.retry(whileAccountBusy),

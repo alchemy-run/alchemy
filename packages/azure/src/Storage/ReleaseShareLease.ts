@@ -44,8 +44,14 @@ export interface ReleaseShareLease extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ReleaseShareLeaseRequest,
-    ) => Effect.Effect<files.ShareReleaseLeaseResponse, files.ShareReleaseLeaseError, RuntimeContext>
+    ) => Effect.Effect<
+      files.ShareReleaseLeaseResponse,
+      files.ShareReleaseLeaseError,
+      RuntimeContext
+    >
   >
 > {}
 
-export const ReleaseShareLease = Binding.Service<ReleaseShareLease>("Azure.Storage.ReleaseShareLease");
+export const ReleaseShareLease = Binding.Service<ReleaseShareLease>(
+  "Azure.Storage.ReleaseShareLease",
+);

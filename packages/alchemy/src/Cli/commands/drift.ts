@@ -2,13 +2,22 @@ import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Drift from "../../Alchemist/routes/drift.ts";
+import * as Alchemist from "../../Alchemist/index.ts";
+import * as Interaction from "../../Interaction.ts";
 import { Cli } from "../../Report.ts";
-import * as CliKit from "../CliKit/index.ts";
+import { renderApply } from "../../Report.ts";
 import { planDecisionScreen } from "../components/view/PlanDecision.tsx";
-import { config, envFile, profile, resolveStage, stage } from "./flags.ts";
+import { setExitCode } from "./errors.ts";
+import { config, envFile, profile, resolveStage, stage, yes } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
-import { renderApply, renderPlanning } from "./render.ts";
+import { renderPlanning } from "./render.ts";
+
+/**
+ * Exit code when drift was found and left unrepaired, so a scheduled job can
+ * tell it apart from a clean stage (0) and a failed check (1), as
+ * `terraform plan -detailed-exitcode` does.
+ */
+export const EXIT_DRIFT_DETECTED = 2;
 
 const repairFlag = Flag.Boolean("repair").pipe(
   Flag.withDescription("Repair detected drift without prompting"),
@@ -21,6 +30,7 @@ interface SyncArgs {
   envFile: Option.Option<string>;
   profile?: string;
   repair?: boolean;
+  yes?: boolean;
 }
 
 const routeDrift = Effect.fn(function* ({
@@ -29,14 +39,18 @@ const routeDrift = Effect.fn(function* ({
   envFile,
   profile,
   repair = false,
+  yes = false,
 }: SyncArgs) {
   const cli = yield* Cli;
-  const snapshot = yield* Drift.inspect({
-    entrypoint: main,
-    stage,
-    profile,
-    envFile: Option.getOrUndefined(envFile),
-  }).pipe(
+  const snapshot = yield* Alchemist.importStack(main).pipe(
+    Effect.flatMap((stack) =>
+      Alchemist.Drift.scan({
+        stack,
+        stage,
+        profile,
+        envFile: Option.getOrUndefined(envFile),
+      }),
+    ),
     renderPlanning({
       operation: "Drift",
       stage,
@@ -44,19 +58,21 @@ const routeDrift = Effect.fn(function* ({
       readyLabel: "Drift check complete",
     }),
   );
-  if (!Drift.hasDrift(snapshot)) {
-    return yield* cli.displayPlan(snapshot.repairPlan.native);
+  if (!Alchemist.Drift.hasDrift(snapshot)) {
+    return yield* cli.displayPlan(snapshot.native);
   }
 
-  if (!repair) {
-    const terminal = yield* CliKit.CliKit;
+  // `--yes` answers the repair prompt, so it repairs like `--repair`.
+  if (!repair && !yes) {
+    const terminal = yield* Interaction.Interaction;
     if (!terminal.terminal.input) {
-      return yield* cli.displayPlan(snapshot.repairPlan.native);
+      yield* cli.displayPlan(snapshot.native);
+      return yield* setExitCode(EXIT_DRIFT_DETECTED);
     }
     const decision = yield* terminal.prompt
-      .custom(
+      .screen(
         planDecisionScreen({
-          plan: snapshot.repairPlan.native,
+          plan: snapshot.native,
           message: "Drift detected",
           choices: [
             {
@@ -72,16 +88,17 @@ const routeDrift = Effect.fn(function* ({
         }),
       )
       .pipe(Effect.catchTag("TerminalCancelled", () => Effect.succeed("cancel" as const)));
-    if (decision === "cancel") return;
+    if (decision === "cancel") return yield* setExitCode(EXIT_DRIFT_DETECTED);
   }
 
-  yield* Drift.repair(snapshot).pipe(renderApply(snapshot.repairPlan.native));
+  yield* Alchemist.Drift.execute(snapshot).pipe(renderApply(snapshot.native));
 });
 
 export const driftCommand = Command.make(
   "drift",
   {
     repair: repairFlag,
+    yes,
     main: config,
     envFile,
     stage,

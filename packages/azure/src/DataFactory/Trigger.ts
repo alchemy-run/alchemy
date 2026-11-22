@@ -316,7 +316,9 @@ export const TriggerProvider = () =>
         }
         observed = yield* datafactory.TriggersCreateOrUpdate({
           ...where,
-          properties: desired,
+          // `type` is any trigger type and `typeProperties` a loose bag, so TypeScript cannot pick
+          // the SDK union arm.
+          properties: desired as unknown as datafactory.Trigger,
         });
       }
 

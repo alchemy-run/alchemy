@@ -1,0 +1,67 @@
+---
+title: MCP servers
+description: Give a Pi harness the tools of an MCP server, and add or remove a server's tools from a conversation as one.
+---
+
+A Pi harness takes an [`AI.McpServer`](/ai/mcp-servers) beside its other tools. The harness connects from the Durable Object, asks the server for its tools, and offers them to the model.
+
+## List a server
+
+List the server in the harness's `tools` and provide its client Layer:
+
+```typescript title="src/Session.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import { McpClient, McpProtocol } from "effect/ai";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import { Fast, FastLive } from "./models.ts";
+
+export class Docs extends AI.McpServer<Docs>()("docs") {}
+
+const DocsLive = Docs.layer(
+  McpClient.layerHttp({
+    name: "my-agent",
+    version: "1.0.0",
+    protocol: McpProtocol.v2025_11_25,
+    url: "https://docs.example.com/mcp",
+  }).pipe(Layer.provide(FetchHttpClient.layer)),
+);
+
+const HarnessLive = Layer.mergeAll(FastLive, DocsLive, PiCloudflare.DurableObjectStorage);
+
+export default class Session extends Cloudflare.DurableObject<Session>()(
+  "Session",
+  Effect.gen(function* () {
+    const harness = yield* Pi.Harness({ models: [Fast], tools: [Docs] });
+
+    return Effect.gen(function* () {
+      return {
+        create: Effect.fn(function* (name: string) {
+          yield* harness.createConversation({ name });
+        }),
+      };
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+## How its tools are named
+
+Each instance of the Durable Object asks the server for its tools when it first opens the harness. The model sees each one as `mcp__<server>__<tool>`: the `search` tool of `docs` is `mcp__docs__search`.
+
+## Add or remove a server
+
+In a conversation's tools, the server stands for every tool it has:
+
+```typescript
+yield* harness.createConversation({ name: "research", tools: [Docs] });
+yield* harness.configure("research", { tools: { remove: [Docs] } });
+```
+
+## A server in another Worker
+
+The client is built inside the Durable Object, so it can reach a Worker of yours over a service binding. Provide the binding's HTTP client where `FetchHttpClient.layer` is above.

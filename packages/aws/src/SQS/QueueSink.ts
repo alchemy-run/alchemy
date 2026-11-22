@@ -43,12 +43,14 @@ export type QueueSinkError = sqs.SendMessageBatchError | BatchRetryExhaustedErro
  * ```typescript
  * const sink = yield* SQS.QueueSink(resultQueue);
  *
- * yield* SQS.consumeQueueMessages(sourceQueue, (records) =>
- *   records.pipe(
- *     Stream.map((record) => ({ MessageBody: record.body })),
- *     Stream.run(sink),
- *     Effect.orDie,
- *   ),
+ * yield* SQS.consumeQueueMessages(
+ *   sourceQueue,
+ *   Effect.fn(function* (event) {
+ *     yield* Stream.fromIterable(event.Records).pipe(
+ *       Stream.map((record) => ({ MessageBody: record.body })),
+ *       Stream.run(sink),
+ *     );
+ *   }),
  * );
  * ```
  *

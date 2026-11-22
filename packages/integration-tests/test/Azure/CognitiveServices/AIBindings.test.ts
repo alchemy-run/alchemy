@@ -1,5 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
-import { Credentials } from "@distilled.cloud/azure";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import { armScopeFor, Credentials } from "@distilled.cloud/azure";
 import * as agents from "@distilled.cloud/azure/ai-agents";
 import * as cu from "@distilled.cloud/azure/ai-content-understanding";
 import * as documents from "@distilled.cloud/azure/ai-document-intelligence";
@@ -8,10 +10,8 @@ import * as vision from "@distilled.cloud/azure/ai-image-analysis";
 import * as projects from "@distilled.cloud/azure/ai-projects";
 import * as authorization from "@distilled.cloud/azure/authorization";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -41,7 +41,7 @@ const COGNITIVE_SERVICES_USER = "a97b65f3-24c7-4388-baec-2e87135dc908";
 /** Object ID (`oid` claim) of the identity running the tests. */
 const callerObjectId = Effect.gen(function* () {
   const config = yield* yield* Credentials;
-  const token = Redacted.value(config.bearerToken);
+  const token = Redacted.value(yield* config.token(armScopeFor(config.apiBaseUrl)));
   return yield* Effect.sync(
     () =>
       JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"))
@@ -263,7 +263,9 @@ describe(
             agents.ListMessageMessages({ endpoint, threadId, order: "asc" }),
           );
           expect(
-            observed.data.map((m) => m.content.map((item) => item.text?.value ?? "").join("")),
+            observed.data.map((m) =>
+              m.content.map((item) => (item.type === "text" ? item.text.value : "")).join(""),
+            ),
           ).toEqual(messages.map((m) => m.text));
 
           const deleted = yield* call(`/thread/delete?id=${threadId}`);
@@ -399,7 +401,7 @@ describe(
           expect(body.result.lines.length).toBeGreaterThan(0);
           expect(body.result.tags).toContain("text");
           const observed = yield* asDeployer(
-            vision.AnalyzeFromUrl({ endpoint, url: TEXT_URL, features: "read" }),
+            vision.AnalyzeFromUrl({ endpoint, url: TEXT_URL, features: ["read"] }),
           );
           expect(body.result.lines).toEqual(
             (observed.readResult?.blocks ?? []).flatMap((b) => b.lines.map((l) => l.text)),

@@ -201,7 +201,8 @@ const desiredOf = (news: FabricAgentProps) => ({
   machineName: news.machineName,
   authenticationIdentity: news.authenticationIdentity,
   resourceAccessIdentity: news.resourceAccessIdentity,
-  customProperties: news.customProperties,
+  // A single-subtype union in the spec; `instanceType` stays a string here.
+  customProperties: news.customProperties as unknown as dr.VMwareFabricAgentModelCustomProperties,
 });
 
 export const FabricAgentProvider = () =>

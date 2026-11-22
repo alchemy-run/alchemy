@@ -106,7 +106,7 @@ export type Release = Resource<
 export const Release = Resource<Release>("GCP.FirebaseRules.Release");
 
 export class ReleaseNotResolved extends Data.TaggedError("GCP.FirebaseRules.ReleaseNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (release: firebaserules.Release, project: string) => {
@@ -167,31 +167,23 @@ export const ReleaseProvider = () =>
 
       if (current === undefined) {
         const created = yield* firebaserules
-          .createProjectsReleases({
-            name: parent,
-            body: {
-              name,
-              rulesetName: desiredRuleset,
-            },
-          })
+          .createProjectsReleases({ parent, name, rulesetName: desiredRuleset })
           .pipe(Effect.catchTag("Conflict", () => getRelease(name)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new ReleaseNotResolved({ name });
+        return yield* new ReleaseNotResolved({ resourceName: name });
       }
 
       if (!sameText(current.rulesetName, desiredRuleset)) {
         current = yield* firebaserules.patchProjectsReleases({
-          name: current.name ?? name,
-          body: {
-            release: {
-              name: current.name ?? name,
-              rulesetName: desiredRuleset,
-            },
-            updateMask: "rulesetName",
+          release: {
+            name: current.name ?? name,
+            rulesetName: desiredRuleset,
           },
+          updateMask: "rulesetName",
+          name: current.name ?? name,
         });
       }
 

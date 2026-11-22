@@ -4,10 +4,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class NeptuneDBParameterGroupUnexpectedResponse extends Data.TaggedError(
+  "NeptuneDBParameterGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DBParameterGroupProps {
   /**
@@ -56,8 +64,18 @@ export interface DBParameterGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBParameterGroupLookup
 > {}
+
+/**
+ * Props for {@link DBParameterGroup.lookup}: find a Neptune parameter group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBParameterGroupLookup {
+  /** The db parameter group name of the existing Neptune parameter group. */
+  dbParameterGroupName: string;
+}
 
 /**
  * An Amazon Neptune DB (instance-level) parameter group — a named set of
@@ -83,6 +101,16 @@ export interface DBParameterGroup extends Resource<
  *   dbInstanceClass: "db.serverless",
  *   dbParameterGroupName: params.dbParameterGroupName,
  * });
+ * ```
+ *
+ * ### Looking up an existing Neptune parameter group
+ * `DBParameterGroup.lookup` references a Neptune parameter group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbParameterGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Neptune parameter group
+ * ```typescript
+ * const existing = AWS.Neptune.DBParameterGroup.lookup({ dbParameterGroupName: "my-neptune-parameter-group" });
  * ```
  *
  * @resource
@@ -128,7 +156,7 @@ export const DBParameterGroupProvider = () =>
           .describeDBParameterGroups({
             DBParameterGroupName: groupName,
           })
-          .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.undefined));
         return response?.DBParameterGroups?.[0];
       });
 
@@ -181,6 +209,22 @@ export const DBParameterGroupProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ dbParameterGroupName: name }) {
+          const group = yield* readGroup(name);
+          if (!group?.DBParameterGroupName) {
+            return undefined;
+          }
+          const userParameters = yield* readUserParameters(name);
+          const tags = yield* readTags(group.DBParameterGroupArn);
+          return {
+            dbParameterGroupName: group.DBParameterGroupName,
+            dbParameterGroupArn: group.DBParameterGroupArn,
+            family: group.DBParameterGroupFamily ?? "",
+            description: group.Description,
+            parameters: toUserParameterRecord(userParameters),
+            tags,
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.dbParameterGroupName ??
@@ -225,7 +269,9 @@ export const DBParameterGroupProvider = () =>
               .pipe(Effect.catchTag("DBParameterGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(name);
             if (!observed?.DBParameterGroupName) {
-              return yield* Effect.fail(new Error(`Failed to create DB parameter group '${name}'`));
+              return yield* new NeptuneDBParameterGroupUnexpectedResponse({
+                message: `Failed to create DB parameter group '${name}'`,
+              });
             }
           }
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Redacted from "effect/Redacted";
 import { packEnvValue, packEnvValueKeepRedacted, unpackEnvValue } from "@/RuntimeContext.ts";
 

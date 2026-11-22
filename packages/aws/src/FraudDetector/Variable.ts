@@ -8,13 +8,13 @@ import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
-import { readFraudDetectorTags, syncFraudDetectorTags } from "./internal.ts";
+import { readFraudDetectorTags, snakeName, syncFraudDetectorTags } from "./internal.ts";
 
 export interface VariableProps {
   /**
-   * Name of the variable. If omitted, a unique lowercase name is generated
-   * from the app, stage, and logical ID. Changing the name replaces the
-   * variable.
+   * Name of the variable: lowercase letters, digits and underscores. If
+   * omitted, a unique name is generated from the app, stage, and logical ID.
+   * Changing the name replaces the variable.
    */
   name?: string;
   /**
@@ -61,8 +61,18 @@ export interface Variable extends Resource<
     dataSource: string;
   },
   never,
-  Providers
+  Providers,
+  VariableLookup
 > {}
+
+/**
+ * Props for {@link Variable.lookup}: find a variable this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface VariableLookup {
+  /** The name of the existing variable. */
+  name: string;
+}
 
 /**
  * An Amazon Fraud Detector variable — a named input to fraud-detection models
@@ -80,6 +90,16 @@ export interface Variable extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing variable
+ * `Variable.lookup` references a variable Alchemy doesn't manage (created in the
+ * console or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing variable
+ * ```typescript
+ * const existing = AWS.FraudDetector.Variable.lookup({ name: "my-variable" });
+ * ```
+ *
  * @resource
  */
 export const Variable = Resource<Variable>("AWS.FraudDetector.Variable");
@@ -89,14 +109,19 @@ export const VariableProvider = () =>
     Variable,
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: Partial<VariableProps>) {
-        return props.name ?? (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }));
+        return (
+          props.name ??
+          snakeName(
+            yield* createPhysicalName({ id, maxLength: 64, lowercase: true, delimiter: "_" }),
+          )
+        );
       });
 
       /** Look a variable up by name; typed not-found → undefined. */
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getVariables({ name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.variables?.[0];
       });
 
@@ -121,6 +146,13 @@ export const VariableProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ name }) {
+          const variable = yield* get(name);
+          if (variable === undefined) return undefined;
+          const attrs = toAttrs(variable);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

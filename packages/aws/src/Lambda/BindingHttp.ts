@@ -2,6 +2,7 @@ import type { Output as OutputType } from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
 import type { Function } from "./Function.ts";
+import { qualifiedArnOf } from "./QualifiedArn.ts";
 
 /**
  * Shared scaffolding for AWS Lambda control/data-plane HTTP bindings.
@@ -36,11 +37,26 @@ export const makeFunctionHttpBinding = <I extends { FunctionName?: string }, A, 
   actions: readonly string[];
   /** ARNs the actions are granted on. @default the function ARN */
   resources?: (func: Function) => (string | OutputType<string>)[];
+  /**
+   * Target the Function's alias (see `FunctionProps.alias`) instead of the
+   * unqualified function, for operations that invoke it. Grants the actions
+   * on the alias ARN unless `resources` overrides it.
+   */
+  qualified?: boolean;
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
     return Effect.fn(function* (func: Function) {
-      const FunctionArn = yield* func.functionArn;
+      const target = options.qualified ? qualifiedArnOf(func) : func.functionArn;
+      const FunctionArn = options.qualified
+        ? // Same runtime path as `yield* output` (which keys the value by the
+          // expression's source text), with a readable key; typed like the
+          // iterator, whose RuntimeContext the host always provides.
+          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the host provides RuntimeContext at runtime
+          yield* target.bind(`${func.LogicalId}.qualifiedArn`) as Effect.Effect<
+            Effect.Effect<string>
+          >
+        : yield* func.functionArn;
       // resolved per bind because a host with a created key signs in the function's own region
       const op = yield* AWSBindings.withCredentials(
         options.operation,
@@ -52,7 +68,7 @@ export const makeFunctionHttpBinding = <I extends { FunctionName?: string }, A, 
             {
               Effect: "Allow",
               Action: [...options.actions],
-              Resource: options.resources?.(func) ?? [func.functionArn],
+              Resource: options.resources?.(func) ?? [target],
             },
           ],
         });

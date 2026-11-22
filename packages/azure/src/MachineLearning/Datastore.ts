@@ -240,7 +240,9 @@ const toAttrs = (
   workspace,
   resourceGroup,
   datastoreType: datastore.properties.datastoreType,
-  accountName: datastore.properties.accountName,
+  accountName:
+    ("accountName" in datastore.properties ? datastore.properties.accountName : undefined) ??
+    undefined,
   isDefault: datastore.properties.isDefault ?? false,
   tags: userTags(armTags(datastore.properties.tags)),
 });
@@ -338,6 +340,8 @@ export const DatastoreProvider = () =>
           workspaceName: workspace,
           name,
           skipValidation: news.skipValidation,
+          // `datastoreType` is only known at runtime and decides the arm, so
+          // the arm is asserted rather than narrowed.
           properties: {
             datastoreType: news.datastoreType ?? "AzureBlob",
             ...location(news),
@@ -347,7 +351,7 @@ export const DatastoreProvider = () =>
             serviceDataAccessAuthIdentity: news.serviceDataAccessAuthIdentity,
             description: news.description,
             tags,
-          },
+          } as ml.DatastorePropertiesInput,
         });
       }
 

@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -60,6 +61,13 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(
+        GCP.SecretManager.LocationsSecret.lookup({
+          secretId: created.secretId,
+          location: created.location,
+        }),
+        created,
+      );
 
       expect(created.name).toContain("/locations/us-central1/secrets/");
       expect(created.secretId).toEqual(expect.any(String));
@@ -79,8 +87,8 @@ test.provider(
         Buffer.from("alchemy-regional-secret", "utf8").toString("base64"),
       );
       const version = yield* secretmanager.addVersionProjectsLocationsSecrets({
+        payload: { data: payload },
         parent: created.name,
-        body: { payload: { data: payload } },
       });
       expect(version.name).toContain("/versions/");
 

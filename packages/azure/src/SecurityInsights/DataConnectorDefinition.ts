@@ -231,9 +231,14 @@ export const DataConnectorDefinitionProvider = () =>
           resourceGroupName: resourceGroup,
           workspaceName: workspace,
           dataConnectorDefinitionName: name,
-          kind: (news.kind ?? "Customizable") as securityinsights.DataConnectorDefinitionKind,
-          etag: observed?.etag,
-          properties: desired,
+          body: {
+            kind: news.kind ?? "Customizable",
+            etag: observed?.etag,
+            // The UI and connections configs stay free-form documents in the
+            // props; the spec now types them, so they are asserted.
+            properties:
+              desired as unknown as securityinsights.CustomizableConnectorDefinitionProperties,
+          },
         });
       }
       return toAttrs(resourceGroup, workspace, name, observed);

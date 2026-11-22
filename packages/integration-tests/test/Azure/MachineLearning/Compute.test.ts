@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ml from "@distilled.cloud/azure/machinelearningservices";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runExpensive, withVcpus } from "../gates.ts";
 import { baseDefault, logLevel, subscription, tags, waitGone } from "./util.ts";
@@ -101,11 +101,9 @@ test.provider.skipIf(!runExpensive)(
           return { ...base, compute };
         });
       const scaleOf = (compute: ml.GetComputeResponse) =>
-        (
-          compute.properties?.properties as {
-            scaleSettings?: { maxNodeCount?: number };
-          }
-        )?.scaleSettings;
+        compute.properties?.computeType === "AmlCompute"
+          ? compute.properties.properties?.scaleSettings
+          : undefined;
 
       yield* stack.destroy();
       const { group, workspace, compute } = yield* stack.deploy(

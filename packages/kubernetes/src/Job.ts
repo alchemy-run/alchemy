@@ -1,3 +1,6 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
+import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
+import type * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
 import * as Output from "alchemy/Output";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -5,7 +8,7 @@ import { Platform, type PlatformProps, type PlatformServices } from "alchemy/Pla
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import type { HostRuntimeContext } from "alchemy/Runtime/Process";
-import { packEnvValue, unpackEnvValue, RuntimeContext } from "alchemy/RuntimeContext";
+import { packEnvValueKeepRedacted, unpackEnvValue, RuntimeContext } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags } from "alchemy/Tags";
 import { unwrapRedacted } from "alchemy/Util/data";
@@ -32,7 +35,8 @@ import { toConnection, type ClusterLike, type Connection } from "./Connection.ts
 import { makeConnectionRegistry } from "./internal/registry.ts";
 import {
   collectBindingEnv,
-  containerEnvValue,
+  ENV_SECRET_DIGEST,
+  workloadEnv,
   connectionIdentity,
   connectionOfOutput,
   deepMerge,
@@ -104,7 +108,12 @@ export interface JobPropsBase extends PlatformProps {
     limits?: { cpu?: string; memory?: string };
   };
   /**
-   * Additional environment variables for the container.
+   * Additional environment variables for the container. A `Redacted` value
+   * (or one holding a `Redacted`) is kept in the Job's own Secret,
+   * `<name>-env`, and read through `secretKeyRef`, so the pod template never
+   * holds it; a changed secret rolls the pods. `{ valueFrom: { ... } }`
+   * passes through as a Kubernetes `EnvVarSource`, to read a Secret,
+   * ConfigMap or field of your own.
    */
   env?: Record<string, any>;
   /**
@@ -112,6 +121,14 @@ export interface JobPropsBase extends PlatformProps {
    * @default the connection's `architecture`, else "amd64"
    */
   architecture?: "amd64" | "arm64";
+  /**
+   * Kubernetes `RuntimeClass` the pods run under. On EKS, `isolated-sandbox`
+   * runs each pod in its own Nitro Sandbox, a lightweight VM isolated by the
+   * AWS Nitro hypervisor, and `confidential-sandbox` also hides the pod's
+   * memory from the node. EKS Auto Mode needs no other setup. Any other
+   * RuntimeClass on the cluster (gVisor, Kata) works too.
+   */
+  runtimeClassName?: "isolated-sandbox" | "confidential-sandbox" | (string & {});
   /**
    * Deep-partial Kubernetes Pod template merged into the synthesized
    * template (objects merge recursively; arrays and primitives replace) —
@@ -154,8 +171,8 @@ export interface BundledJobProps extends JobPropsBase {
   image?: string;
   /** Named export to load from `main`. @default "default" */
   handler?: string;
-  /** Bundler configuration for the entrypoint. */
-  build?: WorkloadImageSource["build"];
+  /** Bundler configuration for the entrypoint, and the image build's layer `cache`. */
+  build?: Bundle.BundleConfig & BuildCacheOptions;
   /** Environment Dockerfile (path or inline content). */
   dockerfile?: WorkloadImageSource["dockerfile"];
   /** Build context for a path {@link dockerfile} environment. */
@@ -163,7 +180,7 @@ export interface BundledJobProps extends JobPropsBase {
 }
 
 /** Build the user's own Dockerfile (`context` + optional `dockerfile` path). */
-export interface DockerfileJobProps extends JobPropsBase {
+export interface DockerfileJobProps extends JobPropsBase, DockerfileBuildOptions {
   /** Docker build context directory. */
   context?: string;
   /**
@@ -207,6 +224,7 @@ export interface Job extends Resource<
      * adapter (on EKS: the pod-identity role + association; on GKE: the
      * Workload Identity principal and the IAM grants applied to it).
      */
+    // oxlint-disable-next-line typescript/no-redundant-type-constituents -- registry type is `never` until cloud packages augment it
     identity: IdentityState | undefined;
     /**
      * Image-registry state provisioned by the cluster platform's adapter
@@ -267,6 +285,23 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
+ * **Example:** Your own Dockerfile with build args and secrets
+ * ```typescript
+ * // Dockerfile:
+ * //   ARG NODE_ENV
+ * //   RUN --mount=type=secret,id=NPM_TOKEN,env=NPM_TOKEN npm ci
+ * const migrate = yield* Kubernetes.Job("DbMigrate", {
+ *   cluster,
+ *   context: "./migrator",
+ *   build: {
+ *     args: { NODE_ENV: "production" },
+ *     // Mounted only into the RUN step that asks for it; never in the image.
+ *     secrets: { NPM_TOKEN: Config.Redacted("NPM_TOKEN") },
+ *   },
+ *   backoffLimit: 2,
+ * });
+ * ```
+ *
  * **Example:** Inline Effect program
  * ```typescript
  * const cluster = yield* Kubernetes.LocalCluster("Cluster", {
@@ -315,6 +350,37 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  *     };
  *   }),
  * );
+ * ```
+ *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
+ *
+ * **Example:** Cache layers in the image repository
+ * ```typescript
+ * const migrate = yield* Kubernetes.Job("Migrate", {
+ *   cluster,
+ *   context: "./migrate",
+ *   build: { cache: true },
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const migrate = yield* Kubernetes.Job("Migrate", {
+ *   cluster,
+ *   context: "./migrate",
+ *   build: {
+ *     cache: {
+ *       from: ["type=gha,scope=migrate"],
+ *       to: ["type=gha,scope=migrate,mode=max"],
+ *     },
+ *   },
+ * });
  * ```
  *
  * ### Bundling & Tree-shaking
@@ -373,23 +439,27 @@ export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> = Plat
         set: (bindingId: string, output: Output.Output) =>
           Effect.sync(() => {
             const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
-            env[key] = output.pipe(Output.map(packEnvValue));
+            // A Redacted stays Redacted, so the Job keeps it in its Secret.
+            env[key] = output.pipe(Output.map(packEnvValueKeepRedacted));
             return key;
           }),
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- runtime ctx.get must read raw env, never Config (see unpackEnvValue)
         get: <T>(key: string) => Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
         run: (effect: Effect.Effect<void, never, any>) =>
           Effect.sync(() => {
+            // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- host programs keep their own requirements; the generated entry satisfies them
             runners.push(effect);
           }),
         serve: ((_handler, options) =>
           Effect.sync(() => {
             const run = options?.shape?.run;
             if (Effect.isEffect(run)) {
-              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `run` is a user program; the host runner surfaces its failures
+              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion, effecttsgo/any-unknown-in-error-context -- `run` is a user program; the host runner surfaces its failures and satisfies its requirements
               runners.push(run as Effect.Effect<void, never, any>);
             }
           })) as HostRuntimeContext["serve"],
         exports: Effect.sync(() => ({
+          // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- host programs keep their own requirements; the generated entry satisfies them
           program: Effect.all(runners, { concurrency: "unbounded" }).pipe(Effect.asVoid),
         })),
       };
@@ -477,7 +547,7 @@ export const JobProvider = () =>
           const observed = yield* readObject({
             transport,
             object: anchor,
-          }).pipe(Effect.catchTag("KubernetesNotFound", () => Effect.succeed(undefined)));
+          }).pipe(Effect.catchTag("KubernetesNotFound", () => Effect.undefined));
           if (observed === undefined) return undefined;
           return output;
         }),
@@ -553,6 +623,9 @@ export const JobProvider = () =>
             ...news.env,
           };
 
+          // Secrets move into the workload's own Secret, read by reference.
+          const env = yield* workloadEnv({ name: baseName, namespace, labels, env: containerEnv });
+
           const serviceAccountObject: KubernetesObjectDefinition = {
             apiVersion: "v1",
             kind: "ServiceAccount",
@@ -567,9 +640,15 @@ export const JobProvider = () =>
           };
           const podTemplate = deepMerge(
             {
-              metadata: { labels: { ...identity?.podLabels, ...labels } },
+              metadata: {
+                labels: { ...identity?.podLabels, ...labels },
+                ...(env.digest === undefined
+                  ? {}
+                  : { annotations: { [ENV_SECRET_DIGEST]: env.digest } }),
+              },
               spec: {
                 serviceAccountName,
+                ...(news.runtimeClassName ? { runtimeClassName: news.runtimeClassName } : {}),
                 restartPolicy: news.restartPolicy ?? "Never",
                 containers: [
                   {
@@ -577,10 +656,7 @@ export const JobProvider = () =>
                     image: resolved.imageUri,
                     command: news.command,
                     args: news.args,
-                    env: Object.entries(containerEnv).map(([name, value]) => ({
-                      name,
-                      value: containerEnvValue(value),
-                    })),
+                    env: env.entries,
                     resources: news.resources,
                   },
                 ],
@@ -629,7 +705,11 @@ export const JobProvider = () =>
                 spec: jobSpec,
               };
 
-          const desiredObjects = [serviceAccountObject, workloadObject];
+          const desiredObjects = [
+            serviceAccountObject,
+            ...(env.secret === undefined ? [] : [env.secret as KubernetesObjectDefinition]),
+            workloadObject,
+          ];
 
           const kubernetesObjects = yield* reconcileObjects({
             transport,

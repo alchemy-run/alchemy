@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   createOwnership,
@@ -140,8 +141,28 @@ export type TransferJob = Resource<
     latestOperationName: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TransferJobLookup
 >;
+
+/**
+ * Props for {@link TransferJob.lookup}: find a transfer job this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface TransferJobLookup {
+  /**
+   * Job id (the `{job}` segment of `transferJobs/{job}`). The API name is
+   * `transferJobs/{job}` (max 128 characters, must not start with
+   * `transferJobs/OPI` unless this is a POSIX transfer).
+   */
+  jobId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Storage Transfer Service job that copies objects between Cloud
@@ -197,6 +218,19 @@ export type TransferJob = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing transfer job
+ * `TransferJob.lookup` references a transfer job Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * transfer job.
+ *
+ * **Example:** Reference an existing transfer job
+ * ```typescript
+ * const transferJob = GCP.StorageTransfer.TransferJob.lookup({
+ *   jobId: "my-job",
+ * });
+ * ```
+ *
  * @resource
  * @category StorageTransfer
  */
@@ -205,7 +239,7 @@ export const TransferJob = Resource<TransferJob>("GCP.StorageTransfer.TransferJo
 export class TransferJobNotResolved extends Data.TaggedError(
   "GCP.StorageTransfer.TransferJobNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const statusOf = (status: string | undefined) =>
@@ -298,6 +332,14 @@ export const TransferJobProvider = () =>
       return replaceOnImmutable(news, olds, output);
     }),
 
+    lookup: Effect.fn(function* ({ jobId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = transferJobName(jobId);
+      const existing = yield* getTransferJob(name, env.project);
+      if (existing === undefined || isDeletedJob(existing)) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const jobId = yield* toJobId(id, olds?.jobId, output?.jobId);
@@ -330,36 +372,34 @@ export const TransferJobProvider = () =>
       if (current === undefined) {
         const created = yield* retryApiDisabled(
           storagetransfer.createTransferJobs({
-            body: toCreateBody(name, env.project, news, desiredDescription),
+            ...toCreateBody(name, env.project, news, desiredDescription),
           }),
         ).pipe(Effect.catchTag("Conflict", () => getTransferJob(name, env.project)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new TransferJobNotResolved({ name });
+        return yield* new TransferJobNotResolved({ resourceName: name });
       }
 
       if (isDeletedJob(current)) {
         current = yield* storagetransfer.patchTransferJobs({
-          jobName: current.name ?? name,
-          body: {
-            projectId: env.project,
-            updateTransferJobFieldMask: fieldMask([
-              "description",
-              news.transferSpec !== undefined ? "transfer_spec" : undefined,
-              news.notificationConfig !== undefined ? "notification_config" : undefined,
-              news.loggingConfig !== undefined ? "logging_config" : undefined,
-              "status",
-            ]),
-            transferJob: {
-              description: desiredDescription,
-              transferSpec: news.transferSpec,
-              notificationConfig: news.notificationConfig,
-              loggingConfig: news.loggingConfig,
-              status: desiredStatus,
-            },
+          projectId: env.project,
+          updateTransferJobFieldMask: fieldMask([
+            "description",
+            news.transferSpec !== undefined ? "transfer_spec" : undefined,
+            news.notificationConfig !== undefined ? "notification_config" : undefined,
+            news.loggingConfig !== undefined ? "logging_config" : undefined,
+            "status",
+          ]),
+          transferJob: {
+            description: desiredDescription,
+            transferSpec: news.transferSpec,
+            notificationConfig: news.notificationConfig,
+            loggingConfig: news.loggingConfig,
+            status: desiredStatus,
           },
+          jobName: current.name ?? name,
         });
       }
 
@@ -378,18 +418,16 @@ export const TransferJobProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* storagetransfer.patchTransferJobs({
-          jobName: current.name ?? name,
-          body: {
-            projectId: env.project,
-            updateTransferJobFieldMask: updateMask,
-            transferJob: {
-              description: desiredDescription,
-              transferSpec: news.transferSpec,
-              notificationConfig: news.notificationConfig,
-              loggingConfig: news.loggingConfig,
-              status: desiredStatus,
-            },
+          projectId: env.project,
+          updateTransferJobFieldMask: updateMask,
+          transferJob: {
+            description: desiredDescription,
+            transferSpec: news.transferSpec,
+            notificationConfig: news.notificationConfig,
+            loggingConfig: news.loggingConfig,
+            status: desiredStatus,
           },
+          jobName: current.name ?? name,
         });
       }
 

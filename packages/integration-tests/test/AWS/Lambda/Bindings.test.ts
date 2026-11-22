@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as Lambda from "@distilled.cloud/aws/lambda";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
@@ -76,11 +76,17 @@ describe("Lambda Bindings", { tags: ["provider:aws", "provider:aws:lambda", "liv
   );
 
   test.provider(
-    "InvokeFunction invokes the target function",
+    "InvokeFunction invokes the target function through its alias",
     () =>
       Effect.gen(function* () {
-        const result = (yield* getJson("/invoke", 30)) as { statusCode: number };
+        const result = (yield* getJson("/invoke", 30)) as {
+          statusCode: number;
+          executedVersion: string;
+        };
         expect(result.statusCode).toBe(200);
+        // The target sets `alias: "live"`, so the binding runs the version
+        // the alias serves, never `$LATEST`.
+        expect(result.executedVersion).toMatch(/^[1-9]\d*$/);
       }),
     { timeout: 120_000 },
   );

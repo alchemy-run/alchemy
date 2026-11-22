@@ -1,7 +1,7 @@
 import { resolveAzureCredentials } from "@alchemy.run/azure/Credentials";
+import { expect } from "@alchemy.run/test";
 import * as securityDomain from "@distilled.cloud/azure/keyvault-security-domain";
 import * as servicePrincipals from "@distilled.cloud/microsoft-graph/servicePrincipals";
-import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { SECURITY_DOMAIN_KEYS } from "./security-domain-keys.ts";

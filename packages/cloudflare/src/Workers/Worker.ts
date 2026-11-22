@@ -1,8 +1,8 @@
-import type * as cf from "@cloudflare/workers-types";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { type MemoOptions } from "alchemy/Command/Memo";
 import type { Dependencies } from "alchemy/Dependencies";
-import type { InputProps } from "alchemy/Input";
+import type { DnsConfig } from "alchemy/DNS/Adapter";
+import type { InputProps, PropsInput } from "alchemy/Input";
 import type { Named, Tag } from "alchemy/Named";
 import type * as Output from "alchemy/Output";
 import {
@@ -25,10 +25,13 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type { Self as SelfService } from "alchemy/Self";
 import { isPathWithin } from "alchemy/Util/isPathWithin";
 import type { WebhookHost } from "alchemy/WebhookHost";
+import type { TcpSocket } from "alchemy/Workers/Workerd/Socket";
 import type { ConfigError } from "effect/Config";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import type * as Scope from "effect/Scope";
 import path from "pathe";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
@@ -43,9 +46,9 @@ import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import type { WorkerAccessConfig, WorkerAccessIdentity } from "./WorkerAccess.ts";
-import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
-import type { WorkerBinding, WorkerBindingResource, WorkerBindings } from "./WorkerBinding.ts";
-import { WorkerEnvironment, WorkerExecutionContext, WorkerTypeId } from "./WorkerRuntime.ts";
+import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
+import { transformWorkerDomainProps } from "./WorkerDomainDns.ts";
+import { WorkerEnvironment, WorkerTypeId } from "./WorkerRuntime.ts";
 import {
   makeWorkerRuntimeContext,
   type WorkerExport,
@@ -53,6 +56,7 @@ import {
 } from "./WorkerRuntimeContext.ts";
 
 export * from "./WorkerRuntime.ts";
+export { WorkerDomainDnsError } from "./WorkerDomainDns.ts";
 
 export const isWorker = <T>(value: T): value is T & Worker => isResourceOfType(value, WorkerTypeId);
 
@@ -102,17 +106,57 @@ export interface WorkerEntrypointSettings {
 
 export type WorkerPlacement = Exclude<workers.PutScriptRequest["metadata"]["placement"], undefined>;
 
+/**
+ * How a deploy rolls new code out to the Worker's running Durable Objects.
+ *
+ * - `{ mode: "deferred" }` — an active object keeps running its current code
+ *   while it waits to hibernate, for up to `maxDelay`, so in-flight work can
+ *   finish. Hibernation API WebSockets stay connected when the object picks
+ *   up the new code after hibernating.
+ * - `{ mode: "immediate" }` — every object resets onto the new code as soon
+ *   as the deploy lands.
+ *
+ * Deferral is best effort: an object can still reset before `maxDelay`
+ * elapses, e.g. during a Cloudflare runtime update.
+ */
+export type WorkerCodeUpdateStrategy =
+  | { mode: "immediate" }
+  | {
+      mode: "deferred";
+      /**
+       * The longest an active Durable Object may keep running old code before
+       * it is forced onto the new code — e.g. `"1 minute"`, `"30 seconds"`, or
+       * a `Duration`. Between 0 and 24 hours, millisecond precision.
+       * @default "5 minutes"
+       */
+      maxDelay?: Duration.Input;
+    };
+
 export type WorkerServices =
   | Worker
   | WebhookHost
   | Request
-  | WorkerExecutionContext
   | WorkerEnvironment
   | CloudflareEnvironment
   | Container.Application<any>
   | SelfService;
 
-export type WorkerShape<Req = never> = Main<WorkerServices | Req> & MainRpc<WorkerServices | Req>;
+/**
+ * The handler for inbound TCP connections: Spectrum (a Spectrum application
+ * whose origin is this Worker) or another Worker's `connect()` over a
+ * service binding. Runs once per connection; the connection stays open until
+ * the Effect settles.
+ */
+export type ConnectHandler<Req = never> = (
+  socket: TcpSocket,
+) => Effect.Effect<void, never, PlatformServices | RuntimeContext | Scope.Scope | Req>;
+
+export type WorkerShape<Req = never> = Main<WorkerServices | Req> & {
+  /**
+   * Accept inbound TCP connections. See {@link ConnectHandler}.
+   */
+  connect?: ConnectHandler<WorkerServices | Req>;
+} & MainRpc<WorkerServices | Req>;
 
 export type WorkerEnv = Record<
   string,
@@ -249,6 +293,36 @@ export interface WorkerDomainConfig {
    * @default false
    */
   previews?: boolean;
+  /**
+   * The DNS host that publishes this domain's records. Omit it (or pass
+   * `Cloudflare.DNS.Adapter()`) for hostnames in a Cloudflare zone of the
+   * account: they attach as native custom domains, exactly as without
+   * `dns`.
+   *
+   * Any other adapter (`AWS.Route53.Adapter()`, `Hetzner.DNS.Adapter()`)
+   * serves the hostnames through
+   * [Cloudflare for SaaS](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/start/advanced-settings/worker-as-origin/):
+   * {@link name} and each alias become a
+   * `Cloudflare.CustomHostname.CustomHostname` on the SaaS zone
+   * ({@link zoneId} / {@link zone} / {@link zoneName}, required), the
+   * DNS host publishes their ownership and certificate-validation TXT
+   * records plus a `CNAME` to {@link cnameTarget}, and the Worker gets a
+   * `<hostname>/*` route on the SaaS zone instead of a custom domain.
+   * {@link redirects} and {@link previews} are not supported on this path,
+   * and the Worker's `url` stays its `workers.dev` URL. Declare the SaaS
+   * zone's `Cloudflare.CustomHostname.FallbackOrigin` once yourself —
+   * several Workers can share one SaaS zone.
+   *
+   * See [DNS Adapters](/infrastructure-as-code/dns-adapters).
+   */
+  dns?: DnsConfig;
+  /**
+   * Hostname in the SaaS zone that custom hostnames CNAME to, typically
+   * the zone's fallback origin (`FallbackOrigin`'s `origin`). Required
+   * when {@link dns} names a DNS host other than Cloudflare; unused
+   * otherwise.
+   */
+  cnameTarget?: string;
 }
 
 export interface WorkerRouteConfig {
@@ -481,6 +555,11 @@ export interface WorkerPreviewOptions {
    * Preview Worker. Locally-hosted Durable Object and Workflow classes
    * *are* allowed: each Preview gets its own isolated namespace.
    *
+   * `observability` and `Cloudflare.Telemetry()` apply to the Preview
+   * itself: Cloudflare keeps Workers Logs and Traces settings per
+   * Preview, independent of the parent, so a Preview records logs by
+   * default and traces when it provides `Cloudflare.Telemetry()`.
+   *
    * Changing the parent replaces the resource (a Preview belongs to
    * exactly one script).
    */
@@ -664,6 +743,8 @@ export interface WorkerProps<
    * across full deployments. Setting it to `false` or omitting `issues`
    * disables Issues on the next full deployment. Version-only uploads and
    * gradual rollouts keep the parent's live observability settings.
+   * A Preview Worker (`preview.of`) applies these settings to its own
+   * Preview, which Cloudflare configures separately from the parent.
    */
   observability?: WorkerObservability;
   /**
@@ -715,8 +796,11 @@ export interface WorkerProps<
    * `python_workers` compatibility flag is added, and dependencies from
    * `pyproject.toml` (or a prebuilt `python_modules/` directory) are
    * vendored alongside. See the Python Workers section above.
+   *
+   * `null` is the same as omitting it, so a wrapper that spreads its own
+   * props (where `main` means something else) can clear it.
    */
-  main?: string;
+  main?: string | null;
   /**
    * Raw module source for the Worker. When provided, bundling is bypassed
    * entirely and this string is uploaded as a single ESM module
@@ -744,6 +828,12 @@ export interface WorkerProps<
      * - Python Workers get `python_workers` instead of the JavaScript defaults.
      *
      * Duplicate flags are removed when defaults are applied.
+     *
+     * Add `enable_request_signal` to interrupt an Effect `fetch` handler when
+     * the client disconnects: the handler's finalizers run as an interruption
+     * and the Worker stays alive until they finish. Without the flag,
+     * Cloudflare cancels the request and its finalizers never run. `alchemy
+     * dev` does not report client disconnects.
      */
     flags?: (
       | "nodejs_compat"
@@ -760,6 +850,21 @@ export interface WorkerProps<
   };
   limits?: WorkerLimits;
   placement?: WorkerPlacement;
+  /**
+   * How each deploy rolls new code out to this Worker's running Durable
+   * Objects. Cloudflare defers updates by default: an active object keeps
+   * running its current code for up to 5 minutes while it waits to
+   * hibernate. Use `{ mode: "immediate" }` when an object must run the new
+   * code right after the deploy (during an incident, or when a test drives
+   * it straight away), or set a different `maxDelay`.
+   *
+   * Applies per deploy, not as a stored setting: changing only this prop
+   * does not redeploy the Worker; the next deploy uses it. See
+   * {@link WorkerCodeUpdateStrategy}.
+   *
+   * @default { mode: "deferred", maxDelay: "5 minutes" }
+   */
+  codeUpdateStrategy?: WorkerCodeUpdateStrategy;
   /**
    * Tracks Durable Object and Workflow exports and captured SQL migrations
    * for Effect-native Workers only.
@@ -919,14 +1024,44 @@ export interface WorkerProps<
    */
   bundle?: boolean;
   /**
-   * Module rules selecting which files in the directory containing
-   * {@link main} are uploaded as additional modules when {@link bundle}
-   * is `false`. Each rule's globs are matched against POSIX-style paths
-   * relative to that directory, mirroring Wrangler's `rules`
-   * configuration. When provided, these rules replace
-   * {@link defaultModuleRules}.
+   * Module rules selecting files uploaded as their own Worker modules,
+   * mirroring Wrangler's `rules`. Globs match POSIX-style paths relative to
+   * the directory containing {@link main}, and `**\/` matches any depth.
+   * Each rule's `type` decides how a file is imported: `Text` as a `string`,
+   * `Data` as an `ArrayBuffer`, `CompiledWasm` as a `WebAssembly.Module`.
+   * Without one, the extension decides (`.wasm` CompiledWasm,
+   * `.txt`/`.html`/`.sql` Text), and other files are Data. When rules
+   * overlap, the first match decides.
    *
-   * @default defaultModuleRules — ESModule (`**\/*.js`, `**\/*.mjs`), CompiledWasm (`**\/*.wasm`), Text (`**\/*.txt`, `**\/*.html`, `**\/*.sql`), Data (`**\/*.bin`)
+   * When Alchemy bundles {@link main}, rules add to the built-in ones
+   * (`.wasm`, `.bin`, `.txt`, `.html`, `.sql`) and are checked first: an
+   * imported file that matches is uploaded as a module instead of bundled.
+   * JavaScript, TypeScript and JSON are always bundled, and imports inside
+   * nested `?worker` modules don't use rules. For files outside the entry's
+   * directory, globs may start with `../` or be absolute. `!` globs exclude
+   * across your rules; an excluded `.txt` or `.wasm` still matches the
+   * built-in rules.
+   *
+   * When {@link bundle} is `false`, every file in the entry's directory that
+   * matches is uploaded, and the rules replace {@link defaultModuleRules}.
+   *
+   * Rules don't apply to an inline {@link script}, a {@link source}
+   * provider or a Python {@link main}.
+   *
+   * ```ts
+   * // worker.ts
+   * import font from "./font.ttf"; // ArrayBuffer
+   * import readme from "./README.md"; // string
+   *
+   * // alchemy.run.ts
+   * rules: [{ globs: ["**\/*.ttf"] }, { type: "Text", globs: ["**\/*.md"] }]
+   *
+   * // modules.d.ts, so TypeScript knows the imports
+   * declare module "*.ttf" { const data: ArrayBuffer; export default data; }
+   * declare module "*.md" { const text: string; export default text; }
+   * ```
+   *
+   * @default none when bundling; {@link defaultModuleRules} with `bundle: false`
    */
   rules?: ModuleRule[];
   /**
@@ -1001,6 +1136,27 @@ export interface WorkerProps<
            */
           identity?: WorkerAccessIdentity;
         };
+        /**
+         * Overrides for the `workerd` process that runs this Worker
+         * locally. Inert on deploy.
+         */
+        workerd?: {
+          /**
+           * Path to the workerd binary to run instead of the one from the
+           * `workerd` npm package. Use it where the npm binary can't
+           * start, e.g. NixOS. Set `ALCHEMY_WORKERD_PATH` instead to
+           * change the binary for every workerd process alchemy starts.
+           */
+          path?: string;
+          /**
+           * Extra V8 flags, e.g. `["--max-old-space-size=4096"]` to raise
+           * the heap limit. Applied after `ALCHEMY_WORKERD_V8_FLAGS`, so
+           * they win when both set the same flag.
+           */
+          v8Flags?: string[];
+          /** Extra environment variables for the workerd process. */
+          env?: Record<string, string>;
+        };
       }
     | {
         /**
@@ -1035,12 +1191,13 @@ export interface WorkerSourceDescriptor {
    */
   readonly devMode: "server" | "bundle";
   /**
-   * The framework project root. Server-mode dev children are spawned with
-   * this directory as their working directory — some framework dev servers
-   * (e.g. `next dev`, which 404s every route when `process.cwd()` differs
-   * from its `dir`) require cwd to be the project root. Relative paths
-   * resolve against the engine's working directory. Defaults to the
-   * engine's working directory.
+   * The framework project root. The only place a source's root is set:
+   * the engine resolves it once and hands it to the module's `make`, and
+   * server-mode dev children are spawned with it as their working
+   * directory — some framework dev servers (e.g. `next dev`, which 404s
+   * every route when `process.cwd()` differs from its `dir`) require cwd to
+   * be the project root. Relative paths resolve against the engine's
+   * working directory. Defaults to the engine's working directory.
    */
   readonly rootDir?: string;
   /**
@@ -1052,7 +1209,7 @@ export interface WorkerSourceDescriptor {
    */
   readonly runtime?: "node";
   /**
-   * Provider-specific options (rootDir, memo, framework config, ...).
+   * Provider-specific options (memo, framework config, ...).
    * Must be JSON-serializable AND JSON-stable: the descriptor persists
    * in state and participates in the metadata hash, so non-deterministic
    * values here cause perpetual redeploys.
@@ -1060,14 +1217,29 @@ export interface WorkerSourceDescriptor {
   readonly options?: unknown;
 }
 
-export interface ViteOptions {
+/**
+ * Which files are hashed to decide whether a framework build re-runs: by
+ * default every non-gitignored file under the root plus the nearest
+ * lockfile, and the workspace packages the build imports.
+ */
+export interface WorkspaceMemoOptions extends MemoOptions {
   /**
-   * Framework-specific build metadata interpreted after Vite completes.
-   * Set by `Website.Foldkit` to derive asset routing from its manifest.
-   * @internal
+   * Workspace directories outside the root to hash. `"auto"` hashes the
+   * workspaces the build's module graph reached; an explicit array pins
+   * them, each hashed under its own scope.
+   * @default "auto"
    */
-  framework?: "foldkit";
+  workspaces?:
+    | "auto"
+    | Array<
+        MemoOptions & {
+          /** The workspace directory, relative to the root. */
+          cwd: string;
+        }
+      >;
+}
 
+export interface ViteOptions {
   /**
    * Overrides the module that becomes the deployed Worker entry, forwarded
    * to the Cloudflare Vite plugin's `main` option. Relative paths resolve
@@ -1099,24 +1271,7 @@ export interface ViteOptions {
    *
    * @see {@link MemoOptions}
    */
-  memo?: MemoOptions & {
-    /**
-     * Configure additional workspaces to hash.
-     * By default, auto-detects workspaces during Vite build, then hashes all
-     * non-gitignored files in the workspace plus the nearest lockfile.
-     * @default "auto"
-     */
-    workspaces?:
-      | "auto"
-      | Array<
-          MemoOptions & {
-            /**
-             * The working directory to hash, relative to the Vite root.
-             */
-            cwd: string;
-          }
-        >;
-  };
+  memo?: WorkspaceMemoOptions;
   /**
    * Selects which Vite environments make up the deployed Worker, for
    * frameworks that build more than one (e.g. React Server Components).
@@ -1298,6 +1453,14 @@ export type Worker<Bindings = any> = Resource<
      * rules are deployed.
      */
     affinityZoneIds?: string[] | undefined;
+    /**
+     * The sorted names of the `secret_text` and `secret_key` bindings this
+     * Worker's deploys uploaded and have not yet deleted. Cloudflare keeps a
+     * secret binding that a later upload omits, so a full deploy deletes the
+     * names listed here that it no longer uploads. Secrets set outside
+     * Alchemy are never listed, and never deleted.
+     */
+    secretNames?: string[] | undefined;
     hash?: {
       assets: string | undefined;
       bundle: string | undefined;
@@ -1327,13 +1490,17 @@ export type Worker<Bindings = any> = Resource<
      */
     cache?: WorkerCache;
     /**
-     * Workers Observability traces settings contributed by
-     * `Cloudflare.Telemetry()`. Deep-merged into upload metadata: bound
-     * traces fill in when `WorkerProps.observability.traces` is omitted,
-     * and never clobber the default logs config. An explicit
-     * `observability.traces` object wins.
+     * Workers Observability traces and logs fields set on
+     * `Cloudflare.Telemetry()` — only the fields its caller set, so
+     * they can be merged with `WorkerProps.observability` field by field.
+     * Where the props omit `traces` / `logs`, these fill in over the
+     * defaults (on); a field set to different values in both fails the
+     * deploy with `ObservabilityConflictError`.
      */
-    observability?: Pick<WorkerObservability, "traces">;
+    observability?: {
+      traces?: Partial<NonNullable<WorkerObservability["traces"]>>;
+      logs?: Partial<NonNullable<WorkerObservability["logs"]>>;
+    };
     containers?: {
       className: string;
       /** Set when an async `Cloudflare.DurableObject(name, { containers })` binding contributed the row. */
@@ -1366,8 +1533,15 @@ export type Worker<Bindings = any> = Resource<
      */
     devRemote?: Record<string, boolean>;
   },
-  Providers
+  Providers,
+  WorkerLookup
 >;
+
+/** Props for {@link Worker.lookup}: find a Worker this stack doesn't manage. */
+export interface WorkerLookup {
+  /** The script name of the Worker, e.g. `"auth-service"`. */
+  name: string;
+}
 
 /** An external/async Worker declared without an Effect implementation. */
 export type ExternalWorker<Bindings = {}> = Worker<Bindings> & {
@@ -1498,6 +1672,39 @@ export const isSelf = (value: unknown): value is Self =>
   value !== null &&
   "~alchemy/Kind" in value &&
   (value as Self)["~alchemy/Kind"] === "Cloudflare.Workers.Self";
+
+/** Options for {@link WorkerRef}. */
+export interface WorkerRefOptions {
+  /** Stage of the referenced Worker. Defaults to the current stage. */
+  stage?: string;
+  /** Stack of the referenced Worker. Defaults to the current stack. */
+  stack?: string;
+}
+
+/**
+ * `Cloudflare.Worker.ref` — by logical id, or by the Worker's declaration so
+ * the reference keeps the declaration's type (`Worker & Rpc<...>`).
+ */
+export interface WorkerRef {
+  <W extends Worker>(
+    worker: Effect.Effect<W, any, any> & PlatformIdentity,
+    options?: WorkerRefOptions,
+  ): Effect.Effect<W>;
+  (id: string, options?: WorkerRefOptions): Effect.Effect<Worker>;
+}
+
+/**
+ * Let `ref` take a declaration in place of its logical id. Only the
+ * declaration's `LogicalId` is read: it is never yielded, so the reference
+ * adds no dependency on (and does not deploy) the referenced Worker.
+ */
+const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platform: P): P => {
+  const ref = platform.ref;
+  return Object.assign(platform, {
+    ref: (worker: string | PlatformIdentity, options?: WorkerRefOptions) =>
+      ref(typeof worker === "string" ? worker : worker.LogicalId, options),
+  });
+};
 
 /**
  * A Cloudflare Worker host with deploy-time binding support and runtime export
@@ -1932,6 +2139,25 @@ export const isSelf = (value: unknown): value is Self =>
  * }
  * ```
  *
+ * **Example:** Running a custom workerd binary in dev
+ * `dev.workerd` configures the local `workerd` process: `path` swaps
+ * the binary from the `workerd` npm package (e.g. on NixOS, where it
+ * can't start), `v8Flags` adds V8 flags and `env` adds environment
+ * variables. `ALCHEMY_WORKERD_PATH` sets the binary for every workerd
+ * process instead, including ones shared across Workers.
+ * ```typescript
+ * {
+ *   main: "./src/worker.ts",
+ *   dev: {
+ *     workerd: {
+ *       path: "workerd",
+ *       v8Flags: ["--max-old-space-size=4096"],
+ *       env: { TZ: "UTC" },
+ *     },
+ *   },
+ * }
+ * ```
+ *
  * ### Bundling & Tree-shaking
  * `main` is bundled with rolldown at deploy time. Unused code is
  * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
@@ -2031,6 +2257,36 @@ export const isSelf = (value: unknown): value is Self =>
  * const api = yield* Cloudflare.Worker("Api", {
  *   main: "./src/api.ts",
  *   env: { ALLOWED_ORIGINS: site.urls },
+ * });
+ * ```
+ *
+ * **Example:** Route 53 domain through Cloudflare for SaaS
+ * ```typescript
+ * // Once per SaaS zone (a Cloudflare zone with Cloudflare for SaaS
+ * // enabled): an originless proxied record as the fallback origin.
+ * const origin = yield* Cloudflare.DNS.Record("SaasOrigin", {
+ *   zoneId: "<SAAS_ZONE_ID>",
+ *   name: "customers.my-saas.com",
+ *   type: "AAAA",
+ *   content: "100::",
+ *   proxied: true,
+ * });
+ * const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin(
+ *   "SaasFallback",
+ *   { zoneId: "<SAAS_ZONE_ID>", origin: origin.name },
+ * );
+ *
+ * // app.example.com's DNS lives in Route 53: Route 53 gets the
+ * // verification TXT records and a CNAME to the fallback origin, and the
+ * // Worker serves `app.example.com/*` on the SaaS zone.
+ * const worker = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   domain: {
+ *     name: "app.example.com",
+ *     zoneId: "<SAAS_ZONE_ID>",
+ *     cnameTarget: fallback.origin,
+ *     dns: AWS.Route53.Adapter({ hostedZoneId: "Z1234567890" }),
+ *   },
  * });
  * ```
  *
@@ -2359,20 +2615,67 @@ export const isSelf = (value: unknown): value is Self =>
  * };
  * ```
  *
+ * ### TCP Connections
+ * Return a `connect` handler to accept raw TCP connections: from a
+ * Spectrum application whose origin is the Worker (`trafficType:
+ * "worker"`), or from another Worker's `connect()` over a service binding.
+ * The handler gets an Effect `Socket` (`socket.raw` is the native one) and
+ * the connection stays open until its Effect settles. See
+ * [Accept TCP connections](/cloudflare/compute/tcp).
+ *
+ * **Example:** Echo every line back in capitals
+ * ```typescript
+ * const decoder = new TextDecoder();
+ *
+ * export default class Echo extends Cloudflare.Worker<Echo>()(
+ *   "Echo",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     return {
+ *       connect: (socket) =>
+ *         Effect.gen(function* () {
+ *           const { pull } = yield* socket.reader;
+ *           const writer = yield* socket.writer;
+ *           while (true) {
+ *             for (const chunk of yield* pull) {
+ *               const text = typeof chunk === "string" ? chunk : decoder.decode(chunk);
+ *               yield* writer.write(text.toUpperCase());
+ *             }
+ *           }
+ *         }).pipe(Effect.catch(() => Effect.void)),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * **Example:** Serve it on a public port with Spectrum
+ * ```typescript
+ * const echo = yield* Echo;
+ * yield* Cloudflare.Spectrum.Application("EchoTcp", {
+ *   zoneId: zone.zoneId,
+ *   dns: { type: "CNAME", name: "tcp.example.com" },
+ *   protocol: "tcp/9000",
+ *   trafficType: "worker",
+ *   originWorkerId: echo.workerId,
+ * });
+ * ```
+ *
  * ### Background Work & Scopes
  * Each incoming event (fetch, RPC call, scheduled run) gets its own Effect
  * `Scope`. When the handler finishes, the bridge closes that scope and
  * registers the close promise with workerd's `ctx.waitUntil` — so
  * finalizers added with `Effect.addFinalizer` inside a handler run *after*
  * the response is sent, without blocking it, and the Worker stays alive
- * until they settle. Streaming responses transfer the scope to the stream,
- * so those finalizers run when the stream completes instead.
+ * until they settle. A streamed response body or RPC result keeps the
+ * scope open until it has been sent.
  *
- * For ad-hoc background work, `WorkerExecutionContext.waitUntil(effect)`
- * forks an Effect with the caller's full context and keeps the invocation
- * alive until it settles. The context can be yielded once in the
- * constructor and used from any handler; its methods are `RuntimeContext`-
- * colored, so they can only run inside a handler.
+ * For ad-hoc background work, `Cloudflare.waitUntil(effect)` forks an
+ * Effect with the caller's full context and keeps the invocation alive
+ * until it settles. The event's scope stays open until then too, so the
+ * work can use what the handler acquired on it, and its spans and logs are
+ * exported with the event's. What the work acquires itself is released when
+ * it finishes. It is `RuntimeContext`-colored, so it can only run inside a
+ * handler.
  *
  * The constructor is evaluated once per isolate: the bridge builds the
  * Worker's layer stack on the first event and every later event reuses the
@@ -2398,13 +2701,10 @@ export const isSelf = (value: unknown): value is Self =>
  *
  * **Example:** Background work with waitUntil
  * ```typescript
- * // Construction
- * const exec = yield* Cloudflare.WorkerExecutionContext;
- *
  * return {
  *   fetch: Effect.gen(function* () {
  *     // respond now; the audit write completes in the background
- *     yield* exec.waitUntil(writeAuditLog(event));
+ *     yield* Cloudflare.waitUntil(writeAuditLog(event));
  *     return HttpServerResponse.text("accepted", { status: 202 });
  *   }),
  * };
@@ -2454,6 +2754,46 @@ export const isSelf = (value: unknown): value is Self =>
  *     });
  *   }),
  * ) {}
+ * ```
+ *
+ * ### Cross-Stack References
+ * `Cloudflare.Worker.ref` references a Worker that another stack or stage
+ * deploys. Pass the Worker's declaration instead of its logical id to keep
+ * its type, so a service binding to it stays typed. Only the declaration's
+ * logical id is read; the referencing stack does not deploy it.
+ *
+ * **Example:** Bind a Worker owned by another stack
+ * ```typescript
+ * // Construction
+ * const greeter = yield* Cloudflare.Workers.bindWorker(
+ *   Cloudflare.Worker.ref(Greeter, { stack: "Greeter" }),
+ * );
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     return HttpServerResponse.text(yield* greeter.greet("world"));
+ *   }),
+ * };
+ * ```
+ *
+ * ### Looking up an existing Worker
+ * `Cloudflare.Worker.lookup` finds a Worker that Alchemy doesn't manage
+ * (deployed with Wrangler, from the dashboard, or by another pipeline) by
+ * its script name. Bind it like a declared Worker; the deploy fails if no
+ * Worker has that name, and Alchemy never updates or deletes it.
+ *
+ * **Example:** Bind a Worker deployed outside Alchemy
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   env: {
+ *     AUTH: Cloudflare.Worker.lookup({ name: "auth-service" }),
+ *     ADMIN: Cloudflare.WorkerEntrypoint(
+ *       Cloudflare.Worker.lookup({ name: "auth-service" }),
+ *       "Admin",
+ *     ),
+ *   },
+ * });
  * ```
  *
  * ### R2 Bucket
@@ -2542,6 +2882,27 @@ export const isSelf = (value: unknown): value is Self =>
  * };
  * ```
  *
+ * By default a deploy lets an active Durable Object keep running its
+ * current code for up to 5 minutes while it waits to hibernate.
+ * `codeUpdateStrategy` changes how long, or applies the new code at once.
+ * See [Code updates](/cloudflare/compute/code-updates).
+ *
+ * **Example:** Shorter deferral for Durable Object code updates
+ * ```typescript
+ * {
+ *   main: import.meta.url,
+ *   codeUpdateStrategy: { mode: "deferred", maxDelay: "1 minute" },
+ * }
+ * ```
+ *
+ * **Example:** Apply Durable Object code updates immediately
+ * ```typescript
+ * {
+ *   main: import.meta.url,
+ *   codeUpdateStrategy: { mode: "immediate" },
+ * }
+ * ```
+ *
  * ### Containers
  * Containers run long-lived processes alongside Durable Objects.
  * `yield* Sandbox` binds the container to the DO and returns its handle
@@ -2608,9 +2969,21 @@ export const isSelf = (value: unknown): value is Self =>
  * @product Workers
  * @category Workers & Compute
  */
-export const Worker: ResourceClassLike<Worker> &
-  Pick<ResourceClass<Worker>, "ref"> &
-  Effect.Effect<Worker & WorkerRuntimeContext & RuntimeContext, never, Worker> & {
+export const Worker: ResourceClassLike<Worker> & {
+  /**
+   * Reference a deployed Worker — in the current stack/stage by default, or
+   * in another via `options`. Pass the Worker's declaration instead of its
+   * logical id to keep its type, including its RPC methods, for service
+   * bindings from another stack.
+   */
+  ref: WorkerRef;
+  /**
+   * Reference a Worker deployed outside this stack (Wrangler, the dashboard,
+   * another pipeline) by its script name, without managing it. Resolves
+   * during plan/deploy and fails the deploy when no such Worker exists.
+   */
+  lookup(props: PropsInput<WorkerLookup>): Worker;
+} & Effect.Effect<Worker & WorkerRuntimeContext & RuntimeContext, never, Worker> & {
     <Self, Shape extends WorkerShape, Deps = never>(): {
       <const Id extends string>(
         id: Id,
@@ -2737,20 +3110,42 @@ export const Worker: ResourceClassLike<Worker> &
      * accessor. See {@link URLEffect}.
      */
     readonly URL: URLEffect;
-  } = Platform(
-  WorkerTypeId,
-  {
-    // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
-    onCreate: (resource, props) => bindWorkerAsyncBindings(resource as Worker, props),
-    createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
-    transformProps: (_id, props) =>
-      Effect.sync(() =>
-        globalThis.__ALCHEMY_RUNTIME__ || typeof props.main !== "string"
-          ? props
-          : { ...props, main: relativeWorkerMain(props.main, process.cwd()) },
-      ),
-  },
-  { URL },
+  } = withDeclarationRef(
+  Platform(
+    WorkerTypeId,
+    {
+      // Binding wiring is deploy-time only and its imports reach the local
+      // runtime, so load it on first use: a runtime bundle folds the guard and
+      // never reads `WorkerAsyncBindings` (#3227). The lazy import also defers
+      // its `isWorker` access until this module has initialized.
+      // `props` is `undefined` for a bare tag whose `.make` Layer has not built yet.
+      onCreate: (resource, props) =>
+        globalThis.__ALCHEMY_RUNTIME__
+          ? Effect.void
+          : Effect.promise(() => import("./WorkerAsyncBindings.ts")).pipe(
+              Effect.flatMap(({ bindWorkerAsyncBindings }) =>
+                bindWorkerAsyncBindings(resource as Worker, props ?? {}),
+              ),
+            ),
+      createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
+      // Drop a `null` main and normalize a path `main` relative to the cwd,
+      // then let `domain.dns` naming a non-Cloudflare DNS host compose
+      // Cloudflare for SaaS custom hostnames + records and rewrite `domain`
+      // into routes.
+      transformProps: (id, props) =>
+        transformWorkerDomainProps(
+          id,
+          globalThis.__ALCHEMY_RUNTIME__ || props === undefined
+            ? props
+            : props.main === null
+              ? { ...props, main: undefined }
+              : typeof props.main === "string"
+                ? { ...props, main: relativeWorkerMain(props.main, process.cwd()) }
+                : props,
+        ),
+    },
+    { URL },
+  ),
 );
 
 /**

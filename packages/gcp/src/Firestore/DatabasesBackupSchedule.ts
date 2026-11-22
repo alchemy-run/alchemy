@@ -120,13 +120,13 @@ export const DatabasesBackupSchedule = Resource<DatabasesBackupSchedule>(
 export class BackupScheduleNotResolved extends Data.TaggedError(
   "GCP.Firestore.BackupScheduleNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class BackupScheduleStillExists extends Data.TaggedError(
   "GCP.Firestore.BackupScheduleStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const desiredWeeklyDay = (news: DatabasesBackupScheduleProps): string | undefined =>
@@ -158,7 +158,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   firestore
     .getProjectsDatabasesBackupSchedules({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOnDatabase = (parent: string) =>
   firestore.listProjectsDatabasesBackupSchedules({ parent }).pipe(
@@ -183,7 +183,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (schedule) => schedule === undefined,
-      () => new BackupScheduleStillExists({ name }),
+      () => new BackupScheduleStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Firestore.BackupScheduleStillExists",
@@ -250,14 +250,12 @@ export const DatabasesBackupScheduleProvider = () =>
       if (current === undefined) {
         const created = yield* firestore
           .createProjectsDatabasesBackupSchedules({
+            retention,
+            dailyRecurrence: daily && weeklyDay === undefined ? {} : undefined,
+            weeklyRecurrence: weeklyDay !== undefined ? { day: weeklyDay } : undefined,
             parent,
-            body: {
-              retention,
-              dailyRecurrence: daily && weeklyDay === undefined ? {} : undefined,
-              weeklyRecurrence: weeklyDay !== undefined ? { day: weeklyDay } : undefined,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created?.name !== undefined) {
           current = created;
         } else {
@@ -268,7 +266,7 @@ export const DatabasesBackupScheduleProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new BackupScheduleNotResolved({
-          name: `${parent}/backupSchedules`,
+          resourceName: `${parent}/backupSchedules`,
         });
       }
 
@@ -276,9 +274,9 @@ export const DatabasesBackupScheduleProvider = () =>
       if ((current.retention ?? "") !== retention) {
         current = yield* retryConcurrentChanges(
           firestore.patchProjectsDatabasesBackupSchedules({
+            retention,
             name,
             updateMask: "retention",
-            body: { retention },
           }),
         );
       }

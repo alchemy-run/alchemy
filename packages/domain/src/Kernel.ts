@@ -1,23 +1,66 @@
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
-import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
+import type { Plan } from "./Backfill.ts";
+import * as CatchUp from "./CatchUp.ts";
 import * as Command from "./Command.ts";
+import * as Decision from "./Decision.ts";
+import {
+  ConsumesItself,
+  DefinitionError,
+  DuplicateDefinition,
+  DuplicateEventTag,
+  DuplicateName,
+  ImplementedTwice,
+  InitialNotJson,
+  InvalidInitial,
+  MissingInitial,
+  MissingKeyOf,
+  NoEmitter,
+  NoJsonForm,
+  PagedWithoutSuccess,
+  type Reason,
+  TwoWriters,
+  NewerGeneration,
+  UndeclaredDecision,
+  UndeclaredEmit,
+  UndeclaredEvent,
+  UnhandledCommand,
+  UnknownEvent,
+  UnknownRead,
+  UnknownSource,
+  UnreadRecord,
+  UnknownWait,
+  UnknownStream,
+  UnmatchedRoute,
+  WriterKeyMismatch,
+} from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
+import { judge, pathsWithoutJson, rejectionTag, settle } from "./internal.ts";
+import * as Key from "./Key.ts";
 import type {
   Accepted,
   AggregateKit,
+  DecideResult,
+  DecisionKit,
+  DecisionRead,
+  DecisionReceiptJson,
+  DecisionWrite,
   Delivery,
+  EmittedRange,
   EnvelopeJson,
   HandleResult,
   Json,
   PolicyKit,
   ReceiptJson,
+  Root,
   StoredEvent,
   StreamEntry,
   ViewEntry,
@@ -26,6 +69,7 @@ import type {
 } from "./Platform.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
+import type * as Query from "./Query.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as DomainStream from "./Stream.ts";
 import * as Telemetry from "./Telemetry.ts";
@@ -36,10 +80,13 @@ import type * as View from "./View.ts";
  */
 export interface Definitions {
   readonly aggregates: ReadonlyArray<Aggregate.Any>;
+  /** The decisions that implement commands across several aggregates. */
+  readonly decisions?: ReadonlyArray<Decision.Any>;
   readonly views: ReadonlyArray<View.Any>;
   readonly policies: ReadonlyArray<Policy.Any>;
   readonly projections: ReadonlyArray<Projection.Any>;
   readonly streams: ReadonlyArray<DomainStream.Any>;
+  readonly queries?: ReadonlyArray<Query.Any>;
 }
 
 /**
@@ -56,26 +103,20 @@ export const InputMeta = Symbol.for("alchemy/Domain/Projection/InputMeta");
 export interface InputMetaValue {
   readonly projection: string;
   readonly key: string;
+  /** The projection's generation: its input log starts over at each one. */
+  readonly generation: number;
   readonly position: number;
   readonly source: string;
   readonly sourceSeq: number;
+  /** The aggregate event the input derives from, through any views. */
+  readonly root: Root;
   readonly at: number;
   readonly commandId: string;
   /** Appends made for this input so far in this run. */
   appends: number;
 }
 
-/**
- * A domain definition error (duplicate tag, missing `keyOf`, …), raised while
- * the kernel is built.
- */
-export class DefinitionError extends Data.TaggedError("DefinitionError")<{
-  readonly message: string;
-}> {
-  constructor(message: string) {
-    super({ message });
-  }
-}
+export { DefinitionError };
 
 interface JsonCodec {
   readonly encode: (value: unknown) => Json;
@@ -85,7 +126,9 @@ interface JsonCodec {
 const jsonCodec = (schema: Schema.Top): JsonCodec => {
   const codec = Schema.toCodecJson(schema as any) as any;
   return {
+    // oxlint-disable-next-line effecttsgo/schema-sync -- JsonCodec is sync by contract
     encode: Schema.encodeUnknownSync(codec),
+    // oxlint-disable-next-line effecttsgo/schema-sync -- JsonCodec is sync by contract
     decode: Schema.decodeUnknownSync(codec),
   };
 };
@@ -114,6 +157,10 @@ export const decodeEnvelope = (json: EnvelopeJson): Aggregate.Envelope => ({
   correlationId: json.correlationId ?? json.commandId,
 });
 
+/** The aggregate event a delivery derives from: its own, unless a view passed it on. @internal */
+export const rootOf = (delivery: Delivery): Root =>
+  delivery.root ?? { source: delivery.source, seq: delivery.seq };
+
 /** The structural attributes of a delivery a reaction handles. */
 const deliveryAttributes = (delivery: Delivery): Record<string, unknown> => ({
   "domain.source": delivery.source,
@@ -136,6 +183,7 @@ export interface Kernel {
     aggregate: Aggregate.Any,
     deliver: (d: Delivery) => Effect.Effect<void>,
   ) => Omit<AggregateKit, "push">;
+  readonly decisionKit: (decision: Decision.Any) => DecisionKit;
   readonly viewKit: (
     view: View.Any,
     deliver: (d: Delivery) => Effect.Effect<void>,
@@ -146,61 +194,212 @@ export interface Kernel {
     projection: Projection.Any,
     key: string,
     batch: ReadonlyArray<Accepted>,
-  ) => ReadonlyArray<unknown>;
-  /** The keys of a projection an aggregate's committed event is routed to (empty if it is not consumed). */
+  ) => Effect.Effect<ReadonlyArray<unknown>>;
+  /**
+   * The keys of a projection an event of a source (an aggregate instance, or
+   * a view key with its encoded `state` after the event) is routed to: empty
+   * if the projection does not consume it.
+   */
   readonly projectionKeys: (
     projection: Projection.Any,
-    aggregate: string,
+    source: string,
     id: string,
     event: { readonly _tag: string },
     seq: number,
+    state?: Json,
   ) => ReadonlyArray<string>;
+  /** The keys of a view an event of a source (as for `projectionKeys`) reaches. */
+  readonly viewKeys: (
+    view: View.Any,
+    source: string,
+    id: string,
+    event: { readonly _tag: string },
+    seq: number,
+    state?: Json,
+  ) => ReadonlyArray<string>;
+  /** Every view and projection in the model, by `CatchUp.targetId`: what catches up. */
+  readonly targets: ReadonlyArray<string>;
+  /**
+   * Whether every key of a consumer (by `CatchUp.targetId`) hears from exactly one
+   * source instance, the one with its own id: it needs no merge and no barrier.
+   */
+  readonly singleSource: (target: string) => boolean;
+  /**
+   * The sources (aggregates and views, by name) a consumer reads, by
+   * `CatchUp.targetId`; `undefined` for one this model doesn't have.
+   */
+  readonly sourcesOf: (target: string) => ReadonlyArray<string> | undefined;
+  /** What a backfill needs to know of a consumer; `undefined` for one this model doesn't have. */
+  readonly planOf: (target: string) => Plan | undefined;
+  /**
+   * Route a source instance's stored rows (as its `log` returns them) to one
+   * consumer only, as history: each row's seq and its deliveries.
+   */
+  readonly history: (
+    target: string,
+    source: string,
+    id: string,
+    rows: ReadonlyArray<unknown>,
+  ) => Effect.Effect<
+    ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }>
+  >;
+  /**
+   * Set a view's or projection's version (`view:Name` or `projection:Name`).
+   * Bumping it rebuilds the consumer, and every view or projection that reads
+   * it, from the history. Set every version before the platform starts.
+   */
+  readonly setVersion: (consumer: string, version: number) => void;
+  /** A consumer's generation: its version plus those of the views it reads. */
+  readonly generationOf: (kind: "view" | "projection", name: string) => number;
+  /** The generation of a consumer's storage: a view rebuilt in place keeps it. */
+  readonly classGenerationOf: (kind: "view" | "projection", name: string) => number;
+  /** A consumer's id, by `CatchUp.targetId`. */
+  readonly targetIdOf: (kind: "view" | "projection", name: string) => string;
+  /** Whether a view is rebuilt in place: keyed by the one aggregate it reads. */
+  readonly inPlace: (kind: "view" | "projection", name: string) => boolean;
   /** The projection that writes a stream, if any. */
   readonly writerOf: (stream: DomainStream.Any) => Projection.Any | undefined;
-  readonly decodeStreamEntry: (entry: StreamEntry) => DomainStream.Entry<unknown, string>;
-  readonly encodeCommand: (aggregate: Aggregate.Any, command: { readonly _tag: string }) => Json;
+  readonly decodeStreamEntry: (
+    entry: StreamEntry,
+  ) => Effect.Effect<DomainStream.Entry<unknown, string>>;
+  readonly encodeCommand: (
+    aggregate: Aggregate.Any,
+    command: { readonly _tag: string },
+  ) => Effect.Effect<Json>;
   readonly decodeRejection: (aggregate: Aggregate.Any, json: Json) => unknown;
   readonly decodeReceipt: (
     aggregate: Aggregate.Any,
     commandTag: string,
     json: ReceiptJson,
-  ) => Aggregate.Receipt;
-  readonly decodeState: (aggregate: Aggregate.Any, json: Json | null) => unknown;
+  ) => Effect.Effect<Aggregate.Receipt>;
+  readonly decodeState: (aggregate: Aggregate.Any, json: Json) => unknown;
+  readonly encodeDecisionCommand: (
+    decision: Decision.Any,
+    command: { readonly _tag: string },
+  ) => Effect.Effect<Json>;
+  readonly decodeDecisionRejection: (decision: Decision.Any, json: Json) => unknown;
+  readonly decodeDecisionReceipt: (
+    decision: Decision.Any,
+    json: DecisionReceiptJson,
+  ) => Effect.Effect<Decision.Receipt>;
   readonly decodeViewState: (view: View.Any, json: Json) => unknown;
-  readonly decodeViewEntry: (view: View.Any, entry: ViewEntry) => View.Entry<unknown, unknown>;
-  readonly decodeEvent: (json: Json) => unknown;
-  readonly encodeEvent: (event: { readonly _tag: string }) => Json;
+  readonly decodeViewEntry: (
+    view: View.Any,
+    entry: ViewEntry,
+  ) => Effect.Effect<View.Entry<unknown, unknown>>;
+  readonly decodeEvent: (json: Json) => Effect.Effect<unknown>;
+  readonly encodeEvent: (event: { readonly _tag: string }) => Effect.Effect<Json>;
 }
 
 /**
- * Build the kernel for a set of definitions. Validates tags and routing.
+ * Build the kernel for a set of definitions. Validates tags and routing, and
+ * dies with a {@link DefinitionError} for every problem, in definition order:
+ * each one is a defect of the Cause.
  */
 export const make = (
   definitions: Definitions,
   telemetry: Telemetry.Resolved = Telemetry.resolve(undefined),
+): Effect.Effect<Kernel> =>
+  Effect.suspend(() => {
+    const { kernel, problems } = collect(definitions, telemetry);
+    return problems.length > 0
+      ? Effect.failCause(Cause.fromReasons(problems.map(Cause.makeDieReason)))
+      : Effect.succeed(kernel);
+  });
+
+/**
+ * Why an `initial` state does not come back the same from JSON text, if it
+ * does not. A schema like `Schema.Any` lets a value through that JSON drops
+ * or refuses, such as a function or a `bigint`.
+ */
+const jsonRoundTrip = (
+  codec: Schema.Codec<unknown, unknown>,
+  encoded: unknown,
+): string | undefined => {
+  const text = Result.try(() => JSON.stringify(encoded));
+  if (Result.isFailure(text)) return describe(text.failure);
+  if (text.success === undefined) return "it encodes to nothing";
+  const back = Schema.decodeUnknownExit(codec)(JSON.parse(text.success));
+  if (Exit.isFailure(back)) return back.cause.pipe(Cause.squash, describe);
+  const again = Schema.encodeUnknownExit(codec)(back.value);
+  if (Exit.isFailure(again)) return again.cause.pipe(Cause.squash, describe);
+  return JSON.stringify(again.value) === text.success
+    ? undefined
+    : `${text.success} comes back different`;
+};
+const describe = (cause: unknown) =>
+  Predicate.hasProperty(cause, "message") ? String(cause.message) : String(cause);
+
+/** Build the kernel and collect every definition problem, each once, in order. */
+const collect = (definitions: Definitions, telemetry: Telemetry.Resolved) => {
+  const problems: Array<DefinitionError> = [];
+  const seen = new Set<string>();
+  const kernel = build(definitions, telemetry, (problem) => {
+    if (seen.has(problem.message)) return;
+    seen.add(problem.message);
+    problems.push(problem);
+  });
+  return { kernel, problems };
+};
+
+/**
+ * Build the kernel. Each definition problem goes to `report`, and the build
+ * goes on past it, so {@link make} reports every problem.
+ */
+const build = (
+  definitions: Definitions,
+  telemetry: Telemetry.Resolved,
+  report: (problem: DefinitionError) => void,
 ): Kernel => {
+  const problem = (reason: Reason) => report(new DefinitionError({ reason }));
+  /** A host stores and sends every value as JSON: each schema must have a JSON form. */
+  const requireJson = (schema: Schema.Top, path: string) => {
+    for (const at of pathsWithoutJson(schema.ast, path)) problem(new NoJsonForm({ path: at }));
+  };
+  const requireCommandJson = (command: Command.Any) => {
+    requireJson(command, `Command ${command.tag}`);
+    if (command.reply) requireJson(command.reply, `Command ${command.tag}.reply`);
+    for (const rejection of command.rejects) {
+      requireJson(rejection, `Rejection ${rejectionTag(rejection)}`);
+    }
+  };
+  /** The JSON an `initial` state is stored as, once it is known to survive JSON. */
+  const encodeInitial = (owner: string, schema: Schema.Top, initial: unknown): Json => {
+    const codec: Schema.Codec<unknown, unknown> = Schema.toCodecJson(schema as any) as any;
+    const encoded = Schema.encodeUnknownExit(codec)(initial);
+    if (Exit.isFailure(encoded)) {
+      problem(new InvalidInitial({ owner, cause: Cause.squash(encoded.cause) }));
+      return null;
+    }
+    const detail = jsonRoundTrip(codec, encoded.value);
+    if (detail !== undefined) problem(new InitialNotJson({ owner, detail }));
+    return encoded.value;
+  };
   // ---------------------------------------------------------------- events
   const eventCodecs = new Map<string, { readonly cls: Event.Any; readonly codec: JsonCodec }>();
   const registerEvent = (cls: Event.Any) => {
     const existing = eventCodecs.get(cls.tag);
     if (existing && existing.cls !== cls) {
-      throw new DefinitionError(`Two different events are tagged '${cls.tag}'`);
+      return problem(new DuplicateEventTag({ tag: cls.tag }));
     }
-    if (!existing) eventCodecs.set(cls.tag, { cls, codec: jsonCodec(cls) });
+    if (!existing) {
+      requireJson(cls, `Event ${cls.tag}`);
+      eventCodecs.set(cls.tag, { cls, codec: jsonCodec(cls) });
+    }
   };
   for (const aggregate of definitions.aggregates) {
     for (const event of aggregate.definition.events) registerEvent(event);
   }
   const eventCodec = (tag: string) => {
     const entry = eventCodecs.get(tag);
-    if (!entry) throw new DefinitionError(`Unknown event '${tag}'`);
-    return entry.codec;
+    return entry
+      ? Effect.succeed(entry.codec)
+      : Effect.die(new DefinitionError({ reason: new UnknownEvent({ event: tag }) }));
   };
-  const encodeEvent = (event: { readonly _tag: string }) => eventCodec(event._tag).encode(event);
-  const decodeEvent = (json: Json) => eventCodec((json as { _tag: string })._tag).decode(json);
-  /** The span attributes an event's declaration adds. */
-  const eventAttributes = (event: { readonly _tag: string }) =>
-    Telemetry.attributesOf(eventCodecs.get(event._tag)?.cls, event);
+  const encodeEvent = (event: { readonly _tag: string }): Effect.Effect<Json> =>
+    Effect.map(eventCodec(event._tag), (codec) => codec.encode(event));
+  const decodeEvent = (json: Json): Effect.Effect<unknown> =>
+    Effect.map(eventCodec((json as { _tag: string })._tag), (codec) => codec.decode(json));
 
   // ----------------------------------------------------- aggregate codecs
   interface AggregateCodecs {
@@ -217,26 +416,31 @@ export const make = (
   const aggregateByName = new Map<string, Aggregate.Any>();
   for (const aggregate of definitions.aggregates) {
     if (aggregateByName.has(aggregate.aggregateName)) {
-      throw new DefinitionError(`Duplicate aggregate '${aggregate.aggregateName}'`);
+      problem(new DuplicateDefinition({ kind: "aggregate", entity: aggregate.aggregateName }));
+      continue;
     }
     aggregateByName.set(aggregate.aggregateName, aggregate);
     const def = aggregate.definition;
     const state = jsonCodec(def.state);
+    requireJson(def.state, `${aggregate.aggregateName}.state`);
     const commands = new Map<string, { cls: Command.Any; codec: JsonCodec; reply?: JsonCodec }>();
     const rejections = new Map<string, JsonCodec>();
     for (const command of def.commands) {
+      requireCommandJson(command);
       commands.set(command.tag, {
         cls: command,
         codec: jsonCodec(command),
         reply: command.reply ? jsonCodec(command.reply) : undefined,
       });
       for (const rejection of command.rejects) {
-        if (!rejections.has(rejection.tag)) rejections.set(rejection.tag, jsonCodec(rejection));
+        const tag = rejectionTag(rejection);
+        if (!rejections.has(tag)) rejections.set(tag, jsonCodec(rejection));
       }
     }
+    const initial = encodeInitial(aggregate.aggregateName, def.state, def.initial);
     aggregateCodecs.set(aggregate.aggregateName, {
       state,
-      initial: state.encode(def.initial),
+      initial,
       commands,
       rejections,
       events: new Set(def.events.map((e: Event.Any) => e.tag)),
@@ -244,13 +448,65 @@ export const make = (
   }
   const codecsOf = (aggregate: Aggregate.Any) => aggregateCodecs.get(aggregate.aggregateName)!;
 
+  // ------------------------------------------------------ decision codecs
+  interface DecisionCodecs {
+    readonly command: JsonCodec;
+    readonly reply?: JsonCodec;
+    readonly rejections: Map<string, JsonCodec>;
+  }
+  const decisionCodecs = new Map<string, DecisionCodecs>();
+  // Every command has one implementation: an aggregate, or a decision.
+  const implementers = new Map<string, string>();
+  const implement = (command: string, by: string) => {
+    const first = implementers.get(command);
+    if (first === undefined) implementers.set(command, by);
+    else if (first !== by) problem(new ImplementedTwice({ command, first, second: by }));
+  };
+  for (const aggregate of aggregateByName.values()) {
+    for (const command of aggregate.definition.commands) {
+      implement(command.tag, aggregate.aggregateName);
+    }
+  }
+  for (const decision of definitions.decisions ?? []) {
+    const command = decision.command;
+    if (decisionCodecs.has(decision.decisionName)) {
+      problem(
+        new ImplementedTwice({
+          command: command.tag,
+          first: `the decision ${decision.decisionName}`,
+          second: "another decision",
+        }),
+      );
+      continue;
+    }
+    implement(command.tag, `the decision ${decision.decisionName}`);
+    requireCommandJson(command);
+    for (const aggregate of new Set(Object.values(decision.reads))) {
+      if (aggregateByName.get(aggregate.aggregateName) !== aggregate) {
+        problem(
+          new UnknownRead({ decision: decision.decisionName, aggregate: aggregate.aggregateName }),
+        );
+      }
+    }
+    const rejections = new Map<string, JsonCodec>();
+    for (const rejection of command.rejects) {
+      const tag = rejectionTag(rejection);
+      if (!rejections.has(tag)) rejections.set(tag, jsonCodec(rejection));
+    }
+    decisionCodecs.set(decision.decisionName, {
+      command: jsonCodec(command),
+      reply: command.reply ? jsonCodec(command.reply) : undefined,
+      rejections,
+    });
+  }
+
   // --------------------------------------------------------------- sources
   type SourceEntry =
     | { readonly kind: "aggregate"; readonly aggregate: Aggregate.Any }
     | { readonly kind: "view"; readonly view: View.Any };
   const sources = new Map<string, SourceEntry>();
   const addSource = (name: string, entry: SourceEntry) => {
-    if (sources.has(name)) throw new DefinitionError(`Two entities are named '${name}'`);
+    if (sources.has(name)) return problem(new DuplicateName({ entity: name }));
     sources.set(name, entry);
   };
   for (const aggregate of definitions.aggregates) {
@@ -264,21 +520,22 @@ export const make = (
     source.kind === "Aggregate"
       ? (source as Aggregate.Any).aggregateName
       : (source as View.Any).viewName;
-  const sourceEntry = (owner: string, source: View.Source) => {
+  const sourceEntry = (owner: string, source: View.Source): SourceEntry | undefined => {
     const entry = sources.get(nameOf(source));
     const entity = entry?.kind === "aggregate" ? entry.aggregate : entry?.view;
     if (entity !== source) {
-      throw new DefinitionError(`${owner} consumes ${nameOf(source)}, which is not in the Domain`);
+      problem(new UnknownSource({ consumer: owner, source: nameOf(source) }));
+      return undefined;
     }
-    return entry!;
+    return entry;
   };
-  /** The aggregate whose refs identify a source's instances. */
-  const keyAggregateOf = (entry: SourceEntry) =>
+  /** The key that identifies a source's instances: its aggregate, or a view's key. */
+  const keyOfSource = (entry: SourceEntry): Key.Any =>
     entry.kind === "aggregate" ? entry.aggregate : entry.view.definition.key;
 
   for (const stream of definitions.streams) {
     if (sources.has(stream.streamName)) {
-      throw new DefinitionError(`Two entities are named '${stream.streamName}'`);
+      problem(new DuplicateName({ entity: stream.streamName }));
     }
     for (const event of stream.definition.entries) registerEvent(event);
   }
@@ -308,12 +565,14 @@ export const make = (
       return declared;
     }
     if (visiting.has(view.viewName)) {
-      throw new DefinitionError(`${view.viewName} consumes itself through other views`);
+      problem(new ConsumesItself({ view: view.viewName }));
+      return new Set();
     }
     visiting.add(view.viewName);
     const tags = new Set<string>();
     for (const source of view.definition.from) {
       const upstream = sourceEntry(view.viewName, source);
+      if (!upstream) continue;
       for (const tag of outputTags(upstream)) {
         if (consumes(view, tag, nameOf(source))) tags.add(tag);
       }
@@ -327,7 +586,8 @@ export const make = (
   /** What routing sees of an event. */
   interface RouteInput {
     readonly event: unknown;
-    readonly source: Aggregate.Ref;
+    /** The source instance: a ref, or a Schema-keyed view's key value. */
+    readonly source: unknown;
     readonly envelope: Aggregate.Envelope;
     readonly state: unknown;
     /** The source stream, e.g. `Account/a-1`. */
@@ -355,10 +615,13 @@ export const make = (
     list.push(subscriber);
   };
 
+  /** Routes that key an event by its own source instance: key `x` hears only from instance `x`. */
+  const identityRoutes = new WeakSet<Route>();
+
   /** How a consumer keyed by `def.key` routes `tag` from `source`. */
   const keyRoute = (
     owner: string,
-    def: { readonly key: Aggregate.Any; readonly keyOf?: unknown },
+    def: { readonly key: Key.Any; readonly keyOf?: unknown },
     upstream: SourceEntry,
     source: string,
     tag: string,
@@ -370,10 +633,11 @@ export const make = (
       state: input.state,
       envelope: input.envelope,
     });
+    // A route returns a ref for an aggregate key, or the value of a Schema key.
     if (typeof custom === "function") {
       return (input) => {
-        const ref = custom(routing(input)) as Aggregate.Ref | undefined;
-        return ref ? [{ key: ref.id as string }] : [];
+        const ref = custom(routing(input));
+        return ref === undefined ? [] : [{ key: Aggregate.targetId(ref) }];
       };
     }
     if (custom) {
@@ -381,26 +645,40 @@ export const make = (
       return (input) => {
         const byKey = new Map<string, Array<string>>();
         for (const [route, fn] of routes) {
-          const ref = fn?.(routing(input)) as Aggregate.Ref | undefined;
-          if (!ref) continue;
-          const list = byKey.get(ref.id as string) ?? [];
-          byKey.set(ref.id as string, list);
+          const ref = fn?.(routing(input));
+          if (ref === undefined) continue;
+          const key = Aggregate.targetId(ref);
+          const list = byKey.get(key) ?? [];
+          byKey.set(key, list);
           list.push(route);
         }
         return [...byKey].map(([key, names]) => ({ key, routes: names }));
       };
     }
-    if (keyAggregateOf(upstream) === def.key)
-      return (input) => [{ key: input.source.id as string }];
-    throw new DefinitionError(
-      `${owner} consumes '${tag}' from ${source}, which is not keyed by ${def.key.aggregateName}: add keyOf.${tag}`,
+    if (keyOfSource(upstream) === def.key) {
+      const route: Route = (input) => [{ key: Aggregate.targetId(input.source) }];
+      identityRoutes.add(route);
+      return route;
+    }
+    problem(
+      new MissingKeyOf({
+        consumer: owner,
+        event: tag,
+        source,
+        keyedBy: Key.isAggregate(def.key) ? def.key.aggregateName : undefined,
+      }),
     );
+    return () => [];
   };
 
   for (const view of definitions.views) {
     const def = view.definition;
     if (def.state !== undefined && def.initial === undefined) {
-      throw new DefinitionError(`${view.viewName} declares state without initial`);
+      problem(new MissingInitial({ view: view.viewName }));
+    }
+    if (def.state !== undefined) {
+      requireJson(def.state, `${view.viewName}.state`);
+      if (def.initial !== undefined) encodeInitial(view.viewName, def.state, def.initial);
     }
     // Route-keyed handlers need the same routes in keyOf.
     for (const field of ["evolve", "emit"] as const) {
@@ -409,8 +687,8 @@ export const make = (
         const routes = handlers(def.keyOf)?.[name];
         for (const route of Object.keys(handler)) {
           if (typeof routes !== "object" || !(route in routes)) {
-            throw new DefinitionError(
-              `${view.viewName}.${field}.${name}.${route} has no matching route in keyOf.${name}`,
+            problem(
+              new UnmatchedRoute({ view: view.viewName, handler: field, source: name, route }),
             );
           }
         }
@@ -418,6 +696,7 @@ export const make = (
     }
     for (const source of def.from) {
       const upstream = sourceEntry(view.viewName, source);
+      if (!upstream) continue;
       const name = nameOf(source);
       for (const tag of outputTags(upstream)) {
         if (!consumes(view, tag, name)) continue;
@@ -445,6 +724,10 @@ export const make = (
       let produced = false;
       for (const source of from) {
         const upstream = sourceEntry(owner, source);
+        if (!upstream) {
+          produced = true; // already reported
+          continue;
+        }
         if (!outputTags(upstream).has(event.tag)) continue;
         produced = true;
         const name = nameOf(source);
@@ -455,17 +738,17 @@ export const make = (
         });
       }
       if (!produced) {
-        throw new DefinitionError(
-          `${owner}: none of ${from.map(nameOf).join(", ")} emits '${event.tag}'`,
-        );
+        problem(new NoEmitter({ consumer: owner, sources: from.map(nameOf), event: event.tag }));
       }
     }
   };
 
   const policyByName = new Map<string, Policy.Any>();
   for (const policy of definitions.policies) {
-    if (policyByName.has(policy.policyName))
-      throw new DefinitionError(`Duplicate policy '${policy.policyName}'`);
+    if (policyByName.has(policy.policyName)) {
+      problem(new DuplicateDefinition({ kind: "policy", entity: policy.policyName }));
+      continue;
+    }
     policyByName.set(policy.policyName, policy);
     const def = policy.definition;
     const owner = `Policy ${policy.policyName}`;
@@ -482,7 +765,10 @@ export const make = (
   const streamNames = new Set(definitions.streams.map((stream) => stream.streamName));
   for (const projection of definitions.projections) {
     const name = projection.projectionName;
-    if (projectionByName.has(name)) throw new DefinitionError(`Duplicate projection '${name}'`);
+    if (projectionByName.has(name)) {
+      problem(new DuplicateDefinition({ kind: "projection", entity: name }));
+      continue;
+    }
     projectionByName.set(name, projection);
     const def = projection.definition;
     const owner = `Projection ${name}`;
@@ -491,36 +777,143 @@ export const make = (
     );
     for (const stream of def.writes ?? []) {
       if (!streamNames.has(stream.streamName)) {
-        throw new DefinitionError(
-          `${owner} writes ${stream.streamName}, which is not in the Domain`,
-        );
+        problem(new UnknownStream({ writer: owner, stream: stream.streamName }));
+        continue;
       }
       const existing = writers.get(stream.streamName);
       if (existing && existing !== projection) {
-        throw new DefinitionError(
-          `${stream.streamName} has two writers, ${existing.projectionName} and ${name}: a stream key has exactly one`,
+        problem(
+          new TwoWriters({
+            stream: stream.streamName,
+            first: existing.projectionName,
+            second: name,
+          }),
         );
+        continue;
       }
       if (stream.definition.key !== def.key) {
-        throw new DefinitionError(
-          `${owner} is keyed by ${def.key.aggregateName}, so it cannot write ${stream.streamName}, keyed by ${stream.definition.key.aggregateName}`,
+        problem(
+          new WriterKeyMismatch({
+            writer: owner,
+            key: Key.describe(def.key),
+            stream: stream.streamName,
+            streamKey: Key.describe(stream.definition.key),
+          }),
         );
+        continue;
       }
       writers.set(stream.streamName, projection);
     }
   }
 
-  /** Every delivery an event produces. */
+  // ---------------------------------------------------------------- queries
+  // A query is a method of an Api's client, beside its commands, views,
+  // streams and aggregates, so it shares their names.
+  const callNames = new Set([
+    ...sources.keys(),
+    ...streamNames,
+    ...definitions.aggregates.flatMap((aggregate) =>
+      aggregate.definition.commands.map((command: Command.Any) => command.tag),
+    ),
+  ]);
+  const queryNames = new Set<string>();
+  for (const query of definitions.queries ?? []) {
+    const name = query.queryName;
+    if (queryNames.has(name)) {
+      problem(new DuplicateDefinition({ kind: "query", entity: name }));
+      continue;
+    }
+    queryNames.add(name);
+    if (callNames.has(name)) problem(new DuplicateName({ entity: name }));
+    const def = query.definition;
+    if (def.paged && !def.success) problem(new PagedWithoutSuccess({ query: name }));
+    for (const read of def.waitsFor ?? []) {
+      const [readName, held] =
+        read.kind === "Projection"
+          ? [read.projectionName, projectionByName.get(read.projectionName) === read]
+          : read.kind === "View"
+            ? [read.viewName, definitions.views.includes(read)]
+            : [read.streamName, definitions.streams.includes(read)];
+      if (!held) problem(new UnknownWait({ query: name, read: readName }));
+    }
+  }
+
+  // ------------------------------------------------------------ generations
+  const versions = new Map<string, number>();
+  const generations = new Map<string, number>();
+  const viewSources = (from: ReadonlyArray<View.Source>) =>
+    from.flatMap((source) => (source.kind === "Aggregate" ? [] : [(source as View.Any).viewName]));
+  const viewByName = new Map(definitions.views.map((view) => [view.viewName, view]));
+  /** A consumer's own version: a view's from its declaration, a projection's from its Layer. */
+  const versionOf = (kind: "view" | "projection", name: string) =>
+    versions.get(`${kind}:${name}`) ??
+    (kind === "view" ? (viewByName.get(name)?.definition.version ?? 0) : 0);
+  /**
+   * A consumer's generation: its own version plus the generations of the
+   * views it reads, so rebuilding a view rebuilds everything built on it.
+   */
+  const generationOf = (kind: "view" | "projection" | "policy", name: string): number => {
+    if (kind === "policy") return 0;
+    const id = `${kind}:${name}`;
+    const known = generations.get(id);
+    if (known !== undefined) return known;
+    const from =
+      kind === "view"
+        ? viewByName.get(name)?.definition.from
+        : projectionByName.get(name)?.definition.from;
+    const generation =
+      versionOf(kind, name) +
+      viewSources(from ?? []).reduce((sum, view) => sum + generationOf("view", view), 0);
+    generations.set(id, generation);
+    return generation;
+  };
+  /**
+   * A view keyed by the one aggregate it reads is rebuilt in place: every key
+   * holds exactly its own instance's events, so it can read them again itself.
+   */
+  const inPlace = (kind: "view" | "projection" | "policy", name: string): boolean => {
+    if (kind !== "view") return false;
+    const from = viewByName.get(name)?.definition.from ?? [];
+    return (
+      from.length === 1 &&
+      from[0]!.kind === "Aggregate" &&
+      singleSource(CatchUp.targetId({ kind, name }))
+    );
+  };
+  /**
+   * The generation of a consumer's storage (its Durable Object class): its
+   * generation, except that a view rebuilt in place keeps its storage.
+   */
+  const classGenerationOf = (kind: "view" | "projection", name: string): number =>
+    inPlace(kind, name) ? 0 : generationOf(kind, name);
+  /** Where a subscriber's deliveries go, with its generation when it has one. */
+  const targetOf = (subscriber: Pick<Subscriber, "kind" | "name">): Delivery["target"] => {
+    const generation = generationOf(subscriber.kind, subscriber.name);
+    return {
+      kind: subscriber.kind,
+      name: subscriber.name,
+      ...(generation > 0 ? { generation } : {}),
+      ...(generation > 0 && inPlace(subscriber.kind, subscriber.name) ? { inPlace: true } : {}),
+    };
+  };
+  /** A consumer's id, by `CatchUp.targetId`, in this code. */
+  const targetIdOf = (kind: "view" | "projection", name: string) =>
+    CatchUp.targetId(targetOf({ kind, name }));
+
+  /** Every delivery an event produces; only to the consumers in `only`, if given. */
   const fanOut = (
     input: RouteInput,
     delivery: Omit<Delivery, "target" | "key" | "routes">,
+    only?: ReadonlySet<string>,
   ): Array<Delivery> => {
     const out: Array<Delivery> = [];
     for (const subscriber of subscribers.get(delivery.origin)?.get(delivery.tag) ?? []) {
+      const target = targetOf(subscriber);
+      if (only && !only.has(CatchUp.targetId(target))) continue;
       for (const { key, routes } of subscriber.route(input)) {
         out.push({
           ...delivery,
-          target: { kind: subscriber.kind, name: subscriber.name },
+          target,
           key,
           ...(routes ? { routes } : {}),
         });
@@ -529,6 +922,149 @@ export const make = (
     return out;
   };
 
+  /** The views and projections that consume a source: the consumers it catches up. */
+  const targetsOf = (source: string): ReadonlyArray<string> => {
+    const out = new Set<string>();
+    for (const list of subscribers.get(source)?.values() ?? []) {
+      for (const subscriber of list) {
+        if (subscriber.kind !== "policy") out.add(CatchUp.targetId(targetOf(subscriber)));
+      }
+    }
+    return [...out].sort();
+  };
+
+  /**
+   * Whether every key of a consumer has exactly one source: it hears only from
+   * the instance with its own id, of one source. Such a key has nothing to merge
+   * and nothing to wait for: it can take its history as soon as its source has it.
+   */
+  const singleSource = (target: string): boolean => {
+    const [kind, rest] = target.split(":") as [string, string];
+    const name = rest.replace(/[#@]\d+$/, "");
+    const sources = new Set<string>();
+    for (const [source, byTag] of subscribers) {
+      for (const list of byTag.values()) {
+        for (const subscriber of list) {
+          if (subscriber.kind !== kind || subscriber.name !== name) continue;
+          if (!identityRoutes.has(subscriber.route)) return false;
+          sources.add(source);
+        }
+      }
+    }
+    return sources.size === 1;
+  };
+
+  /**
+   * The sources (aggregates and views, by name) a consumer reads, by
+   * `CatchUp.targetId`; `undefined` for one this model doesn't have.
+   */
+  const sourcesOf = (target: string): ReadonlyArray<string> | undefined => {
+    const [kind, rest] = target.split(":") as [string, string];
+    const name = (rest ?? "").replace(/[#@]\d+$/, "");
+    const known =
+      kind === "view"
+        ? definitions.views.some((view) => view.viewName === name)
+        : definitions.projections.some((projection) => projection.projectionName === name);
+    if (!known) return undefined;
+    const sources = new Set<string>();
+    for (const [source, byTag] of subscribers) {
+      for (const list of byTag.values()) {
+        if (list.some((subscriber) => subscriber.kind === kind && subscriber.name === name))
+          sources.add(source);
+      }
+    }
+    return [...sources].sort();
+  };
+
+  const planOf = (target: string): Plan | undefined => {
+    const sources = sourcesOf(target);
+    if (sources === undefined) return undefined;
+    // Rebuilt views among its sources: their keys are the objects named for their generation.
+    const generations: Record<string, number> = {};
+    for (const source of sources) {
+      if (!definitions.views.some((view) => view.viewName === source)) continue;
+      // Where the source's keys are stored: a view rebuilt in place keeps its storage.
+      const generation = classGenerationOf("view", source);
+      if (generation > 0) generations[source] = generation;
+    }
+    return {
+      sources,
+      singleSource: singleSource(target),
+      ...(Object.keys(generations).length > 0 ? { generations } : {}),
+    };
+  };
+
+  /** Each source's replay, built once: what routes its stored rows as history. */
+  const replayers = new Map<
+    string,
+    {
+      readonly replay: (input: CatchUp.ReplayInput<any>) => Effect.Effect<CatchUp.ReplayResult>;
+      readonly seqOf: (row: any) => number;
+    }
+  >();
+  const replayerOf = (source: string) => {
+    let found = replayers.get(source);
+    if (found) return found;
+    const aggregate = definitions.aggregates.find((a) => a.aggregateName === source);
+    const view = definitions.views.find((v) => v.viewName === source);
+    if (aggregate)
+      found = {
+        replay: aggregateKit(aggregate, () => Effect.void).replay,
+        seqOf: (row: StoredEvent) => row.envelope.seq,
+      };
+    else if (view)
+      found = {
+        replay: viewKit(view, () => Effect.void).replay,
+        seqOf: (row: ViewEntry) => row.seq,
+      };
+    if (found) replayers.set(source, found);
+    return found;
+  };
+  const history = (
+    target: string,
+    source: string,
+    id: string,
+    rows: ReadonlyArray<unknown>,
+  ): Effect.Effect<
+    ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }>
+  > => {
+    const replayer = replayerOf(source);
+    if (!replayer) return Effect.succeed([]);
+    const targets = targetsOf(source);
+    return Effect.forEach(rows, (row) => {
+      const seq = replayer.seqOf(row);
+      return Effect.map(
+        replayer.replay({
+          id,
+          routed: Object.fromEntries(
+            targets.map((t) => [t, t === target ? seq - 1 : Number.MAX_SAFE_INTEGER]),
+          ),
+          rows: [row],
+        }),
+        ({ deliveries }) => ({ seq, deliveries }),
+      );
+    });
+  };
+
+  /** Replay stored rows to the consumers lagging behind them, in order. */
+  const replay = Effect.fnUntraced(function* <Row>(
+    targets: ReadonlyArray<string>,
+    input: CatchUp.ReplayInput<Row>,
+    seqOf: (row: Row) => number,
+    route: (row: Row, only: ReadonlySet<string>) => Effect.Effect<ReadonlyArray<Delivery>>,
+  ) {
+    const routed: Record<string, number> = { ...input.routed };
+    const deliveries: Array<Delivery> = [];
+    for (const row of input.rows) {
+      const seq = seqOf(row);
+      const lagging = new Set(targets.filter((target) => (routed[target] ?? 0) < seq));
+      if (lagging.size === 0) continue;
+      deliveries.push(...(yield* route(row, lagging)));
+      for (const target of lagging) routed[target] = seq;
+    }
+    return { deliveries, routed } satisfies CatchUp.ReplayResult;
+  });
+
   const viewCodecs = new Map<string, JsonCodec>();
   const viewCodec = (view: View.Any) => {
     let codec = viewCodecs.get(view.viewName);
@@ -536,20 +1072,17 @@ export const make = (
     return codec;
   };
   /** Decode the state a delivery carries from a view source. */
-  const sourceState = (entry: SourceEntry, json: Json | null | undefined) =>
+  const sourceState = (entry: SourceEntry, json: Json) =>
     json === undefined || json === null || entry.kind !== "view" || !entry.view.definition.state
       ? json
       : viewCodec(entry.view).decode(json);
 
   // ------------------------------------------------------------------ kits
-  const aggregateKit = (
-    aggregate: Aggregate.Any,
-    deliver: (d: Delivery) => Effect.Effect<void>,
-  ): Omit<AggregateKit, "push"> => {
+  /** Fold decided events into an instance's state, stamp them, and route them. */
+  const commitOf = (aggregate: Aggregate.Any) => {
     const def = aggregate.definition;
     const codecs = codecsOf(aggregate);
-    const decodeId = Schema.decodeUnknownSync(def.id as any) as (u: unknown) => unknown;
-    const commit = (
+    return Effect.fnUntraced(function* (
       id: string,
       state: unknown,
       version: number,
@@ -559,23 +1092,29 @@ export const make = (
       history: boolean,
       correlationId: string = commandId,
       trace?: Telemetry.TraceJson,
-    ) => {
+      at?: ReadonlyArray<number | null>,
+    ) {
       const stream = `${aggregate.aggregateName}/${id}`;
       const events: Array<StoredEvent> = [];
       const deliveries: Array<Delivery> = [];
       const sourceRef = Aggregate.makeRef(aggregate, id);
       let next = state;
-      decided.forEach((event, index) => {
+      for (const [index, event] of decided.entries()) {
         if (!codecs.events.has(event._tag)) {
-          throw new DefinitionError(
-            `${aggregate.aggregateName} does not declare event '${event._tag}'`,
+          return yield* Effect.die(
+            new DefinitionError({
+              reason: new UndeclaredEvent({
+                aggregate: aggregate.aggregateName,
+                event: event._tag,
+              }),
+            }),
           );
         }
         const envelope: Aggregate.Envelope = {
           id,
           stream,
           seq: version + index + 1,
-          at: now,
+          at: typeof at?.[index] === "number" ? DateTime.makeUnsafe(at[index]) : now,
           commandId,
           correlationId,
         };
@@ -585,7 +1124,7 @@ export const make = (
           envelope,
         );
         const stored: StoredEvent = {
-          event: encodeEvent(event),
+          event: yield* encodeEvent(event),
           envelope: encodeEnvelope(envelope, trace),
         };
         events.push(stored);
@@ -603,24 +1142,39 @@ export const make = (
             },
           ),
         );
-      });
+      }
       return { next, events, deliveries };
-    };
+    });
+  };
+
+  const aggregateKit = (
+    aggregate: Aggregate.Any,
+    deliver: (d: Delivery) => Effect.Effect<void>,
+  ): Omit<AggregateKit, "push"> => {
+    const def = aggregate.definition;
+    const codecs = codecsOf(aggregate);
+    // oxlint-disable-next-line effecttsgo/schema-sync -- ids decode synchronously when building refs
+    const decodeId = Schema.decodeUnknownSync(def.id as any) as (u: unknown) => unknown;
+    const commit = commitOf(aggregate);
     return {
       name: aggregate.aggregateName,
       deliver,
-      seed: (input) => {
+      record: Effect.fnUntraced(function* (input) {
         const id = decodeId(input.id) as string;
         const state = codecs.state.decode(input.state ?? codecs.initial);
-        const decided = input.events.map(decodeEvent);
-        const result = commit(
+        const decided = (yield* Effect.forEach(input.events, decodeEvent)) as ReadonlyArray<{
+          readonly _tag: string;
+        }>;
+        const result = yield* commit(
           id,
           state,
           input.version,
           decided,
           DateTime.makeUnsafe(input.now),
           input.commandId,
-          true,
+          false,
+          input.correlationId,
+          input.trace,
         );
         return {
           state: codecs.state.encode(result.next),
@@ -628,7 +1182,70 @@ export const make = (
           events: result.events,
           deliveries: result.deliveries,
         };
+      }),
+      // Read when used: versions are set once the whole model is built.
+      consumerSingleSource: (target: string) => singleSource(target),
+      get targets() {
+        return targetsOf(aggregate.aggregateName);
       },
+      replay: (input) => {
+        const targets = targetsOf(aggregate.aggregateName);
+        const id = decodeId(input.id) as string;
+        const stream = `${aggregate.aggregateName}/${id}`;
+        const sourceRef = Aggregate.makeRef(aggregate, id);
+        return replay(
+          targets,
+          input,
+          (row) => row.envelope.seq,
+          (row, only) =>
+            Effect.map(decodeEvent(row.event), (event) =>
+              fanOut(
+                {
+                  event,
+                  source: sourceRef,
+                  envelope: decodeEnvelope(row.envelope),
+                  state: undefined,
+                  stream,
+                },
+                {
+                  source: stream,
+                  seq: row.envelope.seq,
+                  origin: aggregate.aggregateName,
+                  tag: (row.event as { readonly _tag: string })._tag,
+                  event: row.event,
+                  envelope: row.envelope,
+                  history: true,
+                },
+                only,
+              ),
+            ),
+        );
+      },
+      seed: Effect.fnUntraced(function* (input) {
+        const id = decodeId(input.id) as string;
+        const state = codecs.state.decode(input.state ?? codecs.initial);
+        const decided = (yield* Effect.forEach(input.events, decodeEvent)) as ReadonlyArray<{
+          readonly _tag: string;
+        }>;
+        const result = yield* commit(
+          id,
+          state,
+          input.version,
+          decided,
+          DateTime.makeUnsafe(input.now),
+          input.commandId,
+          true,
+          undefined,
+          undefined,
+          input.at,
+        );
+        return {
+          state: codecs.state.encode(result.next),
+          version: input.version + decided.length,
+          events: result.events,
+          deliveries: result.deliveries,
+        };
+      }),
       handle: (input) => {
         const tag = (input.command as { readonly _tag: string })._tag;
         const correlationId = input.correlationId ?? input.commandId;
@@ -644,70 +1261,57 @@ export const make = (
           const command = codecs.commands.get(tag);
           if (!command) {
             return yield* Effect.die(
-              new DefinitionError(`${aggregate.aggregateName} does not handle '${tag}'`),
+              new DefinitionError({
+                reason: new UnhandledCommand({ aggregate: aggregate.aggregateName, command: tag }),
+              }),
             );
           }
           const decoded = command.codec.decode(input.command) as { readonly _tag: string };
-          yield* Effect.annotateCurrentSpan(Telemetry.attributesOf(command.cls, decoded));
           const state = codecs.state.decode(input.state ?? codecs.initial);
           const id = decodeId(input.id) as string;
           const now = DateTime.makeUnsafe(input.now);
-          let decision = (def.decide as Record<string, (...args: any[]) => unknown>)[decoded._tag](
-            state,
-            decoded,
-            { id, now },
-          );
+          let decision = Aggregate.decisionOf(aggregate, state, decoded, {
+            id,
+            now,
+            commandId: input.commandId,
+            stream: `${aggregate.aggregateName}/${id}`,
+            version: input.version,
+          });
+          if (decision === undefined) {
+            return yield* Effect.die(
+              new DefinitionError({
+                reason: new UnhandledCommand({ aggregate: aggregate.aggregateName, command: tag }),
+              }),
+            );
+          }
           // An effectful decision runs here, inside the decide span, with the
           // context the command was sent with (its only requirement, enforced
           // by `Aggregate.Decision`).
           if (Effect.isEffect(decision)) {
-            const exit = yield* Effect.exit(
-              Effect.provideContext(
-                decision as Effect.Effect<unknown, unknown, never>,
-                RequestContext.restore(input.context),
+            const context = yield* RequestContext.restore(input.context);
+            const settled = settle(
+              yield* Effect.exit(
+                Effect.provideContext(decision, context as Context.Context<unknown>),
               ),
             );
-            if (Exit.isSuccess(exit)) {
-              decision = exit.value;
-            } else {
-              const rejection = Cause.findErrorOption(exit.cause);
-              if (Option.isNone(rejection))
-                return yield* Effect.failCause(exit.cause as Cause.Cause<never>);
-              decision = rejection.value;
-            }
+            if (settled._tag === "Failed")
+              return yield* Effect.failCause(settled.cause as Cause.Cause<never>);
+            decision = settled.decision;
           }
-          if (!Array.isArray(decision)) {
-            const rejection = decision as { readonly _tag: string };
-            const codec = codecs.rejections.get(rejection._tag);
-            const declared = command.cls.rejects.find((r) => r.tag === rejection._tag);
-            if (!codec || !declared) {
-              return yield* Effect.die(
-                new DefinitionError(
-                  `${aggregate.aggregateName}.decide.${decoded._tag} returned '${rejection?._tag}', which ${decoded._tag} does not declare in rejects`,
-                ),
-              );
-            }
-            yield* Effect.annotateCurrentSpan({
-              "domain.outcome": rejection._tag,
-              ...Telemetry.attributesOf(declared, rejection),
-            });
+          const judged = judge(aggregate.aggregateName, command.cls, decision);
+          if (judged._tag === "Undeclared") return yield* Effect.die(judged.error);
+          if (judged._tag === "Rejected") {
+            const rejection = judged.rejection;
+            const codec = codecs.rejections.get(rejection._tag)!;
+            yield* Effect.annotateCurrentSpan({ "domain.outcome": rejection._tag });
             return { _tag: "Rejected", rejection: codec.encode(rejection) } as HandleResult;
           }
-          for (const event of decision as ReadonlyArray<{ readonly _tag: string }>) {
-            if (!command.cls.events.some((e) => e.tag === event._tag)) {
-              return yield* Effect.die(
-                new DefinitionError(
-                  `${aggregate.aggregateName}.decide.${decoded._tag} returned '${event._tag}', which ${decoded._tag} does not declare in events`,
-                ),
-              );
-            }
-          }
           const trace = yield* Telemetry.currentTrace;
-          const { next, events, deliveries } = commit(
+          const { next, events, deliveries } = yield* commit(
             id,
             state,
             input.version,
-            decision,
+            judged.events,
             now,
             input.commandId,
             false,
@@ -718,8 +1322,8 @@ export const make = (
             decoded._tag
           ];
           const reply =
-            replyFn && command.reply ? command.reply.encode(replyFn(next, decision)) : null;
-          const decided = decision as ReadonlyArray<{ readonly _tag: string }>;
+            replyFn && command.reply ? command.reply.encode(replyFn(next, judged.events)) : null;
+          const decided = judged.events;
           yield* Effect.annotateCurrentSpan({
             "domain.outcome": "accepted",
             "domain.events": decided.length,
@@ -728,10 +1332,7 @@ export const make = (
           const span = yield* Effect.orElseSucceed(Effect.currentSpan, () => undefined);
           const at = BigInt(input.now) * 1_000_000n;
           for (const [index, event] of decided.entries()) {
-            span?.event(event._tag, at, {
-              "domain.seq": input.version + index + 1,
-              ...eventAttributes(event),
-            });
+            span?.event(event._tag, at, { "domain.seq": input.version + index + 1 });
             yield* Telemetry.record(Telemetry.events, {
               "domain.aggregate": aggregate.aggregateName,
               "domain.event": event._tag,
@@ -747,7 +1348,7 @@ export const make = (
           } as HandleResult;
         });
         return Effect.gen(function* () {
-          const started = yield* Effect.sync(() => Date.now());
+          const started = yield* Clock.currentTimeMillis;
           const result = yield* decideAndCommit.pipe(
             Effect.annotateLogs(base),
             Effect.withSpan(`Domain.decide ${aggregate.aggregateName}.${tag}`, {
@@ -768,7 +1369,253 @@ export const make = (
           yield* Telemetry.record(
             Telemetry.commandDuration,
             tags,
-            (yield* Effect.sync(() => Date.now())) - started,
+            (yield* Clock.currentTimeMillis) - started,
+          );
+          return result;
+        });
+      },
+    };
+  };
+
+  const decisionKit = (decision: Decision.Any): DecisionKit => {
+    const name = decision.decisionName;
+    const def = decision.definition;
+    const command = decision.command;
+    const codecs = decisionCodecs.get(name)!;
+    const undeclared = (returned: string, list: "events" | "rejects") =>
+      new DefinitionError({
+        reason: new UndeclaredDecision({ aggregate: name, command: command.tag, returned, list }),
+      });
+    const named = Object.entries(def.reads);
+    /**
+     * The instances a decoded command involves: each once, in stream order,
+     * and the stream (or streams) each name in `reads` stands for.
+     */
+    const readsOf = (decoded: unknown) => {
+      const ids = def.keyOf(decoded);
+      const byStream = new Map<
+        string,
+        { keys: Array<string>; aggregate: Aggregate.Any; id: string }
+      >();
+      const streams: Record<string, string | ReadonlyArray<string>> = {};
+      for (const [key, aggregate] of named) {
+        const streamOf = (id: string) => {
+          const stream = `${aggregate.aggregateName}/${id}`;
+          const found = byStream.get(stream);
+          if (found === undefined) byStream.set(stream, { keys: [key], aggregate, id });
+          else if (!found.keys.includes(key)) found.keys.push(key);
+          return stream;
+        };
+        const id = ids[key]!;
+        streams[key] = typeof id === "string" ? streamOf(id) : id.map(streamOf);
+      }
+      return {
+        streams,
+        reads: [...byStream.entries()]
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+          .map(([stream, read]) => ({ ...read, stream })),
+      };
+    };
+    /** One value per name in `reads`: of its instance, or of each of its instances. */
+    const byName = (
+      streams: Record<string, string | ReadonlyArray<string>>,
+      of: (stream: string) => unknown,
+    ): Record<string, unknown> =>
+      Object.fromEntries(
+        Object.entries(streams).map(([key, stream]) => [
+          key,
+          typeof stream === "string" ? of(stream) : stream.map(of),
+        ]),
+      );
+    return {
+      name,
+      reads: (json) =>
+        Effect.sync((): ReadonlyArray<DecisionRead> =>
+          readsOf(codecs.command.decode(json)).reads.map(({ keys, aggregate, id, stream }) => ({
+            keys,
+            aggregate: aggregate.aggregateName,
+            id,
+            stream,
+          })),
+        ),
+      decide: (input) => {
+        const correlationId = input.correlationId ?? input.commandId;
+        const base = {
+          "domain.decision": name,
+          "domain.command": command.tag,
+          "domain.command_id": input.commandId,
+          "domain.correlation_id": correlationId,
+        };
+        const decide = Effect.gen(function* () {
+          const decoded = codecs.command.decode(input.command) as { readonly _tag: string };
+          const { streams, reads } = readsOf(decoded);
+          const now = DateTime.makeUnsafe(input.now);
+          const states = new Map(input.states.map((state) => [state.stream, state]));
+          // What `decide` sees of each instance, under every name that stands for it.
+          const seen = new Map<string, unknown>();
+          const current = new Map<string, { state: unknown; version: number }>();
+          for (const read of reads) {
+            const stored = states.get(read.stream);
+            const state = codecsOf(read.aggregate).state.decode(
+              stored?.state ?? codecsOf(read.aggregate).initial,
+            );
+            const version = stored?.version ?? 0;
+            current.set(read.stream, { state, version });
+            seen.set(read.stream, {
+              id: read.id,
+              stream: read.stream,
+              state,
+              version,
+              record: (event: unknown) => Decision.recorded(read.stream, event),
+            });
+          }
+          let decision = def.decide(
+            byName(streams, (stream) => seen.get(stream)),
+            decoded,
+            { commandId: input.commandId, now },
+          );
+          // An effectful decision runs inside the decide span, with the context
+          // the command was sent with (its only requirement).
+          if (Effect.isEffect(decision)) {
+            const context = yield* RequestContext.restore(input.context);
+            const settled = settle(
+              yield* Effect.exit(
+                Effect.provideContext(decision, context as Context.Context<unknown>),
+              ),
+            );
+            if (settled._tag === "Failed")
+              return yield* Effect.failCause(settled.cause as Cause.Cause<never>);
+            decision = settled.decision;
+          }
+          if (!Array.isArray(decision)) {
+            const rejection = decision as { readonly _tag: string };
+            const codec = codecs.rejections.get(rejection?._tag);
+            if (!codec) return yield* Effect.die(undeclared(String(rejection?._tag), "rejects"));
+            yield* Effect.annotateCurrentSpan({ "domain.outcome": rejection._tag });
+            return { _tag: "Rejected", rejection: codec.encode(rejection) } as DecideResult;
+          }
+          // Each event goes to the instance it was recorded on, in the order recorded.
+          const recorded = new Map<string, Array<{ readonly _tag: string }>>();
+          const events: Array<{ readonly _tag: string }> = [];
+          for (const item of decision as ReadonlyArray<unknown>) {
+            const stream = Decision.recordedOn(item);
+            if (stream === undefined || !current.has(stream)) {
+              return yield* Effect.die(
+                new DefinitionError({
+                  reason: new UnreadRecord({
+                    decision: name,
+                    returned: String((item as { readonly _tag?: string } | null)?._tag ?? item),
+                  }),
+                }),
+              );
+            }
+            const event = (item as Decision.Recorded<{ readonly _tag: string }>).event;
+            if (!command.events.some((cls) => cls.tag === event._tag)) {
+              return yield* Effect.die(undeclared(event._tag, "events"));
+            }
+            const list = recorded.get(stream);
+            if (list) list.push(event);
+            else recorded.set(stream, [event]);
+            events.push(event);
+          }
+          const trace = yield* Telemetry.currentTrace;
+          const writes: Array<DecisionWrite> = [];
+          const after = new Map<string, unknown>();
+          for (const read of reads) {
+            const { state, version } = current.get(read.stream)!;
+            const decided = recorded.get(read.stream) ?? [];
+            for (const event of decided) {
+              if (!codecsOf(read.aggregate).events.has(event._tag)) {
+                return yield* Effect.die(
+                  new DefinitionError({
+                    reason: new UndeclaredEvent({
+                      aggregate: read.aggregate.aggregateName,
+                      event: event._tag,
+                    }),
+                  }),
+                );
+              }
+            }
+            // The reply reads each instance's state after its events.
+            const next =
+              def.reply === undefined || decided.length === 0
+                ? state
+                : (yield* commitOf(read.aggregate)(
+                    read.id,
+                    state,
+                    version,
+                    decided,
+                    now,
+                    input.commandId,
+                    false,
+                    correlationId,
+                  )).next;
+            after.set(read.stream, next);
+            writes.push({
+              keys: read.keys,
+              aggregate: read.aggregate.aggregateName,
+              id: read.id,
+              stream: read.stream,
+              version,
+              events: yield* Effect.forEach(decided, encodeEvent),
+            });
+          }
+          yield* Effect.annotateCurrentSpan({
+            "domain.outcome": "accepted",
+            "domain.events": events.length,
+          });
+          for (const event of events) {
+            yield* Telemetry.record(Telemetry.events, {
+              "domain.aggregate": name,
+              "domain.event": event._tag,
+            });
+          }
+          return {
+            _tag: "Accepted",
+            writes,
+            receipt: {
+              commits: writes.map((write) => ({
+                stream: write.stream,
+                version: write.version + write.events.length,
+              })),
+              events: yield* Effect.forEach(events, encodeEvent),
+              reply:
+                def.reply && codecs.reply
+                  ? codecs.reply.encode(
+                      def.reply(
+                        byName(streams, (stream) => after.get(stream)),
+                        events,
+                      ),
+                    )
+                  : null,
+            },
+            correlationId,
+            ...(trace ? { trace } : {}),
+          } as DecideResult;
+        });
+        return Effect.gen(function* () {
+          const started = yield* Clock.currentTimeMillis;
+          const result = yield* decide.pipe(
+            Effect.annotateLogs(base),
+            Effect.withSpan(`Domain.decide ${name}`, {
+              kind: "server",
+              attributes: base,
+              ...(input.trace && !input.link ? { parent: Telemetry.spanOf(input.trace) } : {}),
+              ...(input.trace && input.link
+                ? { links: [{ span: Telemetry.spanOf(input.trace), attributes: {} }] }
+                : {}),
+            }),
+          );
+          const outcome =
+            result._tag === "Accepted"
+              ? "accepted"
+              : ((result.rejection as { readonly _tag?: string })._tag ?? "rejected");
+          const tags = { "domain.aggregate": name, "domain.command": command.tag };
+          yield* Telemetry.record(Telemetry.commands, { ...tags, "domain.outcome": outcome });
+          yield* Telemetry.record(
+            Telemetry.commandDuration,
+            tags,
+            (yield* Clock.currentTimeMillis) - started,
           );
           return result;
         });
@@ -803,8 +1650,59 @@ export const make = (
     return {
       name: view.viewName,
       deliver,
+      consumerSingleSource: (target: string) => singleSource(target),
+      get targets() {
+        return targetsOf(view.viewName);
+      },
+      get generation() {
+        return generationOf("view", view.viewName);
+      },
+      get classGeneration() {
+        return classGenerationOf("view", view.viewName);
+      },
+      get target() {
+        return targetIdOf("view", view.viewName);
+      },
+      get singleSource() {
+        return singleSource(`view:${view.viewName}`);
+      },
+      history: (target, source, id, rows) => history(target, source, id, rows),
+      replay: (input) => {
+        const targets = targetsOf(view.viewName);
+        const keyRef = Key.refOf(def.key, input.id);
+        const stream = `${view.viewName}/${input.id}`;
+        return replay(
+          targets,
+          input,
+          (row) => row.seq,
+          (row, only) =>
+            Effect.map(decodeEvent(row.event), (event) =>
+              fanOut(
+                {
+                  event,
+                  source: keyRef,
+                  envelope: decodeEnvelope(row.envelope),
+                  state: codec && row.state !== null ? codec.decode(row.state) : null,
+                  stream,
+                },
+                {
+                  source: stream,
+                  seq: row.seq,
+                  origin: view.viewName,
+                  tag: (row.event as { readonly _tag: string })._tag,
+                  event: row.event,
+                  envelope: row.envelope,
+                  state: row.state,
+                  ...(row.root ? { root: row.root } : {}),
+                  history: true,
+                },
+                only,
+              ),
+            ),
+        );
+      },
       observe: (key, batch) => (effect) => {
-        if (!telemetry.views || batch.length === 0 || batch.every((d) => d.history)) return effect;
+        if (!telemetry.views || batch.every((d) => d.history)) return effect;
         const traces = batch.flatMap((d) => (d.envelope.trace ? [d.envelope.trace] : []));
         const single = batch.length === 1 && traces.length === 1;
         const attributes = {
@@ -830,26 +1728,40 @@ export const make = (
           ),
         );
       },
-      apply: (key, snapshot, batch) => {
+      apply: Effect.fnUntraced(function* (key, snapshot, batch) {
         let current: unknown =
           codec && snapshot.state !== null ? codec.decode(snapshot.state) : null;
         let { version, seq } = snapshot;
         const checkpoints: Record<string, number> = { ...snapshot.checkpoints };
+        // Written before this record existed: each source's fills in on its next delivery.
+        const emitted: Record<string, EmittedRange> = { ...snapshot.emitted };
         let changed = false;
         const entries: Array<ViewEntry> = [];
         const downstream: Array<Delivery> = [];
-        const keyRef = Aggregate.makeRef(def.key, key);
+        const keyRef = Key.refOf(def.key, key);
         const stream = `${view.viewName}/${key}`;
+        const generation = generationOf("view", view.viewName);
         for (const delivery of batch) {
+          const sent = delivery.target.generation ?? 0;
+          // For an earlier generation: sent by an instance still on older code.
+          if (sent < generation) continue;
+          if (sent > generation) {
+            return yield* Effect.die(
+              new DefinitionError({
+                reason: new NewerGeneration({ consumer: view.viewName, sent, runs: generation }),
+              }),
+            );
+          }
           if ((checkpoints[delivery.source] ?? 0) >= delivery.seq) continue;
           checkpoints[delivery.source] = delivery.seq;
           changed = true;
+          const emittedBefore = seq;
           const origin = sources.get(delivery.origin)!;
-          const event = decodeEvent(delivery.event) as { readonly _tag: string };
+          const event = (yield* decodeEvent(delivery.event)) as { readonly _tag: string };
           const envelope = decodeEnvelope(delivery.envelope);
           const context = {
             key: keyRef,
-            source: Aggregate.makeRef(keyAggregateOf(origin), envelope.id),
+            source: Key.refOf(keyOfSource(origin), envelope.id),
             state: sourceState(origin, delivery.state),
             envelope,
             at: envelope.at,
@@ -876,8 +1788,10 @@ export const make = (
             for (const out of emitted as ReadonlyArray<{ readonly _tag: string } | undefined>) {
               if (out === undefined) continue;
               if (declared && !declared.has(out._tag)) {
-                throw new DefinitionError(
-                  `${view.viewName} emitted '${out._tag}', which it does not declare in events`,
+                return yield* Effect.die(
+                  new DefinitionError({
+                    reason: new UndeclaredEmit({ view: view.viewName, event: out._tag }),
+                  }),
                 );
               }
               seq += 1;
@@ -891,9 +1805,10 @@ export const make = (
               };
               const entry: ViewEntry = {
                 seq,
-                event: encodeEvent(out),
+                event: yield* encodeEvent(out),
                 envelope: encodeEnvelope(outEnvelope, delivery.envelope.trace),
                 state: encodeState(current),
+                root: rootOf(delivery),
               };
               entries.push(entry);
               downstream.push(
@@ -907,21 +1822,38 @@ export const make = (
                     event: entry.event,
                     envelope: entry.envelope,
                     state: entry.state,
+                    root: entry.root,
                     ...(delivery.history ? { history: true } : {}),
                   },
                 ),
               );
             }
           }
+          // What this command's deliveries from the source have become, so far.
+          const commandId = delivery.envelope.commandId;
+          const last = emitted[delivery.source];
+          emitted[delivery.source] = {
+            commandId,
+            sourceSeq: delivery.seq,
+            after: last?.commandId === commandId ? last.after : emittedBefore,
+            through: seq,
+          };
         }
-        const next: ViewSnapshot = { state: encodeState(current), version, checkpoints, seq };
+        const next: ViewSnapshot = {
+          state: encodeState(current),
+          version,
+          checkpoints,
+          seq,
+          ...(generation > 0 ? { generation } : {}),
+          emitted,
+        };
         return { snapshot: next, changed, entries, downstream };
-      },
+      }),
     };
   };
 
   const policyKit = (policy: Policy.Any, handler: Policy.Handler<unknown>): PolicyKit => {
-    const keyAggregate = policy.definition.key;
+    const policyKey = policy.definition.key;
     return {
       name: policy.policyName,
       run: (delivery) => {
@@ -929,9 +1861,8 @@ export const make = (
         if (delivery.history) return Effect.void;
         const upstream = sources.get(delivery.origin)!;
         const envelope = decodeEnvelope(delivery.envelope);
-        const source = Aggregate.makeRef(keyAggregateOf(upstream), envelope.id);
-        const key = keyAggregate ? Aggregate.makeRef(keyAggregate, delivery.key) : source;
-        const event = decodeEvent(delivery.event);
+        const source = Key.refOf(keyOfSource(upstream), envelope.id);
+        const key = policyKey ? Key.refOf(policyKey, delivery.key) : source;
         const state = sourceState(upstream, delivery.state);
         const attributes = {
           "domain.policy": policy.policyName,
@@ -939,27 +1870,26 @@ export const make = (
           ...deliveryAttributes(delivery),
         };
         const parent = parentOf(delivery);
-        return Effect.forEach(
-          delivery.routes ?? [undefined],
-          (route) => {
-            let n = 0;
-            const prefix = `${delivery.source}:${delivery.seq}:${policy.policyName}${route === undefined ? "" : `:${route}`}`;
-            return handler({ key, route, source, event, envelope, state }).pipe(
-              Effect.provideContext(
-                Context.make(Aggregate.PolicyRun, { next: () => `${prefix}:${n++}` }).pipe(
-                  Context.add(Telemetry.Correlation, { id: envelope.correlationId }),
+        return Effect.flatMap(decodeEvent(delivery.event), (event) =>
+          Effect.forEach(
+            delivery.routes ?? [undefined],
+            (route) => {
+              let n = 0;
+              const prefix = `${delivery.source}:${delivery.seq}:${policy.policyName}${route === undefined ? "" : `:${route}`}`;
+              return handler({ key, route, source, event, envelope, state }).pipe(
+                Effect.provideContext(
+                  Context.make(Aggregate.PolicyRun, { next: () => `${prefix}:${n++}` }).pipe(
+                    Context.add(Telemetry.Correlation, { id: envelope.correlationId }),
+                  ),
                 ),
-              ),
-            );
-          },
-          { discard: true },
-        ).pipe(
-          Effect.tap(() =>
-            Effect.annotateCurrentSpan(eventAttributes(event as { readonly _tag: string })),
+              );
+            },
+            { discard: true },
           ),
+        ).pipe(
           Effect.onExit((exit) =>
             Effect.gen(function* () {
-              const now = yield* Effect.sync(() => Date.now());
+              const now = yield* Clock.currentTimeMillis;
               const tags = { "domain.kind": "policy", "domain.consumer": policy.policyName };
               yield* Telemetry.record(Telemetry.lag, tags, now - delivery.envelope.at);
               yield* Telemetry.record(Telemetry.runs, {
@@ -983,45 +1913,51 @@ export const make = (
     projection: Projection.Any,
     key: string,
     batch: ReadonlyArray<Accepted>,
-  ): ReadonlyArray<unknown> => {
-    const keyRef = Aggregate.makeRef(projection.definition.key, key);
-    const inputs: Array<unknown> = [];
-    for (const { delivery, position } of batch) {
-      const upstream = sources.get(delivery.origin)!;
-      const envelope = decodeEnvelope(delivery.envelope);
-      const source = Aggregate.makeRef(keyAggregateOf(upstream), envelope.id);
-      const event = decodeEvent(delivery.event);
-      const state = sourceState(upstream, delivery.state);
-      // Shared by every route the delivery takes, so their appends count up together.
-      const meta: InputMetaValue = {
-        projection: projection.projectionName,
-        key,
-        position,
-        source: delivery.source,
-        sourceSeq: delivery.seq,
-        at: delivery.envelope.at,
-        commandId: delivery.envelope.commandId,
-        appends: 0,
-      };
-      for (const route of delivery.routes ?? [undefined]) {
-        const input = { key: keyRef, route, source, event, envelope, state, position };
-        Object.defineProperty(input, InputMeta, { value: meta, enumerable: false });
-        inputs.push(input);
+  ): Effect.Effect<ReadonlyArray<unknown>> =>
+    Effect.gen(function* () {
+      const keyRef = Key.refOf(projection.definition.key, key);
+      const generation = generationOf("projection", projection.projectionName);
+      const inputs: Array<unknown> = [];
+      for (const { delivery, position } of batch) {
+        const upstream = sources.get(delivery.origin)!;
+        const envelope = decodeEnvelope(delivery.envelope);
+        const source = Key.refOf(keyOfSource(upstream), envelope.id);
+        const event = yield* decodeEvent(delivery.event);
+        const state = sourceState(upstream, delivery.state);
+        // Shared by every route the delivery takes, so their appends count up together.
+        const meta: InputMetaValue = {
+          projection: projection.projectionName,
+          key,
+          generation,
+          position,
+          source: delivery.source,
+          sourceSeq: delivery.seq,
+          root: rootOf(delivery),
+          at: delivery.envelope.at,
+          commandId: delivery.envelope.commandId,
+          appends: 0,
+        };
+        for (const route of delivery.routes ?? [undefined]) {
+          const input = { key: keyRef, route, source, event, envelope, state, position };
+          Object.defineProperty(input, InputMeta, { value: meta, enumerable: false });
+          inputs.push(input);
+        }
       }
-    }
-    return inputs;
-  };
+      return inputs;
+    });
 
-  const projectionKeys = (
-    projection: Projection.Any,
-    aggregate: string,
+  const consumerKeys = (
+    kind: "view" | "projection",
+    name: string,
+    source: string,
     id: string,
     event: { readonly _tag: string },
     seq: number,
+    state?: Json,
   ): ReadonlyArray<string> => {
-    const entry = sources.get(aggregate);
-    if (entry?.kind !== "aggregate") return [];
-    const stream = `${aggregate}/${id}`;
+    const entry = sources.get(source);
+    if (entry === undefined) return [];
+    const stream = `${source}/${id}`;
     const envelope: Aggregate.Envelope = {
       id,
       stream,
@@ -1031,14 +1967,16 @@ export const make = (
       correlationId: "",
     };
     const keys: Array<string> = [];
-    for (const subscriber of subscribers.get(aggregate)?.get(event._tag) ?? []) {
-      if (subscriber.kind !== "projection" || subscriber.name !== projection.projectionName)
-        continue;
+    for (const subscriber of subscribers.get(source)?.get(event._tag) ?? []) {
+      if (subscriber.kind !== kind || subscriber.name !== name) continue;
       const input = {
         event,
-        source: Aggregate.makeRef(entry.aggregate, id),
+        source:
+          entry.kind === "aggregate"
+            ? Aggregate.makeRef(entry.aggregate, id)
+            : Key.refOf(keyOfSource(entry), id),
         envelope,
-        state: undefined,
+        state: entry.kind === "aggregate" ? undefined : sourceState(entry, state ?? null),
         stream,
       };
       for (const { key } of subscriber.route(input)) keys.push(key);
@@ -1046,24 +1984,71 @@ export const make = (
     return keys;
   };
 
+  const projectionKeys = (
+    projection: Projection.Any,
+    source: string,
+    id: string,
+    event: { readonly _tag: string },
+    seq: number,
+    state?: Json,
+  ) => consumerKeys("projection", projection.projectionName, source, id, event, seq, state);
+  const viewKeys = (
+    view: View.Any,
+    source: string,
+    id: string,
+    event: { readonly _tag: string },
+    seq: number,
+    state?: Json,
+  ) => consumerKeys("view", view.viewName, source, id, event, seq, state);
+
   return {
     aggregateKit,
+    decisionKit,
     viewKit,
     policyKit,
     projectionInputs,
     projectionKeys,
+    viewKeys,
+    get targets() {
+      return [
+        ...definitions.views.map((view) => targetIdOf("view", view.viewName)),
+        ...definitions.projections.map((projection) =>
+          targetIdOf("projection", projection.projectionName),
+        ),
+      ].sort();
+    },
+    singleSource,
+    sourcesOf,
+    planOf,
+    history,
+    setVersion: (consumer, version) => {
+      versions.set(consumer, version);
+      generations.clear();
+    },
+    generationOf,
+    classGenerationOf,
+    targetIdOf,
+    inPlace,
     writerOf: (stream) => writers.get(stream.streamName),
-    decodeStreamEntry: (entry) => ({
-      event: decodeEvent(entry.event),
-      envelope: decodeEnvelope(entry.envelope),
-    }),
+    decodeStreamEntry: (entry) =>
+      Effect.map(decodeEvent(entry.event), (event) => ({
+        event,
+        envelope: decodeEnvelope(entry.envelope),
+      })),
     decodeEvent,
     encodeEvent,
     encodeCommand: (aggregate, command) => {
       const entry = codecsOf(aggregate).commands.get(command._tag);
-      if (!entry)
-        throw new DefinitionError(`${aggregate.aggregateName} does not handle '${command._tag}'`);
-      return entry.codec.encode(command);
+      return entry
+        ? Effect.sync(() => entry.codec.encode(command))
+        : Effect.die(
+            new DefinitionError({
+              reason: new UnhandledCommand({
+                aggregate: aggregate.aggregateName,
+                command: command._tag,
+              }),
+            }),
+          );
     },
     decodeRejection: (aggregate, json) =>
       codecsOf(aggregate)
@@ -1071,23 +2056,42 @@ export const make = (
         .decode(json),
     decodeReceipt: (aggregate, commandTag, json) => {
       const reply = codecsOf(aggregate).commands.get(commandTag)?.reply;
-      return {
+      return Effect.map(Effect.forEach(json.events, decodeEvent), (events) => ({
         stream: json.stream,
         version: json.version,
-        events: json.events.map(decodeEvent),
+        commits: [{ stream: json.stream, version: json.version }],
+        events,
         reply: reply && json.reply !== null ? reply.decode(json.reply) : undefined,
-      };
+      })) as Effect.Effect<Aggregate.Receipt>;
     },
     decodeState: (aggregate, json) => {
       const codecs = codecsOf(aggregate);
       return codecs.state.decode(json ?? codecs.initial);
     },
+    encodeDecisionCommand: (decision, command) =>
+      Effect.sync(() => decisionCodecs.get(decision.decisionName)!.command.encode(command)),
+    decodeDecisionRejection: (decision, json) =>
+      decisionCodecs
+        .get(decision.decisionName)!
+        .rejections.get((json as { _tag: string })._tag)!
+        .decode(json),
+    decodeDecisionReceipt: (decision, json) => {
+      const reply = decisionCodecs.get(decision.decisionName)!.reply;
+      return Effect.map(Effect.forEach(json.events, decodeEvent), (events) => ({
+        commits: json.commits,
+        events,
+        reply: reply && json.reply !== null ? reply.decode(json.reply) : undefined,
+      })) as Effect.Effect<Decision.Receipt>;
+    },
     decodeViewState: (view, json) => viewCodec(view).decode(json),
-    decodeViewEntry: (view, entry) => ({
-      event: decodeEvent(entry.event),
-      state:
-        entry.state === null || !view.definition.state ? null : viewCodec(view).decode(entry.state),
-      envelope: decodeEnvelope(entry.envelope),
-    }),
+    decodeViewEntry: (view, entry) =>
+      Effect.map(decodeEvent(entry.event), (event) => ({
+        event,
+        state:
+          entry.state === null || !view.definition.state
+            ? null
+            : viewCodec(view).decode(entry.state),
+        envelope: decodeEnvelope(entry.envelope),
+      })),
   };
 };

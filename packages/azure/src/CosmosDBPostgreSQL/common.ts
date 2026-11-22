@@ -58,9 +58,7 @@ export const generatePassword = Effect.sync(() =>
   Redacted.make(`Aa1-${Buffer.from(crypto.randomBytes(24)).toString("base64url")}`),
 );
 
-export const reveal = (
-  value: Redacted.Redacted<string> | string | undefined,
-): string | undefined =>
+export const reveal = (value: Redacted.Redacted<string> | string | undefined): string | undefined =>
   value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 export const sameText = (a: string | undefined, b: string | undefined) =>

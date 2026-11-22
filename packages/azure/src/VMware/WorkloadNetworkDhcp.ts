@@ -249,12 +249,14 @@ export const WorkloadNetworkDhcpProvider = () =>
       // Sync mutable fields against the observed NSX object. NSX uses the
       // revision for optimistic concurrency, so send back the observed one.
       const props = observed.properties;
+      const server = props?.dhcpType === "SERVER" ? props : undefined;
+      const relay = props?.dhcpType === "RELAY" ? props : undefined;
       if (
         (news.displayName !== undefined && props?.displayName !== news.displayName) ||
-        (news.serverAddress !== undefined && props?.serverAddress !== news.serverAddress) ||
-        (news.leaseTime !== undefined && props?.leaseTime !== news.leaseTime) ||
+        (news.serverAddress !== undefined && server?.serverAddress !== news.serverAddress) ||
+        (news.leaseTime !== undefined && server?.leaseTime !== news.leaseTime) ||
         (news.serverAddresses !== undefined &&
-          !sameSet(props?.serverAddresses, news.serverAddresses))
+          !sameSet(relay?.serverAddresses, news.serverAddresses))
       ) {
         yield* vmware.UpdateWorkloadNetworkDhcp({
           ...where,

@@ -1,11 +1,12 @@
 import { PrismaAuth } from "@alchemy.run/prisma/AuthProvider";
 import { PrismaEnvironment, fromProfile } from "@alchemy.run/prisma/PrismaEnvironment";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "alchemy-test";
 import { AuthProviders } from "alchemy/Auth/AuthProvider";
 import { ProfileStore } from "alchemy/Auth/Profile";
-import * as CliKit from "alchemy/Cli/CliKit";
+import * as Interaction from "alchemy/Interaction";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -26,19 +27,19 @@ const testLayer = (config: Record<string, string>, options: { storedToken?: stri
       Layer.succeed(ProfileStore, makeProfile(options.storedToken ?? "test-token")),
     ),
     Layer.provideMerge(ConfigProvider.layer(ConfigProvider.fromUnknown(config))),
-    Layer.provideMerge(NodeServices.layer),
-    Layer.provideMerge(CliKit.layer({ input: false })),
+    Layer.provideMerge(Layer.merge(NodeServices.layer, SecureRandom.layerWebCrypto)),
+    Layer.provideMerge(Interaction.layerNonInteractive()),
   );
 };
 
 describe("PrismaEnvironment", { tags: ["unit", "provider:prisma", "local"] }, () => {
   it.effect("resolves stored credentials and API base URL from config", () =>
     Effect.gen(function* () {
-      const env = yield* PrismaEnvironment;
+      const env = yield* PrismaEnvironment.current;
 
       expect(env.type).toBe("serviceToken");
       expect(env.source).toEqual({ type: "stored" });
-      expect(Redacted.value(env.serviceToken)).toBe("test-token");
+      expect(env.serviceToken && Redacted.value(env.serviceToken)).toBe("test-token");
       expect(env.baseUrl).toBe("https://control-plane.prisma.test");
     }).pipe(
       Effect.provide(
@@ -52,7 +53,7 @@ describe("PrismaEnvironment", { tags: ["unit", "provider:prisma", "local"] }, ()
 
   it.effect("prefers PRISMA_API_URL over PRISMA_MANAGEMENT_API_URL", () =>
     Effect.gen(function* () {
-      const env = yield* PrismaEnvironment;
+      const env = yield* PrismaEnvironment.current;
 
       expect(env.baseUrl).toBe("https://api-url.prisma.test");
     }).pipe(
@@ -70,18 +71,18 @@ describe("PrismaEnvironment", { tags: ["unit", "provider:prisma", "local"] }, ()
 
   it.effect("resolves stored profile credentials", () =>
     Effect.gen(function* () {
-      const env = yield* PrismaEnvironment;
+      const env = yield* PrismaEnvironment.current;
 
       expect(env.type).toBe("serviceToken");
       expect(env.source).toEqual({ type: "stored" });
-      expect(Redacted.value(env.serviceToken)).toBe("stored-token");
+      expect(env.serviceToken && Redacted.value(env.serviceToken)).toBe("stored-token");
       expect(env.baseUrl).toBe("https://api.prisma.io");
     }).pipe(Effect.provide(testLayer({}, { storedToken: "stored-token" }))),
   );
 
   it.effect("allows HTTP only for loopback Management API URLs", () =>
     Effect.gen(function* () {
-      const env = yield* PrismaEnvironment;
+      const env = yield* PrismaEnvironment.current;
       expect(env.baseUrl).toBe("http://127.0.0.1:8787");
     }).pipe(
       Effect.provide(

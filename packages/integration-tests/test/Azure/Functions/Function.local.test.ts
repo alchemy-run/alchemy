@@ -1,10 +1,10 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as blob from "@distilled.cloud/azure/storage-blob";
 import * as queue from "@distilled.cloud/azure/storage-queue";
 import * as web from "@distilled.cloud/azure/web";
 import * as Alchemy from "alchemy";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

@@ -1,7 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { SecurityGroup, SecurityGroupRule, Vpc } from "@alchemy.run/aws/EC2";
+import { expect } from "@alchemy.run/test";
 import * as EC2 from "@distilled.cloud/aws/ec2";
-import { expect } from "alchemy-test";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -99,6 +100,14 @@ for (const type of ["ingress", "egress"] as const) {
           SecurityGroupRuleIds: [rule.securityGroupRuleId],
         }).pipe(Effect.map((result) => result.SecurityGroupRules![0]!));
         expect((yield* stack.plan(desired)).resources.DriftRule?.action).toBe("noop");
+        // #1968: the standalone rule belongs to DriftRule, not to the group,
+        // so the group does not read as drifted — but a rogue rule does.
+        const detect = Drift.detect({ name: stack.name, stage: stack.stage }).pipe(
+          Effect.provide(stack.state),
+        );
+        const clean = yield* detect;
+        expect(clean.resources.DriftSg?.action).toBe("unchanged");
+        expect(clean.resources.DriftRule?.action).toBe("unchanged");
         const rogue = yield* EC2.authorizeSecurityGroupIngress({
           GroupId: sg.groupId,
           IpPermissions: [
@@ -106,6 +115,13 @@ for (const type of ["ingress", "egress"] as const) {
           ],
         });
         const rogueId = rogue.SecurityGroupRules![0]!.SecurityGroupRuleId!;
+        const withRogue = (yield* detect).resources.DriftSg;
+        expect(withRogue?.action).toBe("drifted");
+        expect(
+          withRogue?.attr.ingressRules.map(
+            (value: { securityGroupRuleId: string }) => value.securityGroupRuleId,
+          ),
+        ).toEqual([rogueId]);
         yield* EC2.deleteTags({
           Resources: [rule.securityGroupRuleId],
           Tags: [{ Key: "alchemy::id" }],

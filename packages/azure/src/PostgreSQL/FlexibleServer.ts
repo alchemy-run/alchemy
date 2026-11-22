@@ -34,7 +34,8 @@ import {
   whileServerBusy,
 } from "./common.ts";
 
-export type PostgresMajorVersion = postgresql.PostgresMajorVersion;
+// The SDK now types `version` as a plain string.
+export type PostgresMajorVersion = "18" | "17" | "16" | "15" | "14" | "13" | "12" | "11";
 export type PostgresSkuTier = postgresql.SkuTier;
 export type PostgresStorageTier = postgresql.AzureManagedDiskPerformanceTier;
 

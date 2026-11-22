@@ -194,7 +194,7 @@ const toAttrs = (item: ssm.Hook, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(ssm.getProjectsLocationsRepositoriesHooks({ name }));
 
 const listOnRepository = (repository: string) =>
@@ -279,17 +279,15 @@ export const RepositoriesHookProvider = () =>
       if (current === undefined) {
         const created = yield* ssm
           .createProjectsLocationsRepositoriesHooks({
+            targetUri,
+            events: events.length > 0 ? events : undefined,
+            disabled: news.disabled === true ? true : undefined,
+            sensitiveQueryString: news.sensitiveQueryString,
+            pushOption: news.pushOption,
             parent: repository,
             hookId,
-            body: {
-              targetUri,
-              events: events.length > 0 ? events : undefined,
-              disabled: news.disabled === true ? true : undefined,
-              sensitiveQueryString: news.sensitiveQueryString,
-              pushOption: news.pushOption,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -297,7 +295,7 @@ export const RepositoriesHookProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const mask = fieldMask([
@@ -311,15 +309,13 @@ export const RepositoriesHookProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* ssm.patchProjectsLocationsRepositoriesHooks({
+          targetUri,
+          events,
+          disabled: news.disabled === true,
+          sensitiveQueryString: news.sensitiveQueryString,
+          pushOption: news.pushOption,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            targetUri,
-            events,
-            disabled: news.disabled === true,
-            sensitiveQueryString: news.sensitiveQueryString,
-            pushOption: news.pushOption,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
@@ -332,7 +328,7 @@ export const RepositoriesHookProvider = () =>
       const operation = yield* retryConflict(
         ssm
           .deleteProjectsLocationsRepositoriesHooks({ name: output.name })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined))),
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined)),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

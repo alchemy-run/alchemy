@@ -57,7 +57,7 @@ export const deepMerge = <T>(base: T, override: unknown): T => {
  */
 export const imagePlatformOf = (
   architecture: "amd64" | "arm64" | undefined,
-  connection?: Connection | undefined,
+  connection?: Connection,
 ): string =>
   (architecture ?? connection?.architecture) === "arm64" ? "linux/arm64" : "linux/amd64";
 
@@ -321,6 +321,7 @@ export const workloadImageHash = Effect.fn(function* (options: {
 });
 
 /** The identity-adapter state persisted on workload attributes. */
+// oxlint-disable-next-line typescript/no-redundant-type-constituents -- registry type is `never` until cloud packages augment it
 export type PersistedIdentityState = IdentityState | undefined;
 
 /**
@@ -338,12 +339,12 @@ import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import { makeEntrypointLayer, RuntimeConfigProviderLive } from "alchemy/Runtime";
 import { provideProcessTelemetry } from "alchemy/Telemetry";
 import * as Context from "effect/Context";
 import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -361,6 +362,7 @@ const layer = makeEntrypointLayer(tag, entrypoint);
 const platform = Layer.mergeAll(
   BunServices.layer,
   FetchHttpClient.layer,
+  SecureRandom.layerWebCrypto,
   Logger.layer([Logger.consolePretty()]),
 );
 
@@ -398,12 +400,7 @@ const program = tag.pipe(
     )),
       Layer.provideMerge(BunHttpServer()),
       Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
-        )
-      ),
+      Layer.provideMerge(RuntimeConfigProviderLive),
     )
   ),
   Effect.scoped
@@ -428,12 +425,12 @@ export const makeJobBootstrap =
 import { BunServices } from "@effect/platform-bun";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import { makeEntrypointLayer, RuntimeConfigProviderLive } from "alchemy/Runtime";
 import { provideProcessTelemetry } from "alchemy/Telemetry";
 import * as Context from "effect/Context";
 import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -447,6 +444,7 @@ const layer = makeEntrypointLayer(tag, entrypoint);
 const platform = Layer.mergeAll(
   BunServices.layer,
   FetchHttpClient.layer,
+  SecureRandom.layerWebCrypto,
   Logger.layer([Logger.consolePretty()]),
 );
 
@@ -482,12 +480,7 @@ const program = tag.pipe(
       Layer.effect(Stage, Config.String("ALCHEMY_STAGE")),
     )),
       Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
-        )
-      ),
+      Layer.provideMerge(RuntimeConfigProviderLive),
     )
   ),
   Effect.scoped
@@ -502,3 +495,73 @@ await Effect.runPromise(program).catch((err) => {
 // (sockets, timers) never keep the pod alive after the work is done.
 process.exit(0);
 `;
+
+/** A container env entry read from elsewhere: a Secret key, a ConfigMap key, a field. */
+export interface EnvValueFrom {
+  readonly valueFrom: Record<string, unknown>;
+}
+
+const isEnvValueFrom = (value: unknown): value is EnvValueFrom =>
+  typeof value === "object" &&
+  value !== null &&
+  !Redacted.isRedacted(value) &&
+  Object.keys(value).length === 1 &&
+  typeof (value as { valueFrom?: unknown }).valueFrom === "object" &&
+  (value as { valueFrom?: unknown }).valueFrom !== null;
+
+/** The annotation that rolls a workload's pods when its secret env changes. */
+export const ENV_SECRET_DIGEST = "alchemy.run/env-secret-digest";
+
+/**
+ * A container's env as Kubernetes renders it: a plain value stays a literal,
+ * `{ valueFrom }` passes through as an `EnvVarSource`, and a secret (a
+ * `Redacted`, or a value holding one) moves into the workload's own Secret
+ * `<name>-env`, read through `secretKeyRef`. Anyone who can read the pod
+ * template sees the Secret's name, never its values. `digest` changes
+ * whenever a secret value does, so pods roll as they did when the value was
+ * a literal.
+ */
+export const workloadEnv = Effect.fn(function* (options: {
+  readonly name: string;
+  readonly namespace: string;
+  readonly labels: Record<string, string>;
+  readonly env: Record<string, unknown>;
+}) {
+  const secretName = `${options.name.slice(0, 249).replace(/-+$/, "")}-env`;
+  const secrets: Record<string, Redacted.Redacted<string>> = {};
+  const entries: Array<Record<string, unknown>> = [];
+  for (const [name, raw] of Object.entries(options.env)) {
+    if (isEnvValueFrom(raw)) {
+      entries.push({ name, valueFrom: raw.valueFrom });
+      continue;
+    }
+    const value = containerEnvValue(raw);
+    if (Redacted.isRedacted(value)) {
+      secrets[name] = value;
+      entries.push({ name, valueFrom: { secretKeyRef: { name: secretName, key: name } } });
+    } else {
+      entries.push({ name, value });
+    }
+  }
+  const names = Object.keys(secrets).sort();
+  if (names.length === 0) return { entries, secret: undefined, digest: undefined };
+  const data = yield* Effect.sync(() =>
+    Object.fromEntries(
+      names.map((name) => [
+        name,
+        Redacted.make(Buffer.from(Redacted.value(secrets[name]!), "utf8").toString("base64")),
+      ]),
+    ),
+  );
+  const digest = (yield* sha256Object(
+    Object.fromEntries(names.map((name) => [name, Redacted.value(secrets[name]!)])),
+  )).slice(0, 16);
+  const secret = {
+    apiVersion: "v1",
+    kind: "Secret",
+    metadata: { name: secretName, namespace: options.namespace, labels: options.labels },
+    type: "Opaque",
+    data,
+  };
+  return { entries, secret, digest };
+});

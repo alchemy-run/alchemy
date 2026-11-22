@@ -217,6 +217,15 @@ interface Where {
 const getDefinition = (where: Where) =>
   orUndefinedIfNotFound(cloudhealth.GetSignalDefinition(where));
 
+/**
+ * The definition's properties object. The SDK union also lists bare
+ * `string` arms, which a signal definition never returns.
+ */
+const propertiesOf = (observed: cloudhealth.GetSignalDefinitionResponse) => {
+  const properties = observed.properties;
+  return typeof properties === "object" ? properties : undefined;
+};
+
 const toAttrs = (
   where: Where,
   observed: cloudhealth.GetSignalDefinitionResponse,
@@ -225,11 +234,11 @@ const toAttrs = (
   signalDefinitionId: observed.id ?? "",
   healthModelName: where.healthModelName,
   resourceGroup: where.resourceGroupName,
-  displayName: observed.properties?.displayName,
-  signalKind: observed.properties?.signalKind ?? "",
-  refreshInterval: observed.properties?.refreshInterval,
-  provisioningState: observed.properties?.provisioningState,
-  tags: userTags(observed.properties?.tags),
+  displayName: propertiesOf(observed)?.displayName,
+  signalKind: propertiesOf(observed)?.signalKind ?? "",
+  refreshInterval: propertiesOf(observed)?.refreshInterval,
+  provisioningState: propertiesOf(observed)?.provisioningState,
+  tags: userTags(propertiesOf(observed)?.tags),
 });
 
 export const SignalDefinitionProvider = () =>
@@ -269,7 +278,7 @@ export const SignalDefinitionProvider = () =>
       const observed = yield* getDefinition(where);
       if (observed === undefined) return undefined;
       const attrs = toAttrs(where, observed);
-      return (yield* isOwned(id, observed.properties?.tags)) ? attrs : Unowned(attrs);
+      return (yield* isOwned(id, propertiesOf(observed)?.tags)) ? attrs : Unowned(attrs);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -296,7 +305,7 @@ export const SignalDefinitionProvider = () =>
         refreshInterval: news.refreshInterval ?? "PT1M",
         dataUnit: news.dataUnit,
         evaluationRules: news.evaluationRules,
-      } satisfies cloudhealth.SignalDefinitionPropertiesInput;
+      };
 
       // Observe.
       const observed = yield* getDefinition(where);
@@ -305,17 +314,22 @@ export const SignalDefinitionProvider = () =>
       if (
         observed === undefined ||
         !isSubset(desired, observed.properties) ||
-        tagsDiffer(observed.properties?.tags, tags)
+        tagsDiffer(propertiesOf(observed)?.tags, tags)
       ) {
         yield* cloudhealth
-          .SignalDefinitionsCreateOrUpdate({ ...where, properties: { ...desired, tags } })
+          .SignalDefinitionsCreateOrUpdate({
+            ...where,
+            // One shape for every `signalKind`; the SDK types each kind as its
+            // own union arm, with that kind's fields required.
+            properties: { ...desired, tags } as cloudhealth.SignalDefinitionPropertiesInput,
+          })
           .pipe(Effect.retry(whileBusy));
       }
 
       const fresh = yield* waitForProvisioned(
         `health model signal definition ${where.signalDefinitionName}`,
         getDefinition(where),
-        (definition) => definition.properties?.provisioningState,
+        (definition) => propertiesOf(definition)?.provisioningState,
         { interval: "3 seconds", times: 40 },
       );
       return toAttrs(where, fresh);

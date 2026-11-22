@@ -1,8 +1,8 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -60,15 +60,16 @@ test.provider.skipIf(!runLifecycle)(
       yield* stack.destroy();
 
       const group = yield* apigee.createOrganizationsAppgroups({
+        name: "alchemy-appgroup",
+        displayName: "alchemy-appgroup",
         parent: org,
-        body: { name: "alchemy-appgroup", displayName: "alchemy-appgroup" },
       });
       const groupId = group.name ?? "alchemy-appgroup";
       const groupParent = groupId.includes("/appgroups/") ? groupId : `${org}/appgroups/${groupId}`;
 
       const app = yield* apigee.createOrganizationsAppgroupsApps({
+        name: "alchemy-app",
         parent: groupParent,
-        body: { name: "alchemy-app" },
       });
       const appName = app.name ?? "alchemy-app";
 

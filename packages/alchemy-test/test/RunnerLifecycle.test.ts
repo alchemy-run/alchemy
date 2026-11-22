@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
+import { expect, it } from "@alchemy.run/test";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { expect, it } from "alchemy-test";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -23,7 +23,7 @@ import { run } from "../src/Runner.ts";
 
 const api = new URL("../src/index.ts", import.meta.url).href;
 const registry = new URL("../src/Registry.ts", import.meta.url).href;
-const effect = new URL("../../../node_modules/effect/dist/Effect.js", import.meta.url).href;
+const effect = import.meta.resolve("effect/Effect");
 
 const setup = Effect.fn(function* (files: Record<string, string>) {
   const fs = yield* FileSystem.FileSystem;

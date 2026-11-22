@@ -1,9 +1,9 @@
 import * as Azure from "@alchemy.run/azure";
-import { Credentials, type Config } from "@distilled.cloud/azure";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import { ARM_SCOPE, Credentials, type Config } from "@distilled.cloud/azure";
 import * as sign from "@distilled.cloud/azure/artifactsigning-data";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -58,10 +58,10 @@ describe("Artifact Signing request encoding", { tags: ["provider:azure"] }, () =
       const credentials = Layer.succeed(
         Credentials,
         Effect.succeed<Config>({
-          bearerToken: Redacted.make("arm-token"),
           subscriptionId: "00000000-0000-0000-0000-000000000001",
           apiBaseUrl: "https://management.azure.com",
-          tokenFor: (scope: string) => Effect.succeed(Redacted.make(`aad:${scope}`)),
+          token: (scope: string) =>
+            Effect.succeed(Redacted.make(scope === ARM_SCOPE ? "arm-token" : `aad:${scope}`)),
         }),
       );
       const result = yield* operation.pipe(

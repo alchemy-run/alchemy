@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { SecurityGroup, SecurityGroupRule, Vpc } from "@alchemy.run/aws/EC2";
 import type { SecurityGroupProps, SecurityGroupRuleData } from "@alchemy.run/aws/EC2/SecurityGroup";
+import { expect } from "@alchemy.run/test";
 import * as EC2 from "@distilled.cloud/aws/ec2";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";

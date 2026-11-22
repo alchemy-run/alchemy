@@ -180,7 +180,7 @@ export const PhraseMatcher = Resource<PhraseMatcher>("GCP.ContactCenterInsights.
 export class PhraseMatcherNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.PhraseMatcherNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_TYPE: PhraseMatcherType = "ALL_OF";
@@ -233,10 +233,10 @@ const toAttrs = (matcher: cci.GoogleCloudContactcenterinsightsV1PhraseMatcher, p
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsPhraseMatchers({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   cci.listProjectsLocationsPhraseMatchers.pages({ parent, pageSize: 100 }).pipe(
@@ -254,7 +254,7 @@ const findByDisplayName = (parent: string, displayName: string) =>
     Stream.filter((matcher) => matcher.displayName === displayName),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const PhraseMatcherProvider = () =>
@@ -326,22 +326,20 @@ export const PhraseMatcherProvider = () =>
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsPhraseMatchers({
+            displayName,
+            type,
+            active,
+            roleMatch: news.roleMatch,
+            versionTag: news.versionTag,
+            phraseMatchRuleGroups,
             parent,
-            body: {
-              displayName,
-              type,
-              active,
-              roleMatch: news.roleMatch,
-              versionTag: news.versionTag,
-              phraseMatchRuleGroups,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => findByDisplayName(parent, displayName)));
         current = created ?? (yield* findByDisplayName(parent, displayName));
       }
 
       if (current === undefined) {
-        return yield* new PhraseMatcherNotResolved({ name });
+        return yield* new PhraseMatcherNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -364,6 +362,12 @@ export const PhraseMatcherProvider = () =>
         groupsChanged
       ) {
         current = yield* cci.patchProjectsLocationsPhraseMatchers({
+          displayName,
+          type,
+          active,
+          roleMatch: news.roleMatch,
+          versionTag: news.versionTag,
+          phraseMatchRuleGroups,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
@@ -373,15 +377,6 @@ export const PhraseMatcherProvider = () =>
             versionChanged ? "version_tag" : undefined,
             groupsChanged ? "phrase_match_rule_groups" : undefined,
           ),
-          body: {
-            name: currentName,
-            displayName,
-            type,
-            active,
-            roleMatch: news.roleMatch,
-            versionTag: news.versionTag,
-            phraseMatchRuleGroups,
-          },
         });
       }
 

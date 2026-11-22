@@ -5,10 +5,30 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { fetchSiteWiseTags, matchesDesired, syncSiteWiseTags } from "./internal.ts";
+
+export class IoTSiteWiseGatewayConflict extends Data.TaggedError("IoTSiteWiseGatewayConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class IoTSiteWiseGatewayInvalidProps extends Data.TaggedError(
+  "IoTSiteWiseGatewayInvalidProps",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class IoTSiteWiseGatewayUnexpectedResponse extends Data.TaggedError(
+  "IoTSiteWiseGatewayUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type GatewayPlatform = sitewise.GatewayPlatform;
 
@@ -66,8 +86,23 @@ export interface Gateway extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  GatewayLookup
 > {}
+
+/**
+ * Props for {@link Gateway.lookup}: find a gateway this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type GatewayLookup =
+  | {
+      /** The id of the existing gateway. */
+      gatewayId: string;
+    }
+  | {
+      /** The name of the existing gateway. */
+      gatewayName: string;
+    };
 
 /**
  * An AWS IoT SiteWise gateway — the ingestion point that connects
@@ -91,6 +126,16 @@ export interface Gateway extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing gateway
+ * `Gateway.lookup` references a gateway Alchemy doesn't manage (created in the
+ * console or by another stack), found by `gatewayId` or `gatewayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing gateway
+ * ```typescript
+ * const plant = AWS.IoTSiteWise.Gateway.lookup({ gatewayName: "plant-1" });
+ * ```
+ *
  * @resource
  */
 export const Gateway = Resource<Gateway>("AWS.IoTSiteWise.Gateway");
@@ -108,7 +153,7 @@ interface GatewayState {
 const readGatewayById = Effect.fn(function* (gatewayId: string) {
   const described = yield* sitewise
     .describeGateway({ gatewayId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described) return undefined;
   const state: GatewayState = {
     described,
@@ -153,6 +198,13 @@ export const GatewayProvider = () =>
             );
             return hydrated.flatMap((state) => (state === undefined ? [] : [state.attrs]));
           }),
+        lookup: Effect.fn(function* (props) {
+          const state =
+            "gatewayId" in props
+              ? yield* readGatewayById(props.gatewayId)
+              : yield* findGatewayByName(props.gatewayName);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.gatewayId
             ? yield* readGatewayById(output.gatewayId)
@@ -177,7 +229,9 @@ export const GatewayProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("IoT SiteWise Gateway requires props"));
+            return yield* new IoTSiteWiseGatewayInvalidProps({
+              message: "IoT SiteWise Gateway requires props",
+            });
           }
           const name = yield* createGatewayName(id, news);
           const internalTags = yield* createInternalTags(id);
@@ -203,9 +257,9 @@ export const GatewayProvider = () =>
                   Effect.gen(function* () {
                     const existing = yield* findGatewayByName(name);
                     if (existing === undefined) {
-                      return yield* Effect.fail(
-                        new Error(`gateway '${name}' already exists but was not found by name`),
-                      );
+                      return yield* new IoTSiteWiseGatewayConflict({
+                        message: `gateway '${name}' already exists but was not found by name`,
+                      });
                     }
                     return {
                       gatewayId: existing.attrs.gatewayId,
@@ -217,7 +271,9 @@ export const GatewayProvider = () =>
             yield* session.note(`Created gateway ${name} (${created.gatewayId})`);
             state = yield* readGatewayById(created.gatewayId);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created gateway ${name}`));
+              return yield* new IoTSiteWiseGatewayUnexpectedResponse({
+                message: `failed to read created gateway ${name}`,
+              });
             }
           }
 
@@ -237,7 +293,9 @@ export const GatewayProvider = () =>
 
           const final = yield* readGatewayById(state.attrs.gatewayId);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled gateway ${name}`));
+            return yield* new IoTSiteWiseGatewayUnexpectedResponse({
+              message: `failed to read reconciled gateway ${name}`,
+            });
           }
           return final.attrs;
         }),

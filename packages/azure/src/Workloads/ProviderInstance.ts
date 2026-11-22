@@ -373,14 +373,9 @@ const secretsOf = (settings: ProviderInstanceSettings) => ({
       : undefined,
 });
 
-/** Wire form of the settings (secrets unwrapped). */
-const toWire = (settings: ProviderInstanceSettings): workloads.ProviderSpecificProperties => {
-  const { dbPassword, sapPassword } = secretsOf(settings);
-  const wire: workloads.ProviderSpecificProperties = { ...settings, dbPassword, sapPassword };
-  if (dbPassword === undefined) delete wire.dbPassword;
-  if (sapPassword === undefined) delete wire.sapPassword;
-  return wire;
-};
+/** Wire form of the settings; the SDK unwraps the `Redacted` secrets. */
+const toWire = (settings: ProviderInstanceSettings): workloads.ProviderSpecificProperties =>
+  settings;
 
 /**
  * Canonical non-secret settings, for comparing desired with observed or

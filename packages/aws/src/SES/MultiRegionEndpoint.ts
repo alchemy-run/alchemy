@@ -5,11 +5,20 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
+
+export class MultiRegionEndpointUnexpectedResponse extends Data.TaggedError(
+  "MultiRegionEndpointUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * The lifecycle status of a multi-region endpoint: `CREATING`, `READY`,
@@ -56,8 +65,18 @@ export interface MultiRegionEndpoint extends Resource<
     status: MultiRegionEndpointStatus;
   },
   never,
-  Providers
+  Providers,
+  MultiRegionEndpointLookup
 > {}
+
+/**
+ * Props for {@link MultiRegionEndpoint.lookup}: find a multi region endpoint this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface MultiRegionEndpointLookup {
+  /** The endpoint name of the existing multi region endpoint. */
+  endpointName: string;
+}
 
 /**
  * An Amazon SES v2 multi-region endpoint (global endpoint) — a single sending
@@ -127,6 +146,16 @@ export interface MultiRegionEndpoint extends Resource<
  *   );
  * ```
  *
+ * ### Looking up an existing multi region endpoint
+ * `MultiRegionEndpoint.lookup` references a multi region endpoint Alchemy doesn't manage (created in the
+ * console or by another stack), found by `endpointName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing multi region endpoint
+ * ```typescript
+ * const existing = AWS.SES.MultiRegionEndpoint.lookup({ endpointName: "my-multi-region-endpoint" });
+ * ```
+ *
  * @resource
  */
 export const MultiRegionEndpoint = Resource<MultiRegionEndpoint>("AWS.SES.MultiRegionEndpoint");
@@ -138,7 +167,7 @@ const toTagRecord = (
 // getMultiRegionEndpoint returns no ARN, so the ARN listTagsForResource needs
 // is derived from the endpoint NAME (not its id) — verified live.
 const endpointArnOf = (region: string, accountId: string, name: string) =>
-  `arn:aws:ses:${region}:${accountId}:multi-region-endpoint/${name}`;
+  `arn:${partitionOf(region)}:ses:${region}:${accountId}:multi-region-endpoint/${name}`;
 
 const sameRegions = (
   a: ReadonlyArray<string> | undefined,
@@ -163,7 +192,7 @@ export const MultiRegionEndpointProvider = () =>
       const getEndpoint = Effect.fn(function* (name: string) {
         return yield* sesv2
           .getMultiRegionEndpoint({ EndpointName: name })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       });
 
       // getMultiRegionEndpoint does not return tags, so ownership costs a
@@ -202,6 +231,17 @@ export const MultiRegionEndpointProvider = () =>
                   ]
                 : [],
             );
+        }),
+
+        lookup: Effect.fn(function* ({ endpointName: name }) {
+          const found = yield* getEndpoint(name);
+          if (!found || !found.EndpointId) return undefined;
+          const attrs = {
+            endpointName: name,
+            endpointId: found.EndpointId,
+            status: found.Status ?? "CREATING",
+          };
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -267,9 +307,9 @@ export const MultiRegionEndpointProvider = () =>
           }
 
           if (observed === undefined || !observed.EndpointId) {
-            return yield* Effect.fail(
-              new Error(`SES multi-region endpoint ${name} was not found after create`),
-            );
+            return yield* new MultiRegionEndpointUnexpectedResponse({
+              message: `SES multi-region endpoint ${name} was not found after create`,
+            });
           }
 
           // 3. SYNC TAGS — diff against OBSERVED cloud tags so an adopted

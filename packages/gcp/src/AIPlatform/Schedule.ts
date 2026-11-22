@@ -188,7 +188,7 @@ export type Schedule = Resource<
 export const Schedule = Resource<Schedule>("GCP.AIPlatform.Schedule");
 
 export class ScheduleNotResolved extends Data.TaggedError("GCP.AIPlatform.ScheduleNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (schedule: aiplatform.GoogleCloudAiplatformV1Schedule, project: string) => {
@@ -218,10 +218,10 @@ const toAttrs = (schedule: aiplatform.GoogleCloudAiplatformV1Schedule, project: 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsSchedules({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   aiplatform.listProjectsLocationsSchedules.pages({ parent, pageSize: 100 }).pipe(
@@ -300,7 +300,7 @@ export const ScheduleProvider = () =>
           Stream.filter((schedule) => schedule.displayName === displayName),
           Stream.runHead,
           Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (found === undefined) return undefined;
       const attrs = toAttrs(found, env.project);
@@ -335,28 +335,26 @@ export const ScheduleProvider = () =>
             Stream.filter((schedule) => schedule.displayName === displayName),
             Stream.runHead,
             Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
       }
 
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsSchedules({
+            displayName,
+            cron: news.cron,
+            maxConcurrentRunCount,
+            maxConcurrentActiveRunCount: news.maxConcurrentActiveRunCount,
+            maxRunCount: news.maxRunCount,
+            startTime: news.startTime,
+            endTime: news.endTime,
+            allowQueueing: news.allowQueueing === true ? true : undefined,
+            createPipelineJobRequest: pipelineRequest,
+            createNotebookExecutionJobRequest: notebookRequest,
             parent,
-            body: {
-              displayName,
-              cron: news.cron,
-              maxConcurrentRunCount,
-              maxConcurrentActiveRunCount: news.maxConcurrentActiveRunCount,
-              maxRunCount: news.maxRunCount,
-              startTime: news.startTime,
-              endTime: news.endTime,
-              allowQueueing: news.allowQueueing === true ? true : undefined,
-              createPipelineJobRequest: pipelineRequest,
-              createNotebookExecutionJobRequest: notebookRequest,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? undefined;
         if (current === undefined) {
           current = yield* aiplatform.listProjectsLocationsSchedules
@@ -366,14 +364,14 @@ export const ScheduleProvider = () =>
               Stream.filter((schedule) => schedule.displayName === displayName),
               Stream.runHead,
               Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("NotFound", () => Effect.undefined),
             );
         }
       }
 
       if (current === undefined) {
         return yield* new ScheduleNotResolved({
-          name: output?.name ?? `${parent}/schedules/-`,
+          resourceName: output?.name ?? `${parent}/schedules/-`,
         });
       }
 
@@ -399,6 +397,14 @@ export const ScheduleProvider = () =>
         queueChanged
       ) {
         current = yield* aiplatform.patchProjectsLocationsSchedules({
+          displayName,
+          cron: news.cron,
+          maxConcurrentRunCount,
+          maxConcurrentActiveRunCount: news.maxConcurrentActiveRunCount,
+          maxRunCount: news.maxRunCount,
+          startTime: news.startTime,
+          endTime: news.endTime,
+          allowQueueing: news.allowQueueing === true,
           name,
           updateMask: [
             cronChanged ? "cron" : undefined,
@@ -412,17 +418,6 @@ export const ScheduleProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            cron: news.cron,
-            maxConcurrentRunCount,
-            maxConcurrentActiveRunCount: news.maxConcurrentActiveRunCount,
-            maxRunCount: news.maxRunCount,
-            startTime: news.startTime,
-            endTime: news.endTime,
-            allowQueueing: news.allowQueueing === true,
-          },
         });
       }
 
@@ -431,10 +426,7 @@ export const ScheduleProvider = () =>
         yield* aiplatform.pauseProjectsLocationsSchedules({ name });
         current = (yield* getByName(name)) ?? current;
       } else if (!desiredPaused && isPaused) {
-        yield* aiplatform.resumeProjectsLocationsSchedules({
-          name,
-          body: { catchUp: false },
-        });
+        yield* aiplatform.resumeProjectsLocationsSchedules({ catchUp: false, name });
         current = (yield* getByName(name)) ?? current;
       }
 
@@ -446,7 +438,7 @@ export const ScheduleProvider = () =>
       if (existing === undefined) return;
       const operation = yield* aiplatform
         .deleteProjectsLocationsSchedules({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

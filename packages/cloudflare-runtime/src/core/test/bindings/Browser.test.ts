@@ -321,6 +321,9 @@ const routes = {
       { headers: { Upgrade: "websocket" } },
     );
     ws.accept();
+    // Listen before the DELETE: the close can arrive while the fetches below
+    // are pending, and a missed close event leaves the socket CLOSING forever.
+    const closed = waitForClosedConnection(ws);
     const deleteResp = await env.MYBROWSER.fetch(
       "https://localhost/v1/devtools/browser/" + sessionId,
       { method: "DELETE" },
@@ -331,7 +334,7 @@ const routes = {
       "https://localhost/v1/sessions?sessionId=" + sessionId,
     ).then((r) => r.json());
     const sessionGone = sessions.length === 0;
-    await waitForClosedConnection(ws);
+    await closed;
     const wsClosed = ws.readyState === WebSocket.READY_STATE_CLOSED;
     return Response.json({
       deleteStatus: deleteResp.status,
@@ -479,11 +482,15 @@ const routes = {
     });
     pageWs.accept();
 
+    // Listen before the DELETE: the closes arrive while it waits for Chrome
+    // to exit, and a missed close event leaves the socket CLOSING forever.
+    const closed = Promise.all([waitForClosedConnection(browserWs), waitForClosedConnection(pageWs)]);
+
     // DELETE should close everything
     const deleteResp = await env.MYBROWSER.fetch(base, { method: "DELETE" });
     const deleteBody = await deleteResp.json();
 
-    await Promise.all([waitForClosedConnection(browserWs), waitForClosedConnection(pageWs)]);
+    await closed;
 
     return Response.json({
       deleteStatus: deleteResp.status,

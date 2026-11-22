@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as loadtestservice from "@distilled.cloud/azure/loadtestservice";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -70,7 +70,9 @@ test.provider(
       expect(workspace.workspaceName).toMatch(/^[a-z0-9-]{3,24}$/);
       expect(workspace.provisioningState).toEqual("Succeeded");
       expect(workspace.workspaceId).toMatch(/^[0-9a-f-]{36}$/);
-      expect(workspace.dataplaneUri).toMatch(/^(https|wss):\/\/[^/\s]+\.playwright\.microsoft\.com\//);
+      expect(workspace.dataplaneUri).toMatch(
+        /^(https|wss):\/\/[^/\s]+\.playwright\.microsoft\.com\//,
+      );
       const observed = yield* getWorkspace(group.resourceGroupName, workspace.workspaceName);
       expect(observed.properties?.dataplaneUri).toEqual(workspace.dataplaneUri);
       expect(observed.properties?.localAuth).toEqual("Disabled");

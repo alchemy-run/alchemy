@@ -1,12 +1,11 @@
 import { describe, expect } from "bun:test";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import * as GCP from "@alchemy.run/gcp";
+import * as Test from "@alchemy.run/test/Bun";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as run from "@distilled.cloud/gcp/run_v2";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Bun";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -27,12 +26,8 @@ const { getWhenReady } = Test;
 // the deploy uses, so the test runs against the configured profile.
 const GcpHttp = Layer.mergeAll(GCP.GcpAuth, GCP.fromAuthProvider(), FetchHttpClient.layer);
 
-// Both hosts are built from `main`, which needs a local image build.
-const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-
 // Deploy, tests and destroy all sit behind the same Docker guard.
-describe.skipIf(!dockerAvailable)("gcp-pubsub-worker", () => {
+describe("gcp-pubsub-worker", () => {
   const stack = beforeAll(deploy(Stack), { timeout: 900_000 });
 
   /** Pull subscriptions the worker's event source created on the topic. */

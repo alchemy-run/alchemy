@@ -1,8 +1,8 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as iam from "@distilled.cloud/gcp/iam_v2";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -58,19 +58,17 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         iam.createPolicyPolicies({
+          displayName: "alchemy-probe",
+          rules: [
+            {
+              denyRule: {
+                deniedPermissions: ["iam.googleapis.com/roles.list"],
+                deniedPrincipals: ["principal://goog/subject/alchemy-deny-probe@example.invalid"],
+              },
+            },
+          ],
           parent: `policies/${attachment}/denypolicies`,
           policyId: "alchemy-probe",
-          body: {
-            displayName: "alchemy-probe",
-            rules: [
-              {
-                denyRule: {
-                  deniedPermissions: ["iam.googleapis.com/roles.list"],
-                  deniedPrincipals: ["principal://goog/subject/alchemy-deny-probe@example.invalid"],
-                },
-              },
-            ],
-          },
         }),
       );
       expect(error._tag).toEqual("Forbidden");

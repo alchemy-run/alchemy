@@ -110,7 +110,7 @@ export const IdentityPoolRoleAttachmentProvider = () =>
       const getRoles = Effect.fn(function* (identityPoolId: string) {
         return yield* ci
           .getIdentityPoolRoles({ IdentityPoolId: identityPoolId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return IdentityPoolRoleAttachment.Provider.of({

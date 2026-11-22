@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as nc from "@distilled.cloud/azure/networkcloud";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runPaidOnly } from "../gates.ts";
 import {
@@ -47,7 +47,9 @@ const program = (props: {
       expiration,
       jumpHostsAllowed: ["10.0.0.4"],
       privilegeLevel: props.privilegeLevel,
-      userList: [{ azureUserName: "alchemy", description: props.description, sshPublicKey: sshKey }],
+      userList: [
+        { azureUserName: "alchemy", description: props.description, sshPublicKey: sshKey },
+      ],
       tags: { env: props.env },
     });
     return { res };

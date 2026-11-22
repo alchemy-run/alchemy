@@ -4,6 +4,7 @@ description: Upgrade Better Auth directly from 1.6, preserve existing users, and
 sidebar:
   order: 3
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 Upgrade directly to 1.7.5 or a later compatible 1.x release. The core account
 schema is unchanged from 1.6; no issuer column or identity backfill is needed.
@@ -38,9 +39,7 @@ Alchemy delays the new host deployment, but old instances keep running; use a ma
 Update the Alchemy Better Auth package to a release supporting 1.7.5, then
 align Better Auth and its synchronized plugins/adapters:
 
-```sh
-npx auth@1.7.5 upgrade
-```
+<PackageManagers script={`{dlx} auth@1.7.5 upgrade`} />
 
 Use Node.js 22.12 or newer and the CLI version matching your target release. Review workspace catalogs and overrides.
 
@@ -72,9 +71,7 @@ need no identity conversion when upgrading directly from 1.6.
 
 Drizzle users own schema migrations. Generate and review the auth schema:
 
-```sh
-npx auth@1.7.5 generate --config ./auth.cli.ts
-```
+<PackageManagers script={`{dlx} auth@1.7.5 generate --config ./auth.cli.ts`} />
 
 The CLI configuration exports an upstream Better Auth instance with the same
 plugins and schema options, using the Relations v2 adapter:

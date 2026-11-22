@@ -1,10 +1,9 @@
 import { describe, expect } from "bun:test";
-import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
+import * as Test from "@alchemy.run/test/Bun";
 import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as scheduler from "@distilled.cloud/gcp/cloudscheduler_v1";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -23,10 +22,6 @@ const { getWhenReady } = Test;
 // Out-of-band calls to the Google APIs resolve the same stored credentials
 // the deploy uses, so the test runs against the configured profile.
 const GcpHttp = Layer.mergeAll(GCP.GcpAuth, GCP.fromAuthProvider(), FetchHttpClient.layer);
-
-// The service is built from `main`, which needs a local image build.
-const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
 
 interface Heartbeat {
   kind: "heartbeat" | "daily";
@@ -57,7 +52,7 @@ const jobsFor = (project: string, location: string, baseUrl: string) =>
     );
 
 // Deploy, tests and destroy all sit behind the same Docker guard.
-describe.skipIf(!dockerAvailable)("gcp-cron", () => {
+describe("gcp-cron", () => {
   const stack = beforeAll(deploy(Stack), { timeout: 900_000 });
 
   afterAll.skipIf(!!process.env.NO_DESTROY)(
@@ -180,13 +175,11 @@ describe.skipIf(!dockerAvailable)("gcp-cron", () => {
       // The rows are real BigQuery rows, not just what the service answers.
       const result = yield* bigquery
         .queryJobs({
+          query: `SELECT kind, COUNT(*) AS n FROM \`${project}.${datasetId}.${tableId}\` GROUP BY kind`,
+          useLegacySql: false,
+          location,
+          timeoutMs: 30_000,
           projectId: project,
-          body: {
-            query: `SELECT kind, COUNT(*) AS n FROM \`${project}.${datasetId}.${tableId}\` GROUP BY kind`,
-            useLegacySql: false,
-            location,
-            timeoutMs: 30_000,
-          },
         })
         .pipe(Effect.orDie, Effect.provide(GcpHttp));
       expect(result.jobComplete).toBe(true);

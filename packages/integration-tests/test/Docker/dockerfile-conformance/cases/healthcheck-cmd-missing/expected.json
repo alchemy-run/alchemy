@@ -1,0 +1,4 @@
+{
+  "ok": false,
+  "error": "dockerfile parse error on line 2: Missing command after HEALTHCHECK CMD"
+}

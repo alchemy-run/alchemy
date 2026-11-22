@@ -125,7 +125,7 @@ export const FolderExclusion = Resource<FolderExclusion>("GCP.Logging.FolderExcl
 export class FolderExclusionNotResolved extends Data.TaggedError(
   "GCP.Logging.FolderExclusionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (folderId: string, exclusionId: string) =>
@@ -159,9 +159,7 @@ const toAttrs = (exclusion: logging.LogExclusion, folderId: string) => {
 };
 
 const getByName = (name: string) =>
-  logging
-    .getFoldersExclusions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  logging.getFoldersExclusions({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const FolderExclusionProvider = () =>
   Provider.succeed(FolderExclusion, {
@@ -228,20 +226,18 @@ export const FolderExclusionProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createFoldersExclusions({
+            name: exclusionId,
+            filter: news.filter,
+            description: desiredDescription,
+            disabled: news.disabled === true ? true : undefined,
             parent: folderParent(folderId),
-            body: {
-              name: exclusionId,
-              filter: news.filter,
-              description: desiredDescription,
-              disabled: news.disabled === true ? true : undefined,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new FolderExclusionNotResolved({ name });
+        return yield* new FolderExclusionNotResolved({ resourceName: name });
       }
 
       const desiredDisabled = news.disabled === true;
@@ -257,13 +253,11 @@ export const FolderExclusionProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* logging.patchFoldersExclusions({
+          filter: news.filter,
+          description: desiredDescription,
+          disabled: desiredDisabled,
           name: current.name?.includes("/") ? current.name : name,
           updateMask: updateMask.join(","),
-          body: {
-            filter: news.filter,
-            description: desiredDescription,
-            disabled: desiredDisabled,
-          },
         });
       }
 

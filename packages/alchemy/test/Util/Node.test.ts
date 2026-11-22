@@ -1,5 +1,5 @@
 import * as NodeNet from "node:net";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import { findAvailablePort, isRegisterHooksSupported, nodeLoaderArgs } from "@/Util/Node";
 

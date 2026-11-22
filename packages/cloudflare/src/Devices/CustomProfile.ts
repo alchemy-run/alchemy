@@ -3,12 +3,20 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import type { DeviceDefaultProfile } from "./DefaultProfile.ts";
+
+export class CustomProfileUnexpectedResponse extends Data.TaggedError(
+  "CustomProfileUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 const TypeId = "Cloudflare.Devices.CustomProfile" as const;
 type TypeId = typeof TypeId;
@@ -322,17 +330,15 @@ export const DeviceCustomProfileProvider = () =>
         });
         const policyId = created?.policyId;
         if (!policyId) {
-          return yield* Effect.fail(
-            new Error(
-              "Cloudflare did not return a policy id for the created custom device profile",
-            ),
-          );
+          return yield* new CustomProfileUnexpectedResponse({
+            message: "Cloudflare did not return a policy id for the created custom device profile",
+          });
         }
         observed = yield* observeProfile(accountId, policyId);
         if (!observed) {
-          return yield* Effect.fail(
-            new Error(`custom device profile ${policyId} disappeared right after create`),
-          );
+          return yield* new CustomProfileUnexpectedResponse({
+            message: `custom device profile ${policyId} disappeared right after create`,
+          });
         }
       }
       const policyId = observed.policyId!;
@@ -433,9 +439,9 @@ export const DeviceCustomProfileProvider = () =>
       // 4. Return — re-read so attrs reflect post-sync truth.
       const final = yield* observeProfile(accountId, policyId);
       if (!final) {
-        return yield* Effect.fail(
-          new Error(`custom device profile ${policyId} disappeared during reconcile`),
-        );
+        return yield* new CustomProfileUnexpectedResponse({
+          message: `custom device profile ${policyId} disappeared during reconcile`,
+        });
       }
       return yield* buildAttrs(accountId, final);
     }),
@@ -483,7 +489,7 @@ type ObservedProfile = NonNullable<zeroTrust.GetDevicePolicyCustomResponse>;
 const observeProfile = (accountId: string, policyId: string) =>
   zeroTrust.getDevicePolicyCustom({ accountId, policyId }).pipe(
     Effect.map((p): ObservedProfile | undefined => p ?? undefined),
-    Effect.catchTag("DevicePolicyNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("DevicePolicyNotFound", () => Effect.undefined),
   );
 
 /**

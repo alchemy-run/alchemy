@@ -1,3 +1,4 @@
+import type { ConfigError } from "@distilled.cloud/core/errors";
 import type { Config } from "@distilled.cloud/hetzner";
 import { Credentials } from "@distilled.cloud/hetzner";
 import * as Context from "effect/Context";
@@ -15,7 +16,7 @@ export type HetznerEnvironmentShape = Config;
 
 export class HetznerEnvironment extends Context.Service<
   HetznerEnvironment,
-  Effect.Effect<HetznerEnvironmentShape>
+  Effect.Effect<HetznerEnvironmentShape, ConfigError>
 >()("Hetzner::Environment") {
   static current = HetznerEnvironment.use((env) => env);
   readonly kind = "Environment" as const;

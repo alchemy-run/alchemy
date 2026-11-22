@@ -1,11 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import BigQueryBindingsHost, {
   Analytics,
   Inserted,
@@ -36,17 +36,15 @@ let tables: {
 const runQuery = (sql: string) =>
   bigquery
     .queryJobs({
-      projectId: dataset.project,
-      body: {
-        query: sql,
-        useLegacySql: false,
-        location: dataset.location,
-        defaultDataset: {
-          projectId: dataset.project,
-          datasetId: dataset.datasetId,
-        },
-        timeoutMs: 60_000,
+      query: sql,
+      useLegacySql: false,
+      location: dataset.location,
+      defaultDataset: {
+        projectId: dataset.project,
+        datasetId: dataset.datasetId,
       },
+      timeoutMs: 60_000,
+      projectId: dataset.project,
     })
     .pipe(
       Effect.map((response) => {
@@ -65,8 +63,8 @@ const seed = (table: string) => runQuery(`INSERT INTO ${table} (id) VALUES ('see
 const projectGrantsOf = (account: string) =>
   resourcemanager
     .getIamPolicyProjects({
+      options: { requestedPolicyVersion: 3 },
       resource: `projects/${dataset.project}`,
-      body: { options: { requestedPolicyVersion: 3 } },
     })
     .pipe(
       Effect.map((policy) =>
@@ -85,10 +83,7 @@ const JOB_USER = [{ role: "roles/bigquery.jobUser", condition: undefined }];
 /** Roles `account` holds on a table's own IAM policy. */
 const tableRolesOf = (table: string, account: string) =>
   bigquery
-    .getIamPolicyTables({
-      resource: table,
-      body: { options: { requestedPolicyVersion: 1 } },
-    })
+    .getIamPolicyTables({ options: { requestedPolicyVersion: 1 }, resource: table })
     .pipe(
       Effect.map((policy) =>
         (policy.bindings ?? [])
@@ -103,7 +98,7 @@ const LEGACY_DATASET_ROLES: Record<string, string> = {
   OWNER: "roles/bigquery.dataOwner",
 };
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "BigQuery Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:bigquery", "provider:gcp:run", "live"],

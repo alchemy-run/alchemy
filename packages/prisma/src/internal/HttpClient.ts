@@ -1,6 +1,5 @@
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import * as EffectContext from "effect/Context";
-import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 

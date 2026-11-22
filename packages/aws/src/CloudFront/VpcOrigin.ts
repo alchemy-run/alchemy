@@ -9,6 +9,11 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
 
+export class VpcOriginUnexpectedResponse extends Data.TaggedError("VpcOriginUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 class VpcOriginPendingDeployment extends Data.TaggedError("VpcOriginPendingDeployment")<{
   message: string;
 }> {}
@@ -96,8 +101,18 @@ export interface VpcOrigin extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  VpcOriginLookup
 > {}
+
+/**
+ * Props for {@link VpcOrigin.lookup}: find a VPC origin this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface VpcOriginLookup {
+  /** The id of the existing VPC origin. */
+  vpcOriginId: string;
+}
 
 /**
  * A CloudFront VPC origin.
@@ -134,6 +149,16 @@ export interface VpcOrigin extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing VPC origin
+ * `VpcOrigin.lookup` references a VPC origin Alchemy doesn't manage (created in the
+ * console or by another stack), found by `vpcOriginId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing VPC origin
+ * ```typescript
+ * const existing = AWS.CloudFront.VpcOrigin.lookup({ vpcOriginId: "..." });
+ * ```
+ *
  * @resource
  */
 export const VpcOrigin = Resource<VpcOrigin>("AWS.CloudFront.VpcOrigin");
@@ -146,7 +171,7 @@ export const VpcOriginProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const result = yield* cloudfront
           .getVpcOrigin({ Id: id })
-          .pipe(Effect.catchTag("EntityNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("EntityNotFound", () => Effect.undefined));
         if (!result?.VpcOrigin?.Id) {
           return undefined;
         }
@@ -288,6 +313,14 @@ export const VpcOriginProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ vpcOriginId }) {
+          const existing = yield* getById(vpcOriginId);
+          if (!existing?.vpcOrigin.Id) {
+            return undefined;
+          }
+          const tags = yield* fetchTags(existing.vpcOrigin.Arn);
+          return toAttrs(existing.vpcOrigin, existing.etag, tags);
+        }),
         read: Effect.fn(function* ({ olds, output }) {
           const existing = output?.vpcOriginId
             ? yield* getById(output.vpcOriginId)
@@ -329,7 +362,9 @@ export const VpcOriginProvider = () =>
               );
 
             if (!created?.vpcOrigin.Id) {
-              return yield* Effect.fail(new Error("createVpcOrigin returned no identifier"));
+              return yield* new VpcOriginUnexpectedResponse({
+                message: "createVpcOrigin returned no identifier",
+              });
             }
 
             yield* session.note(created.vpcOrigin.Id);

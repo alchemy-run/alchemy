@@ -131,7 +131,7 @@ const OPEN_STATUSES = ["PENDING", "CASE_OPENED"] as const;
 const getRequest = (requestId: string) =>
   servicequotas.getRequestedServiceQuotaChange({ RequestId: requestId }).pipe(
     Effect.map((r) => r.RequestedQuota),
-    Effect.catchTag("NoSuchResourceException", () => Effect.succeed(undefined)),
+    Effect.catchTag("NoSuchResourceException", () => Effect.undefined),
   );
 
 // Observe the applied quota value; quotas without an applied (account-level)
@@ -153,7 +153,7 @@ const observeQuota = (serviceCode: string, quotaCode: string, contextId: string 
           })
           .pipe(
             Effect.map((r) => r.Quota),
-            Effect.catchTag("NoSuchResourceException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchResourceException", () => Effect.undefined),
           ),
       ),
     );

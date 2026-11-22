@@ -1,22 +1,26 @@
 import { CurrentActivity } from "alchemy/WorkflowEncoding";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import type * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Data from "effect/Data";
 import type * as DateTime from "effect/DateTime";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import type { Annotations } from "./Annotations.ts";
 import type * as Command from "./Command.ts";
+import { DefinitionError, UnhandledCommand } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
-import type * as Middleware from "./Middleware.ts";
-import type * as Read from "./Read.ts";
-import type * as Rejection from "./Rejection.ts";
+import { judge, settle, targetId as internalTargetId } from "./internal.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as Telemetry from "./Telemetry.ts";
 
 /**
- * Instance type produced by a class.
+ * The instance type of a class: `InstanceOf<typeof NotOwner>` is `NotOwner`.
+ * Distributes over a union of classes.
  */
-export type Inst<C> = C extends abstract new (...args: any[]) => infer I ? I : never;
+export type InstanceOf<C> = C extends abstract new (...args: any[]) => infer I ? I : never;
 
 /**
  * Context passed to every `decide` handler.
@@ -24,30 +28,40 @@ export type Inst<C> = C extends abstract new (...args: any[]) => infer I ? I : n
 export interface DecideContext<Id> {
   /** The id of the aggregate instance handling the command. */
   readonly id: Id;
+  /** The id the command was sent with; its events' envelopes carry it too. */
+  readonly commandId: string;
+  /** The stream the command's events commit to, e.g. `Account/a-1`. */
+  readonly stream: string;
+  /** The stream's version before this decision: `0` for a new instance. */
+  readonly version: number;
   /** The time the command is being handled. Controlled by stories via `clock`. */
   readonly now: DateTime.Utc;
 }
 
 /**
- * Metadata recorded with every committed event.
+ * Metadata recorded with every committed event. Its schema is what Api clients
+ * decode, so the wire carries every field.
  */
-export interface Envelope<Id = string> {
+export const Envelope = Schema.Struct({
   /** The id of the aggregate instance that committed the event. */
-  readonly id: Id;
+  id: Schema.String,
   /** The stream the event belongs to, e.g. `Account/a-1`. */
-  readonly stream: string;
+  stream: Schema.String,
   /** The event's sequence number within its stream, starting at 1. */
-  readonly seq: number;
+  seq: Schema.Number,
   /** The commit time. */
-  readonly at: DateTime.Utc;
+  at: Schema.DateTimeUtc,
   /** The id of the command that produced the event. */
-  readonly commandId: string;
+  commandId: Schema.String,
   /**
    * The id of the first command in the chain that led here: the same for a
    * command, the events it records, and every reaction and command they cause.
    */
-  readonly correlationId: string;
-}
+  correlationId: Schema.String,
+});
+
+/** An {@link Envelope} whose `id` is the aggregate's (branded) id. */
+export type Envelope<Id = string> = typeof Envelope.Type & { readonly id: Id };
 
 /**
  * The outcome of a successfully handled command.
@@ -61,6 +75,23 @@ export interface Receipt<Ev = unknown, Reply = unknown> {
   readonly events: ReadonlyArray<Ev>;
   /** The command's reply, if it declares one. */
   readonly reply: Reply;
+  /**
+   * Every stream the command committed to: this one, for a command an
+   * aggregate implements; each instance a `Domain.Decision` read, for one it
+   * implements (and `stream` and `version` are then the first of them).
+   */
+  readonly commits: ReadonlyArray<{ readonly stream: string; readonly version: number }>;
+}
+
+/**
+ * What {@link Client.schedule} returns: the scheduled command's id, to
+ * `unschedule` it by, and when it is due.
+ */
+export interface ScheduleReceipt {
+  /** The command id: the one passed in `options`, or the one derived for it. */
+  readonly commandId: string;
+  /** When the command is due, on the platform's clock. */
+  readonly at: DateTime.Utc;
 }
 
 type ByTag<U, T> = Extract<U, { readonly tag: T }>;
@@ -73,15 +104,29 @@ type ReplyTags<C extends Command.Any> = C extends {
 
 type IdSchema = Schema.Top & { readonly Type: string; readonly Encoded: string };
 
-/** What `decide` returns for a command: events, a rejection, or an Effect of either. */
+/**
+ * What `decide` returns for a command: events, a rejection, or an Effect of
+ * either. The Effect may read what the command's middleware provides.
+ */
 export type Decision<C extends Command.Any> =
-  | ReadonlyArray<Inst<C["events"][number]>>
-  | Inst<C["rejects"][number]>
+  | ReadonlyArray<InstanceOf<C["events"][number]>>
+  | InstanceOf<C["rejects"][number]>
   | Effect.Effect<
-      ReadonlyArray<Inst<C["events"][number]>>,
-      Inst<C["rejects"][number]>,
+      ReadonlyArray<InstanceOf<C["events"][number]>>,
+      InstanceOf<C["rejects"][number]>,
       Command.ContextOf<C>
     >;
+
+/** One step of an aggregate: what a transition is given. */
+export interface Transition<State, Cmd, Ev> {
+  /** The state the command met. */
+  readonly before: State;
+  /** The state its events left. */
+  readonly after: State;
+  readonly command: Cmd;
+  /** The events the command recorded, in order. */
+  readonly events: ReadonlyArray<Ev>;
+}
 
 /** The event classes a set of commands may record. */
 export type EventsOf<C extends ReadonlyArray<Command.Any>> = C[number]["events"][number];
@@ -94,9 +139,8 @@ export interface Definition<
   Id extends IdSchema,
   S extends Schema.Top,
   C extends ReadonlyArray<Command.Any>,
-  Ms extends Middleware.List = readonly [],
-  Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
-  E extends Event.Any = EventsOf<C>,
+  X extends ReadonlyArray<Event.Any> = readonly [],
+  E extends Event.Any = EventsOf<C> | X[number],
 > {
   /** Schema of the aggregate id (a string or branded string). */
   readonly id: Id;
@@ -104,49 +148,83 @@ export interface Definition<
   readonly state: S;
   /** The state of an instance that has never committed an event. */
   readonly initial: S["Type"];
-  /** Every command this aggregate handles, each declaring the events it records. */
-  readonly commands: C;
   /**
-   * One handler per command: returns the events to commit (from the command's
-   * declared events), an empty array for an accepted no-op, or one of the
-   * command's declared rejections. A handler may be an Effect that reads the
-   * context its command's middleware provides (e.g. `yield* CurrentActor`)
-   * and fails with a rejection; it may require nothing else.
+   * Rules that hold for every state the aggregate can reach, each named and
+   * given the state: `true` while the rule holds. They say what must never
+   * happen; `decide` and `evolve` say what does. `Prove.invariants` proves
+   * that no command can break one.
    */
-  readonly decide: {
+  readonly invariants?: { readonly [name: string]: (state: S["Type"]) => boolean };
+  /**
+   * Rules that hold for every step the aggregate can take, each named and
+   * given the state before a command, the command, the events it recorded
+   * and the state after: `true` while the rule holds. Where an invariant
+   * says what no state may be, a transition says what no command may do. One
+   * may be an `Effect.fn` that reads the context its commands' middleware
+   * provides, as `decide` does. `Prove.invariants` proves that no command
+   * can break one.
+   */
+  readonly transitions?: {
+    readonly [name: string]: (
+      step: Transition<S["Type"], InstanceOf<C[number]>, InstanceOf<E>>,
+    ) => boolean | Effect.Effect<boolean, never, Command.ContextOf<C[number]>>;
+  };
+  /**
+   * Every command this aggregate handles, each declaring the events it
+   * records. Leave it out, with `decide`, for an aggregate that only folds
+   * what `Domain.Decision`s record on it.
+   */
+  readonly commands?: C;
+  /**
+   * The id of the instance a command is for, read from the command's input.
+   * Each of the aggregate's commands is routed to that one instance.
+   */
+  readonly keyOf?: (command: InstanceOf<C[number]>) => Id["Type"];
+  /**
+   * Events it folds but none of its own commands records: what a
+   * `Domain.Decision` records on it. `evolve` has a handler for each.
+   */
+  readonly events?: X;
+  /**
+   * One handler per command, given the instance's current state, the command
+   * and the decision's context: returns the events to commit (from the
+   * command's declared events), an empty array for an accepted no-op, or one
+   * of the command's declared rejections. A handler may be an `Effect.fn`
+   * that reads the context its command's middleware provides (e.g.
+   * `yield* CurrentActor`) and fails with a rejection; it may require
+   * nothing else.
+   */
+  readonly decide?: {
     readonly [T in C[number]["tag"]]: (
       state: S["Type"],
-      command: Inst<ByTag<C[number], T>>,
+      command: InstanceOf<ByTag<C[number], T>>,
       ctx: DecideContext<Id["Type"]>,
     ) => Decision<ByTag<C[number], T>>;
   };
   /**
-   * One handler per event: folds a committed event into state. Throw when an
-   * event cannot apply to the current state; that is a bug, not a rejection.
+   * One handler per event: folds a committed event into state. It covers
+   * every state and never fails: `decide` refuses a command with a rejection
+   * before it records an event, so a handler keeps a state its event can't
+   * follow.
    */
   readonly evolve: {
     readonly [T in E["tag"]]: (
       state: S["Type"],
-      event: Inst<ByTag<E, T>>,
+      event: InstanceOf<ByTag<E, T>>,
       envelope: Envelope<Id["Type"]>,
     ) => S["Type"];
   };
   /**
    * One handler per command that declares a reply: computes it from the
-   * updated state and the committed events.
+   * updated state and the committed events. Like `evolve`, it covers every
+   * state and never fails.
    */
   readonly reply?: {
     readonly [T in ReplyTags<C[number]>]: (
       state: S["Type"],
-      events: ReadonlyArray<Inst<E>>,
+      events: ReadonlyArray<InstanceOf<E>>,
     ) => NonNullable<ByTag<C[number], T>["reply"]>["Type"];
   };
-  /**
-   * Let an Api expose this aggregate's state and committed events to clients
-   * (`get`, `watch`, `events`): its middleware, rejections, and `validate`,
-   * which judges each read against the instance's current state.
-   */
-  readonly read?: Read.Contract<{ readonly id: Id["Type"] }, S["Type"], Ms, Rejects>;
 }
 
 /**
@@ -165,13 +243,102 @@ export interface SendOptions {
 }
 
 /**
- * Options for {@link Client.schedule}: when to send, absolutely or after a delay.
+ * The command scheduled with this id already ran, so it can no longer be
+ * cancelled: a deadline that fired before it was cancelled.
  */
-export type ScheduleOptions = SendOptions &
-  (
-    | { readonly at: DateTime.Utc; readonly after?: never }
-    | { readonly after: Duration.Input; readonly at?: never }
-  );
+export class AlreadyExecuted extends Data.TaggedError("AlreadyExecuted")<{
+  readonly aggregate: string;
+  readonly id: string;
+  readonly commandId: string;
+}> {}
+
+/** The scheduled command with this id was already cancelled. */
+export class AlreadyCancelled extends Data.TaggedError("AlreadyCancelled")<{
+  readonly aggregate: string;
+  readonly id: string;
+  readonly commandId: string;
+}> {}
+
+/** No command was ever scheduled with this id on the instance. */
+export class NotScheduled extends Data.TaggedError("NotScheduled")<{
+  readonly aggregate: string;
+  readonly id: string;
+  readonly commandId: string;
+}> {}
+
+/**
+ * The instance was not at the version an import expected: it already has
+ * events, or other events were committed since the previous import.
+ */
+export class UnexpectedVersion extends Data.TaggedError("UnexpectedVersion")<{
+  readonly aggregate: string;
+  readonly id: string;
+  readonly commandId: string;
+  /** The version the import expected. */
+  readonly expected: number;
+  /** The instance's version. */
+  readonly version: number;
+}> {}
+
+/**
+ * An imported event's commit time came before the event ahead of it (the
+ * instance's latest event, for the first), or after the platform's clock.
+ * Views rebuild their history in commit-time order, so an import commits
+ * its events in that order or not at all.
+ */
+export class ImportOutOfOrder extends Data.TaggedError("ImportOutOfOrder")<{
+  readonly aggregate: string;
+  readonly id: string;
+  readonly commandId: string;
+  /** The position of the first event out of order. */
+  readonly index: number;
+  /** Its commit time. */
+  readonly at: DateTime.Utc;
+  /** The time it may not precede, or the platform's clock it may not pass. */
+  readonly after: DateTime.Utc;
+}> {}
+
+/**
+ * One event for {@link Client.import}: the event alone, stamped with the
+ * platform's current time, or the event with the time it was originally
+ * committed, which its envelope's `at` keeps.
+ */
+export type Imported<Ev> = Ev | { readonly event: Ev; readonly at: DateTime.Utc };
+
+/**
+ * Options for {@link Client.import}.
+ */
+export interface ImportOptions {
+  /**
+   * Names the import on its instance. An import retried with an id the
+   * instance has already seen commits nothing and returns the original
+   * receipt.
+   */
+  readonly commandId: string;
+  /**
+   * The version the instance must be at: `0` (no events yet) by default.
+   * Import a long history in batches by passing the previous receipt's
+   * `version`.
+   */
+  readonly expectedVersion?: number;
+}
+
+/**
+ * Options for {@link Client.schedule}: when to send, absolutely or after a
+ * delay, and the command id that names it.
+ */
+export type ScheduleOptions = {
+  /**
+   * Names the scheduled command on its instance, to replace or `unschedule`
+   * it by, e.g. `stall:<ticketId>`. Scheduling under the same id replaces
+   * the earlier command, pending or already run. Defaults to an id derived
+   * like a send's.
+   */
+  readonly commandId?: string;
+} & (
+  | { readonly at: DateTime.Utc; readonly after?: never }
+  | { readonly after: Duration.Input; readonly at?: never }
+);
 
 /**
  * When a scheduled command is due: an epoch-millisecond time, or a delay the
@@ -203,12 +370,14 @@ export interface AnyDefinition {
   readonly id: IdSchema;
   readonly state: Schema.Top;
   readonly initial: unknown;
+  readonly invariants?: AnyHandlers;
+  readonly transitions?: AnyHandlers;
   readonly commands: ReadonlyArray<Command.Any>;
+  readonly keyOf: ((command: never) => string) | undefined;
   readonly events: ReadonlyArray<Event.Any>;
   readonly decide: AnyHandlers;
   readonly evolve: AnyHandlers;
   readonly reply?: AnyHandlers;
-  readonly read?: Read.AnyContract;
 }
 
 /** An aggregate instance to address: its id, or a ref carrying it. */
@@ -235,7 +404,7 @@ type ReplyOf<C> = C extends { readonly reply: infer R }
  * **Example:** Sending a command
  * ```typescript
  * const accounts = yield* Account;
- * const { reply } = yield* accounts.send(accountId, new WithdrawMoney({ amount: 30 }));
+ * const { reply } = yield* accounts.send(new WithdrawMoney({ accountId, amount: 30 }));
  * ```
  */
 export interface Client<Def extends AnyDefinition> {
@@ -245,13 +414,12 @@ export interface Client<Def extends AnyDefinition> {
    * Requires the context the command's middleware provides (e.g. the current
    * actor): an Api's middleware provides it, other senders provide it.
    */
-  readonly send: <Cmd extends Inst<Def["commands"][number]>>(
-    target: Target<Def>,
+  readonly send: <Cmd extends InstanceOf<Def["commands"][number]>>(
     command: Cmd,
     options?: SendOptions,
   ) => Effect.Effect<
-    Receipt<Inst<Def["events"][number]>, ReplyOf<CommandClassOf<Def, Cmd>>>,
-    Inst<CommandClassOf<Def, Cmd>["rejects"][number]>,
+    Receipt<InstanceOf<Def["events"][number]>, ReplyOf<CommandClassOf<Def, Cmd>>>,
+    InstanceOf<CommandClassOf<Def, Cmd>["rejects"][number]>,
     Command.ContextOf<CommandClassOf<Def, Cmd>>
   >;
   /**
@@ -259,15 +427,55 @@ export interface Client<Def extends AnyDefinition> {
    * that never reject can be scheduled, since nobody is waiting to handle a
    * rejection when it fires; such a command reports a fact ("the approval
    * window closed") and records nothing when it no longer applies.
-   * Scheduling again with the same command id replaces the earlier one.
+   * Scheduling again with the same command id replaces the earlier one,
+   * pending or already run, so a deadline can be armed again. A policy or
+   * saga step that runs again for the same trigger schedules nothing new.
+   * Returns the command id to `unschedule` it by, and when it is due.
    */
-  readonly schedule: <Cmd extends Inst<Schedulable<Def>>>(
-    target: Target<Def>,
+  readonly schedule: <Cmd extends InstanceOf<Schedulable<Def>>>(
     command: Cmd,
     options: ScheduleOptions,
-  ) => Effect.Effect<void, never, Command.ContextOf<CommandClassOf<Def, Cmd>>>;
-  /** Read the current state of an instance. */
-  readonly state: (target: Target<Def>) => Effect.Effect<Def["state"]["Type"]>;
+  ) => Effect.Effect<ScheduleReceipt, never, Command.ContextOf<CommandClassOf<Def, Cmd>>>;
+  /**
+   * Cancel a pending scheduled command by the command id it was scheduled
+   * with. Once it succeeds, the command never runs. Fails with
+   * `AlreadyExecuted` when the command ran first, `AlreadyCancelled` when it
+   * was cancelled before, and `NotScheduled` when nothing was scheduled with
+   * that id.
+   */
+  readonly unschedule: (
+    target: Target<Def>,
+    commandId: string,
+  ) => Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled>;
+  /**
+   * Append events that were decided elsewhere, such as history moved from
+   * another system, without running `decide`. `evolve` folds them into the
+   * state; views and projections apply them like any other events, while
+   * policies and sagas never react to them. All of them are committed at
+   * once under `commandId`. Each is stamped with the platform's current
+   * time, or with its original commit time when passed as `{ event, at }`.
+   * Wait for a projection with `Projection.caughtUp(receipt)`.
+   *
+   * Fails with `UnexpectedVersion` when the instance is not at
+   * `expectedVersion` (`0` by default, so an instance with events refuses
+   * an import), and with `ImportOutOfOrder` when an event's time comes
+   * before the event ahead of it (the instance's latest, for the first) or
+   * after the platform's clock. Retrying with the same `commandId` returns
+   * the original receipt.
+   */
+  readonly import: (
+    target: Target<Def>,
+    events: ReadonlyArray<Imported<InstanceOf<Def["events"][number]>>>,
+    options: ImportOptions,
+  ) => Effect.Effect<
+    Receipt<InstanceOf<Def["events"][number]>, void>,
+    UnexpectedVersion | ImportOutOfOrder
+  >;
+  /**
+   * Read the current state of an instance, as of its latest commit: `initial`
+   * for one that has never committed.
+   */
+  readonly get: (target: Target<Def>) => Effect.Effect<Def["state"]["Type"]>;
 }
 
 /** The commands of a definition that never reject, so can be scheduled. */
@@ -283,16 +491,23 @@ export type Schedulable<Def extends AnyDefinition> = Extract<
  */
 export interface ClientImpl {
   readonly send: (
-    target: unknown,
     command: { readonly _tag: string },
     options?: SendOptions,
   ) => Effect.Effect<Receipt, unknown>;
   readonly schedule: (
-    target: unknown,
     command: { readonly _tag: string },
     options: ScheduleOptions,
-  ) => Effect.Effect<void>;
-  readonly state: (target: unknown) => Effect.Effect<unknown>;
+  ) => Effect.Effect<ScheduleReceipt>;
+  readonly unschedule: (
+    target: unknown,
+    commandId: string,
+  ) => Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled>;
+  readonly import: (
+    target: unknown,
+    events: ReadonlyArray<Imported<{ readonly _tag: string }>>,
+    options: ImportOptions,
+  ) => Effect.Effect<Receipt, UnexpectedVersion | ImportOutOfOrder>;
+  readonly get: (target: unknown) => Effect.Effect<unknown>;
 }
 
 /**
@@ -300,6 +515,7 @@ export interface ClientImpl {
  */
 export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "Aggregate";
+  readonly annotations: Annotations;
   readonly aggregateName: string;
   readonly definition: AnyDefinition;
 }
@@ -309,11 +525,152 @@ export type IdOf<A extends Any> = A["definition"]["id"]["Type"];
 /** The state type of an aggregate class. */
 export type StateOf<A extends Any> = A["definition"]["state"]["Type"];
 /** The event instance types of an aggregate class. */
-export type EventOf<A extends Any> = Inst<A["definition"]["events"][number]>;
+export type EventOf<A extends Any> = InstanceOf<A["definition"]["events"][number]>;
 /** The command instance types of an aggregate class. */
-export type CommandOf<A extends Any> = Inst<A["definition"]["commands"][number]>;
+export type CommandOf<A extends Any> = InstanceOf<A["definition"]["commands"][number]>;
 /** The requirement identifier of an aggregate class. */
 export type Identifier<A extends Any> = A extends Context.Key<infer I, unknown> ? I : never;
+
+/**
+ * Options for {@link predict}: what the server would give `decide`. A command
+ * with middleware needs `context`: what its middleware provides, from a
+ * client-side Layer of the same services.
+ */
+export type PredictOptions<R = never> = PredictBase &
+  ([R] extends [never]
+    ? { readonly context?: Context.Context<never> }
+    : { readonly context: Context.Context<R> });
+
+interface PredictBase {
+  /** The time the command is decided at (the server stamps commands with its clock). */
+  readonly now: DateTime.Utc;
+  /** The state's version: `decide` sees it, and predicted envelopes continue from it. Defaults to `0`. */
+  readonly version?: number;
+  /** The id the command will be sent with, for `decide` and the predicted envelopes. Defaults to `""`. */
+  readonly commandId?: string;
+  /** Defaults to the command id. */
+  readonly correlationId?: string;
+}
+
+/**
+ * What the aggregate would do with a command, decided locally: the events it
+ * would record and the state after them, the rejection it would return, or
+ * `Unpredictable` when only the server can tell. `cause` says why: `decide`
+ * waited on something asynchronous (the server awaits it; `predict` is
+ * synchronous), died, or broke its command's declaration through a cast (a
+ * `DefinitionError`, which the server dies on).
+ */
+export type Prediction<State, Ev, Rej, Id = string> =
+  | {
+      readonly _tag: "Accepted";
+      readonly events: ReadonlyArray<Ev>;
+      /** One envelope per event, as the server would stamp it (`seq` from `version`). */
+      readonly envelopes: ReadonlyArray<Envelope<Id>>;
+      readonly state: State;
+    }
+  | { readonly _tag: "Rejected"; readonly rejection: Rej }
+  | { readonly _tag: "Unpredictable"; readonly cause: Cause.Cause<unknown> };
+
+/**
+ * Run an aggregate's own `decide` and `evolve` for one command, without a
+ * platform: the same events and state, or the same rejection, as the server
+ * for the same state, id and time. Use it to show a command's outcome before
+ * the server answers.
+ *
+ * An effectful decision runs here synchronously, as the kernel runs it: a
+ * rejection fails with itself, and a `decide` that suspends or dies gives
+ * `Unpredictable`. `predict` never throws.
+ */
+/**
+ * One decision for one command, as the kernel and `predict` run it: the
+ * command's handler, given the instance's state. `undefined` when `decide`
+ * has no handler for the command.
+ *
+ * @internal
+ */
+export const decisionOf = (
+  aggregate: Any,
+  state: unknown,
+  command: { readonly _tag: string },
+  ctx: DecideContext<unknown>,
+): unknown => {
+  const handler = (
+    aggregate.definition.decide as unknown as Record<
+      string,
+      ((state: unknown, command: unknown, ctx: DecideContext<unknown>) => unknown) | undefined
+    >
+  )[command._tag];
+  return handler ? handler(state, command, ctx) : undefined;
+};
+
+export const predict = (
+  aggregate: Any,
+  state: unknown,
+  command: { readonly _tag: string },
+  options: PredictOptions,
+): Prediction<unknown, { readonly _tag: string }, { readonly _tag: string }> => {
+  const def = aggregate.definition;
+  const cls = def.commands.find((c) => c.tag === command._tag);
+  const version = options.version ?? 0;
+  const commandId = options.commandId ?? "";
+  // The instance the command is for, as the server routes it.
+  const id = targetOf(aggregate, command) ?? "";
+  const stream = `${aggregate.aggregateName}/${id}`;
+  let decision = cls
+    ? decisionOf(aggregate, state, command, {
+        id,
+        now: options.now,
+        commandId,
+        stream,
+        version,
+      })
+    : undefined;
+  if (!cls || decision === undefined) {
+    return {
+      _tag: "Unpredictable",
+      cause: Cause.die(
+        new DefinitionError({
+          reason: new UnhandledCommand({
+            aggregate: aggregate.aggregateName,
+            command: command._tag,
+          }),
+        }),
+      ),
+    };
+  }
+  if (Effect.isEffect(decision)) {
+    const settled = decision.pipe(
+      Effect.provideContext((options.context ?? Context.empty()) as Context.Context<unknown>),
+      Effect.runSyncExit,
+      settle,
+    );
+    if (settled._tag === "Failed") return { _tag: "Unpredictable", cause: settled.cause };
+    decision = settled.decision;
+  }
+  const judged = judge(aggregate.aggregateName, cls, decision);
+  if (judged._tag === "Undeclared")
+    return { _tag: "Unpredictable", cause: Cause.die(judged.error) };
+  if (judged._tag === "Rejected") return judged;
+  const envelopes: Array<Envelope> = [];
+  let next = state;
+  judged.events.forEach((event, index) => {
+    const envelope: Envelope = {
+      id,
+      stream,
+      seq: version + index + 1,
+      at: options.now,
+      commandId,
+      correlationId: options.correlationId ?? commandId,
+    };
+    envelopes.push(envelope);
+    next = (def.evolve[event._tag] as (s: unknown, e: unknown, env: unknown) => unknown)(
+      next,
+      event,
+      envelope,
+    );
+  });
+  return { _tag: "Accepted", events: judged.events, envelopes, state: next };
+};
 
 const RefClass = Symbol.for("alchemy/Domain/Ref.class");
 
@@ -354,8 +711,7 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  * }) {}
  *
  * export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
- *   target: AccountId,
- *   input: { amount: Schema.Int },
+ *   input: { accountId: AccountId, amount: Schema.Int },
  *   events: [MoneyWithdrawn],
  *   rejects: [InsufficientFunds],
  *   reply: { balance: Schema.Int },
@@ -366,11 +722,12 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  *   state: Schema.Struct({ balance: Schema.Int }),
  *   initial: { balance: 0 },
  *   commands: [WithdrawMoney],
+ *   keyOf: (cmd) => cmd.accountId,
  *   decide: {
- *     WithdrawMoney: (s, cmd) =>
- *       cmd.amount > s.balance
- *         ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
- *         : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
+ *     WithdrawMoney: (account, cmd) =>
+ *       cmd.amount > account.balance
+ *         ? new InsufficientFunds({ balance: account.balance, requested: cmd.amount })
+ *         : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: account.balance - cmd.amount })],
  *   },
  *   evolve: {
  *     MoneyWithdrawn: (_, e) => ({ balance: e.balanceAfter }),
@@ -382,32 +739,16 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  * ```
  *
  * ### Authorizing in decide
- * A handler can be an `Effect.fn` that reads what the command's middleware
+ * A handler can be an `Effect.fn` that reads what its command's middleware
  * provides.
  *
  * **Example:** Only the owner may withdraw
  * ```typescript
  * decide: {
- *   WithdrawMoney: Effect.fn(function* (s, cmd) {
+ *   WithdrawMoney: Effect.fn(function* (account, cmd) {
  *     const actor = yield* CurrentActor;
- *     if (actor.customerId !== s.owner) return yield* new NotOwner();
- *     return [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })];
- *   }),
- * },
- * ```
- *
- * ### Exposing reads
- * `read` lets an Api expose the aggregate itself, so a client can get it,
- * watch it, and follow its events. `validate` judges every read.
- *
- * **Example:** A read contract
- * ```typescript
- * read: {
- *   middleware: [Session],
- *   rejects: [NotOwner],
- *   validate: Effect.fn(function* (_request, s) {
- *     const actor = yield* CurrentActor;
- *     if (actor.customerId !== s.owner) return yield* new NotOwner();
+ *     if (actor.customerId !== account.owner) return yield* new NotOwner();
+ *     return [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: account.balance - cmd.amount })];
  *   }),
  * },
  * ```
@@ -416,8 +757,52 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  * **Example:** From a policy or your own code
  * ```typescript
  * const accounts = yield* Account;
- * const { reply } = yield* accounts.send(accountId, new WithdrawMoney({ amount: 30 }));
- * yield* accounts.schedule(accountId, new SendStatement(), { after: "30 days" });
+ * const { reply } = yield* accounts.send(new WithdrawMoney({ accountId, amount: 30 }));
+ * yield* accounts.schedule(new SendStatement({ accountId }), { after: "30 days", commandId: "statement" });
+ * yield* accounts.unschedule(accountId, "statement"); // cancel it while it is pending
+ * ```
+ *
+ * ### Folding what decisions record
+ * A `Domain.Decision` records events on the instances it reads. List them in
+ * `events`, with an `evolve` handler for each. An aggregate that only takes
+ * part in decisions leaves out `commands`, `keyOf` and `decide`.
+ *
+ * **Example:** A username, claimed by a registration
+ * ```typescript
+ * export class UsernameClaim extends Domain.Aggregate("UsernameClaim", {
+ *   id: Username,
+ *   state: Schema.Union([
+ *     Schema.TaggedStruct("Free", {}),
+ *     Schema.TaggedStruct("Claimed", { customerId: CustomerId }),
+ *   ]),
+ *   initial: { _tag: "Free" },
+ *   events: [UsernameClaimed],
+ *   evolve: {
+ *     UsernameClaimed: (_, e) => ({ _tag: "Claimed" as const, customerId: e.customerId }),
+ *   },
+ * }) {}
+ * ```
+ *
+ * ### Annotating aggregates
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class Account extends Domain.Aggregate(
+ *   "Account",
+ *   {
+ *     id: AccountId,
+ *     state: Schema.Struct({ balance: Schema.Int }),
+ *     initial: { balance: 0 },
+ *     commands: [DepositMoney],
+ *     keyOf: (cmd) => cmd.accountId,
+ *     decide: { DepositMoney: (account, cmd) => [new MoneyDeposited({ balanceAfter: account.balance + cmd.amount })] },
+ *     evolve: { MoneyDeposited: (_, e) => ({ balance: e.balanceAfter }) },
+ *   },
+ *   { description: "A bank account, which keeps its own balance." },
+ * ) {}
  * ```
  *
  * @primitive
@@ -433,10 +818,7 @@ export const streamOf = (ref: { readonly aggregate: string; readonly id: string 
   `${ref.aggregate}/${ref.id}`;
 
 /** The id addressed by a {@link Target}. @internal */
-export const targetId = (target: unknown): string =>
-  typeof target === "object" && target !== null && "id" in target
-    ? String((target as { readonly id: unknown }).id)
-    : String(target);
+export const targetId = internalTargetId;
 
 /**
  * Deterministic command ids for sends made while a policy handles a trigger,
@@ -455,7 +837,10 @@ export class PolicyRun extends Context.Service<PolicyRun, { readonly next: () =>
  *
  * @internal
  */
-export const commandIdFor = (options: SendOptions | undefined): Effect.Effect<string> =>
+export const commandIdFor = (
+  options: SendOptions | undefined,
+  random: SecureRandom.SecureRandom["Service"],
+): Effect.Effect<string> =>
   options?.commandId !== undefined
     ? Effect.succeed(options.commandId)
     : Effect.gen(function* () {
@@ -464,7 +849,7 @@ export const commandIdFor = (options: SendOptions | undefined): Effect.Effect<st
         if (Option.isSome(step)) return step.value.next();
         const policy = yield* Effect.serviceOption(PolicyRun);
         if (Option.isSome(policy)) return policy.value.next();
-        return yield* Effect.sync(() => crypto.randomUUID());
+        return yield* random.uuidV4();
       });
 
 /**
@@ -481,9 +866,10 @@ export const commandIdFor = (options: SendOptions | undefined): Effect.Effect<st
  *   state: CustomerState,
  *   initial: { _tag: "New" },
  *   commands: [Register], // declares events: [CustomerRegistered]
+ *   keyOf: (cmd) => cmd.customerId,
  *   decide: {
- *     Register: (s, cmd) =>
- *       s._tag === "Registered" ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
+ *     Register: (customer, cmd) =>
+ *       customer._tag === "Registered" ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
  *   },
  *   evolve: {
  *     CustomerRegistered: (_, e) => ({ _tag: "Registered", name: e.name }),
@@ -491,48 +877,89 @@ export const commandIdFor = (options: SendOptions | undefined): Effect.Effect<st
  * }) {}
  *
  * const customers = yield* Customer;
- * yield* customers.send("c-1", new Register({ name: "sam" }));
+ * yield* customers.send(new Register({ customerId: "c-1", name: "sam" }));
  * ```
  */
 export const make = <
   const Name extends string,
   Id extends IdSchema,
   S extends Schema.Top,
-  const C extends ReadonlyArray<Command.Any>,
-  const Ms extends Middleware.List = readonly [],
-  const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
+  const C extends ReadonlyArray<Command.Any> = readonly [],
+  const X extends ReadonlyArray<Event.Any> = readonly [],
 >(
   name: Name,
-  definition: Definition<Id, S, C, Ms, Rejects>,
-): AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects>> => {
-  const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, Ms, Rejects>>>()(
+  definition: Definition<Id, S, C, X> & Decides<C>,
+  annotations: Annotations = {},
+): AggregateClass<Name, Resolved<Id, S, C, X>> => {
+  const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, X>>>()(
     `alchemy/Domain/Aggregate/${name}`,
   );
+  // oxlint-disable-next-line effecttsgo/schema-sync -- ids decode synchronously when building refs
   const decodeId = Schema.decodeUnknownSync(
     definition.id as unknown as Schema.Codec<unknown, unknown>,
   );
+  const commands: ReadonlyArray<Command.Any> = definition.commands ?? [];
   return class extends Tag {
     static readonly kind = "Aggregate" as const;
+    static readonly annotations: Annotations = annotations;
     static readonly aggregateName: Name = name;
-    static readonly definition: Resolved<Id, S, C, Ms, Rejects> = {
+    static readonly definition = {
       ...definition,
-      events: [...new Set(definition.commands.flatMap((command) => command.events))],
-    } as unknown as Resolved<Id, S, C, Ms, Rejects>;
+      commands,
+      keyOf: definition.keyOf,
+      decide: definition.decide ?? {},
+      // What its commands record, then what decisions record on it.
+      events: [
+        ...new Set([
+          ...commands.flatMap((command) => command.events),
+          ...(definition.events ?? []),
+        ]),
+      ],
+    } as unknown as Resolved<Id, S, C, X>;
     /** Address one instance of this aggregate. */
     static ref<Self extends Any>(this: Self, id: Self["definition"]["id"]["Encoded"]): Ref<Self> {
       return makeRef(this, decodeId(id) as IdOf<Self>);
     }
-  } as unknown as AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects>>;
+    /** Decide a command locally. See {@link predict}. */
+    static predict(
+      this: Any,
+      state: unknown,
+      command: { readonly _tag: string },
+      options: PredictOptions,
+    ) {
+      return predict(this, state, command, options);
+    }
+  } as unknown as AggregateClass<Name, Resolved<Id, S, C, X>>;
 };
+
+/** An aggregate with commands says which instance each is for, and decides each. */
+export type Decides<C extends ReadonlyArray<Command.Any>> = [C[number]] extends [never]
+  ? unknown
+  : { readonly commands: C; readonly keyOf: Function; readonly decide: object };
+
+/**
+ * The id of the instance a command is for, from the aggregate's `keyOf`;
+ * `undefined` when the aggregate doesn't handle the command.
+ *
+ * @internal
+ */
+export const targetOf = (aggregate: Any, command: { readonly _tag: string }): string | undefined =>
+  aggregate.definition.commands.some((cls) => cls.tag === command._tag)
+    ? (aggregate.definition.keyOf as ((command: unknown) => string) | undefined)?.(command)
+    : undefined;
 
 /** A definition with its events collected from its commands. */
 export type Resolved<
   Id extends IdSchema,
   S extends Schema.Top,
   C extends ReadonlyArray<Command.Any>,
-  Ms extends Middleware.List = readonly [],
-  Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
-> = Definition<Id, S, C, Ms, Rejects> & { readonly events: ReadonlyArray<EventsOf<C>> };
+  X extends ReadonlyArray<Event.Any> = readonly [],
+> = Omit<Definition<Id, S, C, X>, "events" | "commands" | "decide" | "keyOf"> &
+  Required<Pick<Definition<Id, S, C, X>, "commands" | "decide">> & {
+    /** Absent on an aggregate with no commands of its own. */
+    readonly keyOf: ((command: InstanceOf<C[number]>) => Id["Type"]) | undefined;
+    readonly events: ReadonlyArray<EventsOf<C> | X[number]>;
+  };
 
 /**
  * The class type returned by {@link make}.
@@ -542,8 +969,35 @@ export interface AggregateClass<
   Def extends AnyDefinition,
 > extends Context.ServiceClass<Key<Name>, string, Client<Def>> {
   readonly kind: "Aggregate";
+  readonly annotations: Annotations;
   readonly aggregateName: Name;
   readonly definition: Def;
   /** Address one instance of this aggregate. */
   ref<Self extends Any>(this: Self, id: Self["definition"]["id"]["Encoded"]): Ref<Self>;
+  /**
+   * Decide a command locally, with this aggregate's own `decide` and
+   * `evolve`: the events and state, or the rejection, the server would give
+   * for the same state, id and time. A command with middleware needs
+   * `context`: what its middleware provides, from a client-side Layer. See
+   * {@link predict}.
+   *
+   * **Example:** Show a withdrawal before the bank answers
+   * ```typescript
+   * const context = yield* Layer.build(Layer.succeed(CurrentActor, actor));
+   * const outcome = Account.predict(state, new WithdrawMoney({ accountId, amount: 30 }), { now, context });
+   * if (outcome._tag === "Rejected") showError(outcome.rejection); // InsufficientFunds
+   * if (outcome._tag === "Accepted") showPending(outcome.state);
+   * ```
+   */
+  predict<Self extends Any, Cmd extends CommandOf<Self>>(
+    this: Self,
+    state: StateOf<Self>,
+    command: Cmd,
+    options: PredictOptions<Command.ContextOf<CommandClassOf<Self["definition"], Cmd>>>,
+  ): Prediction<
+    StateOf<Self>,
+    InstanceOf<CommandClassOf<Self["definition"], Cmd>["events"][number]>,
+    InstanceOf<CommandClassOf<Self["definition"], Cmd>["rejects"][number]>,
+    IdOf<Self>
+  >;
 }

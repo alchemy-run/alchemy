@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as websecurityscanner from "@distilled.cloud/gcp/websecurityscanner_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -64,13 +65,11 @@ test.provider(
       // 203.0.113.0/24 is TEST-NET-3; it can never be reserved in the project.
       const error = yield* Effect.flip(
         websecurityscanner.createProjectsScanConfigs({
+          displayName: "unreserved",
+          startingUrls: ["http://203.0.113.9/"],
+          targetPlatforms: ["COMPUTE"],
+          exportToSecurityCommandCenter: "DISABLED",
           parent: `projects/${project}`,
-          body: {
-            displayName: "unreserved",
-            startingUrls: ["http://203.0.113.9/"],
-            targetPlatforms: ["COMPUTE"],
-            exportToSecurityCommandCenter: "DISABLED",
-          },
         }),
       );
       expect(error._tag).toEqual("StartingUrlIpNotReserved");
@@ -95,6 +94,10 @@ test.provider(
             region: "us-central1",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.Address.lookup({ addressName: reserved.addressName, region: reserved.region }),
+        reserved,
       );
       expect(reserved.address).toEqual(expect.any(String));
       const startingUrl = `http://${reserved.address}`;

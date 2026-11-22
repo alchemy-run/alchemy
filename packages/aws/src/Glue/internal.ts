@@ -1,20 +1,19 @@
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as glue from "@distilled.cloud/aws/glue";
+import * as lf from "@distilled.cloud/aws/lakeformation";
 import { diffTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
-/** ARN partition — the testing account is on the standard AWS partition. */
-const PARTITION = "aws";
+import { partitionOf } from "../Partition.ts";
 
 /** `arn:aws:glue:{region}:{account}:catalog` */
 export const catalogArn = (region: string, accountId: string) =>
-  `arn:${PARTITION}:glue:${region}:${accountId}:catalog`;
+  `arn:${partitionOf(region)}:glue:${region}:${accountId}:catalog`;
 
 /** `arn:aws:glue:{region}:{account}:database/{name}` */
 export const databaseArn = (region: string, accountId: string, databaseName: string) =>
-  `arn:${PARTITION}:glue:${region}:${accountId}:database/${databaseName}`;
+  `arn:${partitionOf(region)}:glue:${region}:${accountId}:database/${databaseName}`;
 
 /** `arn:aws:glue:{region}:{account}:table/{database}/{table}` */
 export const tableArn = (
@@ -22,19 +21,19 @@ export const tableArn = (
   accountId: string,
   databaseName: string,
   tableName: string,
-) => `arn:${PARTITION}:glue:${region}:${accountId}:table/${databaseName}/${tableName}`;
+) => `arn:${partitionOf(region)}:glue:${region}:${accountId}:table/${databaseName}/${tableName}`;
 
 /** `arn:aws:glue:{region}:{account}:crawler/{name}` */
 export const crawlerArn = (region: string, accountId: string, crawlerName: string) =>
-  `arn:${PARTITION}:glue:${region}:${accountId}:crawler/${crawlerName}`;
+  `arn:${partitionOf(region)}:glue:${region}:${accountId}:crawler/${crawlerName}`;
 
 /** `arn:aws:glue:{region}:{account}:job/{name}` */
 export const jobArn = (region: string, accountId: string, jobName: string) =>
-  `arn:${PARTITION}:glue:${region}:${accountId}:job/${jobName}`;
+  `arn:${partitionOf(region)}:glue:${region}:${accountId}:job/${jobName}`;
 
 /** `arn:aws:glue:{region}:{account}:connection/{name}` */
 export const connectionArn = (region: string, accountId: string, connectionName: string) =>
-  `arn:${PARTITION}:glue:${region}:${accountId}:connection/${connectionName}`;
+  `arn:${partitionOf(region)}:glue:${region}:${accountId}:connection/${connectionName}`;
 
 /**
  * Fetch the observed Glue tags for a resource ARN as a plain record. Glue's
@@ -201,3 +200,41 @@ export const reapGlueLogStreams = (
       ),
     { concurrency: 5, discard: true },
   );
+
+/**
+ * Delete a Glue database, tolerating one that is already gone.
+ *
+ * A database registered under Lake Formation (e.g. one a DataZone
+ * environment provisioned) only grants DROP to the principals LF lists — IAM
+ * admin rights are not enough. A Lake Formation admin may re-open it to IAM
+ * access control, after which the drop succeeds. A caller that is not an LF
+ * admin gets the original denial back.
+ */
+export const deleteGlueDatabase = Effect.fn("AWS.Glue.deleteGlueDatabase")(function* (
+  name: string,
+  catalogId: string | undefined,
+) {
+  const drop = glue.deleteDatabase({ Name: name, CatalogId: catalogId }).pipe(
+    retryWhileConcurrentModification,
+    Effect.catchTag("EntityNotFoundException", () => Effect.void),
+  );
+  yield* drop.pipe(
+    Effect.catchTag("InsufficientLakeFormationPermissions", (error) =>
+      lf
+        .grantPermissions({
+          CatalogId: catalogId,
+          Principal: { DataLakePrincipalIdentifier: "IAM_ALLOWED_PRINCIPALS" },
+          Resource: { Database: { CatalogId: catalogId, Name: name } },
+          Permissions: ["ALL"],
+        })
+        .pipe(
+          retryWhileConcurrentModification,
+          Effect.catchTags({
+            EntityNotFoundException: () => Effect.void,
+            AccessDeniedException: () => Effect.fail(error),
+          }),
+          Effect.andThen(drop),
+        ),
+    ),
+  );
+});

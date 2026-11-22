@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -62,14 +63,12 @@ test.provider(
       const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         compute.insertInstanceGroupManagerResizeRequests({
+          name: "alchemy-rr-probe",
+          description: "alchemy entitlement probe",
+          resizeBy: 1,
           project,
           zone,
           instanceGroupManager: "does-not-exist",
-          body: {
-            name: "alchemy-rr-probe",
-            description: "alchemy entitlement probe",
-            resizeBy: 1,
-          },
         }),
       );
       expect(error._tag).toEqual("NotFound");
@@ -104,6 +103,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { template, manager, request };
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.InstanceGroupManagerResizeRequest.lookup({
+          resizeRequestName: created.request.resizeRequestName,
+          zone: created.request.zone,
+          instanceGroupManager: created.request.instanceGroupManager,
+        }),
+        created.request,
       );
 
       expect(created.request.resizeRequestName).toEqual(expect.any(String));

@@ -18,10 +18,9 @@
 import { Credentials, fromStaticToken } from "@distilled.cloud/azure";
 import * as storageQueue from "@distilled.cloud/azure/storage-queue";
 import { NodeServices } from "@effect/platform-node";
-import { reifyBoundConfigProvider } from "alchemy/Runtime";
+import { RuntimeConfigProviderLive } from "alchemy/Runtime";
 import { entrypointLayer, stackFromEnv } from "alchemy/Runtime/Bootstrap";
 import * as Clock from "effect/Clock";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Cron from "effect/Cron";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -30,6 +29,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import {
   functionRegistry,
@@ -39,7 +39,10 @@ import {
 import { installStorageEmulator, listen } from "./FunctionsLocalCore.ts";
 
 /** Placeholder credentials: there is no identity to get a token from locally. */
-const localCredentials = fromStaticToken({ bearerToken: "alchemy-local", subscriptionId: "" });
+const localCredentials = fromStaticToken({
+  bearerToken: Redacted.make("alchemy-local"),
+  subscriptionId: "",
+});
 
 const runtimeLayer = Layer.mergeAll(localCredentials, FetchHttpClient.layer);
 
@@ -182,12 +185,7 @@ export const bootstrap = async (entrypoint: unknown): Promise<void> => {
         Layer.provideMerge(stackFromEnv),
         Layer.provideMerge(localCredentials),
         Layer.provideMerge(platform),
-        Layer.provideMerge(
-          Layer.succeed(
-            ConfigProvider.ConfigProvider,
-            reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env),
-          ),
-        ),
+        Layer.provideMerge(RuntimeConfigProviderLive),
       ),
     ),
     Effect.scoped,

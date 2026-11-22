@@ -291,7 +291,9 @@ export const ScheduleProvider = () =>
           workspaceName: workspace,
           name,
           properties: {
-            action: news.action,
+            // `actionType` is only known at runtime and decides the arm, so
+            // the arm is asserted rather than narrowed.
+            action: news.action as ml.ScheduleActionBaseInput,
             trigger,
             isEnabled,
             displayName: news.displayName,

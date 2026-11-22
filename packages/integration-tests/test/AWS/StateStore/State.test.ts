@@ -2,18 +2,42 @@ import { createHash } from "node:crypto";
 import * as AWS from "@alchemy.run/aws";
 import { makeS3State } from "@alchemy.run/aws";
 import { createStateBucketName } from "@alchemy.run/aws/StateStore/State";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as kms from "@distilled.cloud/aws/kms";
 import * as s3 from "@distilled.cloud/aws/s3";
-import { expect } from "alchemy-test";
+import * as sqs from "@distilled.cloud/aws/sqs";
+import { TelemetryDebug } from "@distilled.cloud/core/telemetry-debug";
+import * as Alchemy from "alchemy";
 import { StateStoreError, type ResourceState, type StateService } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
+import { SEALED_PREFIX } from "alchemy/State/StateEncryption";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Redacted from "effect/Redacted";
 import * as References from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+/** The account's default state key, which a store with no key of its own uses. */
+const defaultStateKeyArn = kms
+  .describeKey({ KeyId: "alias/alchemy-state" })
+  .pipe(Effect.map((result) => result.KeyMetadata?.Arn));
+
+/** Expect the state store's default encryption: SSE-KMS under its own key. */
+const expectDefaultEncryption = (rule: s3.ServerSideEncryptionRule) =>
+  Effect.gen(function* () {
+    const keyId = rule.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID;
+    expect(rule.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe("aws:kms");
+    expect(Redacted.isRedacted(keyId) ? Redacted.value(keyId) : keyId).toBe(
+      yield* defaultStateKeyArn,
+    );
+    expect(rule.BucketKeyEnabled).toBe(true);
+    expect(rule.BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
+  });
 
 test.provider(
   "PR1587 fresh state services skip matching KMS encryption writes",
@@ -125,10 +149,7 @@ test.provider(
       const defaults = (yield* s3.getBucketEncryption({
         Bucket: bucket.bucketName,
       })).ServerSideEncryptionConfiguration!.Rules[0]!;
-      expect(defaults.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe("AES256");
-      expect(defaults.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID).toBeUndefined();
-      expect(defaults.BucketKeyEnabled ?? false).toBe(false);
-      expect(defaults.BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
+      yield* expectDefaultEncryption(defaults);
       yield* stack.destroy();
       const absent = yield* s3.getBucketLocation({ Bucket: bucket.bucketName }).pipe(
         Effect.as(false),
@@ -184,9 +205,15 @@ for (const blocked of ["SSE-C", "NONE"] as const) {
             ],
           },
         });
-        const before = (yield* s3.getBucketEncryption({
-          Bucket: bucket.bucketName,
-        })).ServerSideEncryptionConfiguration!.Rules[0]!;
+        // Encryption reads lag a write; wait for the drift to show.
+        const before = yield* s3.getBucketEncryption({ Bucket: bucket.bucketName }).pipe(
+          Effect.map((result) => result.ServerSideEncryptionConfiguration!.Rules[0]!),
+          Effect.repeat({
+            until: (rule) => rule.BlockedEncryptionTypes?.EncryptionType?.[0] === blocked,
+            schedule: Schedule.spaced("1 second"),
+            times: 10,
+          }),
+        );
         expect(before.BlockedEncryptionTypes?.EncryptionType).toEqual([blocked]);
         expect(before.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe("aws:kms");
         // Re-running the generator constructs a fresh state service and rechecks cloud configuration.
@@ -194,10 +221,7 @@ for (const blocked of ["SSE-C", "NONE"] as const) {
         const after = (yield* s3.getBucketEncryption({
           Bucket: bucket.bucketName,
         })).ServerSideEncryptionConfiguration!.Rules[0]!;
-        expect(after.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe("AES256");
-        expect(after.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID).toBeUndefined();
-        expect(after.BucketKeyEnabled ?? false).toBe(false);
-        expect(after.BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
+        yield* expectDefaultEncryption(after);
         yield* stack.destroy();
         const absent = yield* s3.getBucketLocation({ Bucket: bucket.bucketName }).pipe(
           Effect.as(false),
@@ -421,6 +445,101 @@ test.provider(
   },
 );
 
+test.provider(
+  "secrets in S3 state are sealed, and a plaintext record is sealed when read",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { bucket, key } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* AWS.S3.Bucket("SealedStateBucket", { forceDestroy: true });
+          const key = yield* AWS.KMS.Key("SealedStateKey", { deletionWindow: "7 days" });
+          return { bucket, key };
+        }),
+      );
+      const options = { bucketName: bucket.bucketName, prefix: "sealed" };
+      // The store's KMS key comes from the encryption layer provided to it.
+      const makeStore = makeS3State(options).pipe(
+        Effect.provide(AWS.stateEncryption({ kmsKeyId: key.keyArn })),
+      );
+      const stage = "sealed";
+      const secret = "s3-sealed-secret-0123456789";
+      const sealed = resource("Sealed", { password: Redacted.make(secret), name: "visible" });
+      const objectKey = (fqn: string) => `sealed/${STACK}/${stage}/${fqn}.json`;
+      const readObject = (fqn: string) =>
+        s3
+          .getObject({ Bucket: bucket.bucketName, Key: objectKey(fqn) })
+          .pipe(Effect.flatMap((result) => result.Body!.pipe(Stream.decodeText, Stream.mkString)));
+
+      yield* Effect.scoped(
+        Effect.flatMap(makeStore, (state) =>
+          state.set({ stack: STACK, stage, fqn: sealed.fqn, value: sealed }),
+        ),
+      );
+      const text = yield* readObject(sealed.fqn);
+      expect(text.startsWith(SEALED_PREFIX)).toBe(true);
+      expect(text).not.toContain(secret);
+      expect(text).toContain('"name": "visible"');
+      // The bucket is encrypted with the store's key. Encryption reads lag a
+      // write, so wait for it to show.
+      const keyId = yield* s3.getBucketEncryption({ Bucket: bucket.bucketName }).pipe(
+        Effect.map((result) => {
+          const id =
+            result.ServerSideEncryptionConfiguration!.Rules[0]!.ApplyServerSideEncryptionByDefault
+              ?.KMSMasterKeyID;
+          return Redacted.isRedacted(id) ? Redacted.value(id) : id;
+        }),
+        Effect.repeat({
+          until: (id) => id === key.keyArn,
+          schedule: Schedule.spaced("1 second"),
+          times: 10,
+        }),
+      );
+      expect(keyId).toBe(key.keyArn);
+
+      // What an earlier version wrote: the secret in plaintext.
+      const legacy = resource("Legacy", { password: Redacted.make(secret) });
+      yield* s3.putObject({
+        Bucket: bucket.bucketName,
+        Key: objectKey(legacy.fqn),
+        Body: JSON.stringify({ ...legacy, attr: { password: { __redacted__: secret } } }),
+        ContentType: "application/json",
+      });
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const state = yield* makeStore;
+          const read = (yield* state.get({
+            stack: STACK,
+            stage,
+            fqn: sealed.fqn,
+          })) as ResourceState;
+          expect(Redacted.value(read.attr!.password as Redacted.Redacted<string>)).toBe(secret);
+          const old = (yield* state.get({ stack: STACK, stage, fqn: legacy.fqn })) as ResourceState;
+          expect(Redacted.value(old.attr!.password as Redacted.Redacted<string>)).toBe(secret);
+        }),
+      );
+      const resealed = yield* readObject(legacy.fqn);
+      expect(resealed.startsWith(SEALED_PREFIX)).toBe(true);
+      expect(resealed).not.toContain(secret);
+
+      yield* Effect.scoped(
+        Effect.flatMap(makeStore, (state) => state.deleteStack({ stack: STACK, stage })),
+      );
+      yield* stack.destroy();
+    }),
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:s3",
+      "provider:aws:kms",
+      "provider:aws:statestore",
+      "live",
+    ],
+    timeout: 120_000,
+  },
+);
+
 // State objects hold generated secrets, and the AWS client logs request
 // payloads and parsed responses at Debug. A Debug floor where the store is
 // built (the CLI's run log sets one) must not put state contents in the logs.
@@ -445,7 +564,8 @@ test.provider(
             );
           });
           const result = yield* effect.pipe(
-            Effect.provide(Logger.layer([logger])),
+            // SDKs write their Debug lines only with TelemetryDebug provided.
+            Effect.provide(Layer.mergeAll(Logger.layer([logger]), TelemetryDebug.layer)),
             Effect.provideService(References.MinimumLogLevel, "Debug"),
           );
           return { result, logs: lines.join("\n") };
@@ -512,13 +632,7 @@ test.provider(
         yield* s3.putBucketEncryption({
           Bucket: bucketName,
           ServerSideEncryptionConfiguration: {
-            Rules: [
-              {
-                ApplyServerSideEncryptionByDefault: {
-                  SSEAlgorithm: "aws:kms",
-                },
-              },
-            ],
+            Rules: [{ ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } }],
           },
         });
         yield* s3.putPublicAccessBlock({
@@ -538,7 +652,7 @@ test.provider(
         });
 
         // Bucket configuration reads are eventually consistent. Observe the
-        // injected drift before reconciliation, or a stale AES256 read can
+        // injected drift before reconciliation, or a stale SSE-KMS read can
         // incorrectly make the provider conclude that no repair is needed.
         const driftedEncryption = yield* s3.getBucketEncryption({ Bucket: bucketName }).pipe(
           Effect.map(
@@ -547,12 +661,12 @@ test.provider(
                 ?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm,
           ),
           Effect.repeat({
-            until: (algorithm) => algorithm === "aws:kms",
+            until: (algorithm) => algorithm === "AES256",
             schedule: Schedule.spaced("1 second"),
             times: 8,
           }),
         );
-        expect(driftedEncryption).toBe("aws:kms");
+        expect(driftedEncryption).toBe("AES256");
 
         const secured = yield* makeS3State({
           bucketName,
@@ -568,10 +682,7 @@ test.provider(
         const encryption = yield* s3.getBucketEncryption({
           Bucket: bucketName,
         });
-        expect(
-          encryption.ServerSideEncryptionConfiguration?.Rules?.[0]
-            ?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm,
-        ).toBe("AES256");
+        yield* expectDefaultEncryption(encryption.ServerSideEncryptionConfiguration!.Rules[0]!);
 
         const publicAccess = yield* s3.getPublicAccessBlock({
           Bucket: bucketName,
@@ -788,5 +899,114 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:s3", "provider:aws:statestore", "live"],
     timeout: 120_000,
+  },
+);
+
+// A large deploy can queue its lease refresh behind thousands of state
+// writes until the lease lapses. Nobody else took it, so the deploy keeps
+// going; a deploy that did take it wins.
+test.provider(
+  "a lease that lapsed while still held is taken back unless another deploy took it",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const bucket = yield* stack.deploy(AWS.S3.Bucket("StateBucket", { forceDestroy: true }));
+      const options = { bucketName: bucket.bucketName, prefix: "lease-lapse" };
+      const stage = "lapse";
+      const key = `lease-lapse/${STACK}/${stage}/__lease__.json`;
+      const created = resource("Queue", { queueUrl: "https://example.com/a" });
+      const request = { stack: STACK, stage, fqn: created.fqn, value: created };
+      const lapse = Effect.gen(function* () {
+        const object = yield* s3.getObject({ Bucket: bucket.bucketName, Key: key });
+        const lease = JSON.parse(yield* Stream.mkString(Stream.decodeText(object.Body!)));
+        yield* s3.putObject({
+          Bucket: bucket.bucketName,
+          Key: key,
+          Body: JSON.stringify({ ...lease, expiresAt: 0 }),
+          ContentType: "application/json",
+        });
+      });
+      // Past the store's 5s trust in its last lease check.
+      const pastCheck = Effect.sleep("6 seconds");
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const held = yield* makeS3State(options);
+          yield* held.set(request);
+          yield* lapse;
+          yield* pastCheck;
+          yield* held.set({ ...request, value: { ...created, attr: { queueUrl: "b" } } });
+          expect(yield* held.get({ stack: STACK, stage, fqn: created.fqn })).toMatchObject({
+            attr: { queueUrl: "b" },
+          });
+
+          // Lapsed again, and this time another deploy takes it.
+          yield* lapse;
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const other = yield* makeS3State(options);
+              yield* other.list({ stack: STACK, stage });
+              yield* pastCheck;
+              const lost = yield* held.set(request).pipe(Effect.flip);
+              expect(lost.message).toContain("was lost mid-run");
+              yield* other.deleteStack({ stack: STACK, stage });
+            }),
+          );
+        }),
+      );
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:s3", "provider:aws:statestore", "live"],
+    timeout: 120_000,
+  },
+);
+
+// Each deploy/destroy of a Stack declaring the S3 state store releases its
+// lease when it finishes, so a file can redeploy and destroy that Stack.
+const s3Stack = { providers: AWS.providers(), state: AWS.state({ backend: "s3" }) };
+const s3Harness = Test.make(s3Stack);
+
+const S3StateStack = Alchemy.Stack(
+  "S3StateHarness",
+  s3Stack,
+  Effect.gen(function* () {
+    const queue = yield* AWS.SQS.Queue("HarnessQueue");
+    return { queueUrl: queue.queueUrl };
+  }),
+);
+
+describe(
+  "a Stack with the S3 state store",
+  { tags: ["provider:aws", "provider:aws:sqs", "provider:aws:statestore", "live"] },
+  () => {
+    const deployed = s3Harness.beforeAll(s3Harness.deploy(S3StateStack), { timeout: 120_000 });
+
+    s3Harness.afterAll.skipIf(!!process.env.NO_DESTROY)(
+      Effect.gen(function* () {
+        const { queueUrl } = yield* deployed;
+        yield* s3Harness.destroy(S3StateStack);
+        const gone = yield* Core.withProviders(
+          sqs.getQueueAttributes({ QueueUrl: queueUrl, AttributeNames: ["QueueArn"] }).pipe(
+            Effect.as(false),
+            Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(true)),
+          ),
+          s3Stack,
+          "S3StateHarness",
+        );
+        expect(gone).toBe(true);
+      }),
+      { timeout: 120_000 },
+    );
+
+    s3Harness.test(
+      "redeploys after the file's first deploy released its lease",
+      Effect.gen(function* () {
+        const { queueUrl } = yield* deployed;
+        const redeployed = yield* s3Harness.deploy(S3StateStack);
+        expect(redeployed.queueUrl).toBe(queueUrl);
+      }),
+      { timeout: 120_000 },
+    );
   },
 );

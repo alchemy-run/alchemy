@@ -45,8 +45,14 @@ export interface CreateFileSymbolicLink extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreateFileSymbolicLinkRequest,
-    ) => Effect.Effect<files.CreateFileSymbolicLinkResponse, files.CreateFileSymbolicLinkError, RuntimeContext>
+    ) => Effect.Effect<
+      files.CreateFileSymbolicLinkResponse,
+      files.CreateFileSymbolicLinkError,
+      RuntimeContext
+    >
   >
 > {}
 
-export const CreateFileSymbolicLink = Binding.Service<CreateFileSymbolicLink>("Azure.Storage.CreateFileSymbolicLink");
+export const CreateFileSymbolicLink = Binding.Service<CreateFileSymbolicLink>(
+  "Azure.Storage.CreateFileSymbolicLink",
+);

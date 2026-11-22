@@ -108,7 +108,7 @@ export const ViteAssetsLive = (
                 name: "assets:vite",
                 worker: {
                   compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
-                  // Node.js compatibility is supplied by the 2026-08-31
+                  // Node.js compatibility is supplied by the 2026-11-17
                   // internal compatibility date.
                   bindings: [
                     {
@@ -189,13 +189,16 @@ const viteHtmlExistsHandler =
       return json(null);
     }
 
-    const publicDirFilePath = `${publicDir}${pathname}`;
+    // Vite resolves a disabled `publicDir` to `""`; joining that would read
+    // the pathname as an absolute path on the host.
+    const publicDirFilePath = publicDir ? `${publicDir}${pathname}` : undefined;
     const rootDirFilePath = `${root}${pathname}`;
 
     // Beyond the public dir only HTML resolves: other files under the root are Vite's modules.
-    const candidates = pathname.endsWith(".html")
-      ? [publicDirFilePath, rootDirFilePath]
-      : [publicDirFilePath];
+    const candidates = [
+      publicDirFilePath,
+      pathname.endsWith(".html") ? rootDirFilePath : undefined,
+    ].filter((candidate) => candidate !== undefined);
     for (const resolved of candidates) {
       try {
         const stats = await NodeFs.stat(resolved);

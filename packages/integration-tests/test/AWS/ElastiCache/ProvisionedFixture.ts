@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import type { SubnetId } from "@alchemy.run/aws/EC2/Subnet";
+import * as Core from "@alchemy.run/test/Core";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as ElastiCache from "@distilled.cloud/aws/elasticache";
-import * as Core from "alchemy/Test/Core";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

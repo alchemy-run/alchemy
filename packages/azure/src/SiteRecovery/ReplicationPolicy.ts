@@ -243,6 +243,9 @@ export const ReplicationPolicyProvider = () =>
       };
       const get = getPolicy(subscriptionId, resourceGroup, vault, name);
       const expected = expectedDetails(news.providerSpecificInput);
+      // `instanceType` is only known at runtime and decides the arm, so the
+      // arm is asserted rather than narrowed.
+      const providerInput = news.providerSpecificInput as asr.PolicyProviderSpecificInput;
 
       // Observe.
       const observed = yield* get;
@@ -252,7 +255,7 @@ export const ReplicationPolicyProvider = () =>
         yield* retryWhileVaultRegistering(
           asr.CreateReplicationPolicy({
             ...where,
-            properties: { providerSpecificInput: news.providerSpecificInput },
+            properties: { providerSpecificInput: providerInput },
           }),
         );
       } else if (!matchesDesired(detailsOf(observed), expected)) {
@@ -261,7 +264,7 @@ export const ReplicationPolicyProvider = () =>
           asr.UpdateReplicationPolicy({
             ...where,
             properties: {
-              replicationProviderSettings: news.providerSpecificInput,
+              replicationProviderSettings: providerInput,
             },
           }),
         );

@@ -15,12 +15,15 @@ import { createInternalTags, diffTags } from "alchemy/Tags";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
 import type { AccountID } from "../Environment.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { attributeDelta, observedAttributes } from "./common.ts";
+import { readElbTags } from "./internal.ts";
 
 export type LoadBalancerName = string;
 export type LoadBalancerArn =
-  `arn:aws:elasticloadbalancing:${RegionID}:${AccountID}:loadbalancer/${string}`;
+  `arn:${Partition}:elasticloadbalancing:${RegionID}:${AccountID}:loadbalancer/${string}`;
 
 export interface LoadBalancerProps {
   /** The load balancer name. If omitted, a unique name is generated. Changing it replaces the load balancer. */
@@ -99,10 +102,30 @@ export interface LoadBalancer extends Resource<
     subnets: string[];
     /** The tags applied to the load balancer. */
     tags: Record<string, string>;
+    /**
+     * The live values of the keys declared in `attributes`. Undeclared
+     * attributes are left out so AWS defaults never register as drift.
+     */
+    attributes?: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  LoadBalancerLookup
 > {}
+
+/**
+ * Props for {@link LoadBalancer.lookup}: find a load balancer this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type LoadBalancerLookup =
+  | {
+      /** The ARN of the existing load balancer. */
+      loadBalancerArn: string;
+    }
+  | {
+      /** The name of the existing load balancer. */
+      loadBalancerName: string;
+    };
 
 /**
  * An ELBv2 (Application / Network / Gateway) load balancer.
@@ -142,9 +165,35 @@ export interface LoadBalancer extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing load balancer
+ * `LoadBalancer.lookup` references a load balancer Alchemy doesn't manage (created in the
+ * console or by another stack), found by `loadBalancerArn` or
+`loadBalancerName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add a listener to an existing load balancer
+ * ```typescript
+ * const alb = AWS.ELBv2.LoadBalancer.lookup({ loadBalancerName: "public" });
+ *
+ * yield* AWS.ELBv2.Listener("Https", {
+ *   loadBalancerArn: alb.loadBalancerArn,
+ *   port: 443,
+ *   protocol: "HTTPS",
+ *   certificateArn: cert.certificateArn,
+ *   targetGroupArn: targets.targetGroupArn,
+ * });
+ * ```
+ *
  * @resource
  */
 export const LoadBalancer = Resource<LoadBalancer>("AWS.ELBv2.LoadBalancer");
+
+// ELB returns subnets and security groups in no fixed order (subnets follow
+// availability zones), so Attributes hold them sorted for drift to compare.
+const sortedSubnets = (lb: elbv2.LoadBalancer) =>
+  (lb.AvailabilityZones ?? []).flatMap((zone) => (zone.SubnetId ? [zone.SubnetId] : [])).sort();
+
+const sortedSecurityGroups = (lb: elbv2.LoadBalancer) => [...(lb.SecurityGroups ?? [])].sort();
 
 export const LoadBalancerProvider = () =>
   Provider.effect(
@@ -154,6 +203,19 @@ export const LoadBalancerProvider = () =>
         props.name
           ? Effect.succeed(props.name)
           : createPhysicalName({ id, maxLength: 32, lowercase: true });
+
+      // The observed values of the declared attribute keys; skips the call
+      // when nothing is declared.
+      const readAttributes = Effect.fn(function* (
+        loadBalancerArn: string,
+        declared: Record<string, string> | undefined,
+      ) {
+        if (!declared || Object.keys(declared).length === 0) return undefined;
+        const observed = yield* elbv2.describeLoadBalancerAttributes({
+          LoadBalancerArn: loadBalancerArn,
+        });
+        return observedAttributes(declared, observed.Attributes);
+      });
 
       return {
         stables: [
@@ -190,7 +252,31 @@ export const LoadBalancerProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        read: Effect.fn(function* ({ output }) {
+        lookup: Effect.fn(function* (props) {
+          const described = yield* elbv2
+            .describeLoadBalancers(
+              "loadBalancerArn" in props
+                ? { LoadBalancerArns: [props.loadBalancerArn] }
+                : { Names: [props.loadBalancerName] },
+            )
+            .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined));
+          const loadBalancer = described?.LoadBalancers?.[0];
+          if (!loadBalancer?.LoadBalancerArn) return undefined;
+          const tags = yield* readElbTags(loadBalancer.LoadBalancerArn);
+          return {
+            loadBalancerArn: loadBalancer.LoadBalancerArn as LoadBalancerArn,
+            loadBalancerName: loadBalancer.LoadBalancerName! as LoadBalancerName,
+            tags,
+            dnsName: loadBalancer.DNSName!,
+            canonicalHostedZoneId: loadBalancer.CanonicalHostedZoneId!,
+            vpcId: loadBalancer.VpcId!,
+            scheme: loadBalancer.Scheme!,
+            type: loadBalancer.Type!,
+            securityGroups: sortedSecurityGroups(loadBalancer),
+            subnets: sortedSubnets(loadBalancer),
+          };
+        }),
+        read: Effect.fn(function* ({ olds, output }) {
           if (!output) {
             return undefined;
           }
@@ -198,25 +284,34 @@ export const LoadBalancerProvider = () =>
             .describeLoadBalancers({
               LoadBalancerArns: [output.loadBalancerArn],
             })
-            .pipe(
-              Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
-            );
+            .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined));
           const loadBalancer = described?.LoadBalancers?.[0];
           if (!loadBalancer?.LoadBalancerArn) {
             return undefined;
           }
+          const attributes = yield* readAttributes(output.loadBalancerArn, olds?.attributes).pipe(
+            Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(null)),
+          );
+          if (attributes === null) {
+            return undefined;
+          }
+          const tags = yield* readElbTags(output.loadBalancerArn).pipe(
+            Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined),
+          );
+          if (tags === undefined) {
+            return undefined;
+          }
           return {
             ...output,
+            tags,
             dnsName: loadBalancer.DNSName!,
             canonicalHostedZoneId: loadBalancer.CanonicalHostedZoneId!,
             vpcId: loadBalancer.VpcId!,
             scheme: loadBalancer.Scheme!,
             type: loadBalancer.Type!,
-            securityGroups: loadBalancer.SecurityGroups ?? [],
-            subnets:
-              loadBalancer.AvailabilityZones?.flatMap((zone) =>
-                zone.SubnetId ? [zone.SubnetId] : [],
-              ) ?? [],
+            securityGroups: sortedSecurityGroups(loadBalancer),
+            subnets: sortedSubnets(loadBalancer),
+            attributes,
           };
         }),
         list: () =>
@@ -280,10 +375,8 @@ export const LoadBalancerProvider = () =>
               vpcId: lb.VpcId!,
               scheme: lb.Scheme!,
               type: lb.Type!,
-              securityGroups: lb.SecurityGroups ?? [],
-              subnets:
-                lb.AvailabilityZones?.flatMap((zone) => (zone.SubnetId ? [zone.SubnetId] : [])) ??
-                [],
+              securityGroups: sortedSecurityGroups(lb),
+              subnets: sortedSubnets(lb),
               tags: tagsByArn.get(lb.LoadBalancerArn) ?? {},
             }));
           }),
@@ -299,9 +392,7 @@ export const LoadBalancerProvider = () =>
             .describeLoadBalancers({
               Names: [name],
             })
-            .pipe(
-              Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
-            );
+            .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined));
           let loadBalancer = described?.LoadBalancers?.[0];
 
           const subnetMappings = news.subnetMappings?.map((m) => ({
@@ -383,18 +474,19 @@ export const LoadBalancerProvider = () =>
             });
           }
 
-          // Sync attributes — observed ↔ desired. We always apply when
-          // desired attrs are non-empty; AWS rejects an empty list anyway,
-          // and reading observed attributes is an extra round-trip we
-          // don't need for convergence.
-          if (news.attributes && Object.keys(news.attributes).length > 0) {
-            yield* elbv2.modifyLoadBalancerAttributes({
+          // Sync attributes — diff the observed values of the declared keys
+          // against desired and apply only the delta.
+          let attributes = yield* readAttributes(loadBalancerArn, news.attributes);
+          const attributeChanges = attributeDelta(news.attributes, attributes);
+          if (attributeChanges.length > 0) {
+            const modified = yield* elbv2.modifyLoadBalancerAttributes({
               LoadBalancerArn: loadBalancerArn,
-              Attributes: Object.entries(news.attributes).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
+              Attributes: attributeChanges,
             });
+            attributes = {
+              ...attributes,
+              ...observedAttributes(news.attributes, modified.Attributes),
+            };
           }
 
           // Sync tags — diff observed cloud tags against desired.
@@ -423,21 +515,26 @@ export const LoadBalancerProvider = () =>
             });
           }
 
+          // Re-read so subnets and security groups set above are reflected.
+          const final =
+            (yield* elbv2
+              .describeLoadBalancers({ LoadBalancerArns: [loadBalancerArn] })
+              .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined)))
+              ?.LoadBalancers?.[0] ?? loadBalancer;
+
           yield* session.note(loadBalancerArn);
           return {
             loadBalancerArn,
-            loadBalancerName: loadBalancer.LoadBalancerName!,
-            dnsName: loadBalancer.DNSName!,
-            canonicalHostedZoneId: loadBalancer.CanonicalHostedZoneId!,
-            vpcId: loadBalancer.VpcId!,
-            scheme: loadBalancer.Scheme!,
-            type: loadBalancer.Type!,
-            securityGroups: loadBalancer.SecurityGroups ?? [],
-            subnets:
-              loadBalancer.AvailabilityZones?.flatMap((zone) =>
-                zone.SubnetId ? [zone.SubnetId] : [],
-              ) ?? [],
+            loadBalancerName: final.LoadBalancerName!,
+            dnsName: final.DNSName!,
+            canonicalHostedZoneId: final.CanonicalHostedZoneId!,
+            vpcId: final.VpcId!,
+            scheme: final.Scheme!,
+            type: final.Type!,
+            securityGroups: sortedSecurityGroups(final),
+            subnets: sortedSubnets(final),
             tags: desiredTags,
+            attributes,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

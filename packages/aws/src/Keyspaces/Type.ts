@@ -3,9 +3,15 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
+
+export class TypeNotReady extends Data.TaggedError("TypeNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * A field of a user-defined type. `type` is a CQL data type such as `text`,
@@ -57,8 +63,20 @@ export interface Type extends Resource<
     keyspaceArn: string;
   },
   never,
-  Providers
+  Providers,
+  TypeLookup
 > {}
+
+/**
+ * Props for {@link Type.lookup}: find a user-defined type this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TypeLookup {
+  /** The keyspace the type belongs to. */
+  keyspaceName: string;
+  /** The name of the existing type. */
+  typeName: string;
+}
 
 /**
  * An Amazon Keyspaces (for Apache Cassandra) user-defined type (UDT) — a
@@ -93,6 +111,16 @@ export interface Type extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing user-defined type
+ * `Type.lookup` references a user-defined type Alchemy doesn't manage (created in the
+ * console or by another stack), found by `keyspaceName` and `typeName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing user-defined type
+ * ```typescript
+ * const address = AWS.Keyspaces.Type.lookup({ keyspaceName: "app", typeName: "address" });
+ * ```
+ *
  * @resource
  */
 export const Type = Resource<Type>("AWS.Keyspaces.Type");
@@ -114,7 +142,7 @@ export const TypeProvider = () =>
       const readType = Effect.fn(function* (keyspaceName: string, typeName: string) {
         return yield* keyspaces
           .getType({ keyspaceName, typeName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const toAttributes = (found: keyspaces.GetTypeResponse) => ({
@@ -142,6 +170,10 @@ export const TypeProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ keyspaceName, typeName }) {
+          const found = yield* readType(keyspaceName, typeName);
+          return found === undefined ? undefined : toAttributes(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const props = (olds ?? {}) as Partial<TypeProps>;
           const keyspaceName = output?.keyspaceName ?? props.keyspaceName;
@@ -178,7 +210,9 @@ export const TypeProvider = () =>
             observed = yield* readType(keyspaceName, typeName).pipe(
               Effect.flatMap((t) =>
                 t === undefined
-                  ? Effect.fail(new Error(`Type '${keyspaceName}.${typeName}' not found`))
+                  ? Effect.fail(
+                      new TypeNotReady({ message: `Type '${keyspaceName}.${typeName}' not found` }),
+                    )
                   : Effect.succeed(t),
               ),
               Effect.retry({
@@ -211,7 +245,7 @@ export const TypeProvider = () =>
             Effect.flatMap((t) =>
               t === undefined
                 ? Effect.void
-                : Effect.fail(new Error(`Type '${typeName}' still deleting`)),
+                : Effect.fail(new TypeNotReady({ message: `Type '${typeName}' still deleting` })),
             ),
             Effect.retry({
               schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),

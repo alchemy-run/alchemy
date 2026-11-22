@@ -1,5 +1,5 @@
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -156,7 +156,7 @@ export const DataStoresBranchesDocument = Resource<DataStoresBranchesDocument>(
 export class DataStoresBranchesDocumentNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresBranchesDocumentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const branchParent = (dataStore: string, branch: string) => `${dataStore}/branches/${branch}`;
@@ -195,10 +195,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsDataStoresBranchesDocuments({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DataStoresBranchesDocumentProvider = () =>
   Provider.succeed(DataStoresBranchesDocument, {
@@ -226,7 +226,7 @@ export const DataStoresBranchesDocumentProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const documentId = yield* toPhysical(
         id,
@@ -244,7 +244,7 @@ export const DataStoresBranchesDocumentProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       // No labels field: without prior state it may not be ours.
-      return output !== undefined ? attrs : Unowned(attrs);
+      return output !== undefined ? attrs : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -274,16 +274,16 @@ export const DataStoresBranchesDocumentProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsDataStoresBranchesDocuments({
+            ...body,
             parent: branchParent(parent, branch),
             documentId,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new DataStoresBranchesDocumentNotResolved({ name });
+        return yield* new DataStoresBranchesDocumentNotResolved({ resourceName: name });
       }
 
       const jsonChanged = fingerprint(current.jsonData) !== fingerprint(jsonData);
@@ -299,6 +299,7 @@ export const DataStoresBranchesDocumentProvider = () =>
 
       if (jsonChanged || structChanged || contentChanged || parentChanged || schemaChanged) {
         current = yield* discoveryengine.patchProjectsLocationsDataStoresBranchesDocuments({
+          ...body,
           name: current.name ?? name,
           allowMissing: true,
           updateMask: [
@@ -310,7 +311,6 @@ export const DataStoresBranchesDocumentProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: { ...body, name: current.name ?? name },
         });
       }
 

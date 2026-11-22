@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as gamesConfiguration from "@distilled.cloud/gcp/gamesConfiguration_v1configuration";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { applicationId, logLevel, missingTag, probeApplicationId } from "./common.ts";
@@ -48,20 +48,18 @@ test.provider.skipIf(!!applicationId)(
 
       const error = yield* Effect.flip(
         gamesConfiguration.insertAchievementConfigurations({
-          applicationId: probeApplicationId,
-          body: {
-            achievementType: "STANDARD",
-            initialState: "REVEALED",
-            draft: {
-              name: {
-                translations: [{ locale: "en-US", value: "Alchemy Probe" }],
-              },
-              description: {
-                translations: [{ locale: "en-US", value: "probe" }],
-              },
-              pointValue: 5,
+          achievementType: "STANDARD",
+          initialState: "REVEALED",
+          draft: {
+            name: {
+              translations: [{ locale: "en-US", value: "Alchemy Probe" }],
             },
+            description: {
+              translations: [{ locale: "en-US", value: "probe" }],
+            },
+            pointValue: 5,
           },
+          applicationId: probeApplicationId,
         }),
       );
       expect(error._tag).toEqual("Forbidden");

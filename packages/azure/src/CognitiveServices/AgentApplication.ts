@@ -244,7 +244,10 @@ export const AgentApplicationProvider = () =>
               authorizationPolicy:
                 news.authorizationPolicy === undefined
                   ? undefined
-                  : { type: news.authorizationPolicy },
+                  : // The SDK has no union arm for `Custom`.
+                    ({
+                      type: news.authorizationPolicy,
+                    } as cognitiveservices.ApplicationAuthorizationPolicy),
               tags,
             },
           })

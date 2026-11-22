@@ -1,0 +1,77 @@
+---
+title: Tokens and networks
+description: Who can reach a Rivet control plane and with what — the admin token and everything that holds it, the HTTPS address each control plane gets without a domain, nodes that only connect out, and the credentials a deploy needs in CI.
+---
+
+import Boundaries from "../../../components/diagrams/Boundaries.astro";
+
+A control plane is reached two ways. Callers send calls to its **gateway**, and nodes connect to it to take work. Both carry the control plane's **admin token**, and both reach it over HTTPS.
+
+## The admin token
+
+A control plane you run gets an admin token when it's created: 32 random bytes, kept in your state. The engines check every request against it.
+
+Everything that talks to the control plane holds it:
+
+- each node, as `RIVET_TOKEN`,
+- each runtime that calls a class or a stream, as a secret environment value bound when it deploys,
+- each deploy, which creates namespaces and pools with it.
+
+The token can do anything on the control plane, in every namespace. Keep a runtime's environment as secret as the token itself. Calls send it in the `x-rivet-token` header, never in the URL, so it stays out of proxy and load balancer logs.
+
+## An HTTPS address without a domain
+
+Every control plane you run serves its gateway over HTTPS, at an address its cloud provides. You don't need a domain of your own.
+
+On AWS, `RivetAWS.Ec2ControlPlane` and `EcsControlPlane` answer at `https://….cloudfront.net`: CloudFront reaches an internal load balancer through a VPC origin.
+
+On GCP, `RivetGCP.ComputeEngineControlPlane` answers at `https://….run.app`: a proxy on Cloud Run reaches the engines through a Serverless VPC Access connector.
+
+On Hetzner, `RivetHetzner.ServerControlPlane` answers at an address like `https://203-0-113-7.sslip.io`: a Caddy server with a Let's Encrypt certificate sits in front of a private load balancer.
+
+On Fly, `RivetFly.MachineControlPlane` answers at `https://….fly.dev`, through Fly's proxy. `RivetDocker.SwarmControlPlane` runs on your machine, at `http://localhost:6420`.
+
+The engines themselves have no public address. Only the HTTPS front reaches them, over the control plane's private network.
+
+<Boundaries
+  nodes={[
+    { id: "api", label: "Api", type: "Lambda", col: 0, row: 0 },
+    { id: "cdn", label: "CloudFront", type: "HTTPS", col: 0, row: 1, tone: "accent" },
+    { id: "lb", label: "Load balancer", type: "internal", col: 0, row: 2 },
+    { id: "engines", label: "Engines", type: "3 instances", col: 1, row: 2 },
+    { id: "nodes", label: "Nodes", type: "pool Default", col: 0, row: 3 },
+  ]}
+  zones={[{ id: "vpc", label: "Control plane VPC", nodes: ["lb", "engines", "nodes"], labelAt: "right" }]}
+  links={[
+    { from: "api", to: "cdn", label: "x-rivet-token" },
+    { from: "cdn", to: "lb", kind: "tunnel", label: "VPC origin" },
+    { from: "lb", to: "engines" },
+    { from: "nodes", to: "lb", label: "connects out" },
+  ]}
+  caption="On AWS, callers reach the engines only through CloudFront: nothing in the VPC has a public address. Nodes inside the VPC use the internal load balancer directly."
+/>
+
+## Nodes only connect out
+
+Nodes open a connection to the control plane and wait for work on it, so nothing connects in to them. A pool needs no public address, no load balancer and no inbound firewall rule.
+
+A node inside the control plane's own network, like an `EcsPool` in the VPC of an `Ec2ControlPlane`, connects to the private address. A node anywhere else, like a `RivetFly.MachinePool` for that same control plane, connects to the HTTPS address.
+
+## Rivet Services stays private
+
+A [Rivet Services](/rivet/durable-streams) node also serves Durable Streams on a port of its own, and that port checks no token. Services pools publish no port, and callers reach every stream through the gateway, with the token. Don't open that port to anyone.
+
+## In CI
+
+A deploy needs the credentials of the cloud the control plane runs on, read the way that provider reads them in CI: `AWS_*` for AWS, `HCLOUD_TOKEN` for Hetzner, and so on. A control plane you run creates its own admin token, so it needs nothing from Rivet.
+
+A Rivet Cloud control plane needs a cluster token from the Rivet dashboard and the cluster's name. `RivetCloud.ControlPlane` reads them from the environment:
+
+```sh
+RIVET_CLOUD_TOKEN=...
+RIVET_CLOUD_CLUSTER=my-cluster
+```
+
+See [Sign in from CI](/rivet/rivet-cloud#sign-in-from-ci).
+
+See [CI](/environments/ci) and [Secrets](/rivet/secrets).

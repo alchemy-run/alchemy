@@ -135,13 +135,13 @@ export const ReasoningEngine = Resource<ReasoningEngine>("GCP.AIPlatform.Reasoni
 export class ReasoningEngineNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.ReasoningEngineNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ReasoningEngineStillExists extends Data.TaggedError(
   "GCP.AIPlatform.ReasoningEngineStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, reasoningEngineId: string) =>
@@ -171,10 +171,10 @@ const toAttrs = (engine: aiplatform.GoogleCloudAiplatformV1ReasoningEngine, proj
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsReasoningEngines({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string) =>
   aiplatform.listProjectsLocationsReasoningEngines.pages({ parent, pageSize: 100 }).pipe(
@@ -206,7 +206,9 @@ const findOwned = (id: string, parent: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((engine) =>
-      engine === undefined ? Effect.void : Effect.fail(new ReasoningEngineStillExists({ name })),
+      engine === undefined
+        ? Effect.void
+        : Effect.fail(new ReasoningEngineStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.ReasoningEngineStillExists",
@@ -300,8 +302,7 @@ export const ReasoningEngineProvider = () =>
       if (current === undefined) {
         const created = yield* retryWriteQuota(
           aiplatform.createProjectsLocationsReasoningEngines({
-            parent,
-            body: compact({
+            ...compact({
               displayName,
               description: news.description,
               labels: desiredLabels,
@@ -309,8 +310,9 @@ export const ReasoningEngineProvider = () =>
               contextSpec: news.contextSpec,
               encryptionSpec: news.encryptionSpec,
             }),
+            parent,
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -321,7 +323,7 @@ export const ReasoningEngineProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new ReasoningEngineNotResolved({
-          name: output?.name ?? parent,
+          resourceName: output?.name ?? parent,
         });
       }
 
@@ -342,9 +344,7 @@ export const ReasoningEngineProvider = () =>
         ].filter((field): field is string => field !== undefined);
         const patched = yield* retryWriteQuota(
           aiplatform.patchProjectsLocationsReasoningEngines({
-            name: observedName,
-            updateMask: updateMask.join(","),
-            body: compact({
+            ...compact({
               name: observedName,
               displayName,
               description: news.description,
@@ -352,6 +352,8 @@ export const ReasoningEngineProvider = () =>
               spec: news.spec,
               etag: current.etag,
             }),
+            name: observedName,
+            updateMask: updateMask.join(","),
           }),
         );
         yield* waitForOperation(patched);
@@ -359,7 +361,7 @@ export const ReasoningEngineProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ReasoningEngineNotResolved({ name: observedName });
+        return yield* new ReasoningEngineNotResolved({ resourceName: observedName });
       }
       return toAttrs(current, env.project);
     }),
@@ -372,8 +374,8 @@ export const ReasoningEngineProvider = () =>
         }),
       ).pipe(
         Effect.catchTags({
-          NotFound: () => Effect.succeed(undefined),
-          BadRequest: () => Effect.succeed(undefined),
+          NotFound: () => Effect.undefined,
+          BadRequest: () => Effect.undefined,
         }),
       );
       if (operation !== undefined) {

@@ -2,6 +2,7 @@
 title: Iceberg tables
 description: Turn an R2 bucket into an Apache Iceberg warehouse with Cloudflare's catalog, manage tables with schema evolution and maintenance, and query them from Spark, DuckDB, or PyIceberg.
 ---
+import Tree from "../../../../components/diagrams/Tree.astro";
 
 Cloudflare's **catalog** (formerly R2 Data Catalog) turns an R2 bucket into an
 Apache Iceberg warehouse. Iceberg stores a table as data files plus metadata,
@@ -16,8 +17,35 @@ get into it in two ways:
 - `Cloudflare.Basin.Table` creates and manages a table directly, for tables
   your own code or engines write.
 
-This page covers enabling the catalog, managing tables, and connecting query
-engines.
+
+<Tree
+  nodes={[
+    { id: "bucket", label: "Lake", type: "R2 bucket · catalog enabled" },
+    { id: "ns", label: "sales", type: "namespace", parent: "bucket" },
+    {
+      id: "orders",
+      label: "Orders",
+      type: "Iceberg table",
+      parent: "ns",
+      tone: "accent",
+      specs: [
+        ["data", "Parquet files"],
+        ["metadata", "schema, snapshots"],
+      ],
+    },
+    {
+      id: "refunds",
+      label: "Refunds",
+      type: "Iceberg table",
+      parent: "ns",
+      specs: [
+        ["data", "Parquet files"],
+        ["metadata", "schema, snapshots"],
+      ],
+    },
+  ]}
+  caption="The catalog organizes a bucket into namespaces and tables. Each table is data files plus metadata, so Spark, DuckDB or Snowflake can read it through the catalog's Iceberg REST endpoint."
+/>
 
 ## Enable the catalog on a bucket
 

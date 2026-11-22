@@ -237,7 +237,7 @@ const toAttrs = (destination: networkconnectivity.Destination, project: string, 
 const getByName = (name: string) =>
   networkconnectivity
     .getProjectsLocationsMulticloudDataTransferConfigsDestinations({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const MulticloudDataTransferConfigsDestinationProvider = () =>
   Provider.succeed(MulticloudDataTransferConfigsDestination, {
@@ -339,14 +339,12 @@ export const MulticloudDataTransferConfigsDestinationProvider = () =>
       if (current === undefined) {
         const created = yield* networkconnectivity
           .createProjectsLocationsMulticloudDataTransferConfigsDestinations({
+            ipPrefix: news.ipPrefix,
+            endpoints,
+            description: news.description,
+            labels: desiredLabels,
             parent: news.parent,
             destinationId,
-            body: {
-              ipPrefix: news.ipPrefix,
-              endpoints,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -354,7 +352,7 @@ export const MulticloudDataTransferConfigsDestinationProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -363,7 +361,7 @@ export const MulticloudDataTransferConfigsDestinationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NetworkConnectivityNotResolved({ name });
+        return yield* new NetworkConnectivityNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -382,15 +380,12 @@ export const MulticloudDataTransferConfigsDestinationProvider = () =>
         const operation =
           yield* networkconnectivity.patchProjectsLocationsMulticloudDataTransferConfigsDestinations(
             {
+              labels: desiredLabels,
+              description: news.description,
+              endpoints,
+              etag: current.etag,
               name: current.name ?? name,
               updateMask: updateMask.join(","),
-              body: {
-                name: current.name ?? name,
-                labels: desiredLabels,
-                description: news.description,
-                endpoints,
-                etag: current.etag,
-              },
             },
           );
         yield* waitForOperation(operation);
@@ -412,7 +407,7 @@ export const MulticloudDataTransferConfigsDestinationProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

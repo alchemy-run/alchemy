@@ -1,13 +1,13 @@
 import * as Azure from "@alchemy.run/azure";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as confidentialledger from "@distilled.cloud/azure/confidentialledger";
 import * as data from "@distilled.cloud/azure/confidentialledger-data";
 import * as identity from "@distilled.cloud/azure/confidentialledger-identity";
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";

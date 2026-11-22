@@ -12,8 +12,7 @@ export class AccountOpened extends Domain.Event("AccountOpened", {
 
 /** Open an account for a customer. Sent by `MainAccountProvisioning`. */
 export class OpenAccount extends Domain.Command("OpenAccount", {
-  target: AccountId,
-  input: { customerId: CustomerId, owner: Schema.String },
+  input: { accountId: AccountId, customerId: CustomerId, owner: Schema.String },
   events: [AccountOpened],
   rejects: [AlreadyOpen],
 }) {}

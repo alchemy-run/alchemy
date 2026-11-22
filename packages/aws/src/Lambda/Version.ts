@@ -159,7 +159,7 @@ export const Version = Object.assign(
     Provider: VersionResource.Provider,
     Self: VersionResource.Self,
     Aliases: VersionResource.Aliases,
-    ref: VersionResource.ref as VersionClass["ref"],
+    ref: ((id, options) => VersionResource.ref(id, options)) as VersionClass["ref"],
   },
 ) as unknown as VersionClass;
 
@@ -303,7 +303,7 @@ export const VersionProvider = () =>
         Lambda.getFunctionConfiguration({
           FunctionName: functionName,
           Qualifier: version,
-        }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const listVersions = (functionName: string) =>
         Lambda.listVersionsByFunction.items({ FunctionName: functionName }).pipe(

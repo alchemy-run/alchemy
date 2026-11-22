@@ -147,7 +147,7 @@ export const DevelopersAppsKey = Resource<DevelopersAppsKey>("GCP.Apigee.Develop
 export class DevelopersAppsKeyNotResolved extends Data.TaggedError(
   "GCP.Apigee.DevelopersAppsKeyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const developerEmailOf = (developer: string) =>
@@ -206,7 +206,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsDevelopersAppsKeys({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const listDeveloperEmails = (organization: string) =>
   apigee
@@ -343,20 +343,18 @@ export const DevelopersAppsKeyProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsDevelopersAppsKeys({
+            consumerKey,
+            consumerSecret,
+            expiresInSeconds: news.expiresInSeconds,
+            attributes: recordToAttributes(attributes),
             parent,
-            body: {
-              consumerKey,
-              consumerSecret,
-              expiresInSeconds: news.expiresInSeconds,
-              attributes: recordToAttributes(attributes),
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new DevelopersAppsKeyNotResolved({ name });
+        return yield* new DevelopersAppsKeyNotResolved({ resourceName: name });
       }
 
       const observedAttributes = attributesToRecord(current.attributes);
@@ -370,14 +368,12 @@ export const DevelopersAppsKeyProvider = () =>
 
       if (scopesChanged || productsChanged || statusChanged || attributesChanged) {
         current = yield* apigee.updateDeveloperAppKeyOrganizationsDevelopersAppsKeys({
+          consumerKey,
+          scopes: news.scopes,
+          apiProducts: news.apiProducts,
+          attributes: recordToAttributes(attributes),
           name,
           action: statusChanged ? status : undefined,
-          body: {
-            consumerKey,
-            scopes: news.scopes,
-            apiProducts: news.apiProducts,
-            attributes: recordToAttributes(attributes),
-          },
         });
       }
 

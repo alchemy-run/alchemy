@@ -1,6 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { poll } from "alchemy/Util/poll";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

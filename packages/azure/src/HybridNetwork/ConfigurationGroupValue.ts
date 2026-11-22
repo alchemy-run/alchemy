@@ -186,6 +186,11 @@ const hashSecret = (value: string | Redacted.Redacted<string>) =>
 const typeOf = (props: { secretConfigurationValue?: unknown }): "Open" | "Secret" =>
   props.secretConfigurationValue !== undefined ? "Secret" : "Open";
 
+/** The observed value of an `Open` configuration (secret values are write-only). */
+const openValueOf = (
+  properties: hybridnetwork.ConfigurationGroupValuePropertiesFormat | undefined,
+) => (properties?.configurationType === "Open" ? properties.configurationValue : undefined);
+
 const toAttrs = (
   resourceGroup: string,
   name: string,
@@ -205,8 +210,7 @@ const toAttrs = (
       value.properties?.configurationGroupSchemaOfferingLocation,
     publisherName: value.properties?.publisherName,
     configurationType,
-    configurationValue:
-      configurationType === "Open" ? value.properties?.configurationValue : undefined,
+    configurationValue: openValueOf(value.properties),
     secretValueHash: configurationType === "Secret" ? secretValueHash : undefined,
     tags: userTags(value.tags),
   };
@@ -290,7 +294,7 @@ export const ConfigurationGroupValueProvider = () =>
       const valueDiffers = (observed: hybridnetwork.GetConfigurationGroupValueResponse) =>
         configurationType === "Secret"
           ? output?.secretValueHash !== secretValueHash
-          : !sameJson(observed.properties?.configurationValue, news.configurationValue ?? "{}");
+          : !sameJson(openValueOf(observed.properties), news.configurationValue ?? "{}");
 
       // Observe.
       let observed = yield* get;

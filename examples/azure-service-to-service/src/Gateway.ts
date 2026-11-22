@@ -35,8 +35,7 @@ export default class Gateway extends Azure.Functions.Function<Gateway>()(
     const quotesToken = Effect.gen(function* () {
       const config = yield* credentials;
       const appId = yield* audience;
-      if (config.tokenFor === undefined) return config.bearerToken;
-      return yield* config.tokenFor(`${appId}/.default`);
+      return yield* config.token(`${appId}/.default`);
     });
 
     return {

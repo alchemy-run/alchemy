@@ -19,9 +19,9 @@
   "dependencies": {
     "@alchemy.run/azure": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@octanejs/vite-plugin": "catalog:",
     "alchemy": "workspace:*",
-    "alchemy-test": "workspace:*",
     "effect": "catalog:",
     "octane": "catalog:",
     "vite": "catalog:"

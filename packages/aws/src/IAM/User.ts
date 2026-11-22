@@ -4,11 +4,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { parsePolicyDocument, stringifyPolicyDocument, toTagRecord } from "./common.ts";
 import type { PolicyDocument } from "./Policy.ts";
+
+export class UserConflict extends Data.TaggedError("UserConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface UserProps {
   /**
@@ -60,8 +66,18 @@ export interface User extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  UserLookup
 > {}
+
+/**
+ * Props for {@link User.lookup}: find an IAM user this stack doesn't manage,
+ * in the ambient account, by name.
+ */
+export interface UserLookup {
+  /** The name of the existing user. */
+  userName: string;
+}
 
 /**
  * An IAM user with optional inline policies, managed policies, and tags.
@@ -76,6 +92,20 @@ export interface User extends Resource<
  *   managedPolicyArns: [
  *     "arn:aws:iam::aws:policy/ReadOnlyAccess",
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing user
+ * `User.lookup` references an IAM user Alchemy doesn't manage (created in the console or by another stack), found by `userName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add an existing user to a group
+ * ```typescript
+ * const alice = AWS.IAM.User.lookup({ userName: "alice" });
+ *
+ * yield* AWS.IAM.GroupMembership("AliceAdmins", {
+ *   groupName: admins.groupName,
+ *   userNames: [alice.userName],
  * });
  * ```
  *
@@ -105,22 +135,20 @@ export const UserProvider = () =>
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
         );
-        const entries = yield* Effect.all(
-          policyNames.map((policyName) =>
-            iam
-              .getUserPolicy({
-                UserName: userName,
-                PolicyName: policyName,
-              })
-              .pipe(
-                Effect.map(
-                  (response) => [policyName, parsePolicyDocument(response.PolicyDocument)] as const,
-                ),
-                Effect.catchTag("NoSuchEntityException", () =>
-                  Effect.succeed([policyName, undefined] as const),
-                ),
+        const entries = yield* Effect.forEach(policyNames, (policyName) =>
+          iam
+            .getUserPolicy({
+              UserName: userName,
+              PolicyName: policyName,
+            })
+            .pipe(
+              Effect.map(
+                (response) => [policyName, parsePolicyDocument(response.PolicyDocument)] as const,
               ),
-          ),
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed([policyName, undefined] as const),
+              ),
+            ),
         );
         return Object.fromEntries(
           entries.filter((entry): entry is [string, PolicyDocument] => entry[1] !== undefined),
@@ -229,7 +257,7 @@ export const UserProvider = () =>
                   };
                 }).pipe(
                   // A user may be deleted concurrently mid-hydration.
-                  Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
                 ),
               { concurrency: 10 },
             );
@@ -247,13 +275,38 @@ export const UserProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ userName }) {
+          const response = yield* iam
+            .getUser({
+              UserName: userName,
+            })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
+          if (!response?.User?.Arn) {
+            return undefined;
+          }
+          const [managedPolicyArns, inlinePolicies, tags] = yield* Effect.all([
+            readManagedPolicies(userName),
+            readInlinePolicies(userName),
+            readTags(userName),
+          ]);
+          return {
+            userArn: response.User.Arn,
+            userName: response.User.UserName,
+            userId: response.User.UserId,
+            path: response.User.Path,
+            permissionsBoundary: response.User.PermissionsBoundary?.PermissionsBoundaryArn,
+            managedPolicyArns,
+            inlinePolicies,
+            tags,
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const userName = output?.userName ?? (yield* toName(id, olds ?? ({} as UserProps)));
           const response = yield* iam
             .getUser({
               UserName: userName,
             })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           if (!response?.User?.Arn) {
             return undefined;
           }
@@ -283,7 +336,7 @@ export const UserProvider = () =>
           // Observe — read the live user (or absence).
           const observedResponse = yield* iam
             .getUser({ UserName: userName })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           let observedUser = observedResponse?.User;
 
           // Ensure — create the user when missing. On race, verify
@@ -302,9 +355,9 @@ export const UserProvider = () =>
                     Effect.filterOrFail(
                       (existing) => hasTags(desiredTags, existing.User?.Tags),
                       () =>
-                        new Error(
-                          `User '${userName}' already exists and is not managed by alchemy`,
-                        ),
+                        new UserConflict({
+                          message: `User '${userName}' already exists and is not managed by alchemy`,
+                        }),
                     ),
                   ),
                 ),

@@ -237,7 +237,7 @@ const waitForRun = (subscriptionId: string, resourceGroup: string, name: string)
     Effect.catchTag("Azure.ProvisioningFailed", (failure) =>
       getScript(subscriptionId, resourceGroup, name).pipe(
         Effect.flatMap((script) => {
-          const error = script?.properties?.status?.error?.error;
+          const error = script?.properties?.status?.error;
           return Effect.fail(
             new DeploymentScriptFailed({
               deploymentScript: name,
@@ -253,7 +253,7 @@ const waitForRun = (subscriptionId: string, resourceGroup: string, name: string)
 const toEnvironment = (
   plain: Record<string, string> | undefined,
   secure: Record<string, Redacted.Redacted<string>> | undefined,
-): resources.DeploymentScriptEnvironmentVariable[] | undefined => {
+): resources.EnvironmentVariable[] | undefined => {
   const variables = [
     ...Object.entries(plain ?? {}).map(([name, value]) => ({ name, value })),
     ...Object.entries(secure ?? {}).map(([name, value]) => ({
@@ -266,7 +266,7 @@ const toEnvironment = (
 
 /** Observed plain environment variables (secure values are never returned). */
 const observedEnvironment = (
-  variables: resources.DeploymentScriptEnvironmentVariable[] | undefined,
+  variables: resources.EnvironmentVariable[] | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     (variables ?? []).flatMap((variable) =>
@@ -388,37 +388,50 @@ export const DeploymentScriptProvider = () =>
         definitionDrifted ||
         (news.forceUpdateTag !== undefined && current.forceUpdateTag !== news.forceUpdateTag)
       ) {
-        yield* resources.CreateDeploymentScript({
-          subscriptionId,
-          resourceGroupName: group,
-          scriptName: name,
+        const envelope = {
           location,
-          kind: news.kind,
           tags,
           identity:
             news.identity === undefined
               ? undefined
               : {
-                  type: "UserAssigned",
+                  type: "UserAssigned" as const,
                   userAssignedIdentities: { [news.identity]: {} },
                 },
-          properties: {
-            azCliVersion: news.kind === "AzureCLI" ? (news.azCliVersion ?? "2.61.0") : undefined,
-            azPowerShellVersion:
-              news.kind === "AzurePowerShell" ? (news.azPowerShellVersion ?? "11.0") : undefined,
-            scriptContent: news.scriptContent,
-            primaryScriptUri: news.primaryScriptUri,
-            supportingScriptUris: news.supportingScriptUris,
-            arguments: news.arguments,
-            environmentVariables: toEnvironment(
-              news.environmentVariables,
-              news.secureEnvironmentVariables,
-            ),
-            forceUpdateTag: news.forceUpdateTag,
-            retentionInterval: news.retentionInterval ?? "PT1H",
-            timeout: news.timeout ?? "PT30M",
-            cleanupPreference: news.cleanupPreference ?? "Always",
-          },
+        };
+        const properties = {
+          scriptContent: news.scriptContent,
+          primaryScriptUri: news.primaryScriptUri,
+          supportingScriptUris: news.supportingScriptUris,
+          arguments: news.arguments,
+          environmentVariables: toEnvironment(
+            news.environmentVariables,
+            news.secureEnvironmentVariables,
+          ),
+          forceUpdateTag: news.forceUpdateTag,
+          retentionInterval: news.retentionInterval ?? "PT1H",
+          timeout: news.timeout ?? "PT30M",
+          cleanupPreference: news.cleanupPreference ?? "Always",
+        };
+        yield* resources.CreateDeploymentScript({
+          subscriptionId,
+          resourceGroupName: group,
+          scriptName: name,
+          body:
+            news.kind === "AzureCLI"
+              ? {
+                  ...envelope,
+                  kind: "AzureCLI",
+                  properties: { ...properties, azCliVersion: news.azCliVersion ?? "2.61.0" },
+                }
+              : {
+                  ...envelope,
+                  kind: "AzurePowerShell",
+                  properties: {
+                    ...properties,
+                    azPowerShellVersion: news.azPowerShellVersion ?? "11.0",
+                  },
+                },
         });
         observed = yield* waitForRun(subscriptionId, group, name);
       }

@@ -1,4 +1,5 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
+import * as FloatingIpActions from "@distilled.cloud/hetzner/floating_ip_actions";
+import * as FloatingIps from "@distilled.cloud/hetzner/floating_ips";
 import type { GetFloatingIpResponseFloatingIp } from "@distilled.cloud/hetzner/floating_ips";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
@@ -18,6 +19,8 @@ import {
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
+  isReplacedGeneration,
+  keepsName,
   labelSelector,
   stripInternalLabels,
   toLabels,
@@ -25,6 +28,18 @@ import {
 import type { Providers } from "./Providers.ts";
 
 export type FloatingIpType = "ipv4" | "ipv6";
+
+/**
+ * Deletion was refused because the Floating IP has delete protection on, set
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or
+ * turn it off in the Hetzner Console) before deleting it.
+ */
+export class FloatingIpDeleteProtected extends Data.TaggedError(
+  "Hetzner.FloatingIpDeleteProtected",
+)<{
+  readonly id: number;
+  readonly message: string;
+}> {}
 
 export interface FloatingIpProps {
   /**
@@ -115,8 +130,18 @@ export type FloatingIp = Resource<
     serverId: number | null;
   },
   never,
-  Providers
+  Providers,
+  FloatingIpLookup
 >;
+
+/**
+ * Props for {@link FloatingIp.lookup}: find a Floating IP this stack
+ * doesn't manage by its name.
+ */
+export interface FloatingIpLookup {
+  /** Floating IP name (unique in the project). */
+  name: string;
+}
 
 /**
  * An unassigned Hetzner Cloud Floating IP. Provide `type` and a
@@ -160,6 +185,16 @@ export type FloatingIp = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing Floating IP
+ * `FloatingIp.lookup` references a Floating IP Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Floating IP
+ * ```typescript
+ * const ip = Hetzner.FloatingIp.lookup({ name: "ingress" });
+ * ```
+ *
  * @resource
  * @product IP Address
  */
@@ -194,20 +229,20 @@ const createFloatingIpName = (id: string, name: string | undefined, existing?: s
   });
 
 const getById = (id: number) =>
-  Hetzner.floatingIps.getFloatingIp({ id }).pipe(
+  FloatingIps.getFloatingIp({ id }).pipe(
     Effect.map(({ floating_ip }) => floating_ip),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const getByName = (name: string) =>
-  Hetzner.floatingIps
-    .listFloatingIps({ name, per_page: 50 })
-    .pipe(Effect.map(({ floating_ips }) => floating_ips[0]));
+  FloatingIps.listFloatingIps({ name, per_page: 50 }).pipe(
+    Effect.map(({ floating_ips }) => floating_ips[0]),
+  );
 
 const getByLabels = (labels: Record<string, string>) =>
-  Hetzner.floatingIps
-    .listFloatingIps({ label_selector: labelSelector(labels), per_page: 50 })
-    .pipe(Effect.map(({ floating_ips }) => floating_ips[0]));
+  FloatingIps.listFloatingIps({ label_selector: labelSelector(labels), per_page: 50 }).pipe(
+    Effect.map(({ floating_ips }) => floating_ips[0]),
+  );
 
 const observe = Effect.fn(function* ({
   id,
@@ -231,7 +266,7 @@ const observe = Effect.fn(function* ({
 });
 
 const refresh = (id: number) =>
-  Hetzner.floatingIps.getFloatingIp({ id }).pipe(
+  FloatingIps.getFloatingIp({ id }).pipe(
     Effect.map(({ floating_ip }) => floating_ip),
     Effect.retry({
       while: (e) => e._tag === "NotFound",
@@ -263,12 +298,12 @@ const matchesDesired = (
   });
 
 const disableProtection = (id: number) =>
-  Hetzner.floatingIpActions
-    .changeFloatingIpProtection({ id, delete: false })
-    .pipe(Effect.flatMap(({ action }) => waitForAction(action)));
+  FloatingIpActions.changeFloatingIpProtection({ id, delete: false }).pipe(
+    Effect.flatMap(({ action }) => waitForAction(action)),
+  );
 
 export class FloatingIpNotCreated extends Data.TaggedError("Hetzner.FloatingIpNotCreated")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const FloatingIpProvider = () =>
@@ -276,7 +311,7 @@ export const FloatingIpProvider = () =>
     stables: ["id", "ip", "type", "homeLocation", "homeLocationId", "created"],
     nuke: { dependsOn: ["Hetzner.Server"] },
     list: Effect.fn(function* () {
-      const items = yield* Hetzner.floatingIps.listFloatingIps
+      const items = yield* FloatingIps.listFloatingIps
         .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,
@@ -288,17 +323,32 @@ export const FloatingIpProvider = () =>
       if (!isResolved(news)) return undefined;
       if (output !== undefined) {
         if (news.type !== output.type) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         if (!sameHomeLocation(news.homeLocation, output)) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* getByName(name);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const found = yield* observe({ id, name: olds?.name ?? output?.name, outputId: output?.id });
       if (found === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: found.id,
+          claimedName: olds?.name,
+          foundName: found.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(found);
       const owned = yield* hasAlchemyLabels(id, tagRecord(found.labels));
       return owned ? attrs : Unowned(attrs);
@@ -328,15 +378,13 @@ export const FloatingIpProvider = () =>
       // Ensure — create only when missing. A Conflict is a race with a
       // peer reconciler or a name that just became visible; re-observe.
       if (current === undefined) {
-        const created = yield* Hetzner.floatingIps
-          .createFloatingIp({
-            type: news.type,
-            home_location: location.name,
-            name,
-            description: desiredDescription,
-            labels: desiredLabels,
-          })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        const created = yield* FloatingIps.createFloatingIp({
+          type: news.type,
+          home_location: location.name,
+          name,
+          description: desiredDescription,
+          labels: desiredLabels,
+        }).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           if (created.action) {
             yield* waitForAction(created.action);
@@ -351,7 +399,7 @@ export const FloatingIpProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FloatingIpNotCreated({ name });
+        return yield* new FloatingIpNotCreated({ resourceName: name });
       }
 
       // Sync — name / description / labels via PUT (labels overwrite the
@@ -364,7 +412,7 @@ export const FloatingIpProvider = () =>
         upsert.length > 0 ||
         removed.length > 0;
       if (needsUpdate) {
-        const updated = yield* Hetzner.floatingIps.updateFloatingIp({
+        const updated = yield* FloatingIps.updateFloatingIp({
           id: current.id,
           name,
           description: desiredDescription,
@@ -374,7 +422,7 @@ export const FloatingIpProvider = () =>
       }
 
       if (current.protection.delete !== desiredProtection) {
-        const { action } = yield* Hetzner.floatingIpActions.changeFloatingIpProtection({
+        const { action } = yield* FloatingIpActions.changeFloatingIpProtection({
           id: current.id,
           delete: desiredProtection,
         });
@@ -383,18 +431,26 @@ export const FloatingIpProvider = () =>
 
       return toAttrs(yield* refresh(current.id));
     }),
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getById(output.id);
       if (current === undefined) return;
+      // Delete protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.protection.delete) {
+        if (force !== true) {
+          return yield* new FloatingIpDeleteProtected({
+            id: current.id,
+            message: `Hetzner Floating IP '${current.id}' has delete protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* disableProtection(current.id);
       }
       if (current.server !== null) {
-        const { action } = yield* Hetzner.floatingIpActions.unassignFloatingIp({ id: current.id });
+        const { action } = yield* FloatingIpActions.unassignFloatingIp({ id: current.id });
         yield* waitForAction(action);
       }
-      yield* Hetzner.floatingIps
-        .deleteFloatingIp({ id: current.id })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* FloatingIps.deleteFloatingIp({ id: current.id }).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
     }),
   });

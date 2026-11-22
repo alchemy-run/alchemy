@@ -181,7 +181,7 @@ export class CustomersConnectorConfigNotResolved extends Data.TaggedError(
   "GCP.ChromeManagement.CustomersConnectorConfigNotResolved",
 )<{
   parent: string;
-  name: string;
+  resourceName: string;
 }> {}
 
 const lookupName = (
@@ -286,11 +286,7 @@ export const CustomersConnectorConfigProvider = () =>
 
       if (current === undefined) {
         const created = yield* chromemanagement
-          .createCustomersConnectorConfigs({
-            parent,
-            connectorConfigId,
-            body: desired,
-          })
+          .createCustomersConnectorConfigs({ ...desired, parent, connectorConfigId })
           .pipe(
             Effect.catchTag("Conflict", () =>
               getConnectorConfig(name).pipe(
@@ -308,7 +304,7 @@ export const CustomersConnectorConfigProvider = () =>
       if (current === undefined) {
         return yield* new CustomersConnectorConfigNotResolved({
           parent,
-          name: name || displayName,
+          resourceName: name || displayName,
         });
       }
 
@@ -320,9 +316,9 @@ export const CustomersConnectorConfigProvider = () =>
 
       if (updateMask.length > 0 && currentName.length > 0) {
         current = yield* chromemanagement.patchCustomersConnectorConfigs({
+          ...desired,
           name: currentName,
           updateMask,
-          body: desired,
         });
       }
 

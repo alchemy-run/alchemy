@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { PUBLIC_KEY_1, VM_LOCATION, VM_SIZE, vmNetwork } from "../Compute/helpers.ts";
 import { withVcpus } from "../gates.ts";

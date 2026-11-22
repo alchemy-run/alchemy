@@ -11,13 +11,14 @@ import {
   validateReplicationGroupProps,
 } from "@alchemy.run/aws/ElastiCache";
 import { sameStringSet } from "@alchemy.run/aws/ElastiCache/internal";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ElastiCache from "@distilled.cloud/aws/elasticache";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { interruptDestroy } from "../../interruptDestroy.ts";
 import {
   assertCacheClusterGone,
   assertReplicationGroupGone,
@@ -276,7 +277,7 @@ test.provider.skipIf(!!process.env.FAST)(
 );
 
 test.provider.skipIf(!!process.env.FAST)(
-  "create, scale, verify, and destroy a provisioned Memcached cluster",
+  "create, scale, verify, and destroy a provisioned Memcached cluster through an interruption",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -308,6 +309,15 @@ test.provider.skipIf(!!process.env.FAST)(
       });
       expect(observed.CacheClusters?.[0]?.NumCacheNodes).toBe(2);
 
+      // The destroy is interrupted while the cluster is deleting. ElastiCache
+      // rejects a second delete of it, so the next destroy has to wait for
+      // the one already running.
+      yield* interruptDestroy(stack, {
+        status: ElastiCache.describeCacheClusters({ CacheClusterId: cache.cacheClusterId }).pipe(
+          Effect.map((response) => response.CacheClusters?.[0]?.CacheClusterStatus),
+        ),
+        deleting: "deleting",
+      });
       yield* stack.destroy();
       yield* assertCacheClusterGone(cache.cacheClusterId);
     }),

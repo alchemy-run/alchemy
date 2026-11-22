@@ -4,11 +4,12 @@ description: Build a schema-validated HTTP API with Effect's HttpApi module, dep
 sidebar:
   order: 2
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 `HttpApi` gives you real REST endpoints, with paths, query strings,
 and typed bodies, behind a typed client. Use it when the API's callers
 aren't all Effect, or aren't TypeScript. The concept lives at
-[Effect HTTP](/apis/effect-http). This page wires it onto Cloud Run.
+[Effect HTTP](/apis/effect-http).
 
 ## Define the schema
 
@@ -152,9 +153,7 @@ export default Alchemy.Stack(
 );
 ```
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Invalid payloads get a 400 with the validation errors.
 
@@ -166,7 +165,7 @@ The same `JobApi` value builds a typed client:
 // test/api.test.ts
 import * as Alchemy from "alchemy";
 import * as GCP from "@alchemy.run/gcp";
-import * as Test from "alchemy/Test/Bun";
+import * as Test from "@alchemy.run/test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -207,6 +206,52 @@ test(
 
 The first call retries while the new Firestore grant reaches the
 service.
+
+## Call it from another service
+
+Keep the API service private and call it from another Cloud Run
+service. `GCP.Run.InvokeService` with `api` returns a typed
+`HttpApiClient` whose requests carry an ID token:
+
+```typescript
+// inside the calling service's Effect
+const jobs = yield* GCP.Run.InvokeService(JobService, { api: JobApi });
+const job = yield* jobs.Jobs.getJob({ query: { jobId } });
+```
+
+`GCP.Run.ServeHttpApi` is a shorter way to serve the API. It adds the
+platform layers and builds the router once per instance:
+
+```typescript
+return { fetch: GCP.Run.ServeHttpApi(JobApi, jobsGroup) };
+```
+
+## Run it as a sidecar
+
+Declare the API as a `GCP.Run.Container` and bind it with
+`GCP.Run.bindContainer` to call it over `localhost`:
+
+```typescript
+// src/JobSidecar.ts
+import * as GCP from "@alchemy.run/gcp";
+import * as Effect from "effect/Effect";
+import { JobApi } from "./JobApi.ts";
+import { jobsGroup } from "./handlers.ts";
+
+export default class JobSidecar extends GCP.Run.Container<JobSidecar>()(
+  "JobSidecar",
+  { main: import.meta.url, port: 3000, startupProbe: { tcpSocket: {} } },
+  Effect.gen(function* () {
+    return { fetch: GCP.Run.ServeHttpApi(JobApi, jobsGroup) };
+  }),
+) {}
+```
+
+```typescript
+// inside the calling service's Effect
+const jobs = yield* GCP.Run.bindContainer(JobSidecar, { api: JobApi });
+const job = yield* jobs.Jobs.getJob({ query: { jobId } });
+```
 
 ## Where next
 

@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -11,6 +11,7 @@ import AuditManagerTestFunctionLive, { AuditManagerTestFunction } from "./handle
 import AuditManagerAssessmentTestFunctionLive, {
   AuditManagerAssessmentTestFunction,
 } from "./handler-assessment";
+import { ensureRegistered } from "./registration.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -236,6 +237,7 @@ describe.sequential(
           "all 22 capabilities bind and the reads answer live data",
           (_stack) =>
             Effect.gen(function* () {
+              yield* ensureRegistered;
               yield* assessmentStack.destroy();
               const cleanup = assessmentStack.destroy().pipe(Effect.catchCause(() => Effect.void));
 

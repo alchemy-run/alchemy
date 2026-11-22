@@ -1,6 +1,6 @@
 import { ObjectType } from "@alchemy.run/git/Protocol/ObjectCodec";
 import { decodeStagedBatch, encodeStagedBatch } from "@alchemy.run/git/PushWire";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 
 describe("push batch codec", { tags: ["unit", "local"] }, () => {
   test("inline and promoted rows round-trip", () => {

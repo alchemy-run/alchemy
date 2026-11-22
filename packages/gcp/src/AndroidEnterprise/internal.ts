@@ -55,7 +55,7 @@ const isMissing = <E extends { readonly _tag: string }>(
 
 export const catchMissing = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
-) => effect.pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
+) => effect.pipe(Effect.catchIf(isMissing, () => Effect.undefined));
 
 export const ignoreList =
   <A>(fallback: A) =>
@@ -197,12 +197,12 @@ export const defaultTitle = (title: string | undefined, fallback: string) =>
 
 export const getPage = (enterpriseId: string, pageId: string) =>
   enterpriseId.length === 0 || pageId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(androidenterprise.getStorelayoutpages({ enterpriseId, pageId }));
 
 export const getCluster = (enterpriseId: string, pageId: string, clusterId: string) =>
   enterpriseId.length === 0 || pageId.length === 0 || clusterId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(
         androidenterprise.getStorelayoutclusters({
           enterpriseId,
@@ -213,7 +213,7 @@ export const getCluster = (enterpriseId: string, pageId: string, clusterId: stri
 
 export const getWebapp = (enterpriseId: string, webAppId: string) =>
   enterpriseId.length === 0 || webAppId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(androidenterprise.getWebapps({ enterpriseId, webAppId }));
 
 export const listPagesAt = (enterpriseId: string) =>

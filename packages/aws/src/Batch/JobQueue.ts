@@ -8,12 +8,14 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { pollBatch, retryBatch } from "./internal.ts";
 
 export type JobQueueName = string;
-export type JobQueueArn = `arn:aws:batch:${RegionID}:${AccountID}:job-queue/${JobQueueName}`;
+export type JobQueueArn =
+  `arn:${Partition}:batch:${RegionID}:${AccountID}:job-queue/${JobQueueName}`;
 
 /**
  * Raised when a job queue's asynchronous deletion does not complete within
@@ -69,8 +71,18 @@ export interface JobQueue extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  JobQueueLookup
 > {}
+
+/**
+ * Props for {@link JobQueue.lookup}: find a job queue this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface JobQueueLookup {
+  /** The job queue name of the existing job queue. */
+  jobQueueName: string;
+}
 
 /**
  * An AWS Batch job queue. Jobs submitted to the queue are scheduled onto its
@@ -91,6 +103,16 @@ export interface JobQueue extends Resource<
  *   priority: 10,
  *   computeEnvironments: [ce.computeEnvironmentArn],
  * });
+ * ```
+ *
+ * ### Looking up an existing job queue
+ * `JobQueue.lookup` references a job queue Alchemy doesn't manage (created in the
+ * console or by another stack), found by `jobQueueName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing job queue
+ * ```typescript
+ * const existing = AWS.Batch.JobQueue.lookup({ jobQueueName: "my-job-queue" });
  * ```
  *
  * @resource
@@ -170,6 +192,13 @@ export const JobQueueProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ jobQueueName: name }) {
+          const q = yield* describeOne(name);
+          if (!q?.jobQueueArn || q.status === "DELETED") {
+            return undefined;
+          }
+          return toAttributes(q, observedTagsOf(q));
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.jobQueueName ?? (yield* toName(id, olds ?? {}));
           const q = yield* describeOne(name);
@@ -190,7 +219,8 @@ export const JobQueueProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.jobQueueName ?? (yield* toName(id, news));
-          const arn = `arn:aws:batch:${region}:${accountId}:job-queue/${name}` as JobQueueArn;
+          const arn =
+            `arn:${partitionOf(region)}:batch:${region}:${accountId}:job-queue/${name}` as JobQueueArn;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredState = news.state ?? "ENABLED";

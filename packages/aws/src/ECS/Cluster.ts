@@ -9,11 +9,12 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type ClusterName = string;
-export type ClusterArn = `arn:aws:ecs:${RegionID}:${AccountID}:cluster/${ClusterName}`;
+export type ClusterArn = `arn:${Partition}:ecs:${RegionID}:${AccountID}:cluster/${ClusterName}`;
 
 export interface ClusterProps {
   /**
@@ -70,8 +71,18 @@ export interface Cluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 > {}
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterLookup {
+  /** The name or ARN of the existing cluster. */
+  clusterName: string;
+}
 
 /**
  * An Amazon ECS cluster for running tasks and services.
@@ -79,6 +90,21 @@ export interface Cluster extends Resource<
  * **Example:** Default Cluster
  * ```typescript
  * const cluster = yield* Cluster("AppCluster", {});
+ * ```
+ *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Run a service on an existing cluster
+ * ```typescript
+ * const cluster = AWS.ECS.Cluster.lookup({ clusterName: "shared" });
+ *
+ * const service = yield* AWS.ECS.Service("Web", {
+ *   cluster: cluster.clusterArn,
+ *   taskDefinition: task.taskDefinitionArn,
+ * });
  * ```
  *
  * @resource
@@ -105,6 +131,22 @@ export const ClusterProvider = () =>
           value,
         }));
 
+      // The one projection of a described cluster onto Attributes, shared by
+      // read, list and reconcile so drift compares like with like.
+      const toAttrs = (cluster: ecs.Cluster, tags: Record<string, string>) => ({
+        clusterArn: cluster.clusterArn as ClusterArn,
+        clusterName: cluster.clusterName!,
+        status: cluster.status ?? "ACTIVE",
+        settings: cluster.settings ?? [],
+        configuration: cluster.configuration,
+        capacityProviders: cluster.capacityProviders ?? [],
+        defaultCapacityProviderStrategy: cluster.defaultCapacityProviderStrategy ?? [],
+        serviceConnectDefaults: cluster.serviceConnectDefaults?.namespace
+          ? { namespace: cluster.serviceConnectDefaults.namespace }
+          : undefined,
+        tags,
+      });
+
       const toClusterName = (id: string, props: { clusterName?: string } = {}) =>
         props.clusterName
           ? Effect.succeed(props.clusterName)
@@ -120,11 +162,25 @@ export const ClusterProvider = () =>
         defaultCapacityProviderStrategy?: ecs.CapacityProviderStrategyItem[];
       }) {
         if (capacityProviders !== undefined || defaultCapacityProviderStrategy !== undefined) {
-          yield* ecs.putClusterCapacityProviders({
-            cluster,
-            capacityProviders: capacityProviders ?? [],
-            defaultCapacityProviderStrategy: defaultCapacityProviderStrategy ?? [],
-          });
+          yield* ecs
+            .putClusterCapacityProviders({
+              cluster,
+              capacityProviders: capacityProviders ?? [],
+              defaultCapacityProviderStrategy: defaultCapacityProviderStrategy ?? [],
+            })
+            .pipe(
+              // The first CreateCluster in an account creates the
+              // AWSServiceRoleForECS service-linked role asynchronously. Until
+              // it is usable, this call rejects the cluster we just observed
+              // ACTIVE as unassumable or not found.
+              Effect.retry({
+                while: (e) =>
+                  e._tag === "ServiceLinkedRoleNotAssumable" ||
+                  e._tag === "ClusterNotFoundException",
+                schedule: Schedule.spaced("3 seconds"),
+                times: 15,
+              }),
+            );
         }
       });
 
@@ -135,6 +191,22 @@ export const ClusterProvider = () =>
           if ((yield* toClusterName(id, olds ?? {})) !== (yield* toClusterName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ clusterName }) {
+          const described = yield* ecs.describeClusters({
+            clusters: [clusterName],
+            include: ["SETTINGS", "TAGS", "CONFIGURATIONS"],
+          });
+          const cluster = described.clusters?.[0];
+          if (!cluster?.clusterArn || cluster.status === "INACTIVE") return undefined;
+          return toAttrs(
+            cluster,
+            Object.fromEntries(
+              (cluster.tags ?? []).flatMap((t) =>
+                typeof t.key === "string" && typeof t.value === "string" ? [[t.key, t.value]] : [],
+              ),
+            ),
+          );
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const clusterName = output?.clusterName ?? (yield* toClusterName(id, olds ?? {}));
@@ -150,19 +222,14 @@ export const ClusterProvider = () =>
           if (!cluster?.clusterArn || cluster.status === "INACTIVE") {
             return undefined;
           }
-          return {
-            clusterArn: cluster.clusterArn as ClusterArn,
-            clusterName: cluster.clusterName!,
-            status: cluster.status ?? "ACTIVE",
-            settings: cluster.settings ?? [],
-            configuration: cluster.configuration,
-            capacityProviders: cluster.capacityProviders ?? [],
-            defaultCapacityProviderStrategy: cluster.defaultCapacityProviderStrategy ?? [],
-            serviceConnectDefaults: cluster.serviceConnectDefaults?.namespace
-              ? { namespace: cluster.serviceConnectDefaults.namespace }
-              : undefined,
-            tags: output?.tags ?? {},
-          };
+          return toAttrs(
+            cluster,
+            Object.fromEntries(
+              (cluster.tags ?? []).flatMap((t) =>
+                typeof t.key === "string" && typeof t.value === "string" ? [[t.key, t.value]] : [],
+              ),
+            ),
+          );
         }),
         list: () =>
           Effect.gen(function* () {
@@ -206,21 +273,7 @@ export const ClusterProvider = () =>
                   )
                   .map((t) => [t.key, t.value]),
               );
-              return [
-                {
-                  clusterArn: cluster.clusterArn as ClusterArn,
-                  clusterName: cluster.clusterName!,
-                  status: cluster.status ?? "ACTIVE",
-                  settings: cluster.settings ?? [],
-                  configuration: cluster.configuration,
-                  capacityProviders: cluster.capacityProviders ?? [],
-                  defaultCapacityProviderStrategy: cluster.defaultCapacityProviderStrategy ?? [],
-                  serviceConnectDefaults: cluster.serviceConnectDefaults?.namespace
-                    ? { namespace: cluster.serviceConnectDefaults.namespace }
-                    : undefined,
-                  tags,
-                },
-              ];
+              return [toAttrs(cluster, tags)];
             });
           }),
         reconcile: Effect.fn(function* ({ id, news: rawNews, session }) {
@@ -230,7 +283,7 @@ export const ClusterProvider = () =>
           const { accountId, region } = yield* AWSEnvironment.current;
           const clusterName = yield* toClusterName(id, news);
           const clusterArn =
-            `arn:aws:ecs:${region}:${accountId}:cluster/${clusterName}` as ClusterArn;
+            `arn:${partitionOf(region)}:ecs:${region}:${accountId}:cluster/${clusterName}` as ClusterArn;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -289,12 +342,22 @@ export const ClusterProvider = () =>
 
           // Sync cluster config — call updateCluster to converge settings,
           // configuration, and serviceConnectDefaults to desired state.
-          yield* ecs.updateCluster({
-            cluster: clusterArn,
-            settings: news.settings,
-            configuration: news.configuration,
-            serviceConnectDefaults: news.serviceConnectDefaults,
-          });
+          yield* ecs
+            .updateCluster({
+              cluster: clusterArn,
+              settings: news.settings,
+              configuration: news.configuration,
+              serviceConnectDefaults: news.serviceConnectDefaults,
+            })
+            .pipe(
+              // A cluster just created can read back ACTIVE while UpdateCluster
+              // still reports it missing.
+              Effect.retry({
+                while: (e) => e._tag === "ClusterNotFoundException",
+                schedule: Schedule.spaced("2 seconds"),
+                times: 10,
+              }),
+            );
 
           // Sync capacity providers — observed ↔ desired.
           yield* applyCapacityProviders({
@@ -327,17 +390,14 @@ export const ClusterProvider = () =>
           }
 
           yield* session.note(clusterArn);
-          return {
-            clusterArn,
-            clusterName,
-            status: cluster?.status ?? "ACTIVE",
-            settings: news.settings ?? [],
-            configuration: news.configuration,
-            capacityProviders: news.capacityProviders ?? [],
-            defaultCapacityProviderStrategy: news.defaultCapacityProviderStrategy ?? [],
-            serviceConnectDefaults: news.serviceConnectDefaults,
-            tags: desiredTags,
-          };
+          // Return what ECS reports, not the props: it fills in account
+          // defaults (e.g. `containerInsights`) that `read` observes, so
+          // echoing the props would report drift on an untouched cluster.
+          const final = (yield* ecs.describeClusters({
+            clusters: [clusterArn],
+            include: ["SETTINGS", "TAGS", "CONFIGURATIONS"],
+          })).clusters?.find((candidate) => candidate.clusterArn === clusterArn);
+          return toAttrs(final ?? cluster, desiredTags);
         }),
         delete: Effect.fn(function* ({ output }) {
           const cluster = output.clusterArn;
@@ -364,8 +424,9 @@ export const ClusterProvider = () =>
             serviceArns,
             (service) =>
               ecs.deleteService({ cluster, service, force: true }).pipe(
-                Effect.catchTag(["ServiceNotFoundException", "ClusterNotFoundException"], () =>
-                  Effect.succeed(undefined),
+                Effect.catchTag(
+                  ["ServiceNotFoundException", "ClusterNotFoundException"],
+                  () => Effect.undefined,
                 ),
                 Effect.asVoid,
               ),
@@ -382,7 +443,7 @@ export const ClusterProvider = () =>
             taskArns,
             (task) =>
               ecs.stopTask({ cluster, task, reason: "alchemy delete" }).pipe(
-                Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ClusterNotFoundException", () => Effect.undefined),
                 Effect.asVoid,
               ),
             { discard: true },
@@ -406,7 +467,7 @@ export const ClusterProvider = () =>
                   force: true,
                 })
                 .pipe(
-                  Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ClusterNotFoundException", () => Effect.undefined),
                   Effect.asVoid,
                 ),
             { discard: true },
@@ -470,7 +531,7 @@ export const ClusterProvider = () =>
                   );
             }),
             Effect.retry({
-              while: (error) => error instanceof ClusterStillActive,
+              while: (error) => error._tag === "ClusterStillActive",
               schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
             }),
           );

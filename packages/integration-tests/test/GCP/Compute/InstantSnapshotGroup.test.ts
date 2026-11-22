@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -37,14 +38,11 @@ test.provider(
       const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         compute.insertInstantSnapshotGroups({
+          name: "alchemy-isg-probe",
+          description: "alchemy entitlement probe",
           project,
           zone,
           sourceConsistencyGroup: "does-not-exist",
-          body: {
-            name: "alchemy-isg-probe",
-            description: "alchemy entitlement probe",
-            sourceConsistencyGroup: "does-not-exist",
-          },
         }),
       );
       expect(error._tag).toEqual("BadRequest");
@@ -72,17 +70,22 @@ test.provider(
           return { policy, disk };
         }),
       );
+      yield* expectFound(
+        GCP.Compute.ResourcePolicy.lookup({
+          resourcePolicyName: created.policy.resourcePolicyName,
+          region: created.policy.region,
+        }),
+        created.policy,
+      );
 
       yield* compute.addResourcePoliciesDisks({
+        resourcePolicies: [
+          created.policy.selfLink ??
+            `projects/${created.disk.project}/regions/us-central1/resourcePolicies/${created.policy.resourcePolicyName}`,
+        ],
         project: created.disk.project,
         zone,
         disk: created.disk.diskName,
-        body: {
-          resourcePolicies: [
-            created.policy.selfLink ??
-              `projects/${created.disk.project}/regions/us-central1/resourcePolicies/${created.policy.resourcePolicyName}`,
-          ],
-        },
       });
 
       const withGroup = yield* stack.deploy(
@@ -105,6 +108,13 @@ test.provider(
           });
           return { policy, disk, group };
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.InstantSnapshotGroup.lookup({
+          instantSnapshotGroupName: withGroup.group.instantSnapshotGroupName,
+          zone: withGroup.group.zone,
+        }),
+        withGroup.group,
       );
 
       expect(withGroup.group.instantSnapshotGroupName).toEqual(expect.any(String));

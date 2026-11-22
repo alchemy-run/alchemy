@@ -228,15 +228,17 @@ export const EvaluationProvider = () =>
       return toAttributes(created, accountId, { datasetIds, evaluationTypeIds });
     }),
     delete: Effect.fn(function* ({ output }) {
-      yield* aiGateway
-        .deleteEvaluation({
-          accountId: output.accountId,
-          gatewayId: output.gatewayId,
-          id: output.evaluationId,
-        })
-        // Cloudflare reports both a missing evaluation and a missing parent
-        // gateway with code 7002 — either way it's already gone.
-        .pipe(Effect.catchTag("EvaluationNotFound", () => Effect.void));
+      yield* (
+        aiGateway
+          .deleteEvaluation({
+            accountId: output.accountId,
+            gatewayId: output.gatewayId,
+            id: output.evaluationId,
+          })
+          // Cloudflare reports both a missing evaluation and a missing parent
+          // gateway with code 7002 — either way it's already gone.
+          .pipe(Effect.catchTag("EvaluationNotFound", () => Effect.void))
+      );
     }),
     // Evaluations are scoped under an AI Gateway, which itself is
     // account-scoped. Fan out: exhaustively paginate every gateway in the
@@ -282,7 +284,7 @@ export const EvaluationProvider = () =>
 const getEvaluation = (accountId: string, gatewayId: string, id: string) =>
   aiGateway
     .getEvaluation({ accountId, gatewayId, id })
-    .pipe(Effect.catchTag("EvaluationNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("EvaluationNotFound", () => Effect.undefined));
 
 /**
  * Find an evaluation by exact name. Cloudflare's `name` query is a fuzzy

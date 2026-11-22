@@ -112,9 +112,8 @@ export const SynchronizationSetting = GroupedResource<SynchronizationSetting>(
   "Azure.DataShare.SynchronizationSetting",
 );
 
-type ObservedSetting =
-  | datashare.GetSynchronizationSettingsResponse
-  | datashare.CreateSynchronizationSettingsResponse;
+/** What GET and PUT return. */
+type ObservedSetting = datashare.ScheduledSynchronizationSetting;
 
 const getSetting = (
   subscriptionId: string,
@@ -231,10 +230,12 @@ export const SynchronizationSettingProvider = () =>
           accountName: account,
           shareName: share,
           synchronizationSettingName: name,
-          kind: "ScheduleBased",
-          properties: {
-            recurrenceInterval: news.recurrenceInterval,
-            synchronizationTime: news.synchronizationTime,
+          body: {
+            kind: "ScheduleBased",
+            properties: {
+              recurrenceInterval: news.recurrenceInterval,
+              synchronizationTime: news.synchronizationTime,
+            },
           },
         });
       }

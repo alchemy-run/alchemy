@@ -5,11 +5,30 @@ import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import {
+  createInternalTags,
+  createTagsList,
+  diffTags,
+  hasAlchemyTags,
+  tagRecord,
+} from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { canonicalJson } from "../internal/Observe.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+
+export class RuleInvalidProps extends Data.TaggedError("RuleInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class RuleOperationFailed extends Data.TaggedError("RuleOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type {
   AppSyncParameters,
@@ -38,7 +57,7 @@ export type {
 
 export type RuleName = string;
 
-export type RuleArn = `arn:aws:events:${RegionID}:${AccountID}:rule/${string}`;
+export type RuleArn = `arn:${Partition}:events:${RegionID}:${AccountID}:rule/${string}`;
 
 export interface RuleTarget {
   /** Unique identifier for this target within the rule. */
@@ -258,6 +277,20 @@ export interface Rule extends Resource<
     ruleArn: RuleArn;
     /** The event bus associated with the rule. */
     eventBusName: string;
+    /**
+     * The rule definition (pattern, schedule, state, role, description), its
+     * targets and its tags, as observed. Lets `alchemy drift` detect
+     * out-of-band changes.
+     */
+    configuration?: {
+      description?: string;
+      eventPattern?: string;
+      scheduleExpression?: string;
+      state?: string;
+      roleArn?: string;
+      targets: eventbridge.Target[];
+      tags: Record<string, string>;
+    };
   },
   never,
   Providers
@@ -277,6 +310,34 @@ export const RuleProvider = () =>
           maxLength: 64,
         });
       };
+
+      /**
+       * Everything reconcile converges on a rule, as observed. `read` and
+       * `reconcile` share it so a converged rule reads unchanged.
+       */
+      const observeRuleConfiguration = Effect.fn(function* (
+        described: eventbridge.DescribeRuleResponse,
+        eventBusParam: string | undefined,
+        tags: eventbridge.Tag[],
+      ) {
+        const targets = yield* eventbridge
+          .listTargetsByRule({ Rule: described.Name!, EventBusName: eventBusParam })
+          .pipe(
+            Effect.map((r) => r.Targets ?? []),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed([] as eventbridge.Target[]),
+            ),
+          );
+        return {
+          description: described.Description || undefined,
+          eventPattern: canonicalJson(described.EventPattern),
+          scheduleExpression: described.ScheduleExpression,
+          state: described.State,
+          roleArn: described.RoleArn,
+          targets: [...targets].sort((a, b) => a.Id.localeCompare(b.Id)),
+          tags: tagRecord(tags),
+        };
+      });
 
       return {
         stables: ["ruleName", "ruleArn", "eventBusName"],
@@ -305,7 +366,7 @@ export const RuleProvider = () =>
               Name: ruleName,
               EventBusName: eventBusName !== "default" ? eventBusName : undefined,
             })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (!described?.Name) {
             return undefined;
@@ -320,6 +381,11 @@ export const RuleProvider = () =>
             ruleName: described.Name,
             ruleArn,
             eventBusName: resolvedEventBusName,
+            configuration: yield* observeRuleConfiguration(
+              described,
+              resolvedEventBusName !== "default" ? resolvedEventBusName : undefined,
+              Tags ?? [],
+            ),
           };
           return (yield* hasAlchemyTags(id, Tags ?? [])) ? attrs : Unowned(attrs);
         }),
@@ -467,7 +533,7 @@ export const RuleProvider = () =>
                 EventBusName: eventBusParam,
                 Ids: removedTargetIds,
               })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
             if (response) {
               yield* assertRemoveTargetsSucceeded(response);
@@ -513,10 +579,19 @@ export const RuleProvider = () =>
           }
 
           yield* session.note(ruleArn);
+          const described = yield* eventbridge.describeRule({
+            Name: ruleName,
+            EventBusName: eventBusParam,
+          });
           return {
             ruleName,
             ruleArn,
             eventBusName,
+            configuration: yield* observeRuleConfiguration(
+              described,
+              eventBusParam,
+              createTagsList(desiredTags),
+            ),
           };
         }),
         delete: Effect.fn(function* (input) {
@@ -596,24 +671,22 @@ const toRuleArn = (
   ruleName: string,
 ): RuleArn =>
   (eventBusName === "default"
-    ? `arn:aws:events:${region}:${accountId}:rule/${ruleName}`
-    : `arn:aws:events:${region}:${accountId}:rule/${eventBusName}/${ruleName}`) as RuleArn;
+    ? `arn:${partitionOf(region)}:events:${region}:${accountId}:rule/${ruleName}`
+    : `arn:${partitionOf(region)}:events:${region}:${accountId}:rule/${eventBusName}/${ruleName}`) as RuleArn;
 
 const validateRuleProps = Effect.fn(function* (props: RuleProps) {
   if (!props.eventPattern && !props.scheduleExpression) {
-    return yield* Effect.fail(
-      new Error("EventBridge Rule requires either `eventPattern` or `scheduleExpression`"),
-    );
+    return yield* new RuleInvalidProps({
+      message: "EventBridge Rule requires either `eventPattern` or `scheduleExpression`",
+    });
   }
 });
 
 const assertPutTargetsSucceeded = Effect.fn(function* (response: eventbridge.PutTargetsResponse) {
   if ((response.FailedEntryCount ?? 0) > 0) {
-    return yield* Effect.fail(
-      new Error(
-        `Failed to attach EventBridge targets: ${JSON.stringify(response.FailedEntries ?? [])}`,
-      ),
-    );
+    return yield* new RuleOperationFailed({
+      message: `Failed to attach EventBridge targets: ${JSON.stringify(response.FailedEntries ?? [])}`,
+    });
   }
 });
 
@@ -621,10 +694,8 @@ const assertRemoveTargetsSucceeded = Effect.fn(function* (
   response: eventbridge.RemoveTargetsResponse,
 ) {
   if ((response.FailedEntryCount ?? 0) > 0) {
-    return yield* Effect.fail(
-      new Error(
-        `Failed to remove EventBridge targets: ${JSON.stringify(response.FailedEntries ?? [])}`,
-      ),
-    );
+    return yield* new RuleOperationFailed({
+      message: `Failed to remove EventBridge targets: ${JSON.stringify(response.FailedEntries ?? [])}`,
+    });
   }
 });

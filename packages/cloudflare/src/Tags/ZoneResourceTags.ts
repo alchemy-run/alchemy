@@ -224,16 +224,18 @@ export const ZoneResourceTagsProvider = () =>
         output?.accessApplicationId ?? (olds?.accessApplicationId as string | undefined);
       if (!zoneId || !resourceId || !resourceType) return undefined;
 
-      const observed = yield* resourceTagging
-        .getZoneTag({
-          zoneId,
-          resourceId,
-          resourceType,
-          accessApplicationId,
-        })
-        // A 404 means the target resource no longer exists; its tags are
-        // gone with it.
-        .pipe(Effect.catchTag("ZoneTagResourceNotFound", () => Effect.succeed(undefined)));
+      const observed = yield* (
+        resourceTagging
+          .getZoneTag({
+            zoneId,
+            resourceId,
+            resourceType,
+            accessApplicationId,
+          })
+          // A 404 means the target resource no longer exists; its tags are
+          // gone with it.
+          .pipe(Effect.catchTag("ZoneTagResourceNotFound", () => Effect.undefined))
+      );
       if (observed === undefined) return undefined;
       const tags = narrowTags(observed.tags);
       // Cloudflare reports untagged (and unknown) resources as an empty

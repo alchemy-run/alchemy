@@ -38,8 +38,8 @@ export interface FirewallProps {
    */
   subnetMappings: NFW.SubnetMapping[];
   /**
-   * Whether the firewall is protected against deletion. The provider
-   * automatically clears this flag before deleting the firewall.
+   * Whether the firewall is protected against deletion. While it is on, `destroy` and replacement fail until it is turned off and
+   * deployed.
    * @default false
    */
   deleteProtection?: boolean;
@@ -83,8 +83,18 @@ export interface Firewall extends Resource<
     endpointIds: string[];
   },
   never,
-  Providers
+  Providers,
+  FirewallLookup
 > {}
+
+/**
+ * Props for {@link Firewall.lookup}: find a firewall this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FirewallLookup {
+  /** The firewall name of the existing firewall. */
+  firewallName: string;
+}
 
 /**
  * An AWS Network Firewall firewall — provisions managed firewall endpoints
@@ -119,11 +129,31 @@ export interface Firewall extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing firewall
+ * `Firewall.lookup` references a firewall Alchemy doesn't manage (created in the
+ * console or by another stack), found by `firewallName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing firewall
+ * ```typescript
+ * const existing = AWS.NetworkFirewall.Firewall.lookup({ firewallName: "my-firewall" });
+ * ```
+ *
  * @resource
  */
 export const Firewall = Resource<Firewall>("AWS.NetworkFirewall.Firewall");
 
 /** Raised (internally, for bounded retry) while a firewall is provisioning. */
+/**
+ * Deletion was refused because the Network Firewall has deletion protection on, set
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class FirewallDeleteProtected extends Data.TaggedError("FirewallDeleteProtected")<{
+  readonly firewallName: string;
+  readonly message: string;
+}> {}
+
 export class FirewallNotReady extends Data.TaggedError("FirewallNotReady")<{
   message: string;
 }> {}
@@ -187,7 +217,7 @@ export const FirewallProvider = () =>
       const describe = Effect.fn(function* (name: string) {
         return yield* nfw
           .describeFirewall({ FirewallName: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       // Bounded readiness wait. Endpoint provisioning typically completes in
@@ -221,12 +251,19 @@ export const FirewallProvider = () =>
                   Effect.map((r) =>
                     r.Firewall !== undefined ? toAttrs(r.Firewall, r.FirewallStatus) : undefined,
                   ),
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                 ),
               { concurrency: 5 },
             );
             return items.filter((item): item is Firewall["Attributes"] => item !== undefined);
           }),
+
+        lookup: Effect.fn(function* ({ firewallName: name }) {
+          const found = yield* describe(name);
+          if (found?.Firewall === undefined) return undefined;
+          const attrs = toAttrs(found.Firewall, found.FirewallStatus);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.firewallName ?? (yield* createName(id, olds ?? {}));
@@ -373,15 +410,22 @@ export const FirewallProvider = () =>
           return toAttrs(firewall, observed.FirewallStatus);
         }),
 
-        delete: Effect.fn(function* ({ output, session }) {
+        delete: Effect.fn(function* ({ output, session, force }) {
           const name = output.firewallName;
           const observed = yield* nfw
             .describeFirewall({ FirewallName: name })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (observed === undefined) return;
 
-          // Clear delete protection first — DeleteFirewall requires it off.
+          // Delete protection, set by this stack or outside it, refuses the
+          // delete. Only an account-wide nuke (`force`) lifts it.
           if (observed.Firewall?.DeleteProtection) {
+            if (force !== true) {
+              return yield* new FirewallDeleteProtected({
+                firewallName: name,
+                message: `Network Firewall '${name}' has deletion protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+              });
+            }
             yield* nfw
               .updateFirewallDeleteProtection({
                 UpdateToken: observed.UpdateToken,
@@ -404,7 +448,7 @@ export const FirewallProvider = () =>
           yield* Effect.gen(function* () {
             const remaining = yield* nfw
               .describeFirewall({ FirewallName: name })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
             if (remaining !== undefined) {
               return yield* new FirewallNotDeleted({
                 message: `firewall '${name}' still deleting (status: ${remaining.FirewallStatus?.Status})`,

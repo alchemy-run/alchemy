@@ -1,6 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
@@ -19,11 +19,9 @@ describe(
   "GCP.Website.Vocs local",
   { tags: ["provider:gcp", "provider:gcp:website", "local"] },
   () => {
-    // Vocs' vite plugin reads `src/pages` from process.cwd() rather than
-    // the project `root`, so alchemy-test (cwd = packages/alchemy) cannot
-    // host the cloned fixture. Cloudflare.Website.Vocs local uses the
-    // Worker source provider instead.
-    test.provider.skipIf(true)(
+    // Vocs reads `src/pages` from process.cwd(); the dev child runs in the
+    // project root.
+    test.provider(
       "dev runs the framework server with no cloud resources",
       (stack) =>
         Effect.gen(function* () {

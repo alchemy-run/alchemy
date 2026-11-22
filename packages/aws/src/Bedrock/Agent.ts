@@ -12,6 +12,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import { bedrockModelArns } from "./ModelArns.ts";
 
 /**
@@ -146,8 +147,20 @@ export interface Agent extends Resource<
      * {@link AgentProps.agentResourceRoleArn} is used.
      */
     roleName: string | undefined;
-  }
+  },
+  never,
+  undefined,
+  AgentLookup
 > {}
+
+/**
+ * Props for {@link Agent.lookup}: find an agent this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AgentLookup {
+  /** The id of the existing agent. */
+  agentId: string;
+}
 
 /**
  * An Amazon Bedrock agent — a foundation model driven by natural-language
@@ -197,6 +210,16 @@ export interface Agent extends Resource<
  *     storage: "30 days",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing agent
+ * `Agent.lookup` references an agent Alchemy doesn't manage (created in the
+ * console or by another stack), found by `agentId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing agent
+ * ```typescript
+ * const existing = AWS.Bedrock.Agent.lookup({ agentId: "..." });
  * ```
  *
  * @resource
@@ -253,7 +276,7 @@ export const AgentProvider = () =>
       const getAgentOrUndefined = Effect.fn(function* (agentId: string) {
         return yield* bedrock.getAgent({ agentId }).pipe(
           Effect.map((r) => r.agent),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -279,7 +302,7 @@ export const AgentProvider = () =>
       const waitForSettled = Effect.fn(function* (agentId: string) {
         return yield* bedrock.getAgent({ agentId }).pipe(
           Effect.map((r) => r.agent),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           Effect.repeat({
             schedule: Schedule.fixed("3 seconds"),
             until: (agent) => agent === undefined || !AGENT_TRANSIENT.has(agent.agentStatus),
@@ -315,7 +338,7 @@ export const AgentProvider = () =>
                   Condition: {
                     StringEquals: { "aws:SourceAccount": accountId },
                     ArnLike: {
-                      "aws:SourceArn": `arn:aws:bedrock:${region}:${accountId}:agent/*`,
+                      "aws:SourceArn": `arn:${partitionOf(region)}:bedrock:${region}:${accountId}:agent/*`,
                     },
                   },
                 },
@@ -357,7 +380,7 @@ export const AgentProvider = () =>
             const summaries = Array.from(pages).flatMap((page) => page.agentSummaries ?? []);
             return summaries.map((s) => ({
               agentId: s.agentId,
-              agentArn: `arn:aws:bedrock:${region}:${accountId}:agent/${s.agentId}`,
+              agentArn: `arn:${partitionOf(region)}:bedrock:${region}:${accountId}:agent/${s.agentId}`,
               agentName: s.agentName,
               agentVersion: "DRAFT",
               agentResourceRoleArn: "",
@@ -365,6 +388,21 @@ export const AgentProvider = () =>
             }));
           }),
 
+        lookup: Effect.fn(function* ({ agentId }) {
+          const agent = yield* getAgentOrUndefined(agentId);
+          if (agent === undefined || agent.agentStatus === "DELETING") {
+            return undefined;
+          }
+          const attrs = {
+            agentId: agent.agentId,
+            agentArn: agent.agentArn,
+            agentName: agent.agentName,
+            agentVersion: agent.agentVersion ?? "DRAFT",
+            agentResourceRoleArn: agent.agentResourceRoleArn,
+            roleName: undefined,
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const agentId =
             output?.agentId ??

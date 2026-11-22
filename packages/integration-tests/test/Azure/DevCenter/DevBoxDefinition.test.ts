@@ -1,8 +1,8 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as devcenter from "@distilled.cloud/azure/devcenter";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runPaidOnly } from "../gates.ts";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
@@ -147,7 +147,11 @@ test.provider.skipIf(!runPaidOnly)(
       yield* stack.destroy();
       expect(
         yield* waitGone(
-          getDefinition(group.resourceGroupName, parent.devCenterName, "alchemy-definition-renamed"),
+          getDefinition(
+            group.resourceGroupName,
+            parent.devCenterName,
+            "alchemy-definition-renamed",
+          ),
         ),
       ).toEqual("gone");
     }).pipe(logLevel),

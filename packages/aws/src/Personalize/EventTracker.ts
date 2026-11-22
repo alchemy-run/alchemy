@@ -5,11 +5,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readPersonalizeTags, syncPersonalizeTags } from "./internal.ts";
+
+export class EventTrackerNotReady extends Data.TaggedError("EventTrackerNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface EventTrackerProps {
   /**
@@ -57,8 +63,18 @@ export interface EventTracker extends Resource<
     datasetGroupArn: string;
   },
   never,
-  Providers
+  Providers,
+  EventTrackerLookup
 > {}
+
+/**
+ * Props for {@link EventTracker.lookup}: find an event tracker this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EventTrackerLookup {
+  /** The ARN of the existing event tracker. */
+  eventTrackerArn: string;
+}
 
 /**
  * An Amazon Personalize event tracker — the ingestion endpoint for streaming
@@ -88,6 +104,16 @@ export interface EventTracker extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing event tracker
+ * `EventTracker.lookup` references an event tracker Alchemy doesn't manage (created in the
+ * console or by another stack), found by `eventTrackerArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing event tracker
+ * ```typescript
+ * const existing = AWS.Personalize.EventTracker.lookup({ eventTrackerArn: "..." });
+ * ```
+ *
  * @resource
  */
 export const EventTracker = Resource<EventTracker>("AWS.Personalize.EventTracker");
@@ -103,7 +129,7 @@ export const EventTrackerProvider = () =>
       const describe = Effect.fn(function* (eventTrackerArn: string) {
         const response = yield* personalize
           .describeEventTracker({ eventTrackerArn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.eventTracker;
       });
 
@@ -116,11 +142,9 @@ export const EventTrackerProvider = () =>
           }),
         );
         if (tracker?.status !== "ACTIVE") {
-          return yield* Effect.fail(
-            new Error(
-              `Personalize event tracker ${eventTrackerArn} did not become ACTIVE (status: ${tracker?.status})`,
-            ),
-          );
+          return yield* new EventTrackerNotReady({
+            message: `Personalize event tracker ${eventTrackerArn} did not become ACTIVE (status: ${tracker?.status})`,
+          });
         }
         return tracker;
       });
@@ -156,6 +180,13 @@ export const EventTrackerProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ eventTrackerArn }) {
+          const tracker = yield* describe(eventTrackerArn);
+          if (tracker === undefined) return undefined;
+          const attrs = toAttrs(tracker);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, output }) {
@@ -229,11 +260,9 @@ export const EventTrackerProvider = () =>
             }),
           );
           if (remaining !== undefined) {
-            return yield* Effect.fail(
-              new Error(
-                `Personalize event tracker ${output.eventTrackerArn} was not deleted (status: ${remaining.status})`,
-              ),
-            );
+            return yield* new EventTrackerNotReady({
+              message: `Personalize event tracker ${output.eventTrackerArn} was not deleted (status: ${remaining.status})`,
+            });
           }
         }),
 

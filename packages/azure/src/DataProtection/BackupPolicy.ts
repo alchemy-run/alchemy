@@ -319,7 +319,9 @@ export const BackupPolicyProvider = () =>
           properties: {
             objectType: "BackupPolicy",
             datasourceTypes: news.datasourceTypes,
-            policyRules: news.policyRules,
+            // Rules keep loose `Record` triggers and criteria, which the SDK
+            // types as unions keyed by `objectType`.
+            policyRules: news.policyRules as dataprotection.BasePolicyRuleInput[],
           },
         });
       }

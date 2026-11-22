@@ -5,10 +5,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readIotWirelessTags, syncIotWirelessTags } from "./internal.ts";
+
+export class IoTWirelessDestinationUnexpectedResponse extends Data.TaggedError(
+  "IoTWirelessDestinationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DestinationProps {
   /**
@@ -61,8 +69,18 @@ export interface Destination extends Resource<
     roleArn: string;
   },
   never,
-  Providers
+  Providers,
+  DestinationLookup
 > {}
+
+/**
+ * Props for {@link Destination.lookup}: find a destination this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DestinationLookup {
+  /** The destination name of the existing destination. */
+  destinationName: string;
+}
 
 /**
  * An AWS IoT Core for LoRaWAN destination — the routing rule that delivers
@@ -141,6 +159,16 @@ export interface Destination extends Resource<
  * );
  * ```
  *
+ * ### Looking up an existing destination
+ * `Destination.lookup` references a destination Alchemy doesn't manage (created in the
+ * console or by another stack), found by `destinationName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing destination
+ * ```typescript
+ * const existing = AWS.IoTWireless.Destination.lookup({ destinationName: "my-destination" });
+ * ```
+ *
  * @resource
  */
 export const Destination = Resource<Destination>("AWS.IoTWireless.Destination");
@@ -156,13 +184,13 @@ export const DestinationProvider = () =>
       const getDestination = (name: string) =>
         iotw
           .getDestination({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const toAttrs = Effect.fn(function* (destination: iotw.GetDestinationResponse, name: string) {
         if (destination.Arn === undefined) {
-          return yield* Effect.fail(
-            new Error(`IoT Wireless destination '${name}' returned without Arn`),
-          );
+          return yield* new IoTWirelessDestinationUnexpectedResponse({
+            message: `IoT Wireless destination '${name}' returned without Arn`,
+          });
         }
         return {
           destinationName: destination.Name ?? name,
@@ -197,6 +225,13 @@ export const DestinationProvider = () =>
                 ),
             ),
           ),
+
+        lookup: Effect.fn(function* ({ destinationName: name }) {
+          const destination = yield* getDestination(name);
+          if (destination === undefined) return undefined;
+          const attrs = yield* toAttrs(destination, name);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.destinationName ?? (yield* createName(id, olds ?? {}));
@@ -244,9 +279,9 @@ export const DestinationProvider = () =>
             destination = yield* getDestination(name);
           }
           if (destination === undefined) {
-            return yield* Effect.fail(
-              new Error(`IoT Wireless destination '${name}' not found after create`),
-            );
+            return yield* new IoTWirelessDestinationUnexpectedResponse({
+              message: `IoT Wireless destination '${name}' not found after create`,
+            });
           }
 
           // 3. SYNC — apply the expression/description/role delta from
@@ -268,9 +303,9 @@ export const DestinationProvider = () =>
             destination = yield* getDestination(name);
           }
           if (destination === undefined) {
-            return yield* Effect.fail(
-              new Error(`IoT Wireless destination '${name}' vanished during update`),
-            );
+            return yield* new IoTWirelessDestinationUnexpectedResponse({
+              message: `IoT Wireless destination '${name}' vanished during update`,
+            });
           }
 
           // 3b. SYNC tags — diff against OBSERVED cloud tags.

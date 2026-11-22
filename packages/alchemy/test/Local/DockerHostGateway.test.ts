@@ -1,4 +1,4 @@
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { isLoopbackHost } from "@/Local/DockerHostGateway";
 
 describe("Docker loopback hosts", { tags: ["unit", "local"] }, () => {

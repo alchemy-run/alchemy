@@ -167,10 +167,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : scc
         .getOrganizationsEventThreatDetectionSettingsCustomModules({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string) =>
   scc.listOrganizationsEventThreatDetectionSettingsCustomModules
@@ -251,15 +251,13 @@ export const OrganizationEventThreatDetectionSettingsCustomModuleProvider = () =
       if (current === undefined) {
         const created = yield* scc
           .createOrganizationsEventThreatDetectionSettingsCustomModules({
+            type,
+            config,
+            enablementState,
+            cloudProvider,
+            displayName,
+            description,
             parent,
-            body: {
-              type,
-              config,
-              enablementState,
-              cloudProvider,
-              displayName,
-              description,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(parent, id)));
         current = created ?? undefined;
@@ -267,7 +265,7 @@ export const OrganizationEventThreatDetectionSettingsCustomModuleProvider = () =
 
       if (current === undefined) {
         return yield* new SecuritycenterNotResolved({
-          name: `${parent}/customModules`,
+          resourceName: `${parent}/customModules`,
         });
       }
 
@@ -281,9 +279,12 @@ export const OrganizationEventThreatDetectionSettingsCustomModuleProvider = () =
 
       if (updateMask.length > 0) {
         current = yield* scc.patchOrganizationsEventThreatDetectionSettingsCustomModules({
+          config,
+          enablementState,
+          displayName,
+          description,
           name: currentName,
           updateMask,
-          body: { config, enablementState, displayName, description },
         });
       }
 

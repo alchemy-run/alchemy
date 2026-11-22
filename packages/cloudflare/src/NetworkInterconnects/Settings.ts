@@ -100,7 +100,7 @@ export const NetworkInterconnectSettingsProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const observed = yield* cni
         .getSetting({ accountId })
-        .pipe(Effect.catchTag("Forbidden", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("Forbidden", () => Effect.undefined));
       if (observed === undefined) return [];
       return [
         {

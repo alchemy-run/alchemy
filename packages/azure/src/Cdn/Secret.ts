@@ -145,19 +145,30 @@ const toAttrs = (
   profile,
   resourceGroup,
   type: secret.properties?.parameters?.type,
-  subject: secret.properties?.parameters?.subject,
-  expirationDate: secret.properties?.parameters?.expirationDate,
+  subject: subjectOf(secret.properties?.parameters),
+  expirationDate: expirationDateOf(secret.properties?.parameters),
   deploymentStatus: secret.properties?.deploymentStatus,
 });
 
-const toParameters = (parameters: AfdSecretParameters) => ({
-  type: parameters.type,
-  secretSource: ref(parameters.secretSourceId),
-  secretVersion: parameters.secretVersion,
-  useLatestVersion: parameters.useLatestVersion,
-  keyId: parameters.keyId,
-  subjectAlternativeNames: parameters.subjectAlternativeNames,
-});
+const subjectOf = (parameters: cdn.SecretParameters | undefined) =>
+  parameters !== undefined && "subject" in parameters ? parameters.subject : undefined;
+
+const expirationDateOf = (parameters: cdn.SecretParameters | undefined) =>
+  parameters !== undefined && "expirationDate" in parameters
+    ? parameters.expirationDate
+    : undefined;
+
+// The props take one loose shape for every secret `type`; the SDK types
+// each `type` as its own union arm.
+const toParameters = (parameters: AfdSecretParameters) =>
+  ({
+    type: parameters.type,
+    secretSource: ref(parameters.secretSourceId),
+    secretVersion: parameters.secretVersion,
+    useLatestVersion: parameters.useLatestVersion,
+    keyId: parameters.keyId,
+    subjectAlternativeNames: parameters.subjectAlternativeNames,
+  }) as cdn.SecretParametersInput;
 
 export const SecretProvider = () =>
   Provider.succeed(Secret, {

@@ -1,4 +1,4 @@
-import { Credentials } from "@distilled.cloud/azure";
+import { armScopeFor, Credentials } from "@distilled.cloud/azure";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -14,9 +14,8 @@ export const REPORTS_PREFIX = "/providers/Microsoft.AppComplianceAutomation/repo
  */
 export const userToken = Effect.gen(function* () {
   const credentials = yield* yield* Credentials;
-  return yield* Effect.sync(() =>
-    Redacted.make(`Bearer ${Redacted.value(credentials.bearerToken)}`),
-  );
+  const token = yield* credentials.token(armScopeFor(credentials.apiBaseUrl));
+  return Redacted.make(`Bearer ${Redacted.value(token)}`);
 });
 
 /**

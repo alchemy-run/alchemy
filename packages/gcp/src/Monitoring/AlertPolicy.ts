@@ -418,7 +418,7 @@ export const AlertPolicy = Resource<AlertPolicy>("GCP.Monitoring.AlertPolicy");
 export class AlertPolicyNotResolved extends Data.TaggedError(
   "GCP.Monitoring.AlertPolicyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -575,7 +575,7 @@ const withConditionNames = (
 const getByName = (name: string) =>
   monitoring
     .getProjectsAlertPolicies({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   monitoring.listProjectsAlertPolicies
@@ -671,13 +671,11 @@ export const AlertPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* monitoring
           .createProjectsAlertPolicies({
+            ...body,
+            conditions: news.conditions.map((condition) =>
+              toApiCondition({ ...condition, name: undefined }),
+            ),
             name: parentOf(env.project),
-            body: {
-              ...body,
-              conditions: news.conditions.map((condition) =>
-                toApiCondition({ ...condition, name: undefined }),
-              ),
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(env.project, id)));
         current = created ?? undefined;
@@ -685,7 +683,7 @@ export const AlertPolicyProvider = () =>
 
       if (current === undefined) {
         return yield* new AlertPolicyNotResolved({
-          name: output?.name ?? displayName,
+          resourceName: output?.name ?? displayName,
         });
       }
 
@@ -727,13 +725,10 @@ export const AlertPolicyProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* monitoring.patchProjectsAlertPolicies({
+          ...body,
+          conditions: withConditionNames(news.conditions, current.conditions),
           name,
           updateMask: updateMask.join(","),
-          body: {
-            ...body,
-            name,
-            conditions: withConditionNames(news.conditions, current.conditions),
-          },
         });
       }
 

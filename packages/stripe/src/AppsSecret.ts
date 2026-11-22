@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetAppsSecrets,
   GetAppsSecretsFind,
@@ -143,7 +142,7 @@ export type AppsSecret = Resource<
 export const AppsSecret = Resource<AppsSecret>("Stripe.AppsSecret");
 
 export class AppsSecretNotResolved extends Data.TaggedError("Stripe.AppsSecretNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 type AppsSecretAttributes = AppsSecret["Attributes"];
@@ -199,7 +198,7 @@ const findByName = (name: string, scope: AppsSecretScope) =>
     expand: ["payload"],
   }).pipe(
     Effect.map((secret) => (isPresent(secret) ? secret : undefined)),
-    Effect.catchIf(isMissingSecret, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissingSecret, () => Effect.undefined),
   );
 
 const listByScope = Effect.fn(function* (scope: AppsSecretScope) {
@@ -314,11 +313,8 @@ export const AppsSecretProvider = () =>
           payload: news.payload,
           scope: toWireScope(scope),
           ...(desiredExpiresAt !== undefined ? { expires_at: desiredExpiresAt } : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey,
-          }),
-        );
+          idempotencyKey,
+        });
 
       if (current === undefined) {
         current = yield* put(`alchemy-apps-secret-${instanceId}`).pipe(
@@ -335,7 +331,7 @@ export const AppsSecretProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppsSecretNotResolved({ name });
+        return yield* new AppsSecretNotResolved({ resourceName: name });
       }
 
       const observedPayload = current.payload ?? undefined;

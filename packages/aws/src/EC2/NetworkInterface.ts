@@ -10,18 +10,27 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { nameTagFilter, single } from "../internal/Lookup.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { SecurityGroupId } from "./SecurityGroup.ts";
 import type { SubnetId } from "./Subnet.ts";
 import type { VpcId } from "./Vpc.ts";
 
+export class NetworkInterfaceUnexpectedResponse extends Data.TaggedError(
+  "NetworkInterfaceUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type NetworkInterfaceId<ID extends string = string> = `eni-${ID}`;
 export const NetworkInterfaceId = <ID extends string>(id: ID): ID & NetworkInterfaceId<ID> =>
   `eni-${id}` as ID & NetworkInterfaceId<ID>;
 
 export type NetworkInterfaceArn =
-  `arn:aws:ec2:${RegionID}:${AccountID}:network-interface/${NetworkInterfaceId}`;
+  `arn:${Partition}:ec2:${RegionID}:${AccountID}:network-interface/${NetworkInterfaceId}`;
 
 export interface NetworkInterfaceProps {
   /**
@@ -136,8 +145,23 @@ export interface NetworkInterface extends Resource<
     ownerId?: string;
   },
   never,
-  Providers
+  Providers,
+  NetworkInterfaceLookup
 > {}
+
+/**
+ * Props for {@link NetworkInterface.lookup}: find a network interface this
+ * stack doesn't manage, in the ambient account and region.
+ */
+export type NetworkInterfaceLookup =
+  | {
+      /** The interface's id. */
+      networkInterfaceId: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several match. */
+      name: string;
+    };
 /**
  * An Elastic Network Interface (ENI) — a virtual network card in a VPC subnet
  * with its own private IPs, MAC address, and security groups. Attach one to an
@@ -187,6 +211,18 @@ export interface NetworkInterface extends Resource<
  * Disable `sourceDestCheck` when the interface belongs to a NAT instance,
  * firewall, or router that forwards packets not addressed to itself.
  *
+ * ### Looking up an existing network interface
+ * `NetworkInterface.lookup` references a network interface Alchemy doesn't manage (created in the
+ * console or by another stack), found by `networkInterfaceId` or its
+`Name` tag. It is read during plan/deploy
+ * and never created, updated or deleted. A lookup by `name` fails with
+ * `AmbiguousLookupError` when several match.
+ *
+ * **Example:** Attach an existing network interface
+ * ```typescript
+ * const eni = AWS.EC2.NetworkInterface.lookup({ name: "fixed-ip" });
+ * ```
+ *
  * @resource
  */
 export const NetworkInterface = Resource<NetworkInterface>("AWS.EC2.NetworkInterface");
@@ -210,6 +246,29 @@ export const NetworkInterfaceProvider = () =>
           if (olds.subnetId !== news.subnetId || olds.privateIpAddress !== news.privateIpAddress) {
             return { action: "replace" };
           }
+        }),
+
+        lookup: Effect.fn(function* (props) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const found = yield* ec2
+            .describeNetworkInterfaces(
+              "networkInterfaceId" in props
+                ? { NetworkInterfaceIds: [props.networkInterfaceId] }
+                : { Filters: [nameTagFilter(props.name)] },
+            )
+            .pipe(
+              Effect.catchTag("InvalidNetworkInterfaceID.NotFound", () =>
+                Effect.succeed({ NetworkInterfaces: [] }),
+              ),
+            );
+          const match = yield* single(
+            "AWS.EC2.NetworkInterface",
+            "networkInterfaceId" in props ? props.networkInterfaceId : `Name=${props.name}`,
+            found.NetworkInterfaces ?? [],
+            (x) => x.NetworkInterfaceId,
+          );
+          if (!match?.NetworkInterfaceId) return undefined;
+          return toNetworkInterfaceAttributes(match, region, accountId);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -370,7 +429,7 @@ const toNetworkInterfaceAttributes = (
   return {
     networkInterfaceId: eniId,
     networkInterfaceArn:
-      `arn:aws:ec2:${region}:${accountId}:network-interface/${eniId}` as NetworkInterfaceArn,
+      `arn:${partitionOf(region)}:ec2:${region}:${accountId}:network-interface/${eniId}` as NetworkInterfaceArn,
     subnetId: eni.SubnetId! as SubnetId,
     vpcId: eni.VpcId! as VpcId,
     availabilityZone: eni.AvailabilityZone!,
@@ -403,7 +462,9 @@ const waitForNetworkInterface = (networkInterfaceId: string, session?: ScopedPla
     });
     const eni = result.NetworkInterfaces?.[0];
     if (!eni) {
-      return yield* Effect.fail(new Error(`Network interface ${networkInterfaceId} not found`));
+      return yield* new NetworkInterfaceUnexpectedResponse({
+        message: `Network interface ${networkInterfaceId} not found`,
+      });
     }
     if (eni.Status === "available" || eni.Status === "in-use") {
       return eni;

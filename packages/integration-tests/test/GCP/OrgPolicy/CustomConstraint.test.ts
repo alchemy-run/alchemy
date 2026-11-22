@@ -1,12 +1,13 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as orgpolicy from "@distilled.cloud/gcp/orgpolicy_v2";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -51,15 +52,13 @@ const organizationOf = () =>
 
 const probeCreate = (parent: string) =>
   orgpolicy.createOrganizationsCustomConstraints({
+    name: `${parent}/customConstraints/custom.alchemyMissingProbe`,
+    resourceTypes: ["compute.googleapis.com/Instance"],
+    methodTypes: ["CREATE"],
+    condition: "resource.name.startsWith('alchemy-probe-')",
+    actionType: "DENY",
+    displayName: "alchemy probe",
     parent,
-    body: {
-      name: `${parent}/customConstraints/custom.alchemyMissingProbe`,
-      resourceTypes: ["compute.googleapis.com/Instance"],
-      methodTypes: ["CREATE"],
-      condition: "resource.name.startsWith('alchemy-probe-')",
-      actionType: "DENY",
-      displayName: "alchemy probe",
-    },
   });
 
 test.provider(
@@ -120,6 +119,13 @@ test.provider.skipIf(!runLifecycle)(
             description: "blocks test-prefixed instances",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.OrgPolicy.CustomConstraint.lookup({
+          constraintId: created.constraintId,
+          organization: created.organization,
+        }),
+        created,
       );
 
       expect(created.constraintId.startsWith("custom.")).toEqual(true);

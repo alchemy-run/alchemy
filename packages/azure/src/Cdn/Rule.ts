@@ -238,8 +238,11 @@ export const RuleProvider = () =>
       const name = news.name ?? output?.ruleName ?? (yield* createAlphanumericName(id));
       const properties = {
         order: news.order,
-        conditions: news.conditions ?? [],
-        actions: news.actions,
+        // The props take the loose `{ name, parameters }` shape and Azure
+        // validates it; the SDK types each `name` as its own union arm with
+        // required parameters, so the loose shape does not overlap it.
+        conditions: (news.conditions ?? []) as unknown as cdn.DeliveryRuleCondition[],
+        actions: news.actions as unknown as cdn.DeliveryRuleAction[],
         matchProcessingBehavior: news.matchProcessingBehavior ?? "Continue",
       };
       const where = {
@@ -265,7 +268,7 @@ export const RuleProvider = () =>
       const changed = changedFields(properties, observed.properties);
       if (Object.keys(changed).length > 0) {
         yield* cdn
-          .UpdateRule({ ...where, properties: changed })
+          .UpdateRule2({ ...where, properties: changed })
           .pipe(Effect.retry(whileProfileBusy));
         observed = yield* waitForAfd(label, get, (r) => r.properties?.provisioningState);
       }
@@ -277,7 +280,7 @@ export const RuleProvider = () =>
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ignoreNotFound(
         cdn
-          .DeleteRule({
+          .DeleteRule2({
             subscriptionId,
             resourceGroupName: output.resourceGroup,
             profileName: output.profile,

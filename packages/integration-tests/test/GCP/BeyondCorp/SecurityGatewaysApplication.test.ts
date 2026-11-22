@@ -1,9 +1,10 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as beyondcorp from "@distilled.cloud/gcp/beyondcorp_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { logLevel, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -50,12 +51,10 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         beyondcorp.createProjectsLocationsSecurityGatewaysApplications({
+          displayName: "probe",
+          endpointMatchers: [{ hostname: "example.com", ports: [443] }],
           parent: `projects/${project}/locations/global/securityGateways/alchemy-missing-sg`,
           applicationId: "alch-probe-app",
-          body: {
-            displayName: "probe",
-            endpointMatchers: [{ hostname: "example.com", ports: [443] }],
-          },
         }),
       );
       expect(error._tag).toEqual("NotFound");
@@ -86,6 +85,14 @@ test.provider.skipIf(!runLifecycle)(
             displayName: "app a",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.BeyondCorp.SecurityGatewaysApplication.lookup({
+          applicationId: created.applicationId,
+          location: created.location,
+          securityGateway: created.securityGateway,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/applications/");

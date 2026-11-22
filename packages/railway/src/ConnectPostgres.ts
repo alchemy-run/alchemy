@@ -74,7 +74,7 @@ export const connectEnvKeys = (postgres: Pick<Postgres, "LogicalId">) => {
 };
 
 export class PostgresUrlMissing extends Data.TaggedError("Railway.PostgresUrlMissing")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export interface ConnectPostgresClient {

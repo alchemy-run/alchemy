@@ -3,7 +3,7 @@ import * as Git from "@alchemy.run/git";
 import * as GitHttp from "@alchemy.run/git/Http";
 import { concatBytes } from "@alchemy.run/git/Protocol/ObjectCodec";
 import { pktText, flushPkt } from "@alchemy.run/git/Protocol/Pkt";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Http from "alchemy/Http";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";

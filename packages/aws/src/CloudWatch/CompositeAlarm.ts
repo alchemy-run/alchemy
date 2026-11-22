@@ -4,14 +4,26 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { AlarmArn } from "./Alarm.ts";
 import { createName, readResourceTags, retryConcurrent, updateResourceTags } from "./common.ts";
 
+export class CompositeAlarmUnexpectedResponse extends Data.TaggedError(
+  "CompositeAlarmUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type CompositeAlarmName = string;
+
+/** A composite alarm as `describeAlarms` lists it. */
+type ListedCompositeAlarm = NonNullable<cloudwatch.DescribeAlarmsOutput["CompositeAlarms"]>[number];
 
 export interface CompositeAlarmProps extends Omit<
   cloudwatch.PutCompositeAlarmInput,
@@ -45,8 +57,18 @@ export interface CompositeAlarm extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  CompositeAlarmLookup
 > {}
+
+/**
+ * Props for {@link CompositeAlarm.lookup}: find a composite alarm this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CompositeAlarmLookup {
+  /** The alarm name of the existing composite alarm. */
+  alarmName: string;
+}
 
 /**
  * A CloudWatch composite alarm — combines the states of other alarms with
@@ -77,6 +99,16 @@ export interface CompositeAlarm extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing composite alarm
+ * `CompositeAlarm.lookup` references a composite alarm Alchemy doesn't manage (created in the
+ * console or by another stack), found by `alarmName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing composite alarm
+ * ```typescript
+ * const existing = AWS.CloudWatch.CompositeAlarm.lookup({ alarmName: "my-composite-alarm" });
+ * ```
+ *
  * @resource
  */
 export const CompositeAlarm = Resource<CompositeAlarm>("AWS.CloudWatch.CompositeAlarm");
@@ -92,7 +124,7 @@ export const CompositeAlarmProvider = () =>
         AWSEnvironment.current.pipe(
           Effect.map(
             (env) =>
-              `arn:aws:cloudwatch:${env.region}:${env.accountId}:alarm:${alarmName}` as AlarmArn,
+              `arn:${partitionOf(env.region)}:cloudwatch:${env.region}:${env.accountId}:alarm:${alarmName}` as AlarmArn,
           ),
         );
 
@@ -134,6 +166,11 @@ export const CompositeAlarmProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ alarmName: name }) {
+          const state = yield* readCompositeAlarm(name);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.alarmName ?? (yield* createAlarmName(id, olds ?? {}));
           const state = yield* readCompositeAlarm(name);
@@ -171,9 +208,9 @@ export const CompositeAlarmProvider = () =>
 
           const state = yield* readCompositeAlarm(name);
           if (!state) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled composite alarm '${name}'`),
-            );
+            return yield* new CompositeAlarmUnexpectedResponse({
+              message: `failed to read reconciled composite alarm '${name}'`,
+            });
           }
 
           return {
@@ -202,7 +239,7 @@ export const CompositeAlarmProvider = () =>
                     (page.CompositeAlarms ?? []).filter(
                       (
                         candidate,
-                      ): candidate is cloudwatch.CompositeAlarm & {
+                      ): candidate is ListedCompositeAlarm & {
                         AlarmName: string;
                         AlarmArn: string;
                       } => candidate.AlarmName != null && candidate.AlarmArn != null,

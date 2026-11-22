@@ -17,12 +17,15 @@ export default AWS.Lambda.Function(
     const { source, result } = yield* SourceAndResultQueues;
     const sink = yield* AWS.SQS.QueueSink(result);
 
-    yield* AWS.SQS.consumeQueueMessages(source, { batchSize: 10 }, (records) =>
-      records.pipe(
-        Stream.map((record) => ({ MessageBody: record.body })),
-        Stream.run(sink),
-        Effect.orDie,
-      ),
+    yield* AWS.SQS.consumeQueueMessages(
+      source,
+      { batchSize: 10 },
+      Effect.fn(function* (event) {
+        yield* Stream.fromIterable(event.Records).pipe(
+          Stream.map((record) => ({ MessageBody: record.body })),
+          Stream.run(sink),
+        );
+      }),
     );
 
     const sourceQueueUrl = yield* source.queueUrl;

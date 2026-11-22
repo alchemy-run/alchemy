@@ -1,9 +1,10 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ssm from "@distilled.cloud/gcp/securesourcemanager_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { currentProject, logLevel, missingRepoOf, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -89,6 +90,14 @@ test.provider.skipIf(!runLifecycle)(
             annotations: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.SecureSourceManager.RepositoriesBranchRule.lookup({
+          branchRuleId: created.branchRuleId,
+          location: created.location,
+          repository: created.repository,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/branchRules/");

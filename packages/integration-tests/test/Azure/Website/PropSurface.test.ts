@@ -1,5 +1,5 @@
 import * as Azure from "@alchemy.run/azure";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 
 describe(
   "Azure.Website prop surfaces",

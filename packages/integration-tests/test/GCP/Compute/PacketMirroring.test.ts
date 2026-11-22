@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -90,13 +91,11 @@ const ensureCollector = () =>
     if (healthCheck === undefined) {
       yield* compute
         .insertHealthChecks({
+          name: names.healthCheck,
+          type: "TCP",
+          tcpHealthCheck: { port: 80 },
+          description: "alchemy packet-mirroring collector",
           project,
-          body: {
-            name: names.healthCheck,
-            type: "TCP",
-            tcpHealthCheck: { port: 80 },
-            description: "alchemy packet-mirroring collector",
-          },
         })
         .pipe(
           Effect.flatMap((operation) => waitOp(operation, "global")),
@@ -114,13 +113,11 @@ const ensureCollector = () =>
     if (instanceGroup === undefined) {
       yield* compute
         .insertInstanceGroups({
+          name: names.instanceGroup,
+          network: network.selfLink,
+          description: "alchemy packet-mirroring collector",
           project,
           zone,
-          body: {
-            name: names.instanceGroup,
-            network: network.selfLink,
-            description: "alchemy packet-mirroring collector",
-          },
         })
         .pipe(
           Effect.flatMap((operation) => waitOp(operation, "zone")),
@@ -147,17 +144,15 @@ const ensureCollector = () =>
       });
       yield* compute
         .insertRegionBackendServices({
+          name: names.backend,
+          protocol: "TCP",
+          loadBalancingScheme: "INTERNAL",
+          healthChecks: hc.selfLink ? [hc.selfLink] : undefined,
+          backends: group.selfLink ? [{ group: group.selfLink }] : undefined,
+          network: network.selfLink,
+          description: "alchemy packet-mirroring collector",
           project,
           region,
-          body: {
-            name: names.backend,
-            protocol: "TCP",
-            loadBalancingScheme: "INTERNAL",
-            healthChecks: hc.selfLink ? [hc.selfLink] : undefined,
-            backends: group.selfLink ? [{ group: group.selfLink }] : undefined,
-            network: network.selfLink,
-            description: "alchemy packet-mirroring collector",
-          },
         })
         .pipe(
           Effect.flatMap((operation) => waitOp(operation, "region")),
@@ -180,19 +175,17 @@ const ensureCollector = () =>
       });
       yield* compute
         .insertForwardingRules({
+          name: names.forwardingRule,
+          loadBalancingScheme: "INTERNAL",
+          isMirroringCollector: true,
+          IPProtocol: "TCP",
+          allPorts: true,
+          backendService: backendService.selfLink,
+          network: network.selfLink,
+          subnetwork: subnet.selfLink,
+          description: "alchemy packet-mirroring collector",
           project,
           region,
-          body: {
-            name: names.forwardingRule,
-            loadBalancingScheme: "INTERNAL",
-            isMirroringCollector: true,
-            IPProtocol: "TCP",
-            allPorts: true,
-            backendService: backendService.selfLink,
-            network: network.selfLink,
-            subnetwork: subnet.selfLink,
-            description: "alchemy packet-mirroring collector",
-          },
         })
         .pipe(
           Effect.flatMap((operation) => waitOp(operation, "region")),
@@ -274,6 +267,13 @@ test.provider(
             mirroredResources: { tags: ["alchemy-pm"] },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.PacketMirroring.lookup({
+          packetMirroringName: created.packetMirroringName,
+          region: created.region,
+        }),
+        created,
       );
 
       expect(created.packetMirroringName).toEqual(expect.any(String));

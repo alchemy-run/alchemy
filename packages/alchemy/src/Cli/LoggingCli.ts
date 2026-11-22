@@ -3,32 +3,33 @@ import * as Prompt from "effect/cli/Prompt";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as LogLevel from "effect/LogLevel";
+import type { ApplyEvent, ApplyStatus } from "../Events.ts";
 import { NonInteractiveTerminal } from "../Interaction.ts";
 import type { ActionApply, ActionDelete, CRUD, Plan } from "../Plan.ts";
 import { Cli, type PlanDisplayOptions } from "../Report.ts";
-import type { ApplyEvent, ApplyStatus } from "../Report.ts";
 import { canPromptOnStdin } from "../Util/interactive.ts";
 import { formatResourceTag } from "../Util/ResourceOutput.ts";
-import { ansiFg, colorsEnabled, theme } from "./CliKit/index.ts";
+import { terminalStyle } from "../Util/Terminal.ts";
+import { theme } from "../Util/Theme.ts";
 import {
   actionStyle,
   applyStatusColor,
   isTerminalStatus as isTerminal,
 } from "./components/view/statusStyle.ts";
 import { formatElapsed } from "./Format.ts";
+import { currentConsoleSettings } from "./GlobalLog.ts";
 import { formatModeNote } from "./ModeTag.ts";
 import { actionHasPlannedWork, buildPlanSummary } from "./NamespaceTree.ts";
+import { present } from "./Present.ts";
 import { formatDeclaredPropertyYaml, matchYamlChange, matchYamlKey } from "./PropertyDiff.ts";
 
-const ESC = "\x1b[";
-const RESET = `${ESC}0m`;
 // Shared with every other non-ink output path — notably it honors
 // FORCE_COLOR, so lines emitted from the piped dev sidecar keep their color.
-const useColor = colorsEnabled();
-const c = (code: string, s: string) => (useColor ? `${ESC}${code}m${s}${RESET}` : s);
-const hex = (color: string) => (s: string) => (useColor ? `${ansiFg(color)}${s}${RESET}` : s);
-const dim = (s: string) => c("2", s);
-const bold = (s: string) => c("1", s);
+const style = terminalStyle();
+const hex = (color: string) => style.hex(color);
+const dim = style.dim;
+const bold = style.bold;
 const red = hex(theme.color.danger);
 const green = hex(theme.color.success);
 const blue = hex(theme.color.accent);
@@ -53,6 +54,10 @@ const statusColor = (status: ApplyStatus): ((s: string) => string) => {
 };
 
 const tag = formatResourceTag;
+
+/** A progress line about one resource. */
+const logFor = (fqn: string, message: string, level?: LogLevel.Severity) =>
+  present(message, { resource: fqn, level });
 
 /**
  * In-progress statuses that represent real cloud work. Plain output has no
@@ -190,8 +195,8 @@ export const LoggingCli = Layer.effect(
           // phase prints as it starts, and the settle line carries the total
           // planning time (the spinner's implicit "how long did that take").
           const startedAt = yield* Clock.currentTimeMillis;
-          if (title !== undefined) yield* Effect.logInfo(bold(title));
-          yield* Effect.logInfo(dim(label));
+          if (title !== undefined) yield* present(bold(title));
+          yield* present(dim(label));
           let closed = false;
           let lastLabel = label;
           const write = (nextLabel: string, _nextDetail?: string) =>
@@ -200,7 +205,7 @@ export const LoggingCli = Layer.effect(
               // carry nothing new for a line-per-change log.
               if (closed || nextLabel === lastLabel) return Effect.void;
               lastLabel = nextLabel;
-              return Effect.logInfo(dim(nextLabel));
+              return present(dim(nextLabel));
             });
           const finish = (message: string, paint: (s: string) => string) =>
             Effect.suspend(() => {
@@ -208,7 +213,7 @@ export const LoggingCli = Layer.effect(
               closed = true;
               return Clock.currentTimeMillis.pipe(
                 Effect.flatMap((now) =>
-                  Effect.logInfo(`${paint(message)} ${dim(`(${formatElapsed(now - startedAt)})`)}`),
+                  present(`${paint(message)} ${dim(`(${formatElapsed(now - startedAt)})`)}`),
                 ),
               );
             });
@@ -223,8 +228,10 @@ export const LoggingCli = Layer.effect(
         }),
       approvePlan: (plan, options) =>
         Effect.gen(function* () {
-          for (const line of formatPlanLines(plan, options)) yield* Effect.logInfo(line);
-          if (canPromptOnStdin()) {
+          const { format } = yield* currentConsoleSettings;
+          for (const line of formatPlanLines(plan, options)) yield* present(line);
+          // A JSON console carries log records only: no prompt between them.
+          if (format !== "json" && canPromptOnStdin()) {
             return yield* confirm(
               plan.destroy === true
                 ? { message: "Destroy these resources?", initial: false }
@@ -239,12 +246,12 @@ export const LoggingCli = Layer.effect(
         }),
       displayPlan: (plan, options) =>
         Effect.gen(function* () {
-          for (const line of formatPlanLines(plan, options)) yield* Effect.logInfo(line);
+          for (const line of formatPlanLines(plan, options)) yield* present(line);
         }),
       startApplySession: (plan, options) =>
         Effect.gen(function* () {
-          for (const line of formatPlanLines(plan, options)) yield* Effect.logInfo(line);
-          yield* Effect.logInfo("");
+          for (const line of formatPlanLines(plan, options)) yield* present(line);
+          yield* present("");
 
           const startedAt = yield* Clock.currentTimeMillis;
           const started = new Map<string, number>();
@@ -252,15 +259,15 @@ export const LoggingCli = Layer.effect(
           const notes = new Map<string, string>();
           const statusNotes = new Map<string, string>();
           return {
-            setOutput: (value: unknown) => Effect.logInfo(inspect(value, { colors: false })),
-            // Progress is an Effect log record, just like provider and build
-            // diagnostics, so the append-only renderer gives every line the
-            // same timestamp / level / fiber prefix.
+            setOutput: (value: unknown) => present(inspect(value, { colors: false, depth: null })),
+            // Presents the apply events (which are already log records) as
+            // lines shaped like log lines, so the plain output reads as one
+            // stream.
             emit: (event: ApplyEvent) =>
               Clock.currentTimeMillis.pipe(
                 Effect.flatMap((now) =>
                   Effect.suspend(() => {
-                    if (event._tag === "apply.resource.note") {
+                    if (event.type === "apply.resource.note") {
                       // `status` notes only surface as the settle line's suffix;
                       // everything else streams, deduping consecutive repeats.
                       if (event.kind === "status") {
@@ -269,7 +276,7 @@ export const LoggingCli = Layer.effect(
                       }
                       if (notes.get(event.fqn) === event.message) return Effect.void;
                       notes.set(event.fqn, event.message);
-                      return Effect.logInfo(`${tag(event.fqn)} ${blue(event.message)}`);
+                      return logFor(event.fqn, blue(event.message));
                     }
                     const id = event.fqn;
                     const mode = modeSuffix({
@@ -280,7 +287,7 @@ export const LoggingCli = Layer.effect(
                     if (!isTerminal(event.status)) {
                       if (!isActive(event.status)) return Effect.void;
                       if (!started.has(id)) started.set(id, now);
-                      return Effect.logInfo(`${tag(id)} ${dim(event.status)}${mode}`);
+                      return logFor(id, `${dim(event.status)}${mode}`);
                     }
                     terminal.set(id, event.status);
                     const status = statusColor(event.status)(event.status);
@@ -294,7 +301,13 @@ export const LoggingCli = Layer.effect(
                     const msg = message
                       ? ` ${dim("—")} ${event.status === "fail" ? red(message) : message}`
                       : "";
-                    return Effect.logInfo(`${tag(id)} ${status}${mode}${msg}${took}`);
+                    // At the level `emit` gives the event, so `--log-level error`
+                    // still shows a failed resource.
+                    return logFor(
+                      id,
+                      `${status}${mode}${msg}${took}`,
+                      event.status === "fail" ? "Error" : undefined,
+                    );
                   }),
                 ),
               ),
@@ -308,9 +321,9 @@ export const LoggingCli = Layer.effect(
                   const parts = [green(`${succeeded} succeeded`)];
                   if (failed) parts.push(red(`${failed} failed`));
                   if (skipped) parts.push(dim(`${skipped} skipped`));
-                  return Effect.logInfo("").pipe(
+                  return present("").pipe(
                     Effect.andThen(
-                      Effect.logInfo(
+                      present(
                         `${bold(outcome === "success" ? "Done:" : "Failed:")} ${parts.join(dim(", "))} ${dim(`(${formatElapsed(now - startedAt)})`)}`,
                       ),
                     ),

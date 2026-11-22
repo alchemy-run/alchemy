@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as deviceregistry from "@distilled.cloud/azure/deviceregistry";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { logLevel, registryLocation as location, subscription, tags, waitGone } from "./util.ts";
 
@@ -63,7 +63,12 @@ test.provider(
         program({ validityPeriodInDays: 30 }),
       );
       const get = (name: string) =>
-        getPolicy(group.resourceGroupName, namespace.namespaceName, ca.certificateAuthorityName, name);
+        getPolicy(
+          group.resourceGroupName,
+          namespace.namespaceName,
+          ca.certificateAuthorityName,
+          name,
+        );
       const observed = yield* get(policy.certificatePolicyName);
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
       expect(observed.properties?.certificate?.validityPeriodInDays).toEqual(30);

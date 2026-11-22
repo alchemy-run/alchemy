@@ -7,10 +7,11 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
-export type TableBucketArn = `arn:aws:s3tables:${RegionID}:${AccountID}:bucket/${string}`;
+export type TableBucketArn = `arn:${Partition}:s3tables:${RegionID}:${AccountID}:bucket/${string}`;
 
 /**
  * Server-side encryption configuration for an S3 table bucket. Applied at
@@ -55,8 +56,23 @@ export interface TableBucket extends Resource<
     type: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TableBucketLookup
 > {}
+
+/**
+ * Props for {@link TableBucket.lookup}: find a table bucket this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type TableBucketLookup =
+  | {
+      /** The ARN of the existing table bucket. */
+      tableBucketArn: string;
+    }
+  | {
+      /** The name of the existing table bucket. */
+      name: string;
+    };
 
 /**
  * An Amazon S3 Tables table bucket — a purpose-built bucket for storing
@@ -89,6 +105,17 @@ export interface TableBucket extends Resource<
  *     kmsKeyArn: key.keyArn,
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing table bucket
+ * `TableBucket.lookup` references a table bucket Alchemy doesn't manage (created in the
+ * console or by another stack), found by `tableBucketArn` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing table bucket
+ * ```typescript
+ * const lake = AWS.S3Tables.TableBucket.lookup({ name: "lake" });
+ * const tableBucketArn = lake.tableBucketArn;
  * ```
  *
  * @resource
@@ -129,12 +156,12 @@ export const TableBucketProvider = () =>
         type: b.type,
       }));
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* (props) {
       const { accountId, region } = yield* AWSEnvironment.current;
-      const name = output?.name ?? (yield* createBucketName(id, olds ?? {}));
       const arn =
-        output?.tableBucketArn ??
-        (`arn:aws:s3tables:${region}:${accountId}:bucket/${name}` as TableBucketArn);
+        "tableBucketArn" in props
+          ? props.tableBucketArn
+          : (`arn:${partitionOf(region)}:s3tables:${region}:${accountId}:bucket/${props.name}` as TableBucketArn);
       return yield* s3tables.getTableBucket({ tableBucketARN: arn }).pipe(
         Effect.map((b): TableBucket["Attributes"] => ({
           tableBucketArn: b.arn as TableBucketArn,
@@ -144,7 +171,25 @@ export const TableBucketProvider = () =>
           tableBucketId: b.tableBucketId,
           type: b.type,
         })),
-        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFoundException", () => Effect.undefined),
+      );
+    }),
+    read: Effect.fn(function* ({ id, olds, output }) {
+      const { accountId, region } = yield* AWSEnvironment.current;
+      const name = output?.name ?? (yield* createBucketName(id, olds ?? {}));
+      const arn =
+        output?.tableBucketArn ??
+        (`arn:${partitionOf(region)}:s3tables:${region}:${accountId}:bucket/${name}` as TableBucketArn);
+      return yield* s3tables.getTableBucket({ tableBucketARN: arn }).pipe(
+        Effect.map((b): TableBucket["Attributes"] => ({
+          tableBucketArn: b.arn as TableBucketArn,
+          name: b.name,
+          ownerAccountId: b.ownerAccountId,
+          createdAt: b.createdAt,
+          tableBucketId: b.tableBucketId,
+          type: b.type,
+        })),
+        Effect.catchTag("NotFoundException", () => Effect.undefined),
       );
     }),
     diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
@@ -166,13 +211,13 @@ export const TableBucketProvider = () =>
       const name = output?.name ?? (yield* createBucketName(id, news));
       const arn =
         output?.tableBucketArn ??
-        (`arn:aws:s3tables:${region}:${accountId}:bucket/${name}` as TableBucketArn);
+        (`arn:${partitionOf(region)}:s3tables:${region}:${accountId}:bucket/${name}` as TableBucketArn);
 
       // Observe — cloud state is authoritative. `output` is only a cache for
       // the deterministic ARN; the bucket may have been deleted out-of-band.
       let bucket = yield* s3tables.getTableBucket({ tableBucketARN: arn }).pipe(
         Effect.map((b) => b),
-        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFoundException", () => Effect.undefined),
       );
 
       // Ensure — create if missing. Tolerate a concurrent create

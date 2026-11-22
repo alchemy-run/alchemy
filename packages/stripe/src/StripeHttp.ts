@@ -1,3 +1,4 @@
+import type { ConfigError } from "@distilled.cloud/core/errors";
 import {
   Credentials,
   DEFAULT_API_BASE_URL,
@@ -7,6 +8,7 @@ import * as Binding from "alchemy/Binding";
 import * as Output from "alchemy/Output";
 import { type ResourceLike } from "alchemy/Resource";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { isEffectOf } from "alchemy/Util/effect";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -70,7 +72,7 @@ export const authorizeWith =
     ) as Effect.Effect<A, E, RuntimeContext>;
 
 export const makeStripeAuth = (options: {
-  credentials: Effect.Effect<StripeCredentialsConfig> | undefined;
+  credentials: Effect.Effect<StripeCredentialsConfig, ConfigError> | undefined;
   http: HttpClient.HttpClient | undefined;
 }): StripeAuth => ({
   authorize: <A, E>(
@@ -112,11 +114,10 @@ export const asStringEffect = (value: unknown): Effect.Effect<Effect.Effect<stri
     return Effect.succeed(Effect.succeed(value));
   }
   if (Output.isOutput(value)) {
-    return value.asEffect() as Effect.Effect<Effect.Effect<string>>;
+    return (value as Output.Output<string, never>).asEffect();
   }
-  if (Effect.isEffect(value)) {
-    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- resource id Effects resolve without requirements
-    return Effect.succeed(value as Effect.Effect<string>);
+  if (isEffectOf<string>(value)) {
+    return Effect.succeed(value);
   }
   return Effect.die("Stripe binding expected a resolved resource id");
 };
@@ -126,7 +127,7 @@ export const asOptionalStringEffect = (
   value: unknown,
 ): Effect.Effect<Effect.Effect<string | undefined>> => {
   if (value === undefined || value === null || value === "") {
-    return Effect.succeed(Effect.succeed(undefined));
+    return Effect.succeed(Effect.undefined);
   }
   return asStringEffect(value).pipe(
     Effect.map((inner) => inner.pipe(Effect.map((s) => (s.length > 0 ? s : undefined)))),

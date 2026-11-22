@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -155,8 +156,32 @@ export type NfsShare = Resource<
     state: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NfsShareLookup
 >;
+
+/**
+ * Props for {@link NfsShare.lookup}: find a nfs share this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface NfsShareLookup {
+  /**
+   * NFS share id (the `{nfsshare}` segment of
+   * `projects/{project}/locations/{location}/nfsShares/{nfsshare}`).
+   */
+  nfsShareId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Bare Metal Solution NFS share — file storage attached to BMS
@@ -218,6 +243,18 @@ export type NfsShare = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing nfs share
+ * `NfsShare.lookup` references a nfs share Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared nfs share.
+ *
+ * **Example:** Reference an existing nfs share
+ * ```typescript
+ * const nfsShare = GCP.BareMetalSolution.NfsShare.lookup({
+ *   nfsShareId: "my-nfs-share",
+ * });
+ * ```
+ *
  * @resource
  * @category BareMetalSolution
  */
@@ -276,7 +313,7 @@ const getByName = (name: string) =>
     }
     return yield* baremetalsolution
       .getProjectsLocationsNfsShares({ name })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   });
 
 const listOwned = (project: string, region: string) =>
@@ -315,6 +352,15 @@ export const NfsShareProvider = () =>
           (previousPod !== undefined && nextPod !== undefined && previousPod !== nextPod),
       });
     }),
+
+    lookup: Effect.fn(function* ({ nfsShareId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, nfsShareId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -359,17 +405,15 @@ export const NfsShareProvider = () =>
       if (current === undefined) {
         const created = yield* baremetalsolution
           .createProjectsLocationsNfsShares({
+            name,
+            requestedSizeGib: size,
+            storageType,
+            pod: news.pod,
+            allowedClients: desiredClients,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
-            body: {
-              name,
-              requestedSizeGib: size,
-              storageType,
-              pod: news.pod,
-              allowedClients: desiredClients,
-              labels: desiredLabels,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -377,7 +421,7 @@ export const NfsShareProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(
@@ -409,14 +453,11 @@ export const NfsShareProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* baremetalsolution.patchProjectsLocationsNfsShares({
+          labels: desiredLabels,
+          allowedClients: desiredClients,
+          requestedSizeGib: size,
           name: ready.name ?? name,
           updateMask: mask,
-          body: {
-            name: ready.name ?? name,
-            labels: desiredLabels,
-            allowedClients: desiredClients,
-            requestedSizeGib: size,
-          },
         });
         yield* waitForOperation(operation);
         const patched = yield* waitUntilReady(
@@ -440,7 +481,7 @@ export const NfsShareProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

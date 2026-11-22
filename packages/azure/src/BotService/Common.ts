@@ -11,9 +11,7 @@ export const sameArm = (a: string | undefined, b: string | undefined) =>
 export const DEFAULT_BOT_LOCATION = "global";
 
 /** Unwrap an optional secret. */
-export const reveal = (
-  value: Redacted.Redacted<string> | string | undefined,
-): string | undefined =>
+export const reveal = (value: Redacted.Redacted<string> | string | undefined): string | undefined =>
   value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 /**

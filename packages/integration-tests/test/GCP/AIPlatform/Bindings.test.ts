@@ -1,13 +1,13 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { callProbe, dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { callProbe, expectProbe } from "../bindingHost.ts";
 import AIPlatformBindingsHost, {
   Agent,
   Browser,
@@ -39,8 +39,8 @@ const projectGrantsOf = (account: string) =>
   Effect.gen(function* () {
     const { project } = yield* GcpEnvironment.current;
     const policy = yield* resourcemanager.getIamPolicyProjects({
+      options: { requestedPolicyVersion: 3 },
       resource: `projects/${project}`,
-      body: { options: { requestedPolicyVersion: 3 } },
     });
     return (policy.bindings ?? [])
       .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${account}`))
@@ -65,7 +65,7 @@ const expectProjectGrants = Effect.gen(function* () {
   expect(yield* projectGrantsOf(hostAccount)).toEqual(PROJECT_GRANTS);
 });
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "AIPlatform Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:aiplatform", "provider:gcp:run", "live"],
@@ -167,10 +167,7 @@ describe.skipIf(!dockerAvailable)(
             const outcome = yield* callProbe(baseUrl, "queryReasoningEngine");
             expect(outcome.ok ? "ok" : outcome.error._tag).toEqual("ReasoningEngineNotRunning");
             const expected = yield* aiplatform
-              .queryReasoningEngines({
-                name: names.engine,
-                body: { input: { input: "hello" } },
-              })
+              .queryReasoningEngines({ input: { input: "hello" }, name: names.engine })
               .pipe(
                 Effect.map(() => "ok"),
                 Effect.catchTag("ReasoningEngineNotRunning", (error) => Effect.succeed(error._tag)),

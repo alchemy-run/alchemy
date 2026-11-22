@@ -4,10 +4,10 @@ import { Filter } from "@alchemy.run/aws/GuardDuty/Filter";
 import { IPSet } from "@alchemy.run/aws/GuardDuty/IPSet";
 import { ThreatIntelSet } from "@alchemy.run/aws/GuardDuty/ThreatIntelSet";
 import { Bucket } from "@alchemy.run/aws/S3/Bucket";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as guardduty from "@distilled.cloud/aws/guardduty";
 import * as s3 from "@distilled.cloud/aws/s3";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { makeGuardDutyTestLease } from "./TestLease.ts";
 

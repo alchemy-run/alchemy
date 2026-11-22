@@ -115,7 +115,7 @@ export const SecretRotationEventSource = Layer.effect(
             }>;
             const permission = yield* Permission(`${secret.LogicalId}-Rotation-Permission`, {
               action: "lambda:InvokeFunction",
-              functionName: host.functionArn,
+              functionName: Lambda.qualifiedArnOf(host),
               principal: "secretsmanager.amazonaws.com",
               sourceAccount: accountId,
             });

@@ -28,20 +28,20 @@ export const MAX_DISPLAY_NAME_LENGTH = 128;
 export const DEFAULT_PROCESSOR_TYPE = "OCR_PROCESSOR";
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.DocumentAI.ResourceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError("GCP.DocumentAI.ResourceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ProcessorPending extends Data.TaggedError("GCP.DocumentAI.ProcessorPending")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class ProcessorFailed extends Data.TaggedError("GCP.DocumentAI.ProcessorFailed")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
@@ -272,7 +272,7 @@ export const waitUntilGone = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new ResourceStillExists({ name }),
+      () => new ResourceStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceStillExists,

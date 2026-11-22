@@ -1,9 +1,3 @@
-import type {
-  AddOnPlansResponseEdgesItemNode,
-  AddOnsResponseEdgesItemNode,
-  CreateAddOnResponseAddOn,
-} from "@distilled.cloud/fly-io/addons";
-import * as addons from "@distilled.cloud/fly-io/addons";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
@@ -16,6 +10,7 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { resolveOrgSlug } from "./Environment.ts";
+import * as AddOns from "./internal/AddOns.ts";
 import { createFlyAppName, matchesAlchemyPhysicalName, sanitizeFlyAppName } from "./Metadata.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -24,10 +19,17 @@ export const REDIS_ADDON_TYPE = "upstash_redis";
 export const REDIS_PROVIDER = "upstash_redis";
 export const REDIS_URL_ENV = "REDIS_URL";
 
+// Re-export from the defining module, not the `@alchemy.run/redis` barrel:
+// rolldown's lazyBarrel rejects an unused re-export from an `export *` barrel
+// (https://github.com/rolldown/rolldown/issues/11344).
 export {
   CommandError as RedisCommandError,
   UrlMissing as RedisUrlMissing,
-} from "@alchemy.run/redis";
+} from "@alchemy.run/redis/Errors";
+// Clients' runtime effects require redis's `RuntimeContext` twin, so it shows
+// up in users' inferred types. Exporting it here lets TypeScript name it
+// through this package without users depending on @alchemy.run/redis.
+export type { RuntimeContext as RedisRuntimeContext } from "@alchemy.run/redis/RuntimeContext";
 
 export interface RedisProps {
   /**
@@ -105,8 +107,18 @@ export type Redis = Resource<
     url: Redacted.Redacted<string> | undefined;
   },
   never,
-  Providers
+  Providers,
+  RedisLookup
 >;
+
+/**
+ * Props for {@link Redis.lookup}: find an Upstash Redis this stack
+ * doesn't manage by its name.
+ */
+export interface RedisLookup {
+  /** Upstash Redis name. */
+  name: string;
+}
 
 /**
  * Managed Upstash Redis in a Fly org. Bind {@link ReadRedis},
@@ -216,13 +228,24 @@ export type Redis = Resource<
  * need a specific size.
  * :::
  *
+ * ### Looking up an existing Redis
+ * `Redis.lookup` references a Redis Alchemy doesn't manage (created with
+ * `fly redis create` or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted. Bind it like a declared Redis.
+ *
+ * **Example:** Read an existing Redis
+ * ```typescript
+ * const cache = Fly.Redis.lookup({ name: "my-cache" });
+ * const redis = yield* Fly.ReadRedis(cache);
+ * ```
+ *
  * @resource
  * @product Redis
  */
 export const Redis = Resource<Redis>("Fly.Redis");
 
 export class RedisNotCreated extends Data.TaggedError("Fly.RedisNotCreated")<{
-  name: string;
+  resourceName: string;
   errorMessage?: string;
 }> {}
 
@@ -239,9 +262,9 @@ class RedisPending extends Data.TaggedError("Fly.RedisPending")<{
   status: string;
 }> {}
 
-type ObservedRedis = AddOnsResponseEdgesItemNode | CreateAddOnResponseAddOn;
+type ObservedRedis = AddOns.AddOnRow;
 
-type RedisPlan = AddOnPlansResponseEdgesItemNode;
+type RedisPlan = AddOns.AddOnPlanRow;
 
 const backoff = Schedule.min([
   Schedule.exponential(Duration.millis(500), 1.5),
@@ -347,57 +370,17 @@ const toAttrs = (
   primaryRegion: row.primaryRegion ?? fallback.primaryRegion,
   readRegions: sorted(row.readRegions),
   status: row.status ?? undefined,
-  planId:
-    "addOnPlan" in row
-      ? ((row.addOnPlan as { id?: string } | null | undefined)?.id ?? fallback.planId)
-      : fallback.planId,
+  planId: row.addOnPlanId ?? fallback.planId,
   planName: row.addOnPlanName ?? undefined,
   privateIp: row.privateIp ?? undefined,
-  orgSlug:
-    "organization" in row
-      ? ((row.organization as { slug?: string | null } | undefined)?.slug ?? fallback.orgSlug)
-      : fallback.orgSlug,
+  orgSlug: row.orgSlug ?? fallback.orgSlug,
   eviction: evictionOf(row.options),
   url: urlOf(row, fallback.url),
 });
 
-export const listRedisAddOns = Effect.fn(function* () {
-  const rows: AddOnsResponseEdgesItemNode[] = [];
-  let after: string | undefined;
-  for (let i = 0; i < 8; i++) {
-    const page = yield* addons.addOns({
-      type: REDIS_ADDON_TYPE,
-      first: 50,
-      after,
-    });
-    for (const edge of page.edges ?? []) {
-      if (edge?.node != null) rows.push(edge.node);
-    }
-    if (!page.pageInfo.hasNextPage) break;
-    after = page.pageInfo.endCursor ?? undefined;
-    if (after === undefined || after.length === 0) break;
-  }
-  return rows;
-});
+export const listRedisAddOns = () => AddOns.listAddOns(REDIS_ADDON_TYPE);
 
-export const listRedisPlans = Effect.fn(function* () {
-  const rows: RedisPlan[] = [];
-  let after: string | undefined;
-  for (let i = 0; i < 4; i++) {
-    const page = yield* addons.addOnPlans({
-      type: REDIS_ADDON_TYPE,
-      first: 50,
-      after,
-    });
-    for (const edge of page.edges ?? []) {
-      if (edge?.node != null) rows.push(edge.node);
-    }
-    if (!page.pageInfo.hasNextPage) break;
-    after = page.pageInfo.endCursor ?? undefined;
-    if (after === undefined || after.length === 0) break;
-  }
-  return rows;
-});
+export const listRedisPlans = () => AddOns.listAddOnPlans(REDIS_ADDON_TYPE);
 
 export const findRedisAddOn = (input: { id?: string; name?: string }) =>
   listRedisAddOns().pipe(
@@ -410,7 +393,7 @@ export const findRedisAddOn = (input: { id?: string; name?: string }) =>
     ),
   );
 
-const cheapestPlan = (plans: RedisPlan[]) => {
+const cheapestPlan = (plans: ReadonlyArray<RedisPlan>) => {
   const usable = plans.filter((plan) => !isLegacyPlanName(plan));
   const pool = usable.length > 0 ? usable : plans;
   if (pool.length === 0) return undefined;
@@ -451,56 +434,46 @@ const resolvePlan = (plan: string | undefined, existingId: string | undefined) =
     return cheapest;
   });
 
-const resolveOrganization = (orgSlug: string) =>
-  addons
-    .organization({ slug: orgSlug })
-    .pipe(Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)));
+const resolveOrganization = (orgSlug: string) => AddOns.getOrganization(orgSlug);
 
 const ensureTos = (orgSlug: string, organizationId: string) =>
   Effect.gen(function* () {
-    const agreed = yield* addons.agreedToProviderTos({
-      slug: orgSlug,
-      providerName: REDIS_PROVIDER,
-    });
+    const agreed = yield* AddOns.agreedToProviderTos(orgSlug, REDIS_PROVIDER);
     if (agreed === true) return;
     // Tokens without org-admin cannot write the ToS row. Create still
     // succeeds when the org already agreed via flyctl.
     yield* Effect.result(
-      addons.createExtensionTosAgreement({
-        input: {
-          addOnProviderName: REDIS_PROVIDER,
-          organizationId,
-        },
+      AddOns.createExtensionTosAgreement({
+        addOnProviderName: REDIS_PROVIDER,
+        organizationId,
       }),
     );
   });
 
 const waitUntilReady = (id: string, name: string) =>
   findRedisAddOn({ id, name }).pipe(
-    Effect.flatMap(
-      (row): Effect.Effect<AddOnsResponseEdgesItemNode, RedisPending | RedisNotCreated> => {
-        if (row === undefined) {
-          return Effect.fail(new RedisPending({ redisId: id, status: "missing" }));
-        }
-        if (failedStatus(row.status)) {
-          return Effect.fail(
-            new RedisNotCreated({
-              name: row.name ?? name,
-              errorMessage: row.errorMessage ?? row.status ?? undefined,
-            }),
-          );
-        }
-        if (pendingStatus(row.status)) {
-          return Effect.fail(
-            new RedisPending({
-              redisId: id,
-              status: row.status ?? "provisioning",
-            }),
-          );
-        }
-        return Effect.succeed(row);
-      },
-    ),
+    Effect.flatMap((row): Effect.Effect<ObservedRedis, RedisPending | RedisNotCreated> => {
+      if (row === undefined) {
+        return Effect.fail(new RedisPending({ redisId: id, status: "missing" }));
+      }
+      if (failedStatus(row.status)) {
+        return Effect.fail(
+          new RedisNotCreated({
+            resourceName: row.name ?? name,
+            errorMessage: row.errorMessage ?? row.status ?? undefined,
+          }),
+        );
+      }
+      if (pendingStatus(row.status)) {
+        return Effect.fail(
+          new RedisPending({
+            redisId: id,
+            status: row.status ?? "provisioning",
+          }),
+        );
+      }
+      return Effect.succeed(row);
+    }),
     Effect.retry({
       while: (error) => error._tag === "Fly.RedisPending",
       times: 10,
@@ -522,7 +495,7 @@ const waitUntilGone = (id: string, name: string) =>
 const desiredOptions = (
   props: RedisProps,
   plan: RedisPlan,
-  observed: unknown | undefined,
+  observed: unknown,
 ): Record<string, unknown> => {
   const options = recordOf(observed);
   if (props.eviction !== undefined) options.eviction = props.eviction;
@@ -593,9 +566,7 @@ export const attachRedisSecrets = Effect.fn(function* (
     }
     let url = unwrapSensitive(row.publicUrl);
     if ((url === undefined || url.length === 0) && row.id !== undefined) {
-      const detail = yield* addons
-        .addOn({ id: row.id })
-        .pipe(Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)));
+      const detail = yield* AddOns.getAddOn({ id: row.id });
       url = unwrapSensitive(detail?.publicUrl);
     }
     if (url === undefined || url.length === 0) {
@@ -649,6 +620,21 @@ export const RedisProvider = () =>
         };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* findRedisAddOn({ name });
+      if (found === undefined) return undefined;
+      let url = unwrapSensitive(found.publicUrl);
+      if ((url === undefined || url.length === 0) && found.id !== undefined) {
+        const detail = yield* AddOns.getAddOn({ id: found.id });
+        url = unwrapSensitive(detail?.publicUrl);
+      }
+      return toAttrs(found, {
+        name,
+        primaryRegion: DEFAULT_REDIS_REGION,
+        url: url === undefined || url.length === 0 ? undefined : Redacted.make(url),
+      });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -706,26 +692,24 @@ export const RedisProvider = () =>
 
       const plan = yield* resolvePlan(
         props.plan,
-        current !== undefined && "addOnPlan" in current ? current.addOnPlan?.id : output?.planId,
+        current !== undefined ? (current.addOnPlanId ?? undefined) : output?.planId,
       );
 
       if (current === undefined) {
         yield* ensureTos(orgSlug, org.id);
         const created = yield* Effect.result(
-          addons.createAddOn({
-            input: {
-              type: REDIS_ADDON_TYPE,
-              name,
-              organizationId: org.id,
-              planId: plan.id,
-              primaryRegion,
-              readRegions: props.readRegions ?? [],
-              options: desiredOptions(props, plan, undefined),
-            },
+          AddOns.createAddOn({
+            type: REDIS_ADDON_TYPE,
+            name,
+            organizationId: org.id,
+            planId: plan.id,
+            primaryRegion,
+            readRegions: props.readRegions ?? [],
+            options: desiredOptions(props, plan, undefined),
           }),
         );
         if (Result.isSuccess(created)) {
-          current = created.success.addOn;
+          current = created.success;
         } else {
           current = yield* findRedisAddOn({ name });
           if (current === undefined) {
@@ -735,7 +719,7 @@ export const RedisProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RedisNotCreated({ name });
+        return yield* new RedisNotCreated({ resourceName: name });
       }
 
       if (pendingStatus(current.status)) {
@@ -744,14 +728,14 @@ export const RedisProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RedisNotCreated({ name });
+        return yield* new RedisNotCreated({ resourceName: name });
       }
 
       const observedOptions = recordOf(current.options);
       const nextOptions = desiredOptions(props, plan, current.options);
       const nextReadRegions = sorted(props.readRegions ?? current.readRegions ?? []);
       const observedReadRegions = sorted(current.readRegions);
-      const observedPlanId = "addOnPlan" in current ? current.addOnPlan?.id : output?.planId;
+      const observedPlanId = current.addOnPlanId ?? undefined;
       const planChanged = observedPlanId !== undefined && observedPlanId !== plan.id;
       const regionsChanged = !deepEqual(observedReadRegions, nextReadRegions);
       const optionsChanged = !deepEqual(observedOptions, nextOptions);
@@ -759,20 +743,18 @@ export const RedisProvider = () =>
 
       if (planChanged || regionsChanged || optionsChanged || prodPackChanged) {
         const updated = yield* Effect.result(
-          addons.updateAddOn({
-            input: {
-              addOnId: current.id,
-              planId: plan.id,
-              readRegions: nextReadRegions,
-              options: nextOptions,
-              prodPack: prodPackChanged ? props.prodPack : undefined,
-            },
+          AddOns.updateAddOn({
+            addOnId: current.id,
+            planId: plan.id,
+            readRegions: nextReadRegions,
+            options: nextOptions,
+            prodPack: prodPackChanged ? props.prodPack : undefined,
           }),
         );
         if (Result.isSuccess(updated)) {
           current = {
             ...current,
-            ...updated.success.addOn,
+            ...updated.success,
           };
         } else {
           const refreshed = yield* findRedisAddOn({
@@ -785,7 +767,7 @@ export const RedisProvider = () =>
 
       let latest = (yield* findRedisAddOn({ id: current.id, name })) ?? current;
       if (unwrapSensitive(latest.publicUrl) === undefined && latest.id !== undefined) {
-        const detail = yield* addons.addOn({ id: latest.id });
+        const detail = yield* AddOns.getAddOn({ id: latest.id });
         latest = { ...latest, ...detail };
       }
       return toAttrs(latest, {
@@ -804,9 +786,9 @@ export const RedisProvider = () =>
         return;
       }
       const deleted = yield* Effect.result(
-        addons.deleteAddOn({
-          input: redisId.length > 0 ? { addOnId: redisId } : { name, provider: REDIS_PROVIDER },
-        }),
+        AddOns.deleteAddOn(
+          redisId.length > 0 ? { addOnId: redisId } : { name, provider: REDIS_PROVIDER },
+        ),
       );
       if (Result.isFailure(deleted)) {
         const still = yield* findRedisAddOn({ id: redisId, name });

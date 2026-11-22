@@ -12,7 +12,7 @@ import { spawnSync } from "node:child_process";
  *   - persisted state rows are stamped `providerMode: "local"`;
  *   - out-of-band raw HTTP against the emulator gateway runs the deployed
  *     task definition (RunTask) and observes it RUNNING as a real docker
- *     container (`docker ps` shows `floci-ecs-<taskId>-…`);
+ *     container (`docker ps` shows `floci-aws-ecs-<taskId>-…`);
  *   - the container round-trips HTTP: floci publishes the LITERAL host
  *     port for bridge-mode port mappings (awsvpc tasks are expose-only
  *     when floci itself runs in a container), so the fixture uses
@@ -25,12 +25,12 @@ import { spawnSync } from "node:child_process";
  * Requires Docker (floci runs as a container); skipped when unavailable.
  */
 import * as AWS from "@alchemy.run/aws";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Command from "alchemy/Command";
 import * as Output from "alchemy/Output";
 import { Stack } from "alchemy/Stack";
 import { State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import { initialCwd } from "alchemy/Util/Node";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -40,7 +40,10 @@ import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import EcsDevMainTask from "./fixtures/ecs-dev/main-task.ts";
-import { dockerAvailable, rawAwsJson } from "./fixtures/raw.ts";
+import { rawAwsJson } from "./fixtures/raw.ts";
+
+/** Floci names a task's container `floci-aws-ecs-<taskId>-<container>`. */
+const ECS_CONTAINER_PREFIX = "floci-aws-ecs-";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
@@ -168,8 +171,8 @@ const runTaskRoundTrip = Effect.fn(function* (options: {
   expect(tasks.tasks?.[0]?.lastStatus).toBe("RUNNING");
 
   // …and the task is a REAL container on the host docker daemon
-  // (`floci-ecs-<taskId>-<containerName>`).
-  expect(yield* runningContainerNames).toContain(`floci-ecs-${taskId}`);
+  // (`floci-aws-ecs-<taskId>-<containerName>`).
+  expect(yield* runningContainerNames).toContain(`${ECS_CONTAINER_PREFIX}${taskId}`);
 
   // Round-trip HTTP to the served marker. Bridge-mode port mappings are
   // published literally on the docker host, so the container is reachable
@@ -214,7 +217,7 @@ const pollMarker = Effect.fn(function* (options: {
 /**
  * Post-destroy (hot-reload variants, where the swap replaced the original
  * task): observe until no running container belongs to the family's primary
- * container (`floci-ecs-<taskId>-<containerName>`), then assert the cluster
+ * container (`floci-aws-ecs-<taskId>-<containerName>`), then assert the cluster
  * and task definition are gone from the emulator.
  */
 const assertFamilyTornDown = Effect.fn(function* (options: {
@@ -226,7 +229,10 @@ const assertFamilyTornDown = Effect.fn(function* (options: {
     Effect.flatMap((names) =>
       names
         .split("\n")
-        .some((name) => name.startsWith("floci-ecs-") && name.endsWith(`-${options.containerName}`))
+        .some(
+          (name) =>
+            name.startsWith(ECS_CONTAINER_PREFIX) && name.endsWith(`-${options.containerName}`),
+        )
         ? Effect.fail(new Error("family container still running"))
         : Effect.void,
     ),
@@ -251,7 +257,7 @@ const assertTornDown = Effect.fn(function* (options: {
   // delete (observe until the daemon agrees — stop is asynchronous).
   yield* runningContainerNames.pipe(
     Effect.flatMap((names) =>
-      names.includes(`floci-ecs-${options.taskId}`)
+      names.includes(`${ECS_CONTAINER_PREFIX}${options.taskId}`)
         ? Effect.fail(new Error("task container still running"))
         : Effect.void,
     ),
@@ -274,7 +280,7 @@ const assertTornDown = Effect.fn(function* (options: {
 // concurrent access (the same helper-race class documented on
 // `Docker.image.push`). One build at a time keeps this file off that path.
 describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "local"] }, () => {
-  test.provider.skipIf(!dockerAvailable)(
+  test.provider(
     "dev mode runs a context-Dockerfile ECS task as a real local container",
     (stack) =>
       Effect.gen(function* () {
@@ -349,7 +355,7 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
     { timeout: 300_000 },
   );
 
-  test.provider.skipIf(!dockerAvailable)(
+  test.provider(
     "dev mode applies logging.retention to the task's log group",
     (stack) =>
       Effect.gen(function* () {
@@ -401,7 +407,7 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
     { timeout: 300_000 },
   );
 
-  test.provider.skipIf(!dockerAvailable)(
+  test.provider(
     "dev mode bundles a main-program ECS task and pushes through the local ECR registry",
     (stack) =>
       Effect.gen(function* () {
@@ -443,7 +449,7 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
     { timeout: 300_000 },
   );
 
-  test.provider.skipIf(!dockerAvailable)(
+  test.provider(
     "hot reloads a context-Dockerfile task without a deploy",
     (stack) =>
       Effect.gen(function* () {
@@ -502,7 +508,7 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
     { timeout: 300_000 },
   );
 
-  test.provider.skipIf(!dockerAvailable)(
+  test.provider(
     "keeps the recorded task definition revision when a Build rewrites the image context during an apply",
     (stack) =>
       Effect.gen(function* () {
@@ -594,7 +600,7 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
     { timeout: 300_000 },
   );
 
-  test.provider.skipIf(!dockerAvailable)(
+  test.provider(
     "hot reloads a bundled-main task without a deploy",
     (stack) =>
       Effect.gen(function* () {
@@ -672,7 +678,7 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
     { timeout: 300_000 },
   );
 
-  test.provider.skipIf(!dockerAvailable)(
+  test.provider(
     "dev mode runs an image-owning ECS Service with hot reload",
     (stack) =>
       Effect.gen(function* () {
@@ -755,6 +761,85 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
   );
 
   /**
+   * `Bundle.watch` emits its initial build, so a bundled-`main` Service's
+   * watcher fires once right after the apply with no content change. That
+   * trigger must not register another revision or roll the service's tasks.
+   */
+  test.provider(
+    "keeps the recorded task definition revision when the watcher's first emission changes nothing",
+    (stack) =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        yield* stack.destroy();
+
+        const clone = yield* cloneFixture(`${import.meta.dirname}/fixtures/ecs-reload-main`, {
+          prefix: "ecs-svc-main-",
+        });
+
+        const program = Effect.gen(function* () {
+          const cluster = yield* AWS.ECS.Cluster("EcsSvcMainCluster");
+          const service = yield* AWS.ECS.Service("EcsSvcMainService", {
+            cluster,
+            main: path.join(clone, "server.ts"),
+            image: "oven/bun:1",
+            port: MAIN_RELOAD_PORT,
+            cpu: 256,
+            memory: 512,
+            networkMode: "bridge",
+            requiresCompatibilities: ["EC2"],
+            launchType: "EC2",
+            desiredCount: 1,
+            runtimePlatform: hostRuntimePlatform,
+            deploymentStabilizationTimeout: "3 minutes",
+          });
+          return { cluster, service };
+        });
+
+        /**
+         * Poll that the recorded revision stays the family's only ACTIVE
+         * revision and the service's current one. The initial `Bundle.watch`
+         * emission lands some seconds after the apply (a bundle build plus a
+         * debounce), so a single read right after the deploy can miss a
+         * redundant roll.
+         */
+        const expectRecordedRevisionSettled = (outputs: {
+          cluster: { clusterName: string };
+          service: { taskFamily?: string; taskDefinitionArn: string; serviceName: string };
+        }) =>
+          Effect.gen(function* () {
+            const { service } = outputs;
+            const listed = (yield* (yield* rawEcs("ListTaskDefinitions", {
+              familyPrefix: service.taskFamily,
+              status: "ACTIVE",
+            })).json) as { taskDefinitionArns?: string[] };
+            expect(listed.taskDefinitionArns ?? []).toEqual([service.taskDefinitionArn]);
+            const described = (yield* (yield* rawEcs("DescribeServices", {
+              cluster: outputs.cluster.clusterName,
+              services: [service.serviceName],
+            })).json) as { services?: { taskDefinition?: string }[] };
+            expect(described.services?.[0]?.taskDefinition).toBe(service.taskDefinitionArn);
+          }).pipe(Effect.repeat({ schedule: Schedule.spaced("2 seconds"), times: 8 }));
+
+        const first = yield* stack.deploy(program);
+        yield* pollMarker({ port: MAIN_RELOAD_PORT, marker: "ecs-reload-main-v1", times: 60 });
+        yield* expectRecordedRevisionSettled(first);
+
+        // Control: a redeploy with no changes keeps the same revision.
+        const unchanged = yield* stack.deploy(program);
+        expect(unchanged.service.taskDefinitionArn).toBe(first.service.taskDefinitionArn);
+        yield* expectRecordedRevisionSettled(unchanged);
+
+        yield* stack.destroy();
+        yield* assertFamilyTornDown({
+          clusterName: first.cluster.clusterName,
+          taskDefinitionArn: first.service.taskDefinitionArn,
+          containerName: first.service.containerName!,
+        });
+      }),
+    { timeout: 300_000 },
+  );
+
+  /**
    * A PROP-driven update — no file event — must roll the service's running
    * containers onto the new task-definition revision. Regression: restart
    * logic lived only in the file-watch trigger, so an engine reconcile
@@ -762,7 +847,7 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
    * `updateService`d onto it while the container kept serving the old one
    * until the next source edit (`onReconciled` in DevWatchProvider).
    */
-  test.provider.skipIf(!dockerAvailable)(
+  test.provider(
     "rolls a service task on a prop-only env update",
     (stack) =>
       Effect.gen(function* () {
@@ -819,7 +904,7 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
    * exercised by any test), and an edit to the Dockerfile itself must
    * rebuild + roll with no deploy.
    */
-  test.provider.skipIf(!dockerAvailable)(
+  test.provider(
     "hot reloads a service whose Dockerfile lives outside the build context",
     (stack) =>
       Effect.gen(function* () {

@@ -45,8 +45,14 @@ export interface GetFileSymbolicLink extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetFileSymbolicLinkRequest,
-    ) => Effect.Effect<files.GetFileSymbolicLinkResponse, files.GetFileSymbolicLinkError, RuntimeContext>
+    ) => Effect.Effect<
+      files.GetFileSymbolicLinkResponse,
+      files.GetFileSymbolicLinkError,
+      RuntimeContext
+    >
   >
 > {}
 
-export const GetFileSymbolicLink = Binding.Service<GetFileSymbolicLink>("Azure.Storage.GetFileSymbolicLink");
+export const GetFileSymbolicLink = Binding.Service<GetFileSymbolicLink>(
+  "Azure.Storage.GetFileSymbolicLink",
+);

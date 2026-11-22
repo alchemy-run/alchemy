@@ -1,0 +1,96 @@
+---
+title: Programs in a sandbox
+description: Run an Effect program you write inside a Daytona sandbox, redeploy it without losing the sandbox, mount volumes into it, and install mount clients with a derived snapshot.
+---
+
+import Timeline from "../../../../components/diagrams/Timeline.astro";
+
+A sandbox can run a program you write, the same way a Worker or a Lambda does. Alchemy bundles it, uploads it into the sandbox, and runs it with Node in a session of its own. The program serves HTTP on a port, reached through the sandbox's preview URL, and keeps running as long as the sandbox does.
+
+## The sandbox outlives the program
+
+The sandbox outlives the program. A code change restarts the process in the same sandbox, at the same URL. Only a change Daytona can't make to a running sandbox, like a new mount, replaces it.
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "sbx1", label: "sandbox 1" },
+    { id: "proc", label: "program" },
+    { id: "sbx2", label: "sandbox 2" },
+  ]}
+  bars={[
+    { lane: "sbx1", start: 0, end: 6.8, label: "sandbox.url stays the same" },
+    { lane: "proc", start: 0, end: 3.4, label: "bundle a1b2" },
+    { lane: "proc", start: 3.6, end: 6.8, label: "bundle c3d4" },
+    { lane: "sbx2", start: 7, end: 10, label: "new sandbox" },
+  ]}
+  marks={[
+    { at: 3.5, label: "code change" },
+    { at: 6.9, label: "mount added" },
+  ]}
+  caption="A code change uploads the new bundle and restarts the process in the same sandbox. Adding a mount replaces the sandbox, since Daytona mounts volumes only when it creates one."
+/>
+
+## Run a program
+
+```typescript title="src/MySandbox.ts"
+import * as Daytona from "@alchemy.run/daytona";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Base } from "./Images.ts";
+
+export default class MySandbox extends Daytona.Sandbox<MySandbox>()(
+  "MySandbox",
+  { snapshot: Base, main: import.meta.url, port: 3000, public: true },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.json({ ok: true })),
+    };
+  }),
+) {}
+```
+
+`sandbox.url` is the preview URL of port 3000. `public` opens it to anyone; a private sandbox's preview needs its token in `X-Daytona-Preview-Token`. See [Network and previews](/daytona/networking/network).
+
+## A deploy restarts the process
+
+A code change uploads the new bundle and restarts the process. The sandbox and its URL stay the same.
+
+A sandbox with `main` doesn't auto-stop. If it stopped anyway, its process ended with it, and the next deploy starts the sandbox and the program again.
+
+## Mount a volume in the program
+
+```typescript title="src/MySandbox.ts"
+import * as Daytona from "@alchemy.run/daytona";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Base } from "./Images.ts";
+import { Data } from "./Storage.ts";
+
+export default class MySandbox extends Daytona.Sandbox<MySandbox>()(
+  "MySandbox",
+  { snapshot: Base, main: import.meta.url, public: true },
+  Effect.gen(function* () {
+    const data = yield* Daytona.MountVolume(Data, { path: "/data" });
+    const fs = yield* FileSystem.FileSystem;
+    return {
+      fetch: Effect.gen(function* () {
+        return yield* HttpServerResponse.json(yield* fs.readDirectory(data.path));
+      }),
+    };
+  }).pipe(Effect.provide(Daytona.MountVolumeLive)),
+) {}
+```
+
+The volume joins the sandbox's `mounts`. Daytona mounts volumes when it creates a sandbox, so adding or removing one replaces the program's sandbox.
+
+## Install a mount client
+
+A mount binding that needs a client in the image, such as an `alchemy/Mount` capability, makes the sandbox boot from a **derived snapshot**: its snapshot plus the client's install lines, built on Daytona. The derived snapshot is named from a hash of its Dockerfile and deleted with the sandbox, and a change to it replaces the sandbox.
+
+Daytona sandboxes provide FUSE, so FUSE clients work. A client that needs NFS fails the deploy with `MountUnsupported`.
+
+## The program reaches what its sandbox does
+
+The program reaches the network the way its sandbox does. Below Daytona's Tier 3, that is only an allowlist of essential services, so bindings that call Daytona's API work, but calls to another sandbox's toolbox are refused. From Tier 3, the program reaches the whole internet. See [Network and previews](/daytona/networking/network).

@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeletePlan,
   GetPlans,
@@ -15,6 +14,13 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import {
+  fromWireTiers,
+  tiersEqual,
+  toWireTiers,
+  type Tier,
+  type TiersMode,
+} from "./internal/tiers.ts";
 import {
   alchemyMetadataKeys,
   createInternalMetadata,
@@ -35,6 +41,18 @@ export type PlanInterval = "day" | "month" | "week" | "year";
 export type PlanUsageType = "licensed" | "metered";
 /** How the price per period is computed. */
 export type PlanBillingScheme = "per_unit" | "tiered";
+/** How a tiered plan applies its tiers. */
+export type PlanTiersMode = TiersMode;
+/** One tier of a tiered plan. */
+export type PlanTier = Tier;
+
+/** A transformation applied to usage or quantity before billing. */
+export interface PlanTransformUsage {
+  /** Divide usage by this number. */
+  divideBy: number;
+  /** After division, round the result `up` or `down`. */
+  round: "up" | "down";
+}
 
 export interface PlanProps {
   /**
@@ -94,6 +112,23 @@ export interface PlanProps {
    */
   billingScheme?: PlanBillingScheme;
   /**
+   * Pricing tiers for a `tiered` plan. Requires `billingScheme: "tiered"`
+   * and `tiersMode`. Create-only — changing them replaces the plan.
+   */
+  tiers?: PlanTier[];
+  /**
+   * How `tiers` apply: `volume` prices every unit at the tier the total
+   * quantity reaches, `graduated` prices each unit at the tier it falls
+   * in. Create-only — changing it replaces the plan.
+   */
+  tiersMode?: PlanTiersMode;
+  /**
+   * Transform usage or quantity before billing, e.g. bill per 1000 API
+   * calls with `{ divideBy: 1000, round: "up" }`. Cannot be combined with
+   * `tiers`. Create-only — changing it replaces the plan.
+   */
+  transformUsage?: PlanTransformUsage;
+  /**
    * Meter that tracks usage for a metered plan. Create-only.
    */
   meter?: string;
@@ -133,6 +168,12 @@ export type Plan = Resource<
     usageType: PlanUsageType;
     /** How the price per period is computed. */
     billingScheme: PlanBillingScheme;
+    /** Pricing tiers, if the plan is tiered. */
+    tiers: PlanTier[] | undefined;
+    /** How tiers apply, if the plan is tiered. */
+    tiersMode: PlanTiersMode | undefined;
+    /** Usage transformation, if set. */
+    transformUsage: PlanTransformUsage | undefined;
     /** Meter id for a metered plan, if set. */
     meter: string | undefined;
     /** User-defined metadata (Alchemy ownership keys stripped). */
@@ -143,16 +184,26 @@ export type Plan = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  PlanLookup
 >;
+
+/**
+ * Props for {@link Plan.lookup}: find a plan this stack
+ * doesn't manage by its id.
+ */
+export interface PlanLookup {
+  /** Stripe plan id, e.g. `"plan_A2b3C4d5E6f7G8"`. */
+  id: string;
+}
 
 /**
  * A Stripe Plan — the legacy (pre-Price) catalog object that defines
  * currency, amount, and billing interval for a Product. Prefer
  * {@link Price} for new catalogs; Plan exists for the Plans API.
  *
- * Currency, amount, interval, usage type, and billing scheme are
- * immutable (changing them replaces the plan). Nickname, metadata,
+ * Currency, amount, interval, usage type, billing scheme, tiers, and
+ * usage transformation are immutable (changing them replaces the plan). Nickname, metadata,
  * `active`, `trialPeriodDays`, and `product` update in place. Destroy
  * hard-deletes the plan; existing subscribers are not affected.
  *
@@ -182,6 +233,32 @@ export type Plan = Resource<
  * });
  * ```
  *
+ * **Example:** Graduated tiered plan
+ * ```typescript
+ * const plan = yield* Stripe.Plan("seats", {
+ *   product: product.id,
+ *   currency: "usd",
+ *   interval: "month",
+ *   billingScheme: "tiered",
+ *   tiersMode: "graduated",
+ *   tiers: [
+ *     { upTo: 10, unitAmount: 500 },
+ *     { upTo: "inf", unitAmount: 400 },
+ *   ],
+ * });
+ * ```
+ *
+ * **Example:** Bill per thousand units
+ * ```typescript
+ * const plan = yield* Stripe.Plan("api-calls", {
+ *   product: product.id,
+ *   currency: "usd",
+ *   interval: "month",
+ *   amount: 100,
+ *   transformUsage: { divideBy: 1000, round: "up" },
+ * });
+ * ```
+ *
  * ### Updating a Plan
  * **Example:** Nickname, metadata, and trial
  * ```typescript
@@ -194,6 +271,16 @@ export type Plan = Resource<
  *   trialPeriodDays: 14,
  *   metadata: { tier: "pro" },
  * });
+ * ```
+ *
+ * ### Looking up an existing plan
+ * `Plan.lookup` references a plan Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing plan
+ * ```typescript
+ * const ref = Stripe.Plan.lookup({ id: "plan_A2b3C4d5E6f7G8" });
  * ```
  *
  * @resource
@@ -231,6 +318,15 @@ const toAttrs = (plan: StripePlan): PlanAttributes => ({
   trialPeriodDays: plan.trial_period_days ?? undefined,
   usageType: plan.usage_type as PlanUsageType,
   billingScheme: plan.billing_scheme as PlanBillingScheme,
+  tiers: fromWireTiers(plan.tiers),
+  tiersMode: (plan.tiers_mode ?? undefined) as PlanTiersMode | undefined,
+  transformUsage:
+    plan.transform_usage == null
+      ? undefined
+      : {
+          divideBy: plan.transform_usage.divide_by,
+          round: plan.transform_usage.round as PlanTransformUsage["round"],
+        },
   meter: plan.meter ?? undefined,
   metadata: userMetadata(plan.metadata),
   created: plan.created,
@@ -240,7 +336,7 @@ const toAttrs = (plan: StripePlan): PlanAttributes => ({
 const isMissingPlan = isMissingStripeResource;
 
 const getById = (plan: string) =>
-  GetPlan({ plan }).pipe(Effect.catchIf(isMissingPlan, () => Effect.succeed(undefined)));
+  GetPlan({ plan, expand: ["tiers"] }).pipe(Effect.catchIf(isMissingPlan, () => Effect.undefined));
 
 const listByActive = Effect.fn(function* (active: boolean) {
   const plans: StripePlan[] = [];
@@ -249,6 +345,7 @@ const listByActive = Effect.fn(function* (active: boolean) {
     const response = yield* GetPlans({
       active,
       limit: LIST_PAGE_SIZE,
+      expand: ["data.tiers"],
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
     });
     plans.push(...response.data);
@@ -321,6 +418,14 @@ const shouldReplace = (news: PlanProps, output: PlanAttributes | undefined) => {
   if ((news.usageType ?? "licensed") !== output.usageType) return true;
   if ((news.billingScheme ?? "per_unit") !== output.billingScheme) return true;
   if ((news.meter ?? undefined) !== output.meter) return true;
+  if (!tiersEqual(news.tiers, output.tiers)) return true;
+  if (news.tiersMode !== undefined && news.tiersMode !== output.tiersMode) return true;
+  if (
+    (news.transformUsage?.divideBy ?? undefined) !== output.transformUsage?.divideBy ||
+    (news.transformUsage?.round ?? undefined) !== output.transformUsage?.round
+  ) {
+    return true;
+  }
   return false;
 };
 
@@ -344,6 +449,11 @@ export const PlanProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, output }) {
@@ -393,21 +503,29 @@ export const PlanProvider = () =>
           interval: news.interval,
           active: desiredActive,
           metadata,
+          expand: ["tiers"],
           ...(news.intervalCount !== undefined ? { interval_count: news.intervalCount } : {}),
           ...(news.amount !== undefined ? { amount: news.amount } : {}),
           ...(news.amountDecimal !== undefined ? { amount_decimal: news.amountDecimal } : {}),
           ...(news.usageType !== undefined ? { usage_type: news.usageType } : {}),
           ...(news.billingScheme !== undefined ? { billing_scheme: news.billingScheme } : {}),
           ...(news.meter !== undefined ? { meter: news.meter } : {}),
+          ...(news.tiers !== undefined ? { tiers: toWireTiers(news.tiers) } : {}),
+          ...(news.tiersMode !== undefined ? { tiers_mode: news.tiersMode } : {}),
+          ...(news.transformUsage !== undefined
+            ? {
+                transform_usage: {
+                  divide_by: news.transformUsage.divideBy,
+                  round: news.transformUsage.round,
+                },
+              }
+            : {}),
           ...(desiredNickname.length > 0 ? { nickname: desiredNickname } : {}),
           ...(desiredTrialPeriodDays !== undefined
             ? { trial_period_days: desiredTrialPeriodDays }
             : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-plan-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-plan-${instanceId}`,
+        });
       }
 
       if (current === undefined) {
@@ -439,6 +557,7 @@ export const PlanProvider = () =>
 
       const updated = yield* UpdatePlan({
         plan: current.id,
+        expand: ["tiers"],
         ...(activeChanged ? { active: desiredActive } : {}),
         ...(nicknameChanged ? { nickname: desiredNickname } : {}),
         ...(productChanged ? { product: news.product } : {}),

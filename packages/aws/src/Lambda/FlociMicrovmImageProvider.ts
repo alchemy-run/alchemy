@@ -42,6 +42,7 @@ import * as Artifacts from "alchemy/Artifacts";
 import { getStableContextDir } from "alchemy/Bundle/TempRoot";
 import { hashDirectory } from "alchemy/Command/Memo";
 import { sha256 } from "alchemy/Util/sha256";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -110,7 +111,11 @@ const buildLocalImage = Effect.fn(function* (id: string, news: MicrovmImageProps
       news.dockerfile !== undefined && isInlineDockerfile(news.dockerfile)
         ? (news.dockerfile.content as string)
         : news.dockerfile;
-    const dockerfile = rewriteBaseImage(buildMicrovmDockerfile(userDockerfile, runtime, port));
+    const dockerfile = rewriteBaseImage(
+      buildMicrovmDockerfile(userDockerfile, runtime, port, {
+        sourceMaps: files.some((f) => f.path.endsWith(".map")),
+      }),
+    );
     const contentHash = yield* sha256(`${bundleHash}:${dockerfile}`);
     const context = yield* getStableContextDir(process.cwd(), dotAlchemy, `${id}-microvm`);
     yield* docker.materialize({
@@ -208,20 +213,18 @@ export const FlociMicrovmImageProvider = () =>
             // it. Running VMs keep their session (deliberately not killed).
             Stream.runForEach(() =>
               Effect.gen(function* () {
-                const startedAt = Date.now();
-                yield* Effect.logInfo(
-                  `[alchemy dev] ${ctx.id}: microvm source changed — rebuilding`,
-                );
+                const startedAt = yield* Clock.currentTimeMillis;
+                yield* Effect.logInfo(`microvm source changed — rebuilding`);
                 const previous = yield* ctx.currentAttrs;
                 const attrs = yield* ctx.rerunReconcile;
                 if (attrs.codeArtifact?.hash !== previous.codeArtifact?.hash) {
                   yield* Effect.logInfo(
-                    `[alchemy dev] ${attrs.name}: microvm image rebuilt (v${attrs.latestActiveImageVersion}) in ${Date.now() - startedAt}ms`,
+                    `microvm image rebuilt (v${attrs.latestActiveImageVersion}) in ${(yield* Clock.currentTimeMillis) - startedAt}ms`,
                   );
                 }
               }).pipe(
                 Effect.catchCause((cause) =>
-                  Effect.logWarning(`[alchemy dev] ${ctx.id}: microvm image rebuild failed`, cause),
+                  Effect.logWarning(`microvm image rebuild failed`, cause),
                 ),
               ),
             ),

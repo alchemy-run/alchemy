@@ -1,5 +1,5 @@
 import * as appengine from "@distilled.cloud/gcp/appengine_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -168,7 +168,7 @@ export const AppsFirewallIngressRuleProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const appsId = yield* resolveAppsId(olds?.appsId, output?.appsId);
       const priority = olds?.priority ?? output?.priority;
@@ -178,7 +178,9 @@ export const AppsFirewallIngressRuleProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, appsId, env.project);
-      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "priority");
     }),
 
     list: () =>
@@ -206,15 +208,7 @@ export const AppsFirewallIngressRuleProvider = () =>
 
       if (current === undefined) {
         const created = yield* appengine
-          .createAppsFirewallIngressRules({
-            appsId,
-            body: {
-              priority,
-              action,
-              sourceRange,
-              description,
-            },
-          })
+          .createAppsFirewallIngressRules({ priority, action, sourceRange, description, appsId })
           .pipe(Effect.catchTag("Conflict", () => getByPriority(appsId, priority)));
         current = created ?? undefined;
       }
@@ -237,15 +231,13 @@ export const AppsFirewallIngressRuleProvider = () =>
       );
       if (updateMask.length > 0) {
         current = yield* appengine.patchAppsFirewallIngressRules({
+          priority: observedPriority,
+          action,
+          sourceRange,
+          description,
           appsId,
           ingressRulesId: String(observedPriority),
           updateMask,
-          body: {
-            priority: observedPriority,
-            action,
-            sourceRange,
-            description,
-          },
         });
       }
 

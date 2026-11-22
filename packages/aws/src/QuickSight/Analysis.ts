@@ -5,11 +5,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { readQuickSightTags, syncQuickSightTags, toWireTags, waitForSettled } from "./internal.ts";
+
+export class AnalysisUnexpectedResponse extends Data.TaggedError("AnalysisUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Properties for an Amazon QuickSight analysis — an editable workspace built
@@ -83,8 +89,18 @@ export interface Analysis extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  AnalysisLookup
 > {}
+
+/**
+ * Props for {@link Analysis.lookup}: find an analysis this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AnalysisLookup {
+  /** The id of the existing analysis. */
+  analysisId: string;
+}
 
 /**
  * An Amazon QuickSight analysis — an editable workspace built from a template
@@ -110,6 +126,16 @@ export interface Analysis extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing analysis
+ * `Analysis.lookup` references an analysis Alchemy doesn't manage (created in the
+ * console or by another stack), found by `analysisId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing analysis
+ * ```typescript
+ * const sales = AWS.QuickSight.Analysis.lookup({ analysisId: "sales" });
+ * ```
+ *
  * @resource
  */
 export const Analysis = Resource<Analysis>("AWS.QuickSight.Analysis");
@@ -126,7 +152,7 @@ export const AnalysisProvider = () =>
       const readAnalysis = Effect.fn(function* (accountId: string, analysisId: string) {
         const response = yield* quicksight
           .describeAnalysis({ AwsAccountId: accountId, AnalysisId: analysisId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         const analysis = response?.Analysis;
         if (analysis === undefined || analysis.Status === "DELETED") {
           return undefined;
@@ -159,6 +185,11 @@ export const AnalysisProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ analysisId }) {
+          const { accountId } = yield* AWSEnvironment.current;
+          const found = yield* readAnalysis(accountId, analysisId);
+          return found === undefined ? undefined : toAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds = {}, output }) {
           const { accountId } = yield* AWSEnvironment.current;
           const analysisId = output?.analysisId ?? (yield* toId(id, olds));
@@ -208,9 +239,9 @@ export const AnalysisProvider = () =>
 
           observed = yield* settle(accountId, analysisId);
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`QuickSight analysis '${analysisId}' not found after reconcile`),
-            );
+            return yield* new AnalysisUnexpectedResponse({
+              message: `QuickSight analysis '${analysisId}' not found after reconcile`,
+            });
           }
 
           // 3b. Sync tags.

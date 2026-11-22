@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as containerregistry from "@distilled.cloud/azure/containerregistry";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runPaidOnly } from "../gates.ts";
 import { basicRegistry, getRegistry, logLevel, subscription, tags, waitGone } from "./util.ts";
@@ -19,6 +19,9 @@ const getTask = (resourceGroupName: string, registryName: string, taskName: stri
   });
 
 const encode = (yaml: string) => Buffer.from(yaml).toString("base64");
+
+const encodedStepOf = (step: containerregistry.TaskStepProperties | undefined) =>
+  step?.type === "EncodedTask" ? step : undefined;
 
 const program = (props: {
   name?: string;
@@ -67,7 +70,7 @@ test.provider.skipIf(!runPaidOnly)(
       expect(task.location).toEqual(registry.location);
       const observed = yield* get(task.taskName);
       expect(observed.properties?.step?.type).toEqual("EncodedTask");
-      expect(observed.properties?.step?.encodedTaskContent).toEqual(
+      expect(encodedStepOf(observed.properties?.step)?.encodedTaskContent).toEqual(
         encode("version: v1.1.0\nsteps:\n  - cmd: mcr.microsoft.com/hello-world\n"),
       );
       expect(observed.properties?.trigger?.timerTriggers?.[0]?.schedule).toEqual("0 3 * * *");
@@ -87,7 +90,7 @@ test.provider.skipIf(!runPaidOnly)(
       const reobserved = yield* get(task.taskName);
       expect(reobserved.properties?.status).toEqual("Disabled");
       expect(reobserved.properties?.trigger?.timerTriggers?.[0]?.schedule).toEqual("0 4 * * *");
-      expect(reobserved.properties?.step?.encodedTaskContent).toEqual(
+      expect(encodedStepOf(reobserved.properties?.step)?.encodedTaskContent).toEqual(
         encode("version: v1.1.0\nsteps:\n  - cmd: mcr.microsoft.com/hello-world:latest\n"),
       );
       expect(reobserved.tags?.env).toEqual("prod");

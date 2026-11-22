@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { DataSource, KnowledgeBase } from "@alchemy.run/aws/Bedrock";
 import * as S3 from "@alchemy.run/aws/S3";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as bedrock from "@distilled.cloud/aws/bedrock-agent";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

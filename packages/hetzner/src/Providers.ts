@@ -1,6 +1,9 @@
+import { DockerLive } from "@alchemy.run/docker/Docker";
+import { Retry as HetznerRetry } from "@distilled.cloud/hetzner/Retry";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Command from "alchemy/Command";
+import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";
 import {
   Server as WebsiteServer,
@@ -11,6 +14,11 @@ import * as Layer from "effect/Layer";
 import { HetznerAuth } from "./AuthProvider.ts";
 import { Certificate, CertificateProvider } from "./Certificate.ts";
 import * as Credentials from "./Credentials.ts";
+import {
+  AdapterLive as DnsAdapterLive,
+  RecordList as DnsRecordList,
+  RecordListProvider as DnsRecordListProvider,
+} from "./DNS.ts";
 import { fromCredentials } from "./Environment.ts";
 import { Firewall, FirewallProvider } from "./Firewall.ts";
 import { FloatingIp, FloatingIpProvider } from "./FloatingIp.ts";
@@ -76,6 +84,7 @@ export const providers = () =>
       Network,
       PlacementGroup,
       PrimaryIp,
+      DnsRecordList,
       RecordSet,
       Server,
       Service,
@@ -97,9 +106,11 @@ export const providers = () =>
         NetworkProvider(),
         PlacementGroupProvider(),
         PrimaryIpProvider(),
+        DnsRecordListProvider(),
         RecordSetProvider(),
         ServerProvider(),
-        ServiceProvider(),
+        // A `context` Service builds its image with the local Docker CLI.
+        ServiceProvider().pipe(Layer.provide(DockerLive)),
         SshKeyProvider(),
         VolumeProvider(),
         VolumeAttachmentProvider(),
@@ -107,12 +118,15 @@ export const providers = () =>
         ZoneProvider(),
       ),
     ),
+    // `domain.dns: Hetzner.DNS.Adapter()` on any platform's custom domain.
+    Layer.provideMerge(DnsAdapterLive),
     Layer.provideMerge(ReadDnsHttp),
     Layer.provideMerge(WriteDnsHttp),
     Layer.provideMerge(ReadWriteDnsHttp),
     Layer.provideMerge(SshLive),
     Layer.provideMerge(MountVolumeLive),
     Layer.provideMerge(fromCredentials()),
+    Layer.provideMerge(Layer.succeed(HetznerRetry, DeployRetry.policy)),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(HetznerAuth),
     Layer.provideMerge(ProfileStoreLive),

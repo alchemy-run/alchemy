@@ -148,7 +148,7 @@ export const AppsAuthorizedCertificate = Resource<AppsAuthorizedCertificate>(
 export class AppsAuthorizedCertificateNotResolved extends Data.TaggedError(
   "GCP.AppEngine.AppsAuthorizedCertificateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const rawDataOf = (props: AppsAuthorizedCertificateProps) => {
@@ -179,7 +179,7 @@ const toAttrs = (certificate: appengine.AuthorizedCertificate, appsId: string, p
 
 const getById = (appsId: string, certificateId: string) =>
   certificateId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(
         appengine.getAppsAuthorizedCertificates({
           appsId,
@@ -248,13 +248,7 @@ export const AppsAuthorizedCertificateProvider = () =>
 
       if (current === undefined) {
         const created = yield* appengine
-          .createAppsAuthorizedCertificates({
-            appsId,
-            body: {
-              displayName,
-              certificateRawData,
-            },
-          })
+          .createAppsAuthorizedCertificates({ displayName, certificateRawData, appsId })
           .pipe(
             Effect.catchTag("Conflict", () =>
               Effect.gen(function* () {
@@ -267,7 +261,7 @@ export const AppsAuthorizedCertificateProvider = () =>
 
       if (current === undefined) {
         return yield* new AppsAuthorizedCertificateNotResolved({
-          name: `apps/${appsId}/authorizedCertificates/${news.certificateId ?? ""}`,
+          resourceName: `apps/${appsId}/authorizedCertificates/${news.certificateId ?? ""}`,
         });
       }
 
@@ -280,13 +274,11 @@ export const AppsAuthorizedCertificateProvider = () =>
       );
       if (updateMask.length > 0) {
         current = yield* appengine.patchAppsAuthorizedCertificates({
+          displayName,
+          certificateRawData,
           appsId,
           authorizedCertificatesId: certificateId,
           updateMask,
-          body: {
-            displayName,
-            certificateRawData,
-          },
         });
       }
 

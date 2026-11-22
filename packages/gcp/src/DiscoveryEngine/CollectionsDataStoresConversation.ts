@@ -98,7 +98,7 @@ export const CollectionsDataStoresConversation = Resource<CollectionsDataStoresC
 export class CollectionsDataStoresConversationNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoresConversationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -130,10 +130,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsCollectionsDataStoresConversations({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const CollectionsDataStoresConversationProvider = () =>
   Provider.succeed(CollectionsDataStoresConversation, {
@@ -167,20 +167,18 @@ export const CollectionsDataStoresConversationProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsCollectionsDataStoresConversations({
+            state,
+            userPseudoId,
+            messages: news.messages,
             parent: news.dataStore,
-            body: {
-              state,
-              userPseudoId,
-              messages: news.messages,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
         return yield* new CollectionsDataStoresConversationNotResolved({
-          name: output?.name ?? `${news.dataStore}/conversations/-`,
+          resourceName: output?.name ?? `${news.dataStore}/conversations/-`,
         });
       }
 
@@ -191,6 +189,9 @@ export const CollectionsDataStoresConversationProvider = () =>
 
       if (stateChanged || userChanged || messagesChanged) {
         current = yield* discoveryengine.patchProjectsLocationsCollectionsDataStoresConversations({
+          state,
+          userPseudoId,
+          messages: news.messages,
           name: resource,
           updateMask: [
             stateChanged ? "state" : undefined,
@@ -199,12 +200,6 @@ export const CollectionsDataStoresConversationProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name: resource,
-            state,
-            userPseudoId,
-            messages: news.messages,
-          },
         });
       }
 

@@ -1,6 +1,6 @@
 import * as Nextjs from "@alchemy.run/frontend-frameworks/nextjs/neon";
 import * as Vocs from "@alchemy.run/frontend-frameworks/vocs/neon";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
@@ -36,7 +36,9 @@ export const exampleRoot = Effect.fn(function* (slug: string) {
   const source = yield* path.fromFileUrl(
     new URL(`../../../../../examples/neon-website-${slug}/`, import.meta.url),
   );
-  // Keep relative tsconfig paths and avoid ignored roots that confuse Tailwind's scanner.
+  // Keep relative tsconfig paths and avoid ignored roots that confuse Tailwind's scanner:
+  // a git-ignored copy makes Tailwind's source scan spin and the Vite build hang,
+  // so these copies must never be gitignored.
   const directory = path.dirname(source);
   yield* fs.makeDirectory(directory, { recursive: true });
   const root = yield* fs.makeTempDirectoryScoped({

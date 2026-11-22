@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -107,8 +108,31 @@ export type SpokesGatewayAdvertisedRoute = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SpokesGatewayAdvertisedRouteLookup
 >;
+
+/**
+ * Props for {@link SpokesGatewayAdvertisedRoute.lookup}: find a spokes
+ * gateway advertised route this stack doesn't manage by its identifiers, in
+ * the ambient project unless `project` names another.
+ */
+export interface SpokesGatewayAdvertisedRouteLookup {
+  /**
+   * Route id (the `{gateway_advertised_route}` segment).
+   */
+  gatewayAdvertisedRouteId: string;
+  /**
+   * Parent gateway spoke resource name
+   * `projects/{project}/locations/{location}/spokes/{spoke}`.
+   */
+  parent: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A route a Network Connectivity Center gateway spoke advertises to a
@@ -157,6 +181,20 @@ export type SpokesGatewayAdvertisedRoute = Resource<
  * );
  * ```
  *
+ * ### Looking up an existing spokes gateway advertised route
+ * `SpokesGatewayAdvertisedRoute.lookup` references a spokes gateway
+ * advertised route Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared spokes gateway advertised route.
+ *
+ * **Example:** Reference an existing spokes gateway advertised route
+ * ```typescript
+ * const spokesGatewayAdvertisedRoute = GCP.NetworkConnectivity.SpokesGatewayAdvertisedRoute.lookup({
+ *   gatewayAdvertisedRouteId: "my-gateway-advertised-route",
+ *   parent: "my-parent",
+ * });
+ * ```
+ *
  * @resource
  * @category NetworkConnectivity
  */
@@ -197,7 +235,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   networkconnectivity
     .getProjectsLocationsSpokesGatewayAdvertisedRoutes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const SpokesGatewayAdvertisedRouteProvider = () =>
   Provider.succeed(SpokesGatewayAdvertisedRoute, {
@@ -247,6 +285,16 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ gatewayAdvertisedRouteId, parent }) {
+      const env = yield* GcpEnvironment.current;
+      const name =
+        parent !== undefined ? resourceNameOf(parent, gatewayAdvertisedRouteId) : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -315,15 +363,13 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
       if (current === undefined) {
         const created = yield* networkconnectivity
           .createProjectsLocationsSpokesGatewayAdvertisedRoutes({
+            ipRange: news.ipRange,
+            priority,
+            recipient: news.recipient,
+            description: news.description,
+            labels: desiredLabels,
             parent: news.parent,
             gatewayAdvertisedRouteId,
-            body: {
-              ipRange: news.ipRange,
-              priority,
-              recipient: news.recipient,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -331,7 +377,7 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -340,7 +386,7 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NetworkConnectivityNotResolved({ name });
+        return yield* new NetworkConnectivityNotResolved({ resourceName: name });
       }
 
       // Labels and description are create-only; `diff` replaces the route
@@ -355,14 +401,11 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
       if (updateMask.length > 0) {
         const operation =
           yield* networkconnectivity.patchProjectsLocationsSpokesGatewayAdvertisedRoutes({
+            description: news.description,
+            priority,
+            recipient: news.recipient,
             name: current.name ?? name,
             updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              description: news.description,
-              priority,
-              recipient: news.recipient,
-            },
           });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(getByName(current.name ?? name), current.name ?? name);
@@ -382,7 +425,7 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

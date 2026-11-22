@@ -1,4 +1,4 @@
-import { expect, test } from "alchemy-test";
+import { expect, test } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import { strFromU8, unzipSync } from "fflate";
 import { sha256 } from "@/Util/sha256";

@@ -1,0 +1,4 @@
+{
+  "ok": false,
+  "error": "dockerfile line greater than max allowed size of 65535"
+}

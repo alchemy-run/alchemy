@@ -155,7 +155,7 @@ const toAttrs = (item: ssm.IssueComment, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(ssm.getProjectsLocationsRepositoriesIssuesIssueComments({ name }));
 
 const listOnIssue = (issue: string) =>
@@ -278,9 +278,9 @@ export const RepositoriesIssuesIssueCommentProvider = () =>
         const created = yield* ssm
           .createProjectsLocationsRepositoriesIssuesIssueComments({
             parent: issue,
-            body: { body },
+            body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const operation = yield* waitForOperation(created);
           const createdName = nameFromOperation(operation);
@@ -294,7 +294,7 @@ export const RepositoriesIssuesIssueCommentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name: name || issue });
+        return yield* new ResourceNotResolved({ resourceName: name || issue });
       }
 
       const currentName = current.name ?? name;
@@ -303,7 +303,7 @@ export const RepositoriesIssuesIssueCommentProvider = () =>
         const operation = yield* ssm.patchProjectsLocationsRepositoriesIssuesIssueComments({
           name: currentName,
           updateMask: "body",
-          body: { body },
+          body,
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(currentName), currentName);
@@ -318,7 +318,7 @@ export const RepositoriesIssuesIssueCommentProvider = () =>
           .deleteProjectsLocationsRepositoriesIssuesIssueComments({
             name: output.name,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined))),
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined)),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -114,13 +114,13 @@ export const EvaluationSet = Resource<EvaluationSet>("GCP.AIPlatform.EvaluationS
 export class EvaluationSetNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.EvaluationSetNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class EvaluationSetStillExists extends Data.TaggedError(
   "GCP.AIPlatform.EvaluationSetStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, setId: string) =>
@@ -184,7 +184,7 @@ const toAttrs = (set: aiplatform.GoogleCloudAiplatformV1EvaluationSet, project: 
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsEvaluationSets({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, location = "-") =>
   aiplatform.listProjectsLocationsEvaluationSets
@@ -214,7 +214,9 @@ const findOwned = (id: string, project: string, location?: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((set) =>
-      set === undefined ? Effect.void : Effect.fail(new EvaluationSetStillExists({ name })),
+      set === undefined
+        ? Effect.void
+        : Effect.fail(new EvaluationSetStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.EvaluationSetStillExists",
@@ -283,20 +285,18 @@ export const EvaluationSetProvider = () =>
       if (current === undefined) {
         current = yield* aiplatform
           .createProjectsLocationsEvaluationSets({
+            displayName,
+            evaluationItems,
+            agentConfigs: news.agentConfigs,
+            metadata: desiredMetadata,
             parent: `projects/${env.project}/locations/${location}`,
-            body: {
-              displayName,
-              evaluationItems,
-              agentConfigs: news.agentConfigs,
-              metadata: desiredMetadata,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(id, env.project, location)));
       }
 
       if (current === undefined) {
         return yield* new EvaluationSetNotResolved({
-          name: name ?? displayName,
+          resourceName: name ?? displayName,
         });
       }
 
@@ -317,13 +317,10 @@ export const EvaluationSetProvider = () =>
 
         current = yield* aiplatform
           .patchProjectsLocationsEvaluationSets({
+            evaluationItems,
+            agentConfigs: news.agentConfigs,
             name: resolvedName,
             updateMask: updateMask.join(","),
-            body: {
-              name: resolvedName,
-              evaluationItems,
-              agentConfigs: news.agentConfigs,
-            },
           })
           .pipe(
             Effect.retry({
@@ -341,7 +338,7 @@ export const EvaluationSetProvider = () =>
       const operation = yield* aiplatform
         .deleteProjectsLocationsEvaluationSets({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

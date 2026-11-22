@@ -5,10 +5,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readIotWirelessTags, sameShape, syncIotWirelessTags } from "./internal.ts";
+
+export class ServiceProfileUnexpectedResponse extends Data.TaggedError(
+  "ServiceProfileUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ServiceProfileProps {
   /**
@@ -42,8 +50,18 @@ export interface ServiceProfile extends Resource<
     serviceProfileName: string;
   },
   never,
-  Providers
+  Providers,
+  ServiceProfileLookup
 > {}
+
+/**
+ * Props for {@link ServiceProfile.lookup}: find a service profile this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ServiceProfileLookup {
+  /** The name of the existing service profile. */
+  serviceProfileName: string;
+}
 
 /**
  * An AWS IoT Core for LoRaWAN service profile — the network-level parameters
@@ -83,6 +101,16 @@ export interface ServiceProfile extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing service profile
+ * `ServiceProfile.lookup` references a service profile Alchemy doesn't manage (created in the
+ * console or by another stack), found by `serviceProfileName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing service profile
+ * ```typescript
+ * const lorawan = AWS.IoTWireless.ServiceProfile.lookup({ serviceProfileName: "lorawan-us915" });
+ * ```
+ *
  * @resource
  */
 export const ServiceProfile = Resource<ServiceProfile>("AWS.IoTWireless.ServiceProfile");
@@ -98,7 +126,7 @@ export const ServiceProfileProvider = () =>
       const getById = (serviceProfileId: string) =>
         iotw
           .getServiceProfile({ Id: serviceProfileId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // Service profiles have no name-keyed Get — enumerate and match. The
       // physical name is deterministic, so this recovers identity after a
@@ -128,9 +156,9 @@ export const ServiceProfileProvider = () =>
 
       const toAttrs = Effect.fn(function* (profile: iotw.GetServiceProfileResponse, name: string) {
         if (profile.Id === undefined || profile.Arn === undefined) {
-          return yield* Effect.fail(
-            new Error(`IoT Wireless service profile '${name}' returned without Id/Arn`),
-          );
+          return yield* new ServiceProfileUnexpectedResponse({
+            message: `IoT Wireless service profile '${name}' returned without Id/Arn`,
+          });
         }
         return {
           serviceProfileId: profile.Id,
@@ -162,6 +190,10 @@ export const ServiceProfileProvider = () =>
             ),
           ),
 
+        lookup: Effect.fn(function* ({ serviceProfileName }) {
+          const profile = yield* observe(undefined, serviceProfileName);
+          return profile === undefined ? undefined : yield* toAttrs(profile, serviceProfileName);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.serviceProfileName ?? (yield* createName(id, olds ?? {}));
           const profile = yield* observe(output, name);
@@ -203,16 +235,16 @@ export const ServiceProfileProvider = () =>
                 LoRaWAN: news.loRaWAN,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             profile =
               created?.Id !== undefined
                 ? yield* getById(created.Id)
                 : yield* observe(undefined, name);
           }
           if (profile === undefined) {
-            return yield* Effect.fail(
-              new Error(`IoT Wireless service profile '${name}' not found after create`),
-            );
+            return yield* new ServiceProfileUnexpectedResponse({
+              message: `IoT Wireless service profile '${name}' not found after create`,
+            });
           }
 
           // 3. SYNC — only tags are mutable; diff against OBSERVED tags.

@@ -2,18 +2,37 @@ import * as AWS from "@alchemy.run/aws";
 import { Cluster } from "@alchemy.run/aws/ECS/Cluster";
 import { Service } from "@alchemy.run/aws/ECS/Service";
 import { HostedZone } from "@alchemy.run/aws/Route53";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as acm from "@distilled.cloud/aws/acm";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as route53 from "@distilled.cloud/aws/route-53";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { getDefaultVpcNetwork } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+// ELB keeps reporting an imported certificate as in use for minutes after
+// its listener and load balancer are gone (over 5 minutes in practice).
+const releaseCertificate = Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(60)]);
+
+// Certificates this file imported whose delete has not succeeded yet. A
+// failed attempt leaves its certificate here; the retry deletes it once its
+// own `stack.destroy()` has removed the load balancer that held it.
+const pendingCertificates = new Set<string>();
+
+const deleteCertificate = (certificateArn: string) =>
+  acm.deleteCertificate({ CertificateArn: certificateArn }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "ResourceInUseException",
+      schedule: releaseCertificate,
+    }),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+    Effect.tap(() => Effect.sync(() => pendingCertificates.delete(certificateArn))),
+  );
 
 const ZONE_NAME = "alchemy-ecs-domain-test.example";
 const DOMAIN = `svc.${ZONE_NAME}`;
@@ -84,6 +103,7 @@ test.provider.skipIf(!!process.env.FAST)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      yield* Effect.forEach([...pendingCertificates], deleteCertificate, { discard: true });
       const net = yield* getDefaultVpcNetwork;
 
       // Import the self-signed certificate out of band (deleted on the way
@@ -93,11 +113,13 @@ test.provider.skipIf(!!process.env.FAST)(
         PrivateKey: new TextEncoder().encode(KEY_PEM),
       });
       const certificateArn = imported.CertificateArn!;
+      pendingCertificates.add(certificateArn);
       // Failure-path backup only (the happy path deletes the cert in-body,
       // below). It runs inside the implicit file afterAll, whose budget is
       // the 120s default — so this retry MUST stay well under that, or a
       // still-in-use cert turns a passing file into an afterAll TimeoutError.
-      // If the cert is still ELB-held after ~60s, leak it for `pnpm nuke`.
+      // A cert still ELB-held after ~60s stays in `pendingCertificates`, and a
+      // retry deletes it once its own destroy has released it.
       yield* Effect.addFinalizer(() =>
         acm.deleteCertificate({ CertificateArn: certificateArn }).pipe(
           Effect.retry({
@@ -216,12 +238,7 @@ test.provider.skipIf(!!process.env.FAST)(
       // afterAll hook's much smaller budget — relying on it for the happy
       // path times the hook out and leaks the certificate. The finalizer
       // stays as a failure-path backup and no-ops once this succeeds.
-      yield* acm.deleteCertificate({ CertificateArn: certificateArn }).pipe(
-        Effect.retry({
-          while: (e) => e._tag === "ResourceInUseException",
-          schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(60)]),
-        }),
-      );
+      yield* deleteCertificate(certificateArn);
     }),
   {
     tags: [

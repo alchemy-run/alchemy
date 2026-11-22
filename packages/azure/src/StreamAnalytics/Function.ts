@@ -221,7 +221,9 @@ export const FunctionProvider = () =>
         properties: {
           inputs: news.inputs,
           output: news.output,
-          binding: news.binding,
+          // The binding's `type` is only known at runtime and decides its
+          // arm, so it is asserted.
+          binding: news.binding as streamanalytics.FunctionBinding,
         },
       };
       const where = {

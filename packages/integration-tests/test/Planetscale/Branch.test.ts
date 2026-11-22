@@ -1,11 +1,11 @@
 import * as Planetscale from "@alchemy.run/planetscale";
 import { hashMigrations } from "@alchemy.run/sql/SqlFile";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ps from "@distilled.cloud/planetscale";
-import { describe, expect } from "alchemy-test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import { Data, Schedule } from "effect";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -13,6 +13,7 @@ import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Planetscale.providers() });
 
@@ -172,6 +173,20 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(
 
               return { database, branch };
             }),
+          );
+          yield* expectFound(
+            Planetscale.PostgresBranch.lookup({ database: branch.database, name: branch.name }),
+            branch,
+            // Migrations and replica intent are this stack's record.
+            {
+              ignore: [
+                "migrationsDir",
+                "migrationsTable",
+                "migrationsHashes",
+                "importHashes",
+                "desiredReplicas",
+              ],
+            },
           );
 
           const live = yield* ps.getBranch({

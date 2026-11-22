@@ -1,10 +1,10 @@
 import { Function, type FunctionProps } from "@alchemy.run/neon/Function";
 import { Project } from "@alchemy.run/neon/Project";
 import { providers } from "@alchemy.run/neon/Providers";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as NeonApi from "@distilled.cloud/neon";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import {
@@ -12,6 +12,7 @@ import {
   functionRolloutTimeout,
   functionTextSamples,
 } from "./FunctionRollout.ts";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: providers() });
 
@@ -76,6 +77,16 @@ test.provider.skipIf(!!process.env.FAST)(
         FUNCTION_TEST_VALUE: "one",
         FUNCTION_TEST_REMOVED: "remove-me",
       });
+      yield* expectFound(
+        Function.lookup({
+          projectId: first.api.projectId,
+          branchId: first.api.branchId,
+          slug: first.api.slug,
+        }),
+        first.api,
+        // The deployed code and environment are this stack's record.
+        { ignore: ["codeHash", "environmentHash"] },
+      );
       expect(first.api.slug).toMatch(/^[a-z0-9]{1,20}$/);
       expect(first.api.currentDeploymentId).toBe(first.api.activeDeploymentId);
       const client = yield* HttpClient.HttpClient;

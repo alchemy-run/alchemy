@@ -180,7 +180,7 @@ export const DataPolicy = Resource<DataPolicy>("GCP.BigQueryDataPolicy.DataPolic
 export class DataPolicyNotResolved extends Data.TaggedError(
   "GCP.BigQueryDataPolicy.DataPolicyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toMasking = (policy: bqdp.DataMaskingPolicy | undefined): DataMaskingPolicy | undefined => {
@@ -220,10 +220,10 @@ const toAttrs = (policy: bqdp.DataPolicy, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : bqdp
         .getProjectsLocationsDataPolicies({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (project: string, location: string) =>
   bqdp.listProjectsLocationsDataPolicies
@@ -273,15 +273,15 @@ const patchPolicy = (name: string, updateMask: string, body: bqdp.DataPolicy) =>
   Effect.gen(function* () {
     const latest = yield* getByName(name);
     if (latest === undefined) {
-      return yield* new DataPolicyNotResolved({ name });
+      return yield* new DataPolicyNotResolved({ resourceName: name });
     }
     return yield* bqdp.patchProjectsLocationsDataPolicies({
-      name,
-      updateMask,
-      body: compact({
+      ...compact({
         ...body,
         etag: latest.etag,
       }),
+      name,
+      updateMask,
     });
   }).pipe(
     Effect.retry({
@@ -357,18 +357,16 @@ export const DataPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* bqdp
           .createProjectsLocationsDataPolicies({
+            dataPolicyId,
+            dataPolicy: toCreateBody(news, dataPolicyType),
             parent,
-            body: {
-              dataPolicyId,
-              dataPolicy: toCreateBody(news, dataPolicyType),
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => observe(id, name, env.project, location)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new DataPolicyNotResolved({ name });
+        return yield* new DataPolicyNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

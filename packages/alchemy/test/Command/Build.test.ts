@@ -1,9 +1,9 @@
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as pathe from "pathe";
 import * as Command from "@/Command";
-import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Command.providers() });
 
@@ -283,6 +283,38 @@ test.provider(
       const build3 = yield* deploy();
       expect(build3.hash.input).not.toBe(build1.hash.input);
       expect(yield* fs.readFileString(outputFile)).not.toBe(firstOutput);
+
+      yield* stack.destroy();
+    }),
+  { tags: ["unit", "local"], timeout: 60000 },
+);
+
+test.provider(
+  "rebuilds when a single-file output changes",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      yield* stack.destroy();
+
+      const fixture = yield* makeTemporaryFixture();
+      const artifact = pathe.join(fixture.cwd, "artifact.txt");
+      const deploy = () =>
+        stack.deploy(
+          Command.Build("test-build", {
+            command: "cp src/main.ts artifact.txt",
+            cwd: fixture.cwd,
+            outdir: "artifact.txt",
+            memo: { include: ["src/**"], lockfile: false },
+          }),
+        );
+
+      const build1 = yield* deploy();
+      const built = yield* fs.readFileString(artifact);
+
+      yield* fs.writeFileString(artifact, "tampered\n");
+      const build2 = yield* deploy();
+      expect(yield* fs.readFileString(artifact)).toBe(built);
+      expect(build2.hash).toMatchObject(build1.hash);
 
       yield* stack.destroy();
     }),

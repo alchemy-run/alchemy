@@ -222,7 +222,7 @@ const getByName = (name: string) =>
       name,
       view: "FULL",
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listChildren = (parent: string) =>
   collectPages(
@@ -353,11 +353,11 @@ export const VmwareClustersVmwareNodePoolProvider = () =>
       if (current === undefined) {
         const created = yield* gkeonprem
           .createProjectsLocationsVmwareClustersVmwareNodePools({
+            ...body,
             parent: cluster,
             vmwareNodePoolId,
-            body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -365,7 +365,7 @@ export const VmwareClustersVmwareNodePoolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const mask = fieldMask([
@@ -378,19 +378,17 @@ export const VmwareClustersVmwareNodePoolProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* gkeonprem.patchProjectsLocationsVmwareClustersVmwareNodePools({
+          ...body,
+          etag: current.etag,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            ...body,
-            etag: current.etag,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
       return toAttrs(current, env.project, env.region);
     }),
@@ -408,7 +406,7 @@ export const VmwareClustersVmwareNodePoolProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

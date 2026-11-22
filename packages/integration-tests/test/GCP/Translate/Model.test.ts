@@ -1,10 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as translate from "@distilled.cloud/gcp/translate_v3";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { expectFound } from "../lookup.ts";
 import { location, logLevel, currentParent, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -36,12 +37,10 @@ const createEmptyDataset = (displayName: string) =>
       return existing.value.name;
     }
     const operation = yield* translate.createProjectsLocationsDatasets({
+      displayName,
+      sourceLanguageCode: "en",
+      targetLanguageCode: "es",
       parent,
-      body: {
-        displayName,
-        sourceLanguageCode: "en",
-        targetLanguageCode: "es",
-      },
     });
     yield* GCP.Translate.waitForOperation(operation);
     const created = yield* findDataset(parent, displayName);
@@ -126,6 +125,10 @@ test.provider.skipIf(!runModelLifecycle)(
             displayName: "enes",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Translate.Model.lookup({ location: model.location, modelId: model.modelId }),
+        model,
       );
       expect(model.name).toContain("/models/");
       expect(model.location).toEqual(location);

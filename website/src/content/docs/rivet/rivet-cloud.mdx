@@ -1,0 +1,84 @@
+---
+title: Rivet Cloud
+description: Use Rivet Cloud as the control plane, sign in to it from the alchemy CLI or CI, and run your nodes on Rivet Cloud or on any cloud.
+---
+
+Let [Rivet Cloud](https://rivet.dev) run the control plane, and the nodes too if you like. There are no engines, disks or buckets of your own to look after.
+
+```typescript title="src/cluster.ts"
+import * as RivetCloud from "@alchemy.run/rivet/Cloud";
+import * as Layer from "effect/Layer";
+
+export const Cluster = RivetCloud.ControlPlane("Rivet");
+
+export const Default = RivetCloud.Pool("Default").pipe(Layer.provide(Cluster));
+```
+
+Each stage gets a namespace of its own on the cluster, the same as on a control plane you run.
+
+## Sign in
+
+Create a cluster in the [Rivet dashboard](https://dashboard.rivet.dev), then add Rivet Cloud to your profile:
+
+```sh
+alchemy profile edit --add RivetCloud
+```
+
+The dashboard opens and asks you to approve a code. Once you do, the profile keeps the session and refreshes it, and remembers the cluster you chose. Deploys read the cluster's address and admin token with it.
+
+If your account belongs to several organizations, sign-in also asks which one to act in and remembers it. Set `RIVET_CLOUD_ORGANIZATION` to the organization's slug to answer without the question.
+
+Self-hosted control planes never ask for this: only `RivetCloud.ControlPlane` signs in.
+
+## Sign in from CI
+
+CI can't approve a code. Create a cluster token in the Rivet dashboard with the `rivet:cluster:read`, `rivet:cluster:engine:read` and `rivet:cluster:engine:write` scopes and no expiry, and give it to the job with the cluster's name:
+
+```sh title=".env"
+RIVET_CLOUD_TOKEN=...
+RIVET_CLOUD_CLUSTER=my-cluster
+```
+
+The same token can go in a profile instead, as the "Cluster token" method.
+
+## Choose a cluster
+
+A profile deploys to the cluster chosen at sign-in. Name another one in code:
+
+```typescript title="src/cluster.ts"
+export const Cluster = RivetCloud.ControlPlane("Rivet", { cluster: "acme" });
+```
+
+## Let Rivet run the nodes
+
+`RivetCloud.Pool` runs the pool's nodes on the cluster. Each deploy that changes a class builds a Docker image of the node program with your local `docker`, uploads it to Rivet Cloud, and rolls the nodes out to it, so deploying needs Docker. The first deploy takes a few minutes while Rivet prepares the image.
+
+```typescript title="src/cluster.ts"
+export const Default = RivetCloud.Pool("Default", { machineType: "e2-medium", nodeCount: 2 }).pipe(
+  Layer.provide(Cluster),
+);
+```
+
+The cluster's plan caps the machines: the free plan allows one `e2-micro` or `e2-small` node.
+
+Rivet Cloud runs one pool of nodes per cluster for now, so only one stage at a time can run its nodes there. A second stage's deploy is refused rather than replacing the first stage's nodes. Give other stages a cluster of their own, or a pool on another cloud.
+
+Rivet Cloud's nodes take no environment of their own, so the stage's namespace and each class's [secrets](/rivet/secrets) are part of the image Rivet stores.
+
+## Run the nodes yourself
+
+Any other pool works too, because nodes connect out to Rivet Cloud:
+
+```typescript title="src/cluster.ts"
+import * as RivetAWS from "@alchemy.run/rivet/AWS";
+
+export const Default = RivetAWS.EcsPool("Default").pipe(Layer.provide(Cluster));
+```
+
+See [Pools](/rivet/pools).
+
+## Your own control plane
+
+To connect to a control plane you already run, use `Rivet.ControlPlane`. See [Control planes](/rivet/control-planes#use-one-you-already-run).
+
+Every option, with its default, is in the reference: [Cloud ControlPlane](/providers/rivet/cloud#controlplane).

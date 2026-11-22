@@ -1,7 +1,9 @@
 import { DockerLive } from "@alchemy.run/docker/Docker";
+import { Retry as GcpRetry } from "@distilled.cloud/gcp/Retry";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Command from "alchemy/Command";
+import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";
 import {
   Server as WebsiteServer,
@@ -230,6 +232,7 @@ import {
 } from "./AndroidPublisher/MonetizationSubscriptionsBasePlansOffer.ts";
 import { ApisConfig, ApisConfigProvider } from "./ApiGateway/ApisConfig.ts";
 import { AnalyticsDatastore, AnalyticsDatastoreProvider } from "./Apigee/AnalyticsDatastore.ts";
+import { Api as ApigeeApi, ApiProvider as ApigeeApiProvider } from "./Apigee/Api.ts";
 import {
   ApimServiceExtension,
   ApimServiceExtensionProvider,
@@ -300,20 +303,30 @@ import {
   EnvironmentsTraceConfigOverride,
   EnvironmentsTraceConfigOverrideProvider,
 } from "./Apigee/EnvironmentsTraceConfigOverride.ts";
+import {
+  Instance as ApigeeInstance,
+  InstanceProvider as ApigeeInstanceProvider,
+} from "./Apigee/Instance.ts";
 import { InstancesAttachment, InstancesAttachmentProvider } from "./Apigee/InstancesAttachment.ts";
 import { InstancesNatAddress, InstancesNatAddressProvider } from "./Apigee/InstancesNatAddress.ts";
 import { Keyvaluemap, KeyvaluemapProvider } from "./Apigee/Keyvaluemap.ts";
 import { KeyvaluemapsEntry, KeyvaluemapsEntryProvider } from "./Apigee/KeyvaluemapsEntry.ts";
 import { Organization, OrganizationProvider } from "./Apigee/Organization.ts";
+import { Report as ApigeeReport, ReportProvider as ApigeeReportProvider } from "./Apigee/Report.ts";
 import { SecurityFeedback, SecurityFeedbackProvider } from "./Apigee/SecurityFeedback.ts";
 import {
   SecurityMonitoringCondition,
   SecurityMonitoringConditionProvider,
 } from "./Apigee/SecurityMonitoringCondition.ts";
+import {
+  SecurityProfile as ApigeeSecurityProfile,
+  SecurityProfileProvider as ApigeeSecurityProfileProvider,
+} from "./Apigee/SecurityProfile.ts";
 import { SecurityProfilesV2, SecurityProfilesV2Provider } from "./Apigee/SecurityProfilesV2.ts";
 import { Sharedflow, SharedflowProvider } from "./Apigee/Sharedflow.ts";
 import { SitesApicategory, SitesApicategoryProvider } from "./Apigee/SitesApicategory.ts";
 import { SitesApidoc, SitesApidocProvider } from "./Apigee/SitesApidoc.ts";
+import { Space as ApigeeSpace, SpaceProvider as ApigeeSpaceProvider } from "./Apigee/Space.ts";
 import { Api as ApihubApi, ApiProvider as ApihubApiProvider } from "./ApiHub/Api.ts";
 import { ApiHubInstance, ApiHubInstanceProvider } from "./ApiHub/ApiHubInstance.ts";
 import { ApisVersion, ApisVersionProvider } from "./ApiHub/ApisVersion.ts";
@@ -418,9 +431,6 @@ import {
   VolumesSnapshot as BaremetalsolutionVolumesSnapshot,
   VolumesSnapshotProvider as BaremetalsolutionVolumesSnapshotProvider,
 } from "./BareMetalSolution/VolumesSnapshot.ts";
-import { AppConnection, AppConnectionProvider } from "./BeyondCorp/AppConnection.ts";
-import { AppConnector, AppConnectorProvider } from "./BeyondCorp/AppConnector.ts";
-import { AppGateway, AppGatewayProvider } from "./BeyondCorp/AppGateway.ts";
 import { SecurityGateway, SecurityGatewayProvider } from "./BeyondCorp/SecurityGateway.ts";
 import {
   SecurityGatewaysApplication,
@@ -900,10 +910,6 @@ import {
 } from "./ContactCenterInsights/ConversationsFeedbackLabel.ts";
 import { Dashboard, DashboardProvider } from "./ContactCenterInsights/Dashboard.ts";
 import {
-  DashboardsChart,
-  DashboardsChartProvider,
-} from "./ContactCenterInsights/DashboardsChart.ts";
-import {
   DatasetsConversationsFeedbackLabel,
   DatasetsConversationsFeedbackLabelProvider,
 } from "./ContactCenterInsights/DatasetsConversationsFeedbackLabel.ts";
@@ -967,7 +973,6 @@ import {
   SynonymSetProvider as ContentwarehouseSynonymSetProvider,
 } from "./ContentWarehouse/SynonymSet.ts";
 import * as Credentials from "./Credentials.ts";
-import { TagTemplate, TagTemplateProvider } from "./DataCatalog/TagTemplate.ts";
 import {
   TaxonomiesPolicyTag,
   TaxonomiesPolicyTagProvider,
@@ -1529,6 +1534,11 @@ import {
   ServiceAccountKey as IamServiceAccountKey,
   ServiceAccountKeyProvider as IamServiceAccountKeyProvider,
 } from "./IAM/ServiceAccountKey.ts";
+import { WorkloadIdentityPool, WorkloadIdentityPoolProvider } from "./IAM/WorkloadIdentityPool.ts";
+import {
+  WorkloadIdentityProvider,
+  WorkloadIdentityProviderProvider,
+} from "./IAM/WorkloadIdentityProvider.ts";
 import {
   BrandsIdentityAwareProxyClient,
   BrandsIdentityAwareProxyClientProvider,
@@ -2143,6 +2153,10 @@ import {
 } from "./Retail/CatalogsServingConfig.ts";
 import { PredictHttp as RetailPredictHttp } from "./Retail/PredictHttp.ts";
 import { SearchHttp as RetailSearchHttp } from "./Retail/SearchHttp.ts";
+import {
+  Container as RunContainer,
+  ContainerProvider as RunContainerProvider,
+} from "./Run/Container.ts";
 import { GetServiceHttp } from "./Run/GetServiceHttp.ts";
 import { GetWorkerPoolHttp } from "./Run/GetWorkerPoolHttp.ts";
 import { Job as CloudRunJob, JobProvider as CloudRunJobProvider } from "./Run/Job.ts";
@@ -2426,6 +2440,10 @@ import {
 } from "./Storage/Object.ts";
 import { ObjectAccessControl, ObjectAccessControlProvider } from "./Storage/ObjectAccessControl.ts";
 import { PutObjectHttp } from "./Storage/PutObjectHttp.ts";
+import {
+  ReportConfig as StorageInsightsReportConfig,
+  ReportConfigProvider as StorageInsightsReportConfigProvider,
+} from "./StorageInsights/ReportConfig.ts";
 import { AgentPool, AgentPoolProvider } from "./StorageTransfer/AgentPool.ts";
 import { GetGoogleServiceAccountHttp } from "./StorageTransfer/GetGoogleServiceAccountHttp.ts";
 import { RunTransferJobHttp } from "./StorageTransfer/RunTransferJobHttp.ts";
@@ -2603,6 +2621,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  */
 /** Auth + env + HTTP client for resource providers, HTTP bindings, and GKE. */
 const gcpLive = fromCredentials().pipe(
+  Layer.provideMerge(Layer.succeed(GcpRetry, DeployRetry.policy)),
   Layer.provideMerge(Credentials.fromAuthProvider()),
   Layer.provideMerge(GcpAuth),
   Layer.provideMerge(ProfileStoreLive),
@@ -2632,6 +2651,7 @@ const makeProviders = () =>
           Managed,
           ObjectAccessControl,
           StorageObject,
+          StorageInsightsReportConfig,
           AgentPool,
           TransferJob,
           Topic,
@@ -2808,6 +2828,7 @@ const makeProviders = () =>
           Queue,
           Job,
           CloudRunJob,
+          RunContainer,
           Service,
           WebsiteServer,
           WorkerPool,
@@ -3083,7 +3104,6 @@ const makeProviders = () =>
           LakesEntity,
           LakesEntitiesPartition,
           MetadataFeed,
-          TagTemplate,
           Taxonomy,
           TaxonomiesPolicyTag,
           DataStoresBranchesDocument,
@@ -3122,7 +3142,6 @@ const makeProviders = () =>
           ConversationsAssessment,
           ConversationsFeedbackLabel,
           Dashboard,
-          DashboardsChart,
           DatasetsConversationsFeedbackLabel,
           IssueModel,
           IssueModelsIssue,
@@ -3442,9 +3461,6 @@ const makeProviders = () =>
           ClouddeployTarget,
           ConfigDeploymentGroup,
           ConfigPreview,
-          AppConnection,
-          AppConnector,
-          AppGateway,
           SecurityGateway,
           SecurityGatewaysApplication,
           ManagedKafkaCluster,
@@ -3551,6 +3567,11 @@ const makeProviders = () =>
           Sharedflow,
           SitesApicategory,
           SitesApidoc,
+          ApigeeApi,
+          ApigeeInstance,
+          ApigeeReport,
+          ApigeeSecurityProfile,
+          ApigeeSpace,
           Assignment,
           AndroidApp,
           SasportalCustomersDeploymentsDevice,
@@ -3588,6 +3609,8 @@ const makeProviders = () =>
           JobTemplate,
           IamServiceAccount,
           IamServiceAccountKey,
+          WorkloadIdentityPool,
+          WorkloadIdentityProvider,
           ProjectService,
         ]) as unknown as Effect.Effect<{ providers: Record<string, any> }, never, never>).providers,
       );
@@ -3635,6 +3658,7 @@ const makeProviders = () =>
             ManagedProvider(),
             ObjectAccessControlProvider(),
             StorageObjectProvider(),
+            StorageInsightsReportConfigProvider(),
             AgentPoolProvider(),
             TransferJobProvider(),
           ),
@@ -3673,6 +3697,7 @@ const makeProviders = () =>
           QueueProvider(),
           JobProvider(),
           CloudRunJobProvider(),
+          RunContainerProvider(),
           ServiceProvider(),
           WebsiteServerProvider(),
           WorkerPoolProvider(),
@@ -4075,7 +4100,7 @@ const makeProviders = () =>
             LakesEntitiesPartitionProvider(),
             MetadataFeedProvider(),
           ),
-          Layer.mergeAll(TagTemplateProvider(), TaxonomyProvider(), TaxonomiesPolicyTagProvider()),
+          Layer.mergeAll(TaxonomyProvider(), TaxonomiesPolicyTagProvider()),
           Layer.mergeAll(
             DataStoresBranchesDocumentProvider(),
             DataStoresControlProvider(),
@@ -4120,7 +4145,6 @@ const makeProviders = () =>
               ConversationsAssessmentProvider(),
               ConversationsFeedbackLabelProvider(),
               DashboardProvider(),
-              DashboardsChartProvider(),
               DatasetsConversationsFeedbackLabelProvider(),
               IssueModelProvider(),
               IssueModelsIssueProvider(),
@@ -4571,13 +4595,7 @@ const makeProviders = () =>
                 SchemaRegistriesSubjectsVersionProvider(),
                 SchemaRegistriesContextsSubjectsVersionProvider(),
               ),
-              Layer.mergeAll(
-                AppConnectionProvider(),
-                AppConnectorProvider(),
-                AppGatewayProvider(),
-                SecurityGatewayProvider(),
-                SecurityGatewaysApplicationProvider(),
-              ),
+              Layer.mergeAll(SecurityGatewayProvider(), SecurityGatewaysApplicationProvider()),
               Layer.mergeAll(
                 RepositoriesBranchRuleProvider(),
                 RepositoriesHookProvider(),
@@ -4679,6 +4697,13 @@ const makeProviders = () =>
                 AndroidAppProvider(),
               ),
               Layer.mergeAll(
+                ApigeeApiProvider(),
+                ApigeeInstanceProvider(),
+                ApigeeReportProvider(),
+                ApigeeSecurityProfileProvider(),
+                ApigeeSpaceProvider(),
+              ),
+              Layer.mergeAll(
                 SasportalCustomersDeploymentsDeviceProvider(),
                 SasportalCustomersNodesDeploymentProvider(),
                 SasportalCustomersNodesDeviceProvider(),
@@ -4710,6 +4735,8 @@ const makeProviders = () =>
                 IamMemberProvider(),
                 IamServiceAccountProvider(),
                 IamServiceAccountKeyProvider(),
+                WorkloadIdentityPoolProvider(),
+                WorkloadIdentityProviderProvider(),
                 ProjectServiceProvider(),
                 SasportalSignedCustomersDeploymentsDeviceProvider(),
                 SasportalSignedNodesDeploymentsDeviceProvider(),

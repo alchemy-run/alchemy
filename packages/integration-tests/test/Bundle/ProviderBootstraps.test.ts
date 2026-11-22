@@ -1,5 +1,5 @@
+import { expect, layer } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, layer } from "alchemy-test";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import * as Effect from "effect/Effect";
 import {
@@ -34,8 +34,12 @@ const BOOTSTRAPS = [
   ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/VirtualMachineAsync"],
   ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/WebApp"],
   ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/WebAppAsync"],
+  ["@alchemy.run/e2b", "@alchemy.run/e2b/Bootstrap"],
+  ["@alchemy.run/archil", "@alchemy.run/archil/Bootstrap"],
+  ["@alchemy.run/boat", "@alchemy.run/boat/Bootstrap"],
   ["@alchemy.run/fly", "@alchemy.run/fly/Bootstrap"],
   ["@alchemy.run/hetzner", "@alchemy.run/hetzner/Bootstrap"],
+  ["@alchemy.run/modal", "@alchemy.run/modal/Bootstrap"],
   ["@alchemy.run/prisma", "@alchemy.run/prisma/Bootstrap"],
   ["@alchemy.run/railway", "@alchemy.run/railway/Bootstrap"],
 ] as const;

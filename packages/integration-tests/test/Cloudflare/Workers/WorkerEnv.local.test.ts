@@ -1,0 +1,77 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import { jsonStrings } from "../../JsonStrings.ts";
+import { expectUrlContains } from "../Utils/Http.ts";
+import EnvEffectWorker from "./fixtures/env/effect.ts";
+
+// Deploy-time `Config` reads in the fixture's Init must resolve.
+process.env.CONFIG_STR ??= "config-string-value";
+process.env.CONFIG_NUM ??= "1234";
+process.env.CONFIG_REDACTED ??= "config-redacted-value";
+process.env.CONFIG_REDACTED_INIT ??= "config-redacted-init-value";
+process.env.CONFIG_NESTED_HOST ??= "config-nested-host-value";
+process.env.CONFIG_JSON_LONG = "12345678901.12345678901234";
+
+// `dev: true` runs local providers behind the RPC sidecar proxy by default,
+// matching the process topology of the real `alchemy dev` command.
+const { test } = Test.make({
+  providers: Cloudflare.providers(),
+  dev: true,
+});
+
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
+
+test.provider(
+  "local effect worker reads env strings that parse as JSON unchanged (#2847, #3497)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const worker = yield* stack.deploy(EnvEffectWorker);
+      expect(worker.url).toMatch(/^http:\/\/localhost:\d+$/);
+
+      const body = yield* expectUrlContains(`${worker.url}/json-strings`, '"PLAIN"', {
+        timeout: "60 seconds",
+        label: "local effect env-worker /json-strings",
+      });
+      expect(JSON.parse(body)).toEqual({
+        init: { ...jsonStrings, JSON_FALSE_BOOL: false, JSON_NUM_NUMBER: 42 },
+        runtime: { ...jsonStrings, JSON_FALSE_BOOL: false, JSON_NUM_NUMBER: 42 },
+        env: jsonStrings,
+        bound: { init: "12345678901.12345678901234", runtime: "12345678901.12345678901234" },
+      });
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "local"],
+    timeout: 180_000,
+  },
+);
+
+test.provider(
+  "local worker starts with undefined env entries, which are no bindings",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const worker = yield* stack.deploy(EnvEffectWorker);
+
+      // workerd refuses a binding without a value, so the Worker only serves
+      // when the entry is left out.
+      const body = yield* expectUrlContains(`${worker.url}/unset`, '"UNSET"', {
+        timeout: "60 seconds",
+        label: "local effect env-worker /unset",
+      });
+      expect(JSON.parse(body)).toEqual({ UNSET: false, UNSET_OUTPUT: false });
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "local"],
+    timeout: 180_000,
+  },
+);

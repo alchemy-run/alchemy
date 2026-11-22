@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -137,8 +138,36 @@ export type RepositoriesReleaseConfig = Resource<
     releaseCompilationResult: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RepositoriesReleaseConfigLookup
 >;
+
+/**
+ * Props for {@link RepositoriesReleaseConfig.lookup}: find a repositories
+ * release config this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface RepositoriesReleaseConfigLookup {
+  /**
+   * Release config id.
+   */
+  releaseConfigId: string;
+  /**
+   * Region used when `repository` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent repository. Full name
+   * `projects/{project}/locations/{location}/repositories/{repository}` or
+   * the repository id (combined with `location`).
+   */
+  repository: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataform release configuration — compiles a Git commitish on a
@@ -169,6 +198,20 @@ export type RepositoriesReleaseConfig = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing repositories release config
+ * `RepositoriesReleaseConfig.lookup` references a repositories release
+ * config Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared repositories release config.
+ *
+ * **Example:** Reference an existing repositories release config
+ * ```typescript
+ * const repositoriesReleaseConfig = GCP.Dataform.RepositoriesReleaseConfig.lookup({
+ *   releaseConfigId: "my-release-config",
+ *   repository: "my-repository",
+ * });
+ * ```
+ *
  * @resource
  * @category Dataform
  */
@@ -179,7 +222,7 @@ export const RepositoriesReleaseConfig = Resource<RepositoriesReleaseConfig>(
 export class RepositoriesReleaseConfigNotResolved extends Data.TaggedError(
   "GCP.Dataform.RepositoriesReleaseConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (repository: string, releaseConfigId: string) =>
@@ -221,10 +264,10 @@ const toAttrs = (config: dataform.ReleaseConfig, project: string, region: string
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dataform
         .getProjectsLocationsRepositoriesReleaseConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isOwnedConfig = (config: dataform.ReleaseConfig) =>
   hasAlchemyLabelMap(config.codeCompilationConfig?.vars);
@@ -249,6 +292,24 @@ export const RepositoriesReleaseConfigProvider = () =>
         nextParent: expandRepository(news.repository, env.project, location),
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      releaseConfigId,
+      location: lookupLocation,
+      repository: lookupRepository,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const repository = expandRepository(
+        lookupRepository ?? parseResourceName("", "releaseConfigs", env.region).parent,
+        env.project,
+        location,
+      );
+      const name = resourceName(repository, releaseConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -301,16 +362,14 @@ export const RepositoriesReleaseConfigProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           dataform.createProjectsLocationsRepositoriesReleaseConfigs({
+            gitCommitish: news.gitCommitish,
+            timeZone: news.timeZone,
+            cronSchedule: news.cronSchedule,
+            disabled,
+            codeCompilationConfig,
+            releaseCompilationResult: news.releaseCompilationResult,
             parent: repository,
             releaseConfigId,
-            body: {
-              gitCommitish: news.gitCommitish,
-              timeZone: news.timeZone,
-              cronSchedule: news.cronSchedule,
-              disabled,
-              codeCompilationConfig,
-              releaseCompilationResult: news.releaseCompilationResult,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -320,7 +379,7 @@ export const RepositoriesReleaseConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RepositoriesReleaseConfigNotResolved({ name });
+        return yield* new RepositoriesReleaseConfigNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -350,6 +409,12 @@ export const RepositoriesReleaseConfigProvider = () =>
       ) {
         current = yield* retryTransient(
           dataform.patchProjectsLocationsRepositoriesReleaseConfigs({
+            gitCommitish: news.gitCommitish,
+            timeZone: news.timeZone,
+            cronSchedule: news.cronSchedule,
+            disabled,
+            codeCompilationConfig,
+            releaseCompilationResult: news.releaseCompilationResult,
             name: currentName,
             updateMask: updateMaskOf(
               gitChanged ? "gitCommitish" : undefined,
@@ -359,14 +424,6 @@ export const RepositoriesReleaseConfigProvider = () =>
               compilationChanged ? "codeCompilationConfig" : undefined,
               resultChanged ? "releaseCompilationResult" : undefined,
             ),
-            body: {
-              gitCommitish: news.gitCommitish,
-              timeZone: news.timeZone,
-              cronSchedule: news.cronSchedule,
-              disabled,
-              codeCompilationConfig,
-              releaseCompilationResult: news.releaseCompilationResult,
-            },
           }),
         );
       }

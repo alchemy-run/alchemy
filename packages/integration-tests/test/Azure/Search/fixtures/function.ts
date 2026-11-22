@@ -118,7 +118,7 @@ export default class SearchFunction extends Azure.Functions.Function<SearchFunct
           case "/get":
             return yield* respond(
               Effect.gen(function* () {
-                const document = yield* getDocument({ key: "2", _select: "id,name" });
+                const document = yield* getDocument({ key: "2", _select: ["id", "name"] });
                 const missing = yield* failureTag(getDocument({ key: "missing" }));
                 return { document: { id: document.id, name: document.name }, missing };
               }),

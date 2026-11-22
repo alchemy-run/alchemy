@@ -234,7 +234,11 @@ export const ProtectionContainerProvider = () =>
           fabricName: fabric,
           protectionContainerName: name,
           properties: {
-            providerSpecificInput: news.providerSpecificInput ?? [{ instanceType: "A2A" }],
+            // `instanceType` is only known at runtime and decides the arm, so
+            // the arms are asserted rather than narrowed.
+            providerSpecificInput: (news.providerSpecificInput ?? [
+              { instanceType: "A2A" },
+            ]) as asr.ReplicationProviderSpecificContainerCreationInput[],
           },
         });
       }

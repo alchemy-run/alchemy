@@ -1,4 +1,4 @@
-import type { AzureOpError } from "@distilled.cloud/azure";
+import type * as secrets from "@distilled.cloud/azure/keyvault-secrets";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
@@ -26,7 +26,7 @@ export interface WriteSecretClient {
   set(
     value: string | Redacted.Redacted<string>,
     options?: SecretWriteOptions,
-  ): Effect.Effect<SecretVersionInfo, AzureOpError, RuntimeContext>;
+  ): Effect.Effect<SecretVersionInfo, secrets.SetSecretError, RuntimeContext>;
   /**
    * Change the content type, tags, or attributes of one version. The value
    * of a version never changes; write a new one with `set`.
@@ -34,7 +34,7 @@ export interface WriteSecretClient {
   update(
     version: string,
     options: SecretWriteOptions,
-  ): Effect.Effect<SecretVersionInfo, AzureOpError, RuntimeContext>;
+  ): Effect.Effect<SecretVersionInfo, secrets.UpdateSecretError, RuntimeContext>;
 }
 
 /**

@@ -1,3 +1,4 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import { Docker } from "@alchemy.run/docker/Docker";
 import * as batch from "@distilled.cloud/aws/batch";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
@@ -12,13 +13,14 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type PlatformProps, type PlatformServices } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource, type ResourceBinding } from "alchemy/Resource";
+import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import {
   createHostRuntimeContext,
   type HostRuntimeContext,
   type ServerHost,
 } from "alchemy/Runtime/Process";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { envStrings } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
 import { toWireSeconds } from "alchemy/Util/Duration";
@@ -34,13 +36,24 @@ import type { Credentials } from "../Credentials.ts";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { managedPolicyArn, type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+
+export class JobDefinitionOperationFailed extends Data.TaggedError("JobDefinitionOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class JobDefinitionConflict extends Data.TaggedError("JobDefinitionConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type JobDefinitionName = string;
 /** Revision-qualified job definition ARN (`.../job-definition/{name}:{revision}`). */
 export type JobDefinitionArn =
-  `arn:aws:batch:${RegionID}:${AccountID}:job-definition/${JobDefinitionName}:${number}`;
+  `arn:${Partition}:batch:${RegionID}:${AccountID}:job-definition/${JobDefinitionName}:${number}`;
 
 /**
  * Raised when the props don't select exactly one of the two forms: the
@@ -157,9 +170,10 @@ export interface JobDefinitionProps extends PlatformProps {
    * Bundler configuration for the Effect-native entrypoint. Unused
    * code is tree-shaken. `effect`, alchemy, and `@distilled.cloud` are
    * marked pure so unused parts prune more aggressively. List extra
-   * packages with `pure.packages`, or disable with `pure: false`.
+   * packages with `pure.packages`, or disable with `pure: false`. `cache`
+   * configures the image build's BuildKit layer cache.
    */
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig & BuildCacheOptions;
   /**
    * Docker image build for the Effect-native form: optional full
    * `dockerfile`. When omitted, Alchemy generates a Dockerfile for the
@@ -217,8 +231,18 @@ export interface JobDefinition extends Resource<
     /** IAM policy statements attached to the managed job role. */
     policyStatements?: PolicyStatement[];
   },
-  Providers
+  Providers,
+  JobDefinitionLookup
 > {}
+
+/**
+ * Props for {@link JobDefinition.lookup}: find a job definition this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface JobDefinitionLookup {
+  /** The job definition name of the existing job definition. */
+  jobDefinitionName: string;
+}
 
 export type JobDefinitionServices = Credentials | Region | ServerHost | AWSEnvironment;
 
@@ -250,7 +274,7 @@ const createJobDefinitionRuntimeContext = (id: string): JobDefinitionRuntimeCont
     // generated container entrypoint) instead of booting an HTTP server.
     serve: ((_handler, options) => {
       const run = (options?.shape as { run?: unknown } | undefined)?.run;
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- untyped impl shape; runner is a host-provided Effect
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion, effecttsgo/any-unknown-in-error-context -- untyped impl shape; runner is a host-provided Effect
       return Effect.isEffect(run) ? base.run(run as Effect.Effect<void, never, any>) : Effect.void;
     }) as HostRuntimeContext["serve"],
   } as JobDefinitionRuntimeContext;
@@ -357,6 +381,16 @@ const createJobDefinitionRuntimeContext = (id: string): JobDefinitionRuntimeCont
  * }
  * ```
  *
+ * ### Looking up an existing job definition
+ * `JobDefinition.lookup` references a job definition Alchemy doesn't manage (created in the
+ * console or by another stack), found by `jobDefinitionName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing job definition
+ * ```typescript
+ * const existing = AWS.Batch.JobDefinition.lookup({ jobDefinitionName: "my-job-definition" });
+ * ```
+ *
  * @resource
  */
 export const JobDefinition: Platform<
@@ -364,7 +398,8 @@ export const JobDefinition: Platform<
   JobDefinitionServices,
   JobDefinitionShape,
   JobDefinitionRuntimeContext
-> = Platform("AWS.Batch.JobDefinition", {
+> &
+  LookupMethod<JobDefinition> = Platform("AWS.Batch.JobDefinition", {
   createRuntimeContext: createJobDefinitionRuntimeContext,
 });
 
@@ -538,7 +573,9 @@ export const JobDefinitionProvider = () =>
       const createRepositoryName = (id: string) =>
         createPhysicalName({
           id: `${id}-repo`,
-          maxLength: 180,
+          // ECS caps an image reference at 255 characters: the registry host,
+          // this name and a 64-character tag must all fit.
+          maxLength: 128,
           lowercase: true,
         });
 
@@ -591,7 +628,7 @@ export const JobDefinitionProvider = () =>
             Effect.map((response) => response.taskDefinition?.status),
             // Not-found means ECS already completed the asynchronous
             // deletion and is therefore terminal as well.
-            Effect.catchTag("ClientException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ClientException", () => Effect.undefined),
           );
           if (status !== undefined && status !== "DELETE_IN_PROGRESS") {
             return yield* new JobDefinitionStillVisible({
@@ -651,16 +688,14 @@ export const JobDefinitionProvider = () =>
               taskDefinitions: inactive.slice(i, i + 10),
             });
             if ((response.failures?.length ?? 0) > 0) {
-              return yield* Effect.fail(
-                new Error(
-                  `ECS failed to delete Batch backing task definitions for ${family}: ${response.failures
-                    ?.map(
-                      (failure) =>
-                        `${failure.arn ?? "unknown"}: ${failure.reason ?? "unknown"} (${failure.detail ?? "no detail"})`,
-                    )
-                    .join(", ")}`,
-                ),
-              );
+              return yield* new JobDefinitionOperationFailed({
+                message: `ECS failed to delete Batch backing task definitions for ${family}: ${response.failures
+                  ?.map(
+                    (failure) =>
+                      `${failure.arn ?? "unknown"}: ${failure.reason ?? "unknown"} (${failure.detail ?? "no detail"})`,
+                  )
+                  .join(", ")}`,
+              });
             }
           }
           yield* Effect.forEach(
@@ -705,7 +740,9 @@ export const JobDefinitionProvider = () =>
                 Effect.filterOrFail(
                   (existing) => hasTags(tags, existing.Role?.Tags),
                   () =>
-                    new Error(`Role '${roleName}' already exists and is not managed by alchemy`),
+                    new JobDefinitionConflict({
+                      message: `Role '${roleName}' already exists and is not managed by alchemy`,
+                    }),
                 ),
               ),
             ),
@@ -925,6 +962,7 @@ await bootstrap(entrypoint);
           imageUri,
           context: contextDir,
           platform: "linux/amd64",
+          cache: props.build?.cache,
         });
       });
 
@@ -993,6 +1031,11 @@ await bootstrap(entrypoint);
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ jobDefinitionName }) {
+          const latest = yield* latestRevision(jobDefinitionName);
+          if (!latest?.jobDefinitionArn) return undefined;
+          return toAttributes(latest, observedTagsOf(latest), emptyPlatformAttributes);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.jobDefinitionName ?? (yield* toName(id, olds ?? {}));
           const latest = yield* latestRevision(name);
@@ -1033,7 +1076,7 @@ await bootstrap(entrypoint);
             return Array.from(latest.values()).map((d) => toAttributes(d, observedTagsOf(d)));
           }),
         reconcile: Effect.fn(function* ({ id, news, bindings, output, session }) {
-          const { region } = yield* AWSEnvironment.current;
+          const { region, partition } = yield* AWSEnvironment.current;
           const name = output?.jobDefinitionName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
@@ -1082,7 +1125,7 @@ await bootstrap(entrypoint);
               id,
               roleName: executionRoleName,
               managedPolicyArns: [
-                "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+                managedPolicyArn(partition, "service-role/AmazonECSTaskExecutionRolePolicy"),
               ],
             });
 
@@ -1124,21 +1167,16 @@ await bootstrap(entrypoint);
               vcpus: String(news.vcpus ?? 0.25),
               memory: String(news.memory ?? 512),
               environment: {
-                // Bindings + alchemy runtime env first (JSON-encoded), then
-                // the caller's `env`, then plain `environment` wins last.
-                ...Object.fromEntries(
-                  Object.entries({
-                    ...bindingEnv,
-                    ...alchemyEnv,
-                    // Fargate does not inject AWS_REGION — the bundled
-                    // program's `Region.fromEnv()` needs it.
-                    AWS_REGION: region,
-                    ...news.env,
-                  }).map(([key, value]) => [
-                    key,
-                    typeof value === "string" ? value : JSON.stringify(value),
-                  ]),
-                ),
+                // Bindings + alchemy runtime env first, then the caller's
+                // `env`, then plain `environment` wins last.
+                ...envStrings({
+                  ...bindingEnv,
+                  ...alchemyEnv,
+                  // Fargate does not inject AWS_REGION — the bundled
+                  // program's `Region.fromEnv()` needs it.
+                  AWS_REGION: region,
+                  ...news.env,
+                }),
                 ...news.environment,
               },
               jobRoleArn,

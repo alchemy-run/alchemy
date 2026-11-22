@@ -117,28 +117,25 @@ type QueryGet = (input: {
 }) => Effect.Effect<any, IamPolicyError, GcpOpContext>;
 type BodyGet = (input: {
   resource: string;
-  body?: { options?: { requestedPolicyVersion?: number } };
+  options?: { requestedPolicyVersion?: number };
 }) => Effect.Effect<any, IamPolicyError, GcpOpContext>;
 type Set = (input: {
   resource: string;
-  body?: { policy?: any };
+  policy?: any;
 }) => Effect.Effect<any, IamPolicyError, GcpOpContext>;
 
 const queryStyle =
   (get: QueryGet, set: Set) =>
   (resource: string): IamPolicyTarget => ({
     get: get({ resource, "options.requestedPolicyVersion": 3 }),
-    set: (policy) => set({ resource, body: { policy } }),
+    set: (policy) => set({ resource, policy }),
   });
 
 const bodyStyle =
   (get: BodyGet, set: Set, policyVersion = 3) =>
   (resource: string): IamPolicyTarget => ({
-    get: get({
-      resource,
-      body: { options: { requestedPolicyVersion: policyVersion } },
-    }),
-    set: (policy) => set({ resource, body: { policy } }),
+    get: get({ resource, options: { requestedPolicyVersion: policyVersion } }),
+    set: (policy) => set({ resource, policy }),
   });
 
 const bucketName = (name: string) =>
@@ -155,12 +152,7 @@ const computeInstance = (name: string): IamPolicyTarget => {
       optionsRequestedPolicyVersion: 3,
     }),
     set: (policy) =>
-      compute.setIamPolicyInstances({
-        project,
-        zone,
-        resource,
-        body: { policy: policy as compute.Policy },
-      }),
+      compute.setIamPolicyInstances({ policy: policy as compute.Policy, project, zone, resource }),
   };
 };
 
@@ -231,17 +223,15 @@ const bigqueryDataset = (name: string): IamPolicyTarget => {
       read.pipe(
         Effect.flatMap((dataset) =>
           bigquery.patchDatasets({
+            etag: dataset.etag,
+            access: [
+              ...(dataset.access ?? []).filter((item) => !isPrincipal(item)),
+              ...(policy.bindings ?? []).flatMap((binding) =>
+                (binding.members ?? []).map((member) => accessItemOf(binding.role ?? "", member)),
+              ),
+            ],
             projectId,
             datasetId,
-            body: {
-              etag: dataset.etag,
-              access: [
-                ...(dataset.access ?? []).filter((item) => !isPrincipal(item)),
-                ...(policy.bindings ?? []).flatMap((binding) =>
-                  (binding.members ?? []).map((member) => accessItemOf(binding.role ?? "", member)),
-                ),
-              ],
-            },
           }),
         ),
       ),
@@ -358,10 +348,7 @@ const TARGETS: Record<GcpIamResourceKind, (name: string) => IamPolicyTarget> = {
       optionsRequestedPolicyVersion: 3,
     }),
     set: (policy) =>
-      storage.setIamPolicyBuckets({
-        bucket: bucketName(name),
-        body: policy as storage.Policy,
-      }),
+      storage.setIamPolicyBuckets({ ...(policy as storage.Policy), bucket: bucketName(name) }),
   }),
   "workstations.workstation": queryStyle(
     workstations.getIamPolicyProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations,
@@ -496,7 +483,7 @@ export const updateIamMembership = (options: {
     Effect.flatMap((policy) =>
       rewrite(policy, member, add, remove, options.condition) === undefined
         ? Effect.void
-        : Effect.fail(new IamPolicyNotConverged({ name: options.name })),
+        : Effect.fail(new IamPolicyNotConverged({ resourceName: options.name })),
     ),
   );
   return write.pipe(
@@ -511,7 +498,7 @@ export const updateIamMembership = (options: {
 
 /** A written IAM policy did not read back with the change applied. */
 export class IamPolicyNotConverged extends Data.TaggedError("GCP.IamPolicyNotConverged")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 /**

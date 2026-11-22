@@ -16,6 +16,7 @@ import { createInternalTags, diffTags } from "alchemy/Tags";
 import { toWireDays, toWireSeconds } from "alchemy/Util/Duration";
 import { sha256 } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -313,6 +314,13 @@ export interface DBInstanceProps {
    * bookkeeping row in one transaction; MySQL and MariaDB commit DDL
    * implicitly, so their DDL is not rolled back if a later statement fails.
    * Deleting the instance never touches the database.
+   *
+   * History is forward-only and linear. A new file must sort after every
+   * applied one, or the deploy fails with `NonLinearMigrationHistoryError`;
+   * an edited or deleted applied file fails with
+   * `RewrittenMigrationHistoryError`. Renaming an applied file without
+   * changing its contents keeps it applied. See
+   * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
    */
   migrations?: MigrationsInput;
   /**
@@ -486,6 +494,11 @@ export interface DBInstance extends Resource<
      */
     deletionProtection: boolean | undefined;
     /**
+     * Whether minor engine upgrades are applied automatically, as observed.
+     * Lets `alchemy drift` detect out-of-band changes.
+     */
+    autoMinorVersionUpgrade?: boolean;
+    /**
      * Immutable region-unique instance resource ID (used in IAM auth ARNs).
      */
     dbiResourceId: string | undefined;
@@ -560,8 +573,18 @@ export interface DBInstance extends Resource<
     migrationsHashes: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBInstanceLookup
 > {}
+
+/**
+ * Props for {@link DBInstance.lookup}: find a DB instance this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBInstanceLookup {
+  /** The db instance identifier of the existing DB instance. */
+  dbInstanceIdentifier: string;
+}
 
 /**
  * An RDS database instance — either a standalone (non-Aurora) database or a
@@ -967,6 +990,17 @@ export interface DBInstance extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing DB instance
+ * `DBInstance.lookup` references a DB instance Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbInstanceIdentifier`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing DB instance
+ * ```typescript
+ * const existing = AWS.RDS.DBInstance.lookup({ dbInstanceIdentifier: "my-db-instance" });
+ * const endpoint = existing.endpoint;
+ * ```
+ *
  * @resource
  */
 export const DBInstance = Resource<DBInstance>("AWS.RDS.DBInstance");
@@ -1070,6 +1104,7 @@ const toAttrs = ({
   enhancedMonitoringResourceArn: instance.EnhancedMonitoringResourceArn,
   enabledCloudwatchLogsExports: instance.EnabledCloudwatchLogsExports ?? [],
   deletionProtection: instance.DeletionProtection,
+  autoMinorVersionUpgrade: instance.AutoMinorVersionUpgrade,
   dbiResourceId: instance.DbiResourceId,
   masterUsername: instance.MasterUsername,
   masterUserSecretArn: instance.MasterUserSecret?.SecretArn,
@@ -1633,7 +1668,7 @@ export const DBInstanceProvider = () =>
           .describeDBInstances({
             DBInstanceIdentifier: instanceId,
           })
-          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.undefined));
         return response?.DBInstances?.[0];
       });
 
@@ -1646,7 +1681,8 @@ export const DBInstanceProvider = () =>
         return instance;
       });
 
-      // Storage optimization is online; provisioning retains its ten-minute budget.
+      // Storage optimization is online. A new instance routinely takes 10–15
+      // minutes to become available, so provisioning has a twenty-minute budget.
       const waitForInstance = Effect.fn(function* (instanceId: string) {
         return yield* observeReadiness(instanceId).pipe(
           Effect.flatMap((instance) =>
@@ -1661,7 +1697,27 @@ export const DBInstanceProvider = () =>
           ),
           Effect.retry({
             while: (error) => error._tag === "DBInstancePending",
-            schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
+            schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(120)]),
+          }),
+        );
+      });
+
+      // RDS can keep reporting `available` for a few seconds after accepting
+      // a modify, so `waitForInstance` may return before the previous change
+      // starts and the next modify reaches a busy instance. Wait it out and
+      // resend.
+      const modifyInstance = Effect.fn(function* (
+        instanceId: string,
+        request: rds.ModifyDBInstanceMessage,
+      ) {
+        return yield* rds.modifyDBInstance(request).pipe(
+          Effect.catchTag("InvalidDBInstanceStateFault", (error) =>
+            waitForInstance(instanceId).pipe(Effect.andThen(Effect.fail(error))),
+          ),
+          Effect.retry({
+            while: (error) => error._tag === "InvalidDBInstanceStateFault",
+            schedule: Schedule.spaced("5 seconds"),
+            times: 8,
           }),
         );
       });
@@ -1790,7 +1846,7 @@ export const DBInstanceProvider = () =>
       const readObservedSecretPolicy = (instance: rds.DBInstance) =>
         instance.MasterUserSecret?.SecretArn === undefined ||
         instance.DBClusterIdentifier !== undefined
-          ? Effect.succeed(undefined)
+          ? Effect.undefined
           : readMasterSecretPolicy(instance.MasterUserSecret.SecretArn).pipe(
               Effect.retry({
                 while: (error) => error._tag === "ResourceNotFoundException",
@@ -1957,6 +2013,19 @@ export const DBInstanceProvider = () =>
           if (yield* diffMigrations({ news, output })) {
             return { action: "update" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dbInstanceIdentifier }) {
+          const instance = yield* readInstance(dbInstanceIdentifier);
+          if (!instance?.DBInstanceArn) return undefined;
+          return toAttrs({
+            instance,
+            tags: toTagRecord(instance.TagList),
+            skipFinalSnapshot: undefined,
+            finalDBSnapshotIdentifier: undefined,
+            masterUserPasswordFingerprint: undefined,
+            masterUserSecretResourcePolicy: yield* readObservedSecretPolicy(instance),
+            migrations: undefined,
+          });
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const identifier =
@@ -2185,7 +2254,7 @@ export const DBInstanceProvider = () =>
               coreDirty = true;
             }
             if (coreDirty) {
-              yield* rds.modifyDBInstance(core);
+              yield* modifyInstance(identifier, core);
               observed = yield* waitForInstance(identifier);
               if (
                 core.DBParameterGroupName !== undefined ||
@@ -2209,7 +2278,7 @@ export const DBInstanceProvider = () =>
           }
           desiredStorage = yield* resolveStorage(news, observed.AllocatedStorage);
           if (desiredStorage && !storageConverged(observed, desiredStorage)) {
-            yield* rds.modifyDBInstance({
+            yield* modifyInstance(identifier, {
               DBInstanceIdentifier: identifier,
               ...desiredStorage.request,
               MaxAllocatedStorage:
@@ -2234,7 +2303,7 @@ export const DBInstanceProvider = () =>
               });
             }
             // AWS disables autoscaling when the ceiling equals live allocation.
-            yield* rds.modifyDBInstance({
+            yield* modifyInstance(identifier, {
               DBInstanceIdentifier: identifier,
               MaxAllocatedStorage: ceiling,
               ApplyImmediately: true,
@@ -2256,7 +2325,7 @@ export const DBInstanceProvider = () =>
                 });
               }
               // Port changes restart immediately without applying unrelated pending settings.
-              yield* rds.modifyDBInstance({
+              yield* modifyInstance(identifier, {
                 DBInstanceIdentifier: identifier,
                 DBPortNumber: port,
                 ApplyImmediately: false,
@@ -2276,7 +2345,7 @@ export const DBInstanceProvider = () =>
               });
             }
             if (parameterChanged || securityChanged) {
-              yield* rds.modifyDBInstance({
+              yield* modifyInstance(identifier, {
                 DBInstanceIdentifier: identifier,
                 DBParameterGroupName: parameterChanged
                   ? associations.dbParameterGroupName
@@ -2296,7 +2365,7 @@ export const DBInstanceProvider = () =>
           if (iamChanged || networkChanged) {
             // IAM and network changes honor maintenance scheduling. AWS cannot
             // selectively apply one queued change without applying the rest.
-            yield* rds.modifyDBInstance({
+            yield* modifyInstance(identifier, {
               DBInstanceIdentifier: identifier,
               EnableIAMDatabaseAuthentication:
                 iamChanged && iamPending !== security.iamAuthentication
@@ -2318,7 +2387,7 @@ export const DBInstanceProvider = () =>
           if (publicChanged || protectionChanged || logDelta) {
             // These fields apply immediately even with false; leave unrelated
             // maintenance-window changes queued rather than flushing them.
-            yield* rds.modifyDBInstance({
+            yield* modifyInstance(identifier, {
               DBInstanceIdentifier: identifier,
               PubliclyAccessible: publicChanged ? security.publiclyAccessible : undefined,
               DeletionProtection: protectionChanged ? security.deletionProtection : undefined,
@@ -2387,20 +2456,33 @@ export const DBInstanceProvider = () =>
           const finalDBSnapshotIdentifier = skipFinalSnapshot
             ? undefined
             : (output.finalDBSnapshotIdentifier ??
-              (yield* Effect.sync(
-                () =>
-                  `${output.dbInstanceIdentifier}-final-${new Date()
-                    .toISOString()
-                    .replaceAll(/[:.]/g, "-")
-                    .toLowerCase()}`,
-              )));
+              `${output.dbInstanceIdentifier}-final-${DateTime.formatIso(yield* DateTime.now)
+                .replaceAll(/[:.]/g, "-")
+                .toLowerCase()}`);
           yield* rds
             .deleteDBInstance({
               DBInstanceIdentifier: output.dbInstanceIdentifier,
               SkipFinalSnapshot: skipFinalSnapshot,
               FinalDBSnapshotIdentifier: finalDBSnapshotIdentifier,
             })
-            .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.void));
+            .pipe(
+              Effect.catchTags({
+                DBInstanceNotFoundFault: () => Effect.void,
+                // RDS rejects a delete of an instance that is already
+                // deleting: a destroy interrupted during the wait below and
+                // run again, or a delete started outside the stack. That
+                // delete is the one we want, so wait for it. Any other state
+                // is a real failure.
+                InvalidDBInstanceStateFault: (error) =>
+                  readInstance(output.dbInstanceIdentifier).pipe(
+                    Effect.flatMap((instance) =>
+                      instance === undefined || instance.DBInstanceStatus === "deleting"
+                        ? Effect.void
+                        : Effect.fail(error),
+                    ),
+                  ),
+              }),
+            );
           // Block until the instance is fully gone. RDS deletion is async; if we
           // return while it is still `deleting`, a dependent (e.g. a
           // DBSubnetGroup or VPC) is torn down next and AWS rejects it with

@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as asr from "@distilled.cloud/azure/recoveryservicessiterecovery";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runExpensive } from "../gates.ts";
 import { logLevel, policyStack, subscription, tags, waitGone } from "./shared.ts";
@@ -21,8 +21,7 @@ const baseStack = Effect.gen(function* () {
 const program = (props: { target: "first" | "other"; agentAutoUpdate: "Enabled" | "Disabled" }) =>
   Effect.gen(function* () {
     const base = yield* baseStack;
-    const target =
-      props.target === "first" ? base.recoveryContainer : base.otherRecoveryContainer;
+    const target = props.target === "first" ? base.recoveryContainer : base.otherRecoveryContainer;
     const mapping = yield* Azure.SiteRecovery.ProtectionContainerMapping("Mapping", {
       ...base.base,
       fabric: base.primary.fabricName,
@@ -74,7 +73,9 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
 
       // Create: pair primary -> recovery with agent auto-update off.
-      const created = yield* stack.deploy(program({ target: "first", agentAutoUpdate: "Disabled" }));
+      const created = yield* stack.deploy(
+        program({ target: "first", agentAutoUpdate: "Disabled" }),
+      );
       const get = (name: string) =>
         getMapping(
           created.group.resourceGroupName,
@@ -101,7 +102,9 @@ test.provider.skipIf(!runExpensive)(
       expect(detailsOf(reobserved).agentAutoUpdateStatus).toEqual("Enabled");
 
       // Replacement: the target container is immutable.
-      const replaced = yield* stack.deploy(program({ target: "other", agentAutoUpdate: "Enabled" }));
+      const replaced = yield* stack.deploy(
+        program({ target: "other", agentAutoUpdate: "Enabled" }),
+      );
       expect(replaced.mapping.targetProtectionContainerId.toLowerCase()).toEqual(
         replaced.otherRecoveryContainer.protectionContainerId.toLowerCase(),
       );

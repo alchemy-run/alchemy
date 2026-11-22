@@ -66,8 +66,8 @@ export const S3BucketEventSource = Layer.effect(
         });
       }
 
-      yield* SQS.consumeQueueMessages(queue, (stream) =>
-        stream.pipe(
+      yield* SQS.consumeQueueMessages(queue, (event) =>
+        Stream.fromArray(event.Records).pipe(
           Stream.mapEffect((record) =>
             Effect.sync(
               () => (JSON.parse(record.body) as { Records?: S3.S3Record[] }).Records ?? [],

@@ -1,5 +1,5 @@
 import * as firebase from "@distilled.cloud/gcp/firebase_v1beta1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -122,10 +122,10 @@ const toAttrs = (app: firebase.AndroidApp) => ({
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : firebase
         .getProjectsAndroidApps({ name })
-        .pipe(Effect.catchTag(["NotFound", "AndroidAppNotFound"], () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag(["NotFound", "AndroidAppNotFound"], () => Effect.undefined));
 
 const findOwned = (project: string, displayName: string, packageName?: string) =>
   listAndroidApps(project).pipe(
@@ -158,7 +158,7 @@ export const AndroidAppProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       let existing = yield* getByName(output?.name ?? "");
       if (existing === undefined) {
@@ -177,7 +177,9 @@ export const AndroidAppProvider = () =>
         return undefined;
       }
       const attrs = toAttrs(existing);
-      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -206,14 +208,12 @@ export const AndroidAppProvider = () =>
       if (current === undefined) {
         const operation = yield* firebase
           .createProjectsAndroidApps({
+            packageName,
+            displayName,
+            sha1Hashes: news.sha1Hashes,
+            sha256Hashes: news.sha256Hashes,
+            apiKeyId: news.apiKeyId,
             parent: projectParent(env.project),
-            body: {
-              packageName,
-              displayName,
-              sha1Hashes: news.sha1Hashes,
-              sha256Hashes: news.sha256Hashes,
-              apiKeyId: news.apiKeyId,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -242,7 +242,7 @@ export const AndroidAppProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: output?.name ?? packageName,
+          resourceName: output?.name ?? packageName,
         });
       }
 
@@ -262,14 +262,12 @@ export const AndroidAppProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* firebase.patchProjectsAndroidApps({
+          displayName,
+          sha1Hashes: news.sha1Hashes,
+          sha256Hashes: news.sha256Hashes,
+          apiKeyId: news.apiKeyId,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            displayName,
-            sha1Hashes: news.sha1Hashes,
-            sha256Hashes: news.sha256Hashes,
-            apiKeyId: news.apiKeyId,
-          },
         });
       }
 
@@ -279,11 +277,8 @@ export const AndroidAppProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
       const operation = yield* firebase
-        .removeProjectsAndroidApps({
-          name: output.name,
-          body: { immediate: true, allowMissing: true },
-        })
-        .pipe(Effect.catchTag(["NotFound", "AndroidAppNotFound"], () => Effect.succeed(undefined)));
+        .removeProjectsAndroidApps({ immediate: true, allowMissing: true, name: output.name })
+        .pipe(Effect.catchTag(["NotFound", "AndroidAppNotFound"], () => Effect.undefined));
       if (operation) {
         yield* waitForOperation(operation).pipe(
           Effect.catchIf(

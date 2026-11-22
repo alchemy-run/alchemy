@@ -1,9 +1,9 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
-import { describe, expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import { poll } from "alchemy/Util/poll";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -207,10 +207,17 @@ describe.skipIf(!!process.env.FAST)(
 
           const { accountId } = yield* yield* CloudflareEnvironment;
           yield* waitForMetadata(accountId, index.indexName, [meta]);
-          const all = yield* provider.list().pipe(Effect.timeout("20 seconds"));
-
-          const entry = all.find(
-            (x) => x.indexName === index.indexName && x.propertyName === "category",
+          // The account-wide index listing lags a direct read of the index.
+          const entry = yield* provider.list().pipe(
+            Effect.timeout("20 seconds"),
+            Effect.map((all) =>
+              all.find((x) => x.indexName === index.indexName && x.propertyName === "category"),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("3 seconds"),
+              until: (found) => found !== undefined,
+              times: 10,
+            }),
           );
           expect(entry?.indexType).toBe("string");
           expect(entry?.accountId).toBeDefined();

@@ -1,4 +1,6 @@
 import * as Namespace from "alchemy/Namespace";
+import { resolveAstroOutput } from "alchemy/Website/AstroOutput";
+import * as Effect from "effect/Effect";
 import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** Configuration for a Neon Astro website. */
@@ -9,7 +11,11 @@ export type AstroProps = FrameworkSiteProps & {
     site?: string;
     /** Deployment base path. */
     base?: string;
-    /** Render on demand or prerender every page. @default "server" */
+    /**
+     * Render on demand or prerender every page. Overrides the `output` in
+     * your `astro.config.*`; leave it unset to use the file's value.
+     * @default the config file's `output`, else `"server"`
+     */
     output?: "server" | "static";
     /** Source directory relative to rootDir. @default "./src" */
     srcDir?: string;
@@ -23,7 +29,7 @@ export type AstroProps = FrameworkSiteProps & {
 };
 
 /**
- * Astro SSR and prerendered pages on Neon Functions. The Node target owns the adapter; omit adapter from astro.config.*. Set astro.output to "static" to prerender every page.
+ * Astro SSR and prerendered pages on Neon Functions. The Node target owns the adapter; omit adapter from astro.config.*. Set `output: "static"` in astro.config.* or astro.output to prerender every page.
  *
  * Native framework development and HMR run without Neon cloud resources.
  * Apply `Alchemy.remote()` to use the live Function deployment during dev.
@@ -62,11 +68,14 @@ export type AstroProps = FrameworkSiteProps & {
  * @product Website
  */
 export const Astro = (id: string, props: AstroProps = {}) =>
-  makeFrameworkSite(id, props, {
-    framework: "@alchemy.run/frontend-frameworks/astro",
-    target: "@alchemy.run/frontend-frameworks/astro/neon",
-    options: {
-      astro: { ...props.astro, output: props.astro?.output ?? "server" },
-    },
-    notFoundHandling: "none",
-  }).pipe(Namespace.push(id));
+  resolveAstroOutput({ rootDir: props.rootDir, output: props.astro?.output }).pipe(
+    Effect.flatMap((output) =>
+      makeFrameworkSite(id, props, {
+        framework: "@alchemy.run/frontend-frameworks/astro",
+        target: "@alchemy.run/frontend-frameworks/astro/neon",
+        options: { astro: { ...props.astro, output } },
+        notFoundHandling: "none",
+      }),
+    ),
+    Namespace.push(id),
+  );

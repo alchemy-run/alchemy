@@ -48,8 +48,14 @@ export interface CreateSharePermission extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreateSharePermissionRequest,
-    ) => Effect.Effect<files.CreateSharePermissionResponse, files.CreateSharePermissionError, RuntimeContext>
+    ) => Effect.Effect<
+      files.CreateSharePermissionResponse,
+      files.CreateSharePermissionError,
+      RuntimeContext
+    >
   >
 > {}
 
-export const CreateSharePermission = Binding.Service<CreateSharePermission>("Azure.Storage.CreateSharePermission");
+export const CreateSharePermission = Binding.Service<CreateSharePermission>(
+  "Azure.Storage.CreateSharePermission",
+);

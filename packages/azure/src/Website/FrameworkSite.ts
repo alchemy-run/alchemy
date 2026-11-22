@@ -1,4 +1,4 @@
-import { Credentials } from "@distilled.cloud/azure";
+import { armScopeFor, Credentials } from "@distilled.cloud/azure";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import type { MemoOptions } from "alchemy/Command/Memo";
 import type { Input } from "alchemy/Input";
@@ -288,7 +288,7 @@ interface DeployerClaims {
 const deployerPrincipal = Effect.gen(function* () {
   const credentials = yield* Credentials;
   const config = yield* credentials;
-  const token = Redacted.value(config.bearerToken);
+  const token = Redacted.value(yield* config.token(armScopeFor(config.apiBaseUrl)));
   const claims = yield* Effect.try(
     () =>
       JSON.parse(

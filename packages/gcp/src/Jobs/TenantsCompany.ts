@@ -169,7 +169,7 @@ export const TenantsCompany = Resource<TenantsCompany>("GCP.Jobs.TenantsCompany"
 export class TenantsCompanyNotResolved extends Data.TaggedError(
   "GCP.Jobs.TenantsCompanyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toParent = (project: string, parent: string) => tenantNameOf(project, parent);
@@ -254,19 +254,17 @@ export const TenantsCompanyProvider = () =>
       if (current === undefined) {
         const created = yield* jobs
           .createProjectsTenantsCompanies({
+            externalId,
+            displayName,
+            websiteUri: news.websiteUri,
+            careerSiteUri: news.careerSiteUri,
+            imageUri: news.imageUri,
+            headquartersAddress: news.headquartersAddress,
+            size: news.size,
+            hiringAgency: news.hiringAgency === true ? true : undefined,
+            eeoText: news.eeoText,
+            keywordSearchableJobCustomAttributes: news.keywordSearchableJobCustomAttributes,
             parent,
-            body: {
-              externalId,
-              displayName,
-              websiteUri: news.websiteUri,
-              careerSiteUri: news.careerSiteUri,
-              imageUri: news.imageUri,
-              headquartersAddress: news.headquartersAddress,
-              size: news.size,
-              hiringAgency: news.hiringAgency === true ? true : undefined,
-              eeoText: news.eeoText,
-              keywordSearchableJobCustomAttributes: news.keywordSearchableJobCustomAttributes,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => findOwnedCompany(parent, id)));
         current = created ?? undefined;
@@ -274,7 +272,7 @@ export const TenantsCompanyProvider = () =>
 
       if (current === undefined) {
         return yield* new TenantsCompanyNotResolved({
-          name: name || `${parent}/companies/${clientId}`,
+          resourceName: name || `${parent}/companies/${clientId}`,
         });
       }
 
@@ -308,21 +306,18 @@ export const TenantsCompanyProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* jobs.patchProjectsTenantsCompanies({
+          externalId,
+          displayName,
+          websiteUri: news.websiteUri ?? "",
+          careerSiteUri: news.careerSiteUri ?? "",
+          imageUri: news.imageUri ?? "",
+          headquartersAddress: news.headquartersAddress ?? "",
+          size: news.size,
+          hiringAgency: desiredHiring,
+          eeoText: news.eeoText ?? "",
+          keywordSearchableJobCustomAttributes: news.keywordSearchableJobCustomAttributes ?? [],
           name: currentName,
           updateMask,
-          body: {
-            name: currentName,
-            externalId,
-            displayName,
-            websiteUri: news.websiteUri ?? "",
-            careerSiteUri: news.careerSiteUri ?? "",
-            imageUri: news.imageUri ?? "",
-            headquartersAddress: news.headquartersAddress ?? "",
-            size: news.size,
-            hiringAgency: desiredHiring,
-            eeoText: news.eeoText ?? "",
-            keywordSearchableJobCustomAttributes: news.keywordSearchableJobCustomAttributes ?? [],
-          },
         });
       }
 

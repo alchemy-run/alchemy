@@ -1,12 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as workstations from "@distilled.cloud/gcp/workstations_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import WorkstationsBindingsHost, { Dev } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -35,8 +35,8 @@ const rolesIn = (bindings: ReadonlyArray<{ role?: string; members?: ReadonlyArra
 const projectRoles = () =>
   resourcemanager
     .getIamPolicyProjects({
+      options: { requestedPolicyVersion: 3 },
       resource: `projects/${project}`,
-      body: { options: { requestedPolicyVersion: 3 } },
     })
     .pipe(
       Effect.map((policy) =>
@@ -76,7 +76,7 @@ const waitForState = (state: string) =>
       }),
     );
 
-describe.skipIf(!dockerAvailable || !runLifecycle)(
+describe.skipIf(!runLifecycle)(
   "Workstations Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:workstations", "provider:gcp:run", "live"],

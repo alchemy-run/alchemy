@@ -50,8 +50,18 @@ export interface Group extends Resource<
     groupId: string;
   },
   never,
-  Providers
+  Providers,
+  GroupLookup
 > {}
+
+/**
+ * Props for {@link Group.lookup}: find a group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface GroupLookup {
+  /** The group name of the existing group. */
+  groupName: string;
+}
 
 /**
  * A CloudWatch Synthetics group — associates canaries (including
@@ -75,6 +85,16 @@ export interface Group extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing group
+ * `Group.lookup` references a group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `groupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing group
+ * ```typescript
+ * const existing = AWS.Synthetics.Group.lookup({ groupName: "my-group" });
+ * ```
+ *
  * @resource
  */
 export const Group = Resource<Group>("AWS.Synthetics.Group");
@@ -94,7 +114,7 @@ export const GroupProvider = () =>
       const getGroupOrUndefined = Effect.fn(function* (identifier: string) {
         return yield* synthetics.getGroup({ GroupIdentifier: identifier }).pipe(
           Effect.map((r) => r.Group),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -135,6 +155,13 @@ export const GroupProvider = () =>
                 groupId: group.Id ?? "",
               }));
           }),
+
+        lookup: Effect.fn(function* ({ groupName }) {
+          const group = yield* getGroupOrUndefined(groupName);
+          if (group === undefined) return undefined;
+          const attrs = toAttributes(groupName, group);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const groupName = output?.groupName ?? (yield* createGroupName(id, olds ?? {}));

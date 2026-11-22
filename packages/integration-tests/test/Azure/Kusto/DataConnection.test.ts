@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as kusto from "@distilled.cloud/azure/azure_kusto";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runExpensive } from "../gates.ts";
 import { devCluster, logLevel, subscription, tags, waitGone } from "./util.ts";
@@ -23,6 +23,9 @@ const getConnection = (
       dataConnectionName,
     });
   });
+
+const eventHubOf = (connection: kusto.DataConnection) =>
+  connection.kind === "EventHub" ? connection : undefined;
 
 const MAPPING = (name: string) =>
   `.create-or-alter table Events ingestion json mapping '${name}' '[{"column":"Name","path":"$.name","datatype":"string"}]'`;
@@ -89,7 +92,7 @@ test.provider.skipIf(!runExpensive)(
         );
       const observed = yield* get();
       expect(observed.kind).toEqual("EventHub");
-      expect(observed.properties?.eventHubResourceId?.toLowerCase()).toEqual(
+      expect(eventHubOf(observed)?.properties?.eventHubResourceId?.toLowerCase()).toEqual(
         hub.eventHubId.toLowerCase(),
       );
       expect(observed.properties?.mappingRuleName).toEqual("EventsMapping");

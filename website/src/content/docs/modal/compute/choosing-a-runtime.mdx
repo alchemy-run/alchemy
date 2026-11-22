@@ -1,0 +1,175 @@
+---
+title: Choosing a runtime
+description: Functions, Servers, program sandboxes and sandboxes created at run time on Modal, and when to use each.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+import Responsibility from "../../../../components/Responsibility.astro";
+import Timeline from "../../../../components/diagrams/Timeline.astro";
+
+Modal runs all your code in containers that start from an image, on CPUs or GPUs you choose. Its runtimes differ in what starts a container and what stops it: Modal itself, scaling with calls or requests, or your code, creating a sandbox and terminating it.
+
+## Modal manages less as you decide more
+
+<Responsibility
+  platform="Modal"
+  columns={[
+    { label: "Function", type: "per call" },
+    { label: "Server", type: "per request" },
+    { label: "program", type: "Sandbox + main" },
+    { label: "sandbox", type: "per task" },
+  ]}
+  rows={[
+    { label: "your code", you: [true, true, true, true] },
+    { label: "image", you: [false, false, false, true] },
+    { label: "scaling", you: [false, false, true, true] },
+    { label: "container lifetime", you: [false, false, true, true] },
+    { label: "hardware", you: [false, false, false, false] },
+  ]}
+  caption="From left to right, Modal manages less and you decide more. Functions and Servers scale on their own; your code creates each sandbox and decides when it stops."
+/>
+
+## The same program on every runtime
+
+A Function, a Server and a program Sandbox are each a class that holds its code. The program inside is the same shape, an Effect that returns `fetch` and any methods you want to call:
+
+```typescript
+Effect.gen(function* () {
+  return {
+    fetch: Effect.succeed(HttpServerResponse.text("ok")),
+    embed: Effect.fn(function* (text: string) {
+      return { tokens: text.split(/\s+/).length };
+    }),
+  };
+});
+```
+
+Alchemy bundles `main` into an image, and Modal builds it at deploy.
+
+## Functions: scale with calls
+
+A `Modal.Function` runs when it's called. Modal starts containers as calls arrive, runs up to `maxConcurrentInputs` in each, and stops them when they're idle. Callers use its methods by name, a schedule calls it on a cron, or `web: true` serves its `fetch` at a `*.modal.run` URL.
+
+```typescript title="src/embed.ts"
+export default class Embed extends Modal.Function<Embed>()(
+  "Embed",
+  { main: import.meta.url, app: Inference, gpu: "L4" },
+  program,
+) {}
+```
+
+Choose it for inference, batch jobs and anything you fan out. See [Functions](/modal/services/functions).
+
+<Timeline
+  end={10}
+  lanes={[{ id: "c1", label: "container 1" }, { id: "c2", label: "container 2" }]}
+  bars={[
+    { lane: "c1", start: 0.2, end: 1.2, tone: "warn" },
+    { lane: "c1", start: 1.2, end: 3.4, label: "embed" },
+    { lane: "c1", start: 3.4, end: 5.6, label: "embed" },
+    { lane: "c2", start: 2.4, end: 3.4, tone: "warn" },
+    { lane: "c2", start: 3.4, end: 5.8, label: "embed" },
+  ]}
+  legend={[{ tone: "accent", label: "call" }, { tone: "warn", label: "cold start" }]}
+  caption="Each container takes one call at a time here. A second container starts when calls pile up, and both stop once idle."
+/>
+
+## Servers: scale with concurrent requests
+
+A `Modal.Server` is an HTTP server behind one routing region. Each container serves many requests at once, and Modal adds a container when they pass `targetConcurrency`.
+
+```typescript title="src/api.ts"
+export default class Api extends Modal.Server<Api>()(
+  "Api",
+  { main: import.meta.url, app: Backend, targetConcurrency: 20 },
+  program,
+) {}
+```
+
+Choose it for APIs, streaming responses and WebSockets. See [Servers](/modal/services/servers).
+
+<Timeline
+  end={10}
+  lanes={[{ id: "s1", label: "container 1" }]}
+  bars={[
+    { lane: "s1", start: 0.4, end: 4, label: "GET /" },
+    { lane: "s1", start: 1, end: 6.2, label: "GET /stream" },
+    { lane: "s1", start: 2.6, end: 5, label: "POST /embed" },
+    { lane: "s1", start: 6.4, end: 9, label: "GET /" },
+  ]}
+  caption="One container serves requests side by side. Modal scales on how many are in flight, not on a queue of calls."
+/>
+
+## Program sandboxes: your program, one container per create
+
+A `Modal.Sandbox` with a `main` bundles your program into an image. Your code starts one with `create`, reaches the program's port through a tunnel, and terminates it, or lets its timeout stop it.
+
+```typescript
+const sandboxes = yield* Modal.CreateSandbox(MySandbox);
+const sandbox = yield* sandboxes.create({ timeout: "10 minutes" });
+const port = yield* sandbox.getTcpPort();
+```
+
+Choose it when each user or session needs a copy of your own server. See [Programs](/modal/sandboxes/programs).
+
+<Timeline
+  end={10}
+  lanes={[{ id: "a", label: "agent-sam" }, { id: "b", label: "agent-ana" }]}
+  bars={[
+    { lane: "a", start: 0.4, end: 6, label: "serving" },
+    { lane: "b", start: 3, end: 9.6, label: "serving" },
+  ]}
+  marks={[{ at: 6, label: "terminate" }]}
+  caption="Each create starts one container running your program. It runs until your code terminates it or its timeout runs out."
+/>
+
+## Sandboxes created at run time: one per task
+
+`Modal.CreateSandbox` bound to an image gives a Worker or Lambda a client that creates sandboxes for code you don't trust. Your code runs commands in each one, reads and writes its files, and terminates it when the task is done. `idleTimeout` stops one nobody is using.
+
+```typescript
+const sandboxes = yield* Modal.CreateSandbox(Warm);
+const sandbox = yield* sandboxes.create({ idleTimeout: "10 minutes" });
+yield* sandbox.exec(["pnpm", "test"], { cwd: "/work" });
+```
+
+Choose it for agent loops, code interpreters and test runs. See [Sandboxes](/modal/sandboxes/sandboxes).
+
+<Timeline
+  end={10}
+  lanes={[{ id: "t1", label: "task-1" }, { id: "t2", label: "task-2" }]}
+  bars={[
+    { lane: "t1", start: 0.2, end: 2.6, label: "pnpm test" },
+    { lane: "t1", start: 3.2, end: 5, label: "pnpm lint" },
+    { lane: "t1", start: 5, end: 8, tone: "muted", label: "idle" },
+    { lane: "t2", start: 1.6, end: 6.4, label: "agent loop" },
+  ]}
+  marks={[{ at: 8, label: "idle timeout" }]}
+  legend={[{ tone: "accent", label: "command" }, { tone: "muted", label: "idle, still billed" }]}
+  caption="Each task gets its own sandbox. Its files and processes last between commands, until your code terminates it or the idle timeout does."
+/>
+
+A [persistent sandbox](/modal/sandboxes/persistent) keeps its files between sessions instead, and resumes where the last one stopped.
+
+## Mix runtimes in one app
+
+A Worker creates a sandbox per user and calls a GPU Function, and both read model weights from one Volume:
+
+<Tree
+  nodes={[
+    { id: "api", label: "Api", type: "Worker", icon: "square-function" },
+    { id: "env", label: "MyEnv", type: "environment", icon: "brand:modal", areas: ["sbx weights", "embed weights"], phoneAreas: ["sbx embed", "weights weights"], colGap: 3.5 },
+    { id: "sbx", label: "session-sam", type: "Sandbox", parent: "env", icon: "box" },
+    { id: "embed", label: "Embed", type: "Function · L4", parent: "env", icon: "square-function" },
+    { id: "weights", label: "Weights", type: "Volume", parent: "env", tone: "accent", icon: "hard-drive" },
+  ]}
+  areas={["api env"]}
+  colGap={3.5}
+  links={[
+    { from: "api", to: "sbx", label: "creates" },
+    { from: "api", to: "embed", label: "calls" },
+    { from: "sbx", to: "weights", label: "mounts" },
+    { from: "embed", to: "weights", label: "mounts" },
+  ]}
+  caption="The Worker, Api, runs outside Modal and reaches both runtimes through Modal's API. The sandbox and the Function mount the same Volume in their environment."
+/>

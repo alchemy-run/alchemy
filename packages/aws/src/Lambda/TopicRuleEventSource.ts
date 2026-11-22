@@ -54,12 +54,12 @@ export const TopicRuleEventSource = Layer.effect(
               ruleName,
               sql: props.sql ?? `SELECT * FROM '${topicFilter}'`,
               awsIotSqlVersion: props.awsIotSqlVersion,
-              actions: [{ lambda: { functionArn: host.functionArn } }],
+              actions: [{ lambda: { functionArn: Lambda.qualifiedArnOf(host) } }],
             });
 
             yield* Permission(`AWS.IoT.TopicRuleInvoke(${ruleName})`, {
               action: "lambda:InvokeFunction",
-              functionName: host.functionName,
+              functionName: Lambda.qualifiedNameOf(host),
               principal: "iot.amazonaws.com",
               sourceArn: rule.ruleArn,
             });

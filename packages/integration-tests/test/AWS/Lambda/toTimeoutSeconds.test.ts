@@ -1,5 +1,5 @@
 import { toTimeoutSeconds } from "@alchemy.run/aws/Lambda/Function";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Duration from "effect/Duration";
 
 describe(

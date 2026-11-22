@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -113,8 +114,36 @@ export type ApplicationsService = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ApplicationsServiceLookup
 >;
+
+/**
+ * Props for {@link ApplicationsService.lookup}: find an applications
+ * service this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface ApplicationsServiceLookup {
+  /**
+   * Service id (the `{service}` segment). Must be RFC1035 (63 chars).
+   */
+  serviceId: string;
+  /**
+   * Region used when `application` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent Application. Full name
+   * `projects/{project}/locations/{location}/applications/{application}` or
+   * the application id (combined with `location`).
+   */
+  application: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An App Hub service registered onto an Application. A service is a
@@ -158,6 +187,20 @@ export type ApplicationsService = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing applications service
+ * `ApplicationsService.lookup` references an applications service Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared applications service.
+ *
+ * **Example:** Reference an existing applications service
+ * ```typescript
+ * const applicationsService = GCP.AppHub.ApplicationsService.lookup({
+ *   serviceId: "my-service",
+ *   application: "my-application",
+ * });
+ * ```
+ *
  * @resource
  * @category AppHub
  */
@@ -191,10 +234,10 @@ const toAttrs = (item: apphub.Service, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apphub
         .getProjectsLocationsApplicationsServices({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listNestedOwned(project, region, (application) =>
@@ -244,6 +287,20 @@ export const ApplicationsServiceProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({
+      serviceId,
+      location: lookupLocation,
+      application: lookupApplication,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const application = expandApplication(lookupApplication ?? "", env.project, location);
+      const name = resourceName(application, serviceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const serviceId = yield* toPhysicalId(id, olds?.serviceId, output?.serviceId, "service");
@@ -288,16 +345,14 @@ export const ApplicationsServiceProvider = () =>
       if (current === undefined) {
         const created = yield* apphub
           .createProjectsLocationsApplicationsServices({
+            discoveredService,
+            displayName,
+            description,
+            attributes: news.attributes,
             parent: application,
             serviceId,
-            body: {
-              discoveredService,
-              displayName,
-              description,
-              attributes: news.attributes,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -305,7 +360,7 @@ export const ApplicationsServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -324,13 +379,11 @@ export const ApplicationsServiceProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* apphub.patchProjectsLocationsApplicationsServices({
+          displayName,
+          description,
+          attributes: news.attributes,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            displayName,
-            description,
-            attributes: news.attributes,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
@@ -352,7 +405,7 @@ export const ApplicationsServiceProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

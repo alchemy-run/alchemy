@@ -3,7 +3,7 @@ import { make as makeVinext } from "@alchemy.run/frontend-frameworks/vinext/node
 import { make as makeVite } from "@alchemy.run/frontend-frameworks/vite";
 import { createComputeArchive } from "@alchemy.run/prisma/ComputeArchive";
 import { stageWebsiteArtifact } from "@alchemy.run/prisma/Website/Artifact";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { findAvailablePort } from "alchemy/Util/Node";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";
@@ -57,9 +57,9 @@ const extract = Effect.fn(function* (archive: Uint8Array) {
   return path.join(root, "bundle");
 });
 
-const serve = Effect.fn(function* (directory: string) {
+const serve = Effect.fn(function* (directory: string, runtimeOverride?: string) {
   const port = yield* findAvailablePort();
-  const runtime = yield* Effect.sync(() => process.execPath);
+  const runtime = runtimeOverride ?? (yield* Effect.sync(() => process.execPath));
   const spawner = yield* ChildProcessSpawner;
   yield* spawner.spawn(
     ChildProcess.make(runtime, ["server.mjs"], {
@@ -312,7 +312,13 @@ describe.sequential(
             expect(files.some((file) => file.includes("unrelated-private-file"))).toBe(false);
             expect(files.some((file) => file.endsWith(".env.private"))).toBe(false);
             yield* fs.remove(root, { recursive: true });
-            const url = yield* serve(extracted);
+            // Prisma Compute runs Bun 1.4. Bun 1.3, which this repo pins for the
+            // test runner, can't load Next 16.4's turbopack server runtime
+            // ("Expected CommonJS module to have a function wrapper").
+            const bunVersion = yield* Effect.sync(() => process.versions.bun ?? "");
+            const [major = 0, minor = 0] = bunVersion.split(".").map(Number);
+            const node = yield* Effect.sync(() => Bun.which("node") ?? "node");
+            const url = yield* serve(extracted, major > 1 || minor >= 4 ? undefined : node);
             expect(
               yield* HttpClient.get(url).pipe(Effect.flatMap((response) => response.text)),
             ).toContain("Next artifact config dependency");

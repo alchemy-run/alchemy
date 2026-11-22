@@ -76,7 +76,7 @@ export default function StackOutputsTerminal({ maxLines = 12 }: { maxLines?: num
       }
     };
 
-    run();
+    void run();
     return () => {
       cancelRef.current = true;
     };

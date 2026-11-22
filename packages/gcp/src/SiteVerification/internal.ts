@@ -86,10 +86,10 @@ const emptyWebResources = () =>
 export const getWebResource = (id: string | undefined) => {
   const pathId = toPathId(id);
   return pathId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : siteVerification
         .getWebResource({ id: pathId })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 };
 
 export const listWebResources = () =>
@@ -133,12 +133,10 @@ export const getWebResourceToken = (request: {
 }) => {
   const siteType = request.siteType ?? DEFAULT_SITE_TYPE;
   return siteVerification.getTokenWebResource({
-    body: {
-      site: {
-        identifier: request.identifier,
-        type: siteType,
-      },
-      verificationMethod: request.verificationMethod ?? defaultVerificationMethod(siteType),
+    site: {
+      identifier: request.identifier,
+      type: siteType,
     },
+    verificationMethod: request.verificationMethod ?? defaultVerificationMethod(siteType),
   });
 };

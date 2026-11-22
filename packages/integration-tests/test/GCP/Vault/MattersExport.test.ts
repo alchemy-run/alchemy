@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as vault from "@distilled.cloud/gcp/vault_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -52,12 +52,10 @@ test.provider.skipIf(!!process.env.GCP_TEST_VAULT)(
 
       const error = yield* Effect.flip(
         vault.createMattersExports({
+          name: "Alchemy Vault Export Probe",
+          query: sampleMailQuery("probe@example.com"),
+          exportOptions: sampleMailExportOptions(),
           matterId: "alchemy-missing-matter",
-          body: {
-            name: "Alchemy Vault Export Probe",
-            query: sampleMailQuery("probe@example.com"),
-            exportOptions: sampleMailExportOptions(),
-          },
         }),
       );
       expect(error._tag).toEqual("VaultScopeInsufficient");

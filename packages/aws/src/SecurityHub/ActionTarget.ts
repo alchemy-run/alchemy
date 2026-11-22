@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface ActionTargetProps {
@@ -77,7 +78,7 @@ const ActionTargetResource = Resource<ActionTarget>("AWS.SecurityHub.ActionTarge
 export { ActionTargetResource as ActionTarget };
 
 const actionTargetArn = (region: string, accountId: string, id: string) =>
-  `arn:aws:securityhub:${region}:${accountId}:action/custom/${id}`;
+  `arn:${partitionOf(region)}:securityhub:${region}:${accountId}:action/custom/${id}`;
 
 export const ActionTargetProvider = () =>
   Provider.effect(
@@ -97,9 +98,9 @@ export const ActionTargetProvider = () =>
         securityhub.describeActionTargets({ ActionTargetArns: [arn] }).pipe(
           Effect.map((r) => r.ActionTargets?.[0]),
           Effect.catchTags({
-            ResourceNotFoundException: () => Effect.succeed(undefined),
+            ResourceNotFoundException: () => Effect.undefined,
             // The whole hub may be disabled — the action target is gone too.
-            InvalidAccessException: () => Effect.succeed(undefined),
+            InvalidAccessException: () => Effect.undefined,
           }),
         );
 

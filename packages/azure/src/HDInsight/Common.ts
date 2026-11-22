@@ -28,9 +28,7 @@ export const clusterOwnedByStage = Effect.fn(function* (
 });
 
 /** Plain value of a secret given either redacted or as a string. */
-export const reveal = (
-  value: Redacted.Redacted<string> | string | undefined,
-): string | undefined =>
+export const reveal = (value: Redacted.Redacted<string> | string | undefined): string | undefined =>
   value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 export const lower = (value: string | undefined) => value?.toLowerCase();

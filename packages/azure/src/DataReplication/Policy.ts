@@ -195,7 +195,11 @@ export const PolicyProvider = () =>
       if (observed === undefined || !matchesDesired(customOf(observed), news.customProperties)) {
         yield* dr.CreatePolicy({
           ...where,
-          properties: { customProperties: news.customProperties },
+          // `instanceType` is any subtype, so TypeScript cannot pick the SDK
+          // union arm.
+          properties: {
+            customProperties: news.customProperties as unknown as dr.PolicyModelCustomProperties,
+          },
         });
       }
       const fresh = yield* waitForProvisioned(

@@ -240,6 +240,18 @@ const sameFingerprint = (
   b: Redacted.Redacted<string> | undefined,
 ) => a !== undefined && b !== undefined && Redacted.value(a) === Redacted.value(b);
 
+/**
+ * The observed source narrowed to its `sourceType` arms. The generated union
+ * also lists `BlobAccessPointConnection` and `BlobAccessPointRemoteAuth`,
+ * which carry no `sourceType`; a response never decodes to them.
+ */
+const sourceOf = (properties: storage.BlobAccessPointConfigurationProperties) =>
+  "sourceType" in properties.source ? properties.source : undefined;
+
+/** The plain value of a member the SDK may return as `Redacted`. */
+const plain = (value: string | Redacted.Redacted<string> | undefined) =>
+  value !== undefined && Redacted.isRedacted(value) ? Redacted.value(value) : value;
+
 const toAttrs = (
   resourceGroup: string,
   storageAccount: string,
@@ -248,6 +260,8 @@ const toAttrs = (
   secretFingerprint: Redacted.Redacted<string> | undefined,
 ): BlobAccessPointConfiguration["Attributes"] => {
   const p = observed.properties;
+  const source = sourceOf(p);
+  const connection = source?.connection;
   return {
     configurationName: name,
     storageAccount,
@@ -257,14 +271,17 @@ const toAttrs = (
     uniqueId: p.uniqueId,
     state: p.state,
     description: p.description,
-    sourceType: p.source.sourceType,
-    connectionType: p.source.connection?.connectionType,
-    endpoint: p.source.connection?.endpoint,
-    tlsVerification: p.source.connection?.tlsVerification,
-    privateEndpointName: p.source.connection?.privateEndpointName,
-    accessKeyId: p.source.auth?.accessKeyId,
-    signingRegion: p.source.auth?.signingRegion,
-    hostOverride: p.source.auth?.hostOverride,
+    sourceType: source?.sourceType ?? "",
+    connectionType: connection?.connectionType,
+    endpoint: connection?.endpoint,
+    tlsVerification: connection?.tlsVerification,
+    privateEndpointName:
+      connection && "privateEndpointName" in connection
+        ? connection.privateEndpointName
+        : undefined,
+    accessKeyId: plain(source?.auth.accessKeyId),
+    signingRegion: source?.auth.signingRegion,
+    hostOverride: source?.auth.hostOverride,
     lastConnectionTestStatus: p.lastConnectionTestStatus,
     secretFingerprint,
     tags: userTags(observed.tags),
@@ -389,10 +406,11 @@ export const BlobAccessPointConfigurationProvider = () =>
         // Sync mutable aspects against the observed configuration. Azure
         // never returns the secret, so a rotation is detected by fingerprint.
         const p = observed.properties;
-        const observedAuth = p.source.auth;
+        const observedSource = sourceOf(p);
+        const observedAuth = observedSource?.auth;
         const sourceDrift =
-          (p.source.connection?.tlsVerification ?? "Perform") !== tlsVerification ||
-          observedAuth?.accessKeyId !== news.accessKeyId ||
+          (observedSource?.connection.tlsVerification ?? "Perform") !== tlsVerification ||
+          plain(observedAuth?.accessKeyId) !== news.accessKeyId ||
           (news.signingRegion !== undefined &&
             observedAuth?.signingRegion !== news.signingRegion) ||
           (news.hostOverride !== undefined && observedAuth?.hostOverride !== news.hostOverride) ||
@@ -413,7 +431,7 @@ export const BlobAccessPointConfigurationProvider = () =>
                 ? {
                     sourceType: news.sourceType,
                     connection: {
-                      connectionType: p.source.connection?.connectionType ?? "Endpoint",
+                      connectionType: observedSource?.connection.connectionType ?? "Endpoint",
                       tlsVerification,
                     },
                     auth,

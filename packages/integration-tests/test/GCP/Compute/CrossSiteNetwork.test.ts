@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -34,6 +35,10 @@ test.provider(
             description: "cross-cloud fabric",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.CrossSiteNetwork.lookup({ crossSiteNetworkName: created.crossSiteNetworkName }),
+        created,
       );
 
       expect(created.crossSiteNetworkName).toEqual(expect.any(String));

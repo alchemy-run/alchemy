@@ -42,7 +42,7 @@ export const RetrieveProductHttp = Layer.effect(
       }) {
         return yield* auth(
           GetProduct({
-            ...(request ?? {}),
+            ...request,
             id: yield* id,
           }),
         );

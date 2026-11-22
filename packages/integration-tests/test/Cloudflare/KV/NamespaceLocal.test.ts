@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Action } from "alchemy/Action";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -33,12 +33,13 @@ test.provider(
 
               return Effect.fn(function* () {
                 // The namespace was created moments ago; the KV value API can
-                // briefly answer `namespace not found` before it sees it.
-                // Retry the first write, bounded, until it lands.
+                // answer `namespace not found` before it sees it, for more
+                // than 12s on 2026-11-11. Retry the first write, bounded
+                // (about 45s), until it lands.
                 yield* kv.put("greeting", "hello world").pipe(
                   Effect.retry({
-                    schedule: Schedule.spaced("1 second"),
-                    times: 10,
+                    schedule: Schedule.spaced("3 seconds"),
+                    times: 15,
                   }),
                 );
 

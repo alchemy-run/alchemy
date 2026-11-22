@@ -3,14 +3,16 @@ import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { Role } from "@alchemy.run/aws/IAM";
 import { Bucket } from "@alchemy.run/aws/S3";
 import { BucketProvider } from "@alchemy.run/aws/S3/Bucket";
+import { describe, expect, it } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Credentials, fromCredentials } from "@distilled.cloud/aws/Credentials";
 import * as KMS from "@distilled.cloud/aws/kms";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { NodeServices } from "@effect/platform-node";
-import { describe, expect, it } from "alchemy-test";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
+import * as Drift from "alchemy/Drift";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { ResourceContext } from "alchemy/ResourceContext";
@@ -18,7 +20,6 @@ import { Stack, type StackSpec } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { State } from "alchemy/State";
 import { inMemoryState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -27,6 +28,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 import { resourceContext } from "../../Util/ResourceContext.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -433,10 +435,22 @@ test.provider(
           policy,
         });
       const bucket = yield* stack.deploy(program([], "managed"));
-      const readRule = S3.getBucketEncryption({ Bucket: bucket.bucketName }).pipe(
-        Effect.map((result) => result.ServerSideEncryptionConfiguration!.Rules[0]!),
-      );
-      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
+      // S3 serves stale encryption reads for a while after a write (worst on a
+      // re-created bucket name), so poll until the expected value shows up.
+      const blockedTypes = (expected: ReadonlyArray<string>) =>
+        S3.getBucketEncryption({ Bucket: bucket.bucketName }).pipe(
+          Effect.map(
+            (result) =>
+              result.ServerSideEncryptionConfiguration!.Rules[0]!.BlockedEncryptionTypes
+                ?.EncryptionType,
+          ),
+          Effect.repeat({
+            until: (types) => JSON.stringify(types) === JSON.stringify(expected),
+            schedule: Schedule.spaced("2 seconds"),
+            times: 15,
+          }),
+        );
+      expect(yield* blockedTypes(["NONE"])).toEqual(["NONE"]);
       const deny: AWS.IAM.PolicyStatement[] = [
         {
           Effect: "Deny",
@@ -469,7 +483,7 @@ test.provider(
         const updated = yield* stack.deploy(desired);
         expect(updated.bucketName).toBe(bucket.bucketName);
         const expected = types.length ? ["SSE-C"] : ["NONE"];
-        expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(expected);
+        expect(yield* blockedTypes(expected)).toEqual(expected);
         yield* Effect.gen(function* () {
           yield* S3.putBucketPolicy({
             Bucket: bucket.bucketName,
@@ -486,7 +500,7 @@ test.provider(
             yield* stack.deploy(program(undefined, "omitted", deny));
           }
           expect(yield* probeWrite).toBe(true);
-          expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(expected);
+          expect(yield* blockedTypes(expected)).toEqual(expected);
         }).pipe(
           Effect.ensuring(S3.deleteBucketPolicy({ Bucket: bucket.bucketName }).pipe(Effect.orDie)),
         );
@@ -500,7 +514,7 @@ test.provider(
           ),
         ).toBe(false);
         yield* stack.deploy(program(undefined, "default"));
-        expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
+        expect(yield* blockedTypes(["NONE"])).toEqual(["NONE"]);
       }
       const desired = program([], "repair");
       yield* stack.deploy(desired);
@@ -517,7 +531,7 @@ test.provider(
       });
       expect((yield* stack.plan(desired)).resources.ManagedEncryptionBlocks?.action).toBe("update");
       yield* stack.deploy(desired);
-      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
+      expect(yield* blockedTypes(["NONE"])).toEqual(["NONE"]);
       expect(
         (yield* stack.plan(program([], "repair"))).resources.ManagedEncryptionBlocks?.action,
       ).toBe("noop");
@@ -566,7 +580,7 @@ test.provider(
       const bucket = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("TestBucket", {
-            bucketName: "alchemy-test-bucket-crud",
+            bucketName: testName("alchemy-test-bucket-crud"),
             tags: { Environment: "test" },
             forceDestroy: true,
           });
@@ -581,7 +595,7 @@ test.provider(
       yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("TestBucket", {
-            bucketName: "alchemy-test-bucket-crud",
+            bucketName: testName("alchemy-test-bucket-crud"),
             tags: { Environment: "production", Team: "platform" },
             forceDestroy: true,
           });
@@ -608,14 +622,16 @@ test.provider(
       const bucket = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("CustomNameBucket", {
-            bucketName: "alchemy-test-bucket-custom-name",
+            bucketName: testName("alchemy-test-bucket-custom-name"),
             forceDestroy: true,
           });
         }),
       );
 
-      expect(bucket.bucketName).toEqual("alchemy-test-bucket-custom-name");
-      expect(bucket.bucketArn).toEqual("arn:aws:s3:::alchemy-test-bucket-custom-name");
+      expect(bucket.bucketName).toEqual(testName("alchemy-test-bucket-custom-name"));
+      expect(bucket.bucketArn).toEqual(
+        `arn:aws:s3:::${testName("alchemy-test-bucket-custom-name")}`,
+      );
 
       yield* S3.headBucket({ Bucket: bucket.bucketName });
 
@@ -635,7 +651,7 @@ test.provider(
       const bucket = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("ForceDestroyBucket", {
-            bucketName: "alchemy-test-bucket-force-destroy",
+            bucketName: testName("alchemy-test-bucket-force-destroy"),
             forceDestroy: true,
           });
         }),
@@ -674,7 +690,7 @@ test.provider(
       const bucket1 = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("IdempotentBucket", {
-            bucketName: "alchemy-test-bucket-idempotent",
+            bucketName: testName("alchemy-test-bucket-idempotent"),
             forceDestroy: true,
           });
         }),
@@ -684,7 +700,7 @@ test.provider(
       const bucket2 = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("IdempotentBucket", {
-            bucketName: "alchemy-test-bucket-idempotent",
+            bucketName: testName("alchemy-test-bucket-idempotent"),
             forceDestroy: true,
           });
         }),
@@ -707,7 +723,7 @@ test.provider(
       const bucket = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("ObjectLockBucket", {
-            bucketName: "alchemy-test-bucket-object-lock",
+            bucketName: testName("alchemy-test-bucket-object-lock"),
             objectLockEnabled: true,
             forceDestroy: true,
           });
@@ -733,7 +749,7 @@ test.provider(
       const bucket = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("TagRemovalBucket", {
-            bucketName: "alchemy-test-bucket-tag-removal",
+            bucketName: testName("alchemy-test-bucket-tag-removal"),
             tags: { Environment: "test", Team: "platform" },
             forceDestroy: true,
           });
@@ -747,7 +763,7 @@ test.provider(
       yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("TagRemovalBucket", {
-            bucketName: "alchemy-test-bucket-tag-removal",
+            bucketName: testName("alchemy-test-bucket-tag-removal"),
             forceDestroy: true,
           });
         }),
@@ -773,12 +789,12 @@ test.provider(
       yield* stack.destroy();
 
       const distributionArn = "arn:aws:cloudfront::123456789012:distribution/TESTDIST";
-      const bucketArn = "arn:aws:s3:::alchemy-test-bucket-policy-bindings";
+      const bucketArn = `arn:aws:s3:::${testName("alchemy-test-bucket-policy-bindings")}`;
 
       const bucket = yield* stack.deploy(
         Effect.gen(function* () {
           const bucket = yield* Bucket("PolicyBucket", {
-            bucketName: "alchemy-test-bucket-policy-bindings",
+            bucketName: testName("alchemy-test-bucket-policy-bindings"),
             forceDestroy: true,
           });
 
@@ -813,7 +829,7 @@ test.provider(
       yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("PolicyBucket", {
-            bucketName: "alchemy-test-bucket-policy-bindings",
+            bucketName: testName("alchemy-test-bucket-policy-bindings"),
             forceDestroy: true,
           });
         }),
@@ -919,7 +935,7 @@ test.provider(
       const bucket = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("ListBucket", {
-            bucketName: "alchemy-test-bucket-list",
+            bucketName: testName("alchemy-test-bucket-list"),
             forceDestroy: true,
           });
         }),
@@ -943,7 +959,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-versioning";
+      const name = testName("alchemy-test-bucket-versioning");
       const bucket = yield* stack.deploy(
         Bucket("VersioningBucket", { bucketName: name, versioning: "Enabled", forceDestroy: true }),
       );
@@ -974,7 +990,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-encryption";
+      const name = testName("alchemy-test-bucket-encryption");
       const bucket = yield* stack.deploy(
         Bucket("EncryptionBucket", {
           bucketName: name,
@@ -1012,7 +1028,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-pab";
+      const name = testName("alchemy-test-bucket-pab");
       const bucket = yield* stack.deploy(
         Bucket("PabBucket", {
           bucketName: name,
@@ -1058,7 +1074,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-cors";
+      const name = testName("alchemy-test-bucket-cors");
       const bucket = yield* stack.deploy(
         Bucket("CorsBucket", {
           bucketName: name,
@@ -1116,7 +1132,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-lifecycle";
+      const name = testName("alchemy-test-bucket-lifecycle");
       const bucket = yield* stack.deploy(
         Bucket("LifecycleBucket", {
           bucketName: name,
@@ -1172,7 +1188,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-website";
+      const name = testName("alchemy-test-bucket-website");
       const bucket = yield* stack.deploy(
         Bucket("WebsiteBucket", {
           bucketName: name,
@@ -1319,8 +1335,8 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const target = "alchemy-test-bucket-logging-target";
-      const source = "alchemy-test-bucket-logging-src";
+      const target = testName("alchemy-test-bucket-logging-target");
+      const source = testName("alchemy-test-bucket-logging-src");
 
       const deployWith = (targetPrefix: string) =>
         stack.deploy(
@@ -1378,7 +1394,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-accel-pay";
+      const name = testName("alchemy-test-bucket-accel-pay");
       const bucket = yield* stack.deploy(
         Bucket("AccelPayBucket", {
           bucketName: name,
@@ -1421,7 +1437,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-objlock-retention";
+      const name = testName("alchemy-test-bucket-objlock-retention");
       const bucket = yield* stack.deploy(
         Bucket("ObjLockRetentionBucket", {
           bucketName: name,
@@ -1447,7 +1463,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-int-tiering";
+      const name = testName("alchemy-test-bucket-int-tiering");
       const bucket = yield* stack.deploy(
         Bucket("IntTieringBucket", {
           bucketName: name,
@@ -1497,7 +1513,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-policy-prop";
+      const name = testName("alchemy-test-bucket-policy-prop");
       const bucketArn = `arn:aws:s3:::${name}`;
       const bucket = yield* stack.deploy(
         Bucket("PolicyPropBucket", {
@@ -1534,8 +1550,8 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const dest = "alchemy-test-bucket-replication-dest";
-      const src = "alchemy-test-bucket-replication-src";
+      const dest = testName("alchemy-test-bucket-replication-dest");
+      const src = testName("alchemy-test-bucket-replication-src");
 
       const buckets = yield* stack.deploy(
         Effect.gen(function* () {
@@ -1628,6 +1644,170 @@ const deleteBucketIfExists = Effect.fn(function* (bucketName: string) {
 });
 
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}
+
+// #2659: `read` must observe every managed setting, or an out-of-band change
+// reads as `unchanged` and drift never repairs it.
+test.provider(
+  "drift detects and repairs out-of-band configuration changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const bucket = yield* stack.deploy(
+        Bucket("DriftConfigBucket", {
+          forceDestroy: true,
+          tags: { team: "storage" },
+          versioning: "Enabled",
+          publicAccessBlock: {
+            blockPublicAcls: true,
+            ignorePublicAcls: true,
+            blockPublicPolicy: true,
+            restrictPublicBuckets: true,
+          },
+          cors: [{ AllowedMethods: ["GET"], AllowedOrigins: ["*"], MaxAgeSeconds: 300 }],
+          lifecycleRules: [
+            {
+              ID: "expire-logs",
+              Status: "Enabled",
+              Filter: { Prefix: "logs/" },
+              Expiration: { Days: 30 },
+            },
+          ],
+          requestPayer: "BucketOwner",
+        }),
+      );
+      const bucketName = bucket.bucketName;
+      const target = { name: stack.name, stage: stack.stage };
+      const detect = Drift.detect(target).pipe(
+        Effect.map((result) => result.resources.DriftConfigBucket),
+        Effect.provide(stack.state),
+      );
+      // S3 bucket configuration is eventually consistent: CORS and lifecycle
+      // reads can lag their writes on some replicas, so wait for a quiet read.
+      const unchanged = detect.pipe(
+        Effect.repeat({
+          until: (result) => result?.action === "unchanged",
+          schedule: Schedule.spaced("3 seconds"),
+          times: 20,
+        }),
+      );
+      expect((yield* unchanged)?.action).toBe("unchanged");
+
+      yield* S3.putBucketVersioning({
+        Bucket: bucketName,
+        VersioningConfiguration: { Status: "Suspended" },
+      });
+      yield* S3.deleteBucketCors({ Bucket: bucketName });
+      yield* S3.putBucketLifecycleConfiguration({
+        Bucket: bucketName,
+        LifecycleConfiguration: {
+          Rules: [
+            {
+              ID: "expire-logs",
+              Status: "Enabled",
+              Filter: { Prefix: "logs/" },
+              Expiration: { Days: 7 },
+            },
+          ],
+        },
+      });
+      yield* S3.putBucketTagging({
+        Bucket: bucketName,
+        Tagging: { TagSet: [{ Key: "team", Value: "other" }] },
+      });
+      yield* S3.deletePublicAccessBlock({ Bucket: bucketName });
+      yield* S3.putBucketEncryption({
+        Bucket: bucketName,
+        ServerSideEncryptionConfiguration: {
+          Rules: [
+            {
+              ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" },
+              BucketKeyEnabled: true,
+            },
+          ],
+        },
+      });
+      yield* S3.putBucketRequestPayment({
+        Bucket: bucketName,
+        RequestPaymentConfiguration: { Payer: "Requester" },
+      });
+
+      // Bucket configuration is eventually consistent: wait until every
+      // out-of-band change is observed.
+      const drifted = yield* detect.pipe(
+        Effect.repeat({
+          until: (result) =>
+            result?.attr?.versioning === "Suspended" &&
+            result.attr.cors?.length === 0 &&
+            result.attr.lifecycleRules?.[0]?.Expiration?.Days === 7 &&
+            result.attr.tags?.team === "other" &&
+            result.attr.publicAccessBlock?.blockPublicAcls === false &&
+            result.attr.encryption?.bucketKeyEnabled === true &&
+            result.attr.requestPayer === "Requester",
+          schedule: Schedule.spaced("2 seconds"),
+          times: 15,
+        }),
+      );
+      expect(drifted?.action).toBe("drifted");
+      expect(drifted?.attr).toMatchObject({
+        versioning: "Suspended",
+        cors: [],
+        tags: { team: "other" },
+        requestPayer: "Requester",
+      });
+
+      const repaired = yield* Drift.repair(target).pipe(Effect.provide(stack.state));
+      expect(repaired.resources.DriftConfigBucket?.action).toBe("repaired");
+      const after = yield* unchanged;
+      expect(after?.attr).toEqual(repaired.resources.DriftConfigBucket?.attr);
+      expect(after?.action).toBe("unchanged");
+
+      // Out-of-band reads lag too: poll until S3 reports the repaired state.
+      const observeRepaired = Effect.gen(function* () {
+        const versioning = yield* S3.getBucketVersioning({ Bucket: bucketName });
+        const cors = yield* S3.getBucketCors({ Bucket: bucketName }).pipe(
+          Effect.map((r) => r.CORSRules ?? []),
+          Effect.catchTag("NoSuchCORSConfiguration", () => Effect.succeed([])),
+        );
+        const lifecycle = yield* S3.getBucketLifecycleConfiguration({ Bucket: bucketName });
+        const tags = yield* S3.getBucketTagging({ Bucket: bucketName });
+        const pab = yield* S3.getPublicAccessBlock({ Bucket: bucketName });
+        const encryption = yield* S3.getBucketEncryption({ Bucket: bucketName });
+        const payment = yield* S3.getBucketRequestPayment({ Bucket: bucketName });
+        return {
+          versioning: versioning.Status,
+          corsMethods: cors[0]?.AllowedMethods,
+          expirationDays: lifecycle.Rules?.[0]?.Expiration?.Days,
+          tags: tags.TagSet,
+          blockPublicAcls: pab.PublicAccessBlockConfiguration?.BlockPublicAcls,
+          bucketKeyEnabled:
+            encryption.ServerSideEncryptionConfiguration?.Rules?.[0]?.BucketKeyEnabled,
+          payer: payment.Payer,
+        };
+      });
+      const expected = {
+        versioning: "Enabled",
+        corsMethods: ["GET"],
+        expirationDays: 30,
+        tags: [{ Key: "team", Value: "storage" }],
+        blockPublicAcls: true,
+        bucketKeyEnabled: false,
+        payer: "BucketOwner",
+      };
+      const observed = yield* observeRepaired.pipe(
+        Effect.repeat({
+          until: (observed) => JSON.stringify(observed) === JSON.stringify(expected),
+          schedule: Schedule.spaced("3 seconds"),
+          times: 20,
+        }),
+      );
+      expect(observed).toEqual(expected);
+
+      yield* stack.destroy();
+      yield* assertBucketDeleted(bucketName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags: ["provider:aws", "provider:aws:s3", "live"], timeout: 240_000 },
+);
 
 const assertBucketDeleted = Effect.fn(function* (bucketName: string) {
   yield* S3.headBucket({ Bucket: bucketName }).pipe(
@@ -1767,7 +1947,7 @@ const recordDelete = (props: { forceDestroy?: boolean }, options?: { force?: boo
         olds: props,
         output: stubbedOutput as never,
         bindings: [] as never,
-        session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+        session: { note: () => Effect.void },
         force: options?.force,
       });
     }).pipe(Effect.provide(BucketProvider()), Effect.provide(stubbedEnv(transport.layer)));

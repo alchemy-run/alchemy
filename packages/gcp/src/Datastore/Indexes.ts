@@ -200,11 +200,8 @@ export const IndexProvider = () =>
 
       if (current === undefined) {
         const created = yield* datastore
-          .createProjectsIndexes({
-            projectId: env.project,
-            body,
-          })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .createProjectsIndexes({ ...body, projectId: env.project })
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           let indexId = indexIdFromOperation(created);
           if (indexId === undefined && created.name !== undefined) {

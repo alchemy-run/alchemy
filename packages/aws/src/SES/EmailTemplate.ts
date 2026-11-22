@@ -8,6 +8,7 @@ import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "al
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface EmailTemplateProps {
@@ -43,8 +44,18 @@ export interface EmailTemplate extends Resource<
     templateArn: string;
   },
   never,
-  Providers
+  Providers,
+  EmailTemplateLookup
 > {}
+
+/**
+ * Props for {@link EmailTemplate.lookup}: find an email template this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EmailTemplateLookup {
+  /** The name of the existing template. */
+  templateName: string;
+}
 
 /**
  * An Amazon SES v2 email template — reusable subject/text/HTML content with
@@ -78,6 +89,17 @@ export interface EmailTemplate extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing email template
+ * `EmailTemplate.lookup` references an email template Alchemy doesn't manage (created in the
+ * console or by another stack), found by `templateName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Send with an existing template
+ * ```typescript
+ * const welcome = AWS.SES.EmailTemplate.lookup({ templateName: "welcome" });
+ * const templateName = welcome.templateName;
+ * ```
+ *
  * @resource
  */
 export const EmailTemplate = Resource<EmailTemplate>("AWS.SES.EmailTemplate");
@@ -87,7 +109,7 @@ const toTagRecord = (
 ): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
 
 const templateArnOf = (region: string, accountId: string, name: string) =>
-  `arn:aws:ses:${region}:${accountId}:template/${name}`;
+  `arn:${partitionOf(region)}:ses:${region}:${accountId}:template/${name}`;
 
 const toContent = (props: EmailTemplateProps): sesv2.EmailTemplateContent => ({
   Subject: props.subject,
@@ -109,7 +131,7 @@ export const EmailTemplateProvider = () =>
       const getTemplate = Effect.fn(function* (name: string) {
         return yield* sesv2
           .getEmailTemplate({ TemplateName: name })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       });
 
       return EmailTemplate.Provider.of({
@@ -129,6 +151,13 @@ export const EmailTemplateProvider = () =>
                 templateArn: templateArnOf(region, accountId, meta.TemplateName),
               }));
           }),
+
+        lookup: Effect.fn(function* ({ templateName }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const found = yield* getTemplate(templateName);
+          if (!found) return undefined;
+          return { templateName, templateArn: templateArnOf(region, accountId, templateName) };
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;

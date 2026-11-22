@@ -2,7 +2,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import type { TimeToLiveSpecification } from "@distilled.cloud/aws/dynamodb";
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { havePropsChanged, isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -17,12 +17,18 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
+export class TableUnexpectedResponse extends Data.TaggedError("TableUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type TableName = string;
 
-export type TableArn = `arn:aws:dynamodb:${RegionID}:${AccountID}:table/${TableName}`;
+export type TableArn = `arn:${Partition}:dynamodb:${RegionID}:${AccountID}:table/${TableName}`;
 
 export type TableRecord<Data> = Omit<lambda.DynamoDBRecord, "dynamodb"> & {
   dynamodb: Omit<lambda.StreamRecord, "NewImage" | "OldImage"> & {
@@ -229,10 +235,80 @@ export interface Table extends Resource<
     pointInTimeRecoveryDescription: DynamoDB.PointInTimeRecoveryDescription | undefined;
     /** The tags attached to the table. */
     tags: Record<string, string> | undefined;
+    /**
+     * Billing mode, as observed on the table. Lets `alchemy drift` detect
+     * out-of-band changes.
+     */
+    billingMode?: DynamoDB.BillingMode;
+    /**
+     * Table-level provisioned capacity (PROVISIONED tables only), as
+     * observed. Lets `alchemy drift` detect out-of-band changes.
+     */
+    provisionedThroughput?: {
+      ReadCapacityUnits?: number;
+      WriteCapacityUnits?: number;
+    };
+    /**
+     * Table-level on-demand maximums, observed when `onDemandThroughput` is
+     * set. Lets `alchemy drift` detect out-of-band changes.
+     */
+    onDemandThroughput?: DynamoDB.OnDemandThroughput;
+    /**
+     * Whether deletion protection is enabled, as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    deletionProtectionEnabled?: boolean;
+    /**
+     * KMS server-side encryption, as observed (`undefined` when the table
+     * uses the default AWS owned key). Lets `alchemy drift` detect
+     * out-of-band changes.
+     */
+    sseDescription?: {
+      sseType?: string;
+      kmsMasterKeyArn?: string;
+    };
+    /**
+     * Table class, as observed. Lets `alchemy drift` detect out-of-band
+     * changes.
+     */
+    tableClass?: DynamoDB.TableClass;
+    /**
+     * Time-to-live attribute when TTL is enabled, as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    timeToLiveAttributeName?: string;
+    /**
+     * Resource-based policy document attached to the table (canonical JSON),
+     * as observed. Lets `alchemy drift` detect out-of-band changes.
+     */
+    resourcePolicy?: string;
+    /**
+     * Active Kinesis streaming destinations, as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    kinesisStreamingDestinations?: {
+      streamArn: string;
+      approximateCreationDateTimePrecision: string;
+    }[];
+    /**
+     * Whether Contributor Insights is enabled, as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    contributorInsightsEnabled?: boolean;
   },
   TableBinding,
-  Providers
+  Providers,
+  TableLookup
 > {}
+
+/**
+ * Props for {@link Table.lookup}: find a table this stack doesn't manage, in
+ * the ambient account and region, by its name.
+ */
+export interface TableLookup {
+  /** The name of the existing table. */
+  tableName: string;
+}
 
 /**
  * An Amazon DynamoDB table with optional indexes, PITR, TTL, and stream-aware
@@ -443,10 +519,26 @@ export interface Table extends Resource<
  * yield* DynamoDB.consumeTableChanges(
  *   table,
  *   { streamViewType: "NEW_AND_OLD_IMAGES" },
- *   Effect.fn(function* (record) {
- *     yield* Effect.log(`${record.eventName}: ${JSON.stringify(record.dynamodb)}`);
+ *   Effect.fn(function* (event) {
+ *     for (const record of event.Records) {
+ *       yield* Effect.log(`${record.eventName}: ${JSON.stringify(record.dynamodb)}`);
+ *     }
  *   }),
  * );
+ * ```
+ *
+ * ### Looking up an existing table
+ * `Table.lookup` references a table Alchemy doesn't manage (created in the
+ * console or by another stack), found by `tableName`. It is read during
+ * plan/deploy and never created, updated or deleted, and binds like a
+ * declared table.
+ *
+ * **Example:** Read items from an existing table
+ * ```typescript
+ * const table = DynamoDB.Table.lookup({ tableName: "users" });
+ *
+ * // init
+ * const getItem = yield* DynamoDB.GetItem(table);
  * ```
  *
  * @resource
@@ -717,7 +809,7 @@ export const TableProvider = () =>
       const readTableResourcePolicy = (tableArn: string) =>
         dynamodb.getResourcePolicy({ ResourceArn: tableArn }).pipe(
           Effect.map((response) => response.Policy),
-          Effect.catchTag("PolicyNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("PolicyNotFoundException", () => Effect.undefined),
           Effect.retry({
             while: isRetryableControlPlaneError,
             schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(15)]),
@@ -1194,46 +1286,49 @@ export const TableProvider = () =>
             );
           const table = response.Table;
           if (!table?.TableArn) {
-            return yield* Effect.fail(new Error(`Table ${tableName} not found`));
+            return yield* new TableUnexpectedResponse({ message: `Table ${tableName} not found` });
           }
 
+          const readTags = dynamodb
+            .listTagsOfResource({
+              ResourceArn: table.TableArn,
+            })
+            .pipe(
+              Effect.retry({
+                while: isRetryableReadError,
+                schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(30)]),
+              }),
+            );
+          const readContinuousBackups = dynamodb
+            .describeContinuousBackups({
+              TableName: tableName,
+            })
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "InternalServerError",
+                schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(30)]),
+              }),
+              Effect.catchTag("TableNotFoundException", () =>
+                Effect.succeed({ ContinuousBackupsDescription: undefined }),
+              ),
+            );
+          const readTimeToLive = dynamodb
+            .describeTimeToLive({
+              TableName: tableName,
+            })
+            .pipe(
+              Effect.retry({
+                while: isRetryableReadError,
+                schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(30)]),
+              }),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed({ TimeToLiveDescription: undefined }),
+              ),
+            );
           const [tagsResult, continuousBackupsResult, ttlResult] = yield* Effect.all([
-            dynamodb
-              .listTagsOfResource({
-                ResourceArn: table.TableArn,
-              })
-              .pipe(
-                Effect.retry({
-                  while: isRetryableReadError,
-                  schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(30)]),
-                }),
-              ),
-            dynamodb
-              .describeContinuousBackups({
-                TableName: tableName,
-              })
-              .pipe(
-                Effect.retry({
-                  while: (e) => e._tag === "InternalServerError",
-                  schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(30)]),
-                }),
-                Effect.catchTag("TableNotFoundException", () =>
-                  Effect.succeed({ ContinuousBackupsDescription: undefined }),
-                ),
-              ),
-            dynamodb
-              .describeTimeToLive({
-                TableName: tableName,
-              })
-              .pipe(
-                Effect.retry({
-                  while: isRetryableReadError,
-                  schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(30)]),
-                }),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed({ TimeToLiveDescription: undefined }),
-                ),
-              ),
+            readTags,
+            readContinuousBackups,
+            readTimeToLive,
           ]);
 
           return {
@@ -1245,7 +1340,7 @@ export const TableProvider = () =>
               continuousBackupsResult.ContinuousBackupsDescription?.PointInTimeRecoveryDescription,
             timeToLiveDescription: ttlResult.TimeToLiveDescription,
           };
-        }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const toAttrs = (state: {
         table: DynamoDB.TableDescription;
@@ -1261,10 +1356,120 @@ export const TableProvider = () =>
         sortKey: state.table.KeySchema?.find((key) => key.KeyType === "RANGE")?.AttributeName,
         latestStreamArn: state.table.LatestStreamArn,
         streamSpecification: state.table.StreamSpecification,
-        localSecondaryIndexes: state.table.LocalSecondaryIndexes,
-        globalSecondaryIndexes: state.table.GlobalSecondaryIndexes,
-        pointInTimeRecoveryDescription: state.pointInTimeRecoveryDescription,
+        // Index descriptions carry item counts, sizes and status that change
+        // on their own; keep only the configuration so drift stays quiet.
+        localSecondaryIndexes: state.table.LocalSecondaryIndexes?.map((index) => ({
+          IndexName: index.IndexName,
+          IndexArn: index.IndexArn,
+          KeySchema: index.KeySchema,
+          Projection: index.Projection,
+        })),
+        globalSecondaryIndexes: state.table.GlobalSecondaryIndexes?.map((index) => ({
+          IndexName: index.IndexName,
+          IndexArn: index.IndexArn,
+          KeySchema: index.KeySchema,
+          Projection: index.Projection,
+          ProvisionedThroughput: normalizeProvisioned(index.ProvisionedThroughput),
+          OnDemandThroughput: normalizeOnDemand(index.OnDemandThroughput),
+        })),
+        // The restorable window moves every second; only the setting is state.
+        pointInTimeRecoveryDescription: state.pointInTimeRecoveryDescription && {
+          PointInTimeRecoveryStatus: state.pointInTimeRecoveryDescription.PointInTimeRecoveryStatus,
+          RecoveryPeriodInDays: state.pointInTimeRecoveryDescription.RecoveryPeriodInDays,
+        },
         tags: state.tags,
+      });
+
+      // DynamoDB omits `BillingModeSummary` for tables that have always been
+      // PROVISIONED — fall back to the observed throughput (on-demand tables
+      // report 0 read capacity).
+      const observedBillingModeOf = (table: DynamoDB.TableDescription): DynamoDB.BillingMode =>
+        table.BillingModeSummary?.BillingMode ??
+        ((table.ProvisionedThroughput?.ReadCapacityUnits ?? 0) > 0
+          ? "PROVISIONED"
+          : "PAY_PER_REQUEST");
+
+      // Encrypted with a KMS key (AWS managed or customer managed) rather
+      // than the default AWS owned key.
+      const isKmsEncrypted = (sse: DynamoDB.SSEDescription | undefined) =>
+        sse?.Status === "ENABLED" || sse?.Status === "ENABLING" || sse?.Status === "UPDATING";
+
+      /**
+       * The table configuration `alchemy drift` compares: every setting
+       * reconcile converges, as observed. `read` and `reconcile` share it so
+       * a converged table reads unchanged. Transitional statuses
+       * (ENABLING, UPDATING) count as their target so a just-applied change
+       * is not reported as drift.
+       */
+      const observeTableConfiguration = Effect.fn(function* (
+        state: {
+          table: DynamoDB.TableDescription;
+          timeToLiveDescription: DynamoDB.TimeToLiveDescription | undefined;
+        },
+        props: { onDemandThroughput?: DynamoDB.OnDemandThroughput } | undefined,
+      ) {
+        const { table } = state;
+        const [policy, destinations, insights] = yield* Effect.all(
+          [
+            readTableResourcePolicy(table.TableArn!),
+            dynamodb.describeKinesisStreamingDestination({ TableName: table.TableName! }).pipe(
+              Effect.map((response) => response.KinesisDataStreamDestinations ?? []),
+              Effect.retry({
+                while: isRetryableControlPlaneError,
+                schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(15)]),
+              }),
+            ),
+            dynamodb.describeContributorInsights({ TableName: table.TableName! }).pipe(
+              Effect.map((response) => response.ContributorInsightsStatus ?? "DISABLED"),
+              Effect.retry({
+                while: isRetryableControlPlaneError,
+                schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(15)]),
+              }),
+            ),
+          ],
+          { concurrency: "unbounded" },
+        );
+        const billingMode = observedBillingModeOf(table);
+        const sse = table.SSEDescription;
+        const ttl = state.timeToLiveDescription;
+        const kinesisStreamingDestinations = destinations
+          .filter(
+            (destination) =>
+              destination.StreamArn !== undefined &&
+              (destination.DestinationStatus === "ACTIVE" ||
+                destination.DestinationStatus === "ENABLING" ||
+                destination.DestinationStatus === "UPDATING"),
+          )
+          .map((destination) => ({
+            streamArn: destination.StreamArn!,
+            approximateCreationDateTimePrecision:
+              destination.ApproximateCreationDateTimePrecision ?? "MILLISECOND",
+          }))
+          .sort((a, b) => a.streamArn.localeCompare(b.streamArn));
+        return {
+          billingMode,
+          provisionedThroughput:
+            billingMode === "PROVISIONED"
+              ? normalizeProvisioned(table.ProvisionedThroughput)
+              : undefined,
+          onDemandThroughput:
+            props?.onDemandThroughput === undefined
+              ? undefined
+              : normalizeOnDemand(table.OnDemandThroughput),
+          deletionProtectionEnabled: table.DeletionProtectionEnabled ?? false,
+          sseDescription: isKmsEncrypted(sse)
+            ? { sseType: sse?.SSEType, kmsMasterKeyArn: sse?.KMSMasterKeyArn }
+            : undefined,
+          tableClass: table.TableClassSummary?.TableClass ?? "STANDARD",
+          timeToLiveAttributeName:
+            ttl?.TimeToLiveStatus === "ENABLED" || ttl?.TimeToLiveStatus === "ENABLING"
+              ? ttl.AttributeName
+              : undefined,
+          resourcePolicy: canonicalPolicyDocument(policy),
+          kinesisStreamingDestinations:
+            kinesisStreamingDestinations.length > 0 ? kinesisStreamingDestinations : undefined,
+          contributorInsightsEnabled: insights === "ENABLED" || insights === "ENABLING",
+        } satisfies Partial<Table["Attributes"]>;
       });
 
       const indexesByName = <T extends { IndexName?: string }>(indexes: readonly T[] | undefined) =>
@@ -1468,33 +1673,34 @@ export const TableProvider = () =>
                   // own, and one can deny the tag read outright (a restrictive
                   // resource policy live; a peer test's table under the local
                   // emulator). A table we cannot read is not ours to return.
-                  // `TableNotFoundException` completes the set: a peer can
-                  // delete a table between `listTables` and our describes, and
-                  // that is what DynamoDB raises for a table that vanished.
+                  // A table a peer deletes between `listTables` and our
+                  // describes already reads as `undefined` in `readTableState`.
                   Effect.catchTag(
-                    [
-                      "ValidationException",
-                      "AccessDeniedException",
-                      "TableNotFoundException",
-                      "ResourceNotFoundException",
-                    ],
-                    () => Effect.succeed(undefined),
+                    ["ValidationException", "AccessDeniedException"],
+                    () => Effect.undefined,
                   ),
                 ),
               { concurrency: 8 },
             );
             return states.filter((state) => state !== undefined).map((state) => toAttrs(state));
           }),
-        read: Effect.fn(function* ({ id, olds, output }) {
+        lookup: Effect.fn(function* ({ tableName }) {
+          const state = yield* readTableState(tableName);
+          return state ? toAttrs(state) : undefined;
+        }),
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const tableName =
             output?.tableName ?? (olds ? yield* createTableName(id, olds) : undefined);
           if (!tableName) return undefined;
-          const state = yield* readTableState(tableName).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-          );
+          const state = yield* readTableState(tableName);
           if (!state) return undefined;
-          const attrs = toAttrs(state);
-          return (yield* hasAlchemyTags(id, state.tags as any)) ? attrs : Unowned(attrs);
+          const attrs = {
+            ...toAttrs(state),
+            ...(yield* observeTableConfiguration(state, olds)),
+          };
+          return (yield* hasAlchemyTags(id, state.tags as any))
+            ? attrs
+            : unownedUnlessPrevious(attrs, previous, "tableName");
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -1611,7 +1817,9 @@ export const TableProvider = () =>
 
             state = yield* readTableState(tableName);
             if (!state) {
-              return yield* Effect.fail(new Error(`Failed to read created table ${tableName}`));
+              return yield* new TableUnexpectedResponse({
+                message: `Failed to read created table ${tableName}`,
+              });
             }
           }
 
@@ -1690,16 +1898,10 @@ export const TableProvider = () =>
 
           // Sync base attributes — observed ↔ desired.
           const desiredBillingMode = news.billingMode ?? "PAY_PER_REQUEST";
-          // DynamoDB omits `BillingModeSummary` for tables that have always
-          // been PROVISIONED — fall back to the observed throughput (on-demand
-          // tables report 0 read capacity) so an unchanged PROVISIONED table
-          // does not trigger a spurious `updateTable` (which DynamoDB rejects
-          // with "provisioned throughput will not change").
-          const observedBillingMode =
-            state.table.BillingModeSummary?.BillingMode ??
-            ((state.table.ProvisionedThroughput?.ReadCapacityUnits ?? 0) > 0
-              ? "PROVISIONED"
-              : "PAY_PER_REQUEST");
+          // An unchanged PROVISIONED table must not trigger a spurious
+          // `updateTable` (which DynamoDB rejects with "provisioned throughput
+          // will not change").
+          const observedBillingMode = observedBillingModeOf(state.table);
           const observedProvisionedThroughput = state.table.ProvisionedThroughput
             ? {
                 ReadCapacityUnits: state.table.ProvisionedThroughput.ReadCapacityUnits,
@@ -1708,32 +1910,88 @@ export const TableProvider = () =>
             : undefined;
           const baseChanged = havePropsChanged(
             {
-              tableClass: state.table.TableClassSummary?.TableClass,
               billingMode: observedBillingMode,
-              deletionProtectionEnabled: state.table.DeletionProtectionEnabled ?? false,
               provisionedThroughput:
                 desiredBillingMode === "PROVISIONED" ? observedProvisionedThroughput : undefined,
             },
             {
-              tableClass: news.tableClass,
               billingMode: desiredBillingMode,
-              deletionProtectionEnabled: news.deletionProtectionEnabled ?? false,
               provisionedThroughput:
                 desiredBillingMode === "PROVISIONED" ? news.provisionedThroughput : undefined,
             },
           );
 
+          // DynamoDB rejects a table-class or deletion-protection change
+          // combined with any other update, and treats either field in the
+          // request as a change, so each is synced on its own.
+          const desiredDeletionProtection = news.deletionProtectionEnabled ?? false;
+          if ((state.table.DeletionProtectionEnabled ?? false) !== desiredDeletionProtection) {
+            yield* session.note(
+              `Table ${tableName}: ${desiredDeletionProtection ? "enabling" : "disabling"} deletion protection`,
+            );
+            yield* dynamodb.updateTable({
+              TableName: tableName,
+              DeletionProtectionEnabled: desiredDeletionProtection,
+            });
+            yield* waitForTableActive(session, tableName);
+          }
+
+          // Omitting the prop means STANDARD, so a class changed out-of-band
+          // converges back.
+          const desiredTableClass = news.tableClass ?? "STANDARD";
+          if ((state.table.TableClassSummary?.TableClass ?? "STANDARD") !== desiredTableClass) {
+            yield* session.note(`Table ${tableName}: updating table class to ${desiredTableClass}`);
+            yield* dynamodb.updateTable({
+              TableName: tableName,
+              TableClass: desiredTableClass,
+            });
+            yield* waitForTableActive(session, tableName);
+          }
+
           if (baseChanged) {
             yield* dynamodb.updateTable({
               TableName: tableName,
-              TableClass: news.tableClass,
               AttributeDefinitions: toAttributeDefinitions(news.attributes),
               BillingMode: desiredBillingMode,
-              SSESpecification: news.sseSpecification,
               WarmThroughput: news.warmThroughput,
-              DeletionProtectionEnabled: news.deletionProtectionEnabled,
               OnDemandThroughput: news.onDemandThroughput,
               ProvisionedThroughput: news.provisionedThroughput,
+            });
+            yield* waitForTableActive(session, tableName);
+          }
+
+          // Sync table-level on-demand maximums when declared.
+          if (
+            news.onDemandThroughput !== undefined &&
+            JSON.stringify(normalizeOnDemand(state.table.OnDemandThroughput)) !==
+              JSON.stringify(normalizeOnDemand(news.onDemandThroughput))
+          ) {
+            yield* session.note(`Table ${tableName}: updating on-demand throughput`);
+            yield* dynamodb.updateTable({
+              TableName: tableName,
+              OnDemandThroughput: news.onDemandThroughput,
+            });
+            yield* waitForTableActive(session, tableName);
+          }
+
+          // Sync server-side encryption. Omitting `sseSpecification` (or
+          // `Enabled: false`) means the default AWS owned key. A key given as
+          // an alias can't be matched against the observed key ARN, so only
+          // the encryption type is compared for it.
+          const desiredKms = news.sseSpecification?.Enabled === true;
+          const desiredKey = news.sseSpecification?.KMSMasterKeyId;
+          const observedKey = state.table.SSEDescription?.KMSMasterKeyArn;
+          const observedKms = isKmsEncrypted(state.table.SSEDescription);
+          const keyMatches =
+            desiredKey === undefined ||
+            desiredKey.startsWith("alias/") ||
+            observedKey === desiredKey ||
+            observedKey?.endsWith(`:key/${desiredKey}`) === true;
+          if (desiredKms !== observedKms || (desiredKms && !keyMatches)) {
+            yield* session.note(`Table ${tableName}: updating server-side encryption`);
+            yield* dynamodb.updateTable({
+              TableName: tableName,
+              SSESpecification: desiredKms ? news.sseSpecification : { Enabled: false },
             });
             yield* waitForTableActive(session, tableName);
           }
@@ -1910,13 +2168,16 @@ export const TableProvider = () =>
           // attributes reflect the post-reconcile cloud state.
           const final = yield* readTableState(tableName);
           if (!final) {
-            return yield* Effect.fail(new Error(`Failed to read reconciled table ${tableName}`));
+            return yield* new TableUnexpectedResponse({
+              message: `Failed to read reconciled table ${tableName}`,
+            });
           }
 
           yield* session.note(final.table.TableArn!);
 
           return {
             ...toAttrs(final),
+            ...(yield* observeTableConfiguration(final, news)),
             tags: desiredTags,
           };
         }),

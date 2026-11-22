@@ -1,18 +1,19 @@
 import * as Hetzner from "@alchemy.run/hetzner";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as servers from "@distilled.cloud/hetzner/servers";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../expectDeleteRefused.ts";
+import { hetznerPrimaryIps } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 
-const { test } = Test.make({ providers: Hetzner.providers() });
+const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const waitUntilGone = (id: number) =>
   servers.getServer({ id }).pipe(
@@ -57,7 +58,7 @@ test(
   { tags: ["provider:hetzner", "provider:hetzner:server", "live"] },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create, update, and delete a server",
   (stack) =>
     Effect.gen(function* () {
@@ -73,6 +74,10 @@ test.provider.skipIf(!hasHetznerCreds)(
           });
         }),
       );
+      yield* expectFound(Hetzner.Server.lookup({ name: created.name }), created, {
+        // Only the deploy that created the server holds its SSH key.
+        ignore: ["privateKey", "deploySshKeyId"],
+      });
 
       expect(created.id).toEqual(expect.any(Number));
       expect(created.serverId).toEqual(created.id);
@@ -122,6 +127,32 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(refetched.server?.labels.role).toEqual("web");
       expect(refetched.server?.public_net.ipv4?.ip).toEqual(created.ipv4);
 
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.Server("Web", {
+            serverType: "cpx12",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+            labels: { env: "prod", role: "web" },
+            deleteProtection: true,
+          });
+        }),
+      );
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, { logicalId: "Web", tag: "Hetzner.ServerDeleteProtected" });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.Server("Web", {
+            serverType: "cpx12",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+            labels: { env: "prod", role: "web" },
+            deleteProtection: false,
+          });
+        }),
+      );
+
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.id);
@@ -130,11 +161,10 @@ test.provider.skipIf(!hasHetznerCreds)(
   {
     tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
     timeout: 180_000,
-    exclusive: true,
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "replace when image changes",
   (stack) =>
     Effect.gen(function* () {
@@ -183,11 +213,10 @@ test.provider.skipIf(!hasHetznerCreds)(
   {
     tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
     timeout: 180_000,
-    exclusive: true,
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "list enumerates the deployed server",
   (stack) =>
     Effect.gen(function* () {
@@ -221,11 +250,10 @@ test.provider.skipIf(!hasHetznerCreds)(
   {
     tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
     timeout: 180_000,
-    exclusive: true,
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "runs a custom init script alongside the alchemy bootstrap",
   (stack) =>
     Effect.gen(function* () {
@@ -286,6 +314,5 @@ test.provider.skipIf(!hasHetznerCreds)(
   {
     tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
     timeout: 300_000,
-    exclusive: true,
   },
 );

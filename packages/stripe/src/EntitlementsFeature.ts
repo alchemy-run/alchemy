@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetEntitlementsFeatures,
   GetEntitlementsFeature,
@@ -74,8 +73,18 @@ export type EntitlementsFeature = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  EntitlementsFeatureLookup
 >;
+
+/**
+ * Props for {@link EntitlementsFeature.lookup}: find an entitlements feature this stack
+ * doesn't manage by its id.
+ */
+export interface EntitlementsFeatureLookup {
+  /** Stripe entitlements feature id, e.g. `"feat_61A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Entitlements Feature — a monetizable ability you attach to
@@ -125,6 +134,16 @@ export type EntitlementsFeature = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing entitlements feature
+ * `EntitlementsFeature.lookup` references an entitlements feature Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing entitlements feature
+ * ```typescript
+ * const ref = Stripe.EntitlementsFeature.lookup({ id: "feat_61A2b3C4d5E6f7G8h" });
+ * ```
+ *
  * @resource
  * @product Entitlements
  */
@@ -166,9 +185,7 @@ const toAttrs = (feature: StripeEntitlementsFeature): EntitlementsFeatureAttribu
 const isMissingFeature = isMissingStripeResource;
 
 const getById = (id: string) =>
-  GetEntitlementsFeature({ id }).pipe(
-    Effect.catchIf(isMissingFeature, () => Effect.succeed(undefined)),
-  );
+  GetEntitlementsFeature({ id }).pipe(Effect.catchIf(isMissingFeature, () => Effect.undefined));
 
 const listByArchived = Effect.fn(function* (archived: boolean) {
   const features: StripeEntitlementsFeature[] = [];
@@ -268,6 +285,11 @@ export const EntitlementsFeatureProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ id, output }) {
       const existing = yield* observe({
         id: output?.id,
@@ -321,11 +343,8 @@ export const EntitlementsFeatureProvider = () =>
           lookup_key: lookupKey,
           name,
           metadata,
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-entitlements-feature-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-entitlements-feature-${instanceId}`,
+        });
       }
 
       const observedMetadata = tagRecord(current.metadata);

@@ -357,7 +357,7 @@ const getPolicy = (
  * The policy body Alchemy sends. Unset fields stay `undefined`: they are
  * left out of the request and ignored by `matchesDesired`.
  */
-const desiredProperties = (news: BackupPolicyProps): backup.ProtectionPolicy => ({
+const desiredProperties = (news: BackupPolicyProps) => ({
   backupManagementType: news.backupManagementType,
   // AzureWorkload policies carry the time zone inside `settings`.
   timeZone: news.backupManagementType === "AzureWorkload" ? undefined : (news.timeZone ?? "UTC"),
@@ -442,7 +442,9 @@ export const BackupPolicyProvider = () =>
           resourceGroupName: resourceGroup,
           vaultName: vault,
           policyName: name,
-          properties: desired,
+          // `backupManagementType` is only known at runtime and decides the
+          // arm, so the arm is asserted rather than narrowed.
+          properties: desired as backup.ProtectionPolicy,
         });
       }
 

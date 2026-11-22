@@ -1,8 +1,8 @@
-import type { AzureOpError } from "@distilled.cloud/azure";
 import type * as certificates from "@distilled.cloud/azure/keyvault-certificates";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { CertificateError } from "./CertificateTypes.ts";
 import type { Vault } from "./Vault.ts";
 
 /** Options of {@link WriteCertificatesClient.create}. */
@@ -42,29 +42,33 @@ export interface WriteCertificatesClient {
   create(
     certificateName: string,
     options?: CertificateCreateOptions,
-  ): Effect.Effect<certificates.CertificateOperation, AzureOpError, RuntimeContext>;
+  ): Effect.Effect<certificates.CertificateOperation, CertificateError, RuntimeContext>;
   /** Import a PFX (base64) or PEM certificate that contains its private key. */
   import(
     certificateName: string,
     options: CertificateImportOptions,
-  ): Effect.Effect<certificates.CertificateBundle, AzureOpError, RuntimeContext>;
+  ): Effect.Effect<certificates.CertificateBundle, CertificateError, RuntimeContext>;
   /** Update a version's attributes and tags (the latest version by default). */
   update(
     certificateName: string,
     options: CertificateUpdateOptions,
-  ): Effect.Effect<certificates.CertificateBundle, AzureOpError, RuntimeContext>;
+  ): Effect.Effect<certificates.CertificateBundle, CertificateError, RuntimeContext>;
   /** Update the certificate's management policy (applies to the next version). */
   updatePolicy(
     certificateName: string,
     policy: CertificatePolicyUpdate,
-  ): Effect.Effect<certificates.CertificatePolicy, AzureOpError, RuntimeContext>;
+  ): Effect.Effect<certificates.CertificatePolicy, CertificateError, RuntimeContext>;
   /**
    * Delete every version of a certificate (a soft delete on vaults with
    * soft-delete); `undefined` when it does not exist.
    */
   delete(
     certificateName: string,
-  ): Effect.Effect<certificates.DeletedCertificateBundle | undefined, AzureOpError, RuntimeContext>;
+  ): Effect.Effect<
+    certificates.DeletedCertificateBundle | undefined,
+    CertificateError,
+    RuntimeContext
+  >;
 }
 
 /**

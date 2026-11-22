@@ -1,12 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as aisearch from "@distilled.cloud/cloudflare/aisearch";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { stageSuffix } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -75,7 +76,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const user = (process.env.USER ?? "test").toLowerCase();
+      const user = stageSuffix();
       const renamed = `${user}-alchemy-aisearch-token-renamed`;
 
       yield* stack.destroy();
@@ -124,7 +125,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const user = (process.env.USER ?? "test").toLowerCase();
+      const user = stageSuffix();
 
       yield* stack.destroy();
 
@@ -225,7 +226,9 @@ test.provider(
         .readInstance({ accountId, id: deployed.instance.instanceId })
         .pipe(
           Effect.retry({
-            while: (e) => e._tag === "Forbidden",
+            while: (e) =>
+              // A fresh instance can read as missing for a moment.
+              e._tag === "Forbidden" || e._tag === "AiSearchInstanceNotFound",
             schedule: propagationSchedule,
             times: 15,
           }),

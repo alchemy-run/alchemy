@@ -7,10 +7,12 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { SecurityGroupArn, SecurityGroupId, SecurityGroupRuleData } from "./SecurityGroup.ts";
 import {
   declaredSecurityGroupRuleIds,
+  persistedSecurityGroupRuleIds,
   expandSecurityGroupRules,
   observedSecurityGroupRuleKey,
   resolveSecurityGroupRules,
@@ -287,7 +289,7 @@ export const DefaultSecurityGroupProvider = () =>
         return {
           groupId: group.GroupId as SecurityGroupId,
           groupArn:
-            `arn:aws:ec2:${region}:${accountId}:security-group/${group.GroupId}` as SecurityGroupArn,
+            `arn:${partitionOf(region)}:ec2:${region}:${accountId}:security-group/${group.GroupId}` as SecurityGroupArn,
           groupName: group.GroupName!,
           description: group.Description!,
           vpcId: group.VpcId as VpcId,
@@ -441,7 +443,14 @@ export const DefaultSecurityGroupProvider = () =>
           if (!vpcId) return undefined;
           const group = yield* describeGroup(vpcId);
           if (!group?.GroupId) return undefined;
-          return yield* toAttrs(group, yield* describeRules(group.GroupId as SecurityGroupId));
+          // Rules declared as separate SecurityGroupRule resources are theirs,
+          // not the group's (reconcile leaves them out of its attributes too).
+          const owned = yield* persistedSecurityGroupRuleIds(group.GroupId);
+          const rules = yield* describeRules(group.GroupId as SecurityGroupId);
+          return yield* toAttrs(
+            group,
+            rules.filter((rule) => !owned.has(rule.SecurityGroupRuleId!)),
+          );
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
@@ -514,7 +523,7 @@ export const DefaultSecurityGroupProvider = () =>
             }),
           );
           yield* session.note(`Reconciled default security group: ${groupId}`);
-          return yield* toAttrs(group, finalRules);
+          return yield* toAttrs(group, inlineRules(finalRules));
         }),
 
         // AWS owns the default group. Intentionally leave it and its rules as-is.

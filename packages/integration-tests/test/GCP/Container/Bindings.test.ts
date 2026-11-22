@@ -1,11 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as container from "@distilled.cloud/gcp/container_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import ContainerBindingsHost, {
   App,
   slow,
@@ -30,8 +30,8 @@ let zonalPool: { nodePoolId: string };
  */
 const expectProjectGrants = Effect.gen(function* () {
   const policy = yield* crm.getIamPolicyProjects({
+    options: { requestedPolicyVersion: 3 },
     resource: `projects/${project}`,
-    body: { options: { requestedPolicyVersion: 3 } },
   });
   const roles = (policy.bindings ?? [])
     .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
@@ -39,7 +39,7 @@ const expectProjectGrants = Effect.gen(function* () {
   expect(roles).toEqual([{ role: "roles/container.clusterViewer", condition: undefined }]);
 });
 
-describe.skipIf(!dockerAvailable || !slow)(
+describe.skipIf(!slow)(
   "Container Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:container", "provider:gcp:run", "live"],

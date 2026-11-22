@@ -96,27 +96,36 @@ export class CredentialsRequired extends Data.TaggedError("CredentialsRequired")
 }
 
 /**
- * Live providers resolve credentials lazily, on their first cloud call, and
- * a failed resolution leaves the credential service as a
- * {@link CredentialsUnavailable} defect. Applied around every provider
+ * Live providers resolve credentials lazily, on their first cloud call. A
+ * failed resolution fails (or, for alchemy services typed as never failing,
+ * dies) with {@link CredentialsUnavailable}. Applied around every provider
  * lifecycle call, this fails the operation with {@link CredentialsRequired}
- * naming the resource instead of treating it as a provider crash.
+ * naming the resource instead.
  */
-export const failCredentialsRequired =
-  (fqn: string) =>
-  <A, E, R>(self: Effect.Effect<A, E, R>) =>
-    Effect.catchDefect(self, (defect) =>
-      Schema.is(CredentialsUnavailable)(defect)
-        ? Effect.fail(
-            new CredentialsRequired({
-              provider: defect.provider,
-              resources: [fqn],
-              reason: "runs against the real cloud",
-              message: defect.message,
-            }),
-          )
-        : Effect.die(defect),
+export const failCredentialsRequired = (fqn: string) =>
+  Effect.fn(function* <A, E, R>(self: Effect.Effect<A, E, R>) {
+    const isUnavailable = Schema.is(CredentialsUnavailable);
+    // Annotated: the catch handler returns this or a re-fail of E, and a
+    // union of Effects does not unify on its own.
+    const required = (
+      unavailable: CredentialsUnavailable,
+    ): Effect.Effect<never, E | CredentialsRequired> =>
+      Effect.fail(
+        new CredentialsRequired({
+          provider: unavailable.provider,
+          resources: [fqn],
+          reason: "runs against the real cloud",
+          message: unavailable.message,
+        }),
+      );
+    return yield* self.pipe(
+      // oxlint-disable-next-line effecttsgo/catch-conditional-refail-to-catch-if -- catchIf cannot narrow a generic E
+      Effect.catch((error) => (isUnavailable(error) ? required(error) : Effect.fail(error))),
+      Effect.catchDefect((defect) =>
+        isUnavailable(defect) ? required(defect) : Effect.die(defect),
+      ),
     );
+  });
 
 const describeReason = (reason: CredentialDemandReason): string => {
   switch (reason) {

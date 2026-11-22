@@ -1,0 +1,23 @@
+{
+  // Checks alchemy's emitted `lib/*.d.ts`, the files the published package
+  // serves to TypeScript, not its `src` (#3119). Loads no workerd globals, so
+  // `raw` falls back to the module export. Imports core alone:
+  // @alchemy.run/cloudflare loads `Phase.d.ts`, which would hide a global that
+  // stopped shipping next to `NativeDurableObjectState`.
+  "extends": "../../../../../../../../tsconfig.base.json",
+  "include": ["module.ts"],
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "target": "ESNext",
+    "lib": ["ES2023", "DOM"],
+    "types": [],
+    "paths": {
+      "alchemy/*": ["../../../../../../../alchemy/lib/*.d.ts"]
+    }
+  },
+  "references": [{ "path": "../../../../../../../alchemy/tsconfig.json" }]
+}

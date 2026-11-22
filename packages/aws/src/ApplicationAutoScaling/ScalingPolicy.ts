@@ -7,6 +7,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { plainJson } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import { SERVICE_NAMESPACES, retryWhileTargetPropagates } from "./internal.ts";
 
@@ -88,6 +89,16 @@ export interface ScalingPolicy extends Resource<
      * a target tracking policy.
      */
     alarms: { alarmName: string; alarmArn: string }[];
+    /**
+     * Target-tracking configuration, as observed. Lets `alchemy drift`
+     * detect out-of-band changes.
+     */
+    targetTracking?: unknown;
+    /**
+     * Step-scaling configuration, as observed. Lets `alchemy drift` detect
+     * out-of-band changes.
+     */
+    stepScaling?: unknown;
   },
   never,
   Providers
@@ -237,6 +248,8 @@ export const ScalingPolicyProvider = () =>
           alarmName: alarm.AlarmName,
           alarmArn: alarm.AlarmARN,
         })),
+        targetTracking: plainJson(policy.TargetTrackingScalingPolicyConfiguration),
+        stepScaling: plainJson(policy.StepScalingPolicyConfiguration),
       });
 
       return {

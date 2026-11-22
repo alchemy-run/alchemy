@@ -216,11 +216,11 @@ export type Key = Resource<
 export const Key = Resource<Key>("GCP.ApiKeys.Key");
 
 export class KeyNotResolved extends Data.TaggedError("GCP.ApiKeys.KeyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class KeyStillExists extends Data.TaggedError("GCP.ApiKeys.KeyStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -363,12 +363,12 @@ const toAttrs = (key: apikeys.V2Key, project: string, keyString?: string): Key["
 const getByName = (name: string) =>
   apikeys
     .getProjectsLocationsKeys({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const getKeyStringValue = (name: string) =>
   apikeys.getKeyStringProjectsLocationsKeys({ name }).pipe(
     Effect.map((response) => response.keyString),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const toAttrsLive = (key: apikeys.V2Key, project: string) =>
@@ -381,7 +381,9 @@ const toAttrsLive = (key: apikeys.V2Key, project: string) =>
 const waitUntilActive = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((key) =>
-      key && !isDeleted(key) ? Effect.succeed(key) : Effect.fail(new KeyNotResolved({ name })),
+      key && !isDeleted(key)
+        ? Effect.succeed(key)
+        : Effect.fail(new KeyNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ApiKeys.KeyNotResolved",
@@ -393,7 +395,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((key) =>
-      key === undefined || isDeleted(key) ? Effect.void : Effect.fail(new KeyStillExists({ name })),
+      key === undefined || isDeleted(key)
+        ? Effect.void
+        : Effect.fail(new KeyStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ApiKeys.KeyStillExists",
@@ -406,7 +410,7 @@ const reviveDeleted = (name: string) =>
   Effect.gen(function* () {
     const operation = yield* apikeys
       .undeleteProjectsLocationsKeys({ name, body: {} })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     if (operation !== undefined) {
       yield* waitForOperation(operation);
     }
@@ -495,12 +499,8 @@ export const KeyProvider = () =>
 
       if (current === undefined || isDeleted(current)) {
         const created = yield* apikeys
-          .createProjectsLocationsKeys({
-            parent,
-            keyId,
-            body: toCreateBody(news, desiredAnnotations),
-          })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .createProjectsLocationsKeys({ ...toCreateBody(news, desiredAnnotations), parent, keyId })
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -514,7 +514,7 @@ export const KeyProvider = () =>
       }
 
       if (current === undefined || isDeleted(current)) {
-        return yield* new KeyNotResolved({ name });
+        return yield* new KeyNotResolved({ resourceName: name });
       }
 
       const observedAnnotations = tagRecord(current.annotations);
@@ -533,15 +533,12 @@ export const KeyProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* apikeys.patchProjectsLocationsKeys({
+          etag: current.etag,
+          annotations: desiredAnnotations,
+          displayName: news.displayName,
+          restrictions: news.restrictions ?? {},
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            etag: current.etag,
-            annotations: desiredAnnotations,
-            displayName: news.displayName,
-            restrictions: news.restrictions ?? {},
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilActive(name);
@@ -562,7 +559,7 @@ export const KeyProvider = () =>
             times: 8,
             schedule: Schedule.spaced("1 second"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

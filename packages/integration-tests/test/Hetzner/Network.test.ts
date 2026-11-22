@@ -1,17 +1,17 @@
 import * as Hetzner from "@alchemy.run/hetzner";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as networks from "@distilled.cloud/hetzner/networks";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../expectDeleteRefused.ts";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const waitUntilGone = (id: number) =>
   networks.getNetwork({ id }).pipe(
@@ -24,7 +24,7 @@ const waitUntilGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create, update, and delete a network",
   (stack) =>
     Effect.gen(function* () {
@@ -45,6 +45,7 @@ test.provider.skipIf(!hasHetznerCreds)(
           });
         }),
       );
+      yield* expectFound(Hetzner.Network.lookup({ name: created.name }), created);
 
       expect(created.networkId).toEqual(expect.any(Number));
       expect(created.name).toEqual(expect.any(String));
@@ -123,6 +124,35 @@ test.provider.skipIf(!hasHetznerCreds)(
         { destination: "10.10.0.0/24", gateway: "10.0.1.2" },
       ]);
 
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "Vpc",
+        tag: "Hetzner.NetworkDeleteProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.Network("Vpc", {
+            ipRange: "10.0.0.0/16",
+            subnets: [
+              {
+                type: "cloud",
+                ipRange: "10.0.1.0/24",
+                networkZone: "eu-central",
+              },
+              {
+                type: "cloud",
+                ipRange: "10.0.2.0/24",
+                networkZone: "eu-central",
+              },
+            ],
+            routes: [{ destination: "10.10.0.0/24", gateway: "10.0.1.2" }],
+            exposeRoutesToVswitch: true,
+            deleteProtection: false,
+            labels: { env: "prod", role: "vpc" },
+          });
+        }),
+      );
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.networkId);
@@ -134,7 +164,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "replace when ip range is not a supernet",
   (stack) =>
     Effect.gen(function* () {
@@ -194,7 +224,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "list enumerates the deployed network",
   (stack) =>
     Effect.gen(function* () {
@@ -229,6 +259,51 @@ test.provider.skipIf(!hasHetznerCreds)(
     }).pipe(logLevel),
   {
     tags: ["provider:hetzner", "provider:hetzner:network", "provider:hetzner:service", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "a subnet without a range gets the first free /24 and redeploys unchanged",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const network = Effect.gen(function* () {
+        return yield* Hetzner.Network("AutoSubnet", {
+          ipRange: "10.30.0.0/16",
+          subnets: [{ type: "cloud", networkZone: "eu-central" }],
+        });
+      });
+      const deployed = yield* stack.deploy(network);
+
+      const live = yield* networks.getNetwork({ id: deployed.networkId });
+      expect(live.network?.subnets).toEqual([
+        expect.objectContaining({
+          type: "cloud",
+          ip_range: "10.30.0.0/24",
+          network_zone: "eu-central",
+        }),
+      ]);
+
+      // The range Hetzner picked satisfies the subnet: nothing to update.
+      const plan = yield* stack.plan(network);
+      expect(
+        Object.values(plan.resources).filter((r: { action: string }) => r.action !== "noop"),
+      ).toEqual([]);
+
+      // A reconcile keeps the one subnet rather than adding another.
+      yield* stack.deploy(network);
+      const after = yield* networks.getNetwork({ id: deployed.networkId });
+      expect(after.network?.subnets).toHaveLength(1);
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(deployed.networkId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: ["provider:hetzner", "provider:hetzner:network", "live"],
     timeout: 120_000,
   },
 );

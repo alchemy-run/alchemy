@@ -1,11 +1,13 @@
 import * as AWS from "@alchemy.run/aws";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../../expectDeleteRefused.ts";
+import { interruptDestroy } from "../../interruptDestroy.ts";
 import NeptuneGraphTestFunctionLive, { FixtureGraph, NeptuneGraphTestFunction } from "./handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -81,7 +83,7 @@ const assertGraphGone = (graphId: string) =>
 // Lambda running openCypher through the ExecuteQuery binding — is skipped
 // under `--fast` and always destroys what it created.
 test.provider.skipIf(!!process.env.FAST)(
-  "create graph, query it from Lambda via ExecuteQuery, destroy",
+  "create graph, query it from Lambda via ExecuteQuery, destroy through an interruption",
   (stack) =>
     Effect.gen(function* () {
       // Clean slate in case a previous run died mid-flight.
@@ -177,8 +179,40 @@ test.provider.skipIf(!!process.env.FAST)(
       const snapshots = (yield* getJson("/snapshots")) as { graphSnapshots: unknown[] };
       expect(Array.isArray(snapshots.graphSnapshots)).toBe(true);
 
-      // Destroy immediately — the graph bills while it exists — and verify
-      // it is fully gone out-of-band.
+      // Deletion protection turned on outside the stack refuses the destroy:
+      // the provider never lifts it. Turn it off the same way, then destroy.
+      const setDeletionProtection = (enabled: boolean) =>
+        neptunegraph
+          .updateGraph({ graphIdentifier: graph.graphId, deletionProtection: enabled })
+          .pipe(
+            Effect.andThen(
+              neptunegraph.getGraph({ graphIdentifier: graph.graphId }).pipe(
+                Effect.repeat({
+                  schedule: Schedule.spaced("5 seconds"),
+                  until: (observed) =>
+                    observed.status === "AVAILABLE" && observed.deletionProtection === enabled,
+                  times: 60,
+                }),
+              ),
+            ),
+          );
+      yield* setDeletionProtection(true);
+      yield* expectDeleteRefused(stack, {
+        logicalId: "FixtureGraph",
+        tag: "GraphDeletionProtected",
+      });
+      yield* setDeletionProtection(false);
+
+      // Destroy immediately — the graph bills while it exists. The destroy is
+      // interrupted once the graph is DELETING, so the next one has to finish
+      // a delete already under way. Then verify the graph is gone out-of-band.
+      yield* interruptDestroy(stack, {
+        status: neptunegraph
+          .getGraph({ graphIdentifier: graph.graphId })
+          .pipe(Effect.map((observed) => observed.status)),
+        deleting: "DELETING",
+        times: 90,
+      });
       yield* stack.destroy();
       yield* assertGraphGone(graph.graphId);
     }),

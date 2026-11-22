@@ -1,8 +1,8 @@
-import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import type { CommandError, UrlMissing } from "./Errors.ts";
 import { command, commandPipeline } from "./Protocol.ts";
 import type { Arg, Reply } from "./Resp.ts";
+import type { RuntimeContext } from "./RuntimeContext.ts";
 
 /**
  * A Redis URL that resolves from the Function/Service environment at
@@ -139,7 +139,8 @@ export interface ReadWriteClient extends Client {}
 const asString = (value: unknown): string => {
   if (typeof value === "string") return value;
   if (value == null) return "";
-  return String(value);
+  // RESP scalars (integers, bigints, booleans) coerce to their text form.
+  return String(value as number | bigint | boolean);
 };
 
 const asNullableString = (value: unknown): string | null => {

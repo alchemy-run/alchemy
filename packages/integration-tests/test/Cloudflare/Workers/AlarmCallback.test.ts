@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { inMemoryState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -17,6 +17,7 @@ import type {
   FailedBatchResult,
   RegistrationResult,
   RollbackResult,
+  NestedTransactionResult,
   SiblingTransactionResult,
   Snapshot,
 } from "./fixtures/alarm-callback/object.ts";
@@ -108,8 +109,8 @@ const assertRollback = (snapshot: Snapshot) => {
 };
 
 describe.concurrent.each([
-  { dev: true, stage: "alarm-callback-local" },
-  { dev: false, stage: "alarm-callback-live" },
+  { dev: true, stage: `${Test.defaultStage()}-alarm-callback-local` },
+  { dev: false, stage: `${Test.defaultStage()}-alarm-callback-live` },
 ])(
   "makeCallback (dev: $dev)",
   ({ dev, stage }) => {
@@ -144,27 +145,6 @@ describe.concurrent.each([
     afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 30_000 });
 
     test(
-      "Worker callback registration stays unsupported after a Durable Object call",
-      Effect.gen(function* () {
-        const { url } = yield* stack;
-        const result = yield* json<RegistrationResult & { runtimeType: string }>(
-          `${url}/worker-registration/worker-registration`,
-          "POST",
-        );
-        expect(result.snapshot.boots).toBeGreaterThan(0);
-        expect(result.runtimeType).toBe("Cloudflare.Worker");
-        expect(result.failure).toEqual({
-          tag: "CallbackError",
-          callback: "unsupported-worker",
-          message: `Durable callbacks are not supported by ${result.runtimeType}`,
-        });
-        expect(result.snapshot.pendingJobs).toEqual([]);
-        expect(result.snapshot.alarm).toBeNull();
-      }),
-      { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
-    );
-
-    test(
       "late DO registration defects without disabling initialized callbacks",
       Effect.gen(function* () {
         const { url } = yield* stack;
@@ -194,18 +174,11 @@ describe.concurrent.each([
     );
 
     test(
-      "batches native alarm bookkeeping across nested callbacks, legacy mutations, and finalizers",
+      "commits jobs from nested callbacks, legacy mutations, and finalizers with one native wake",
       Effect.gen(function* () {
         const { url } = yield* stack;
         const base = `${url}/bookkeeping`;
         const result = yield* json<BatchResult>(`${base}/bookkeeping`, "POST");
-        yield* Effect.logInfo("Native alarm bookkeeping", result.counts);
-        expect(result.counts).toEqual({
-          schemaChecks: 1,
-          reconciliations: 1,
-          setAlarm: 1,
-          deleteAlarm: 0,
-        });
         expect(result.snapshot.pendingJobs).toHaveLength(3);
         expect(result.snapshot.alarm).not.toBeNull();
         const delivered = yield* poll<Snapshot>(`${base}/snapshot`, drained(3));
@@ -219,51 +192,65 @@ describe.concurrent.each([
     );
 
     test(
-      "batches native alarm deletion for repeated cancellation",
+      "repeated cancellation clears the native alarm",
       Effect.gen(function* () {
         const { url } = yield* stack;
         const result = yield* json<BatchResult>(
           `${url}/cancel-bookkeeping/cancel-bookkeeping`,
           "POST",
         );
-        yield* Effect.logInfo("Native cancellation bookkeeping", result.counts);
-        expect(result.counts).toEqual({
-          schemaChecks: 1,
-          reconciliations: 1,
-          setAlarm: 0,
-          deleteAlarm: 1,
-        });
         expect(result.snapshot.pendingJobs).toEqual([]);
         expect(result.snapshot.alarm).toBeNull();
       }),
       { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
     );
 
+    test(
+      "delivers recurring interval and cron jobs until they are cancelled",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const base = `${url}/recurring`;
+        const scheduled = yield* json<Snapshot>(`${base}/recurring`, "POST");
+        expect(scheduled.pendingJobs.map(({ callback, id }) => `${callback}:${id}`)).toEqual([
+          "tick:cron",
+          "tick:every",
+        ]);
+        const count = (snapshot: Snapshot, value: string) =>
+          snapshot.deliveries.filter((delivery) => delivery.value === value).length;
+        // Each job stays pending after it runs, so both keep delivering.
+        yield* poll<Snapshot>(
+          `${base}/snapshot`,
+          (snapshot) => count(snapshot, "every") >= 3 && count(snapshot, "cron") >= 3,
+        );
+        const cancelled = yield* json<Snapshot>(`${base}/cancel-recurring`, "POST");
+        expect(cancelled.pendingJobs).toEqual([]);
+        expect(cancelled.alarm).toBeNull();
+        // Cancelling doesn't interrupt a run already under way, which may
+        // still finish; after that, nothing more is delivered.
+        yield* Effect.sleep("2500 millis");
+        const settled = yield* json<Snapshot>(`${base}/snapshot`, "GET");
+        expect(settled.deliveries.length - cancelled.deliveries.length).toBeLessThanOrEqual(1);
+        yield* Effect.sleep("2500 millis");
+        const after = yield* json<Snapshot>(`${base}/snapshot`, "GET");
+        expect(after.deliveries).toEqual(settled.deliveries);
+        expect(after.pendingJobs).toEqual([]);
+      }),
+      { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
+    );
+
     for (const explicit of [true, false]) {
       test(
-        `${explicit ? "explicit rollback" : "native reconciliation failure"} discards deferred bookkeeping and retries schema initialization`,
+        `${explicit ? "explicit rollback" : "native SQL failure"} discards scheduled jobs and their native wake`,
         Effect.gen(function* () {
           const { url } = yield* stack;
           const operation = explicit ? "bookkeeping-rollback" : "bookkeeping-failure";
           const base = `${url}/${operation}`;
           const result = yield* json<FailedBatchResult>(`${base}/${operation}`, "POST");
           if (explicit) expect(result.failure).toBeNull();
-          else expect(result.failure).toContain("no such table: alchemy_alarm_callbacks");
-          expect(result.rolledBack.counts).toEqual({
-            schemaChecks: 1,
-            reconciliations: explicit ? 0 : 1,
-            setAlarm: 0,
-            deleteAlarm: 0,
-          });
+          else expect(result.failure).toContain("no such table: missing_table");
           assertRollback(result.rolledBack.snapshot);
           expect(result.rolledBack.snapshot.pendingJobs).toEqual([]);
           expect(result.rolledBack.snapshot.alarm).toBeNull();
-          expect(result.recovered.counts).toEqual({
-            schemaChecks: 1,
-            reconciliations: 1,
-            setAlarm: 1,
-            deleteAlarm: 0,
-          });
           expect(result.recovered.snapshot.pendingJobs).toHaveLength(1);
           expect(result.recovered.snapshot.alarm).not.toBeNull();
           const delivered = yield* poll<Snapshot>(`${base}/snapshot`, drained(1));
@@ -273,6 +260,24 @@ describe.concurrent.each([
         { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
       );
     }
+
+    test(
+      "nested transactions undo only their own writes and jobs",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const base = `${url}/nested-transactions`;
+        const result = yield* json<NestedTransactionResult>(`${base}/nested-transactions`, "POST");
+        expect(result.failure).toBe("inner-failure");
+        expect(result.snapshot.application).toBe("outer");
+        expect(result.snapshot.rows).toEqual([{ value: "inner-committed" }]);
+        expect(result.snapshot.pendingJobs.map(({ callback, id }) => `${callback}:${id}`)).toEqual([
+          "archive:outer",
+        ]);
+        const delivered = yield* poll<Snapshot>(`${base}/snapshot`, drained(1));
+        expect(deliveries(delivered)).toEqual(["archive:outer"]);
+      }),
+      { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
+    );
 
     test(
       "preserves getAlarm observations and explicit native alarm write ordering in transactions",

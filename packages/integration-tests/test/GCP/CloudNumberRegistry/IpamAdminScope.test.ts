@@ -1,9 +1,10 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cnr from "@distilled.cloud/gcp/cloudnumberregistry_v1alpha";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import {
   location,
   logLevel,
@@ -76,6 +77,13 @@ test.provider.skipIf(!runLifecycle)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.CloudNumberRegistry.IpamAdminScope.lookup({
+          ipamAdminScopeId: created.ipamAdminScopeId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.ipamAdminScopeId).toEqual(expect.any(String));

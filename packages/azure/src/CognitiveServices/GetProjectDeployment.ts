@@ -46,7 +46,7 @@ export interface GetProjectDeployment extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetProjectDeploymentRequest,
-    ) => Effect.Effect<projects.Deployment, projects.GetDeploymentError, RuntimeContext>
+    ) => Effect.Effect<projects.GetDeploymentResponse, projects.GetDeploymentError, RuntimeContext>
   >
 > {}
 

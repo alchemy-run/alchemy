@@ -2,8 +2,12 @@ import type { DockerImagePublicationError } from "@alchemy.run/docker/RegistryEr
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-export const retryContainerPublication = <A, R>(
-  publication: Effect.Effect<A, DockerImagePublicationError, R>,
+/**
+ * Retries an image build or push on transient registry errors. It never
+ * imposes a deadline: a build or push takes as long as the image needs.
+ */
+export const retryContainerPublication = <A, E extends DockerImagePublicationError, R>(
+  publication: Effect.Effect<A, E, R>,
 ) =>
   Effect.retry(publication, {
     while: (error) =>

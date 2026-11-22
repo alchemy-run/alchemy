@@ -1,0 +1,83 @@
+---
+title: What is Better Auth?
+description: The concepts behind Better Auth — the auth server, users, accounts, sessions and cookies, sign-in providers, the signing secret, the database and its migrations, and middleware — and how @alchemy.run/better-auth models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+
+[Better Auth](https://better-auth.com) is a TypeScript library that runs sign-in inside your own app. Your users, their sessions and their linked accounts live in your own database, not a third party's, and the routes that sign people in and out are served by your own server.
+
+Take one small app: a Worker with email and password sign-in, GitHub sign-in, and an API that only signed-in users may call. A browser signs in through the auth routes. Better Auth checks the credentials, stores a session in your database and sets a cookie. Your API's middleware reads the cookie and gives each handler the current user.
+
+<Tree
+  nodes={[
+    { id: "app", label: "Api", type: "your Worker or Lambda", icon: "brand:betterauth", areas: ["routes", "mw", "api"], phoneAreas: ["routes routes", "mw api"], colGap: 2.5 },
+    { id: "routes", label: "/api/auth/*", type: "auth routes", parent: "app", tone: "accent", icon: "log-in" },
+    { id: "mw", label: "middleware", type: "current user", parent: "app", icon: "shield-check" },
+    { id: "api", label: "/api/notes", type: "your handler", parent: "app", icon: "file-code" },
+    { id: "db", label: "AuthDb", type: "your database", icon: "database", areas: ["user", "session"], phoneAreas: ["user session"] },
+    { id: "user", label: "user", type: "table", parent: "db", icon: "table" },
+    { id: "session", label: "session", type: "table", parent: "db", icon: "table" },
+  ]}
+  areas={["app db"]}
+  colGap={4}
+  links={[
+    { from: "routes", to: "db", label: "writes" },
+    { from: "mw", to: "db", label: "reads" },
+    { from: "mw", to: "api", label: "then" },
+  ]}
+  caption="Better Auth runs inside your app and keeps its tables in your database. Signing in from the browser writes a session cookie, and every later request's middleware reads the session back before your handler runs."
+/>
+
+## The auth server
+
+Better Auth is an **auth server** you configure in code: which sign-in methods to offer, where its routes live, which plugins to add. It serves its own routes, under a base path like `/api/auth`, for signing up, signing in, signing out and reading the session.
+
+In Alchemy, you create it with `BetterAuth` and expose it as an Effect service your handlers can ask for:
+
+```typescript title="src/auth.ts"
+const makeAuth = BetterAuth({ basePath: "/api/auth", emailAndPassword: { enabled: true } });
+```
+
+## Users, accounts and sessions
+
+Better Auth keeps a few tables. A **user** is a person. An **account** links a user to a way of signing in: a password, or a GitHub identity. A **session** records that a user is signed in on one device, until it expires or they sign out. A **verification** row holds short-lived tokens, like an email confirmation.
+
+Because one user can have several accounts, a person who signed up with a password can later sign in with GitHub and stay the same user.
+
+## Sessions and cookies
+
+Signing in creates a session and sets a **cookie** in the browser. Every later request carries the cookie, and the server looks up its session to know who's asking. The cookie is signed with a **secret**, so it can't be forged.
+
+Alchemy creates that secret for you and keeps it stable across deploys, so sessions survive a redeploy.
+
+## Sign-in providers
+
+A **sign-in provider** is a way to prove who you are. **Email and password** keeps the password hash in your database. **OAuth providers**, like GitHub, Google or Microsoft, send the user to that service to sign in and back to your app with their identity. Each OAuth provider needs an app registered with it, whose client id and secret your server holds.
+
+See [Sign-in providers](/better-auth/sign-in-providers).
+
+## The database and migrations
+
+Better Auth needs a database for its tables, and it works with many. In Alchemy, the database is a Layer you provide to the Auth service, so the same service runs on D1, Neon, Postgres, Aurora or SQLite by changing one line.
+
+Its tables are created and updated on deploy, as migrations, so there's no schema to set up by hand.
+
+See [Databases](/better-auth/databases) and [Migrations](/better-auth/guides/migrations).
+
+## Middleware and the current user
+
+An API that needs a signed-in user asks for one from **middleware**: code that runs before the handler, reads the session from the request, and either provides the user or rejects the request. Handlers then just read the current user.
+
+See [HTTP API middleware](/better-auth/guides/http-api-middleware).
+
+## Plugins
+
+Better Auth grows through **plugins**: two-factor sign-in, passkeys, organizations, API keys and more. A plugin can add routes and tables, and its tables are migrated like the rest.
+
+## How @alchemy.run/better-auth models these concepts
+
+The auth server is an Effect service, built by `BetterAuth` with your options. Its database is a Layer you choose. Its secret is created and kept stable for you, its tables are migrated on deploy, and OAuth credentials come in through config bindings. Middleware turns a request into the current user for your Effect HTTP handlers. Everything else, every option and plugin, is Better Auth's own, documented at [better-auth.com](https://better-auth.com/docs).
+
+Next, build one: the [tutorial](/better-auth/tutorial/part-1) puts these ideas to work, one step at a time.

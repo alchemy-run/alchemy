@@ -209,7 +209,7 @@ export type Pipeline = Resource<
 export const Pipeline = Resource<Pipeline>("GCP.DataPipelines.Pipeline");
 
 export class PipelineNotResolved extends Data.TaggedError("GCP.DataPipelines.PipelineNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -347,24 +347,22 @@ export const PipelineProvider = () =>
       if (current === undefined) {
         const created = yield* datapipelines
           .createProjectsLocationsPipelines({
+            name,
+            displayName,
+            type,
+            state,
+            scheduleInfo,
+            schedulerServiceAccountEmail,
+            workload,
+            pipelineSources,
             parent,
-            body: {
-              name,
-              displayName,
-              type,
-              state,
-              scheduleInfo,
-              schedulerServiceAccountEmail,
-              workload,
-              pipelineSources,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getPipeline(name)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new PipelineNotResolved({ name });
+        return yield* new PipelineNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -385,14 +383,12 @@ export const PipelineProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* datapipelines.patchProjectsLocationsPipelines({
+          displayName,
+          scheduleInfo,
+          schedulerServiceAccountEmail,
+          workload,
           name: currentName,
           updateMask,
-          body: {
-            displayName,
-            scheduleInfo,
-            schedulerServiceAccountEmail,
-            workload,
-          },
         });
       }
 
@@ -408,7 +404,7 @@ export const PipelineProvider = () =>
             Effect.flatMap((row) =>
               row !== undefined
                 ? Effect.succeed(row)
-                : new PipelineNotResolved({ name: currentName }),
+                : new PipelineNotResolved({ resourceName: currentName }),
             ),
           );
       }

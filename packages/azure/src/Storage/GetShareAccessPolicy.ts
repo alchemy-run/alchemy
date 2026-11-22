@@ -45,8 +45,14 @@ export interface GetShareAccessPolicy extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetShareAccessPolicyRequest,
-    ) => Effect.Effect<files.GetShareAccessPolicyResponse, files.GetShareAccessPolicyError, RuntimeContext>
+    ) => Effect.Effect<
+      files.GetShareAccessPolicyResponse,
+      files.GetShareAccessPolicyError,
+      RuntimeContext
+    >
   >
 > {}
 
-export const GetShareAccessPolicy = Binding.Service<GetShareAccessPolicy>("Azure.Storage.GetShareAccessPolicy");
+export const GetShareAccessPolicy = Binding.Service<GetShareAccessPolicy>(
+  "Azure.Storage.GetShareAccessPolicy",
+);

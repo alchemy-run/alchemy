@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -126,8 +127,18 @@ export interface AccessPoint extends Resource<
     accountId: AccountID;
   },
   never,
-  Providers
+  Providers,
+  AccessPointLookup
 > {}
+
+/**
+ * Props for {@link AccessPoint.lookup}: find an access point this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AccessPointLookup {
+  /** The name of the existing access point. */
+  accessPointName: string;
+}
 
 /**
  * An Amazon S3 Access Point — a named network endpoint attached to a bucket
@@ -187,6 +198,16 @@ export interface AccessPoint extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing access point
+ * `AccessPoint.lookup` references an access point Alchemy doesn't manage (created in the
+ * console or by another stack), found by `accessPointName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing access point
+ * ```typescript
+ * const existing = AWS.S3Control.AccessPoint.lookup({ accessPointName: "..." });
+ * ```
+ *
  * @resource
  */
 export const AccessPoint = Resource<AccessPoint>("AWS.S3Control.AccessPoint");
@@ -219,7 +240,7 @@ const retryWhileAccessPointPropagates = <A, E extends { _tag: string }, R>(
  * poisons the owning bucket's delete with `BucketHasAccessPointsAttached`).
  */
 class AccessPointNotYetDeleted extends Data.TaggedError("AccessPointNotYetDeleted")<{
-  readonly name: string;
+  readonly resourceName: string;
 }> {}
 
 /**
@@ -251,12 +272,12 @@ export const AccessPointProvider = () =>
       });
 
       const accessPointArn = (region: string, accountId: string, name: string) =>
-        `arn:aws:s3:${region}:${accountId}:accesspoint/${name}`;
+        `arn:${partitionOf(region)}:s3:${region}:${accountId}:accesspoint/${name}`;
 
       const observeAccessPoint = (accountId: string, name: string) =>
         s3control
           .getAccessPoint({ AccountId: accountId, Name: name })
-          .pipe(Effect.catchTag("NoSuchAccessPoint", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchAccessPoint", () => Effect.undefined));
 
       const observedTags = (accountId: string, arn: string) =>
         s3control.listTagsForResource({ AccountId: accountId, ResourceArn: arn }).pipe(
@@ -316,6 +337,13 @@ export const AccessPointProvider = () =>
               })),
             );
           }),
+        lookup: Effect.fn(function* ({ accessPointName: name }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const live = yield* observeAccessPoint(accountId, name);
+          if (live === undefined) return undefined;
+          const attrs = toAttrs(name, live, region, accountId);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.accessPointName ?? (yield* createName(id, olds ?? {}));
@@ -426,7 +454,9 @@ export const AccessPointProvider = () =>
                 live === undefined
                   ? Effect.void
                   : deleteOnce.pipe(
-                      Effect.flatMap(() => Effect.fail(new AccessPointNotYetDeleted({ name }))),
+                      Effect.flatMap(() =>
+                        Effect.fail(new AccessPointNotYetDeleted({ resourceName: name })),
+                      ),
                     ),
               ),
             ),

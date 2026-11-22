@@ -1,6 +1,6 @@
 import * as Azure from "@alchemy.run/azure";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import { getCustomer, logLevel, tags, untilGone, untilObserved, untilSucceeded } from "./util.ts";
 

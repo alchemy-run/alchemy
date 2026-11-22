@@ -253,6 +253,34 @@ const getConnection = (
     }),
   );
 
+/** Every data connection field Alchemy reads or writes; which apply depends on `kind`. */
+interface DataConnectionFields {
+  eventHubResourceId?: string;
+  consumerGroup?: string;
+  tableName?: string;
+  mappingRuleName?: string;
+  dataFormat?: string;
+  eventSystemProperties?: string[];
+  compression?: string;
+  provisioningState?: string;
+  managedIdentityResourceId?: string;
+  managedIdentityObjectId?: string;
+  databaseRouting?: string;
+  retrievalStartDate?: string;
+  storageAccountResourceId?: string;
+  eventGridResourceId?: string;
+  ignoreFirstRecord?: boolean;
+  blobStorageEventType?: string;
+  iotHubResourceId?: string;
+  sharedAccessPolicyName?: string;
+  cosmosDbAccountResourceId?: string;
+  cosmosDbDatabase?: string;
+  cosmosDbContainer?: string;
+}
+
+const fieldsOf = (connection: kusto.DataConnection): DataConnectionFields =>
+  connection.properties ?? {};
+
 const toAttrs = (
   resourceGroup: string,
   cluster: string,
@@ -267,10 +295,10 @@ const toAttrs = (
   resourceGroup,
   location: connection.location ?? "",
   kind: connection.kind,
-  tableName: connection.properties?.tableName,
-  mappingRuleName: connection.properties?.mappingRuleName,
-  dataFormat: connection.properties?.dataFormat,
-  managedIdentityObjectId: connection.properties?.managedIdentityObjectId,
+  tableName: fieldsOf(connection).tableName,
+  mappingRuleName: fieldsOf(connection).mappingRuleName,
+  dataFormat: fieldsOf(connection).dataFormat,
+  managedIdentityObjectId: fieldsOf(connection).managedIdentityObjectId,
 });
 
 /** Source identity fields: changing any of them replaces the connection. */
@@ -299,7 +327,7 @@ const MUTABLE_FIELDS = [
   "sharedAccessPolicyName",
 ] as const;
 
-const desiredProperties = (news: DataConnectionProps): kusto.DataConnectionProperties => ({
+const desiredProperties = (news: DataConnectionProps): DataConnectionFields => ({
   eventHubResourceId: news.eventHubResourceId,
   consumerGroup: news.consumerGroup,
   tableName: news.tableName,
@@ -320,6 +348,14 @@ const desiredProperties = (news: DataConnectionProps): kusto.DataConnectionPrope
   cosmosDbDatabase: news.cosmosDbDatabase,
   cosmosDbContainer: news.cosmosDbContainer,
 });
+
+// `kind` and the fields are separate props, so TypeScript cannot pick the
+// SDK union arm.
+const toInput = (
+  location: string | undefined,
+  kind: DataConnectionProps["kind"],
+  properties: DataConnectionFields,
+) => ({ location, kind, properties }) as kusto.DataConnectionInput;
 
 export const DataConnectionProvider = () =>
   Provider.succeed(DataConnection, {
@@ -390,7 +426,7 @@ export const DataConnectionProvider = () =>
       const waitReady = waitForProvisioned(
         `kusto data connection ${name}`,
         get,
-        (c) => c.properties?.provisioningState,
+        (c) => fieldsOf(c).provisioningState,
         { interval: "5 seconds", times: 60 },
       );
       const properties = desiredProperties(news);
@@ -407,9 +443,7 @@ export const DataConnectionProvider = () =>
         yield* kusto
           .DataConnectionsCreateOrUpdate({
             ...where,
-            location,
-            kind: news.kind,
-            properties,
+            body: toInput(location, news.kind, properties),
           })
           .pipe(Effect.retry(whileClusterBusy));
       }
@@ -419,7 +453,7 @@ export const DataConnectionProvider = () =>
       // the full property set because the per-kind required fields are
       // validated on every write.
       const drifted = (connection: NonNullable<typeof observed>) => {
-        const props = connection.properties ?? {};
+        const props = fieldsOf(connection);
         return (
           MUTABLE_FIELDS.some(
             (key) => properties[key] !== undefined && props[key] !== properties[key],
@@ -433,16 +467,14 @@ export const DataConnectionProvider = () =>
         yield* kusto
           .UpdateDataConnection({
             ...where,
-            location: observed.location,
-            kind: news.kind,
-            properties,
+            body: toInput(observed.location, news.kind, properties),
           })
           .pipe(Effect.retry(whileClusterBusy));
         observed = yield* waitForProvisioned(
           `kusto data connection ${name}`,
           get,
           untilConverged(
-            (c) => c.properties?.provisioningState,
+            (c) => fieldsOf(c).provisioningState,
             (c) => !drifted(c),
           ),
           { interval: "5 seconds", times: 60 },

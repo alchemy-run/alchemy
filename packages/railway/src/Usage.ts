@@ -405,9 +405,7 @@ const readWorkspaceLimit = Query.fn((workspaceId: string) => {
 });
 
 const getWorkspace = (workspaceId: string) =>
-  readWorkspaceLimit(workspaceId).pipe(
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
-  );
+  readWorkspaceLimit(workspaceId).pipe(Effect.catchTag("RailwayNotFound", () => Effect.undefined));
 
 const toAttrs = (
   limit: CloudLimit,

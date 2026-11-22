@@ -1,10 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as dataplex from "@distilled.cloud/gcp/dataplex_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -43,6 +44,14 @@ test.provider.skipIf(!!process.env.FAST)(
           });
           return { glossary, term };
         }),
+      );
+      yield* expectFound(
+        GCP.Dataplex.GlossariesTerm.lookup({
+          termId: created.term.termId,
+          location: created.term.location,
+          glossary: created.term.glossary,
+        }),
+        created.term,
       );
 
       expect(created.term.name).toContain("/terms/");

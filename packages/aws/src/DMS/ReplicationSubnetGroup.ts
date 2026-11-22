@@ -6,11 +6,20 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { managedPolicyArn, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
+
+export class ReplicationSubnetGroupUnexpectedResponse extends Data.TaggedError(
+  "ReplicationSubnetGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ReplicationSubnetGroupProps {
   /**
@@ -52,8 +61,18 @@ export interface ReplicationSubnetGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ReplicationSubnetGroupLookup
 > {}
+
+/**
+ * Props for {@link ReplicationSubnetGroup.lookup}: find a replication subnet group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ReplicationSubnetGroupLookup {
+  /** The replication subnet group identifier of the existing replication subnet group. */
+  replicationSubnetGroupIdentifier: string;
+}
 
 /**
  * A DMS replication subnet group — the set of VPC subnets a replication
@@ -66,6 +85,16 @@ export interface ReplicationSubnetGroup extends Resource<
  *   description: "DMS replication subnets",
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
  * });
+ * ```
+ *
+ * ### Looking up an existing replication subnet group
+ * `ReplicationSubnetGroup.lookup` references a replication subnet group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `replicationSubnetGroupIdentifier`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing replication subnet group
+ * ```typescript
+ * const existing = AWS.DMS.ReplicationSubnetGroup.lookup({ replicationSubnetGroupIdentifier: "my-replication-subnet-group" });
  * ```
  *
  * @resource
@@ -96,7 +125,7 @@ const sameStringSet = (
 };
 
 const DMS_VPC_ROLE_NAME = "dms-vpc-role";
-const DMS_VPC_POLICY_ARN = "arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole";
+const DMS_VPC_POLICY = "service-role/AmazonDMSVPCManagementRole";
 const DMS_VPC_ROLE_OWNER_TAG = {
   Key: "alchemy::managed-by",
   Value: "AWS.DMS.ReplicationSubnetGroup",
@@ -115,7 +144,7 @@ export const ReplicationSubnetGroupProvider = () =>
       // them rather than reading one back (describe returns no ARN).
       const toArn = Effect.fn(function* (identifier: string) {
         const { accountId, region } = yield* AWSEnvironment.current;
-        return `arn:aws:dms:${region}:${accountId}:subgrp:${identifier}`;
+        return `arn:${partitionOf(region)}:dms:${region}:${accountId}:subgrp:${identifier}`;
       });
 
       const findGroup = Effect.fn(function* (identifier: string) {
@@ -123,7 +152,7 @@ export const ReplicationSubnetGroupProvider = () =>
           .describeReplicationSubnetGroups({
             Filters: [{ Name: "replication-subnet-group-id", Values: [identifier] }],
           })
-          .pipe(Effect.catchTag("ResourceNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundFault", () => Effect.undefined));
         return response?.ReplicationSubnetGroups?.[0];
       });
 
@@ -151,9 +180,10 @@ export const ReplicationSubnetGroupProvider = () =>
           })
           .pipe(Effect.catchTag("EntityAlreadyExistsException", () => Effect.void));
         // Idempotent — attaching an already-attached managed policy is a no-op.
+        const { partition } = yield* AWSEnvironment.current;
         yield* iam.attachRolePolicy({
           RoleName: DMS_VPC_ROLE_NAME,
-          PolicyArn: DMS_VPC_POLICY_ARN,
+          PolicyArn: managedPolicyArn(partition, DMS_VPC_POLICY),
         });
       }).pipe(
         // A concurrent last-subnet-group delete can remove the shared helper
@@ -179,7 +209,7 @@ export const ReplicationSubnetGroupProvider = () =>
 
           const tags = yield* iam
             .listRoleTags({ RoleName: DMS_VPC_ROLE_NAME })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           if (tags === undefined) return;
           const owned = (tags.Tags ?? []).some(
             (tag) =>
@@ -188,10 +218,11 @@ export const ReplicationSubnetGroupProvider = () =>
           if (!owned) return;
 
           const deleted = yield* Effect.gen(function* () {
+            const { partition } = yield* AWSEnvironment.current;
             yield* iam
               .detachRolePolicy({
                 RoleName: DMS_VPC_ROLE_NAME,
-                PolicyArn: DMS_VPC_POLICY_ARN,
+                PolicyArn: managedPolicyArn(partition, DMS_VPC_POLICY),
               })
               .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
             yield* iam
@@ -216,7 +247,7 @@ export const ReplicationSubnetGroupProvider = () =>
 
           const remaining = yield* iam
             .getRole({ RoleName: DMS_VPC_ROLE_NAME })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           if (remaining === undefined) return;
           yield* Effect.sleep("1 second");
         }
@@ -237,9 +268,9 @@ export const ReplicationSubnetGroupProvider = () =>
       const toAttrs = Effect.fn(function* (group: dms.ReplicationSubnetGroup) {
         const identifier = group.ReplicationSubnetGroupIdentifier;
         if (!identifier) {
-          return yield* Effect.fail(
-            new Error("DMS replication subnet group is missing its identifier"),
-          );
+          return yield* new ReplicationSubnetGroupUnexpectedResponse({
+            message: "DMS replication subnet group is missing its identifier",
+          });
         }
         const arn = yield* toArn(identifier);
         return {
@@ -265,6 +296,13 @@ export const ReplicationSubnetGroupProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ replicationSubnetGroupIdentifier: name }) {
+          const group = yield* findGroup(name);
+          if (!group?.ReplicationSubnetGroupIdentifier) return undefined;
+          const attrs = yield* toAttrs(group);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -333,9 +371,9 @@ export const ReplicationSubnetGroupProvider = () =>
           }
 
           if (!observed?.ReplicationSubnetGroupIdentifier) {
-            return yield* Effect.fail(
-              new Error(`DMS replication subnet group '${name}' not found after reconcile`),
-            );
+            return yield* new ReplicationSubnetGroupUnexpectedResponse({
+              message: `DMS replication subnet group '${name}' not found after reconcile`,
+            });
           }
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.

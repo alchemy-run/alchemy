@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { KEY_RING_ID } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -55,6 +56,10 @@ test.provider(
             location: "us-central1",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.KMS.KeyRing.lookup({ keyRingId: created.keyRingId, location: created.location }),
+        created,
       );
 
       expect(created.keyRingId).toEqual(KEY_RING_ID);

@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -61,13 +62,11 @@ test.provider.skipIf(!!process.env.GCP_TEST_STORAGE_POOL)(
 
       const error = yield* Effect.flip(
         compute.insertStoragePools({
+          name: "alchemy-storage-pool-probe",
+          storagePoolType: `projects/${project}/zones/${zone}/storagePoolTypes/hyperdisk-balanced`,
+          poolProvisionedCapacityGb: "10",
           project,
           zone,
-          body: {
-            name: "alchemy-storage-pool-probe",
-            storagePoolType: `projects/${project}/zones/${zone}/storagePoolTypes/hyperdisk-balanced`,
-            poolProvisionedCapacityGb: "10",
-          },
         }),
       );
       expect(error._tag).toBe("BadRequest");
@@ -95,6 +94,13 @@ test.provider.skipIf(!runLifecycle)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.StoragePool.lookup({
+          storagePoolName: created.storagePoolName,
+          zone: created.zone,
+        }),
+        created,
       );
 
       expect(created.storagePoolName).toEqual(expect.any(String));

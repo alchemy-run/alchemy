@@ -18,6 +18,8 @@ import {
   type ConnectionProps,
   connectionPropsDiffer,
   observedDiffers,
+  targetEndpointOf,
+  targetIdOf,
   toLinkerInput,
 } from "./ConnectionProperties.ts";
 import { createLinkerName } from "./Linker.ts";
@@ -153,7 +155,9 @@ const toAttrs = (
   location,
   targetType: connector.properties?.targetService?.type ?? "",
   target:
-    connector.properties?.targetService?.id ?? connector.properties?.targetService?.endpoint ?? "",
+    targetIdOf(connector.properties?.targetService) ??
+    targetEndpointOf(connector.properties?.targetService) ??
+    "",
   authType: connector.properties?.authInfo?.authType ?? "",
   clientType: connector.properties?.clientType ?? "none",
   provisioningState: connector.properties?.provisioningState,

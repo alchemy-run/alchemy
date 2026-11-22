@@ -1,8 +1,8 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as resources from "@distilled.cloud/azure/resources";
 import * as solutions from "@distilled.cloud/azure/solutions";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { createUiDefinition, mainTemplate, READER } from "./fixtures/templates.ts";

@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { applyRedshiftTagDelta, redshiftArn, toTagRecord } from "./internal.ts";
+
+export class ClusterParameterGroupUnexpectedResponse extends Data.TaggedError(
+  "ClusterParameterGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ClusterParameterGroupProps {
   /**
@@ -72,8 +80,18 @@ export interface ClusterParameterGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClusterParameterGroupLookup
 > {}
+
+/**
+ * Props for {@link ClusterParameterGroup.lookup}: find a cluster parameter group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterParameterGroupLookup {
+  /** The cluster parameter group name of the existing cluster parameter group. */
+  clusterParameterGroupName: string;
+}
 
 /**
  * An Amazon Redshift cluster parameter group — a named set of database
@@ -100,6 +118,16 @@ export interface ClusterParameterGroup extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing cluster parameter group
+ * `ClusterParameterGroup.lookup` references a cluster parameter group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterParameterGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing cluster parameter group
+ * ```typescript
+ * const existing = AWS.Redshift.ClusterParameterGroup.lookup({ clusterParameterGroupName: "my-cluster-parameter-group" });
+ * ```
+ *
  * @resource
  */
 export const ClusterParameterGroup = Resource<ClusterParameterGroup>(
@@ -118,9 +146,7 @@ export const ClusterParameterGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* redshift
           .describeClusterParameterGroups({ ParameterGroupName: name })
-          .pipe(
-            Effect.catchTag("ClusterParameterGroupNotFoundFault", () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag("ClusterParameterGroupNotFoundFault", () => Effect.undefined));
         return response?.ParameterGroups?.[0];
       });
 
@@ -141,7 +167,9 @@ export const ClusterParameterGroupProvider = () =>
       const toAttrs = Effect.fn(function* (group: redshift.ClusterParameterGroup) {
         const { accountId, region } = yield* AWSEnvironment.current;
         if (!group.ParameterGroupName) {
-          return yield* Effect.fail(new Error("Cluster parameter group is missing its name"));
+          return yield* new ClusterParameterGroupUnexpectedResponse({
+            message: "Cluster parameter group is missing its name",
+          });
         }
         return {
           clusterParameterGroupName: group.ParameterGroupName,
@@ -170,6 +198,13 @@ export const ClusterParameterGroupProvider = () =>
           if (olds?.family !== news.family || olds?.description !== news.description) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ clusterParameterGroupName: name }) {
+          const group = yield* readGroup(name);
+          if (!group?.ParameterGroupName) return undefined;
+          const attrs = yield* toAttrs(group);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -204,9 +239,9 @@ export const ClusterParameterGroupProvider = () =>
               .pipe(Effect.catchTag("ClusterParameterGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(name);
             if (!observed?.ParameterGroupName) {
-              return yield* Effect.fail(
-                new Error(`Failed to create cluster parameter group '${name}'`),
-              );
+              return yield* new ClusterParameterGroupUnexpectedResponse({
+                message: `Failed to create cluster parameter group '${name}'`,
+              });
             }
           }
 

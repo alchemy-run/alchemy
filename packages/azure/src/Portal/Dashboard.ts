@@ -6,7 +6,6 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
-  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
@@ -252,7 +251,9 @@ export const DashboardProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* collectAll(portal.ListDashboardBySubscription, { subscriptionId });
+      // The SDK no longer marks this list as pageable, so only the first
+      // page is read.
+      const page = yield* portal.ListDashboardBySubscription({ subscriptionId });
       return (page.value ?? []).flatMap((dashboard) => {
         const group = resourceGroupOf(dashboard.id);
         return hasAnyAlchemyTag(dashboard.tags) &&

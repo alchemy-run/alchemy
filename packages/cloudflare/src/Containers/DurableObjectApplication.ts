@@ -5,6 +5,7 @@ import * as Namespace from "alchemy/Namespace";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
 import { normalizeNulls } from "alchemy/Util/stable";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -18,6 +19,7 @@ import {
   durableObjectSettingsPatch,
   mergeApplicationSettings,
 } from "./ContainerConfiguration.ts";
+import { deleteSnapshotImages } from "./ContainerSnapshots.ts";
 
 export const DurableObjectApplicationTypeId = "Cloudflare.Containers.DurableObjectApplication";
 
@@ -93,6 +95,42 @@ export const declareDurableObjectApplication = (worker: { LogicalId: string }, c
  * containers API can report the namespace missing for a few seconds before it
  * sees it. Retry creates that attach to it, bounded at ~30s.
  */
+/**
+ * Delete a fleet application attached to `namespaceId` and wait until
+ * Cloudflare no longer lists it, so a Durable Object-managed application can
+ * take the namespace.
+ */
+const releaseFleetApplication = Effect.fn(function* (
+  accountId: string,
+  namespaceId: string,
+  session: { readonly note: (message: string) => Effect.Effect<void> },
+) {
+  const attached = Containers.listContainerApplications({ accountId }).pipe(
+    Effect.map((apps) =>
+      apps.find(
+        (app) =>
+          app.durableObjects?.namespaceId === namespaceId &&
+          app.schedulingPolicy !== "durable_object",
+      ),
+    ),
+  );
+  const fleet = yield* attached;
+  if (fleet === undefined) return;
+  yield* session.note(
+    `Replacing fleet container application ${fleet.name} with Durable Object scheduling...`,
+  );
+  yield* Containers.deleteContainerApplication({ accountId, applicationId: fleet.id }).pipe(
+    Effect.catchTag("ContainerApplicationNotFound", () => Effect.void),
+  );
+  yield* attached.pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (app) => app === undefined,
+      times: 20,
+    }),
+  );
+});
+
 export const retryNamespacePropagation = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
 ) =>
@@ -103,7 +141,11 @@ export const retryNamespacePropagation = <A, E extends { readonly _tag: string }
         : Effect.void,
     ),
     Effect.retry({
-      while: (error) => error._tag === "DurableObjectNamespaceNotFound",
+      // Cloudflare also refuses creates for a moment ("can't create
+      // application at this time"); the same request succeeds when retried.
+      while: (error) =>
+        error._tag === "DurableObjectNamespaceNotFound" ||
+        error._tag === "ContainerApplicationCreateUnavailable",
       schedule: Schedule.spaced("2 seconds"),
       times: 15,
     }),
@@ -246,6 +288,20 @@ export const LiveDurableObjectApplicationProvider = () =>
         (yield* boundNamespace(className, bindings)) ??
         (output?.durableObjects?.namespaceId ? output.durableObjects : undefined);
       if (!durableObjects) {
+        // An existing Worker gaining this class publishes its old output
+        // first, which has no namespace for it yet. The application stays a
+        // placeholder until the Worker's upload binds the namespace, when
+        // the run reconciles it again; if that never comes, the next
+        // deploy's diff plans the create.
+        if (!isLiveApplication(output?.applicationId)) {
+          return placeholder({
+            applicationId: "",
+            applicationName: name,
+            accountId,
+            className,
+            createdAt: "",
+          });
+        }
         return yield* new ContainerConfigurationError({
           message: `The container application of Durable Object class '${className}' requires a resolved Durable Object namespace. Reconcile its Worker first.`,
         });
@@ -268,11 +324,17 @@ export const LiveDurableObjectApplicationProvider = () =>
       // 1. Observe. The namespace belongs to this stack's Worker, so an
       //    application already attached to it is this class's application.
       let application = yield* getApplication.pipe(
-        Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("ContainerApplicationNotFound", () => Effect.undefined),
       );
 
       // 2. Ensure
       if (!application) {
+        // The class's Containers were fleet-scheduled before: that fleet
+        // application holds the namespace, and Cloudflare cannot change a
+        // policy in place. The namespace is this stack's, so the fleet
+        // application is too. Deleting it frees the namespace; the class's
+        // Durable Objects and their storage stay where they are.
+        yield* releaseFleetApplication(accountId, durableObjects.namespaceId, session);
         yield* session.note(`Creating container application ${name}...`);
         application = yield* retryNamespacePropagation(
           Containers.createDurableObjectContainerApplication({
@@ -305,6 +367,9 @@ export const LiveDurableObjectApplicationProvider = () =>
     }),
     delete: Effect.fn(function* ({ output }) {
       if (!isLiveApplication(output.applicationId)) return;
+      yield* deleteSnapshotImages(output.accountId, output.applicationId).pipe(
+        Effect.catchTag("ContainerApplicationNotFound", () => Effect.void),
+      );
       yield* Containers.deleteContainerApplication({
         accountId: output.accountId,
         applicationId: output.applicationId,
@@ -319,7 +384,7 @@ export const LiveDurableObjectApplicationProvider = () =>
           applicationId: output.applicationId,
         }).pipe(
           Effect.map((application) => toAttributes(application, className, output.settings)),
-          Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("ContainerApplicationNotFound", () => Effect.undefined),
         );
       }
       // Generated names identify this instance, so a match is ours.
@@ -355,7 +420,7 @@ export const LocalDurableObjectApplicationProvider = () =>
         applicationName: yield* createContainerApplicationName(id, undefined),
         accountId: yield* localAccountId,
         className: news.className,
-        createdAt: new Date().toISOString(),
+        createdAt: DateTime.formatIso(yield* DateTime.now),
       });
     }),
     reconcile: Effect.fn(function* ({ id, news, bindings, output }) {
@@ -364,7 +429,7 @@ export const LocalDurableObjectApplicationProvider = () =>
         applicationName: yield* createContainerApplicationName(id, undefined),
         accountId: yield* localAccountId,
         className: news.className,
-        createdAt: output?.createdAt || new Date().toISOString(),
+        createdAt: output?.createdAt || DateTime.formatIso(yield* DateTime.now),
         durableObjects: yield* boundNamespace(news.className, bindings),
         settings: yield* boundSettings(news.className, bindings),
       });

@@ -5,9 +5,15 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
+
+export class FHIRDatastoreNotReady extends Data.TaggedError("FHIRDatastoreNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface FHIRDatastoreIdentityProviderProps {
   /**
@@ -92,8 +98,23 @@ export interface FHIRDatastore extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  FHIRDatastoreLookup
 > {}
+
+/**
+ * Props for {@link FHIRDatastore.lookup}: find a FHIR datastore this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type FHIRDatastoreLookup =
+  | {
+      /** The id of the existing datastore. */
+      datastoreId: string;
+    }
+  | {
+      /** The name of the existing datastore. */
+      datastoreName: string;
+    };
 
 /**
  * An AWS HealthLake FHIR-enabled data store — a HIPAA-eligible, managed
@@ -125,6 +146,17 @@ export interface FHIRDatastore extends Resource<
  * const datastore = yield* FHIRDatastore("Records", {
  *   kmsKeyId: key.keyArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing FHIR datastore
+ * `FHIRDatastore.lookup` references a FHIR datastore Alchemy doesn't manage (created in the
+ * console or by another stack), found by `datastoreId` or `datastoreName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing FHIR datastore
+ * ```typescript
+ * const records = AWS.HealthLake.FHIRDatastore.lookup({ datastoreName: "records" });
+ * const datastoreEndpoint = records.datastoreEndpoint;
  * ```
  *
  * @resource
@@ -182,7 +214,7 @@ export const FHIRDatastoreProvider = () =>
       const readDatastore = Effect.fn(function* (datastoreId: string) {
         const response = yield* healthlake
           .describeFHIRDatastore({ DatastoreId: datastoreId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.DatastoreProperties;
       });
 
@@ -227,13 +259,11 @@ export const FHIRDatastoreProvider = () =>
         );
         if (properties === undefined || properties.DatastoreStatus !== "ACTIVE") {
           const cause = properties?.ErrorCause?.ErrorMessage;
-          return yield* Effect.fail(
-            new Error(
-              `HealthLake data store '${datastoreId}' did not become ACTIVE (status: ${
-                properties?.DatastoreStatus ?? "gone"
-              }${cause ? `: ${cause}` : ""})`,
-            ),
-          );
+          return yield* new FHIRDatastoreNotReady({
+            message: `HealthLake data store '${datastoreId}' did not become ACTIVE (status: ${
+              properties?.DatastoreStatus ?? "gone"
+            }${cause ? `: ${cause}` : ""})`,
+          });
         }
         return properties;
       });
@@ -261,11 +291,9 @@ export const FHIRDatastoreProvider = () =>
           }),
         );
         if (properties !== undefined && properties.DatastoreStatus !== "DELETED") {
-          return yield* Effect.fail(
-            new Error(
-              `HealthLake data store '${datastoreId}' still exists after deletion (status: ${properties.DatastoreStatus})`,
-            ),
-          );
+          return yield* new FHIRDatastoreNotReady({
+            message: `HealthLake data store '${datastoreId}' still exists after deletion (status: ${properties.DatastoreStatus})`,
+          });
         }
       });
 
@@ -303,6 +331,14 @@ export const FHIRDatastoreProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* (props) {
+          const properties =
+            "datastoreId" in props
+              ? yield* readDatastore(props.datastoreId)
+              : yield* findByName(props.datastoreName);
+          if (properties === undefined || isGoneOrGoing(properties)) return undefined;
+          return yield* toAttrs(properties);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           let properties = output?.datastoreId
             ? yield* readDatastore(output.datastoreId)
@@ -417,7 +453,7 @@ export const FHIRDatastoreProvider = () =>
                 while: (e) => e._tag === "ConflictException",
                 schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(10)]),
               }),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
           }
           // Deletion is asynchronous — wait until the data store is gone so

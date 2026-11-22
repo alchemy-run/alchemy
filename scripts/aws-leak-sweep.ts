@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import { fromChain } from "@distilled.cloud/aws/Credentials";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
@@ -23,6 +22,8 @@ import * as SecretsManager from "@distilled.cloud/aws/secrets-manager";
 import * as SNS from "@distilled.cloud/aws/sns";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import * as SSM from "@distilled.cloud/aws/ssm";
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 /**
  * AWS leak sweep — finds (and optionally deletes) alchemy-tagged TEST resources
  * left behind by crashed/interrupted test runs.
@@ -30,7 +31,7 @@ import * as SSM from "@distilled.cloud/aws/ssm";
  * Discovery is tag-driven: every alchemy resource is branded with
  * `alchemy::stack` / `alchemy::stage` / `alchemy::id` (see src/Tags.ts
  * createInternalTags). Test suites deploy with stage `test_$USER` (the default
- * in packages/alchemy/src/Test/Core.ts), so we sweep everything tagged
+ * in packages/alchemy-test/src/Core.ts), so we sweep everything tagged
  * `alchemy::stage = test_$USER`.
  *
  * Primary discovery path: resourcegroupstaggingapi GetResources (regional).
@@ -40,16 +41,19 @@ import * as SSM from "@distilled.cloud/aws/ssm";
  *     (physical names embed `-{stage}-`, see src/PhysicalName.ts)
  *
  * Usage:
- *   bun scripts/aws-leak-sweep.ts                      # DRY RUN (default)
- *   bun scripts/aws-leak-sweep.ts --delete             # actually delete
- *   bun scripts/aws-leak-sweep.ts --older-than 12      # only >= 12h old (default 6)
- *   bun scripts/aws-leak-sweep.ts --stage test_sam     # tag stage filter (default test_$USER)
- *   bun scripts/aws-leak-sweep.ts --region us-west-2   # region (default env or us-west-2)
+ *   node scripts/aws-leak-sweep.ts                      # DRY RUN (default)
+ *   node scripts/aws-leak-sweep.ts --delete             # actually delete
+ *   node scripts/aws-leak-sweep.ts --older-than 12      # only >= 12h old (default 6)
+ *   node scripts/aws-leak-sweep.ts --stage test_sam     # tag stage filter (default test_$USER)
+ *   node scripts/aws-leak-sweep.ts --region us-west-2   # region (default env or us-west-2)
  *
  * KMS keys are ALWAYS report-only — never deleted by this tool.
  * Resources whose age can't be determined are treated as eligible (a leak with
  * an unknown birthday is still a leak) and shown with age `?`.
  */
+import { Command, Flag } from "effect/cli";
+import * as Config from "effect/Config";
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import { FetchHttpClient } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -67,22 +71,6 @@ interface Args {
   stage: string;
   region: string;
 }
-
-const parseArgs = Effect.sync((): Args => {
-  const argv = process.argv.slice(2);
-  const flag = (name: string) => argv.includes(`--${name}`);
-  const opt = (name: string): string | undefined => {
-    const i = argv.indexOf(`--${name}`);
-    return i >= 0 ? argv[i + 1] : undefined;
-  };
-  return {
-    delete: flag("delete"),
-    olderThanHours: Number(opt("older-than") ?? 6),
-    stage: opt("stage") ?? `test_${process.env.USER || process.env.USERNAME || "unknown"}`,
-    region:
-      opt("region") ?? process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? "us-west-2",
-  };
-});
 
 // ---------------------------------------------------------------------------
 // Model
@@ -136,7 +124,7 @@ const tryDate = <E, R>(
 ): Effect.Effect<Date | undefined, never, R> =>
   eff.pipe(
     Effect.map(toDate),
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.orElseSucceed(() => undefined),
   );
 
 // ---------------------------------------------------------------------------
@@ -458,7 +446,7 @@ const lookupCreatedAt = (
       );
     }
     default:
-      return Effect.succeed(undefined);
+      return Effect.undefined;
   }
 };
 
@@ -555,7 +543,7 @@ const deleteEcsService = (leak: Leak) =>
     // name = "service/{cluster}/{service}"
     const [, cluster, service] = leak.name.split("/");
     yield* ECS.updateService({ cluster, service, desiredCount: 0 }).pipe(
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.orElseSucceed(() => undefined),
     );
     yield* retryDependencies(ECS.deleteService({ cluster, service, force: true }));
   });
@@ -568,7 +556,7 @@ const deleteEventsRule = (leak: Leak) =>
     const targets = yield* EventBridge.listTargetsByRule({
       Rule: name,
       EventBusName: bus,
-    }).pipe(Effect.catch(() => Effect.succeed({ Targets: [] })));
+    }).pipe(Effect.orElseSucceed(() => ({ Targets: [] })));
     const ids = (targets.Targets ?? [])
       .map((t) => t.Id)
       .filter((id): id is string => id !== undefined);
@@ -578,7 +566,7 @@ const deleteEventsRule = (leak: Leak) =>
         EventBusName: bus,
         Ids: ids,
         Force: true,
-      }).pipe(Effect.catch(() => Effect.succeed(undefined)));
+      }).pipe(Effect.orElseSucceed(() => undefined));
     }
     yield* EventBridge.deleteRule({
       Name: name,
@@ -609,7 +597,7 @@ const deleteVpcDeep = (vpcId: string) =>
       subnets.Subnets ?? [],
       (s) =>
         retryDependencies(EC2.deleteSubnet({ SubnetId: s.SubnetId! })).pipe(
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.orElseSucceed(() => undefined),
         ),
       { discard: true },
     );
@@ -629,7 +617,7 @@ const deleteVpcDeep = (vpcId: string) =>
               InternetGatewayId: igw.InternetGatewayId!,
             }),
           ),
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.orElseSucceed(() => undefined),
         ),
       { discard: true },
     );
@@ -639,7 +627,7 @@ const deleteVpcDeep = (vpcId: string) =>
       (rts.RouteTables ?? []).filter((rt) => !(rt.Associations ?? []).some((a) => a.Main)),
       (rt) =>
         EC2.deleteRouteTable({ RouteTableId: rt.RouteTableId! }).pipe(
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.orElseSucceed(() => undefined),
         ),
       { discard: true },
     );
@@ -649,7 +637,7 @@ const deleteVpcDeep = (vpcId: string) =>
       (sgs.SecurityGroups ?? []).filter((sg) => sg.GroupName !== "default"),
       (sg) =>
         retryDependencies(EC2.deleteSecurityGroup({ GroupId: sg.GroupId! })).pipe(
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.orElseSucceed(() => undefined),
         ),
       { discard: true },
     );
@@ -661,7 +649,7 @@ const deleteEfs = (fileSystemId: string) =>
   Effect.gen(function* () {
     const mts = yield* EFS.describeMountTargets({
       FileSystemId: fileSystemId,
-    }).pipe(Effect.catch(() => Effect.succeed({ MountTargets: [] })));
+    }).pipe(Effect.orElseSucceed(() => ({ MountTargets: [] })));
     yield* Effect.forEach(
       mts.MountTargets ?? [],
       (mt) => EFS.deleteMountTarget({ MountTargetId: mt.MountTargetId }),
@@ -816,7 +804,7 @@ const discoverIam = (stage: string, account: string) =>
       (r) =>
         IAM.listRoleTags({ RoleName: r.RoleName }).pipe(
           Effect.map((t) => ({ role: r, tags: tagRecord(t.Tags) })),
-          Effect.catch(() => Effect.succeed({ role: r, tags: {} as Record<string, string> })),
+          Effect.orElseSucceed(() => ({ role: r, tags: {} as Record<string, string> })),
         ),
       { concurrency: 5 },
     );
@@ -850,7 +838,7 @@ const discoverIam = (stage: string, account: string) =>
       (p) =>
         IAM.listPolicyTags({ PolicyArn: p.Arn! }).pipe(
           Effect.map((t) => ({ policy: p, tags: tagRecord(t.Tags) })),
-          Effect.catch(() => Effect.succeed({ policy: p, tags: {} as Record<string, string> })),
+          Effect.orElseSucceed(() => ({ policy: p, tags: {} as Record<string, string> })),
         ),
       { concurrency: 5 },
     );
@@ -897,7 +885,7 @@ const discoverSchedules = (stage: string, region: string, account: string) =>
         name: s.Name ?? "",
         createdAt: toDate(s.CreationDate),
       }));
-  }).pipe(Effect.catch(() => Effect.succeed([])));
+  }).pipe(Effect.orElseSucceed(() => []));
 
 // ---------------------------------------------------------------------------
 // Report
@@ -906,7 +894,7 @@ const discoverSchedules = (stage: string, region: string, account: string) =>
 const fmtAge = (h: number | undefined): string =>
   h === undefined ? "?" : h >= 48 ? `${(h / 24).toFixed(1)}d` : `${h.toFixed(1)}h`;
 
-const printTable = (leaks: Leak[]) => {
+const printTable = Effect.fn(function* (leaks: Leak[]) {
   const rows = leaks.map((l) => ({
     age: fmtAge(ageHours(l.createdAt)),
     cost: l.hourly ? "HOURLY" : "",
@@ -928,18 +916,17 @@ const printTable = (leaks: Leak[]) => {
     Math.max(headers[c].length, ...rows.map((r) => r[c].length));
   const line = (r: Record<(typeof cols)[number], string>) =>
     cols.map((c) => r[c].padEnd(width(c))).join("  ");
-  console.log(line(headers));
-  console.log(cols.map((c) => "-".repeat(width(c))).join("  "));
-  for (const r of rows) console.log(line(r));
-};
+  yield* Console.log(line(headers));
+  yield* Console.log(cols.map((c) => "-".repeat(width(c))).join("  "));
+  for (const r of rows) yield* Console.log(line(r));
+});
 
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
-const main = Effect.gen(function* () {
-  const args = yield* parseArgs;
-  console.log(
+const main = Effect.fn(function* (args: Args) {
+  yield* Console.log(
     `aws-leak-sweep: region=${args.region} stage=${args.stage} older-than=${args.olderThanHours}h mode=${args.delete ? "DELETE" : "DRY-RUN"}`,
   );
 
@@ -1005,16 +992,14 @@ const main = Effect.gen(function* () {
   }
 
   if (leaks.length === 0) {
-    console.log("No alchemy-tagged test resources found. Clean.");
+    yield* Console.log("No alchemy-tagged test resources found. Clean.");
     return;
   }
 
   // -- enrich ages ------------------------------------------------------
   const bucketDates = new Map<string, Date>();
   if (leaks.some((l) => l.kind === "s3:bucket")) {
-    const buckets = yield* S3.listBuckets({}).pipe(
-      Effect.catch(() => Effect.succeed({ Buckets: [] })),
-    );
+    const buckets = yield* S3.listBuckets({}).pipe(Effect.orElseSucceed(() => ({ Buckets: [] })));
     for (const b of buckets.Buckets ?? []) {
       const d = toDate(b.CreationDate);
       if (b.Name && d) bucketDates.set(b.Name, d);
@@ -1045,27 +1030,27 @@ const main = Effect.gen(function* () {
 
   eligible.sort((a, b) => (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0));
 
-  console.log(
+  yield* Console.log(
     `\nFound ${leaks.length} alchemy '${args.stage}'-stage resources; ${eligible.length} older than ${args.olderThanHours}h (or unknown age), ${skippedYoung} younger (skipped).\n`,
   );
-  printTable(eligible);
+  yield* printTable(eligible);
 
   const hourlyCount = eligible.filter((l) => l.hourly).length;
   if (hourlyCount > 0) {
-    console.log(
+    yield* Console.log(
       `\n!! ${hourlyCount} resource(s) bill HOURLY (NAT/EIP/RDS/ELB) — sweep these first.`,
     );
   }
   const reportOnly = eligible.filter((l) => l.reportOnly);
   if (reportOnly.length > 0) {
-    console.log(`\nReport-only (not deleted by this tool):`);
+    yield* Console.log(`\nReport-only (not deleted by this tool):`);
     for (const l of reportOnly) {
-      console.log(`  - ${l.arn} (${l.reportOnlyReason ?? ""})`);
+      yield* Console.log(`  - ${l.arn} (${l.reportOnlyReason ?? ""})`);
     }
   }
 
   if (!args.delete) {
-    console.log(
+    yield* Console.log(
       `\nDRY RUN — nothing deleted. Re-run with --delete to remove the ${
         eligible.filter((l) => !l.reportOnly).length
       } deletable resource(s).`,
@@ -1098,30 +1083,73 @@ const main = Effect.gen(function* () {
           : String(result.failure);
       if (GONE.test(tag)) {
         gone++;
-        console.log(`  ~ already gone ${leak.kind} ${leak.arn}`);
+        yield* Console.log(`  ~ already gone ${leak.kind} ${leak.arn}`);
       } else {
         failed++;
-        console.log(`  x FAILED ${leak.kind} ${leak.arn}: ${tag}`);
+        yield* Console.log(`  x FAILED ${leak.kind} ${leak.arn}: ${tag}`);
       }
     } else {
       ok++;
-      console.log(`  ✓ deleted ${leak.kind} ${leak.arn}`);
+      yield* Console.log(`  ✓ deleted ${leak.kind} ${leak.arn}`);
     }
   }
-  console.log(`\nDelete complete: ${ok} deleted, ${gone} already gone, ${failed} failed.`);
+  yield* Console.log(`\nDelete complete: ${ok} deleted, ${gone} already gone, ${failed} failed.`);
   if (failed > 0) {
-    console.log(
+    yield* Console.log(
       "Failures are usually dependency ordering (NAT->EIP->VPC take minutes); re-run the sweep.",
     );
-    process.exitCode = 1;
+    yield* Effect.sync(() => {
+      process.exitCode = 1;
+    });
   }
 });
 
-const args = await Effect.runPromise(parseArgs);
-const layers = Layer.mergeAll(
-  fromChain(),
-  Layer.succeed(Region, Effect.succeed(args.region as any)),
-  FetchHttpClient.layer,
+const command = Command.make(
+  "aws-leak-sweep",
+  {
+    delete: Flag.Boolean("delete").pipe(
+      Flag.withDescription("Actually delete the eligible resources (default is a dry run)"),
+      Flag.withDefault(false),
+    ),
+    olderThanHours: Flag.Finite("older-than").pipe(
+      Flag.withDescription("Only sweep resources at least this many hours old"),
+      Flag.withDefault(6),
+    ),
+    stage: Flag.String("stage").pipe(
+      Flag.withDescription("alchemy::stage tag to sweep (default test_$USER)"),
+      Flag.withFallbackConfig(
+        Config.NonEmptyString("USER").pipe(
+          Config.orElse(() => Config.NonEmptyString("USERNAME")),
+          Config.withDefault("unknown"),
+          Config.map((user) => `test_${user}`),
+        ),
+      ),
+    ),
+    region: Flag.String("region").pipe(
+      Flag.withDescription("AWS region (default $AWS_REGION, $AWS_DEFAULT_REGION or us-west-2)"),
+      Flag.withFallbackConfig(
+        Config.String("AWS_REGION").pipe(
+          Config.orElse(() => Config.String("AWS_DEFAULT_REGION")),
+          Config.withDefault("us-west-2"),
+        ),
+      ),
+    ),
+  },
+  (args) =>
+    main(args).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          fromChain(),
+          Layer.succeed(Region, Effect.succeed(args.region as any)),
+          FetchHttpClient.layer,
+        ),
+      ),
+    ),
+).pipe(
+  Command.withDescription("Find (and optionally delete) leaked alchemy-tagged AWS test resources"),
 );
 
-await Effect.runPromise(main.pipe(Effect.provide(layers)));
+Command.run(command, { version: "0.0.0" }).pipe(
+  Effect.provide(NodeServices.layer),
+  NodeRuntime.runMain,
+);

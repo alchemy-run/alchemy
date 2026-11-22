@@ -1,26 +1,18 @@
-import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import MarkerJob, { MARKER_OBJECT } from "./fixtures/job.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const dockerAvailable = (() => {
-  try {
-    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-  } catch {
-    return false;
-  }
-})();
 
 const IMAGE = "us-docker.pkg.dev/cloudrun/container/job:latest";
 
@@ -53,6 +45,10 @@ test.provider(
             containers: [{ image: IMAGE }],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Run.Job.lookup({ jobId: created.jobId, location: created.location }),
+        created,
       );
 
       expect(created.name).toContain("/jobs/");
@@ -110,7 +106,7 @@ test.provider(
   { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 120_000 },
 );
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "effect-native Job run writes a Storage object",
   (stack) =>
     Effect.gen(function* () {

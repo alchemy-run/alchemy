@@ -1,6 +1,7 @@
-import { describe, expect, it } from "alchemy-test";
-import { CallbackError, type Callback, type CallbackOptions } from "alchemy/Callback";
+import { describe, expect, it } from "@alchemy.run/test";
+import { CallbackError } from "alchemy/Callback";
 import { RuntimeContext } from "alchemy/RuntimeContext";
+import type { AlarmCallback, AlarmRetryPolicy } from "alchemy/Workers/Workerd/AlarmCallback";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
@@ -40,7 +41,8 @@ describe(
         const fixture = yield* makeAlarmScheduler;
         const register = () =>
           fixture.register("broken", () => Effect.fail("unavailable"), {
-            retry: { delay: "1 second" },
+            delay: "1 second",
+            maxAttempts: 8,
           });
         const callback = yield* register();
         fixture.seal();
@@ -62,7 +64,7 @@ describe(
           Effect.gen(function* () {
             const fixture = yield* makeAlarmScheduler;
             let deliveries = 0;
-            const callback: Callback<null> = yield* fixture.register(
+            const callback: AlarmCallback<null> = yield* fixture.register(
               "loop",
               () =>
                 Effect.gen(function* () {
@@ -73,7 +75,7 @@ describe(
                     payload: null,
                   });
                 }),
-              { retry: { delay: "1 second" } },
+              { delay: "1 second", maxAttempts: 8 },
             );
             fixture.seal();
             yield* callback.schedule("0", { after: 0, payload: null });
@@ -100,7 +102,7 @@ describe(
                 yield* TestClock.adjust("10 seconds");
                 return yield* Effect.fail("still unavailable");
               }),
-            { retry: { delay: "1 second" } },
+            { delay: "1 second", maxAttempts: 8 },
           );
           fixture.seal();
           yield* callback.schedule("a", { after: 0, payload: null });
@@ -114,7 +116,8 @@ describe(
         const fixture = yield* makeAlarmScheduler;
         const register = () =>
           fixture.register("broken", () => Effect.fail("unavailable"), {
-            retry: { delay: "1 second" },
+            delay: "1 second",
+            maxAttempts: 8,
           });
         const callback = yield* register();
         fixture.seal();
@@ -133,7 +136,7 @@ describe(
       Effect.gen(function* () {
         const fixture = yield* makeAlarmScheduler;
         const callback = yield* fixture.register("broken", () => Effect.fail("unavailable"), {
-          retry: { delay: "1 millis" },
+          delay: "1 millis",
         });
         fixture.seal();
         yield* callback.schedule("a", { after: 0, payload: null });
@@ -147,7 +150,7 @@ describe(
         const fixture = yield* makeAlarmScheduler;
         const release = yield* Deferred.make<void>();
         let detached: Fiber.Fiber<void, unknown> | undefined;
-        const callback: Callback<null> = yield* fixture.register("detached", () =>
+        const callback: AlarmCallback<null> = yield* fixture.register("detached", () =>
           Effect.gen(function* () {
             detached = yield* Deferred.await(release).pipe(
               Effect.andThen(() => callback.schedule("a", { after: 0, payload: null })),
@@ -188,7 +191,7 @@ describe(
         Effect.gen(function* () {
           const fixture = yield* makeAlarmScheduler;
           const callback = yield* fixture.register("broken", () => Effect.fail("unavailable"), {
-            retry: { delay: "1 second" },
+            delay: "1 second",
           });
           fixture.seal();
           yield* callback.schedule("a", {
@@ -227,11 +230,9 @@ describe(
           const fixture = yield* makeAlarmScheduler;
           const register = (maxAttempts: number) =>
             fixture.register("broken", () => Effect.fail("unavailable"), {
-              retry: {
-                delay: "2 seconds",
-                maxAttempts,
-                parkedDelay: "2 hours",
-              },
+              delay: "2 seconds",
+              maxAttempts,
+              parkedDelay: "2 hours",
             });
           let callback = yield* register(2);
           fixture.seal();
@@ -283,6 +284,38 @@ describe(
         }).pipe(Effect.provide(RuntimeContext.phantom)),
     );
 
+    it.effect("weighs another callback's cursor without letting it hide a schedule", () =>
+      Effect.gen(function* () {
+        const fixture = yield* makeAlarmScheduler;
+        const delivered: string[] = [];
+        const target = yield* fixture.register(
+          "target",
+          (id: string) => Effect.sync(() => delivered.push(id)),
+          { delay: "1 second", maxAttempts: 8 },
+        );
+        const source = yield* fixture.register(
+          "source",
+          () =>
+            Effect.gen(function* () {
+              yield* target.schedule("behind", { after: 0, payload: "behind", progress: 1 });
+              yield* target.schedule("past", { after: 0, payload: "past", progress: 101 });
+            }),
+          { delay: "1 second", maxAttempts: 8 },
+        );
+        fixture.seal();
+        yield* source.schedule("s", { after: 0, payload: null, progress: 100 });
+        yield* fixture.fire;
+        // Behind the source's cursor: scheduled under its own cursor, with the
+        // source's budget. Past it: progress, so a fresh budget.
+        expect(yield* target.getStatus("behind")).toMatchObject({ attempts: 1, progress: 1 });
+        expect(yield* target.getStatus("past")).toMatchObject({ attempts: 0, progress: 101 });
+        yield* fixture.fire;
+        expect(delivered).toEqual(["past"]);
+        yield* fixture.fire;
+        expect(delivered).toEqual(["past", "behind"]);
+      }).pipe(Effect.provide(RuntimeContext.phantom)),
+    );
+
     for (const changeId of [false, true]) {
       it.effect(
         `resets the budget for committed forward progress${changeId ? " across IDs" : ""}`,
@@ -293,7 +326,7 @@ describe(
               "CREATE TABLE source (version INTEGER NOT NULL); INSERT INTO source VALUES (0)",
             );
             let version = 0;
-            const callback: Callback<null> = yield* fixture.register(
+            const callback: AlarmCallback<null> = yield* fixture.register(
               "progress",
               () =>
                 fixture.state.storage.transaction(
@@ -307,7 +340,7 @@ describe(
                     });
                   }),
                 ),
-              { retry: { delay: "1 second", maxAttempts: 2 } },
+              { delay: "1 second", maxAttempts: 2 },
             );
             fixture.seal();
             yield* callback.schedule("0", {
@@ -336,7 +369,7 @@ describe(
           fixture.db.exec(
             "CREATE TABLE source (version INTEGER NOT NULL); INSERT INTO source VALUES (0)",
           );
-          const callback: Callback<null> = yield* fixture.register(
+          const callback: AlarmCallback<null> = yield* fixture.register(
             "rollback",
             () =>
               fixture.state.storage.transaction(
@@ -350,7 +383,7 @@ describe(
                   return yield* Effect.fail("rollback progress");
                 }),
               ),
-            { retry: { delay: "1 second", maxAttempts: 1 } },
+            { delay: "1 second", maxAttempts: 1 },
           );
           fixture.seal();
           yield* callback.schedule("a", {
@@ -378,7 +411,7 @@ describe(
       () =>
         Effect.gen(function* () {
           const fixture = yield* makeAlarmScheduler;
-          const callback: Callback<string> = yield* fixture.register(
+          const callback: AlarmCallback<string> = yield* fixture.register(
             "replace",
             () =>
               Effect.gen(function* () {
@@ -392,7 +425,7 @@ describe(
                 });
                 return yield* Effect.fail("old attempt failed");
               }),
-            { retry: { delay: "1 second" } },
+            { delay: "1 second", maxAttempts: 8 },
           );
           fixture.seal();
           yield* callback.schedule("a", { after: 0, payload: "initial" });
@@ -425,7 +458,7 @@ describe(
               yield* Deferred.await(release);
               return yield* Effect.fail("stale failure");
             }),
-          { retry: { delay: "1 second" } },
+          { delay: "1 second", maxAttempts: 8 },
         );
         fixture.seal();
         yield* callback.schedule("a", {
@@ -457,7 +490,8 @@ describe(
         yield* callback.schedule("a", { after: 0, payload: null });
         fixture.restart();
         fixture.seal();
-        for (let i = 0; i < 8; i++) yield* fixture.fire;
+        // An unregistered callback uses the default policy: parked after 12.
+        for (let i = 0; i < 12; i++) yield* fixture.fire;
         expect((yield* callback.getStatus("a"))?.parked).toBe(true);
         expect(fixture.alarm! - (yield* Clock.currentTimeMillis)).toBe(3_600_000);
         fixture.restart();
@@ -536,12 +570,12 @@ describe(
       { parkedDelay: "59 minutes" },
       { parkedDelay: Infinity },
       { delay: "2 hours", parkedDelay: "1 hour" },
-    ] satisfies NonNullable<CallbackOptions["retry"]>[]) {
+    ] satisfies AlarmRetryPolicy[]) {
       it.effect(`rejects invalid retry policy ${JSON.stringify(retry)}`, () =>
         Effect.gen(function* () {
           const fixture = yield* makeAlarmScheduler;
           const exit = yield* fixture
-            .register("invalid", () => Effect.void, { retry })
+            .register("invalid", () => Effect.void, retry)
             .pipe(Effect.exit);
           expect(Exit.isFailure(exit)).toBe(true);
           if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(CallbackError);
@@ -575,7 +609,7 @@ describe(
       });
       return Effect.gen(function* () {
         const fixture = yield* makeAlarmScheduler;
-        const callback: Callback<string> = yield* fixture.register(
+        const callback: AlarmCallback<string> = yield* fixture.register(
           "PRIVATE_CALLBACK",
           () =>
             fixture.state.storage.transaction(
@@ -587,7 +621,7 @@ describe(
                 return yield* Effect.fail("rollback rearm");
               }),
             ),
-          { retry: { delay: "1 second", maxAttempts: 1 } },
+          { delay: "1 second", maxAttempts: 1 },
         );
         fixture.seal();
         yield* callback.schedule("PRIVATE_ID", {
@@ -607,5 +641,158 @@ describe(
         Effect.provide(RuntimeContext.phantom),
       );
     });
+    it.effect("keeps a recurring job pending and collapses runs missed while one ran", () =>
+      Effect.gen(function* () {
+        const fixture = yield* makeAlarmScheduler;
+        const start = yield* Clock.currentTimeMillis;
+        const delivered: number[] = [];
+        const callback = yield* fixture.register("tick", (payload: string) =>
+          Effect.gen(function* () {
+            delivered.push((yield* Clock.currentTimeMillis) - start);
+            expect(payload).toBe("sweep");
+            // The second run outlasts three more intervals.
+            if (delivered.length === 2) yield* TestClock.adjust("35 seconds");
+          }),
+        );
+        fixture.seal();
+        yield* callback.schedule("a", { every: "10 seconds", payload: "sweep" });
+        expect(fixture.alarm! - start).toBe(10_000);
+        yield* fixture.fire;
+        expect(fixture.alarm! - start).toBe(20_000);
+        yield* fixture.fire;
+        // 30, 40 and 50 seconds passed while it ran: they collapse into 60.
+        expect(fixture.alarm! - start).toBe(60_000);
+        yield* fixture.fire;
+        expect(delivered).toEqual([10_000, 20_000, 60_000]);
+        expect(yield* callback.getStatus("a")).toEqual({
+          scheduledAt: start + 70_000,
+          retryAt: undefined,
+          attempts: 0,
+          parked: false,
+          progress: undefined,
+        });
+      }).pipe(Effect.provide(RuntimeContext.phantom)),
+    );
+
+    it.effect("retries a failed recurring run, then continues on its schedule", () =>
+      Effect.gen(function* () {
+        const fixture = yield* makeAlarmScheduler;
+        const start = yield* Clock.currentTimeMillis;
+        let attempts = 0;
+        const callback = yield* fixture.register(
+          "tick",
+          () => (++attempts === 1 ? Effect.fail("unavailable") : Effect.void),
+          { delay: "1 second" },
+        );
+        fixture.seal();
+        yield* callback.schedule("a", { every: "10 seconds", payload: null });
+        yield* fixture.fire;
+        expect(fixture.alarm! - start).toBe(11_000);
+        yield* fixture.fire;
+        expect(attempts).toBe(2);
+        expect(fixture.alarm! - start).toBe(20_000);
+        expect((yield* callback.getStatus("a"))?.attempts).toBe(0);
+      }).pipe(Effect.provide(RuntimeContext.phantom)),
+    );
+
+    it.effect("runs a cron job on each match of its expression", () =>
+      Effect.gen(function* () {
+        const fixture = yield* makeAlarmScheduler;
+        const delivered: number[] = [];
+        const callback = yield* fixture.register("report", () =>
+          Effect.gen(function* () {
+            delivered.push(yield* Clock.currentTimeMillis);
+          }),
+        );
+        fixture.seal();
+        yield* callback.schedule("a", { cron: "*/15 * * * * *", payload: null });
+        yield* fixture.fire;
+        yield* fixture.fire;
+        expect(delivered).toEqual([15_000, 30_000]);
+        expect(fixture.alarm).toBe(45_000);
+      }).pipe(Effect.provide(RuntimeContext.phantom)),
+    );
+
+    it.effect("stops a recurring job cancelled or replaced while it ran", () =>
+      Effect.gen(function* () {
+        const fixture = yield* makeAlarmScheduler;
+        const start = yield* Clock.currentTimeMillis;
+        const cancelled: AlarmCallback<null> = yield* fixture.register("cancelled", () =>
+          cancelled.cancel("a"),
+        );
+        let replacements = 0;
+        const replaced: AlarmCallback<null> = yield* fixture.register("replaced", () =>
+          replacements++ === 0
+            ? replaced.schedule("a", { after: "1 minute", payload: null })
+            : Effect.void,
+        );
+        fixture.seal();
+        yield* cancelled.schedule("a", { every: "10 seconds", payload: null });
+        yield* replaced.schedule("a", { every: "10 seconds", payload: null });
+        yield* fixture.fire;
+        expect(yield* cancelled.getStatus("a")).toBeUndefined();
+        expect((yield* replaced.getStatus("a"))?.scheduledAt).toBe(start + 70_000);
+        yield* fixture.fire;
+        // The replacement ran once and was acknowledged, like any one-off job.
+        expect(yield* replaced.getStatus("a")).toBeUndefined();
+        expect(fixture.alarm).toBeNull();
+      }).pipe(Effect.provide(RuntimeContext.phantom)),
+    );
+
+    it.effect("adds recurrence to a version-two table without changing its version", () =>
+      Effect.gen(function* () {
+        const fixture = yield* makeAlarmScheduler;
+        const callback = yield* fixture.register("tick", (_: null) => Effect.void);
+        fixture.seal();
+        // A table as releases without recurrence left it.
+        yield* callback.getStatus("a");
+        fixture.db.exec("ALTER TABLE alchemy_alarm_callbacks DROP COLUMN recurrence");
+        fixture.restart();
+        const restarted = yield* fixture.register("tick", (_: null) => Effect.void);
+        fixture.seal();
+        yield* restarted.schedule("a", { every: "10 seconds", payload: null });
+        expect(fixture.db.query("SELECT version FROM alchemy_alarm_schema").get()).toEqual({
+          version: 2,
+        });
+        expect(
+          fixture.db
+            .query("SELECT recurrence IS NOT NULL AS recurring FROM alchemy_alarm_callbacks")
+            .get(),
+        ).toEqual({ recurring: 1 });
+      }).pipe(Effect.provide(RuntimeContext.phantom)),
+    );
+
+    it.effect("runs a recurring job once after a release without recurrence replaced it", () =>
+      Effect.gen(function* () {
+        const fixture = yield* makeAlarmScheduler;
+        const callback = yield* fixture.register("tick", (_: null) => Effect.void);
+        fixture.seal();
+        yield* callback.schedule("a", { every: "10 seconds", payload: null });
+        // An older release rescheduling the job writes a new version and
+        // leaves the column it doesn't know about.
+        fixture.db.exec("UPDATE alchemy_alarm_callbacks SET version = 'older-release'");
+        yield* fixture.fire;
+        expect(yield* callback.getStatus("a")).toBeUndefined();
+        expect(fixture.alarm).toBeNull();
+      }).pipe(Effect.provide(RuntimeContext.phantom)),
+    );
+
+    for (const [label, schedule] of [
+      ["an unparsable cron expression", { cron: "every morning", payload: null }],
+      ["an unknown time zone", { cron: "0 9 * * *", timeZone: "Mars/Olympus", payload: null }],
+      ["a zero interval", { every: 0, payload: null }],
+      ["two times", { after: "1 second", every: "1 minute", payload: null } as never],
+    ] as const) {
+      it.effect(`rejects a recurring schedule with ${label}`, () =>
+        Effect.gen(function* () {
+          const fixture = yield* makeAlarmScheduler;
+          const callback = yield* fixture.register("tick", (_: null) => Effect.void);
+          fixture.seal();
+          const error = yield* Effect.flip(callback.schedule("a", schedule));
+          expect(error._tag).toBe("CallbackError");
+          expect(yield* callback.getStatus("a")).toBeUndefined();
+        }).pipe(Effect.provide(RuntimeContext.phantom)),
+      );
+    }
   },
 );

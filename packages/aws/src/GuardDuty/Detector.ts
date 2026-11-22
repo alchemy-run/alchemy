@@ -5,6 +5,7 @@ import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -48,8 +49,18 @@ export interface Detector extends Resource<
     findingPublishingFrequency: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DetectorLookup
 > {}
+
+/**
+ * Props for {@link Detector.lookup}: find a detector this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DetectorLookup {
+  /** The detector id of the existing detector. */
+  detectorId: string;
+}
 
 /**
  * A GuardDuty detector — the account/region singleton that enables Amazon
@@ -71,13 +82,23 @@ export interface Detector extends Resource<
  *   tags: { team: "security" },
  * });
  * ```
+ *
+ * ### Looking up an existing detector
+ * `Detector.lookup` references a detector Alchemy doesn't manage (created in the
+ * console or by another stack), found by `detectorId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing detector
+ * ```typescript
+ * const existing = AWS.GuardDuty.Detector.lookup({ detectorId: "my-detector" });
+ * ```
  */
 const DetectorResource = Resource<Detector>("AWS.GuardDuty.Detector");
 
 export { DetectorResource as Detector };
 
 export const detectorArn = (region: string, accountId: string, detectorId: string) =>
-  `arn:aws:guardduty:${region}:${accountId}:detector/${detectorId}`;
+  `arn:${partitionOf(region)}:guardduty:${region}:${accountId}:detector/${detectorId}`;
 
 const buildAttrs = Effect.fn(function* (detectorId: string, d: guardduty.GetDetectorResponse) {
   const { accountId, region } = yield* AWSEnvironment.current;
@@ -101,9 +122,16 @@ export const DetectorProvider = () =>
       const getDetector = (detectorId: string) =>
         guardduty
           .getDetector({ DetectorId: detectorId })
-          .pipe(Effect.catchTag("BadRequestException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("BadRequestException", () => Effect.undefined));
 
       return {
+        lookup: Effect.fn(function* ({ detectorId }) {
+          if (!detectorId) return undefined;
+          const d = yield* getDetector(detectorId);
+          if (!d) return undefined;
+          const attrs = yield* buildAttrs(detectorId, d);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, output }) {
           const detectorId = output?.detectorId ?? (yield* firstDetectorId);
           if (!detectorId) return undefined;

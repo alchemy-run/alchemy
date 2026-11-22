@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as dr from "@distilled.cloud/azure/recoveryservicesdatareplication";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { logLevel, subscription, tags, vaultStack, waitGone } from "./shared.ts";
 
@@ -36,8 +36,7 @@ const getPolicy = (rg: string, vault: string, policyName: string) =>
     });
   });
 
-const customOf = (policy: dr.GetPolicyResponse) =>
-  policy.properties?.customProperties as Record<string, unknown>;
+const customOf = (policy: dr.GetPolicyResponse) => policy.properties?.customProperties;
 
 // Vault and policies are free; ~5 minutes.
 test.provider(
@@ -56,8 +55,8 @@ test.provider(
       const vault = created.vault.vaultName;
       const name = created.policy.policyName;
       const observed = customOf(yield* getPolicy(rg, vault, name));
-      expect(observed.instanceType).toEqual("VMwareToAzStackHCI");
-      expect(observed.recoveryPointHistoryInMinutes).toEqual(4320);
+      expect(observed?.instanceType).toEqual("VMwareToAzStackHCI");
+      expect(observed?.recoveryPointHistoryInMinutes).toEqual(4320);
 
       // Replace: retention (the service ignores a re-PUT of a policy).
       const updated = yield* stack.deploy(
@@ -70,7 +69,7 @@ test.provider(
       expect(yield* waitGone(getPolicy(rg, vault, name))).toEqual("gone");
       expect(
         customOf(yield* getPolicy(rg, vault, updated.policy.policyName))
-          .recoveryPointHistoryInMinutes,
+          ?.recoveryPointHistoryInMinutes,
       ).toEqual(2880);
 
       // Replace: instanceType.
@@ -81,7 +80,7 @@ test.provider(
         }),
       );
       expect(
-        customOf(yield* getPolicy(rg, vault, replaced.policy.policyName)).instanceType,
+        customOf(yield* getPolicy(rg, vault, replaced.policy.policyName))?.instanceType,
       ).toEqual("HyperVToAzStackHCI");
 
       // Delete the policy, keep the vault.

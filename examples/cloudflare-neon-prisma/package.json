@@ -30,6 +30,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/test": "workspace:*",
     "prisma": "catalog:",
     "typescript": "catalog:"
   }

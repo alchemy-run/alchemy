@@ -1,11 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import type * as memcache from "@distilled.cloud/gcp/memcache_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import MemcacheBindingsHost, { Cache, memcacheEnabled } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -17,7 +17,7 @@ let hostAccount: string;
 let project: string;
 let instanceName: string;
 
-describe.skipIf(!dockerAvailable || !memcacheEnabled)(
+describe.skipIf(!memcacheEnabled)(
   "Memcache Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:memcache", "provider:gcp:run", "live"],
@@ -59,8 +59,8 @@ describe.skipIf(!dockerAvailable || !memcacheEnabled)(
 
             // Memcache instances have no IAM policy of their own.
             const policy = yield* crm.getIamPolicyProjects({
+              options: { requestedPolicyVersion: 3 },
               resource: `projects/${project}`,
-              body: { options: { requestedPolicyVersion: 3 } },
             });
             const roles = (policy.bindings ?? [])
               .filter((binding) =>

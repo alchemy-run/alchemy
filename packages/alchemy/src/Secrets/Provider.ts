@@ -1,4 +1,5 @@
 import * as ConfigProvider from "effect/ConfigProvider";
+import type * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -21,6 +22,7 @@ export type SecretsServices =
   | Path.Path
   | HttpClient.HttpClient
   | ChildProcessSpawner.ChildProcessSpawner
+  | SecureRandom.SecureRandom
   | AuthProviders
   | ProfileStore;
 

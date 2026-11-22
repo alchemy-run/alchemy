@@ -45,7 +45,7 @@ export const makeSecretHelpers = Effect.gen(function* () {
         return yield* Effect.sync(() => new Uint8Array(Buffer.from(data, "base64")));
       }).pipe(
         // Missing, disabled, and destroyed versions have no readable payload.
-        Effect.catchTag(["NotFound", "SecretVersionNotEnabled"], () => Effect.succeed(undefined)),
+        Effect.catchTag(["NotFound", "SecretVersionNotEnabled"], () => Effect.undefined),
       );
     return {
       accessBytes,
@@ -67,10 +67,7 @@ export const makeSecretHelpers = Effect.gen(function* () {
             : Buffer.from(value.buffer, value.byteOffset, value.byteLength)
           ).toString("base64"),
         );
-        const version = yield* addVersion({
-          parent: yield* secretName,
-          body: { payload: { data } },
-        });
+        const version = yield* addVersion({ payload: { data }, parent: yield* secretName });
         return version.name ?? "";
       }),
     disableVersion: (version) =>

@@ -9,9 +9,18 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { nameTagFilter, single } from "../internal/Lookup.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { VpcId } from "./Vpc.ts";
+
+export class EgressOnlyInternetGatewayUnexpectedResponse extends Data.TaggedError(
+  "EgressOnlyInternetGatewayUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type EgressOnlyInternetGatewayId<ID extends string = string> = `eigw-${ID}`;
 export const EgressOnlyInternetGatewayId = <ID extends string>(
@@ -20,7 +29,7 @@ export const EgressOnlyInternetGatewayId = <ID extends string>(
 
 export type EgressOnlyInternetGatewayArn<
   ID extends EgressOnlyInternetGatewayId = EgressOnlyInternetGatewayId,
-> = `arn:aws:ec2:${RegionID}:${AccountID}:egress-only-internet-gateway/${ID}`;
+> = `arn:${Partition}:ec2:${RegionID}:${AccountID}:egress-only-internet-gateway/${ID}`;
 
 export interface EgressOnlyInternetGatewayProps {
   /**
@@ -63,8 +72,23 @@ export interface EgressOnlyInternetGateway extends Resource<
     }>;
   },
   never,
-  Providers
+  Providers,
+  EgressOnlyInternetGatewayLookup
 > {}
+
+/**
+ * Props for {@link EgressOnlyInternetGateway.lookup}: find an egress-only
+ * internet gateway this stack doesn't manage, in the ambient account and region.
+ */
+export type EgressOnlyInternetGatewayLookup =
+  | {
+      /** The gateway's id. */
+      egressOnlyInternetGatewayId: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several match. */
+      name: string;
+    };
 /**
  * An egress-only internet gateway is the IPv6 counterpart to a NAT gateway: it
  * lets instances in a VPC initiate outbound IPv6 traffic to the internet while
@@ -122,6 +146,18 @@ export interface EgressOnlyInternetGateway extends Resource<
  * outbound IPv6 connections (updates, API calls) while remaining unreachable
  * from the public internet.
  *
+ * ### Looking up an existing egress-only internet gateway
+ * `EgressOnlyInternetGateway.lookup` references an egress-only internet gateway Alchemy doesn't manage (created in the
+ * console or by another stack), found by `egressOnlyInternetGatewayId`
+or its `Name` tag. It is read during plan/deploy
+ * and never created, updated or deleted. A lookup by `name` fails with
+ * `AmbiguousLookupError` when several match.
+ *
+ * **Example:** Reference an existing egress-only gateway
+ * ```typescript
+ * const eigw = AWS.EC2.EgressOnlyInternetGateway.lookup({ name: "ipv6-egress" });
+ * ```
+ *
  * @resource
  */
 export const EgressOnlyInternetGateway = Resource<EgressOnlyInternetGateway>(
@@ -160,7 +196,11 @@ export const EgressOnlyInternetGatewayProvider = () =>
             Effect.flatMap((gw) =>
               gw
                 ? Effect.succeed(gw)
-                : Effect.fail(new Error(`Egress-Only Internet Gateway ${eigwId} not found`)),
+                : Effect.fail(
+                    new EgressOnlyInternetGatewayUnexpectedResponse({
+                      message: `Egress-Only Internet Gateway ${eigwId} not found`,
+                    }),
+                  ),
             ),
           );
 
@@ -170,7 +210,7 @@ export const EgressOnlyInternetGatewayProvider = () =>
             egressOnlyInternetGatewayId:
               gw.EgressOnlyInternetGatewayId as EgressOnlyInternetGatewayId,
             egressOnlyInternetGatewayArn:
-              `arn:aws:ec2:${env.region}:${env.accountId}:egress-only-internet-gateway/${gw.EgressOnlyInternetGatewayId}` as EgressOnlyInternetGatewayArn,
+              `arn:${partitionOf(env.region)}:ec2:${env.region}:${env.accountId}:egress-only-internet-gateway/${gw.EgressOnlyInternetGatewayId}` as EgressOnlyInternetGatewayArn,
             attachments: gw.Attachments?.map((a) => ({
               state: a.State as "attaching" | "attached" | "detaching" | "detached",
               vpcId: a.VpcId as VpcId,
@@ -200,7 +240,7 @@ export const EgressOnlyInternetGatewayProvider = () =>
                       egressOnlyInternetGatewayId:
                         gw.EgressOnlyInternetGatewayId as EgressOnlyInternetGatewayId,
                       egressOnlyInternetGatewayArn:
-                        `arn:aws:ec2:${env.region}:${env.accountId}:egress-only-internet-gateway/${gw.EgressOnlyInternetGatewayId}` as EgressOnlyInternetGatewayArn,
+                        `arn:${partitionOf(env.region)}:ec2:${env.region}:${env.accountId}:egress-only-internet-gateway/${gw.EgressOnlyInternetGatewayId}` as EgressOnlyInternetGatewayArn,
                       attachments: gw.Attachments?.map((a) => ({
                         state: a.State as "attaching" | "attached" | "detaching" | "detached",
                         vpcId: a.VpcId as VpcId,
@@ -211,6 +251,30 @@ export const EgressOnlyInternetGatewayProvider = () =>
             );
             return items satisfies EgressOnlyInternetGateway["Attributes"][];
           }),
+
+        lookup: Effect.fn(function* (props) {
+          const found = yield* ec2
+            .describeEgressOnlyInternetGateways(
+              "egressOnlyInternetGatewayId" in props
+                ? { EgressOnlyInternetGatewayIds: [props.egressOnlyInternetGatewayId] }
+                : { Filters: [nameTagFilter(props.name)] },
+            )
+            .pipe(
+              Effect.catchTag("InvalidEgressOnlyInternetGatewayId.NotFound", () =>
+                Effect.succeed({ EgressOnlyInternetGateways: [] }),
+              ),
+            );
+          const match = yield* single(
+            "AWS.EC2.EgressOnlyInternetGateway",
+            "egressOnlyInternetGatewayId" in props
+              ? props.egressOnlyInternetGatewayId
+              : `Name=${props.name}`,
+            found.EgressOnlyInternetGateways ?? [],
+            (x) => x.EgressOnlyInternetGatewayId,
+          );
+          if (!match?.EgressOnlyInternetGatewayId) return undefined;
+          return yield* toAttrs(match);
+        }),
 
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;

@@ -320,7 +320,7 @@ interface ObservedIpsecTunnel {
 const getTunnel = (accountId: string, ipsecTunnelId: string) =>
   magicTransit.getIpsecTunnel({ accountId, ipsecTunnelId, xMagicNewHcTarget: true }).pipe(
     Effect.map((r): ObservedIpsecTunnel | undefined => r.ipsecTunnel ?? undefined),
-    Effect.catchTag("IpsecTunnelNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("IpsecTunnelNotFound", () => Effect.undefined),
   );
 
 /**

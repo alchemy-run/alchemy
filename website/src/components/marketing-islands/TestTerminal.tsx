@@ -110,7 +110,7 @@ export default function TestTerminal({ title = `CI · ${TEST_STAGE}` }: { title?
       }
     };
 
-    run();
+    void run();
     return () => {
       cancelRef.current = true;
     };

@@ -1,4 +1,5 @@
 import * as Output from "alchemy/Output";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
 import type { Role } from "../IAM/Role.ts";
@@ -60,7 +61,7 @@ export const makeTranslateHttpBinding = <I, A, E, R>(options: {
  * auto-generates it) — a UUID is generated per call when omitted.
  */
 export const makeTranslateStartJobHttpBinding = <
-  I extends { DataAccessRoleArn: string; ClientToken: string },
+  I extends { DataAccessRoleArn: string; ClientToken?: string },
   A,
   E,
   R,
@@ -75,6 +76,7 @@ export const makeTranslateStartJobHttpBinding = <
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
+    const random = yield* SecureRandom.SecureRandom;
 
     return Effect.fn(function* <Rl extends Role>(dataAccessRole: Rl) {
       const RoleArn = yield* dataAccessRole.roleArn;
@@ -110,7 +112,7 @@ export const makeTranslateStartJobHttpBinding = <
         return yield* op({
           ...request,
           DataAccessRoleArn: request.DataAccessRoleArn ?? (yield* RoleArn),
-          ClientToken: request.ClientToken ?? (yield* Effect.sync(() => crypto.randomUUID())),
+          ClientToken: request.ClientToken ?? (yield* random.uuidV4()),
         } as I);
       });
     });

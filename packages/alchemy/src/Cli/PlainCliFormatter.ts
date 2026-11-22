@@ -64,7 +64,10 @@ export const plainCliFormatter = (options: { columns: number }): CliOutput.Forma
   const columns = Math.max(60, Math.min(options.columns, 120));
   const fallback = CliOutput.defaultFormatter({ colors: false });
   return {
-    ...fallback,
+    formatCliError: fallback.formatCliError,
+    formatError: fallback.formatError,
+    formatErrors: fallback.formatErrors,
+    formatVersion: fallback.formatVersion,
     formatHelpDoc: (doc) => wrapLines(fallback.formatHelpDoc(compactDoc(doc)), columns),
   };
 };

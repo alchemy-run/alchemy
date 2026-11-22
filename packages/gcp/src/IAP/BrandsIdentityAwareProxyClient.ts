@@ -106,7 +106,7 @@ export const BrandsIdentityAwareProxyClient = Resource<BrandsIdentityAwareProxyC
 export class BrandsIdentityAwareProxyClientNotResolved extends Data.TaggedError(
   "GCP.IAP.BrandsIdentityAwareProxyClientNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -191,10 +191,7 @@ export const BrandsIdentityAwareProxyClientProvider = () =>
 
       if (current === undefined) {
         const created = yield* iap
-          .createProjectsBrandsIdentityAwareProxyClients({
-            parent: brand,
-            body: { displayName },
-          })
+          .createProjectsBrandsIdentityAwareProxyClients({ displayName, parent: brand })
           .pipe(
             Effect.catchTag("Conflict", () =>
               findOwnedClient(env.project, id, brand, userDisplayName),
@@ -205,7 +202,7 @@ export const BrandsIdentityAwareProxyClientProvider = () =>
 
       if (current === undefined) {
         return yield* new BrandsIdentityAwareProxyClientNotResolved({
-          name: name || `${brand}/identityAwareProxyClients`,
+          resourceName: name || `${brand}/identityAwareProxyClients`,
         });
       }
 

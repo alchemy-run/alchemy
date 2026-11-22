@@ -6,13 +6,13 @@ import type { Input, InputProps } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
+import { envStrings } from "alchemy/RuntimeContext";
 import { createInternalTags, diffTags } from "alchemy/Tags";
 import { sha256 } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Assets } from "../Assets.ts";
@@ -26,16 +26,9 @@ import {
 import { MicrovmImage, type MicrovmImageProps } from "./MicrovmImage.ts";
 
 // Fold the `env` map (user-provided + capability-binding contributions) into the
-// MicroVM API's `environmentVariables` (a `Record<string, string>`). Redacted
-// values are unwrapped; non-string values are JSON-encoded.
+// MicroVM API's `environmentVariables` (a `Record<string, string>`).
 const foldEnv = (env: Record<string, any> | undefined): Record<string, string> | undefined => {
-  if (!env) return undefined;
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(env)) {
-    if (value === undefined) continue;
-    const v = Redacted.isRedacted(value) ? Redacted.value(value) : value;
-    out[key] = typeof v === "string" ? v : JSON.stringify(v);
-  }
+  const out = envStrings(env);
   return Object.keys(out).length > 0 ? out : undefined;
 };
 
@@ -155,7 +148,7 @@ const resolveName = (id: string, name?: string) =>
 const getImage = (identifier: string) =>
   microvms
     .getMicrovmImage({ imageIdentifier: identifier })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
 // Look an image up by its (name-only) identifier via the name filter, since
 // `getMicrovmImage` won't accept a name. Returns the full image or undefined.
@@ -206,7 +199,9 @@ const artifactContent = (
         port,
         build: news.build,
       });
-      const dockerfile = buildMicrovmDockerfile(news.dockerfile, runtime, port);
+      const dockerfile = buildMicrovmDockerfile(news.dockerfile, runtime, port, {
+        sourceMaps: files.some((f) => f.path.endsWith(".map")),
+      });
       const identity = `${bundleHash}:${dockerfile}`;
       const contentHash = yield* sha256(identity);
       const archive = yield* zipFiles([{ path: "Dockerfile", content: dockerfile }, ...files]);
@@ -612,7 +607,7 @@ const waitForDeleted = (imageArn: string, session: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const image = yield* microvms
       .getMicrovmImage({ imageIdentifier: imageArn })
-      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
     if (!image || image.state === "DELETED") return;
     if (image.state === "DELETE_FAILED") {
       return yield* new ImageFailed({ imageArn, state: image.state });

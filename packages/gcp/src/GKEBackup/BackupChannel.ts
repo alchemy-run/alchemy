@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -87,8 +88,33 @@ export type BackupChannel = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BackupChannelLookup
 >;
+
+/**
+ * Props for {@link BackupChannel.lookup}: find a backup channel this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface BackupChannelLookup {
+  /**
+   * Backup channel id (the `{backupChannel}` segment of
+   * `projects/{project}/
+   * locations/{location}/backupChannels/{backupChannel}`).
+   */
+  backupChannelId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Backup for GKE backup channel that authorizes storing backups in a
@@ -125,6 +151,19 @@ export type BackupChannel = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing backup channel
+ * `BackupChannel.lookup` references a backup channel Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * backup channel.
+ *
+ * **Example:** Reference an existing backup channel
+ * ```typescript
+ * const backupChannel = GCP.GKEBackup.BackupChannel.lookup({
+ *   backupChannelId: "my-backup-channel",
+ * });
+ * ```
+ *
  * @resource
  * @category GKEBackup
  */
@@ -154,7 +193,7 @@ const toAttrs = (item: gkebackup.BackupChannel, project: string, region: string)
 const getByName = (name: string) =>
   gkebackup
     .getProjectsLocationsBackupChannels({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   listAtLocation(project, (parent) =>
@@ -193,6 +232,15 @@ export const BackupChannelProvider = () =>
           previousDest !== `projects/${nextDest}`,
       });
     }),
+
+    lookup: Effect.fn(function* ({ backupChannelId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, backupChannelId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -238,15 +286,13 @@ export const BackupChannelProvider = () =>
       if (current === undefined) {
         const created = yield* gkebackup
           .createProjectsLocationsBackupChannels({
+            destinationProject,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             backupChannelId,
-            body: {
-              destinationProject,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -254,7 +300,7 @@ export const BackupChannelProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -266,13 +312,11 @@ export const BackupChannelProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* gkebackup.patchProjectsLocationsBackupChannels({
+          etag: current.etag,
+          labels: desiredLabels,
+          description: news.description,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            etag: current.etag,
-            labels: desiredLabels,
-            description: news.description,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
@@ -293,7 +337,7 @@ export const BackupChannelProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

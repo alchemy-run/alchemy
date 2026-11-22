@@ -28,7 +28,15 @@ import {
   RunRef,
   Upstream,
 } from "../Protocol.ts";
-import { Bucket, Cache, COMMENT_MARKER, Database, RegistryConfig, tarballKey } from "./Bindings.ts";
+import {
+  Bucket,
+  Cache,
+  COMMENT_MARKER,
+  Database,
+  type Policy,
+  RegistryConfig,
+  tarballKey,
+} from "./Bindings.ts";
 import * as GitHub from "./GitHub.ts";
 import * as KVCache from "./KVCache.ts";
 import { sweep } from "./Sweep.ts";
@@ -89,6 +97,19 @@ export const tagsFor = (run: Run): string[] => {
   return tags;
 };
 
+/**
+ * The branch whose latest publication this run becomes, when the policy
+ * keeps that branch. Only pushes count: a pull request run's head branch
+ * names the pull request's branch, and a fork never gets branch tags.
+ */
+export const keptBranch = (run: Run, policy: Pick<Policy, "keepLatest">): string | null =>
+  run.pr === null &&
+  !isFork(run) &&
+  run.headBranch !== null &&
+  (policy.keepLatest ?? []).includes(run.headBranch)
+    ? run.headBranch
+    : null;
+
 /** The tag install commands are written against. */
 export const installTag = (run: Run) =>
   run.pr !== null ? `pr:${run.pr}:${run.headSha.slice(0, SHORT)}` : run.headSha.slice(0, SHORT);
@@ -119,7 +140,9 @@ const lookupRun = Effect.fn("lookupRun")(function* (ref: RunRef) {
     data.status !== "in_progress" ||
     (data.run_attempt !== undefined && data.run_attempt !== ref.attempt)
   ) {
-    return yield* RunNotInProgress.make({ message: "run is not in progress" });
+    return yield* RunNotInProgress.make({
+      message: `run is not in progress: GitHub reports run ${ref.runId} as ${data.status}, attempt ${data.run_attempt ?? "unknown"}; the request is from attempt ${ref.attempt}`,
+    });
   }
   if (data.event !== "push" && data.event !== "pull_request") {
     return yield* BadRequest.make({
@@ -189,7 +212,7 @@ const publish = Effect.fn("publish")(function* (run: Run, manifestText: string) 
   const base = yield* origin;
 
   yield* requireVouched(run, manifestText);
-  const manifest = yield* Schema.decodeUnknownEffect(ManifestJson)(manifestText).pipe(
+  const manifest = yield* Schema.decodeEffect(ManifestJson)(manifestText).pipe(
     Effect.mapError((e) => BadRequest.make({ message: `invalid manifest: ${String(e)}` })),
   );
   // The run vouched for the manifest, but the tags come from the run's
@@ -226,6 +249,7 @@ const publish = Effect.fn("publish")(function* (run: Run, manifestText: string) 
   const prs = run.pr !== null ? [`${run.repo}#${run.pr}`] : [];
   const tags = tagsFor(run);
   const tag = installTag(run);
+  const headOf = keptBranch(run, policy);
   const published = yield* Effect.forEach(
     packages,
     Effect.fn(function* (pkg: ManifestPackage) {
@@ -238,9 +262,20 @@ const publish = Effect.fn("publish")(function* (run: Run, manifestText: string) 
             sha256: pkg.sha256,
             expiresAt,
             prs,
+            headOf,
           }),
         { discard: true },
       );
+      // After the upserts, so the package always has a kept publication:
+      // a failure here leaves the previous head kept a little longer.
+      if (headOf !== null) {
+        yield* Tags.releaseHead({
+          package: pkg.name,
+          branch: headOf,
+          current: tags,
+          expiresAt,
+        });
+      }
       return {
         name: pkg.name,
         group: pkg.group,

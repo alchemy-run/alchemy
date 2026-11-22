@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteApplePayDomain,
   GetApplePayDomains,
@@ -40,8 +39,18 @@ export type ApplePayDomain = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  ApplePayDomainLookup
 >;
+
+/**
+ * Props for {@link ApplePayDomain.lookup}: find an Apple Pay domain this stack
+ * doesn't manage by its id.
+ */
+export interface ApplePayDomainLookup {
+  /** Stripe Apple Pay domain id, e.g. `"apwc_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Apple Pay Domain — a hostname registered so Apple Pay can be
@@ -84,6 +93,16 @@ export type ApplePayDomain = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing Apple Pay domain
+ * `ApplePayDomain.lookup` references an Apple Pay domain Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Apple Pay domain
+ * ```typescript
+ * const ref = Stripe.ApplePayDomain.lookup({ id: "apwc_1A2b3C4d5E6f7G8h" });
+ * ```
+ *
  * @resource
  * @product Payment Methods
  */
@@ -107,7 +126,7 @@ const toAttrs = (domain: StripeApplePayDomain): ApplePayDomainAttributes => ({
 const isMissing = isMissingStripeResource;
 
 const getById = (domain: string) =>
-  GetApplePayDomain({ domain }).pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
+  GetApplePayDomain({ domain }).pipe(Effect.catchIf(isMissing, () => Effect.undefined));
 
 const listAllApplePayDomains = Effect.fn(function* () {
   const domains: StripeApplePayDomain[] = [];
@@ -186,6 +205,11 @@ export const ApplePayDomainProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ output, olds }) {
       const domainName =
         output?.domainName ?? (typeof olds?.domainName === "string" ? olds.domainName : undefined);
@@ -216,10 +240,8 @@ export const ApplePayDomainProvider = () =>
       if (current === undefined) {
         current = yield* CreateApplePayDomain({
           domain_name: news.domainName,
+          idempotencyKey: `alchemy-apple-pay-domain-${instanceId}`,
         }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-apple-pay-domain-${instanceId}`,
-          }),
           Effect.catchIf(
             (e) => e._tag === "InvalidRequestError" || e._tag === "Conflict",
             (e) =>

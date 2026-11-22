@@ -1,11 +1,11 @@
 import * as Azure from "@alchemy.run/azure";
 import { instanceIdOf, STEP_ACTIVITY } from "@alchemy.run/azure/Functions/DurableEngine";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as dts from "@distilled.cloud/azure/durabletask-data";
-import { describe, expect } from "alchemy-test";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import type { Status } from "alchemy/Workflows";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

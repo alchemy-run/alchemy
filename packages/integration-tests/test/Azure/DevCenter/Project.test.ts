@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as devcenter from "@distilled.cloud/azure/devcenter";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
@@ -105,9 +105,9 @@ test.provider(
       expect(replaced.project.projectId).not.toEqual(project.projectId);
       const renamed = yield* getProject(group.resourceGroupName, "alchemy-project-renamed");
       expect(renamed.properties?.description).toEqual("Two");
-      expect(
-        yield* waitGone(getProject(group.resourceGroupName, project.projectName)),
-      ).toEqual("gone");
+      expect(yield* waitGone(getProject(group.resourceGroupName, project.projectName))).toEqual(
+        "gone",
+      );
 
       yield* stack.destroy();
       expect(

@@ -2,10 +2,22 @@
 title: Tokens
 description: Create tokens for apps that run outside your Stack.
 ---
+import Tree from "../../../components/diagrams/Tree.astro";
 
 Turso has two kinds of tokens. A database token lets an app run SQL. An API token lets an app create and delete databases.
 
 Workers that use [Connect](/turso/connections) or [ManageDatabases](/turso/database-per-tenant) get their tokens for you. Create one yourself when an app outside your Stack needs access.
+
+<Tree
+  nodes={[
+    { id: "g", label: "Tenants", type: "group" },
+    { id: "d1", label: "tenant-acme", type: "database", parent: "g", specs: [["DatabaseToken", "read-only · 2w"]] },
+    { id: "d2", label: "tenant-globex", type: "database", parent: "g" },
+    { id: "d3", label: "tenant-new", type: "database · created later", parent: "g", tone: "muted" },
+  ]}
+  scopes={[{ on: "g", label: "GroupToken: every database, even later ones" }]}
+  caption="A database token reaches one database. A group token reaches every database in its group, including ones created after it."
+/>
 
 ## A token for one database
 

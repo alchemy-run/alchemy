@@ -1,12 +1,12 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Command from "alchemy/Command";
 import * as Output from "alchemy/Output";
 import type * as Plan from "alchemy/Plan";
 import { Stack } from "alchemy/Stack";
 import { encodeState, type ResourceState, reviveState, State } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -740,6 +740,59 @@ describe.concurrent(
           yield* stack.destroy();
         }).pipe(logLevel),
       { timeout: 360_000 },
+    );
+
+    test.provider(
+      "StaticSite: R2 S3Credentials on env is a binding, not a build env var (#2219)",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+
+          yield* stack.destroy();
+
+          const cwd = yield* fs.makeTempDirectory({ prefix: "alchemy-staticsite-s3-" });
+          yield* fs.writeFileString(
+            path.join(cwd, "build.sh"),
+            [
+              "#!/bin/bash",
+              "set -euo pipefail",
+              "mkdir -p dist",
+              'echo "STORAGE_S3=${STORAGE_S3:-missing}" > dist/env.txt',
+            ].join("\n"),
+          );
+
+          // `S3Credentials` is Effect-shaped; before #2219 the build env
+          // serialization yielded it and the deploy died with
+          // "Service not found: Cloudflare.Workers.WorkerEnvironment".
+          const site = yield* stack.deploy(
+            Effect.gen(function* () {
+              const bucket = yield* Cloudflare.R2.Bucket("StaticSiteS3Bucket", {
+                forceDestroy: true,
+              });
+              return yield* Cloudflare.Website.StaticSite("S3Site", {
+                command: "bash build.sh",
+                shell: true,
+                cwd,
+                outdir: "dist",
+                workersDev: false,
+                env: {
+                  STORAGE_S3: Cloudflare.R2.S3Credentials(bucket, { access: "read-write" }),
+                },
+              });
+            }),
+          );
+
+          yield* expectWorkerExists(site.workerName, accountId);
+          // The credentials are a Worker secret, never handed to the build.
+          const envFile = yield* fs.readFileString(path.join(cwd, "dist", "env.txt"));
+          expect(envFile).toContain("STORAGE_S3=missing");
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:r2"], timeout: 360_000 },
     );
 
     // ─────────────────────────────────────────────────────────────────────

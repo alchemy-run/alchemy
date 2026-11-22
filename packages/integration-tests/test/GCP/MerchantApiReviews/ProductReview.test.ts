@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as reviews from "@distilled.cloud/gcp/merchantapi_reviews_v1beta";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -9,6 +9,7 @@ import {
   logLevel,
   probeAccount,
   probeDataSource,
+  reviewsV1betaRetired,
   productReviewDataSource,
   runProductReviewLifecycle,
 } from "./common.ts";
@@ -47,7 +48,7 @@ test.provider.skipIf(!runProductReviewLifecycle)(
   },
 );
 
-test.provider.skipIf(runProductReviewLifecycle)(
+test.provider.skipIf(runProductReviewLifecycle || reviewsV1betaRetired)(
   "insertAccountsProductReviews without Product Reviews access fails with InsufficientScopes",
   (stack) =>
     Effect.gen(function* () {
@@ -55,17 +56,15 @@ test.provider.skipIf(runProductReviewLifecycle)(
 
       const error = yield* Effect.flip(
         reviews.insertAccountsProductReviews({
+          productReviewId: "alchemy-probe-product-review",
+          productReviewAttributes: {
+            reviewTime: "2020-01-01T00:00:00Z",
+            content: "probe",
+            title: "Alchemy Probe Product Review",
+            skus: ["alchemy-probe-sku"],
+          },
           parent: `accounts/${probeAccount}`,
           dataSource: probeDataSource(productReviewDataSource),
-          body: {
-            productReviewId: "alchemy-probe-product-review",
-            productReviewAttributes: {
-              reviewTime: "2020-01-01T00:00:00Z",
-              content: "probe",
-              title: "Alchemy Probe Product Review",
-              skus: ["alchemy-probe-sku"],
-            },
-          },
         }),
       );
       expect(error._tag).toEqual("InsufficientScopes");

@@ -265,10 +265,20 @@ export interface ConnectionProps {
   };
 }
 
+/** ARM ID of an observed `AzureResource` target. */
+export const targetIdOf = (target: servicelinker.TargetServiceBase | undefined) =>
+  target !== undefined && "id" in target ? target.id : undefined;
+
+/** Endpoint of an observed endpoint target (Confluent, self-hosted). */
+export const targetEndpointOf = (target: servicelinker.TargetServiceBase | undefined) =>
+  target !== undefined && "endpoint" in target ? target.endpoint : undefined;
+
 /** The request body for a linker/connector PUT. */
 export const toLinkerInput = (props: ConnectionProps): servicelinker.LinkerPropertiesInput => ({
-  targetService: props.targetService,
-  authInfo: props.authInfo,
+  // The target `type` and `authType` decide the arms; the props mirror the
+  // arms with looser nested types, so they are asserted.
+  targetService: props.targetService as servicelinker.TargetServiceBase,
+  authInfo: props.authInfo as servicelinker.AuthInfoBase,
   clientType: props.clientType ?? "none",
   vNetSolution: props.vNetSolution,
   secretStore: props.secretStore,
@@ -312,7 +322,8 @@ export const observedDiffers = (
   const desiredTarget = desired.targetService;
   const targetKey =
     desiredTarget.type === "AzureResource" ? desiredTarget.id : desiredTarget.endpoint;
-  const observedKey = desiredTarget.type === "AzureResource" ? target?.id : target?.endpoint;
+  const observedKey =
+    desiredTarget.type === "AzureResource" ? targetIdOf(target) : targetEndpointOf(target);
   return (
     (target?.type ?? "") !== desiredTarget.type ||
     (observedKey ?? "").toLowerCase() !== targetKey.toLowerCase() ||

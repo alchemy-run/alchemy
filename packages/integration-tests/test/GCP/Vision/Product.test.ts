@@ -1,9 +1,10 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as vision from "@distilled.cloud/gcp/vision_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { location, logLevel, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -47,12 +48,10 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         vision.createProjectsLocationsProducts({
+          displayName: "Alchemy probe",
+          productCategory: "homegoods-v2",
           parent: `projects/${project}/locations/${location}`,
           productId: "alchemy-vision-probe",
-          body: {
-            displayName: "Alchemy probe",
-            productCategory: "homegoods-v2",
-          },
         }),
       );
       expect(error._tag).toEqual("ProductSearchNotOnboarded");
@@ -79,6 +78,10 @@ test.provider.skipIf(!runLifecycle)(
             productLabels: [{ key: "color", value: "blue" }],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Vision.Product.lookup({ location: created.location, productId: created.productId }),
+        created,
       );
 
       expect(

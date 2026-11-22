@@ -34,9 +34,7 @@ export default class BigQueryDataTransferBindingsHost extends GCP.Function<BigQu
 
     return {
       fetch: serveProbes({
-        startManualRuns: start({
-          body: { requestedRunTime: "2020-01-01T00:00:00Z" },
-        }),
+        startManualRuns: start({ requestedRunTime: "2020-01-01T00:00:00Z" }),
       }),
     };
   }).pipe(Effect.provide(GCP.BigQueryDataTransfer.StartManualRunsHttp)),

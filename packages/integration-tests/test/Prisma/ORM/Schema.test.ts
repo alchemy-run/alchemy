@@ -1,6 +1,6 @@
 import { defineContract, enumType, field, member, model } from "@alchemy.run/prisma/ORM";
 import { emitSchemas, makeSchemas, SchemaError } from "@alchemy.run/prisma/ORM/Schema";
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { contract } from "./fixtures/client/contract.ts";

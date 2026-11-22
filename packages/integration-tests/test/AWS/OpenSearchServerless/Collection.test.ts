@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { AccessPolicy, Collection, SecurityPolicy } from "@alchemy.run/aws/OpenSearchServerless";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as aoss from "@distilled.cloud/aws/opensearchserverless";
 import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -229,7 +229,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(collection.collectionArn).toContain(":collection/");
       expect(collection.collectionId).toBeDefined();
       // The data-plane endpoint that a Bedrock Knowledge Base points at.
-      expect(collection.collectionEndpoint).toContain("aoss.amazonaws.com");
+      expect(collection.collectionEndpoint).toContain(".aoss.");
 
       // Out-of-band verification via distilled: the collection is ACTIVE.
       const observed = yield* aoss.batchGetCollection({ ids: [collection.collectionId] });

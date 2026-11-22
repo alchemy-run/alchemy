@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { requestClientSecretToken } from "@distilled.cloud/azure";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
@@ -61,7 +61,7 @@ test.provider(
       ).toEqual([password.keyId]);
 
       const token = yield* signIn(app.tenantId, app.appId, password.secretText);
-      expect(Redacted.value(token.token).split(".").length).toEqual(3);
+      expect(Redacted.value(token.value).split(".").length).toEqual(3);
 
       // A new expiry rotates the secret: new key in, old key out.
       const { password: rotated } = yield* stack.deploy(program("2027-12-31T00:00:00Z"));

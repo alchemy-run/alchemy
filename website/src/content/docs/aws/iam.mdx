@@ -1,0 +1,278 @@
+---
+title: IAM and bindings
+description: How IAM identities, roles, trust, resource-based policies and tag-based access (ABAC) work on AWS, and how Alchemy bindings write each runtime's least-privilege policies from the calls its code makes.
+---
+
+import DAG from "../../../components/DAG.astro";
+import Sequence from "../../../components/diagrams/Sequence.astro";
+
+IAM is the part of AWS that answers one question on every request: may this identity do this action on this resource? Nothing is allowed until a policy says so.
+
+## Every request has an identity
+
+When your code calls `s3:PutObject`, AWS first works out who is asking. The caller signs each request with credentials, and the credentials belong to an **identity**.
+
+There are two kinds. An **IAM user** has long-lived keys of its own. An **IAM role** has none: a trusted principal **assumes** it and receives temporary credentials that expire within hours.
+
+Prefer roles everywhere. A person signs in through IAM Identity Center and assumes a role in the account they work in. A Lambda Function, an ECS task or an EC2 instance runs as a role AWS assumes for it. CI assumes a role through OIDC. No long-lived key is ever written down.
+
+## A policy lists what an identity may do
+
+A **policy** is a JSON document of statements. Each statement names an effect, the actions it covers and the resources it applies to:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["sqs:SendMessage"],
+  "Resource": "arn:aws:sqs:us-east-1:123456789012:myapp-jobs-a1b2c3"
+}
+```
+
+Actions are `service:Operation` pairs, one per API call. Resources are ARNs, and a `*` in one matches many: `arn:aws:s3:::myapp-files-a1b2c3/*` is every object in one Bucket.
+
+AWS denies by default. A request is allowed only if some statement allows it and no statement denies it. So the safe policy is the smallest one: exactly the actions the code calls, on exactly the resources it calls them on. That's **least privilege**.
+
+## A role is trusted, then assumed
+
+A role has two policies. Its **permissions** say what it may do. Its **trust policy** says who may assume it.
+
+<DAG
+  nodes={[
+    { id: "lambda", label: "Lambda", type: "AWS service", col: 0, row: 0 },
+    { id: "trust", label: "trust policy", type: "who may assume it", col: 1, row: 0 },
+    { id: "perms", label: "permissions", type: "SendMessage on Jobs", col: 1, row: 1 },
+    { id: "queue", label: "Jobs", type: "SQS Queue", col: 2, row: 1 },
+  ]}
+  groups={[{ id: "role", label: "Execution role", nodes: ["trust", "perms"] }]}
+  edges={[
+    { from: "lambda", to: "trust", label: "assumes" },
+    { from: "perms", to: "queue" },
+  ]}
+  caption="A role holds two policies. The trust policy lets Lambda assume the role. The permissions let the role send to one Queue."
+/>
+
+A Lambda Function's execution role trusts `lambda.amazonaws.com`, so the Lambda service can assume it on the Function's behalf. Every time your code runs, it carries the role's temporary credentials, and every call it makes is checked against the role's permissions.
+
+## A resource can have a policy too
+
+So far every policy has been attached to an identity, saying what it may do. Many resources carry a policy of their own, saying who may reach them. Buckets, Queues, Topics, KMS keys, Secrets and Lambda Functions all do. This is a **resource-based policy**, and its statements name a **principal**: the account, role or service the statement is about.
+
+```json
+{
+  "Effect": "Allow",
+  "Principal": { "Service": "cloudfront.amazonaws.com" },
+  "Action": ["s3:GetObject"],
+  "Resource": "arn:aws:s3:::myapp-site-a1b2c3/*",
+  "Condition": { "StringEquals": { "AWS:SourceArn": "arn:aws:cloudfront::123456789012:distribution/E1A2B3" } }
+}
+```
+
+This one lets CloudFront read the site's files, but only on behalf of one distribution. The condition matters: without it, any distribution in any account could read the Bucket.
+
+Within one account, either kind of policy can allow a request. Across accounts, both must: the caller's identity policy has to allow the call, and the resource's policy has to allow the caller's account.
+
+<Sequence
+  actors={[
+    { id: "role", label: "Role", type: "account 1111" },
+    { id: "identity", label: "identity policy", type: "account 1111" },
+    { id: "resource", label: "bucket policy", type: "account 2222" },
+    { id: "bucket", label: "Bucket", type: "account 2222", tone: "accent" },
+  ]}
+  steps={[
+    { from: "role", to: "identity", label: "may I s3:GetObject?" },
+    { from: "identity", to: "role", label: "allow", dashed: true },
+    { from: "role", to: "resource", label: "GetObject" },
+    { note: "does it trust account 1111?", over: "resource" },
+    { from: "resource", to: "bucket", label: "allow" },
+    { from: "bucket", to: "role", label: "the object", dashed: true },
+    { divider: "within one account" },
+    { note: "either policy allowing is enough", over: ["identity", "resource"] },
+  ]}
+  caption="A call across accounts passes two checks, one in each account, and both must allow it. Within one account, either is enough. An explicit deny in either always wins."
+/>
+
+Services that call your resources, like CloudFront, EventBridge, SNS or S3 notifications, have no identity policy in your account. A resource policy is the only way to let them in.
+
+## Bindings write the policy
+
+Writing that policy by hand means keeping two lists in step: the calls in the code, and the statements in the role. Add a call and forget the statement, and the call fails in production. Remove a call and forget the statement, and the role keeps a permission nobody uses.
+
+A **binding** keeps them in step. It's one line in the runtime's Construction phase that returns a typed client and adds the matching statement to the runtime's role:
+
+```typescript title="src/api.ts"
+const sendMessage = yield* SQS.SendMessage(Jobs);
+```
+
+Deploy adds `sqs:SendMessage` on the `Jobs` Queue's ARN to the Function's role. Call the client while the Function runs:
+
+```typescript title="src/api.ts"
+yield* sendMessage({ MessageBody: JSON.stringify({ id }) });
+```
+
+The client comes from the binding's Layer, `SQS.SendMessageHttp`, which the Function provides:
+
+```typescript title="src/api.ts"
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const sendMessage = yield* SQS.SendMessage(Jobs);
+    return {
+      fetch: sendMessage({ MessageBody: "hello" }).pipe(
+        Effect.as(HttpServerResponse.text("queued")),
+        Effect.orDie,
+      ),
+    };
+  }).pipe(Effect.provide(SQS.SendMessageHttp)),
+) {}
+```
+
+Each binding is one IAM statement. Bind `S3.GetObject` as well, and the role gains `s3:GetObject` on that Bucket's objects. Delete a binding, and the next deploy removes its statement.
+
+## Bindings are scoped to one resource
+
+A binding takes the resource it grants access to, so its statement names that resource's ARN and nothing else:
+
+```typescript title="src/api.ts"
+const getObject = yield* S3.GetObject(Files);
+const putObject = yield* S3.PutObject(Uploads);
+```
+
+The Function may read from `Files` and write to `Uploads`. It can't write to `Files`, and it can't touch any other Bucket in the account, even one created by the same Stack.
+
+## The role comes with the runtime
+
+You never declare a Lambda Function's execution role. Deploying the Function creates it, with the Lambda trust policy, permission to write its own logs, and one statement per binding. Destroying the Function deletes it.
+
+The role's name and ARN are on the Function, for anything outside the Function that needs them:
+
+```typescript title="alchemy.run.ts"
+const api = yield* Api;
+return { role: api.roleArn };
+```
+
+ECS tasks, EKS workloads and EC2 instances work the same way. A binding on any of them adds its statement to the role that runs it. See [Choosing a runtime](/aws/compute/choosing-a-runtime).
+
+## Bindings write resource policies too
+
+When the caller is a service rather than your code, the binding writes the resource's policy instead of a role's. You don't declare these statements, and each one carries the condition that limits it to the one caller:
+
+A Website's CloudFront distribution gets `s3:GetObject` in its Bucket's policy, for that distribution only. An EventBridge rule that targets a Queue gets `sqs:SendMessage` in the Queue's policy, for that rule only. A rule, schedule or Bucket notification that targets a Function gets a **Lambda permission**, the resource policy that lets the service invoke it. An event source that polls, like a Queue or a Stream, instead gets read permissions on the Function's role.
+
+Remove the website, rule or subscription, and the next deploy removes its statement.
+
+## Open a resource to another account
+
+A resource policy is also how you share a resource with another account. Add your own statements to a Bucket's `policy`, and they're merged with the ones bindings contribute:
+
+```typescript title="src/reports.ts"
+export const Reports = AWS.S3.Bucket("Reports", {
+  bucketName: "acme-reports",
+  policy: [
+    {
+      Effect: "Allow",
+      Principal: { AWS: "arn:aws:iam::222222222222:root" },
+      Action: ["s3:GetObject"],
+      Resource: ["arn:aws:s3:::acme-reports/*"],
+    },
+  ],
+});
+```
+
+Name the Bucket yourself here, so the statement can name its ARN. The other account still has to allow its own roles to make the call. Queues and KMS keys take a `policy` the same way. To let another account or a service invoke a Function, declare a permission:
+
+```typescript title="alchemy.run.ts"
+yield* AWS.Lambda.Permission("PartnerInvoke", {
+  functionName: api.functionName,
+  action: "lambda:InvokeFunction",
+  principal: "222222222222",
+});
+```
+
+## Grant by tag with ABAC
+
+Bindings grant access to named resources: this Function may write to this Bucket. That's the right model when the code knows what it calls. Sometimes access follows a rule instead: anyone on the payments team may read the payments team's tables, including ones created next month.
+
+**Attribute-based access control** (ABAC) writes that rule with tags. A statement's condition compares a tag on the resource with a tag on the caller, so one statement covers every matching resource, current and future:
+
+```typescript title="alchemy.run.ts"
+const analysts = yield* AWS.IAM.Role("PaymentsAnalysts", {
+  assumeRolePolicyDocument: {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: { AWS: "arn:aws:iam::123456789012:root" },
+        Action: ["sts:AssumeRole", "sts:TagSession"],
+      },
+    ],
+  },
+  tags: { team: "payments" },
+  inlinePolicies: {
+    ReadTeamTables: {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Action: ["dynamodb:GetItem", "dynamodb:Query"],
+          Resource: "*",
+          Condition: {
+            StringEquals: { "aws:ResourceTag/team": "${aws:PrincipalTag/team}" },
+          },
+        },
+      ],
+    },
+  },
+});
+```
+
+Tag the resources the rule should cover:
+
+```typescript title="src/ledger.ts"
+export const Ledger = AWS.DynamoDB.Table("Ledger", {
+  partitionKey: "id",
+  attributes: { id: "S" },
+  tags: { team: "payments" },
+});
+```
+
+Alchemy already tags everything it creates with `alchemy::stack`, `alchemy::stage` and `alchemy::id`, so you can scope a rule to one stage without adding tags of your own:
+
+```json
+{ "StringEquals": { "aws:ResourceTag/alchemy::stage": "prod" } }
+```
+
+Not every action supports tag conditions. Check the service's entry in the [AWS service authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html) before relying on one. And keep tags under control: whoever can change a tag can change who has access.
+
+## Declare a role for anything else
+
+Some identities aren't runtimes: the role CI assumes to deploy, a role another service assumes, a role you hand to a partner account. Declare those with `AWS.IAM.Role`, giving its trust policy and its permissions:
+
+```typescript title="alchemy.run.ts"
+const role = yield* AWS.IAM.Role("DeployRole", {
+  assumeRolePolicyDocument: {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: { Federated: oidc.openIDConnectProviderArn },
+        Action: ["sts:AssumeRoleWithWebIdentity"],
+        Condition: {
+          StringLike: { "token.actions.githubusercontent.com:sub": "repo:your-org/your-repo:*" },
+        },
+      },
+    ],
+  },
+  managedPolicyArns: ["arn:aws:iam::aws:policy/AdministratorAccess"],
+});
+```
+
+This one lets GitHub Actions in one repository deploy without a stored key. The [CI tutorial](/aws/tutorial/part-5) builds it step by step.
+
+## Trust another cloud
+
+A runtime on another cloud can be trusted the same way. A Cloud Run service binds an SQS Queue exactly as a Lambda does, and the binding creates a role that trusts that one Google service account. There's no access key to create, store or rotate. See [Federated identity](/aws/security/federated-identity).
+
+## Keep secrets out of policies
+
+IAM decides who may call AWS. It doesn't hold your third-party API keys. Pass those to a runtime from your `.env` through `effect/Config`, or keep them in Secrets Manager when other resources share or rotate them. See [Secrets & env](/aws/security/secrets-env).

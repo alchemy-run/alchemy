@@ -146,10 +146,10 @@ const toAttrs = (item: cw.GoogleCloudContentwarehouseV1DocumentSchema, project: 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cw
         .getProjectsLocationsDocumentSchemas({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string) =>
   collectPages(
@@ -240,15 +240,13 @@ export const DocumentSchemaProvider = () =>
       if (current === undefined) {
         const created = yield* cw
           .createProjectsLocationsDocumentSchemas({
+            displayName,
+            description,
+            documentIsFolder,
+            propertyDefinitions,
             parent,
-            body: {
-              displayName,
-              description,
-              documentIsFolder,
-              propertyDefinitions,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? (yield* findInParent);
         if (current === undefined) {
           current = yield* waitUntilExists(
@@ -260,7 +258,7 @@ export const DocumentSchemaProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: output?.name ?? resourceName(env.project, location, documentSchemaId),
+          resourceName: output?.name ?? resourceName(env.project, location, documentSchemaId),
         });
       }
 
@@ -270,16 +268,14 @@ export const DocumentSchemaProvider = () =>
       const displayChanged = !sameText(current.displayName, displayName);
       if (descriptionChanged || displayChanged || appended.appended) {
         current = yield* cw.patchProjectsLocationsDocumentSchemas({
-          name: currentName,
-          body: {
-            documentSchema: {
-              name: currentName,
-              displayName,
-              description,
-              documentIsFolder,
-              propertyDefinitions: appended.properties,
-            },
+          documentSchema: {
+            name: currentName,
+            displayName,
+            description,
+            documentIsFolder,
+            propertyDefinitions: appended.properties,
           },
+          name: currentName,
         });
       }
 

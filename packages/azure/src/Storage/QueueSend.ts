@@ -1,8 +1,23 @@
 import type { AzureOpError } from "@distilled.cloud/azure";
+import type * as queues from "@distilled.cloud/azure/storage-queue";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import type { Queue } from "./Queue.ts";
+
+/**
+ * Error of every queue client operation: the typed
+ * `@distilled.cloud/azure/storage-queue` errors plus {@link AzureOpError}.
+ */
+export type StorageQueueError =
+  | queues.MessageNotFound
+  | queues.PopReceiptMismatch
+  | queues.QueueAlreadyExists
+  | queues.StorageAuthenticationFailed
+  | queues.StorageAuthorizationFailure
+  | queues.StorageBeingDeleted
+  | queues.StorageResourceAlreadyExists
+  | AzureOpError;
 
 export interface StorageQueueSendOptions {
   /** Seconds before the message becomes visible. @default 0 */
@@ -23,7 +38,7 @@ export interface SendStorageQueueClient {
   send(
     message: string,
     options?: StorageQueueSendOptions,
-  ): Effect.Effect<StorageQueueSendResult, AzureOpError, RuntimeContext>;
+  ): Effect.Effect<StorageQueueSendResult, StorageQueueError, RuntimeContext>;
 }
 
 /**

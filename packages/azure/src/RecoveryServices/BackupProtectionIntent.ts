@@ -300,6 +300,9 @@ export const BackupProtectionIntentProvider = () =>
             vaultName: vault,
             fabricName: BACKUP_FABRIC,
             intentObjectName: name,
+            // The SDK union has no arm for the intermediate swagger types
+            // (`RecoveryServiceVaultItem`, the default, and
+            // `AzureWorkloadAutoProtectionIntent`), so the arm is asserted.
             properties: {
               protectionIntentItemType: news.protectionIntentItemType ?? DEFAULT_ITEM_TYPE,
               backupManagementType: news.backupManagementType ?? "AzureWorkload",
@@ -307,7 +310,7 @@ export const BackupProtectionIntentProvider = () =>
               itemId: news.itemId,
               policyId: news.policyId,
               workloadItemType: news.workloadItemType,
-            },
+            } as backup.ProtectionIntent,
           }),
         );
       }

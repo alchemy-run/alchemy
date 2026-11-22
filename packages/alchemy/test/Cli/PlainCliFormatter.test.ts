@@ -1,4 +1,4 @@
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 import * as Context from "effect/Context";
 import * as Option from "effect/Option";
 import { plainCliFormatter } from "@/Cli/PlainCliFormatter.ts";

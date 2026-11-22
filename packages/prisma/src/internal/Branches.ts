@@ -2,9 +2,15 @@ import {
   type GetProjectBranchesResponse,
   getProjectBranches,
 } from "@distilled.cloud/prisma/management";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { PrismaPaginationError } from "./Pagination.ts";
 import { isPrismaDevId } from "./Refs.ts";
+
+export class BranchesConflict extends Data.TaggedError("BranchesConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 // Distilled emits the cursor-paginated list operations as plain ops, so
 // callers walk `pagination` themselves (see `src/Neon/Project.ts`).
@@ -47,11 +53,9 @@ export const desiredBranchId = Effect.fn(function* (
   if (props.branchGitName !== undefined) {
     const branches = yield* listBranches(projectId, props.branchGitName);
     if (branches.length > 1) {
-      return yield* Effect.fail(
-        new Error(
-          `Prisma returned multiple branches named '${props.branchGitName}' in project '${projectId}'; refusing an ambiguous match.`,
-        ),
-      );
+      return yield* new BranchesConflict({
+        message: `Prisma returned multiple branches named '${props.branchGitName}' in project '${projectId}'; refusing an ambiguous match.`,
+      });
     }
     return branches[0]
       ? { resolved: true as const, id: branches[0].id }
@@ -60,11 +64,9 @@ export const desiredBranchId = Effect.fn(function* (
   const branches = yield* listBranches(projectId);
   const defaults = branches.filter((branch) => branch.isDefault);
   if (defaults.length > 1) {
-    return yield* Effect.fail(
-      new Error(
-        `Prisma returned multiple default branches for project '${projectId}'; refusing an ambiguous match.`,
-      ),
-    );
+    return yield* new BranchesConflict({
+      message: `Prisma returned multiple default branches for project '${projectId}'; refusing an ambiguous match.`,
+    });
   }
   const defaultBranch = defaults[0];
   return defaultBranch

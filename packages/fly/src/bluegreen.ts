@@ -102,7 +102,7 @@ export const setRouting = (
       yield* getMachineById(appName, machineId).pipe(
         Effect.filterOrFail(
           (machine) => machine !== undefined && machine.cordoned === cordoned,
-          () => new ReplicaNotCreated({ appName, name: machineId }),
+          () => new ReplicaNotCreated({ appName, resourceName: machineId }),
         ),
         Effect.retry({
           times: 8,
@@ -293,7 +293,9 @@ export const reconcileBlueGreen = Effect.fn(function* (
     reusable?.[0] ??
     (yield* sha256Object({
       workload,
-      predecessors: owned.map((machine) => machine.id).sort(),
+      predecessors: owned
+        .map((machine) => machine.id)
+        .sort((a, b) => ((a ?? "") < (b ?? "") ? -1 : (a ?? "") > (b ?? "") ? 1 : 0)),
     })).slice(0, 20);
   const desired = reusable?.[1] ?? [];
   if (
@@ -417,7 +419,7 @@ export const reconcileBlueGreen = Effect.fn(function* (
           ),
           Effect.filterOrFail(
             (machine) => machine !== undefined,
-            () => new ReplicaNotCreated({ appName: input.appName, name }),
+            () => new ReplicaNotCreated({ appName: input.appName, resourceName: name }),
           ),
           Effect.retry({
             times: 8,
@@ -442,11 +444,15 @@ export const reconcileBlueGreen = Effect.fn(function* (
           .pipe(
             Retry.none,
             Effect.timeout("30 seconds"),
-            Effect.catchTag(["Conflict", "GatewayTimeout", "TimeoutError"], () => readback),
+            Effect.catchTag(
+              ["Conflict", "GatewayTimeout", "TimeoutError", "StorageHostCapacity"],
+              () => readback,
+            ),
             Effect.catchReason("HttpClientError", "TransportError", () => readback),
           );
       }
-      if (!current?.id) return yield* new ReplicaNotCreated({ appName: input.appName, name });
+      if (!current?.id)
+        return yield* new ReplicaNotCreated({ appName: input.appName, resourceName: name });
       const leased = (yield* leaseSnapshot(input.appName, [current], leases))[0];
       if (!leased?.id)
         return yield* ambiguous(

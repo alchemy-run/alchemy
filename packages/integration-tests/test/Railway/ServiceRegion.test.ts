@@ -4,7 +4,7 @@ import {
   regionPlacementPatch,
   serviceRegionPlacement,
 } from "@alchemy.run/railway/ServiceRegion";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 
 describe(
   "Railway service region placement",

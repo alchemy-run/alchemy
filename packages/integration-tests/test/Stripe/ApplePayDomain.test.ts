@@ -1,12 +1,13 @@
 import * as Stripe from "@alchemy.run/stripe";
 import { isMissingStripeResource } from "@alchemy.run/stripe/missing";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { GetApplePayDomain } from "@distilled.cloud/stripe/stripe";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
@@ -41,6 +42,7 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(Stripe.ApplePayDomain.lookup({ id: created.id }), created);
 
       expect(created.id).toMatch(/^apwc_/);
       expect(created.domainName).toEqual(LIFECYCLE_DOMAIN);

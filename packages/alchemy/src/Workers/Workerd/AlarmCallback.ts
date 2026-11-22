@@ -1,0 +1,629 @@
+import type * as cf from "@cloudflare/workers-types";
+import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import type * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Logger from "effect/Logger";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Tracer from "effect/Tracer";
+import {
+  CallbackError,
+  nextCallbackRun,
+  resolveCallbackSchedule,
+  type Callback,
+  type CallbackRecurrence,
+  type CallbackScheduleOptions,
+  type CallbackStatus,
+} from "../../Callback.ts";
+import { RuntimeContext } from "../../RuntimeContext.ts";
+import { ensureAlarmTables, reconcileDurableObjectAlarm } from "./DurableObjectAlarmStorage.ts";
+import {
+  fromDurableObjectState,
+  type NativeDurableObjectState,
+  type WorkerdDurableObjectState,
+} from "./DurableObjectState.ts";
+import { fromDurableObjectStorage } from "./DurableObjectStorage.ts";
+import { ActiveStorageTransactions } from "./DurableObjectTransactionContext.ts";
+import { inStorageTransaction } from "./internal/StorageTransaction.ts";
+
+// The engine's own Durable Object state service is part of every invocation;
+// it is engine-specific, so the registry only sees it as an opaque service.
+type InvocationServices = any;
+interface RetryPolicy {
+  readonly delay: number;
+  readonly maxAttempts: number;
+  readonly parkedDelay: number;
+}
+/**
+ * How a job whose handler dies is redelivered: a recovery wake persisted
+ * before each attempt survives crashes, from 2 seconds doubling (like
+ * workerd's own alarm retries), and every hour once the doubling reaches one.
+ * A job is never dropped.
+ */
+const defaultRetryPolicy: RetryPolicy = {
+  delay: 2_000,
+  maxAttempts: 12,
+  parkedDelay: 3_600_000,
+};
+
+/**
+ * @internal Override the redelivery policy, for tests of the scheduler
+ * itself. Not part of `Alchemy.makeCallback`.
+ */
+export interface AlarmRetryPolicy {
+  readonly delay?: Duration.Input;
+  readonly maxAttempts?: number;
+  readonly parkedDelay?: Duration.Input;
+}
+
+/** @internal A job's status, with the scheduler's redelivery state. */
+export interface AlarmCallbackStatus extends CallbackStatus {
+  readonly retryAt: number | undefined;
+  readonly attempts: number;
+  readonly parked: boolean;
+}
+
+/** @internal An alarm callback, with the scheduler's redelivery state. */
+export interface AlarmCallback<Payload> extends Callback<Payload> {
+  readonly getStatus: (
+    id: string,
+  ) => Effect.Effect<AlarmCallbackStatus | undefined, CallbackError, RuntimeContext>;
+}
+
+/** @internal Register an alarm callback, optionally with its own redelivery policy. */
+export type AlarmCallbackFactory = <Payload, E, R>(
+  name: string,
+  handler: (payload: Payload) => Effect.Effect<unknown, E, R>,
+  retry?: AlarmRetryPolicy,
+) => Effect.Effect<AlarmCallback<Payload>, never, Exclude<R, Scope.Scope>>;
+
+const recoveryDelay = (policy: RetryPolicy, attempts: number, parked: boolean) =>
+  parked ? policy.parkedDelay : Math.min(policy.parkedDelay, policy.delay * 2 ** (attempts - 1));
+
+interface RegisteredCallback {
+  readonly retry: RetryPolicy;
+  readonly handler: (payload: unknown) => Effect.Effect<unknown, unknown, InvocationServices>;
+}
+interface CallbackRegistry {
+  readonly callbacks: Map<string, RegisteredCallback>;
+  open: boolean;
+}
+type AlarmRow = {
+  callback: string;
+  id: string;
+  version: string;
+  run_at: number;
+  scheduled_at: number;
+  retry_at: number | null;
+  attempts: number;
+  parked: number;
+  progress: number;
+  payload: string;
+  /**
+   * A recurring job's {@link CallbackRecurrence} and the row version it was
+   * written with, as JSON; `null` for one run.
+   */
+  recurrence: string | null;
+};
+type AlarmRef = Pick<AlarmRow, "callback" | "id" | "version">;
+interface AlarmPass {
+  readonly storage: cf.DurableObjectStorage;
+  readonly row: AlarmRow;
+  readonly justParked: boolean;
+  readonly parking: AlarmRef[];
+  active: boolean;
+}
+const CurrentAlarmPass = Context.Reference<AlarmPass | undefined>(
+  "alchemy/Cloudflare/CurrentAlarmPass",
+  { defaultValue: () => undefined },
+);
+const readAlarm = (storage: cf.DurableObjectStorage, callback: string, id: string) =>
+  Effect.sync(
+    () =>
+      storage.sql
+        .exec<AlarmRow>(
+          "SELECT * FROM alchemy_alarm_callbacks WHERE callback = ? AND id = ?",
+          callback,
+          id,
+        )
+        .toArray()[0],
+  );
+
+const activePass = (storage: cf.DurableObjectStorage, callback: string) =>
+  Effect.gen(function* () {
+    const current = yield* CurrentAlarmPass;
+    const pass = current?.storage === storage ? current : undefined;
+    if (pass !== undefined && !pass.active) {
+      return yield* new CallbackError({
+        callback,
+        message: "The alarm callback invocation has already finished",
+      });
+    }
+    return pass;
+  });
+
+const reportParking = (pass: AlarmPass) =>
+  Effect.gen(function* () {
+    for (const ref of pass.parking) {
+      const row = yield* readAlarm(pass.storage, ref.callback, ref.id);
+      // A replacement, progress or rollback can remove tentative parking. Only
+      // report committed work, without exposing its identifiers or payload.
+      if (row?.version === ref.version && row.parked === 1) {
+        yield* Effect.logWarning("Durable Object alarm callback parked", {
+          attempts: row.attempts,
+          retryAt: row.retry_at,
+        }).pipe(Effect.exit);
+      }
+    }
+  });
+// Keyed by the native state's identity, whichever declaration types it.
+const registries = new WeakMap<object, CallbackRegistry>();
+
+/**
+ * @internal Run background work handed to `waitUntil` apart from the callback
+ * invocation that started it. The invocation ends first, so its schedules
+ * would be rejected; here they start a fresh budget, as external schedules
+ * do. Only for work whose schedules report their own progress.
+ */
+export const outsideAlarmPass = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.provideService(effect, CurrentAlarmPass, undefined);
+
+/** @internal */
+export const initializeAlarmCallbacks = (state: cf.DurableObjectState) => {
+  const registry: CallbackRegistry = { callbacks: new Map(), open: true };
+  registries.set(state, registry);
+  return () => {
+    registry.open = false;
+  };
+};
+
+/**
+ * The durable callback factory of one Durable Object instance. `stateTag`
+ * is the engine's own Durable Object state service, stripped (with the other
+ * per-invocation services) from the registration-time context a handler
+ * closes over.
+ *
+ * @internal
+ */
+export const makeDurableObjectCallbackFactory = (
+  raw: cf.DurableObjectState,
+  stateTag: Context.Key<any, any>,
+  random: SecureRandom.SecureRandom["Service"],
+): AlarmCallbackFactory => {
+  // `unknown` skips comparing the native state's two declarations, which
+  // hangs (see `NativeDurableObjectState`).
+  const state = fromDurableObjectState(raw as unknown as NativeDurableObjectState);
+  return (name, handler, retry) => makeAlarmCallback(state, stateTag, random, name, handler, retry);
+};
+
+const makeAlarmCallback = <Payload, E, R>(
+  state: WorkerdDurableObjectState,
+  stateTag: Context.Key<any, any>,
+  random: SecureRandom.SecureRandom["Service"],
+  name: string,
+  handler: (payload: Payload) => Effect.Effect<unknown, E, R>,
+  options?: AlarmRetryPolicy,
+): Effect.Effect<AlarmCallback<Payload>, never, Exclude<R, Scope.Scope>> =>
+  Effect.gen(function* () {
+    const context = (yield* Effect.context<Exclude<R, Scope.Scope>>()).pipe(
+      Context.omit(
+        ActiveStorageTransactions,
+        CurrentAlarmPass,
+        stateTag,
+        RuntimeContext,
+        Scope.Scope,
+        Tracer.ParentSpan,
+        Tracer.Tracer,
+        Logger.CurrentLoggers,
+      ),
+    );
+    const registry = registries.get(state.raw);
+    if (!registry?.open || !name || registry.callbacks.has(name)) {
+      return yield* Effect.die(
+        new CallbackError({
+          callback: name,
+          message: !registry?.open
+            ? "Alarm callbacks must be registered during Durable Object instance initialization"
+            : "Alarm callback names must be non-empty and unique within an instance",
+        }),
+      );
+    }
+    const retry = yield* Effect.try({
+      try: () => {
+        const delay = Math.ceil(Duration.toMillis(options?.delay ?? defaultRetryPolicy.delay));
+        const maxAttempts = options?.maxAttempts ?? defaultRetryPolicy.maxAttempts;
+        const parkedDelay = Math.ceil(
+          Duration.toMillis(
+            options?.parkedDelay ?? Math.max(defaultRetryPolicy.parkedDelay, delay),
+          ),
+        );
+        if (
+          !Number.isSafeInteger(delay) ||
+          delay <= 0 ||
+          !Number.isSafeInteger(maxAttempts) ||
+          maxAttempts < 1 ||
+          !Number.isSafeInteger(parkedDelay) ||
+          parkedDelay < 3_600_000 ||
+          parkedDelay < delay
+        ) {
+          throw new Error(
+            "Retry delay must be positive, maxAttempts a positive safe integer, and parkedDelay at least one hour and the retry delay",
+          );
+        }
+        return { delay: Math.max(1_000, delay), maxAttempts, parkedDelay };
+      },
+      catch: (cause) =>
+        new CallbackError({
+          callback: name,
+          message: "Invalid alarm retry policy",
+          cause,
+        }),
+    }).pipe(Effect.orDie);
+    yield* Effect.sync(() =>
+      registry.callbacks.set(name, {
+        retry,
+        handler: (payload) =>
+          Effect.gen(function* () {
+            const invocation = yield* Effect.context<InvocationServices>();
+            return yield* handler(payload as Payload).pipe(
+              Effect.provide(Context.merge(invocation, context) as Context.Context<R>),
+            );
+          }),
+      }),
+    );
+
+    const raw = state.raw.storage;
+    const transaction = <A, R>(effect: Effect.Effect<A, CallbackError, R>) =>
+      inStorageTransaction(raw, effect, (effect) => state.storage.transaction(effect)).pipe(
+        Effect.mapError((cause) =>
+          cause._tag === "CallbackError"
+            ? cause
+            : new CallbackError({
+                callback: name,
+                message: "Callback storage transaction failed",
+                cause,
+              }),
+        ),
+      );
+    return {
+      schedule: Effect.fn(function* (id: string, schedule: CallbackScheduleOptions<Payload>) {
+        const now = yield* Clock.currentTimeMillis;
+        const { at, recurrence } = yield* resolveCallbackSchedule(
+          name,
+          schedule as CallbackScheduleOptions<unknown>,
+          now,
+        );
+        const payload = yield* Effect.try({
+          try: () => {
+            if (!id) throw new Error("Alarm IDs must be non-empty");
+            if (!Schema.is(Schema.Json)(schedule.payload)) {
+              throw new Error("Alarm payload must be a JSON value");
+            }
+            if (
+              schedule.progress !== undefined &&
+              (!Number.isSafeInteger(schedule.progress) || schedule.progress < 0)
+            ) {
+              throw new Error("Alarm progress must be a nonnegative safe integer");
+            }
+            const payload = JSON.stringify(schedule.payload);
+            if (payload === undefined) throw new Error("Alarm payload must be JSON-serializable");
+            return payload;
+          },
+          catch: (cause) =>
+            new CallbackError({
+              callback: name,
+              message: "Invalid alarm schedule",
+              cause,
+            }),
+        });
+        yield* transaction(
+          Effect.gen(function* () {
+            const pass = yield* activePass(raw, name);
+            yield* ensureAlarmTables(raw);
+            const existing = yield* readAlarm(raw, name, id);
+            const source = pass?.row;
+            // Another callback's cursor counts in its own units: it never hides
+            // this schedule, but a cursor that isn't past it isn't progress.
+            const progress = Math.max(
+              existing?.progress ?? -1,
+              source?.callback === name ? source.progress : -1,
+            );
+            if (
+              schedule.progress !== undefined &&
+              (schedule.progress < progress ||
+                (source === undefined && schedule.progress === progress))
+            )
+              return;
+            const progressed =
+              schedule.progress !== undefined &&
+              schedule.progress > Math.max(progress, source?.progress ?? -1);
+            const sourceProgressed =
+              source?.callback === name &&
+              source.id === id &&
+              (existing?.progress ?? -1) > source.progress;
+            const attempts =
+              source === undefined || progressed || sourceProgressed
+                ? 0
+                : Math.max(source.attempts, existing?.attempts ?? 0);
+            const parked =
+              attempts > 0 &&
+              (source?.parked === 1 || existing?.parked === 1 || attempts >= retry.maxAttempts);
+            const retryAt =
+              attempts === 0
+                ? null
+                : (yield* Clock.currentTimeMillis) + recoveryDelay(retry, attempts, parked);
+            const version = yield* random.uuidV4();
+            yield* Effect.sync(() =>
+              raw.sql.exec(
+                `INSERT INTO alchemy_alarm_callbacks
+             (callback, id, version, run_at, payload, scheduled_at, retry_at, attempts, parked, progress, recurrence)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (callback, id) DO UPDATE SET
+             version = excluded.version, run_at = excluded.run_at, payload = excluded.payload,
+             scheduled_at = excluded.scheduled_at, retry_at = excluded.retry_at,
+             attempts = excluded.attempts, parked = excluded.parked, progress = excluded.progress,
+             recurrence = excluded.recurrence`,
+                name,
+                id,
+                version,
+                Math.max(at, retryAt ?? at),
+                payload,
+                at,
+                retryAt,
+                attempts,
+                parked ? 1 : 0,
+                Math.max(progress, schedule.progress ?? -1),
+                recurrence === undefined ? null : JSON.stringify({ version, recurrence }),
+              ),
+            );
+            if (
+              pass !== undefined &&
+              parked &&
+              (pass.justParked || (source?.parked !== 1 && existing?.parked !== 1))
+            ) {
+              const ref = { callback: name, id, version };
+              pass.parking.push(ref);
+            }
+            yield* reconcileDurableObjectAlarm(raw);
+          }),
+        );
+      }),
+      cancel: Effect.fn(function* (id: string) {
+        yield* transaction(
+          Effect.gen(function* () {
+            yield* activePass(raw, name);
+            yield* ensureAlarmTables(raw);
+            yield* Effect.sync(() =>
+              raw.sql.exec(
+                "DELETE FROM alchemy_alarm_callbacks WHERE callback = ? AND id = ?",
+                name,
+                id,
+              ),
+            );
+            yield* reconcileDurableObjectAlarm(raw);
+          }),
+        );
+      }),
+      getStatus: Effect.fn(function* (id: string) {
+        return yield* transaction(
+          Effect.gen(function* () {
+            yield* ensureAlarmTables(raw);
+            const row = yield* readAlarm(raw, name, id);
+            return row === undefined
+              ? undefined
+              : {
+                  scheduledAt: row.scheduled_at,
+                  retryAt: row.retry_at ?? undefined,
+                  attempts: row.attempts,
+                  parked: row.parked === 1,
+                  progress: row.progress < 0 ? undefined : row.progress,
+                };
+          }),
+        );
+      }),
+    };
+  });
+
+/** @internal */
+export const dispatchAlarmCallbacks = (state: cf.DurableObjectState, hasLegacyHandler: boolean) =>
+  Effect.gen(function* () {
+    const registry = registries.get(state);
+    if (!registry) return;
+    const raw = state.storage;
+    if (registry.callbacks.size === 0) {
+      const hasJobs = yield* Effect.sync(
+        () =>
+          raw.sql
+            ?.exec(
+              "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('alchemy_alarm_callbacks', 'alchemy_alarm_schema', 'alchemy_scheduled_events')",
+            )
+            .toArray().length > 0,
+      );
+      if (!hasJobs) return;
+    }
+    const storage = fromDurableObjectStorage(raw);
+    yield* ensureAlarmTables(raw);
+    if (!hasLegacyHandler) {
+      const legacy = yield* Effect.sync(() =>
+        raw.sql.exec("SELECT id FROM alchemy_scheduled_events LIMIT 1").toArray(),
+      );
+      if (legacy.length > 0) {
+        return yield* new CallbackError({
+          callback: "scheduleEvent",
+          message: "Pending legacy events require an alarm handler calling processScheduledEvents",
+        });
+      }
+    }
+    const now = yield* Clock.currentTimeMillis;
+    const due = yield* Effect.sync(() =>
+      raw.sql
+        .exec<AlarmRow>(
+          `SELECT * FROM alchemy_alarm_callbacks
+       WHERE run_at <= ? ORDER BY run_at, callback, id LIMIT 100`,
+          now,
+        )
+        .toArray(),
+    );
+    for (const job of due) {
+      const callback = registry.callbacks.get(job.callback);
+      const retry = callback?.retry ?? defaultRetryPolicy;
+      const claimed = yield* storage.transaction(
+        Effect.gen(function* () {
+          const now = yield* Clock.currentTimeMillis;
+          const attempts =
+            job.parked === 1 ? job.attempts : Math.min(retry.maxAttempts, job.attempts + 1);
+          const parked = job.parked === 1 || attempts >= retry.maxAttempts;
+          const retryAt = now + recoveryDelay(retry, attempts, parked);
+          const claimed = yield* Effect.sync(
+            () =>
+              raw.sql.exec(
+                `UPDATE alchemy_alarm_callbacks
+           SET run_at = MAX(scheduled_at, ?), retry_at = ?, attempts = ?, parked = ?
+           WHERE callback = ? AND id = ? AND version = ?`,
+                retryAt,
+                retryAt,
+                attempts,
+                parked ? 1 : 0,
+                job.callback,
+                job.id,
+                job.version,
+              ).rowsWritten > 0,
+          );
+          yield* reconcileDurableObjectAlarm(raw);
+          return claimed
+            ? {
+                ...job,
+                run_at: Math.max(job.scheduled_at, retryAt),
+                retry_at: retryAt,
+                attempts,
+                parked: parked ? 1 : 0,
+              }
+            : undefined;
+        }),
+      );
+      if (!claimed) continue;
+      yield* storage.sync();
+      const pass: AlarmPass = {
+        storage: raw,
+        row: claimed,
+        justParked: job.parked === 0 && claimed.parked === 1,
+        parking: [],
+        active: true,
+      };
+      if (pass.justParked) pass.parking.push(claimed);
+      const result = yield* Effect.gen(function* () {
+        if (!callback) {
+          return yield* new CallbackError({
+            callback: job.callback,
+            message: "No handler is registered for a pending alarm",
+          });
+        }
+        const payload = yield* Effect.try({
+          try: () => JSON.parse(job.payload),
+          catch: (cause) =>
+            new CallbackError({
+              callback: job.callback,
+              message: "Invalid persisted alarm payload",
+              cause,
+            }),
+        });
+        yield* callback.handler(payload);
+      }).pipe(
+        Effect.provideService(CurrentAlarmPass, pass),
+        Effect.scoped,
+        Effect.ensuring(
+          Effect.sync(() => {
+            pass.active = false;
+          }),
+        ),
+        Effect.exit,
+      );
+      if (Exit.isFailure(result)) {
+        if (Cause.hasInterrupts(result.cause)) return yield* Effect.failCause(result.cause);
+        yield* storage.transaction(
+          Effect.gen(function* () {
+            // The pre-handler wake survives crashes. A completed failure starts
+            // its backoff here, even when the handler outlasted that recovery wake.
+            const retryAt =
+              (yield* Clock.currentTimeMillis) +
+              recoveryDelay(retry, claimed.attempts, claimed.parked === 1);
+            yield* Effect.sync(() =>
+              raw.sql.exec(
+                `UPDATE alchemy_alarm_callbacks SET run_at = MAX(scheduled_at, ?), retry_at = ?
+             WHERE callback = ? AND id = ? AND version = ?`,
+                retryAt,
+                retryAt,
+                job.callback,
+                job.id,
+                job.version,
+              ),
+            );
+            yield* reconcileDurableObjectAlarm(raw);
+          }),
+        );
+        yield* Effect.logError("Durable Object alarm callback failed", result.cause);
+      } else {
+        const stored = claimed.recurrence;
+        const recurrence =
+          stored === null
+            ? undefined
+            : yield* Effect.try({
+                try: () => {
+                  const { version, recurrence } = JSON.parse(stored) as {
+                    readonly version: string;
+                    readonly recurrence: CallbackRecurrence;
+                  };
+                  // Written by a release without recurrence after this was set.
+                  return version === job.version ? recurrence : undefined;
+                },
+                catch: (cause) =>
+                  new CallbackError({
+                    callback: job.callback,
+                    message: "Invalid persisted alarm recurrence",
+                    cause,
+                  }),
+              });
+        const next =
+          recurrence === undefined
+            ? undefined
+            : yield* nextCallbackRun(
+                job.callback,
+                recurrence,
+                claimed.scheduled_at,
+                yield* Clock.currentTimeMillis,
+              );
+        yield* storage.transaction(
+          Effect.gen(function* () {
+            // Scheduled again or cancelled while it ran: the version moved on,
+            // and that stands. A recurring job moves to its next run instead.
+            yield* Effect.sync(() =>
+              next === undefined
+                ? raw.sql.exec(
+                    "DELETE FROM alchemy_alarm_callbacks WHERE callback = ? AND id = ? AND version = ?",
+                    job.callback,
+                    job.id,
+                    job.version,
+                  )
+                : raw.sql.exec(
+                    `UPDATE alchemy_alarm_callbacks
+             SET run_at = ?, scheduled_at = ?, retry_at = NULL, attempts = 0, parked = 0
+             WHERE callback = ? AND id = ? AND version = ?`,
+                    next,
+                    next,
+                    job.callback,
+                    job.id,
+                    job.version,
+                  ),
+            );
+            yield* reconcileDurableObjectAlarm(raw);
+          }),
+        );
+      }
+      yield* reportParking(pass);
+    }
+    yield* storage.transaction(reconcileDurableObjectAlarm(raw));
+  });

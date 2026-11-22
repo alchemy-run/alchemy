@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -157,8 +158,28 @@ export type Dataset = Resource<
     lastModifiedTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DatasetLookup
 >;
+
+/**
+ * Props for {@link Dataset.lookup}: find a dataset this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface DatasetLookup {
+  /**
+   * Dataset id (the `{datasetId}` segment of
+   * `projects/{project}/datasets/{datasetId}`). Must contain only letters,
+   * numbers, and underscores; max 1024 characters.
+   */
+  datasetId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google BigQuery dataset — a container for tables, views, and routines.
@@ -192,13 +213,23 @@ export type Dataset = Resource<
  * const result = yield* query({ query: "SELECT 1 AS n" });
  * ```
  *
+ * ### Looking up an existing dataset
+ * `Dataset.lookup` references a dataset Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared dataset.
+ *
+ * **Example:** Reference an existing dataset
+ * ```typescript
+ * const dataset = GCP.BigQuery.Dataset.lookup({ datasetId: "my-dataset" });
+ * ```
+ *
  * @resource
  * @category BigQuery
  */
 export const Dataset = Resource<Dataset>("GCP.BigQuery.Dataset");
 
 export class DatasetNotResolved extends Data.TaggedError("GCP.BigQuery.DatasetNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const userLabels = (
@@ -277,7 +308,7 @@ const toAttrs = (
 const getById = (project: string, datasetId: string) =>
   bigquery
     .getDatasets({ projectId: project, datasetId })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const sameString = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -313,6 +344,14 @@ export const DatasetProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ datasetId }) {
+      const env = yield* GcpEnvironment.current;
+      const project = env.project;
+      const existing = yield* getById(project, datasetId);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -360,30 +399,28 @@ export const DatasetProvider = () =>
       if (current === undefined) {
         const created = yield* bigquery
           .insertDatasets({
+            datasetReference: { projectId: project, datasetId },
+            location,
+            labels: desiredLabels,
+            description: news.description,
+            friendlyName: news.friendlyName,
+            defaultTableExpirationMs: news.defaultTableExpirationMs,
+            defaultPartitionExpirationMs: news.defaultPartitionExpirationMs,
+            maxTimeTravelHours: news.maxTimeTravelHours,
+            storageBillingModel: news.storageBillingModel,
+            isCaseInsensitive: news.isCaseInsensitive === true ? true : undefined,
+            defaultCollation: news.defaultCollation,
+            defaultRoundingMode: news.defaultRoundingMode,
+            defaultEncryptionConfiguration: news.defaultEncryptionConfiguration,
+            access: news.access,
             projectId: project,
-            body: {
-              datasetReference: { projectId: project, datasetId },
-              location,
-              labels: desiredLabels,
-              description: news.description,
-              friendlyName: news.friendlyName,
-              defaultTableExpirationMs: news.defaultTableExpirationMs,
-              defaultPartitionExpirationMs: news.defaultPartitionExpirationMs,
-              maxTimeTravelHours: news.maxTimeTravelHours,
-              storageBillingModel: news.storageBillingModel,
-              isCaseInsensitive: news.isCaseInsensitive === true ? true : undefined,
-              defaultCollation: news.defaultCollation,
-              defaultRoundingMode: news.defaultRoundingMode,
-              defaultEncryptionConfiguration: news.defaultEncryptionConfiguration,
-              access: news.access,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getById(project, datasetId)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new DatasetNotResolved({ name });
+        return yield* new DatasetNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -392,9 +429,10 @@ export const DatasetProvider = () =>
         // PATCH merges labels; removing one needs a JSON null the typed body
         // cannot carry, so replace the labels with PUT (get-modify-put).
         current = yield* bigquery.updateDatasets({
+          ...current,
+          labels: desiredLabels,
           projectId: project,
           datasetId,
-          body: { ...current, labels: desiredLabels },
         });
       }
       const labelsChanged = removed.length === 0 && upsert.length > 0;
@@ -479,6 +517,7 @@ export const DatasetProvider = () =>
           body.access = news.access;
         }
         current = yield* bigquery.patchDatasets({
+          ...body,
           projectId: project,
           datasetId,
           updateMode:
@@ -487,7 +526,6 @@ export const DatasetProvider = () =>
               : accessChanged
                 ? "UPDATE_ACL"
                 : "UPDATE_METADATA",
-          body,
         });
       }
 

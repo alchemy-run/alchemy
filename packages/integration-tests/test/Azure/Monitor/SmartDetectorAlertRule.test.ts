@@ -1,9 +1,9 @@
 import * as Azure from "@alchemy.run/azure";
 import { ensureRegistered } from "@alchemy.run/azure/Arm";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as alertsmanagement from "@distilled.cloud/azure/alertsmanagement";
-import { Credentials } from "@distilled.cloud/azure/Credentials";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { armScopeFor, Credentials } from "@distilled.cloud/azure/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -57,7 +57,9 @@ const armRequest = (
     const client = yield* HttpClient.HttpClient;
     const url = `${credentials.apiBaseUrl}/subscriptions/${subscriptionId}${path}?api-version=${apiVersion}`;
     let request = HttpClientRequest.make(method)(url).pipe(
-      HttpClientRequest.bearerToken(Redacted.value(credentials.bearerToken)),
+      HttpClientRequest.bearerToken(
+        Redacted.value(yield* credentials.token(armScopeFor(credentials.apiBaseUrl))),
+      ),
     );
     if (body !== undefined) {
       request = request.pipe(HttpClientRequest.bodyJsonUnsafe(body));

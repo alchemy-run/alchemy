@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -55,15 +56,13 @@ test.provider(
       const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         compute.insertInterconnects({
+          name: "alchemy-ix-probe",
+          description: "alchemy entitlement probe",
+          location: `projects/${project}/global/interconnectLocations/iad-zone1-1`,
+          interconnectType: "DEDICATED",
+          linkType: "LINK_TYPE_ETHERNET_10G_LR",
+          requestedLinkCount: 1,
           project,
-          body: {
-            name: "alchemy-ix-probe",
-            description: "alchemy entitlement probe",
-            location: `projects/${project}/global/interconnectLocations/iad-zone1-1`,
-            interconnectType: "DEDICATED",
-            linkType: "LINK_TYPE_ETHERNET_10G_LR",
-            requestedLinkCount: 1,
-          },
         }),
       );
       expect(error._tag).toEqual("BadRequest");
@@ -88,6 +87,10 @@ test.provider.skipIf(!runLifecycle)(
             description: "dedicated pair",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.Interconnect.lookup({ interconnectName: created.interconnectName }),
+        created,
       );
 
       expect(created.interconnectName).toEqual(expect.any(String));

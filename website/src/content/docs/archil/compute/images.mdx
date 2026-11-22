@@ -1,0 +1,108 @@
+---
+title: Images
+description: Boot sandboxes from public images, private registries, or a Dockerfile built on your machine and pushed for Archil to pull.
+sidebar:
+  order: 4
+---
+
+import DAG from "../../../../components/DAG.astro";
+
+A sandbox boots an OCI image for `linux/amd64`. Archil pulls the image once, records the digest it resolved, and every sandbox booted from it starts from that digest. Archil has no builder: it pulls images, so an image from a Dockerfile is built on your machine and pushed to a registry first.
+
+## Archil pulls, you build
+
+<DAG
+  nodes={[
+    { id: "dockerfile", label: "Dockerfile", type: "./agent", col: 0, row: 0 },
+    { id: "docker", label: "docker build", type: "your machine", col: 1, row: 0 },
+    { id: "registry", label: "ghcr.io/acme/agent", type: "your registry", col: 1, row: 1 },
+    { id: "image", label: "MyImage", type: "Archil.Image · digest", tone: "accent", col: 2, row: 1 },
+    { id: "sandbox", label: "task-1", type: "sandbox", col: 2, row: 2 },
+  ]}
+  edges={[
+    { from: "dockerfile", to: "docker" },
+    { from: "docker", to: "registry", label: "push" },
+    { from: "registry", to: "image", label: "pull" },
+    { from: "image", to: "sandbox", label: "boots" },
+  ]}
+  caption="Alchemy builds the Dockerfile with your Docker and pushes it to your registry. Archil pulls it from there and boots sandboxes from the digest it pulled."
+/>
+
+## Boot a public image directly
+
+A public image needs no resource. Name it as a sandbox's `baseImage`:
+
+```typescript title="src/devbox.ts"
+export const DevBox = Archil.Sandbox("DevBox", { baseImage: "python:3.13" });
+```
+
+A sandbox with neither `baseImage` nor `image` boots `node:24-bookworm`.
+
+## Pin an image by its digest
+
+`Archil.Image` pulls an image once and keeps its digest, so every sandbox boots the same bits even after the tag moves:
+
+```typescript title="src/images.ts"
+export const Base = Archil.Image("Base", { image: "node:24-bookworm" });
+```
+
+Pass its `imageId` to a sandbox:
+
+```typescript title="src/devbox.ts"
+export const DevBox = Effect.gen(function* () {
+  const base = yield* Base;
+  return yield* Archil.Sandbox("DevBox", { image: base.imageId });
+});
+```
+
+Changing `image` pulls it again.
+
+## Pull from a private registry
+
+Give the registry's credentials. Archil uses them to pull this image and doesn't store them:
+
+```typescript title="src/images.ts"
+export const MyImage = Archil.Image("MyImage", {
+  image: "ghcr.io/acme/agent:1",
+  registry: {
+    server: "ghcr.io",
+    username: "acme-bot",
+    password: Config.Redacted("GHCR_TOKEN"),
+  },
+});
+```
+
+## Build a Dockerfile on your machine
+
+Give a `dockerfile` and where to `push` it. Alchemy builds it with your local Docker, pushes it tagged with the build's hash, and Archil pulls it:
+
+```typescript title="src/images.ts"
+export const MyImage = Archil.Image("MyImage", {
+  dockerfile: "./agent/Dockerfile",
+  context: "./agent",
+  push: {
+    repository: "ghcr.io/acme/agent",
+    credentials: { server: "ghcr.io", username: "acme-bot", password: Config.Redacted("GHCR_TOKEN") },
+  },
+});
+```
+
+The credentials need to push to the repository and pull from it. A change to the Dockerfile or its context builds and pushes a new tag.
+
+## Pull images while your app runs
+
+`Archil.CreateImage` pulls images at run time, e.g. one per customer repository, with the same props as `Archil.Image`:
+
+```typescript
+const images = yield* Archil.CreateImage();
+const image = yield* images.build({ image: `ghcr.io/acme/${tenant}:latest` });
+const sandbox = yield* sandboxes.create({ name: tenant, image: image.imageId });
+```
+
+## Programs that need a filesystem client
+
+A [program sandbox](/archil/compute/programs) boots a public image. When one of its bindings installs a filesystem client, like a mount for another storage service, Alchemy builds an image of the base plus that client the same way, so give the sandbox a `push` too.
+
+## Images stay in your registry
+
+Archil has no API to delete an image. Destroying an `Archil.Image` removes it from Alchemy's state only, and the image pushed to your registry stays there.

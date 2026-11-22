@@ -8,9 +8,7 @@ import { stackAndStage, waitForProvisioned, waitUntilGone } from "../Arm.ts";
 // Shared Microsoft.Network helpers. Internal: not exported from index.ts.
 
 /** Unwrap a secret prop that may be given as plain text or `Redacted`. */
-export const reveal = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
+export const reveal = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
   value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 /**

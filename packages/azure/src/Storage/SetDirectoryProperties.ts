@@ -46,8 +46,14 @@ export interface SetDirectoryProperties extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SetDirectoryPropertiesRequest,
-    ) => Effect.Effect<files.SetDirectoryPropertiesResponse, files.SetDirectoryPropertiesError, RuntimeContext>
+    ) => Effect.Effect<
+      files.SetDirectoryPropertiesResponse,
+      files.SetDirectoryPropertiesError,
+      RuntimeContext
+    >
   >
 > {}
 
-export const SetDirectoryProperties = Binding.Service<SetDirectoryProperties>("Azure.Storage.SetDirectoryProperties");
+export const SetDirectoryProperties = Binding.Service<SetDirectoryProperties>(
+  "Azure.Storage.SetDirectoryProperties",
+);

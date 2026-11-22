@@ -1,4 +1,5 @@
 import type { AzureOpError } from "@distilled.cloud/azure";
+import type * as file from "@distilled.cloud/azure/storage-file";
 
 /**
  * Errors a file share client operation can fail with: the typed
@@ -7,7 +8,17 @@ import type { AzureOpError } from "@distilled.cloud/azure";
  * `SchemaRegistryStorageAccessDenied` (`AuthorizationPermissionMismatch`)
  * while a new role assignment propagates.
  */
-export type FileShareError = AzureOpError;
+export type FileShareError =
+  | file.DirectoryNotEmpty
+  | file.ParentNotFound
+  | file.ShareAlreadyExists
+  | file.StorageAuthenticationFailed
+  | file.StorageAuthorizationFailure
+  | file.StorageBeingDeleted
+  | file.StorageLeaseConflict
+  | file.StorageNoPendingCopyOperation
+  | file.StorageResourceAlreadyExists
+  | AzureOpError;
 
 /**
  * A distilled `storage-file` request without the identifiers a bound share

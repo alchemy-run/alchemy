@@ -345,7 +345,11 @@ export const BackupInstanceProvider = () =>
         news.dataStoreParameters || news.datasourceParameters
           ? {
               dataStoreParametersList: news.dataStoreParameters,
-              backupDatasourceParametersList: news.datasourceParameters,
+              // `objectType` is any parameters type, so TypeScript cannot
+              // pick the SDK union arm.
+              backupDatasourceParametersList: news.datasourceParameters as
+                | dataprotection.BackupDatasourceParameters[]
+                | undefined,
             }
           : undefined;
 

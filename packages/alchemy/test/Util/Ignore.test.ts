@@ -1,5 +1,5 @@
+import { describe, expect, it, layer } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -383,6 +383,20 @@ describe("Ignore rules (in-memory trees)", { tags: ["unit", "local"] }, () => {
         );
         // `logs` itself is excluded but walked; `empty` is kept.
         expect(kept).toEqual(["empty/", "logs/keep.log"]);
+      }),
+    );
+
+    it.effect("keeps a pruned directory that the rules only empty", () =>
+      Effect.gen(function* () {
+        // `cache/**` excludes everything below `cache`, not `cache` itself:
+        // Docker sends it as an empty directory.
+        const { kept, reads } = yield* walkTree(
+          tree("cache/x", "cache/sub/y", "app.ts"),
+          "cache/**\n",
+          "dockerignore",
+        );
+        expect(kept).toEqual(["app.ts", "cache/"]);
+        expect(reads).not.toContain("cache");
       }),
     );
 

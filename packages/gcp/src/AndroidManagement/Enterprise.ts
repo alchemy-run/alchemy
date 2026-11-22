@@ -168,7 +168,7 @@ export const Enterprise = Resource<Enterprise>("GCP.AndroidManagement.Enterprise
 export class EnterpriseNotResolved extends Data.TaggedError(
   "GCP.AndroidManagement.EnterpriseNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (enterprise: androidmanagement.Enterprise, project: string) => {
@@ -263,13 +263,13 @@ export const EnterpriseProvider = () =>
       if (current === undefined) {
         const created = yield* androidmanagement
           .createEnterprises({
+            ...desired,
             projectId,
             signupUrlName: news.signupUrlName,
             enterpriseToken: news.enterpriseToken,
             agreementAccepted: customerManaged
               ? news.agreementAccepted
               : (news.agreementAccepted ?? true),
-            body: desired,
           })
           .pipe(
             Effect.catchTag("Conflict", () => findEnterpriseByDisplayName(projectId, displayName)),
@@ -279,7 +279,7 @@ export const EnterpriseProvider = () =>
 
       if (current === undefined) {
         return yield* new EnterpriseNotResolved({
-          name: output?.name ?? displayName,
+          resourceName: output?.name ?? displayName,
         });
       }
 
@@ -313,11 +313,7 @@ export const EnterpriseProvider = () =>
       );
 
       if (updateMask.length > 0 && name.length > 0) {
-        current = yield* androidmanagement.patchEnterprises({
-          name,
-          updateMask,
-          body: desired,
-        });
+        current = yield* androidmanagement.patchEnterprises({ ...desired, name, updateMask });
       }
 
       const fresh = (yield* getEnterprise(name)) ?? current;

@@ -5,12 +5,17 @@ import {
   EnvironmentBlueprintConfiguration,
   Project,
 } from "@alchemy.run/aws/DataZone";
+import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import * as IAM from "@alchemy.run/aws/IAM";
 import * as S3 from "@alchemy.run/aws/S3";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as athena from "@distilled.cloud/aws/athena";
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as datazone from "@distilled.cloud/aws/datazone";
+import * as glue from "@distilled.cloud/aws/glue";
 import * as lf from "@distilled.cloud/aws/lakeformation";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
@@ -19,11 +24,6 @@ const { test } = Test.make({ providers: AWS.providers() });
 // Environment deployment drives a CloudFormation stack (several minutes each
 // way) — the full lifecycle only runs when explicitly requested.
 const RUN_SLOW = !process.env.FAST;
-
-// The DefaultDataLake blueprint requires an S3 location whose bucket name
-// contains "datazone" (the provisioning policy scopes S3 access to
-// *datazone* buckets). Deterministic constant — never Date.now().
-const DATALAKE_BUCKET = "amazon-datazone-391965393224-usw2-alchemy-test";
 
 // Ungated: the typed error union covers the not-found probe — proves the
 // distilled error mapping without provisioning anything.
@@ -51,6 +51,7 @@ test.provider(
 
 /** Domain + roles + bucket + blueprint config + project shared by both deploys. */
 const baseInfra = Effect.gen(function* () {
+  const { accountId, region } = yield* AWSEnvironment.current;
   const domain = yield* Domain("EnvTestDomain", {
     description: "alchemy datazone environment test",
   });
@@ -84,25 +85,27 @@ const baseInfra = Effect.gen(function* () {
       "arn:aws:iam::aws:policy/service-role/AmazonDataZoneGlueManageAccessRolePolicy",
     ],
   });
-  const bucket = yield* S3.Bucket("EnvDataLakeBucket", {
-    bucketName: DATALAKE_BUCKET,
+  // The DefaultDataLake blueprint requires an S3 location whose bucket name
+  // contains "datazone" (the provisioning policy scopes S3 access to
+  // *datazone* buckets): the generated name carries the logical id.
+  const bucket = yield* S3.Bucket("DataZoneLakeBucket", {
     forceDestroy: true,
   });
   const config = yield* EnvironmentBlueprintConfiguration("EnvDataLakeBlueprint", {
     domainId: domain.domainId,
     environmentBlueprint: "DefaultDataLake",
-    enabledRegions: ["us-west-2"],
+    enabledRegions: [region],
     provisioningRoleArn: provisioningRole.roleArn,
     manageAccessRoleArn: manageAccessRole.roleArn,
     regionalParameters: {
-      "us-west-2": { S3Location: `s3://${DATALAKE_BUCKET}` },
+      [region]: { S3Location: Output.interpolate`s3://${bucket.bucketName}` },
     },
   });
   const project = yield* Project("EnvTestProject", {
     domainId: domain.domainId,
     description: "environment test project",
   });
-  return { domain, config, project, provisioningRole, manageAccessRole };
+  return { domain, config, project, provisioningRole, manageAccessRole, accountId, region };
 });
 
 const lakeFormationAdmins = lf
@@ -122,13 +125,16 @@ test.provider.skipIf(!RUN_SLOW)(
       // 1. Deploy the domain, project, roles, bucket, and blueprint config.
       const base = yield* stack.deploy(
         Effect.gen(function* () {
-          const { domain, config, project, provisioningRole, manageAccessRole } = yield* baseInfra;
+          const { domain, config, project, provisioningRole, manageAccessRole, accountId, region } =
+            yield* baseInfra;
           return {
             domainId: domain.domainId,
             projectId: project.projectId,
             environmentBlueprintId: config.environmentBlueprintId,
             provisioningRoleArn: provisioningRole.roleArn,
             manageAccessRoleArn: manageAccessRole.roleArn,
+            accountId,
+            region,
           };
         }),
       );
@@ -140,8 +146,8 @@ test.provider.skipIf(!RUN_SLOW)(
         name: "alchemy-env-test-profile",
         environmentBlueprintIdentifier: base.environmentBlueprintId,
         projectIdentifier: base.projectId,
-        awsAccountId: "391965393224",
-        awsAccountRegion: "us-west-2",
+        awsAccountId: base.accountId,
+        awsAccountRegion: base.region,
       });
 
       const result = yield* stack
@@ -186,6 +192,15 @@ test.provider.skipIf(!RUN_SLOW)(
       // DataZone made the blueprint's manage-access role a Lake Formation
       // administrator when it deployed the environment.
       expect(yield* lakeFormationAdmins).toContain(base.manageAccessRoleArn);
+      // The blueprint stack retains these on delete; the provider removes them.
+      const provisioned = (name: string) =>
+        created.provisionedResources?.find((r) => r.name === name)?.value;
+      const databases = [provisioned("glueProducerDBName"), provisioned("glueConsumerDBName")];
+      const workGroup = provisioned("athenaWorkGroupName");
+      const logGroup = provisioned("logGroupArn")?.split(":")[6];
+      expect(databases.every(Boolean)).toBe(true);
+      expect(workGroup).toBeDefined();
+      expect(logGroup).toBeDefined();
 
       // 3. Destroy — environment, project, blueprint config, and domain.
       yield* stack.destroy();
@@ -207,6 +222,15 @@ test.provider.skipIf(!RUN_SLOW)(
       const adminsAfterDestroy = yield* lakeFormationAdmins;
       expect(adminsAfterDestroy).not.toContain(base.manageAccessRoleArn);
       expect(adminsAfterDestroy).not.toContain(base.provisioningRoleArn);
+      // ...and nothing the environment's stack retained was left behind.
+      for (const database of databases) {
+        const lookup = yield* glue.getDatabase({ Name: database! }).pipe(Effect.result);
+        expect(Result.isFailure(lookup) && lookup.failure._tag).toBe("EntityNotFoundException");
+      }
+      const workGroups = yield* athena.listWorkGroups({});
+      expect((workGroups.WorkGroups ?? []).map((w) => w.Name)).not.toContain(workGroup);
+      const logGroups = yield* logs.describeLogGroups({ logGroupNamePrefix: logGroup });
+      expect(logGroups.logGroups ?? []).toHaveLength(0);
     }),
   {
     tags: ["provider:aws", "provider:aws:datazone", "provider:aws:iam", "provider:aws:s3", "live"],

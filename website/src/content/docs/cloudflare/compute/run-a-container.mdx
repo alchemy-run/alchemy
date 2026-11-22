@@ -4,6 +4,7 @@ description: Run a long-lived container alongside a Durable Object, expose RPC m
 sidebar:
   order: 11
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 Some workloads need a long-lived process — a sandboxed shell, a
 database client, a binary you can't compile to wasm. In this part
@@ -82,8 +83,7 @@ is missing. Let's fill it in.
 
 The container's deploy-time props can read the surrounding Stack
 through `Stack.useSync`. Pass it as `.make()`'s first argument to
-pick a beefier instance type in `prod` and the cheap `dev` instance
-everywhere else:
+log less in `prod` than everywhere else:
 
 ```diff lang="typescript"
 // src/Sandbox.runtime.ts
@@ -95,7 +95,7 @@ export const SandboxLive = Sandbox.make(
 -  { main: import.meta.url },
 +  Stack.useSync((stack) => ({
 +    main: import.meta.url,
-+    instanceType: stack.stage === "prod" ? "standard-1" : "dev",
++    env: { LOG_LEVEL: stack.stage === "prod" ? "info" : "debug" },
 +    observability: { logs: { enabled: true } },
 +  })),
   Effect.gen(function* () {
@@ -359,16 +359,14 @@ export default Cloudflare.Worker(
 
 ## Deploy
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 The first deploy uploads the container image to Cloudflare and
 provisions the registry — expect it to take a minute or two longer
 than usual. The image here is built for you from the `main`
 entrypoint; to run a pre-built image instead, see
 [Bring your own image](/cloudflare/compute/containers#bring-your-own-image)
-and [Build & push images](/docker/build-and-push) in the Docker hub.
+and [Build images](/docker/build-images) in the Docker hub.
 
 ## Verify
 
@@ -378,7 +376,7 @@ stdout in the response:
 ```diff lang="typescript"
 // test/integ.test.ts
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as Test from "alchemy/Test/Bun";
+import * as Test from "@alchemy.run/test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 +import * as HttpBody from "effect/http/HttpBody";

@@ -198,10 +198,10 @@ const toAttrs = (binding: vmwareengine.ManagementDnsZoneBinding, project: string
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : vmwareengine
         .getProjectsLocationsPrivateCloudsManagementDnsZoneBindings({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listBindingsAt = (parent: string) =>
   collectPages(
@@ -319,13 +319,11 @@ export const PrivateCloudsManagementDnsZoneBindingProvider = () =>
       if (current === undefined) {
         const created = yield* vmwareengine
           .createProjectsLocationsPrivateCloudsManagementDnsZoneBindings({
+            description: desiredDescription,
+            vpcNetwork,
+            vmwareEngineNetwork,
             parent: privateCloud,
             managementDnsZoneBindingId: bindingId,
-            body: {
-              description: desiredDescription,
-              vpcNetwork,
-              vmwareEngineNetwork,
-            },
           })
           .pipe(
             Effect.retry({
@@ -333,7 +331,7 @@ export const PrivateCloudsManagementDnsZoneBindingProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -342,7 +340,7 @@ export const PrivateCloudsManagementDnsZoneBindingProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new VmwareengineNotResolved({ name });
+        return yield* new VmwareengineNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -357,12 +355,9 @@ export const PrivateCloudsManagementDnsZoneBindingProvider = () =>
       if (updateMask.length > 0) {
         const operation =
           yield* vmwareengine.patchProjectsLocationsPrivateCloudsManagementDnsZoneBindings({
+            description: desiredDescription,
             name: current.name ?? name,
             updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              description: desiredDescription,
-            },
           });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
@@ -386,7 +381,7 @@ export const PrivateCloudsManagementDnsZoneBindingProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

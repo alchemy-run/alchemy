@@ -1,8 +1,8 @@
-import type { AzureOpError } from "@distilled.cloud/azure";
 import type * as certificates from "@distilled.cloud/azure/keyvault-certificates";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { CertificateError } from "./CertificateTypes.ts";
 import type { Vault } from "./Vault.ts";
 
 /** Options of {@link ReadCertificatesClient.list}. */
@@ -29,24 +29,24 @@ export interface ReadCertificatesClient {
   get(
     certificateName: string,
     version?: string,
-  ): Effect.Effect<certificates.CertificateBundle | undefined, AzureOpError, RuntimeContext>;
+  ): Effect.Effect<certificates.CertificateBundle | undefined, CertificateError, RuntimeContext>;
   /** A certificate's management policy; `undefined` when the certificate does not exist. */
   policy(
     certificateName: string,
-  ): Effect.Effect<certificates.CertificatePolicy | undefined, AzureOpError, RuntimeContext>;
+  ): Effect.Effect<certificates.CertificatePolicy | undefined, CertificateError, RuntimeContext>;
   /** A certificate's pending create operation; `undefined` when there is none. */
   operation(
     certificateName: string,
-  ): Effect.Effect<certificates.CertificateOperation | undefined, AzureOpError, RuntimeContext>;
+  ): Effect.Effect<certificates.CertificateOperation | undefined, CertificateError, RuntimeContext>;
   /** One page of the vault's certificates. */
   list(
     options?: CertificateListOptions,
-  ): Effect.Effect<certificates.CertificateListResult, AzureOpError, RuntimeContext>;
+  ): Effect.Effect<certificates.CertificateListResult, CertificateError, RuntimeContext>;
   /** One page of a certificate's versions. */
   versions(
     certificateName: string,
     options?: CertificateVersionsOptions,
-  ): Effect.Effect<certificates.CertificateListResult, AzureOpError, RuntimeContext>;
+  ): Effect.Effect<certificates.CertificateListResult, CertificateError, RuntimeContext>;
 }
 
 /**

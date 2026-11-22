@@ -1,3 +1,6 @@
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import * as Http from "alchemy/Http";
 import type {
   ALBEvent,
@@ -7,13 +10,15 @@ import type {
   LambdaFunctionURLEvent,
   LambdaFunctionURLResult,
 } from "aws-lambda";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as HttpEffect from "effect/http/HttpEffect";
 import * as HttpMiddleware from "effect/http/HttpMiddleware";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
-import { withInvocationDeadline } from "./InvocationDeadline.ts";
+import { type InvocationTimeoutError, withInvocationDeadline } from "./InvocationDeadline.ts";
 
 export const isFunctionURLEvent = (event: any): event is LambdaFunctionURLEvent =>
   event.requestContext?.http?.method !== undefined;
@@ -34,7 +39,7 @@ export const isAlbEvent = (event: any): event is ALBEvent =>
   typeof event?.httpMethod === "string" && event?.requestContext?.elb !== undefined;
 
 // `HttpMiddleware.tracer` records the request on the `http.server` span only
-// when the request finishes. A span the deadline flush ends early would ship
+// when the request finishes. A span the backstop flush ends early would ship
 // without it, so record the method and path up front.
 const annotateRequestSpan = <A, E, R>(self: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
@@ -47,21 +52,29 @@ const annotateRequestSpan = <A, E, R>(self: Effect.Effect<A, E, R>) =>
     return yield* self;
   });
 
-export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
+export const makeFunctionHttpHandler = <Req>(
+  handler: Http.HttpEffect<Req>,
+  options: {
+    /** Return Function URL responses as a {@link FunctionURLStream}. */
+    responseStream?: boolean;
+  } = {},
+) => {
   // `HttpMiddleware.tracer` creates the `http.server` root span per request
   // (continuing an incoming `traceparent`), matching the Worker bridge's
   // fetch path. With the default no-op tracer this is free; with a telemetry
   // exporter installed the span is exported when the invocation scope
   // flushes.
   //
-  // The invocation deadline flush sits INSIDE the span so it can find the
-  // `http.server` root span in context and end it — with
-  // `InvocationTimeoutError` as its status — before draining the exporters.
-  // The dispatcher's outer guard stands down when this one takes the
-  // deadline; see `withInvocationDeadline`.
+  // The invocation deadline sits INSIDE the span, so a request that runs
+  // past the Function's `timeout` is interrupted within it: the `http.server`
+  // span ends with `InvocationTimeoutError`, with every child span ended by
+  // the interruption. No response is sent: the dispatcher holds the
+  // invocation until Lambda's own timeout answers it. The dispatcher's outer
+  // guard stands down when this one takes the deadline; see
+  // `withInvocationDeadline`.
   const safeHandler = handler.pipe(
     Http.safeHttpEffect,
-    withInvocationDeadline,
+    withInvocationDeadline(),
     annotateRequestSpan,
     HttpMiddleware.tracer,
   );
@@ -69,8 +82,8 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
     event: any,
   ):
     | Effect.Effect<
-        ALBResult | APIGatewayProxyResult | LambdaFunctionURLResult,
-        never,
+        ALBResult | APIGatewayProxyResult | LambdaFunctionURLResult | FunctionURLStream,
+        InvocationTimeoutError,
         Exclude<Effect.Services<typeof handler>, HttpServerRequest.HttpServerRequest | Scope>
       >
     | undefined => {
@@ -80,13 +93,17 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
         url: webRequest.url,
         remoteAddress: Option.some(event.requestContext.http.sourceIp),
       });
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures; generic Exclude on R can't be proven statically
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures other than the invocation deadline; generic Exclude on R can't be proven statically
       return safeHandler.pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
-        Effect.flatMap(toLambdaFunctionURLResult),
+        Effect.flatMap((response): Effect.Effect<LambdaFunctionURLResult | FunctionURLStream> =>
+          options.responseStream
+            ? toFunctionURLStream(response)
+            : toLambdaFunctionURLResult(response),
+        ),
       ) as Effect.Effect<
-        LambdaFunctionURLResult,
-        never,
+        LambdaFunctionURLResult | FunctionURLStream,
+        InvocationTimeoutError,
         Exclude<Effect.Services<typeof handler>, HttpServerRequest.HttpServerRequest | Scope>
       >;
     }
@@ -95,7 +112,7 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
       const request = HttpServerRequest.fromWeb(webRequest).modify({
         url: webRequest.url,
       });
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures; generic Exclude on R can't be proven statically
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures other than the invocation deadline; generic Exclude on R can't be proven statically
       return safeHandler.pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
         // The ALB result shape is the API Gateway v1 result shape (statusCode,
@@ -105,7 +122,7 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
         Effect.flatMap(toApiGatewayProxyResult),
       ) as Effect.Effect<
         ALBResult,
-        never,
+        InvocationTimeoutError,
         Exclude<Effect.Services<typeof handler>, HttpServerRequest.HttpServerRequest | Scope>
       >;
     }
@@ -115,13 +132,13 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
         url: webRequest.url,
         remoteAddress: Option.fromNullishOr(event.requestContext?.identity?.sourceIp),
       });
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures; generic Exclude on R can't be proven statically
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures other than the invocation deadline; generic Exclude on R can't be proven statically
       return safeHandler.pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
         Effect.flatMap(toApiGatewayProxyResult),
       ) as Effect.Effect<
         APIGatewayProxyResult,
-        never,
+        InvocationTimeoutError,
         Exclude<Effect.Services<typeof handler>, HttpServerRequest.HttpServerRequest | Scope>
       >;
     }
@@ -381,4 +398,100 @@ const isTextualContentType = (contentType: string | null): boolean => {
     normalized.includes("javascript") ||
     normalized.includes("form-urlencoded")
   );
+};
+
+/**
+ * Set by the deploy when the Function URL uses `invokeMode:
+ * "RESPONSE_STREAM"`; the runtime then exports a streaming handler.
+ */
+export const RESPONSE_STREAM_ENV = "ALCHEMY_LAMBDA_RESPONSE_STREAM";
+
+interface ResponseStreamMetadata {
+  statusCode: number;
+  headers: Record<string, string>;
+  cookies?: string[];
+}
+
+/** The `awslambda` global the Lambda Node.js runtime installs. */
+interface AwsLambdaGlobal {
+  streamifyResponse: (
+    handler: (event: any, responseStream: NodeJS.WritableStream, context: any) => Promise<void>,
+  ) => (event: any, context: any) => Promise<any>;
+  HttpResponseStream: {
+    from: (
+      stream: NodeJS.WritableStream,
+      metadata: ResponseStreamMetadata,
+    ) => NodeJS.WritableStream;
+  };
+}
+
+const awslambda = () => (globalThis as unknown as { awslambda?: AwsLambdaGlobal }).awslambda;
+
+/**
+ * Whether this sandbox serves a `RESPONSE_STREAM` Function URL. Dies on a
+ * malformed flag: the deploy writes it, so a bad value is a deploy bug, not
+ * something a handler can recover from.
+ */
+export const isResponseStreaming: Effect.Effect<boolean> = Config.Boolean(RESPONSE_STREAM_ENV).pipe(
+  Config.withDefault(false),
+  Effect.map((streaming) => streaming && awslambda() !== undefined),
+  Effect.orDie,
+);
+
+/** A Function URL response whose body is still being produced. */
+interface FunctionURLStream {
+  readonly _tag: "FunctionURLStream";
+  readonly metadata: ResponseStreamMetadata;
+  readonly body: ReadableStream<Uint8Array> | null;
+}
+
+// As in the Cloudflare Worker bridge, the body stream takes over the request
+// scope and closes it when it finishes: the dispatcher returns as soon as
+// the headers are ready, and sees the scope as ejected.
+const toFunctionURLStream = (
+  response: HttpServerResponse.HttpServerResponse,
+): Effect.Effect<FunctionURLStream> =>
+  Effect.map(Effect.context(), (context) => {
+    const webResponse = HttpServerResponse.toWeb(HttpEffect.scopeTransferToStream(response), {
+      context,
+    });
+    const headers = new Headers(webResponse.headers);
+    const cookies = headers.getSetCookie();
+    headers.delete("set-cookie");
+    return {
+      _tag: "FunctionURLStream",
+      metadata: {
+        statusCode: webResponse.status,
+        headers: Object.fromEntries(headers.entries()),
+        ...(cookies.length > 0 ? { cookies } : {}),
+      },
+      body: webResponse.body,
+    };
+  });
+
+const isFunctionURLStream = (result: unknown): result is FunctionURLStream =>
+  (result as FunctionURLStream | undefined)?._tag === "FunctionURLStream";
+
+/**
+ * Wrap the Lambda dispatcher with `awslambda.streamifyResponse`. A Function
+ * URL response is piped into the response stream as its body is produced;
+ * any other listener's result (an SQS batch response, a direct `Invoke`) is
+ * written as JSON, which a buffered `Invoke` returns as its payload.
+ */
+export const streamifyHandler = (dispatch: (event: any, context: any) => Promise<unknown>) => {
+  const aws = awslambda()!;
+  return aws.streamifyResponse(async (event, responseStream, context) => {
+    const result = await dispatch(event, context);
+    if (!isFunctionURLStream(result)) {
+      responseStream.end(JSON.stringify(result) ?? "");
+      return;
+    }
+    const stream = aws.HttpResponseStream.from(responseStream, result.metadata);
+    if (result.body === null) {
+      // The metadata prelude is only flushed by a write.
+      stream.end("");
+      return;
+    }
+    await pipeline(Readable.fromWeb(result.body as unknown as NodeReadableStream), stream);
+  });
 };

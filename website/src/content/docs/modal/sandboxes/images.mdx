@@ -1,0 +1,92 @@
+---
+title: Images
+description: Build Modal images from a registry image, a Dockerfile, or another image, and start sandboxes with a repository already installed.
+---
+
+import BranchGraph from "../../../../components/diagrams/BranchGraph.astro";
+
+An **image** is the filesystem a Modal container starts from. Modal builds it on its own builders, so a deploy needs no Docker on your machine, and it caches each build by its inputs.
+
+## An image builds on another
+
+Each image starts from a registry image or from another image, and adds its own layer. A warm base runs your setup once, at deploy, so every sandbox starts with the work done:
+
+<BranchGraph
+  end={6}
+  branches={[
+    { id: "node", label: "Node", type: "node:22-bookworm" },
+    { id: "warm", label: "Warm", type: "from Node", from: { branch: "node", at: 2 }, tone: "accent" },
+  ]}
+  points={[
+    { branch: "node", at: 1, label: "apt-get install git" },
+    { branch: "warm", at: 3.5, label: "git clone · pnpm install" },
+  ]}
+  caption="Node adds git to a registry image. Warm starts from Node and installs the repository. Sandboxes from Warm start with both layers in place."
+/>
+
+## Build from a registry image
+
+```typescript title="src/Images.ts"
+import * as Modal from "@alchemy.run/modal";
+
+export const Coder = Modal.App("Coder", {});
+
+export const Node = Modal.Image("Node", {
+  app: Coder,
+  image: "node:22-bookworm",
+  commands: ["RUN apt-get update && apt-get install -y git ripgrep"],
+});
+```
+
+`commands` are Dockerfile lines, run on top of the registry image.
+
+## Build from a Dockerfile
+
+```typescript title="src/Images.ts"
+import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
+import * as Modal from "@alchemy.run/modal";
+
+export const Coder = Modal.App("Coder", {});
+
+export const Python = Modal.Image("Python", {
+  app: Coder,
+  dockerfile: Dockerfile.inline`
+    FROM python:3.12-slim
+    RUN pip install pandas
+  `,
+});
+```
+
+Modal's builder isn't Docker. Multi-stage builds, BuildKit mounts, `EXPOSE`, `HEALTHCHECK`, `LABEL`, `ONBUILD`, `STOPSIGNAL` and `VOLUME` fail at plan, naming the line. `USER` is ignored: containers run as root.
+
+A Dockerfile path works too: `dockerfile: "./sandbox/Dockerfile"`. Files its `COPY` lines read are uploaded from the Dockerfile's directory, or from `context`.
+
+## Install a repository into a warm base
+
+```typescript title="src/Images.ts"
+export const Warm = Modal.Image("Warm", {
+  app: Coder,
+  from: Node,
+  run: [
+    "git clone https://github.com/alchemy-run/alchemy /work",
+    "cd /work && corepack enable && pnpm install",
+  ],
+});
+```
+
+`run` executes in a sandbox at deploy, then saves its files as the image. Changing `run` or the base builds a new one.
+
+## Build images while your app runs
+
+For an image per repository or per user, bind `CreateImage` and build at run time:
+
+```typescript
+const images = yield* Modal.CreateImage(Coder);
+const image = yield* images.build({
+  image: "node:22-bookworm",
+  commands: [`RUN git clone https://github.com/${repo} /work`],
+});
+const sandbox = yield* sandboxes.create({ image });
+```
+
+Modal caches builds by content, so the same inputs return the same image.

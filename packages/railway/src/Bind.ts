@@ -1,5 +1,6 @@
 import * as Binding from "alchemy/Binding";
 import type { Rpc } from "alchemy/Rpc";
+import { encodeRpcArgs } from "alchemy/RpcArgs";
 import { unpackEnvValue } from "alchemy/RuntimeContext";
 import { isYieldableEffectLike } from "alchemy/Util/effect";
 import * as Data from "effect/Data";
@@ -73,13 +74,14 @@ const makeStub = <Shape>(options: { readonly baseUrl: string; readonly token: st
             }
             const response = yield* Effect.tryPromise({
               try: () =>
+                // oxlint-disable-next-line effecttsgo/global-fetch-in-effect -- untyped Proxy RPC stub; an HttpClient requirement would be invisible to callers' Shape and unsatisfied at runtime
                 fetch(`${baseUrl}${RPC_PATH_PREFIX}${encodeURIComponent(prop)}`, {
                   method: "POST",
                   headers: {
                     "content-type": "application/json",
                     [RPC_TOKEN_HEADER]: token,
                   },
-                  body: JSON.stringify(args),
+                  body: encodeRpcArgs(args),
                   signal: AbortSignal.timeout(25_000),
                 }),
               catch: (cause) => new RpcCallError({ method: prop, cause }),
@@ -97,6 +99,7 @@ const makeStub = <Shape>(options: { readonly baseUrl: string; readonly token: st
               (value as { _tag?: unknown })._tag === RPC_ERROR_TAG &&
               "error" in value
             ) {
+              // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- forwards the remote service's error as it arrived over RPC
               return yield* Effect.fail((value as { error: unknown }).error);
             }
             return value;

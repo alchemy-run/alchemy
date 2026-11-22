@@ -134,8 +134,7 @@ export const PremierAddOn = GroupedResource<PremierAddOn>("Azure.Web.PremierAddO
 
 type ObservedAddOn = web.WebAppsGetPremierAddOnResponse;
 
-const createAddOnName = (id: string) =>
-  createPhysicalName({ id, maxLength: 60, lowercase: true });
+const createAddOnName = (id: string) => createPhysicalName({ id, maxLength: 60, lowercase: true });
 
 const getAddOn = (
   subscriptionId: string,

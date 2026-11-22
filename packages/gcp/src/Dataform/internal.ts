@@ -18,11 +18,11 @@ export const MAX_ID_LENGTH = 63;
 export const MAX_DISPLAY_NAME_LENGTH = 63;
 
 export class DataformPending extends Data.TaggedError("GCP.Dataform.Pending")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class DataformStillExists extends Data.TaggedError("GCP.Dataform.StillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -286,7 +286,9 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
 ) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value !== undefined ? Effect.succeed(value) : Effect.fail(new DataformPending({ name })),
+      value !== undefined
+        ? Effect.succeed(value)
+        : Effect.fail(new DataformPending({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataform.Pending",
@@ -518,10 +520,7 @@ export const deleteFolderTree = (name: string) =>
   dataform.deleteProjectsLocationsFolders({ name }).pipe(
     Effect.catchTag("Conflict", () =>
       dataform
-        .deleteTreeProjectsLocationsFolders({
-          name,
-          body: { force: true },
-        })
+        .deleteTreeProjectsLocationsFolders({ force: true, name })
         .pipe(Effect.flatMap((operation) => waitForOperation(operation, { notFoundOk: true }))),
     ),
     Effect.catchTag("NotFound", () => Effect.void),
@@ -532,10 +531,7 @@ export const deleteTeamFolderTree = (name: string) =>
   dataform.deleteProjectsLocationsTeamFolders({ name }).pipe(
     Effect.catchTag("Conflict", () =>
       dataform
-        .deleteTreeProjectsLocationsTeamFolders({
-          name,
-          body: { force: true },
-        })
+        .deleteTreeProjectsLocationsTeamFolders({ force: true, name })
         .pipe(Effect.flatMap((operation) => waitForOperation(operation, { notFoundOk: true }))),
     ),
     Effect.catchTag("NotFound", () => Effect.void),

@@ -173,7 +173,9 @@ export default class AiBindingsFunction extends Azure.Functions.Function<AiBindi
               Effect.map(listMessages({ threadId: q("thread"), order: "asc" }), (page) => ({
                 messages: page.data.map((message) => ({
                   role: message.role,
-                  text: message.content.map((item) => item.text?.value ?? "").join(""),
+                  text: message.content
+                    .map((item) => (item.type === "text" ? item.text.value : ""))
+                    .join(""),
                 })),
               })),
             );
@@ -267,7 +269,7 @@ export default class AiBindingsFunction extends Azure.Functions.Function<AiBindi
           // ai-image-analysis
           case "/image/analyze":
             return yield* respond(
-              Effect.map(analyzeImage({ url: TEXT_URL, features: "tags,read" }), (result) => ({
+              Effect.map(analyzeImage({ url: TEXT_URL, features: ["tags", "read"] }), (result) => ({
                 tags: (result.tagsResult?.values ?? []).map((tag) => tag.name),
                 lines: (result.readResult?.blocks ?? []).flatMap((block) =>
                   block.lines.map((line) => line.text),

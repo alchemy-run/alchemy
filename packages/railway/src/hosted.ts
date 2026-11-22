@@ -11,6 +11,7 @@ import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/
 import { safeHttpEffect } from "alchemy/Http";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createContainerRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
+import { envStrings } from "alchemy/RuntimeContext";
 import { Self } from "alchemy/Self";
 import {
   copyExtraFiles,
@@ -180,11 +181,11 @@ const makeFunctionBootstrap =
   (handler: string) =>
   (importPath: string): string =>
     `
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import { makeEntrypointLayer, RuntimeConfigProviderLive } from "alchemy/Runtime";
 import { Stack } from "alchemy/Stack";
 import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -193,7 +194,7 @@ globalThis.__ALCHEMY_RUNTIME__ = true;
 const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
 const tag = Context.Service(${JSON.stringify(Self.key)});
 const layer = makeEntrypointLayer(tag, entrypoint);
-const platform = FetchHttpClient.layer;
+const platform = Layer.mergeAll(FetchHttpClient.layer, SecureRandom.layerWebCrypto);
 const stack = Layer.effect(
   Stack,
   Effect.all([
@@ -214,12 +215,7 @@ await Effect.runPromise(
       layer.pipe(
         Layer.provideMerge(stack),
         Layer.provideMerge(platform),
-        Layer.provideMerge(
-          Layer.succeed(
-            ConfigProvider.ConfigProvider,
-            reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
-          )
-        ),
+        Layer.provideMerge(RuntimeConfigProviderLive),
       )
     )
   )
@@ -255,13 +251,11 @@ export const plainEnvValue = (value: unknown): string | undefined => {
   return undefined;
 };
 
-export const toEnvRecord = (env: Record<string, any> | undefined): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(env ?? {}).flatMap(([key, value]) => {
-      const raw = plainEnvValue(value);
-      return raw === undefined ? [] : [[key, raw]];
-    }),
-  );
+/**
+ * `env` as Railway variables. Bound values keep the runtime context's
+ * packing, so its `get` can rebuild a `Redacted`.
+ */
+export const toEnvRecord = envStrings;
 
 const coerceBindingId = (value: unknown): string | undefined => {
   const direct = plainEnvValue(value);

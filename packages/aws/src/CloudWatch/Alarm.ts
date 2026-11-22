@@ -4,15 +4,22 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { createName, readResourceTags, retryConcurrent, updateResourceTags } from "./common.ts";
 
+export class AlarmUnexpectedResponse extends Data.TaggedError("AlarmUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type AlarmName = string;
-export type AlarmArn = `arn:aws:cloudwatch:${RegionID}:${AccountID}:alarm:${string}`;
+export type AlarmArn = `arn:${Partition}:cloudwatch:${RegionID}:${AccountID}:alarm:${string}`;
 export type AlarmStateValue = cloudwatch.StateValue;
 
 export interface AlarmProps extends Omit<cloudwatch.PutMetricAlarmInput, "AlarmName" | "Tags"> {
@@ -44,8 +51,18 @@ export interface Alarm extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  AlarmLookup
 > {}
+
+/**
+ * Props for {@link Alarm.lookup}: find an alarm this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AlarmLookup {
+  /** The alarm name of the existing alarm. */
+  alarmName: string;
+}
 
 /**
  * A CloudWatch metric alarm — watches a single metric (or metric-math
@@ -93,6 +110,16 @@ export interface Alarm extends Resource<
  * const state = result.MetricAlarms?.[0]?.StateValue;
  * ```
  *
+ * ### Looking up an existing alarm
+ * `Alarm.lookup` references an alarm Alchemy doesn't manage (created in the
+ * console or by another stack), found by `alarmName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing alarm
+ * ```typescript
+ * const existing = AWS.CloudWatch.Alarm.lookup({ alarmName: "my-alarm" });
+ * ```
+ *
  * @resource
  */
 export const Alarm = Resource<Alarm>("AWS.CloudWatch.Alarm");
@@ -108,7 +135,7 @@ export const AlarmProvider = () =>
         AWSEnvironment.current.pipe(
           Effect.map(
             (env) =>
-              `arn:aws:cloudwatch:${env.region}:${env.accountId}:alarm:${alarmName}` as AlarmArn,
+              `arn:${partitionOf(env.region)}:cloudwatch:${env.region}:${env.accountId}:alarm:${alarmName}` as AlarmArn,
           ),
         );
 
@@ -190,6 +217,11 @@ export const AlarmProvider = () =>
             );
             return attrs;
           }),
+        lookup: Effect.fn(function* ({ alarmName: name }) {
+          const state = yield* readAlarm(name);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.alarmName ?? (yield* createAlarmName(id, olds ?? {}));
           const state = yield* readAlarm(name);
@@ -227,7 +259,9 @@ export const AlarmProvider = () =>
 
           const state = yield* readAlarm(name);
           if (!state) {
-            return yield* Effect.fail(new Error(`failed to read reconciled alarm '${name}'`));
+            return yield* new AlarmUnexpectedResponse({
+              message: `failed to read reconciled alarm '${name}'`,
+            });
           }
 
           return {

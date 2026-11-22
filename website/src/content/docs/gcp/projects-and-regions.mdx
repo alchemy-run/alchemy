@@ -1,0 +1,76 @@
+---
+title: Projects and regions
+description: How GCP projects isolate resources and sit in an organization, how regions and zones place them, and how profiles and stages choose where each Alchemy deploy goes.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Everything you create on Google Cloud lives in a **project**: its resources, the IAM policy that guards them, and the APIs that are turned on for them. A project is identified by an id you choose, like `my-app-prod`, and its bill goes to a **billing account**.
+
+## Projects sit in an organization
+
+Projects sit in a hierarchy. An **organization** is the root, usually your company's domain, and **folders** group projects inside it, by team or by environment. A role granted on a folder applies to every project under it, so a team's access can be set in one place.
+
+<Tree
+  nodes={[
+    { id: "org", label: "example.com", type: "organization" },
+    { id: "prod", label: "Production", type: "folder", parent: "org" },
+    { id: "dev", label: "Development", type: "folder", parent: "org" },
+    { id: "p1", label: "my-app-prod", type: "project", parent: "prod", tone: "accent" },
+    { id: "p2", label: "billing-prod", type: "project", parent: "prod" },
+    { id: "p3", label: "my-app-dev", type: "project", parent: "dev" },
+    { id: "p4", label: "sam-sandbox", type: "project", parent: "dev" },
+  ]}
+  scopes={[{ on: "dev", label: "roles/editor · dev-team@" }]}
+  caption="Folders group projects under the organization. The dev team's role on Development covers both projects in it, and nothing in Production."
+/>
+
+Use projects to keep environments apart: one for production, others for staging and development. Nothing in one project can reach another unless IAM allows it.
+
+## Connect a project with a profile
+
+Alchemy reaches a project through a [profile](/environments/profiles), which names a **gcloud configuration**: a Google account, a project and a default region. Add GCP to your `default` profile:
+
+```sh
+alchemy profile edit --add GCP
+```
+
+Alchemy signs in to the configuration with `gcloud auth login` when it has no login yet. It never activates the configuration, so each profile can use a different Google account while your own gcloud stays as it is. To deploy as a service account instead, point the profile at its key file. See [Setup](/gcp/setup).
+
+Make a profile per project:
+
+```sh
+alchemy profile create prod
+alchemy profile edit --profile prod --add GCP
+```
+
+## Choose the stage and the project separately
+
+A [stage](/environments/stages) decides **what** you deploy: its own state and its own resource names. A profile decides **where**: which project, and the default region.
+
+```sh
+alchemy deploy --stage prod --profile prod
+alchemy deploy --stage pr-42 --profile default
+```
+
+Many stages can share the development project, each with its own services.
+
+## Turn on the APIs a project uses
+
+Every service is an API, like `run.googleapis.com`, and it must be **enabled** in a project before anything there can use it. A new project has almost none enabled:
+
+```sh
+gcloud services enable run.googleapis.com artifactregistry.googleapis.com
+```
+
+[Setup](/gcp/setup) lists the ones most apps need.
+
+## A region is where a resource runs
+
+A **region**, like `us-central1` or `europe-west1`, is a geographic location with several **zones**, separate data centers inside it. A Cloud Run service, a Cloud SQL instance or a subnet runs in one region. Some resources are **multi-regional**, like a Cloud Storage bucket in `US`, and some are **global**, like a VPC network and IAM itself.
+
+The configuration's `compute/region` is the default region: where Alchemy creates regional resources that don't set their own `region` or `location`. A `region` in the profile overrides it.
+
+## In CI
+
+With `CI=true`, Alchemy skips the profile and reads the environment: `GOOGLE_PROJECT_ID` and `GOOGLE_APPLICATION_CREDENTIALS` for a key file. Better still, let the workflow sign in with no key at all. See [Federated identity](/gcp/security/federated-identity).

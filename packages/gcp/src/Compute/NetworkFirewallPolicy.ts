@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { ignoredCodes } from "./internal.ts";
@@ -96,8 +97,26 @@ export type NetworkFirewallPolicy = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NetworkFirewallPolicyLookup
 >;
+
+/**
+ * Props for {@link NetworkFirewallPolicy.lookup}: find a network firewall
+ * policy this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface NetworkFirewallPolicyLookup {
+  /**
+   * Policy name (RFC1035, 1-63 characters).
+   */
+  networkFirewallPolicyName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine network firewall policy.
@@ -135,6 +154,19 @@ export type NetworkFirewallPolicy = Resource<
  * const policy = yield* GCP.Compute.NetworkFirewallPolicy("VpcFw", {
  *   networkFirewallPolicyName: "app-nfw",
  *   associations: [{ name: "vpc", attachmentTarget: network.selfLink }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing network firewall policy
+ * `NetworkFirewallPolicy.lookup` references a network firewall policy
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared network firewall policy.
+ *
+ * **Example:** Reference an existing network firewall policy
+ * ```typescript
+ * const networkFirewallPolicy = GCP.Compute.NetworkFirewallPolicy.lookup({
+ *   networkFirewallPolicyName: "my-network-firewall-policy",
  * });
  * ```
  *
@@ -346,7 +378,7 @@ const toAttrs = (
 const getByName = (project: string, firewallPolicy: string) =>
   compute
     .getNetworkFirewallPolicies({ project, firewallPolicy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, networkFirewallPolicyName: string) =>
   getByName(project, networkFirewallPolicyName).pipe(
@@ -432,9 +464,9 @@ const syncRules = (
           project,
           networkFirewallPolicyName,
           compute.addRuleNetworkFirewallPolicies({
+            ...toRuleBody(rule),
             project,
             firewallPolicy: networkFirewallPolicyName,
-            body: toRuleBody(rule),
           }),
           { ignoreAlreadyExists: true },
         );
@@ -445,10 +477,10 @@ const syncRules = (
           project,
           networkFirewallPolicyName,
           compute.patchRuleNetworkFirewallPolicies({
+            ...toRuleBody(rule),
             project,
             firewallPolicy: networkFirewallPolicyName,
-            priority,
-            body: toRuleBody(rule),
+            rulePriority: priority,
           }),
         );
       }
@@ -496,9 +528,10 @@ const syncAssociations = (
           project,
           networkFirewallPolicyName,
           compute.addAssociationNetworkFirewallPolicies({
+            name,
+            attachmentTarget: target,
             project,
             firewallPolicy: networkFirewallPolicyName,
-            body: { name, attachmentTarget: target },
           }),
           { ignoreAlreadyExists: true },
         );
@@ -509,10 +542,11 @@ const syncAssociations = (
           project,
           networkFirewallPolicyName,
           compute.addAssociationNetworkFirewallPolicies({
+            name,
+            attachmentTarget: target,
             project,
             firewallPolicy: networkFirewallPolicyName,
             replaceExistingAssociation: true,
-            body: { name, attachmentTarget: target },
           }),
         );
       }
@@ -564,7 +598,14 @@ export const NetworkFirewallPolicyProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ networkFirewallPolicyName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, networkFirewallPolicyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const networkFirewallPolicyName = yield* toName(
         id,
@@ -575,7 +616,9 @@ export const NetworkFirewallPolicyProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "networkFirewallPolicyName");
     }),
 
     list: () =>
@@ -614,12 +657,10 @@ export const NetworkFirewallPolicyProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertNetworkFirewallPolicies({
+            name: networkFirewallPolicyName,
+            description: desiredDescription,
+            policyType,
             project: env.project,
-            body: {
-              name: networkFirewallPolicyName,
-              description: desiredDescription,
-              policyType,
-            },
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -637,12 +678,10 @@ export const NetworkFirewallPolicyProvider = () =>
           env.project,
           networkFirewallPolicyName,
           compute.patchNetworkFirewallPolicies({
+            description: desiredDescription,
+            fingerprint: current.fingerprint,
             project: env.project,
             firewallPolicy: networkFirewallPolicyName,
-            body: {
-              description: desiredDescription,
-              fingerprint: current.fingerprint,
-            },
           }),
         );
         current = (yield* getByName(env.project, networkFirewallPolicyName)) ?? current;

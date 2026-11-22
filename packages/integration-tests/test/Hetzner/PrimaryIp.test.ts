@@ -1,17 +1,18 @@
 import * as Hetzner from "@alchemy.run/hetzner";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as primaryIps from "@distilled.cloud/hetzner/primary_ips";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../expectDeleteRefused.ts";
+import { hetznerPrimaryIps } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 
-const { test } = Test.make({ providers: Hetzner.providers() });
+const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const waitUntilGone = (id: number) =>
   primaryIps.getPrimaryIp({ id }).pipe(
@@ -24,7 +25,7 @@ const waitUntilGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create, update, and delete an unassigned ipv6 primary ip",
   (stack) =>
     Effect.gen(function* () {
@@ -39,6 +40,7 @@ test.provider.skipIf(!hasHetznerCreds)(
           });
         }),
       );
+      yield* expectFound(Hetzner.PrimaryIp.lookup({ name: created.name }), created);
 
       expect(created.id).toEqual(expect.any(Number));
       expect(created.name).toEqual(expect.any(String));
@@ -85,6 +87,35 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(refetched.primary_ip.labels.env).toEqual("prod");
       expect(refetched.primary_ip.labels.role).toEqual("web");
 
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.PrimaryIp("WebIp", {
+            type: "ipv6",
+            location: "nbg1",
+            autoDelete: true,
+            labels: { env: "prod", role: "web" },
+            deleteProtection: true,
+          });
+        }),
+      );
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "WebIp",
+        tag: "Hetzner.PrimaryIpDeleteProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.PrimaryIp("WebIp", {
+            type: "ipv6",
+            location: "nbg1",
+            autoDelete: true,
+            labels: { env: "prod", role: "web" },
+            deleteProtection: false,
+          });
+        }),
+      );
+
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.id);
@@ -96,7 +127,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "replace when location changes",
   (stack) =>
     Effect.gen(function* () {
@@ -149,7 +180,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create from datacenter name",
   (stack) =>
     Effect.gen(function* () {
@@ -185,7 +216,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "list enumerates the deployed primary ip",
   (stack) =>
     Effect.gen(function* () {

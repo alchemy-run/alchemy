@@ -103,8 +103,29 @@ export type OrganizationsSecurityProfileGroup = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationsSecurityProfileGroupLookup
 >;
+
+/**
+ * Props for {@link OrganizationsSecurityProfileGroup.lookup}: find an
+ * organizations security profile group this stack doesn't manage by its
+ * identifiers.
+ */
+export interface OrganizationsSecurityProfileGroupLookup {
+  /**
+   * Security profile group id.
+   */
+  securityProfileGroupId: string;
+  /**
+   * Organization id or `organizations/{organization}`.
+   */
+  organization?: string;
+  /**
+   * Location. Profile groups live in `global`.
+   */
+  location?: string;
+}
 
 /**
  * An organization-scoped group of Network Security profiles.
@@ -131,6 +152,20 @@ export type OrganizationsSecurityProfileGroup = Resource<
  *     labels: { env: "prod" },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing organizations security profile group
+ * `OrganizationsSecurityProfileGroup.lookup` references an organizations
+ * security profile group Alchemy doesn't manage (created in the console or
+ * by another stack). It is read during plan/deploy, never created, updated
+ * or deleted, and binds like a declared organizations security profile
+ * group.
+ *
+ * **Example:** Reference an existing organizations security profile group
+ * ```typescript
+ * const organizationsSecurityProfileGroup = GCP.NetworkSecurity.OrganizationsSecurityProfileGroup.lookup({
+ *   securityProfileGroupId: "my-security-profile-group",
+ * });
  * ```
  *
  * @resource
@@ -167,7 +202,7 @@ const toAttrs = (group: networksecurity.SecurityProfileGroup) => {
 const getByName = (name: string) =>
   networksecurity
     .getOrganizationsLocationsSecurityProfileGroups({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (organization: string) =>
   networksecurity.listOrganizationsLocationsSecurityProfileGroups
@@ -218,6 +253,23 @@ export const OrganizationsSecurityProfileGroupProvider = () =>
           previousId !== undefined &&
           nextId === previousId,
       };
+    }),
+
+    lookup: Effect.fn(function* ({
+      securityProfileGroupId,
+      organization: lookupOrganization,
+      location: lookupLocation,
+    }) {
+      const organization = yield* resolveOrganization(lookupOrganization, undefined).pipe(
+        Effect.catchTag("GCP.NetworkSecurity.OrganizationRequired", () => Effect.succeed("")),
+      );
+      const location = normalizeLocation(lookupLocation);
+      const name =
+        organization.length > 0 ? resourceName(organization, location, securityProfileGroupId) : "";
+      if (name.length === 0) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -282,16 +334,14 @@ export const OrganizationsSecurityProfileGroupProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createOrganizationsLocationsSecurityProfileGroups({
+            description: news.description,
+            labels: desiredLabels,
+            threatPreventionProfile: news.threatPreventionProfile,
+            urlFilteringProfile: news.urlFilteringProfile,
+            customMirroringProfile: news.customMirroringProfile,
+            customInterceptProfile: news.customInterceptProfile,
             parent: organizationParent(organization, location),
             securityProfileGroupId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              threatPreventionProfile: news.threatPreventionProfile,
-              urlFilteringProfile: news.urlFilteringProfile,
-              customMirroringProfile: news.customMirroringProfile,
-              customInterceptProfile: news.customInterceptProfile,
-            },
           })
           .pipe(
             Effect.retry({
@@ -299,7 +349,7 @@ export const OrganizationsSecurityProfileGroupProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -308,7 +358,7 @@ export const OrganizationsSecurityProfileGroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -341,17 +391,14 @@ export const OrganizationsSecurityProfileGroupProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* networksecurity.patchOrganizationsLocationsSecurityProfileGroups({
+          labels: desiredLabels,
+          description: news.description,
+          threatPreventionProfile: news.threatPreventionProfile,
+          urlFilteringProfile: news.urlFilteringProfile,
+          customMirroringProfile: news.customMirroringProfile,
+          customInterceptProfile: news.customInterceptProfile,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            threatPreventionProfile: news.threatPreventionProfile,
-            urlFilteringProfile: news.urlFilteringProfile,
-            customMirroringProfile: news.customMirroringProfile,
-            customInterceptProfile: news.customInterceptProfile,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
@@ -372,7 +419,7 @@ export const OrganizationsSecurityProfileGroupProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

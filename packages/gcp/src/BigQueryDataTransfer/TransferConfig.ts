@@ -325,7 +325,7 @@ export const TransferConfig = Resource<TransferConfig>("GCP.BigQueryDataTransfer
 export class TransferConfigNotResolved extends Data.TaggedError(
   "GCP.BigQueryDataTransfer.TransferConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -509,7 +509,7 @@ const toAttrs = (config: bqdt.TransferConfig, project: string, location: string)
 const getByName = (name: string) =>
   bqdt
     .getProjectsLocationsTransferConfigs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string) =>
   bqdt.listProjectsLocationsTransferConfigs
@@ -658,11 +658,11 @@ export const TransferConfigProvider = () =>
       if (current === undefined) {
         const created = yield* bqdt
           .createProjectsLocationsTransferConfigs({
+            ...desiredBody,
             parent,
             serviceAccountName: news.serviceAccountName,
             versionInfo: news.versionInfo,
             authorizationCode: news.authorizationCode,
-            body: desiredBody,
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(parent, id, news.dataSourceId)));
         current = created ?? undefined;
@@ -670,7 +670,7 @@ export const TransferConfigProvider = () =>
 
       if (current === undefined) {
         return yield* new TransferConfigNotResolved({
-          name: `${parent}/transferConfigs`,
+          resourceName: `${parent}/transferConfigs`,
         });
       }
 
@@ -756,12 +756,12 @@ export const TransferConfigProvider = () =>
       if (mask.length > 0 || serviceAccountChanged) {
         current = yield* retryTransient(
           bqdt.patchProjectsLocationsTransferConfigs({
+            ...desiredBody,
             name,
             updateMask: mask.length > 0 ? mask.join(",") : "displayName",
             serviceAccountName: news.serviceAccountName,
             versionInfo: news.versionInfo,
             authorizationCode: news.authorizationCode,
-            body: { ...desiredBody, name },
           }),
         );
         current = (yield* getByName(name)) ?? current;

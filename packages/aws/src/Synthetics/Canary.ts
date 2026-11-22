@@ -17,6 +17,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { managedPolicyArn, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface CanaryProps {
@@ -180,8 +181,18 @@ export interface Canary extends Resource<
     engineArn: string | undefined;
   },
   {},
-  Providers
+  Providers,
+  CanaryLookup
 > {}
+
+/**
+ * Props for {@link Canary.lookup}: find a canary this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CanaryLookup {
+  /** The name of the existing canary. */
+  canaryName: string;
+}
 
 /**
  * A CloudWatch Synthetics canary — a scripted probe that monitors your
@@ -242,6 +253,17 @@ export interface Canary extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing canary
+ * `Canary.lookup` references a canary Alchemy doesn't manage (created in the
+ * console or by another stack), found by `canaryName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing canary
+ * ```typescript
+ * const checkout = AWS.Synthetics.Canary.lookup({ canaryName: "checkout" });
+ * const canaryArn = checkout.canaryArn;
+ * ```
+ *
  * @resource
  */
 export const Canary = Resource<Canary>("AWS.Synthetics.Canary");
@@ -249,8 +271,7 @@ export const Canary = Resource<Canary>("AWS.Synthetics.Canary");
 const DEFAULT_RUNTIME_VERSION = "syn-nodejs-puppeteer-16.1";
 const DEFAULT_SCHEDULE_EXPRESSION = "rate(5 minutes)";
 const ROLE_POLICY_NAME = "AlchemyCanaryPolicy";
-const VPC_ACCESS_POLICY_ARN =
-  "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole";
+const VPC_ACCESS_POLICY = "service-role/AWSLambdaVPCAccessExecutionRole";
 
 /**
  * Canary create/update/start/stop are asynchronous; the canary reports a
@@ -358,13 +379,13 @@ export const CanaryProvider = () =>
 
       const canaryArnOf = Effect.fn(function* (canaryName: string) {
         const { accountId, region } = yield* AWSEnvironment.current;
-        return `arn:aws:synthetics:${region}:${accountId}:canary:${canaryName}`;
+        return `arn:${partitionOf(region)}:synthetics:${region}:${accountId}:canary:${canaryName}`;
       });
 
       const getCanaryOrUndefined = Effect.fn(function* (canaryName: string) {
         return yield* synthetics.getCanary({ Name: canaryName }).pipe(
           Effect.map((r) => r.Canary),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -627,12 +648,12 @@ export const CanaryProvider = () =>
               {
                 Effect: "Allow",
                 Action: ["s3:PutObject", "s3:GetObject"],
-                Resource: [`arn:aws:s3:::${artifactBucket}/*`],
+                Resource: [`arn:${partitionOf(region)}:s3:::${artifactBucket}/*`],
               },
               {
                 Effect: "Allow",
                 Action: ["s3:GetBucketLocation"],
-                Resource: [`arn:aws:s3:::${artifactBucket}`],
+                Resource: [`arn:${partitionOf(region)}:s3:::${artifactBucket}`],
               },
               {
                 Effect: "Allow",
@@ -652,7 +673,9 @@ export const CanaryProvider = () =>
               {
                 Effect: "Allow",
                 Action: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
-                Resource: [`arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/cwsyn-*`],
+                Resource: [
+                  `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:/aws/lambda/cwsyn-*`,
+                ],
               },
               {
                 Effect: "Allow",
@@ -665,7 +688,7 @@ export const CanaryProvider = () =>
         if (vpc) {
           yield* iam.attachRolePolicy({
             RoleName: roleName,
-            PolicyArn: VPC_ACCESS_POLICY_ARN,
+            PolicyArn: managedPolicyArn(partitionOf(region), VPC_ACCESS_POLICY),
           });
         }
         if (created) {
@@ -675,7 +698,7 @@ export const CanaryProvider = () =>
           // propagate; the CREATE_FAILED recreate loop below covers stragglers.
           yield* Effect.sleep("10 seconds");
         }
-        return `arn:aws:iam::${accountId}:role/${roleName}`;
+        return `arn:${partitionOf(region)}:iam::${accountId}:role/${roleName}`;
       });
 
       // Tear down the auto-created execution role. Idempotent: every step
@@ -687,10 +710,11 @@ export const CanaryProvider = () =>
             PolicyName: ROLE_POLICY_NAME,
           })
           .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+        const { partition } = yield* AWSEnvironment.current;
         yield* iam
           .detachRolePolicy({
             RoleName: roleName,
-            PolicyArn: VPC_ACCESS_POLICY_ARN,
+            PolicyArn: managedPolicyArn(partition, VPC_ACCESS_POLICY),
           })
           .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
         yield* iam.deleteRole({ RoleName: roleName }).pipe(
@@ -711,7 +735,7 @@ export const CanaryProvider = () =>
         for (let attempt = 0; attempt < 30; attempt++) {
           const remaining = yield* iam
             .getRole({ RoleName: roleName })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           if (remaining === undefined) return;
           yield* Effect.sleep("1 second");
         }
@@ -803,6 +827,25 @@ export const CanaryProvider = () =>
             return items;
           }),
 
+        lookup: Effect.fn(function* ({ canaryName }) {
+          const canary = yield* getCanaryOrUndefined(canaryName);
+          if (canary === undefined) return undefined;
+          const attrs: Canary["Attributes"] = {
+            canaryName,
+            canaryArn: yield* canaryArnOf(canaryName),
+            canaryId: canary.Id ?? "",
+            executionRoleArn: canary.ExecutionRoleArn ?? "",
+            artifactS3Location: canary.ArtifactS3Location
+              ? parseArtifactLocation(canary.ArtifactS3Location).artifactS3Location
+              : "",
+            runtimeVersion: canary.RuntimeVersion ?? "",
+            // The execution role names the role a declared canary records.
+            roleName: canary.ExecutionRoleArn?.split("/").at(-1),
+            configHash: undefined,
+            engineArn: canary.EngineArn,
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const canaryName = output?.canaryName ?? (yield* createCanaryName(id, olds ?? {}));
           const canary = yield* getCanaryOrUndefined(canaryName);

@@ -1,12 +1,13 @@
 import * as MysqlClient from "@effect/sql-mysql2/MysqlClient";
-import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
-import { proxyChain } from "alchemy/Util/proxy-chain";
-import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Reactivity from "effect/reactivity/Reactivity";
 import * as Redacted from "effect/Redacted";
 import * as Sql from "effect/sql/SqlClient";
+import * as Statement from "effect/sql/Statement";
 import type * as Mysql from "mysql2";
+import { makeDeferredClient } from "./DeferredClient.ts";
 
 /**
  * Options for {@link MySQL}: `@effect/sql-mysql2`'s client configuration,
@@ -20,6 +21,12 @@ export type MySQLConfig<E = never, R = never> = Omit<MysqlClient.MysqlClientConf
 const isWorkerd = () =>
   (globalThis as { navigator?: { userAgent?: string } }).navigator?.userAgent ===
     "Cloudflare-Workers" || "WebSocketPair" in globalThis;
+
+/** A MySQL connection url that could not be parsed. */
+export class MySQLUrlError extends Data.TaggedError("MySQLUrlError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 // Query-string params are JSON-parsed into poolConfig entries (mysql2's own
 // URI convention), so `mysql://...?ssl={"rejectUnauthorized":true}` works.
@@ -45,7 +52,11 @@ const parseMySQLUrl = (url: Redacted.Redacted<string>) =>
         poolConfig: poolConfig as Mysql.PoolOptions,
       };
     },
-    catch: (cause) => new Error(`SQL.MySQL: failed to parse connection url: ${cause}`),
+    catch: (cause) =>
+      new MySQLUrlError({
+        message: `SQL.MySQL: failed to parse connection url: ${cause instanceof Error ? cause.message : String(cause)}`,
+        cause,
+      }),
   }).pipe(Effect.orDie);
 
 /**
@@ -97,10 +108,13 @@ export const resolveMySQLConfig = <E = never, R = never>(
  * });
  * ```
  *
- * The pool opens on the first query of an execution, is reused for every
- * query in it, and closes when the event settles (see
- * {@link makeExecutionMemo}); plan/deploy never connect. Workers defaults
- * ({@link resolveMySQLConfig}) are overridden in the config:
+ * The client is a real `MysqlClient`: `` sql`...` ``, `sql.insert` and
+ * `sql.and` build and compile statements with `@effect/sql-mysql2`'s own
+ * code, with no connection. Running a statement opens the pool. The pool is
+ * opened at most once per execution and closes when the event settles. The
+ * connection URL resolves then too, so deploy / plan-time invocations never
+ * connect. Workers defaults ({@link resolveMySQLConfig}) are overridden in
+ * the config:
  *
  * ```typescript
  * const sql = yield* SQL.MySQL({
@@ -112,17 +126,28 @@ export const resolveMySQLConfig = <E = never, R = never>(
  *
  * @binding
  */
-export const MySQL = <E = never, R = never>(config: MySQLConfig<E, R>) =>
-  Effect.map(
-    makeExecutionMemo(
-      Effect.gen(function* () {
-        const resolved = yield* resolveMySQLConfig(config);
-        const mysqlCtx = yield* Layer.build(MysqlClient.layer(resolved));
-        return Context.get(mysqlCtx, MysqlClient.MysqlClient);
-      }),
+export const MySQL = Effect.fn(function* <E = never, R = never>(config: MySQLConfig<E, R>) {
+  const { url: _, ...options } = config;
+  const { client } = yield* makeDeferredClient({
+    driver: "mysql2",
+    compiler: MysqlClient.makeCompiler(options.transformQueryNames),
+    transformRows: options.transformResultNames
+      ? Statement.defaultTransforms(options.transformResultNames).array
+      : undefined,
+    // The database, host and port are in the URL, which resolves on connect.
+    spanAttributes: [...Object.entries(options.spanAttributes ?? {}), ["db.system.name", "mysql"]],
+    connect: Effect.flatMap(resolveMySQLConfig(config), (resolved) =>
+      MysqlClient.make(resolved).pipe(
+        Effect.provideServiceEffect(Reactivity.Reactivity, Reactivity.make),
+      ),
     ),
-    (client) => proxyChain<MysqlClient.MysqlClient>(client),
-  );
+  });
+  return Object.assign(client, {
+    [MysqlClient.TypeId]: MysqlClient.TypeId,
+    // The options known at Construction phase. The URL resolves on connect.
+    config: options,
+  }) satisfies MysqlClient.MysqlClient as MysqlClient.MysqlClient & Sql.SqlClient;
+});
 
 /**
  * Provide an `@effect/sql-mysql2` client as the `MysqlClient` and generic
@@ -135,8 +160,8 @@ export const MySQL = <E = never, R = never>(config: MySQLConfig<E, R>) =>
  * );
  * ```
  *
- * The layer itself builds synchronously at init; the underlying pool is
- * created lazily per execution (see {@link MySQL}).
+ * The layer itself builds synchronously at Construction phase; the
+ * underlying pool is created lazily per execution (see {@link MySQL}).
  */
 export const MySQLLayer = <E = never, R = never>(config: MySQLConfig<E, R>) =>
   // Derive SqlClient from the single MysqlClient build so both tags share

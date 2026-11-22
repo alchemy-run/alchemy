@@ -1,6 +1,8 @@
-import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
 import { decodeFields } from "@alchemy.run/gcp/Firestore/Values";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as scheduler from "@distilled.cloud/gcp/cloudscheduler_v1";
 import * as eventarc from "@distilled.cloud/gcp/eventarc_v1";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
@@ -8,9 +10,6 @@ import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -40,15 +39,7 @@ const sharedStack = Core.scratchStack(
   "test/GCP/Smoke/Serverless.smoke.test.ts",
 );
 
-const dockerAvailable = (() => {
-  try {
-    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-  } catch {
-    return false;
-  }
-})();
-
-const skip = !!process.env.FAST || !dockerAvailable;
+const skip = !!process.env.FAST;
 
 interface StackOutputs {
   url: string;

@@ -1,13 +1,13 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import ArtifactRegistryBindingsHost, { Images } from "./fixtures/bindings-host.ts";
 import { IMAGE, pushDockerVersion } from "./registry.ts";
 
@@ -29,8 +29,8 @@ const projectGrantsOf = (account: string) =>
   Effect.gen(function* () {
     const { project } = yield* GcpEnvironment.current;
     const policy = yield* resourcemanager.getIamPolicyProjects({
+      options: { requestedPolicyVersion: 3 },
       resource: `projects/${project}`,
-      body: { options: { requestedPolicyVersion: 3 } },
     });
     return (policy.bindings ?? [])
       .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${account}`))
@@ -40,7 +40,7 @@ const projectGrantsOf = (account: string) =>
       }));
   });
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "ArtifactRegistry Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:artifactregistry", "provider:gcp:run", "live"],

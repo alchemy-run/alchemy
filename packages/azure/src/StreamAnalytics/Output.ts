@@ -226,7 +226,9 @@ export const OutputProvider = () =>
       yield* checkResourceGroup(resourceGroup);
       const name = news.name ?? output?.outputName ?? (yield* createStreamAnalyticsName(id));
       const properties: streamanalytics.OutputPropertiesInput = {
-        datasource: news.datasource,
+        // The data source's `type` is only known at runtime and decides its
+        // arm, so it is asserted.
+        datasource: news.datasource as streamanalytics.OutputDataSource,
         serialization: news.serialization,
         timeWindow: news.timeWindow,
         sizeWindow: news.sizeWindow,

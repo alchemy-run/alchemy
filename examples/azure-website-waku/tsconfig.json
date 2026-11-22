@@ -13,8 +13,5 @@
     "strict": true
   },
   "include": ["alchemy.run.ts", "src", "test"],
-  "references": [
-    { "path": "../../packages/alchemy" },
-    { "path": "../../packages/azure" }
-  ]
+  "references": [{ "path": "../../packages/alchemy" }, { "path": "../../packages/azure" }]
 }

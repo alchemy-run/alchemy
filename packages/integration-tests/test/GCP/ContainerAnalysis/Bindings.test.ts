@@ -1,11 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as containeranalysis from "@distilled.cloud/gcp/containeranalysis_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import { currentProject, TEST_RESOURCE_URI } from "./common.ts";
 import ContainerAnalysisBindingsHost, { Authority, Signed } from "./fixtures/bindings-host.ts";
 
@@ -22,8 +22,8 @@ let hostAccount: string;
 const projectRoles = Effect.gen(function* () {
   const project = yield* currentProject;
   const policy = yield* crm.getIamPolicyProjects({
+    options: { requestedPolicyVersion: 3 },
     resource: `projects/${project}`,
-    body: { options: { requestedPolicyVersion: 3 } },
   });
   return (policy.bindings ?? [])
     .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
@@ -33,7 +33,7 @@ const projectRoles = Effect.gen(function* () {
     }));
 });
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "ContainerAnalysis Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:containeranalysis", "provider:gcp:run", "live"],

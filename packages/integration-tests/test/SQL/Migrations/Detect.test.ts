@@ -7,8 +7,8 @@ import {
   resolveMigrations,
   timestampPrefixMillis,
 } from "@alchemy.run/sql/Migrations";
+import { describe as plainDescribe, expect, layer, test } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe as plainDescribe, expect, layer, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 

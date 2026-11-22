@@ -301,7 +301,9 @@ export const PipelineProvider = () =>
           resourceGroupName: resourceGroup,
           factoryName,
           pipelineName: name,
-          properties: desired,
+          // Activities take the loose `{ name, type, typeProperties }` shape; the SDK types each
+          // activity `type` as its own union arm.
+          properties: desired as datafactory.Pipeline,
         });
       }
 

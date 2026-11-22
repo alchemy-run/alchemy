@@ -275,7 +275,7 @@ export type Key = Resource<
 export const Key = Resource<Key>("GCP.RecaptchaEnterprise.Key");
 
 export class KeyNotResolved extends Data.TaggedError("GCP.RecaptchaEnterprise.KeyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 type KeyKind = "web" | "android" | "ios" | "express";
@@ -587,17 +587,14 @@ export const KeyProvider = () =>
 
       if (current === undefined) {
         const created = yield* recaptchaenterprise
-          .createProjectsKeys({
-            parent: `projects/${env.project}`,
-            body: desired,
-          })
+          .createProjectsKeys({ ...desired, parent: `projects/${env.project}` })
           .pipe(Effect.catchTag("Conflict", () => findOwnedKey(env.project, id, lookupName)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
         return yield* new KeyNotResolved({
-          name: lookupName.length > 0 ? lookupName : displayName,
+          resourceName: lookupName.length > 0 ? lookupName : displayName,
         });
       }
 
@@ -635,11 +632,7 @@ export const KeyProvider = () =>
       );
 
       if (updateMask.length > 0) {
-        current = yield* recaptchaenterprise.patchProjectsKeys({
-          name,
-          updateMask,
-          body: { ...desired, name },
-        });
+        current = yield* recaptchaenterprise.patchProjectsKeys({ ...desired, name, updateMask });
       }
 
       return toAttrs(current, env.project);

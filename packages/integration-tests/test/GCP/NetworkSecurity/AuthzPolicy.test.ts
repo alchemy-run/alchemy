@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -58,22 +59,20 @@ test.provider(
       const forwardingRule = `//compute.googleapis.com/projects/${project}/regions/us-central1/forwardingRules/alchemy-missing-fr`;
       const error = yield* Effect.flip(
         networksecurity.createProjectsLocationsAuthzPolicies({
+          action: "ALLOW",
+          target: {
+            loadBalancingScheme: "INTERNAL_MANAGED",
+            resources: [forwardingRule],
+          },
+          httpRules: [
+            {
+              to: {
+                operations: [{ methods: ["GET"], paths: [{ prefix: "/admin" }] }],
+              },
+            },
+          ],
           parent: `projects/${project}/locations/us-central1`,
           authzPolicyId: "alchemy-missing-authz-policy",
-          body: {
-            action: "ALLOW",
-            target: {
-              loadBalancingScheme: "INTERNAL_MANAGED",
-              resources: [forwardingRule],
-            },
-            httpRules: [
-              {
-                to: {
-                  operations: [{ methods: ["GET"], paths: [{ prefix: "/admin" }] }],
-                },
-              },
-            ],
-          },
         }),
       );
       expect(error._tag).toBe("BadRequest");
@@ -116,6 +115,13 @@ test.provider.skipIf(!process.env.GCP_TEST_AUTHZ_POLICY_TARGET)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkSecurity.AuthzPolicy.lookup({
+          authzPolicyId: created.authzPolicyId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/authzPolicies/");

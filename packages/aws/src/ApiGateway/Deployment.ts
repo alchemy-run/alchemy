@@ -68,8 +68,20 @@ export interface DeploymentType extends Resource<
     description: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DeploymentTypeLookup
 > {}
+
+/**
+ * Props for {@link DeploymentType.lookup}: find a deployment type this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DeploymentTypeLookup {
+  /** The id of the existing deployment type. */
+  deploymentId: string;
+  /** The id of the rest api it belongs to. */
+  restApiId: string;
+}
 
 /**
  * A point-in-time snapshot of a REST API, ready to be served through a
@@ -120,6 +132,16 @@ export interface DeploymentType extends Resource<
  * hand-written `DependsOn: [Method1, Method2, ...]` listing every method.
  * Alchemy derives that list automatically from the bindings registered on
  * the `RestApi`, so adding a method never requires editing the deployment.
+ *
+ * ### Looking up an existing deployment type
+ * `DeploymentType.lookup` references a deployment type Alchemy doesn't manage (created in the
+ * console or by another stack), found by `deploymentId` and `restApiId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing deployment type
+ * ```typescript
+ * const existing = AWS.ApiGateway.DeploymentType.lookup({ deploymentId: "...", restApiId: "..." });
+ * ```
  *
  * @resource
  */
@@ -261,6 +283,20 @@ export const DeploymentProvider = () =>
             return { action: "update" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ deploymentId, restApiId }) {
+          const d = yield* ag
+            .getDeployment({
+              restApiId: restApiId,
+              deploymentId: deploymentId,
+            })
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
+          if (!d?.id) return undefined;
+          return {
+            deploymentId: d.id,
+            restApiId: restApiId,
+            description: d.description,
+          };
+        }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.deploymentId) return undefined;
           const d = yield* ag
@@ -268,7 +304,7 @@ export const DeploymentProvider = () =>
               restApiId: output.restApiId,
               deploymentId: output.deploymentId,
             })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           if (!d?.id) return undefined;
           return {
             deploymentId: d.id,
@@ -296,7 +332,7 @@ export const DeploymentProvider = () =>
                   restApiId,
                   deploymentId: output.deploymentId,
                 })
-                .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined))
             : undefined;
 
           // Ensure — create a new deployment if there isn't one yet.

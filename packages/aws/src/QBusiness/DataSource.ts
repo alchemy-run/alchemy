@@ -11,6 +11,20 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class QBusinessDataSourceInvalidProps extends Data.TaggedError(
+  "QBusinessDataSourceInvalidProps",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class QBusinessDataSourceUnexpectedResponse extends Data.TaggedError(
+  "QBusinessDataSourceUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type DataSourceStatus = qbusiness.DataSourceStatus;
 
 export interface DataSourceProps {
@@ -106,8 +120,31 @@ export interface DataSource extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DataSourceLookup
 > {}
+
+/**
+ * Props for {@link DataSource.lookup}: find a data source this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type DataSourceLookup =
+  | {
+      /** The application the data source belongs to. */
+      applicationId: string;
+      /** The index the data source feeds. */
+      indexId: string;
+      /** The id of the existing data source. */
+      dataSourceId: string;
+    }
+  | {
+      /** The application the data source belongs to. */
+      applicationId: string;
+      /** The index the data source feeds. */
+      indexId: string;
+      /** The display name of the existing data source. */
+      displayName: string;
+    };
 
 /**
  * An Amazon Q Business data source — a connector that syncs documents from
@@ -152,6 +189,17 @@ export interface DataSource extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing data source
+ * `DataSource.lookup` references a data source Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationId` and `indexId`, with `dataSourceId` or
+`displayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing data source
+ * ```typescript
+ * const wiki = AWS.QBusiness.DataSource.lookup({ applicationId, indexId, displayName: "wiki" });
+ * ```
+ *
  * @resource
  */
 export const DataSource = Resource<DataSource>("AWS.QBusiness.DataSource");
@@ -164,7 +212,7 @@ const createDisplayName = (id: string, props: { displayName?: string | undefined
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* qbusiness
     .listTagsForResource({ resourceARN: arn })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return Object.fromEntries((response?.tags ?? []).map((tag) => [tag.key, tag.value]));
 });
 
@@ -180,7 +228,7 @@ const readDataSourceById = Effect.fn(function* (
 ) {
   const described = yield* qbusiness
     .getDataSource({ applicationId, indexId, dataSourceId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described || described.status === "DELETING") return undefined;
   const arn = described.dataSourceArn;
   if (arn === undefined) return undefined;
@@ -274,7 +322,7 @@ const waitForDataSourceStatus = (
     Effect.gen(function* () {
       const described = yield* qbusiness
         .getDataSource({ applicationId, indexId, dataSourceId })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* new DataSourceNotReady({ dataSourceId, status: described.status });
@@ -300,6 +348,13 @@ export const DataSourceProvider = () =>
         // account-wide without iterating every application — treated as a
         // sub-resource per the factory list() convention.
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* (props) {
+          const state =
+            "dataSourceId" in props
+              ? yield* readDataSourceById(props.applicationId, props.indexId, props.dataSourceId)
+              : yield* findDataSourceByName(props.applicationId, props.indexId, props.displayName);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const applicationId = output?.applicationId ?? olds?.applicationId;
           const indexId = output?.indexId ?? olds?.indexId;
@@ -328,7 +383,9 @@ export const DataSourceProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("QBusiness DataSource requires props"));
+            return yield* new QBusinessDataSourceInvalidProps({
+              message: "QBusiness DataSource requires props",
+            });
           }
           const applicationId = news.applicationId;
           const indexId = news.indexId;
@@ -363,17 +420,17 @@ export const DataSourceProvider = () =>
               }),
             );
             if (!created.dataSourceId) {
-              return yield* Effect.fail(
-                new Error(`CreateDataSource for '${displayName}' returned no dataSourceId`),
-              );
+              return yield* new QBusinessDataSourceUnexpectedResponse({
+                message: `CreateDataSource for '${displayName}' returned no dataSourceId`,
+              });
             }
             yield* session.note(`Creating data source ${displayName} (${created.dataSourceId})...`);
             yield* waitForDataSourceStatus(applicationId, indexId, created.dataSourceId, "ACTIVE");
             state = yield* readDataSourceById(applicationId, indexId, created.dataSourceId);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created data source ${displayName}`),
-              );
+              return yield* new QBusinessDataSourceUnexpectedResponse({
+                message: `failed to read created data source ${displayName}`,
+              });
             }
           }
 
@@ -433,9 +490,9 @@ export const DataSourceProvider = () =>
 
           const final = yield* readDataSourceById(applicationId, indexId, state.attrs.dataSourceId);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled data source ${displayName}`),
-            );
+            return yield* new QBusinessDataSourceUnexpectedResponse({
+              message: `failed to read reconciled data source ${displayName}`,
+            });
           }
           return final.attrs;
         }),

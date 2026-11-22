@@ -9,6 +9,7 @@ import * as Order from "effect/Order";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -73,8 +74,18 @@ export interface ObjectLambdaAccessPoint extends Resource<
     accountId: AccountID;
   },
   never,
-  Providers
+  Providers,
+  ObjectLambdaAccessPointLookup
 > {}
+
+/**
+ * Props for {@link ObjectLambdaAccessPoint.lookup}: find an object lambda access point this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ObjectLambdaAccessPointLookup {
+  /** The name of the existing object lambda access point. */
+  objectLambdaAccessPointName: string;
+}
 
 /**
  * An S3 Object Lambda Access Point — intercepts S3 `GetObject` /
@@ -120,6 +131,16 @@ export interface ObjectLambdaAccessPoint extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing object lambda access point
+ * `ObjectLambdaAccessPoint.lookup` references an object lambda access point Alchemy doesn't manage (created in the
+ * console or by another stack), found by `objectLambdaAccessPointName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing object lambda access point
+ * ```typescript
+ * const existing = AWS.S3Control.ObjectLambdaAccessPoint.lookup({ objectLambdaAccessPointName: "..." });
+ * ```
+ *
  * @resource
  */
 export const ObjectLambdaAccessPoint = Resource<ObjectLambdaAccessPoint>(
@@ -158,12 +179,12 @@ export const ObjectLambdaAccessPointProvider = () =>
       });
 
       const objectLambdaArn = (region: string, accountId: string, name: string) =>
-        `arn:aws:s3-object-lambda:${region}:${accountId}:accesspoint/${name}`;
+        `arn:${partitionOf(region)}:s3-object-lambda:${region}:${accountId}:accesspoint/${name}`;
 
       const observeAccessPoint = (accountId: string, name: string) =>
         s3control
           .getAccessPointForObjectLambda({ AccountId: accountId, Name: name })
-          .pipe(Effect.catchTag("NoSuchAccessPoint", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchAccessPoint", () => Effect.undefined));
 
       const desiredConfiguration = (
         props: ObjectLambdaAccessPointProps,
@@ -214,6 +235,18 @@ export const ObjectLambdaAccessPointProvider = () =>
           }),
         // Object Lambda Access Points do not support tags, so a read hit is
         // treated as ours (ownership is scoped by the deterministic name).
+        lookup: Effect.fn(function* ({ objectLambdaAccessPointName: name }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const live = yield* observeAccessPoint(accountId, name);
+          if (live === undefined) return undefined;
+          return {
+            objectLambdaAccessPointName: name,
+            objectLambdaAccessPointArn: objectLambdaArn(region, accountId, name),
+            alias: live.Alias?.Value,
+            region,
+            accountId,
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.objectLambdaAccessPointName ?? (yield* createName(id, olds ?? {}));

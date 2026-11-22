@@ -373,7 +373,7 @@ export const FileShareProvider = () =>
 
       // Sync each mutable aspect against observed state; PATCH only deltas.
       const p = observed.properties ?? {};
-      const changed: fileshares.FileShareUpdateProperties = {};
+      const changed: fileshares.FileShareUpdatePropertiesInput = {};
       if (p.provisionedStorageGiB !== storageGiB) {
         changed.provisionedStorageGiB = storageGiB;
       }

@@ -11,6 +11,16 @@ import type { RuntimeContext } from "./RuntimeContext.ts";
 declare const ImplementedTypeId: unique symbol;
 
 /**
+ * Annotates a workflow with the name an engine stores its runs under, when
+ * that differs from the workflow's own name. An engine that names storage
+ * after the workflow, like Cloudflare's Durable Object engine with one class
+ * per workflow, uses it as given.
+ */
+export class StorageName extends Context.Service<StorageName, string>()(
+  "alchemy/Workflows/StorageName",
+) {}
+
+/**
  * Marks a workflow as runnable here: something in the context implements it.
  * `Workflows.layer` provides it for the workflow it implements, and a remote
  * engine, like `AWS.Lambda.DurableFunctionEngine`, for the workflows its
@@ -134,6 +144,7 @@ export function layer<
 ): Layer.Layer<
   Implemented<Name>,
   InitE,
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents -- generic in R; only looks like `never` to the linter
   InitR | Exclude<Requirements<ReturnType<typeof workflow.toLayer<R>>>, RuntimeContext>
 >;
 export function layer(
@@ -146,13 +157,33 @@ export function layer(
         unknown
       >,
 ): Layer.Layer<any, any, any> {
+  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the overloads carry the types; this implementation is erased
   return Effect.isEffect(execute)
-    ? Layer.unwrap(Effect.map(execute, (handler) => layer(workflow, handler)))
+    ? // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the overloads carry the types; this implementation is erased
+      Layer.unwrap(Effect.map(execute, (handler) => layer(workflow, handler)))
     : Layer.merge(
+        // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the overloads carry the types; this implementation is erased
         workflow.toLayer(execute as any) as Layer.Layer<never, never, any>,
         implemented([workflow._tag]),
       );
 }
+
+/**
+ * A workflow with its schemas' services erased. `Workflows.layer` provides
+ * every decoding/encoding service a workflow's schemas need where it
+ * implements the workflow, so clients and runs read the engine with none
+ * left to satisfy.
+ */
+interface ErasedCodec<T = unknown> extends Schema.Codec<T, unknown, never, never> {}
+interface ErasedPayload extends ErasedCodec {
+  readonly fields: Schema.Struct.Fields;
+}
+type ErasedWorkflow<A = unknown, E = unknown> = Workflow.Workflow<
+  string,
+  ErasedPayload,
+  ErasedCodec<A>,
+  ErasedCodec<E>
+>;
 
 type NameOf<W> = W extends Workflow.Workflow<infer Name, any, any, any> ? Name : never;
 type SuccessOf<W> = W extends Workflow.Workflow<any, any, infer S, any> ? S["Type"] : never;
@@ -168,6 +199,83 @@ export type Status<A, E> =
   | { readonly _tag: "Failed"; readonly error: E }
   | { readonly _tag: "Interrupted" }
   | { readonly _tag: "Died"; readonly defect: unknown };
+
+/**
+ * How a finished run ended, from its stored exit.
+ *
+ * @internal
+ */
+export const statusOf = <A, E>(exit: Exit.Exit<A, E>): Ended<A, E> => {
+  if (Exit.isSuccess(exit)) return { _tag: "Completed", result: exit.value };
+  const failure = exit.cause.reasons.find((reason) => reason._tag === "Fail");
+  if (failure?._tag === "Fail") return { _tag: "Failed", error: failure.error };
+  const defect = exit.cause.reasons.find((reason) => reason._tag === "Die");
+  return defect?._tag === "Die" ? { _tag: "Died", defect: defect.defect } : { _tag: "Interrupted" };
+};
+
+/** Where a finished run ended. */
+export type Ended<A, E> = Exclude<Status<A, E>, { readonly _tag: "NotStarted" | "Running" }>;
+
+/** A run whose result the engine stored, as {@link OnResult} receives it. */
+export interface StoredResult {
+  /** The workflow's name. */
+  readonly workflow: string;
+  /** The run's id. */
+  readonly executionId: string;
+  /** How the run ended. */
+  readonly status: Ended<unknown, unknown>;
+}
+
+/**
+ * Called each time the workflow engine stores a run's result: when the run
+ * completes, fails, is interrupted, or dies. A run that suspends or is retried
+ * stores nothing and calls nothing.
+ *
+ * It is delivered at least once and only after the result is stored. The
+ * engine schedules the call in the same write as the result and retries it
+ * until it succeeds, so a hook that dies runs again and must be idempotent.
+ * Key what it writes by the workflow and execution id.
+ *
+ * Provide it where the engine Layer is built. The Durable Object engines
+ * call it: `Cloudflare.Workflows.layerDurableObjectEngine`, Rivet's engine,
+ * and `@alchemy.run/domain` sagas on Cloudflare and Rivet. It runs inside the
+ * execution's Durable Object, so resolve bindings while the Layer builds.
+ *
+ * ### Reacting to stored results
+ * **Example:** Report every run that died
+ * ```typescript
+ * import * as Cloudflare from "@alchemy.run/cloudflare";
+ * import * as Workflows from "alchemy/Workflows";
+ * import * as Effect from "effect/Effect";
+ * import * as Layer from "effect/Layer";
+ * import { Incidents } from "./Incidents.ts";
+ * import { SendWelcomeLive } from "./SendWelcome.ts";
+ *
+ * const ReportDeaths = Layer.effect(
+ *   Workflows.OnResult,
+ *   Effect.gen(function* () {
+ *     const incidents = yield* Cloudflare.Queues.WriteQueue(Incidents);
+ *     return Effect.fn(function* ({ workflow, executionId, status }) {
+ *       if (status._tag !== "Died") return;
+ *       yield* incidents
+ *         .send({ id: `${workflow}/${executionId}`, defect: String(status.defect) })
+ *         .pipe(Effect.orDie);
+ *     });
+ *   }),
+ * ).pipe(Layer.provide(Cloudflare.Queues.WriteQueueBinding));
+ *
+ * const WorkflowsLive = SendWelcomeLive.pipe(
+ *   Layer.provideMerge(Cloudflare.Workflows.layerDurableObjectEngine()),
+ *   Layer.provide(ReportDeaths),
+ * );
+ * ```
+ *
+ * @primitive
+ */
+export class OnResult extends Context.Service<
+  OnResult,
+  (stored: StoredResult) => Effect.Effect<void, never, RuntimeContext>
+>()("alchemy/Workflows/OnResult") {}
 
 /** One run of a workflow. */
 export interface Run<A, E> {
@@ -244,9 +352,9 @@ export const RunWorkflow = <W extends Workflow.Any>(
 > =>
   Effect.gen(function* () {
     const engine = yield* WorkflowEngine.WorkflowEngine;
-    const typed = workflow as unknown as Workflow.Workflow<string, any, any, any>;
+    const typed = workflow as unknown as ErasedWorkflow;
     const run = (executionId: string) =>
-      makeRun(engine, typed, executionId) as Run<SuccessOf<W>, ErrorOf<W>>;
+      makeRun<SuccessOf<W>, ErrorOf<W>>(engine, typed, executionId);
     return {
       start: (payload) =>
         typed
@@ -264,26 +372,20 @@ export const RunWorkflow = <W extends Workflow.Any>(
  *
  * @internal
  */
-export const makeRun = (
+export const makeRun = <A = unknown, E = unknown>(
   engine: WorkflowEngine.WorkflowEngine["Service"],
   workflow: Workflow.Workflow<string, any, any, any>,
   executionId: string,
-): Run<unknown, unknown> => {
-  const poll = engine.poll(workflow, executionId);
+): Run<A, E> => {
+  const erased = workflow as unknown as ErasedWorkflow<A, E>;
+  const poll = engine.poll(erased, executionId);
   return {
     executionId,
-    status: Effect.map(poll, (result): Status<unknown, unknown> => {
+    status: Effect.map(poll, (result): Status<A, E> => {
       if (Option.isNone(result)) return { _tag: "NotStarted" };
       if (result.value._tag === "Suspended") return { _tag: "Running" };
-      const exit = result.value.exit;
-      if (Exit.isSuccess(exit)) return { _tag: "Completed", result: exit.value };
-      const failure = exit.cause.reasons.find((reason) => reason._tag === "Fail");
-      if (failure?._tag === "Fail") return { _tag: "Failed", error: failure.error };
-      const defect = exit.cause.reasons.find((reason) => reason._tag === "Die");
-      return defect?._tag === "Die"
-        ? { _tag: "Died", defect: defect.defect }
-        : { _tag: "Interrupted" };
-    }) as Effect.Effect<Status<unknown, unknown>>,
+      return statusOf(result.value.exit);
+    }),
     result: poll.pipe(
       Effect.flatMap((result) =>
         Option.isSome(result) && result.value._tag === "Complete"
@@ -293,14 +395,17 @@ export const makeRun = (
       Effect.retry({ schedule: POLL }),
       Effect.orDie,
       Effect.flatten,
-    ) as Effect.Effect<unknown, unknown>,
+    ),
     signal: (deferred, value) =>
-      engine.deferredDone(deferred, {
-        workflowName: workflow._tag,
-        executionId,
-        deferredName: deferred.name,
-        exit: Exit.succeed(value),
-      }) as Effect.Effect<void>,
+      engine.deferredDone(
+        deferred as unknown as DurableDeferred.DurableDeferred<ErasedCodec, ErasedCodec>,
+        {
+          workflowName: workflow._tag,
+          executionId,
+          deferredName: deferred.name,
+          exit: Exit.succeed(value),
+        },
+      ),
     interrupt: engine.interrupt(workflow, executionId),
   };
 };

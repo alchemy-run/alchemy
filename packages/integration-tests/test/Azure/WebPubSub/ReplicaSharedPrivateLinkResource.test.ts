@@ -1,9 +1,9 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as keyvault from "@distilled.cloud/azure/keyvault";
 import * as webpubsub from "@distilled.cloud/azure/webpubsub";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { runExpensive } from "../gates.ts";

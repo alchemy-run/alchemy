@@ -116,11 +116,11 @@ const GrantDiscoveryRole = Effect.gen(function* () {
 /** A distilled operation, resolved with the host's credentials. */
 type Operation<I, A, E> = (input: I) => Effect.Effect<A, E>;
 
-interface DiscoveryBindingOptions<I, A, E> {
+// `operation` stays inline on each builder's parameter: inferring `A` and `E`
+// through a generic named options type yields `unknown`.
+interface DiscoveryBindingOptions {
   /** Fully-qualified binding tag, e.g. `Azure.Discovery.GetKnowledgeBase`. */
   tag: string;
-  /** The distilled operation; the endpoint is injected. */
-  operation: Effect.Effect<Operation<I, A, E>, never, any>;
   /** Role assigned on the bound resource. */
   grant: DiscoveryGrant;
 }
@@ -132,7 +132,10 @@ interface DiscoveryBindingOptions<I, A, E> {
  * `grant` on the bookshelf.
  */
 export const makeBookshelfHttpBinding = <I extends { endpoint: string }, A, E>(
-  options: DiscoveryBindingOptions<I, A, E>,
+  options: DiscoveryBindingOptions & {
+    /** The distilled operation; the endpoint is injected. */
+    operation: Effect.Effect<Operation<I, A, E>, never, any>;
+  },
 ) =>
   Effect.gen(function* () {
     const grant = yield* GrantDiscoveryRole;
@@ -157,7 +160,10 @@ export const makeBookshelfHttpBinding = <I extends { endpoint: string }, A, E>(
  * `grant` on the workspace.
  */
 export const makeWorkspaceHttpBinding = <I extends { endpoint: string }, A, E>(
-  options: DiscoveryBindingOptions<I, A, E>,
+  options: DiscoveryBindingOptions & {
+    /** The distilled operation; the endpoint is injected. */
+    operation: Effect.Effect<Operation<I, A, E>, never, any>;
+  },
 ) =>
   Effect.gen(function* () {
     const grant = yield* GrantDiscoveryRole;

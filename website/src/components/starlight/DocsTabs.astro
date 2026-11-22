@@ -1,6 +1,6 @@
 ---
 import { TAB_ICONS } from "../../docs-icons";
-import { DOCS_TABS, DOCS_TAB_GROUPS, activeTab, groupTabs } from "../../docs-tabs";
+import { DOCS_TABS, DOCS_TAB_GROUPS, activeTab } from "../../docs-tabs";
 
 const start = DOCS_TABS.filter((tab) => tab.slot === "start");
 const current = activeTab(Astro.url.pathname);
@@ -35,7 +35,11 @@ const current = activeTab(Astro.url.pathname);
         current hub ("Clouds · AWS"). */}
     {
       DOCS_TAB_GROUPS.map((group) => {
-        const activeHere = groupTabs(group).some((tab) => tab.label === current.label);
+        // A hub listed in several dropdowns underlines only its own category.
+        const activeHere =
+          current.category !== undefined &&
+          (group.label === current.category ||
+            group.sections.some((section) => section.heading === current.category));
         return (
           <div class="alc-tabs__menu-root">
             <button

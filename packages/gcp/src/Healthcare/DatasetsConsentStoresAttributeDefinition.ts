@@ -135,7 +135,7 @@ export const DatasetsConsentStoresAttributeDefinition =
 export class DatasetsConsentStoresAttributeDefinitionNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsConsentStoresAttributeDefinitionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const storeOf = (
@@ -175,12 +175,12 @@ const toAttrs = (definition: healthcare.AttributeDefinition, project: string, re
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : healthcare
         .getProjectsLocationsDatasetsConsentStoresAttributeDefinitions({
           name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
   Provider.succeed(DatasetsConsentStoresAttributeDefinition, {
@@ -266,15 +266,13 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           healthcare.createProjectsLocationsDatasetsConsentStoresAttributeDefinitions({
+            category: news.category,
+            allowedValues: news.allowedValues,
+            description,
+            consentDefaultValues: news.consentDefaultValues,
+            dataMappingDefaultValue: news.dataMappingDefaultValue,
             parent: consentStore,
             attributeDefinitionId,
-            body: {
-              category: news.category,
-              allowedValues: news.allowedValues,
-              description,
-              consentDefaultValues: news.consentDefaultValues,
-              dataMappingDefaultValue: news.dataMappingDefaultValue,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -282,7 +280,7 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
 
       if (current === undefined) {
         return yield* new DatasetsConsentStoresAttributeDefinitionNotResolved({
-          name,
+          resourceName: name,
         });
       }
 
@@ -301,6 +299,10 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
       if (descriptionChanged || allowedChanged || consentDefaultChanged || mappingDefaultChanged) {
         current = yield* retryTransient(
           healthcare.patchProjectsLocationsDatasetsConsentStoresAttributeDefinitions({
+            description,
+            allowedValues: news.allowedValues,
+            consentDefaultValues: news.consentDefaultValues,
+            dataMappingDefaultValue: news.dataMappingDefaultValue,
             name: currentName,
             updateMask: updateMaskOf(
               descriptionChanged ? "description" : undefined,
@@ -308,12 +310,6 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
               consentDefaultChanged ? "consentDefaultValues" : undefined,
               mappingDefaultChanged ? "dataMappingDefaultValue" : undefined,
             ),
-            body: {
-              description,
-              allowedValues: news.allowedValues,
-              consentDefaultValues: news.consentDefaultValues,
-              dataMappingDefaultValue: news.dataMappingDefaultValue,
-            },
           }),
         );
       }

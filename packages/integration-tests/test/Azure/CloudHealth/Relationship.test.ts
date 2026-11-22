@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudhealth from "@distilled.cloud/azure/cloudhealth";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { gone, logLevel, modelProgram, modelWhere, tags } from "./util.ts";
 
@@ -75,7 +75,9 @@ test.provider(
       expect(replacedOld).toEqual("gone");
 
       yield* stack.destroy();
-      const destroyed = yield* gone(getRelationship(rg, hm, replaced.relationship.relationshipName));
+      const destroyed = yield* gone(
+        getRelationship(rg, hm, replaced.relationship.relationshipName),
+      );
       expect(destroyed).toEqual("gone");
     }).pipe(logLevel),
   { tags, timeout: 900_000 },

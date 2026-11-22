@@ -5,16 +5,31 @@ import type { Input } from "alchemy/Input";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { createName, readResourceTags, retryConcurrent, updateResourceTags } from "./common.ts";
 
+export class InsightRuleUnexpectedResponse extends Data.TaggedError(
+  "InsightRuleUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class InsightRuleOperationFailed extends Data.TaggedError("InsightRuleOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type InsightRuleName = string;
-export type InsightRuleArn = `arn:aws:cloudwatch:${RegionID}:${AccountID}:insight-rule/${string}`;
+export type InsightRuleArn =
+  `arn:${Partition}:cloudwatch:${RegionID}:${AccountID}:insight-rule/${string}`;
 
 export interface CloudWatchLogRuleFilter {
   Match: string;
@@ -145,7 +160,7 @@ export const InsightRuleProvider = () =>
         AWSEnvironment.current.pipe(
           Effect.map(
             (env) =>
-              `arn:aws:cloudwatch:${env.region}:${env.accountId}:insight-rule/${name}` as InsightRuleArn,
+              `arn:${partitionOf(env.region)}:cloudwatch:${env.region}:${env.accountId}:insight-rule/${name}` as InsightRuleArn,
           ),
         );
 
@@ -226,9 +241,9 @@ export const InsightRuleProvider = () =>
 
           const state = yield* readInsightRule(name);
           if (!state) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled insight rule '${name}'`),
-            );
+            return yield* new InsightRuleUnexpectedResponse({
+              message: `failed to read reconciled insight rule '${name}'`,
+            });
           }
 
           return {
@@ -273,7 +288,7 @@ export const InsightRuleProvider = () =>
               rules,
               (insightRule) => {
                 const arn =
-                  `arn:aws:cloudwatch:${region}:${accountId}:insight-rule/${insightRule.Name}` as InsightRuleArn;
+                  `arn:${partitionOf(region)}:cloudwatch:${region}:${accountId}:insight-rule/${insightRule.Name}` as InsightRuleArn;
                 return readResourceTags(arn).pipe(
                   Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({})),
                   Effect.map((tags) => ({
@@ -302,11 +317,9 @@ export const InsightRuleProvider = () =>
           );
 
           if ((response.Failures?.length ?? 0) > 0) {
-            return yield* Effect.fail(
-              new Error(
-                `failed to delete insight rule '${output.ruleName}': ${failureMessage(response.Failures)}`,
-              ),
-            );
+            return yield* new InsightRuleOperationFailed({
+              message: `failed to delete insight rule '${output.ruleName}': ${failureMessage(response.Failures)}`,
+            });
           }
         }),
       };

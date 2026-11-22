@@ -1,0 +1,33 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "ARG",
+          "line": 2,
+          "flags": [],
+          "vars": [
+            [
+              "DIR",
+              "src"
+            ]
+          ]
+        },
+        {
+          "tag": "COPY",
+          "line": 3,
+          "flags": [],
+          "sources": [
+            "${DIR}/"
+          ],
+          "destination": "/app/$DIR"
+        }
+      ]
+    }
+  ]
+}

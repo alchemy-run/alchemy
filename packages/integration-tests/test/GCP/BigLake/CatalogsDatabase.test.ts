@@ -1,8 +1,9 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as biglake from "@distilled.cloud/gcp/biglake_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import { location, logLevel, currentProject, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -52,6 +53,14 @@ test.provider(
           });
           return { catalog, database };
         }),
+      );
+      yield* expectFound(
+        GCP.BigLake.CatalogsDatabase.lookup({
+          databaseId: created.database.databaseId,
+          location: created.database.location,
+          catalog: created.database.catalog,
+        }),
+        created.database,
       );
 
       expect(created.database.name).toContain("/databases/");

@@ -4,9 +4,9 @@ import {
   SlackChannelConfiguration,
 } from "@alchemy.run/aws/Chatbot";
 import { Role } from "@alchemy.run/aws/IAM/Role";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as chatbot from "@distilled.cloud/aws/chatbot";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

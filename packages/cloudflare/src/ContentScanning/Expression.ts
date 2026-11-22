@@ -257,8 +257,8 @@ const listExpressions = (zoneId: string) =>
     Stream.runCollect,
     Effect.map((chunk): readonly ObservedExpression[] | undefined => Array.from(chunk)),
     Effect.catchTags({
-      ContentScanningNotEnabled: () => Effect.succeed(undefined),
-      InvalidRoute: () => Effect.succeed(undefined),
+      ContentScanningNotEnabled: () => Effect.undefined,
+      InvalidRoute: () => Effect.undefined,
     }),
   );
 

@@ -100,7 +100,7 @@ export const EnvironmentsKeyvaluemapsEntry = Resource<EnvironmentsKeyvaluemapsEn
 export class EnvironmentsKeyvaluemapsEntryNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsKeyvaluemapsEntryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const mapIdOf = (value: string) => segmentAfter(value, "keyvaluemaps") ?? lastSegment(value);
@@ -203,21 +203,22 @@ export const EnvironmentsKeyvaluemapsEntryProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsEnvironmentsKeyvaluemapsEntries({
+            name: entryId,
+            value: news.value,
             parent,
-            body: { name: entryId, value: news.value },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentsKeyvaluemapsEntryNotResolved({ name });
+        return yield* new EnvironmentsKeyvaluemapsEntryNotResolved({ resourceName: name });
       }
 
       if (!sameText(current.value, news.value)) {
         current = yield* apigee.updateOrganizationsEnvironmentsKeyvaluemapsEntries({
+          value: news.value,
           name,
-          body: { name: entryId, value: news.value },
         });
       }
 

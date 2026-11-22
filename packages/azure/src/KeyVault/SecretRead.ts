@@ -1,4 +1,4 @@
-import type { AzureOpError } from "@distilled.cloud/azure";
+import type * as secrets from "@distilled.cloud/azure/keyvault-secrets";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Data from "effect/Data";
@@ -39,9 +39,13 @@ export interface ReadSecretClient {
   /** Read the latest (or a specific) version of the secret. */
   get(
     version?: string,
-  ): Effect.Effect<Redacted.Redacted<string>, AzureOpError | SecretValueMissing, RuntimeContext>;
+  ): Effect.Effect<
+    Redacted.Redacted<string>,
+    secrets.GetSecretError | SecretValueMissing,
+    RuntimeContext
+  >;
   /** List every version of the secret (metadata only, every page). */
-  versions(): Effect.Effect<SecretVersionInfo[], AzureOpError, RuntimeContext>;
+  versions(): Effect.Effect<SecretVersionInfo[], secrets.GetSecretVersionsError, RuntimeContext>;
 }
 
 /**

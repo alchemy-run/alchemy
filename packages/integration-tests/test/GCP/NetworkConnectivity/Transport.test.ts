@@ -1,12 +1,13 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as networkconnectivity from "@distilled.cloud/gcp/networkconnectivity_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -39,15 +40,13 @@ const waitUntilGone = (name: string) =>
 const probeCreate = (project: string, transportId: string, profileId: string) =>
   networkconnectivity
     .createProjectsLocationsTransports({
+      network: `projects/${project}/global/networks/default`,
+      remoteProfile: `projects/${project}/locations/${location}/remoteTransportProfiles/${profileId}`,
+      bandwidth: "BPS_1G",
+      remoteAccountId: "123456789012",
+      description: "alchemy transport probe",
       parent: `projects/${project}/locations/${location}`,
       transportId,
-      body: {
-        network: `projects/${project}/global/networks/default`,
-        remoteProfile: `projects/${project}/locations/${location}/remoteTransportProfiles/${profileId}`,
-        bandwidth: "BPS_1G",
-        remoteAccountId: "123456789012",
-        description: "alchemy transport probe",
-      },
     })
     .pipe(Effect.result);
 
@@ -128,6 +127,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { network, transport };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkConnectivity.Transport.lookup({
+          transportId: created.transport.transportId,
+          location: created.transport.location,
+        }),
+        created.transport,
       );
 
       expect(created.transport.name).toContain("/transports/");

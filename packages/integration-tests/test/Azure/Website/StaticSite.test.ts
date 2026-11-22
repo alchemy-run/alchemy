@@ -1,6 +1,6 @@
 import * as Azure from "@alchemy.run/azure";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { assetCacheControl, htmlCacheControl } from "alchemy/Website/assets";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

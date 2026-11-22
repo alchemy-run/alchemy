@@ -19,10 +19,9 @@ export interface DurableObjectMigrations {
   readonly migrationsTable?: string | undefined;
 }
 
-export interface DurableObjectConfig<TRelations extends AnyRelations = EmptyRelations> extends Omit<
-  SQLiteDoDrizzle.EffectDrizzleSQLiteDoConfig<TRelations>,
-  "storage"
-> {
+export interface DurableObjectConfig<
+  TRelations extends AnyRelations = EmptyRelations,
+> extends SQLiteDoDrizzle.EffectDrizzleSQLiteDoConfig<TRelations> {
   /**
    * Migrations applied before the database is returned. Prefer a snapshot
    * from `Cloudflare.SqlMigrations(dir)`: SQL is read during construction
@@ -125,10 +124,9 @@ export const DurableObject = Effect.fn("Drizzle.DurableObject")(function* <
   // A parent input-gate timer can block later transaction timers. Yield through
   // microtasks while retaining the adapter's client, SQL permit, and context.
   yield* Effect.sync(() => Object.assign(client, { withTransaction }));
-  const db = yield* SQLiteDoDrizzle.makeWithDefaults({
-    ...(drizzleConfig as Omit<SQLiteDoDrizzle.EffectDrizzleSQLiteDoConfig<TRelations>, "storage">),
-    storage,
-  }).pipe(Effect.provideContext(services));
+  const db = yield* SQLiteDoDrizzle.makeWithDefaults(drizzleConfig).pipe(
+    Effect.provideContext(services),
+  );
   if (migrations !== undefined && "_tag" in migrations) {
     yield* migrations.apply().pipe(Effect.orDie);
   } else if (migrations !== undefined) {

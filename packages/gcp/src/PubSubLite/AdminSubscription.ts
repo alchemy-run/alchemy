@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_ZONE,
@@ -121,8 +122,31 @@ export type AdminSubscription = Resource<
     exportConfig: pubsublite.ExportConfig | undefined;
   },
   never,
-  Providers
+  Providers,
+  AdminSubscriptionLookup
 >;
+
+/**
+ * Props for {@link AdminSubscription.lookup}: find an admin subscription
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface AdminSubscriptionLookup {
+  /**
+   * Subscription id (the `{subscription}` segment of
+   * `projects/{project}/locations/{location}/subscriptions/{subscription}`).
+   */
+  subscriptionId: string;
+  /**
+   * Zone or region. Must match the topic.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Pub/Sub Lite subscription — a named consumer of a Lite topic.
@@ -162,6 +186,19 @@ export type AdminSubscription = Resource<
  *     desiredState: "ACTIVE",
  *     pubsubConfig: { topic: classic.name },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing admin subscription
+ * `AdminSubscription.lookup` references an admin subscription Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared admin subscription.
+ *
+ * **Example:** Reference an existing admin subscription
+ * ```typescript
+ * const adminSubscription = GCP.PubSubLite.AdminSubscription.lookup({
+ *   subscriptionId: "my-subscription",
  * });
  * ```
  *
@@ -248,6 +285,20 @@ export const AdminSubscriptionProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ subscriptionId, location }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getSubscription(
+        resourceName(
+          env.project,
+          normalizeLocation(location, DEFAULT_ZONE),
+          COLLECTION,
+          subscriptionId,
+        ),
+      );
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const subscriptionId = yield* toResourceId(id, olds?.subscriptionId, output?.subscriptionId);
@@ -303,17 +354,17 @@ export const AdminSubscriptionProvider = () =>
         if (exportConfig !== undefined) body.exportConfig = exportConfig;
         const created = yield* pubsublite
           .createAdminProjectsLocationsSubscriptions({
+            ...body,
             parent: parentOf(env.project, location),
             subscriptionId,
             skipBacklog: news.skipBacklog,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => getSubscription(name)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedName = current.name ?? name;
@@ -343,9 +394,9 @@ export const AdminSubscriptionProvider = () =>
         if (deliveryConfig !== undefined) body.deliveryConfig = deliveryConfig;
         if (exportConfig !== undefined) body.exportConfig = exportConfig;
         current = yield* pubsublite.patchAdminProjectsLocationsSubscriptions({
+          ...body,
           name: observedName,
           updateMask: mask,
-          body,
         });
       }
 

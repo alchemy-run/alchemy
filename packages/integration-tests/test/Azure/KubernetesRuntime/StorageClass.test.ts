@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as kr from "@distilled.cloud/azure/kubernetesruntime";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { arcClusterId, logLevel, tags, waitGone } from "./util.ts";
 
@@ -9,6 +9,9 @@ const { test } = Test.make({ providers: Azure.providers() });
 
 const getStorageClass = (clusterId: string, storageClassName: string) =>
   kr.GetStorageClass({ resourceUri: clusterId, storageClassName });
+
+const nfsOf = (properties: kr.StorageClassTypeProperties | undefined) =>
+  properties?.type === "NFS" ? properties : undefined;
 
 const program = (props: {
   share: string;
@@ -54,7 +57,7 @@ test.provider.skipIf(!arcClusterId)(
       );
       expect(storageClass.type).toEqual("NFS");
       const observed = yield* getStorageClass(clusterId, storageClass.storageClassName);
-      expect(observed.properties?.typeProperties.share).toEqual("/exports/a");
+      expect(nfsOf(observed.properties?.typeProperties)?.share).toEqual("/exports/a");
       expect(observed.properties?.priority).toEqual(10);
 
       // In place: priority and the NFS share are PATCHed.
@@ -68,7 +71,7 @@ test.provider.skipIf(!arcClusterId)(
       expect(updated.storageClass.storageClassId).toEqual(storageClass.storageClassId);
       const reobserved = yield* getStorageClass(clusterId, storageClass.storageClassName);
       expect(reobserved.properties?.priority).toEqual(20);
-      expect(reobserved.properties?.typeProperties.share).toEqual("/exports/b");
+      expect(nfsOf(reobserved.properties?.typeProperties)?.share).toEqual("/exports/b");
 
       // Replacement: the volume binding mode is create-only.
       const replaced = yield* stack.deploy(

@@ -2,7 +2,7 @@ import type { AIGateway } from "@alchemy.run/neon/AIGateway";
 import { backendEnvKey } from "@alchemy.run/neon/BackendConnection";
 import { FunctionEnvironment } from "@alchemy.run/neon/FunctionEnvironment";
 import { QueryAIGateway, QueryAIGatewayHttp } from "@alchemy.run/neon/QueryAIGateway";
-import { expect, test } from "alchemy-test";
+import { expect, test } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";

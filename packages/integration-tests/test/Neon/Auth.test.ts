@@ -3,13 +3,14 @@ import { AuthTrustedDomain } from "@alchemy.run/neon/AuthTrustedDomain";
 import { Branch } from "@alchemy.run/neon/Branch";
 import { Project } from "@alchemy.run/neon/Project";
 import { providers } from "@alchemy.run/neon/Providers";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schema from "effect/Schema";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: providers() });
 
@@ -39,6 +40,10 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const first = yield* stack.deploy(application(false, "https://auth.example.com"));
+      yield* expectFound(
+        Auth.lookup({ projectId: first.auth.projectId, branchId: first.auth.branchId }),
+        first.auth,
+      );
       const request = {
         project_id: first.auth.projectId,
         branch_id: first.auth.branchId,

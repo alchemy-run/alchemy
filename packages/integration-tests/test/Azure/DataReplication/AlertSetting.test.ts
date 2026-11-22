@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as dr from "@distilled.cloud/azure/recoveryservicesdatareplication";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { logLevel, subscription, tags, vaultStack } from "./shared.ts";
@@ -105,10 +105,7 @@ test.provider.skipIf(!process.env.AZURE_TEST_DATAREPLICATION_ALERTS)(
       const reobserved = yield* getAlerts(rg, vault);
       expect(reobserved.properties?.sendToOwners).toEqual(false);
       const emails = [...(reobserved.properties?.customEmailAddresses ?? [])].sort();
-      expect(emails).toEqual([
-        "a@example.com",
-        "b@example.com",
-      ]);
+      expect(emails).toEqual(["a@example.com", "b@example.com"]);
       expect(reobserved.properties?.locale).toEqual("fr-FR");
 
       // Delete: no delete API, the setting is reset.

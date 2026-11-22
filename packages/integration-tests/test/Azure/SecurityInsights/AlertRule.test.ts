@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as securityinsights from "@distilled.cloud/azure/securityinsights";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { pollGone, sentinelWorkspace, tags } from "./sentinel.ts";
 
@@ -17,6 +17,12 @@ const getRule = (resourceGroupName: string, workspaceName: string, ruleId: strin
       ruleId,
     });
   });
+
+const scheduledOf = (rule: securityinsights.AlertRule) =>
+  rule.kind === "Scheduled" ? rule.properties : undefined;
+
+const incidentCreationOf = (rule: securityinsights.AlertRule) =>
+  rule.kind === "MicrosoftSecurityIncidentCreation" ? rule.properties : undefined;
 
 const ruleGone = (rg: string, ws: string, ruleId: string) =>
   pollGone(
@@ -70,19 +76,19 @@ test.provider(
       const ruleId = created.rule.ruleId;
       expect(created.rule.kind).toEqual("Scheduled");
       const observed = yield* getRule(rg, ws, ruleId);
-      const props = observed.properties as Record<string, unknown>;
-      expect(props.severity).toEqual("Low");
-      expect(props.query).toEqual("Heartbeat | take 1");
-      expect(String(props.description)).toContain("[alchemy ");
+      const props = scheduledOf(observed);
+      expect(props?.severity).toEqual("Low");
+      expect(props?.query).toEqual("Heartbeat | take 1");
+      expect(String(props?.description)).toContain("[alchemy ");
 
       // In-place update of mutable properties.
       const updated = yield* stack.deploy(
         program({ severity: "High", query: "Heartbeat | take 2" }),
       );
       expect(updated.rule.ruleId).toEqual(ruleId);
-      const after = (yield* getRule(rg, ws, ruleId)).properties as Record<string, unknown>;
-      expect(after.severity).toEqual("High");
-      expect(after.query).toEqual("Heartbeat | take 2");
+      const after = scheduledOf(yield* getRule(rg, ws, ruleId));
+      expect(after?.severity).toEqual("High");
+      expect(after?.query).toEqual("Heartbeat | take 2");
 
       // Changing the kind replaces the rule.
       const replaced = yield* stack.deploy(
@@ -93,9 +99,7 @@ test.provider(
       expect(yield* ruleGone(rg, ws, ruleId)).toEqual("gone");
       const incidents = yield* getRule(rg, ws, replaced.rule.ruleId);
       expect(incidents.kind).toEqual("MicrosoftSecurityIncidentCreation");
-      expect((incidents.properties as Record<string, unknown>).productFilter).toEqual(
-        "Azure Security Center",
-      );
+      expect(incidentCreationOf(incidents)?.productFilter).toEqual("Azure Security Center");
 
       yield* stack.destroy();
       expect(yield* ruleGone(rg, ws, replaced.rule.ruleId)).toEqual("gone");

@@ -302,11 +302,7 @@ const toAttrs = (
   };
 };
 
-const desiredProperties = (
-  news: AlertRuleProps,
-  kind: string,
-  marker: string,
-): Record<string, unknown> => {
+const desiredProperties = (news: AlertRuleProps, kind: string, marker: string) => {
   const scheduled = sameText(kind, "Scheduled");
   return compact({
     displayName: news.displayName,
@@ -398,9 +394,13 @@ export const AlertRuleProvider = () =>
           resourceGroupName: resourceGroup,
           workspaceName: workspace,
           ruleId,
-          kind: kind as securityinsights.AlertRuleKind,
-          etag: observed?.etag,
-          properties: desired,
+          // `kind` is only known at runtime and decides the arm, so the arm
+          // is asserted rather than narrowed.
+          body: {
+            kind,
+            etag: observed?.etag,
+            properties: desired,
+          } as securityinsights.AlertRuleInput,
         });
       }
       return toAttrs(resourceGroup, workspace, ruleId, observed);

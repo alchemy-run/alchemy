@@ -6,19 +6,25 @@ import {
   stampedOf,
   type MigrationsInput,
 } from "@alchemy.run/sql/Migrations";
-import { hashImports, readSqlFile, splitSqlStatements } from "@alchemy.run/sql/SqlFile";
+import { applySqlImports, hashImports, splitSqlStatements } from "@alchemy.run/sql/SqlFile";
 import * as turso from "@distilled.cloud/turso/turso";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Redacted from "effect/Redacted";
 import { organization } from "./Credentials.ts";
 import * as Hrana from "./Hrana.ts";
 import type { Providers } from "./Providers.ts";
+
+export class DatabaseUnexpectedResponse extends Data.TaggedError("DatabaseUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DatabaseSeed {
   /**
@@ -128,6 +134,13 @@ export interface DatabaseProps {
    * Bookkeeping lives in Alchemy's `__alchemy_migrations` table. A database
    * previously migrated by drizzle-kit is adopted by a one-way conversion on
    * first deploy.
+   *
+   * History is forward-only and linear. A new file must sort after every
+   * applied one, or the deploy fails with `NonLinearMigrationHistoryError`;
+   * an edited or deleted applied file fails with
+   * `RewrittenMigrationHistoryError`. Renaming an applied file without
+   * changing its contents keeps it applied. See
+   * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
    */
   migrations?: MigrationsInput;
   /**
@@ -185,8 +198,18 @@ export type Database = Resource<
   DatabaseProps,
   DatabaseAttributes,
   never,
-  Providers
+  Providers,
+  DatabaseLookup
 >;
+
+/**
+ * Props for {@link Database.lookup}: find a database this stack
+ * doesn't manage by its name, in the credentialed organization.
+ */
+export interface DatabaseLookup {
+  /** Database name. */
+  name: string;
+}
 
 /**
  * A Turso database: a SQLite database that lives in a {@link Group}.
@@ -246,6 +269,17 @@ export type Database = Resource<
  * const db = yield* Drizzle.LibSQL(conn);
  * ```
  *
+ * ### Looking up an existing database
+ * `Database.lookup` references a database Alchemy doesn't manage (created with
+ * the Turso CLI or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted.
+ *
+ * **Example:** Mint a token for an existing database
+ * ```typescript
+ * const db = Turso.Database.lookup({ name: "app" });
+ * const token = yield* Turso.DatabaseToken("AppToken", { database: db.name });
+ * ```
+ *
  * @resource
  * @product Database
  */
@@ -276,7 +310,9 @@ const withConnection = <A, E, R>(
       authorization: "full-access",
     });
     if (!jwt) {
-      return yield* Effect.fail(new Error(`Turso returned no token for ${database.name}`));
+      return yield* new DatabaseUnexpectedResponse({
+        message: `Turso returned no token for ${database.name}`,
+      });
     }
     return yield* use({ url: `https://${database.hostname}`, authToken: jwt }, client);
   });
@@ -288,7 +324,7 @@ export const DatabaseProvider = () =>
       const observe = (org: string, name: string) =>
         turso.getDatabase({ organizationSlug: org, databaseName: name }).pipe(
           Effect.map((res) => res.database),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
 
       const toAttrs = (
@@ -351,7 +387,19 @@ export const DatabaseProvider = () =>
             }
           }
         }),
-        read: Effect.fn(function* ({ id, olds, output }) {
+        lookup: Effect.fn(function* ({ name }) {
+          const org = yield* organization;
+          const db = yield* observe(org, name);
+          if (!db) return undefined;
+          return toAttrs(org, db, yield* getConfig(org, name), {
+            migrationsDir: undefined,
+            migrationsTable: undefined,
+            migrationsHashes: {},
+            importHashes: {},
+          });
+        }),
+
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const org = output?.organization ?? (yield* organization);
           const name = output?.name ?? (yield* databaseName(id, olds?.name));
           const db = yield* observe(org, name);
@@ -363,8 +411,13 @@ export const DatabaseProvider = () =>
             importHashes: output?.importHashes ?? {},
           });
           // Turso has no tags: a database found under an explicit,
-          // user-chosen name without prior state may belong to someone else.
-          return output === undefined && olds?.name !== undefined ? Unowned(attrs) : attrs;
+          // user-chosen name without prior state may belong to someone else — unless it
+          // is the generation a delete-first replacement is about to free.
+          const ours =
+            output !== undefined ||
+            olds?.name === undefined ||
+            (previous?.organization === org && previous.name === name);
+          return ours ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const org = output?.organization ?? (yield* organization);
@@ -393,7 +446,9 @@ export const DatabaseProvider = () =>
               .pipe(Effect.catchTag("Conflict", () => Effect.void));
             db = yield* observe(org, name);
             if (!db) {
-              return yield* Effect.fail(new Error(`Turso database ${name} vanished after create`));
+              return yield* new DatabaseUnexpectedResponse({
+                message: `Turso database ${name} vanished after create`,
+              });
             }
           }
 
@@ -447,23 +502,23 @@ export const DatabaseProvider = () =>
               })
             : undefined;
 
-          const previousImports = output?.importHashes ?? {};
-          const importHashes: Record<string, string> = {};
-          if (news.importFiles?.length) {
-            const root = yield* rootDir;
-            for (const filePath of news.importFiles) {
-              const file = yield* readSqlFile(root, filePath);
-              if (previousImports[filePath] !== file.hash) {
-                yield* session.note(`Importing ${filePath}...`);
-                yield* withConnection(org, target, (connection, client) =>
-                  Hrana.transaction(connection, splitSqlStatements(file.sql)).pipe(
-                    Effect.provideService(HttpClient.HttpClient, client),
+          const importHashes = yield* applySqlImports({
+            importFiles: news.importFiles,
+            rootDir: yield* rootDir,
+            previous: output?.importHashes,
+            apply: (file) =>
+              session
+                .note(`Importing ${file.id}...`)
+                .pipe(
+                  Effect.andThen(
+                    withConnection(org, target, (connection, client) =>
+                      Hrana.transaction(connection, splitSqlStatements(file.sql)).pipe(
+                        Effect.provideService(HttpClient.HttpClient, client),
+                      ),
+                    ),
                   ),
-                );
-              }
-              importHashes[filePath] = file.hash;
-            }
-          }
+                ),
+          });
 
           return toAttrs(org, db, config, {
             ...migrationsAttrs({ input: migrationsInput, run: migrations, output }),

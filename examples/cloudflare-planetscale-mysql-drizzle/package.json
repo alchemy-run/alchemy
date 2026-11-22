@@ -26,10 +26,10 @@
     "@effect/sql-mysql2": "catalog:",
     "alchemy": "workspace:*",
     "drizzle-orm": "catalog:",
-    "effect": "catalog:",
-    "mysql2": "catalog:"
+    "effect": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/test": "workspace:*",
     "drizzle-kit": "catalog:"
   }
 }

@@ -18,14 +18,15 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { azuriteEndpoints } from "@alchemy.run/azure/Storage/Azurite";
+import { DevCli, fetchOk } from "@alchemy.run/test/DevCli";
 import { type Credentials, fromStaticToken } from "@distilled.cloud/azure";
 import * as blob from "@distilled.cloud/azure/storage-blob";
 import * as queue from "@distilled.cloud/azure/storage-queue";
-import { DevCli, fetchOk } from "alchemy-test/DevCli";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 
 const root = path.resolve(import.meta.dirname, "..");
 const STAGE = "dev-cli-test";
@@ -66,7 +67,7 @@ const azurite = <A, E>(
     }).pipe(
       Effect.provide(
         Layer.mergeAll(
-          fromStaticToken({ bearerToken: "azurite", subscriptionId: "" }),
+          fromStaticToken({ bearerToken: Redacted.make("azurite"), subscriptionId: "" }),
           FetchHttpClient.layer,
         ),
       ),

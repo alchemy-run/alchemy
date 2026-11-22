@@ -1,5 +1,6 @@
 import { expect } from "bun:test";
 import * as Azure from "@alchemy.run/azure";
+import * as Test from "@alchemy.run/test/Bun";
 import * as app from "@distilled.cloud/azure/app";
 import { Credentials } from "@distilled.cloud/azure/Credentials";
 import * as web from "@distilled.cloud/azure/web";
@@ -7,7 +8,6 @@ import * as applications from "@distilled.cloud/microsoft-graph/applications";
 import * as Alchemy from "alchemy";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
-import * as Test from "alchemy/Test/Bun";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -88,8 +88,7 @@ const deployerToken = (audience: string) =>
   Effect.gen(function* () {
     const resolve = yield* Credentials;
     const config = yield* resolve;
-    if (config.tokenFor === undefined) return Redacted.value(config.bearerToken);
-    const token = yield* config.tokenFor(`${audience}/.default`);
+    const token = yield* config.token(`${audience}/.default`);
     return Redacted.value(token);
   }).pipe(Effect.provide(azure));
 

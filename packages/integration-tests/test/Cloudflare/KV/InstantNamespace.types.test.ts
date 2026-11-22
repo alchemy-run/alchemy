@@ -1,5 +1,5 @@
 import * as KV from "@alchemy.run/cloudflare/KV";
-import { expect, test } from "alchemy-test";
+import { expect, test } from "@alchemy.run/test";
 import type { Input } from "alchemy/Input";
 import * as Effect from "effect/Effect";
 

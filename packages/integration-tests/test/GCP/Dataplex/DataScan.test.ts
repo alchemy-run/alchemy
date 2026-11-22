@@ -1,12 +1,13 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as dataplex from "@distilled.cloud/gcp/dataplex_v1";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -72,6 +73,13 @@ test.provider.skipIf(!runLifecycle)(
             dataProfileSpec: { samplingPercent: 100 },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Dataplex.DataScan.lookup({
+          dataScanId: created.dataScanId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/dataScans/");

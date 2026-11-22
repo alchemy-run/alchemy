@@ -26,7 +26,7 @@ const asRedactedUrl = (
   const url = typeof plain === "string" ? plain : "";
   return url.length > 0
     ? Effect.succeed(Redacted.make(url))
-    : Effect.fail(new PostgresUrlMissing({ name }));
+    : Effect.fail(new PostgresUrlMissing({ resourceName: name }));
 };
 
 /**

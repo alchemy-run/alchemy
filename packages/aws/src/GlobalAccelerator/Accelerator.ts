@@ -96,8 +96,23 @@ export interface Accelerator extends Resource<
     flowLogsS3Prefix: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AcceleratorLookup
 > {}
+
+/**
+ * Props for {@link Accelerator.lookup}: find an accelerator this stack doesn't
+ * manage, in the ambient account.
+ */
+export type AcceleratorLookup =
+  | {
+      /** The ARN of the existing accelerator. */
+      acceleratorArn: string;
+    }
+  | {
+      /** The name of the existing accelerator. */
+      name: string;
+    };
 
 /**
  * An AWS Global Accelerator standard accelerator — two anycast static IP
@@ -149,6 +164,17 @@ export interface Accelerator extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing accelerator
+ * `Accelerator.lookup` references an accelerator Alchemy doesn't manage (created in the
+ * console or by another stack), found by `acceleratorArn` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing accelerator
+ * ```typescript
+ * const edge = AWS.GlobalAccelerator.Accelerator.lookup({ name: "edge" });
+ * const dnsName = edge.dnsName;
+ * ```
+ *
  * @resource
  */
 export const Accelerator = Resource<Accelerator>("AWS.GlobalAccelerator.Accelerator");
@@ -181,7 +207,7 @@ const toAttributes = (
 const describeAccelerator = Effect.fn(function* (acceleratorArn: string) {
   return yield* withGaRegion(ga.describeAccelerator({ AcceleratorArn: acceleratorArn })).pipe(
     Effect.map((r) => r.Accelerator),
-    Effect.catchTag("AcceleratorNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("AcceleratorNotFoundException", () => Effect.undefined),
   );
 });
 
@@ -190,7 +216,7 @@ const describeFlowLogs = Effect.fn(function* (acceleratorArn: string) {
     ga.describeAcceleratorAttributes({ AcceleratorArn: acceleratorArn }),
   ).pipe(
     Effect.map((r) => r.AcceleratorAttributes),
-    Effect.catchTag("AcceleratorNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("AcceleratorNotFoundException", () => Effect.undefined),
   );
 });
 
@@ -281,6 +307,14 @@ export const AcceleratorProvider = () =>
           ),
         ),
       ),
+    lookup: Effect.fn(function* (props) {
+      const live =
+        "acceleratorArn" in props
+          ? yield* describeAccelerator(props.acceleratorArn)
+          : yield* findAcceleratorByName(props.name);
+      if (!live?.AcceleratorArn) return undefined;
+      return toAttributes(live, live.AcceleratorArn, yield* describeFlowLogs(live.AcceleratorArn));
+    }),
     read: Effect.fn(function* ({ id, olds, output }) {
       let live = output?.acceleratorArn
         ? yield* describeAccelerator(output.acceleratorArn)

@@ -3,33 +3,24 @@ title: Axiom
 description: Observability as resources — OTEL datasets, ingest tokens, monitors, notifiers, and dashboards declared next to the code that emits the data.
 ---
 
-Axiom is an event and observability store for logs, traces, and
-metrics. Effect already emits OpenTelemetry, and with alchemy the
-receiving end is code too: datasets, ingest tokens, monitors,
-notifiers, and dashboards live in the same Stack as the Workers and
-Functions they observe, so a threshold change is a reviewable diff.
+import HubMap from "../../../components/HubMap.astro";
 
-New here? [Set up credentials](/axiom/setup) first.
+Axiom is a platform for event data and observability. It stores logs, traces and metrics at any scale, and queries them in seconds.
 
-## Resources
+You send it OpenTelemetry and query it with APL. Monitors alert you when something crosses a line, and dashboards show what's happening.
 
-A `Dataset` is the top-level container. Pick a `kind` per OTEL
-signal — it exposes the OTLP endpoints as outputs:
+**New to Axiom?** Start with [What is Axiom?](/axiom/what-is-axiom).
+
+## A quick example
+
+A Dataset holds one kind of telemetry, and exposes its OTLP endpoint:
 
 ```typescript
-const traces  = yield* Axiom.Dataset("traces",  { name: "app-traces",  kind: "otel:traces:v1"  });
-const logs    = yield* Axiom.Dataset("logs",    { name: "app-logs",    kind: "otel:logs:v1"    });
-const metrics = yield* Axiom.Dataset("metrics", { name: "app-metrics", kind: "otel:metrics:v1" });
+const traces = yield* Axiom.Dataset("traces", { name: "app-traces", kind: "otel:traces:v1" });
+const logs = yield* Axiom.Dataset("logs", { name: "app-logs", kind: "otel:logs:v1" });
 ```
 
-:::caution
-Renaming a dataset or changing its `kind` is a **replacement** — the
-old dataset and all its events are deleted. See
-[Datasets & Ingest](/axiom/data/ingest) for details.
-:::
-
-An `ApiToken` mints a least-privilege ingest credential for your
-runtime to ship with:
+An ApiToken gives your runtime ingest access to one dataset, and nothing else:
 
 ```typescript
 const ingest = yield* Axiom.ApiToken("ingest", {
@@ -40,15 +31,13 @@ const ingest = yield* Axiom.ApiToken("ingest", {
 });
 ```
 
-`Monitor` + `Notifier` turn queries into alerts — see
-[Monitors & Alerting](/axiom/guides/alerting) for threshold and
-anomaly monitors:
+A Monitor runs an APL query on a schedule and alerts through a Notifier:
 
 ```typescript
 const slack = yield* Axiom.Notifier("ops-slack", {
   name: "ops-channel",
   properties: {
-    slack: { slackUrl: process.env.SLACK_WEBHOOK_URL! },
+    slack: { slackUrl: yield* Config.String("SLACK_WEBHOOK_URL") },
   },
 });
 
@@ -62,37 +51,14 @@ yield* Axiom.Monitor("panics", {
 });
 ```
 
-Beyond alerts, `Dashboard` declares charts as code, `View` saves an
-APL query as a virtual dataset, and `Annotation` marks deploys on
-your charts — see [Dashboards as Code](/axiom/guides/dashboards).
-`VirtualField` derives computed fields on a dataset at query time.
+Point a Worker or Lambda's OpenTelemetry exporter at the dataset endpoints, and Effect's traces and logs flow into Axiom with no code changes. See [Observability](/testing/observability).
 
-## Compose with your cloud
+## Where to start
 
-Wire the dataset's OTLP endpoints and the ingest token into your
-Worker or Lambda's environment, and Effect's OpenTelemetry output
-flows into Axiom with no code changes — see
-[Observability](/testing/observability) for the exporter-as-a-Layer
-pattern:
+**Want to build?** Connect your organization in [Setup](/axiom/setup), then [Observability with Axiom](/cloudflare/observability/axiom-observability) takes a Worker from no telemetry to a monitor that pages you.
 
-```typescript
-vars: {
-  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: traces.otelTracesEndpoint,
-  OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: logs.otelLogsEndpoint,
-},
-```
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
 
-For a full end-to-end walkthrough — dataset, token, Worker wiring,
-and a monitor on top — follow
-[Observability with Axiom](/cloudflare/observability/axiom-observability).
+## The docs
 
-## Reference
-
-[Dataset](/providers/axiom/dataset) ·
-[ApiToken](/providers/axiom/apitoken) ·
-[Monitor](/providers/axiom/monitor) ·
-[Notifier](/providers/axiom/notifier) ·
-[Dashboard](/providers/axiom/dashboard) ·
-[Annotation](/providers/axiom/annotation) ·
-[View](/providers/axiom/view) ·
-[VirtualField](/providers/axiom/virtualfield)
+<HubMap />

@@ -17,7 +17,7 @@ import {
   type RpcErrorEnvelope,
   type RpcStreamEnvelope,
 } from "@alchemy.run/cloudflare/Workers/Rpc";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
@@ -563,6 +563,29 @@ describe(
         const decoded = fromRpcReadableStream(envelope.body, "jsonl");
         const chunks = yield* Stream.runCollect(decoded);
         expect(chunks).toEqual([{ a: 1 }]);
+      }),
+    );
+
+    // A first chunk holding several elements must reach the body whole, not
+    // just the element peeked to pick the encoding.
+    it.effect("roundtrips every element of a multi-element jsonl stream", () =>
+      Effect.gen(function* () {
+        const stream = Stream.fromIterable([{ a: 1 }, { a: 2 }, { a: 3 }]);
+        const envelope = yield* toRpcStream(stream);
+        const decoded = fromRpcReadableStream(envelope.body, "jsonl");
+        const chunks = yield* Stream.runCollect(decoded);
+        expect(chunks).toEqual([{ a: 1 }, { a: 2 }, { a: 3 }]);
+      }),
+    );
+
+    it.effect("roundtrips every element of a multi-element bytes stream", () =>
+      Effect.gen(function* () {
+        const data = [new Uint8Array([1]), new Uint8Array([2]), new Uint8Array([3])];
+        const stream = Stream.fromIterable(data);
+        const envelope = yield* toRpcStream(stream);
+        const decoded = fromRpcReadableStream(envelope.body, "bytes");
+        const chunks = yield* Stream.runCollect(decoded);
+        expect(chunks).toEqual(data);
       }),
     );
 

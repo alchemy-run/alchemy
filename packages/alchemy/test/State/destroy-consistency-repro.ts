@@ -1,5 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import * as path from "node:path";
+import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
@@ -21,7 +22,6 @@ import * as Scope from "effect/Scope";
  *   bun test/State/destroy-consistency-repro.ts [files] [iterations]
  */
 import * as Alchemy from "@/index.ts";
-import * as Core from "@/Test/Core.ts";
 import { Bucket, TestLayers } from "../test.resources.ts";
 
 const FILES = Number(process.argv[2] ?? 16);

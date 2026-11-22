@@ -3,14 +3,14 @@ import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as iam from "@distilled.cloud/aws/iam";
 import type { Region } from "@distilled.cloud/aws/Region";
-import * as route53 from "@distilled.cloud/aws/route-53";
-import { deepEqual, isResolved } from "alchemy/Diff";
+import { deepEqual, isResolved, stripEffects } from "alchemy/Diff";
+import type { DnsConfig } from "alchemy/DNS/Adapter";
 import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import { type LookupMethod, Resource } from "alchemy/Resource";
 import type { HostRuntimeContext, ServerHost } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, diffTags } from "alchemy/Tags";
@@ -22,11 +22,11 @@ import type { HttpClient } from "effect/http/HttpClient";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { Certificate } from "../ACM/Certificate.ts";
 import { ScalableTarget } from "../ApplicationAutoScaling/ScalableTarget.ts";
 import { ScalingPolicy } from "../ApplicationAutoScaling/ScalingPolicy.ts";
 import { Service as CloudMapService } from "../CloudMap/Service.ts";
 import type { Credentials } from "../Credentials.ts";
+import { domainCertificate, isRoute53Dns, resolveDomainDns } from "../CustomDomain.ts";
 import {
   SecurityGroup,
   type SecurityGroupId,
@@ -39,8 +39,8 @@ import {
   makeImageSource,
   type BundledImageSource,
   type DockerfileImageSource,
+  type EcrRegistryImageSource,
   type ImageSourceLike,
-  type RegistryImageSource,
 } from "../ECR/ImageSource.ts";
 import type { ListenerAction, ListenerRuleCondition } from "../ELBv2/common.ts";
 import { Listener } from "../ELBv2/Listener.ts";
@@ -48,11 +48,12 @@ import { ListenerRule } from "../ELBv2/ListenerRule.ts";
 import { LoadBalancer } from "../ELBv2/LoadBalancer.ts";
 import { TargetGroup, type TargetGroupArn } from "../ELBv2/TargetGroup.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { plainJson } from "../internal/Observe.ts";
 import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { findPublicHostedZoneId } from "../Route53/HostedZoneLookup.ts";
-import { Record as Route53Record } from "../Route53/Record.ts";
 import type { ClusterArn } from "./Cluster.ts";
 import {
   attachTaskBindings,
@@ -71,7 +72,8 @@ import {
 } from "./Task.ts";
 
 export type ServiceName = string;
-export type ServiceArn = `arn:aws:ecs:${RegionID}:${AccountID}:service/${string}/${ServiceName}`;
+export type ServiceArn =
+  `arn:${Partition}:ecs:${RegionID}:${AccountID}:service/${string}/${ServiceName}`;
 
 export const isService = (value: any): value is Service =>
   typeof value === "object" &&
@@ -166,9 +168,19 @@ export interface ServiceDomainConfig {
   /**
    * ARN of an existing ACM certificate (in the service's region) for the
    * HTTPS/TLS listener. When omitted, a DNS-validated `AWS.ACM.Certificate`
-   * is composed in the matching Route 53 hosted zone.
+   * is composed in the matching Route 53 hosted zone (or through
+   * {@link dns}).
    */
   cert?: string;
+  /**
+   * DNS host for the certificate validation and alias records (see
+   * [DNS Adapters](/infrastructure-as-code/dns-adapters)). Omitted: Route
+   * 53 (a matching public hosted zone must exist; alias `A` + `AAAA`
+   * records). Pass `Cloudflare.DNS.Adapter()` or `Hetzner.DNS.Adapter()`
+   * for a domain whose DNS lives there — each name gets a `CNAME` to the
+   * load balancer and the certificate is validated through that host.
+   */
+  dns?: DnsConfig;
 }
 
 /**
@@ -208,12 +220,14 @@ export interface ServiceLoadBalancerConfig {
   /**
    * Owned-only: point a custom domain at the composed load balancer.
    *
-   * A matching Route 53 hosted zone must exist (looked up by walking the
-   * domain's labels); alias A + AAAA records are composed for the domain and
-   * every alias. Unless {@link ServiceDomainConfig.cert} supplies an
-   * existing certificate ARN, a DNS-validated `AWS.ACM.Certificate` is
-   * composed in the service's region and attached to the HTTPS listener
-   * (the default listener becomes `443/https`). The service `url` prefers
+   * By default a matching Route 53 hosted zone must exist (looked up by
+   * walking the domain's labels) and alias A + AAAA records are composed for
+   * the domain and every alias; set {@link ServiceDomainConfig.dns} to
+   * `Cloudflare.DNS.Adapter()` for a domain whose DNS lives in Cloudflare.
+   * Unless {@link ServiceDomainConfig.cert} supplies an existing certificate
+   * ARN, a DNS-validated `AWS.ACM.Certificate` is composed in the service's
+   * region and attached to the HTTPS listener (the default listener becomes
+   * `443/https`). The service `url` prefers
    * the domain.
    */
   domain?: string | ServiceDomainConfig;
@@ -816,8 +830,8 @@ export interface BundledServiceProps extends ImageOwningServicePropsBase, Bundle
 /** Build the user's own Dockerfile into the service's image. */
 export interface DockerfileServiceProps
   extends ImageOwningServicePropsBase, DockerfileImageSource {}
-/** Run a pre-built registry image, mirrored into ECR. */
-export interface ImageServiceProps extends ImageOwningServicePropsBase, RegistryImageSource {}
+/** Run a pre-built registry image, mirrored into ECR unless `mirror: false`. */
+export interface ImageServiceProps extends ImageOwningServicePropsBase, EcrRegistryImageSource {}
 
 /**
  * Service props — either reference an existing task definition (`task:`) or
@@ -897,6 +911,13 @@ export interface Service extends Resource<
      */
     ingressKind?: "owned" | "shared";
 
+    /**
+     * Desired count, networking, load balancers, service registries, the
+     * declared deployment/placement/execute-command settings and the tags,
+     * as observed. Lets `alchemy drift` detect out-of-band changes.
+     */
+    configuration?: Record<string, unknown>;
+
     /** Family of the synthesized task definition (image-owning form only). */
     taskFamily?: string;
     /** Name of the primary container (image-owning form only). */
@@ -928,8 +949,20 @@ export interface Service extends Resource<
     };
   },
   TaskBindingContract,
-  Providers
+  Providers,
+  ServiceLookup
 > {}
+
+/**
+ * Props for {@link Service.lookup}: find a service this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ServiceLookup {
+  /** The name or ARN of the cluster the service runs in. */
+  cluster: string;
+  /** The name of the existing service. */
+  serviceName: string;
+}
 
 export type ServiceServices = Credentials | Region | ServerHost | AWSEnvironment;
 
@@ -949,7 +982,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *
  * The service's image comes from one of four sources:
  *
- * - `image` — run a pre-built registry image, mirrored into ECR.
+ * - `image` — run a pre-built registry image, mirrored into ECR unless
+ *   `mirror: false`.
  * - `context` — build your own Dockerfile.
  * - `main` — bundle an inline Effect program (servers return `{ fetch }`).
  * - `task:` — deploy an existing `AWS.ECS.Task`'s definition; the Service
@@ -1004,6 +1038,39 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *     };
  *   }).pipe(Effect.provide(AWS.DynamoDB.PutItemHttp)),
  * );
+ * ```
+ *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
+ *
+ * **Example:** Cache layers in the image repository
+ * ```typescript
+ * const api = yield* AWS.ECS.Service("Api", {
+ *   cluster,
+ *   context: "./api",
+ *   port: 8080,
+ *   build: { cache: true },
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const api = yield* AWS.ECS.Service("Api", {
+ *   cluster,
+ *   context: "./api",
+ *   port: 8080,
+ *   build: {
+ *     cache: {
+ *       from: ["type=gha,scope=api"],
+ *       to: ["type=gha,scope=api,mode=max"],
+ *     },
+ *   },
+ * });
  * ```
  *
  * ### Bundling & Tree-shaking
@@ -1117,6 +1184,21 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *   port: 3000,
  *   loadBalancer: {
  *     domain: { name: "api.example.com", aliases: ["www.api.example.com"], cert: certificateArn },
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Domain on Cloudflare DNS
+ * ```typescript
+ * // The certificate is validated through the Cloudflare zone and each
+ * // name gets a CNAME to the load balancer. Requires
+ * // `Cloudflare.providers()` in the stack.
+ * const svc = yield* Service("Api", {
+ *   cluster,
+ *   image: "my-org/api:latest",
+ *   port: 3000,
+ *   loadBalancer: {
+ *     domain: { name: "api.example.com", dns: Cloudflare.DNS.Adapter() },
  *   },
  * });
  * ```
@@ -1298,30 +1380,93 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
+ * ### Looking up an existing service
+ * `Service.lookup` references a service Alchemy doesn't manage (created in the
+ * console or by another stack), found by `cluster` and `serviceName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing service
+ * ```typescript
+ * const web = AWS.ECS.Service.lookup({ cluster: "shared", serviceName: "web" });
+ * const serviceArn = web.serviceArn;
+ * ```
+ *
  * @resource
  */
-export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
-  Platform("AWS.ECS.Service", {
-    createRuntimeContext: createContainerRuntimeContext("AWS.ECS.Service") as (
-      id: string,
-    ) => ServiceRuntimeContext,
-    // Compose the managed load balancer (owned ALB/listeners or shared-listener
-    // rules + target groups) as REAL namespaced child resources before the core
-    // service resource is declared.
-    transformProps: (id, props) => transformServiceProps(id, props),
-    // Autoscaling references the service's own Output attributes (cluster/name/
-    // target-group ARNs), so it composes AFTER the resource exists.
-    onCreate: (resource, props) =>
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- Platform onCreate hook type is Effect<void, never, any>; failures still propagate at runtime
-      composeServiceScaling(
-        resource as Service,
-        props as ServiceProps,
-        // Typed failures (e.g. RequestCountScalingRequiresLoadBalancer)
-        // surface through the deploy like any resource-construction error.
-      ) as Effect.Effect<void, never, any>,
-  });
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> &
+  LookupMethod<Service> = Platform("AWS.ECS.Service", {
+  createRuntimeContext: createContainerRuntimeContext("AWS.ECS.Service") as (
+    id: string,
+  ) => ServiceRuntimeContext,
+  // Compose the managed load balancer (owned ALB/listeners or shared-listener
+  // rules + target groups) as REAL namespaced child resources before the core
+  // service resource is declared.
+  transformProps: (id, props) => transformServiceProps(id, props),
+  // Autoscaling references the service's own Output attributes (cluster/name/
+  // target-group ARNs), so it composes AFTER the resource exists.
+  // Typed failures (e.g. RequestCountScalingRequiresLoadBalancer) surface
+  // through the deploy like any resource-construction error.
+  onCreate: (resource, props) => composeServiceScaling(resource as Service, props as ServiceProps),
+});
 
 /** The BYO task reference, when the props use the `task:` form. */
+/**
+ * The service settings reconcile converges, as observed on `service`.
+ * `read` and `reconcile` share it so a converged service reads unchanged.
+ * Settings whose prop is unset are left unchanged by `updateService`, so
+ * they are only observed when declared; the desired count is not observed
+ * while autoscaling owns it.
+ */
+const observeServiceConfiguration = (
+  service: ecs.Service,
+  props: ServiceProps | undefined,
+  tags: Record<string, string>,
+) => {
+  const declared = <V>(key: keyof ServiceProps, value: V) =>
+    props?.[key] === undefined ? undefined : value;
+  const vpc = service.networkConfiguration?.awsvpcConfiguration;
+  return plainJson({
+    desiredCount: props?.scaling === undefined ? service.desiredCount : undefined,
+    networkConfiguration: vpc && {
+      subnets: [...(vpc.subnets ?? [])].sort(),
+      securityGroups: [...(vpc.securityGroups ?? [])].sort(),
+      assignPublicIp: vpc.assignPublicIp,
+    },
+    loadBalancers: service.loadBalancers?.length
+      ? [...service.loadBalancers].sort((a, b) =>
+          JSON.stringify(a).localeCompare(JSON.stringify(b)),
+        )
+      : undefined,
+    serviceRegistries: service.serviceRegistries?.length ? service.serviceRegistries : undefined,
+    platformVersion: declared("platformVersion", service.platformVersion),
+    deploymentConfiguration: declared("deploymentConfiguration", service.deploymentConfiguration),
+    healthCheckGracePeriodSeconds: declared(
+      "healthCheckGracePeriod",
+      service.healthCheckGracePeriodSeconds,
+    ),
+    capacityProviderStrategy: declared(
+      "capacityProviderStrategy",
+      service.capacityProviderStrategy,
+    ),
+    placementConstraints: declared("placementConstraints", service.placementConstraints),
+    placementStrategy: declared("placementStrategy", service.placementStrategy),
+    enableExecuteCommand: declared("enableExecuteCommand", service.enableExecuteCommand),
+    propagateTags: declared("propagateTags", service.propagateTags),
+    availabilityZoneRebalancing: declared(
+      "availabilityZoneRebalancing",
+      service.availabilityZoneRebalancing,
+    ),
+    tags,
+  });
+};
+
+const ecsTagRecord = (tags: ecs.Tag[] | undefined): Record<string, string> =>
+  Object.fromEntries(
+    (tags ?? []).flatMap((t) =>
+      typeof t.key === "string" && typeof t.value === "string" ? [[t.key, t.value]] : [],
+    ),
+  );
+
 const taskRefOf = (props: ServiceProps | undefined) =>
   props !== undefined && "task" in props ? props.task : undefined;
 
@@ -1449,7 +1594,7 @@ interface ManagedSgPort {
  */
 const managedSgIngress = (
   staticPorts: ManagedSgPort[],
-  dynamicPort: number | unknown | undefined,
+  dynamicPort: unknown,
 ): SecurityGroupRuleData[] => {
   const rulesOf = (entries: ManagedSgPort[]): SecurityGroupRuleData[] => {
     const seen = new Set<string>();
@@ -1552,10 +1697,7 @@ const composeServiceRegistry = (id: string, props: ServiceProps) =>
  * namespace and rewrite the props to reference their outputs (the internal
  * `ingress` prop and `serviceRegistries`). A no-op at runtime.
  */
-const transformServiceProps = (
-  id: string,
-  props: ServiceProps,
-): Effect.Effect<ServiceProps, unknown, any> =>
+const transformServiceProps = (id: string, props: ServiceProps) =>
   Effect.gen(function* () {
     // Composition is a plan/deploy concern — never runs inside bundles.
     if (globalThis.__ALCHEMY_RUNTIME__) {
@@ -1717,9 +1859,13 @@ const composeManagedIngress = (
     let certificateArn: string | undefined = props.certificateArn;
     const domainNames = domain !== undefined ? [domain.name, ...(domain.aliases ?? [])] : [];
     const domainZones = new Map<string, string>();
+    // Route 53 (the default) needs a matching hosted zone up front; other
+    // DNS hosts (e.g. Cloudflare) infer their zone at reconcile time.
+    const usesRoute53 = domain !== undefined && isRoute53Dns(domain.dns);
+    const pinnedZoneId = domain?.dns?.zone as string | undefined;
     if (domain !== undefined) {
-      for (const name of domainNames) {
-        const zoneId = yield* findPublicHostedZoneId(name);
+      for (const name of usesRoute53 ? domainNames : []) {
+        const zoneId = pinnedZoneId ?? (yield* findPublicHostedZoneId(name));
         if (zoneId === undefined) {
           return yield* new ServiceHostedZoneNotFound({
             serviceId: id,
@@ -1735,13 +1881,18 @@ const composeManagedIngress = (
         // DNS-validated certificate in the service's own region (an ALB/NLB
         // listener requires an in-region certificate).
         const { region } = yield* AWSEnvironment.current;
-        const certificate = yield* Certificate("Certificate", {
-          domainName: domain.name,
-          subjectAlternativeNames: domain.aliases,
-          hostedZoneId: domainZones.get(domain.name)!,
-          region,
-          tags: props.tags,
-        });
+        const certificate = yield* domainCertificate(
+          "Certificate",
+          {
+            domainName: domain.name,
+            subjectAlternativeNames: domain.aliases,
+            ...(usesRoute53 ? { hostedZoneId: domainZones.get(domain.name)! } : {}),
+            region,
+            tags: props.tags,
+          },
+          domain.dns,
+        );
+        // Resolves once the certificate is issued.
         certificateArn = certificate.certificateArn as unknown as string;
       }
     }
@@ -2087,20 +2238,24 @@ const composeManagedIngress = (
     // ── domain: alias records pointing at the owned load balancer ───────
     if (domain !== undefined && alb !== undefined) {
       for (const name of domainNames) {
-        const zoneId = domainZones.get(name)!;
         const sanitizedName = name.replaceAll(/[^a-zA-Z0-9-]/g, "-");
-        for (const recordType of ["A", "AAAA"] as const) {
-          yield* Route53Record(`Domain-${sanitizedName}-${recordType}`, {
-            hostedZoneId: zoneId,
-            name,
-            type: recordType,
-            aliasTarget: {
+        const dns = yield* resolveDomainDns(
+          usesRoute53 ? undefined : domain.dns,
+          domainZones.get(name),
+        );
+        // Route 53: alias `A` + `AAAA` (`Domain-{name}-A` / `-AAAA`);
+        // other hosts: a single CNAME to the load balancer.
+        yield* dns.alias(`Domain-${sanitizedName}`, {
+          name,
+          ipv6: true,
+          target: {
+            hostname: alb.dnsName,
+            route53Alias: {
               hostedZoneId: alb.canonicalHostedZoneId,
-              dnsName: alb.dnsName,
               evaluateTargetHealth: false,
             },
-          });
-        }
+          },
+        });
       }
     }
 
@@ -2190,10 +2345,7 @@ const composeManagedIngress = (
  * because the scalable target's `resourceId` and the request-count metric's
  * `ResourceLabel` are derived from the service's own Output attributes.
  */
-const composeServiceScaling = (
-  service: Service,
-  props: ServiceProps | undefined,
-): Effect.Effect<void, unknown, any> =>
+const composeServiceScaling = (service: Service, props: ServiceProps | undefined) =>
   Effect.gen(function* () {
     // Composition is a plan/deploy concern — never runs inside bundles.
     if (globalThis.__ALCHEMY_RUNTIME__) {
@@ -2421,7 +2573,7 @@ const observeServiceConvergence = (input: {
         cluster: input.clusterArn,
         services: [input.serviceName],
       })
-      .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.undefined));
     const service = described?.services?.find(
       (candidate) => candidate.serviceName === input.serviceName && candidate.status !== "INACTIVE",
     );
@@ -2434,29 +2586,49 @@ const observeServiceConvergence = (input: {
       };
     }
 
-    const targetGroupArns = [
-      ...new Set(
-        (service.loadBalancers ?? []).flatMap((loadBalancer) =>
-          loadBalancer.targetGroupArn ? [loadBalancer.targetGroupArn] : [],
-        ),
-      ),
+    // A load balancer is one target "slot". With native blue/green, ECS
+    // alternates the tasks between the configured group and
+    // `advancedConfiguration.alternateTargetGroupArn` while DescribeServices
+    // keeps reporting the configured one, so a slot counts the targets of
+    // both groups — it converges wherever ECS put the tasks.
+    const targetGroupSlots = [
+      ...new Map(
+        (service.loadBalancers ?? []).flatMap((loadBalancer) => {
+          const arns = [
+            ...new Set(
+              [
+                loadBalancer.targetGroupArn,
+                loadBalancer.advancedConfiguration?.alternateTargetGroupArn,
+              ].filter((arn): arn is string => arn !== undefined && arn !== ""),
+            ),
+          ];
+          return arns.length > 0 ? [[arns.join("|"), arns] as const] : [];
+        }),
+      ).values(),
     ];
     const targetGroups = yield* Effect.forEach(
-      targetGroupArns,
-      (targetGroupArn) =>
-        elbv2.describeTargetHealth({ TargetGroupArn: targetGroupArn }).pipe(
-          Effect.map((health) => ({
-            missing: false,
-            states: (health.TargetHealthDescriptions ?? []).map(
-              (target) => target.TargetHealth?.State,
+      targetGroupSlots,
+      (arns) =>
+        Effect.forEach(arns, (targetGroupArn) =>
+          elbv2.describeTargetHealth({ TargetGroupArn: targetGroupArn }).pipe(
+            Effect.map((health) => ({
+              missing: false,
+              states: (health.TargetHealthDescriptions ?? []).map(
+                (target) => target.TargetHealth?.State,
+              ),
+            })),
+            Effect.catchTag("TargetGroupNotFoundException", () =>
+              Effect.succeed({
+                missing: true,
+                states: [] as (string | undefined)[],
+              }),
             ),
-          })),
-          Effect.catchTag("TargetGroupNotFoundException", () =>
-            Effect.succeed({
-              missing: true,
-              states: [] as (string | undefined)[],
-            }),
           ),
+        ).pipe(
+          Effect.map((groups) => ({
+            missing: groups.every((group) => group.missing),
+            states: groups.flatMap((group) => group.states),
+          })),
         ),
       { concurrency: 4 },
     );
@@ -2587,6 +2759,19 @@ const waitForServiceConvergence = (input: {
   );
 };
 
+/** Keep image resolution, drift detection and dev watching on the same inputs. */
+export const serviceImageInput = (props: ServiceProps) => {
+  const imageProps = props as ImageOwningServicePropsBase;
+  const source = props as ImageSourceLike;
+  return {
+    source,
+    platform: taskImagePlatform(imageProps.runtimePlatform),
+    port: imageProps.port,
+    isExternal: imageProps.isExternal,
+    bootstrap: makeBunBootstrap(source.handler ?? "default"),
+  };
+};
+
 export const ServiceProvider = () =>
   Provider.effect(
     Service,
@@ -2679,7 +2864,7 @@ export const ServiceProvider = () =>
           .describeLoadBalancers({
             LoadBalancerArns: [ingress.loadBalancerArn],
           })
-          .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined));
         const dnsName = described?.LoadBalancers?.[0]?.DNSName;
         if (!dnsName) {
           return undefined;
@@ -2814,7 +2999,9 @@ export const ServiceProvider = () =>
           output?.repositoryName ??
           (yield* createPhysicalName({
             id: `${id}-repo`,
-            maxLength: 256,
+            // ECS caps an image reference at 255 characters: the registry host,
+            // this name and a 64-character tag must all fit.
+            maxLength: 128,
             lowercase: true,
           }));
         const logGroupName =
@@ -2835,13 +3022,13 @@ export const ServiceProvider = () =>
         // already-attached ARNs; a `LimitExceededException` means the
         // policy was NOT attached, so it propagates and fails the deploy
         // rather than silently shipping a role with missing permissions.
-        yield* Effect.all(
-          (news.taskRoleManagedPolicyArns ?? []).map((policyArn) =>
+        yield* Effect.forEach(
+          news.taskRoleManagedPolicyArns ?? [],
+          (policyArn) =>
             iam.attachRolePolicy({
               RoleName: taskRoleName,
               PolicyArn: policyArn,
             }),
-          ),
           { concurrency: "unbounded" },
         );
 
@@ -2885,20 +3072,15 @@ export const ServiceProvider = () =>
           retention: news.logging?.retention,
         });
 
-        const source = news as ImageSourceLike;
         const resolved = yield* imageSource.resolve({
+          ...serviceImageInput(news),
           id,
-          source,
           repositoryName,
           repositoryUri:
             output?.repositoryUri && output.repositoryName === repositoryName
               ? output.repositoryUri
               : undefined,
           tags,
-          platform: taskImagePlatform(news.runtimePlatform),
-          port: news.port,
-          isExternal: news.isExternal,
-          bootstrap: makeBunBootstrap(source.handler ?? "default"),
           session,
         });
 
@@ -3045,7 +3227,16 @@ export const ServiceProvider = () =>
 
       return {
         stables: ["serviceArn", "serviceName", "clusterArn"],
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
+        diff: Effect.fn(function* ({ id, olds, news: desired, output }) {
+          // Effect-native runtime exports remain unevaluated during planning.
+          // Their identity is represented by the image hash, so they must not
+          // prevent source changes from reaching the hash comparison below.
+          const news =
+            typeof desired === "object" && desired !== null && "exports" in desired
+              ? (Object.assign({}, desired, {
+                  exports: stripEffects(desired.exports),
+                }) as typeof desired)
+              : desired;
           if (!isResolved(news)) return;
           // serviceName change → delete-first replace (name is the identity).
           if ((yield* toServiceName(id, olds ?? {})) !== (yield* toServiceName(id, news ?? {}))) {
@@ -3096,19 +3287,30 @@ export const ServiceProvider = () =>
           // surface drift as an update; without this a bootstrap or code-only
           // change would silently no-op until `--force`.
           if (output?.code && taskRefOf(news) === undefined) {
-            const imageNews = news as ImageOwningServicePropsBase;
-            const source = news as ImageSourceLike;
-            const hash = yield* imageSource.hash({
-              source,
-              platform: taskImagePlatform(imageNews.runtimePlatform),
-              port: imageNews.port,
-              isExternal: imageNews.isExternal,
-              bootstrap: makeBunBootstrap(source.handler ?? "default"),
-            });
+            const hash = yield* imageSource.hash(serviceImageInput(news));
             if (hash !== undefined && hash !== output.code.hash) {
               return { action: "update" } as const;
             }
           }
+        }),
+        lookup: Effect.fn(function* ({ cluster, serviceName }) {
+          const described = yield* ecs
+            .describeServices({ cluster, services: [serviceName], include: ["TAGS"] })
+            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.undefined));
+          const service = described?.services?.[0];
+          if (!service?.serviceArn || service.status === "INACTIVE") return undefined;
+          return {
+            serviceArn: service.serviceArn as ServiceArn,
+            serviceName: service.serviceName!,
+            clusterArn: service.clusterArn as ClusterArn,
+            taskDefinitionArn: service.taskDefinition!,
+            status: service.status ?? "ACTIVE",
+            configuration: observeServiceConfiguration(
+              service,
+              undefined,
+              ecsTagRecord(service.tags),
+            ),
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const clusterArn = output?.clusterArn ?? clusterArnOf(olds?.cluster);
@@ -3127,7 +3329,7 @@ export const ServiceProvider = () =>
               services: [serviceName],
               include: ["TAGS"],
             })
-            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.undefined));
           const service = described?.services?.[0];
           if (!service?.serviceArn) {
             return undefined;
@@ -3139,6 +3341,7 @@ export const ServiceProvider = () =>
             clusterArn: service.clusterArn as ClusterArn,
             taskDefinitionArn: service.taskDefinition!,
             status: service.status ?? "ACTIVE",
+            configuration: observeServiceConfiguration(service, olds, ecsTagRecord(service.tags)),
           };
         }),
         list: () =>
@@ -3253,7 +3456,7 @@ export const ServiceProvider = () =>
               services: [serviceName],
               include: ["TAGS"],
             })
-            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.undefined));
           const observed = described?.services?.find(
             (s) =>
               s.serviceName === serviceName && s.status !== "INACTIVE" && s.status !== "DRAINING",
@@ -3288,22 +3491,32 @@ export const ServiceProvider = () =>
           };
 
           if (!observed?.serviceArn) {
-            const created = yield* ecs.createService({
-              ...mutableInput(news, task, network, securityGroups),
-              // With autoscaling, `desiredCount` is only the initial size
-              // (defaulting to `scaling.min`) — the scalable target owns it
-              // from then on.
-              desiredCount: news.desiredCount ?? news.scaling?.min ?? 1,
-              serviceName,
-              cluster: clusterArn,
-              loadBalancers: loadBalancersOf(news, task),
-              serviceRegistries: news.serviceRegistries,
-              deploymentController: news.deploymentController,
-              schedulingStrategy: news.schedulingStrategy,
-              role: news.role,
-              tags: toEcsTags(desiredTags),
-              enableECSManagedTags: news.enableECSManagedTags ?? true,
-            });
+            const created = yield* ecs
+              .createService({
+                ...mutableInput(news, task, network, securityGroups),
+                // With autoscaling, `desiredCount` is only the initial size
+                // (defaulting to `scaling.min`) — the scalable target owns it
+                // from then on.
+                desiredCount: news.desiredCount ?? news.scaling?.min ?? 1,
+                serviceName,
+                cluster: clusterArn,
+                loadBalancers: loadBalancersOf(news, task),
+                serviceRegistries: news.serviceRegistries,
+                deploymentController: news.deploymentController,
+                schedulingStrategy: news.schedulingStrategy,
+                role: news.role,
+                tags: toEcsTags(desiredTags),
+                enableECSManagedTags: news.enableECSManagedTags ?? true,
+              })
+              .pipe(
+                Effect.retry({
+                  // ECS assumes `advancedConfiguration.roleArn` (blue/green) to
+                  // validate the target groups. A role created in the same apply
+                  // may not have propagated through IAM yet — retry bounded.
+                  while: (e) => e._tag === "ServiceRoleNotAssumable",
+                  schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
+                }),
+              );
             const service = created.service;
             if (!service?.serviceArn) {
               return yield* Effect.die(new Error("createService returned no service"));
@@ -3339,6 +3552,7 @@ export const ServiceProvider = () =>
               clusterArn: stableService.clusterArn as ClusterArn,
               taskDefinitionArn: stableService.taskDefinition!,
               status: stableService.status ?? "ACTIVE",
+              configuration: observeServiceConfiguration(stableService, news, desiredTags),
               ...ingressAttrs,
               ...ownedAttributes,
             };
@@ -3374,11 +3588,14 @@ export const ServiceProvider = () =>
             .pipe(
               // The service may still be transitioning (e.g. a prior
               // deployment settling). updateService rejects with
-              // ServiceNotActiveException until it returns to ACTIVE — retry
-              // bounded.
+              // ServiceNotActiveException until it returns to ACTIVE. ECS also
+              // assumes `advancedConfiguration.roleArn` (blue/green) to validate
+              // the target groups, and a role created in the same apply may not
+              // have propagated through IAM yet. Retry both, bounded.
               Effect.retry({
-                while: (e) => e._tag === "ServiceNotActiveException",
-                schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(8)]),
+                while: (e) =>
+                  e._tag === "ServiceNotActiveException" || e._tag === "ServiceRoleNotAssumable",
+                schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
               }),
             );
           yield* session.note(`Waiting for ECS service ${serviceName} to stabilize`);
@@ -3440,6 +3657,7 @@ export const ServiceProvider = () =>
             clusterArn: stableService.clusterArn as ClusterArn,
             taskDefinitionArn: stableService.taskDefinition!,
             status: stableService.status ?? "ACTIVE",
+            configuration: observeServiceConfiguration(stableService, news, desiredTags),
             ...ingressAttrs,
             ...ownedAttributes,
           };

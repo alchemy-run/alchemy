@@ -1,8 +1,10 @@
+import * as dns from "node:dns/promises";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 
 /**
@@ -38,6 +40,125 @@ export class HttpMarkerPresent extends Data.TaggedError("HttpMarkerPresent")<{
   marker: string;
   bodyExcerpt: string;
 }> {}
+
+export class DnsNotReady extends Data.TaggedError("DnsNotReady")<{
+  hostname: string;
+  type: string;
+  detail: string;
+}> {
+  override get message() {
+    return `${this.type} lookup for ${this.hostname} failed: ${this.detail}`;
+  }
+}
+
+/**
+ * Wait until `hostname` resolves for every record type in `types` on its
+ * zone's authoritative nameservers. Call it before the first fetch of a
+ * hostname the test just created.
+ *
+ * No caching resolver may be asked about the hostname before the record is
+ * live: an early lookup caches the negative answer for the zone's SOA
+ * minimum (30 minutes on Cloudflare), and that poisons every later fetch.
+ * This applies to public resolvers too: polling 1.1.1.1 over DoH caches the
+ * NXDOMAIN at 1.1.1.1, which is often the machine's own upstream.
+ * Authoritative nameservers keep no cache, so they answer as soon as the
+ * record exists. The zone is found by asking for NS records on the
+ * hostname's parents, never on the hostname itself.
+ *
+ * Each attempt queries through a fresh `Resolver`: c-ares (behind
+ * `dns.Resolver` in Node and Bun) caches negative answers per resolver for
+ * the SOA minimum, so reusing one would replay the first NXDOMAIN on every
+ * retry.
+ */
+export const waitForDns = Effect.fn(function* (
+  hostname: string,
+  types: ReadonlyArray<"A" | "AAAA"> = ["A", "AAAA"],
+) {
+  const nameservers = yield* Effect.tryPromise({
+    try: async () => {
+      const labels = hostname.split(".");
+      for (let i = 1; i < labels.length - 1; i++) {
+        const zone = labels.slice(i).join(".");
+        const ns = await dns.resolveNs(zone).catch(() => []);
+        if (ns.length > 0) {
+          return (await Promise.all(ns.map((host) => dns.resolve4(host)))).flat();
+        }
+      }
+      throw new Error(`no zone found for ${hostname}`);
+    },
+    catch: (cause) => new DnsNotReady({ hostname, type: "NS", detail: String(cause) }),
+  });
+  yield* Effect.forEach(
+    types,
+    (type) =>
+      Effect.tryPromise({
+        try: async () => {
+          const authoritative = new dns.Resolver();
+          authoritative.setServers(nameservers);
+          const answers =
+            type === "A"
+              ? await authoritative.resolve4(hostname)
+              : await authoritative.resolve6(hostname);
+          if (answers.length === 0) throw new Error("no answer");
+        },
+        catch: (cause) => new DnsNotReady({ hostname, type, detail: String(cause) }),
+      }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "DnsNotReady",
+          schedule: Schedule.spaced("2 seconds"),
+          times: 45,
+        }),
+      ),
+    { discard: true },
+  );
+});
+
+/** The authoritative nameserver addresses of the zone `hostname` is in. */
+const authoritativeServers = async (hostname: string): Promise<string[]> => {
+  const labels = hostname.split(".");
+  for (let i = 1; i < labels.length - 1; i++) {
+    const ns = await dns.resolveNs(labels.slice(i).join(".")).catch(() => []);
+    if (ns.length > 0) return (await Promise.all(ns.map((host) => dns.resolve4(host)))).flat();
+  }
+  throw new Error(`no zone found for ${hostname}`);
+};
+
+/**
+ * Resolve `hostname` to an IPv4 address through authoritative nameservers
+ * only, following CNAMEs hop by hop (each target asked of its own zone's
+ * nameservers). For a hostname the test just created whose record is a
+ * CNAME (a Spectrum application's edge record): `waitForDns` asks the
+ * zone's nameservers for A records, which they do not chase across zones.
+ * Connect to the returned address, so no caching resolver ever sees the
+ * name before it exists. See `waitForDns` for why.
+ */
+export const resolveAuthoritativeIpv4 = Effect.fn(function* (hostname: string) {
+  return yield* Effect.tryPromise({
+    try: async () => {
+      let name = hostname;
+      for (let hop = 0; hop < 8; hop++) {
+        const resolver = new dns.Resolver();
+        resolver.setServers(await authoritativeServers(name));
+        const cname = await resolver.resolveCname(name).catch(() => []);
+        if (cname.length > 0) {
+          name = cname[0]!;
+          continue;
+        }
+        const addresses = await resolver.resolve4(name);
+        if (addresses.length === 0) throw new Error("no answer");
+        return addresses[0]!;
+      }
+      throw new Error("CNAME chain too long");
+    },
+    catch: (cause) => new DnsNotReady({ hostname, type: "A", detail: String(cause) }),
+  }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "DnsNotReady",
+      schedule: Schedule.spaced("2 seconds"),
+      times: 45,
+    }),
+  );
+});
 
 export interface ExpectUrlContainsOptions {
   /** Request headers, e.g. an explicit HTML Accept header for content negotiation. */
@@ -149,31 +270,45 @@ export const expectUrlContains = (
   const initial = options.initialBackoff ?? "750 millis";
   const label = options.label ?? "url";
 
-  return fetchOnce(url, marker, options.headers).pipe(
-    Effect.retry({
-      // Cap individual sleeps at 8s so very long timeouts still
-      // sample at a reasonable rate near the end of the budget.
-      schedule: Schedule.min([Schedule.exponential(initial, 1.5), Schedule.spaced("8 seconds")]),
-    }),
-    // Bound the *total* retry budget. `Effect.retry` on its own would
-    // back off forever; the timeout guarantees the test fails loudly
-    // instead of stalling out the suite. We swap the default
-    // `TimeoutException` for a typed assertion error so the failure
-    // message says *what* we were waiting for, not just "timed out".
-    Effect.timeoutOrElse({
-      duration: totalTimeout,
-      orElse: () =>
-        Effect.fail(
-          new HttpAssertionFailed({
-            url,
-            marker,
-            status: 0,
-            bodyExcerpt: `[timed out after ${Duration.toMillis(totalTimeout)}ms waiting for marker "${marker}"]`,
-          }),
+  return Effect.gen(function* () {
+    // The last attempt's outcome, so a timeout says what the URL served.
+    const last = yield* Ref.make<string>("no attempt finished");
+    return yield* fetchOnce(url, marker, options.headers).pipe(
+      Effect.tapError((error) =>
+        Ref.set(
+          last,
+          error._tag === "HttpAssertionFailed"
+            ? `${error.status}: ${error.bodyExcerpt}`
+            : `fetch failed: ${error.message}`,
         ),
-    }),
-    Effect.tapError((error) => Effect.logError(`expectUrlContains(${label}) failed`, error)),
-  );
+      ),
+      Effect.retry({
+        // Cap individual sleeps at 8s so very long timeouts still
+        // sample at a reasonable rate near the end of the budget.
+        schedule: Schedule.min([Schedule.exponential(initial, 1.5), Schedule.spaced("8 seconds")]),
+      }),
+      // Bound the *total* retry budget. `Effect.retry` on its own would
+      // back off forever; the timeout guarantees the test fails loudly
+      // instead of stalling out the suite. We swap the default
+      // `TimeoutException` for a typed assertion error so the failure
+      // message says *what* we were waiting for, not just "timed out".
+      Effect.timeoutOrElse({
+        duration: totalTimeout,
+        orElse: () =>
+          Effect.flatMap(Ref.get(last), (lastOutcome) =>
+            Effect.fail(
+              new HttpAssertionFailed({
+                url,
+                marker,
+                status: 0,
+                bodyExcerpt: `[timed out after ${Duration.toMillis(totalTimeout)}ms waiting for marker "${marker}"; last attempt: ${lastOutcome}]`,
+              }),
+            ),
+          ),
+      }),
+      Effect.tapError((error) => Effect.logError(`expectUrlContains(${label}) failed`, error)),
+    );
+  });
 };
 
 /**

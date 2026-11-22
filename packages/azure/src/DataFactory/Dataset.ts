@@ -263,7 +263,9 @@ export const DatasetProvider = () =>
           resourceGroupName: resourceGroup,
           factoryName,
           datasetName: name,
-          properties: desired,
+          // `type` is any dataset type and `typeProperties` a loose bag, so TypeScript cannot pick
+          // the SDK union arm.
+          properties: desired as datafactory.Dataset,
         });
       }
 

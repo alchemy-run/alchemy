@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as reviews from "@distilled.cloud/gcp/merchantapi_reviews_v1beta";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -10,6 +10,7 @@ import {
   merchantReviewDataSource,
   probeAccount,
   probeDataSource,
+  reviewsV1betaRetired,
   runMerchantReviewLifecycle,
 } from "./common.ts";
 
@@ -47,7 +48,7 @@ test.provider.skipIf(!runMerchantReviewLifecycle)(
   },
 );
 
-test.provider.skipIf(runMerchantReviewLifecycle)(
+test.provider.skipIf(runMerchantReviewLifecycle || reviewsV1betaRetired)(
   "insertAccountsMerchantReviews without Merchant Reviews access fails with InsufficientScopes",
   (stack) =>
     Effect.gen(function* () {
@@ -55,17 +56,15 @@ test.provider.skipIf(runMerchantReviewLifecycle)(
 
       const error = yield* Effect.flip(
         reviews.insertAccountsMerchantReviews({
+          merchantReviewId: "alchemy-probe-merchant-review",
+          merchantReviewAttributes: {
+            merchantId: probeAccount,
+            reviewTime: "2020-01-01T00:00:00Z",
+            content: "probe",
+            title: "Alchemy Probe Merchant Review",
+          },
           parent: `accounts/${probeAccount}`,
           dataSource: probeDataSource(merchantReviewDataSource),
-          body: {
-            merchantReviewId: "alchemy-probe-merchant-review",
-            merchantReviewAttributes: {
-              merchantId: probeAccount,
-              reviewTime: "2020-01-01T00:00:00Z",
-              content: "probe",
-              title: "Alchemy Probe Merchant Review",
-            },
-          },
         }),
       );
       expect(error._tag).toEqual("InsufficientScopes");

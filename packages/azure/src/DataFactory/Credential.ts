@@ -245,7 +245,9 @@ export const CredentialProvider = () =>
           resourceGroupName: resourceGroup,
           factoryName,
           credentialName: name,
-          properties: desired,
+          // `type` picks the SDK union arm, and the props carry `typeProperties` as one loose bag
+          // for every type.
+          properties: desired as datafactory.Credential,
         });
       }
 

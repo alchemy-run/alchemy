@@ -1,12 +1,11 @@
 import { describe, expect } from "bun:test";
-import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
+import * as Test from "@alchemy.run/test/Bun";
 import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
 import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import * as run from "@distilled.cloud/gcp/run_v2";
 import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -26,24 +25,17 @@ const { getWhenReady } = Test;
 // the deploy uses, so the test runs against the configured profile.
 const GcpHttp = Layer.mergeAll(GCP.GcpAuth, GCP.fromAuthProvider(), FetchHttpClient.layer);
 
-// The service is built from `main`, which needs a local image build.
-const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-
 const API_KEY = "integ-test-key";
 
 // Deploy, tests and destroy all sit behind the same Docker guard.
-describe.skipIf(!dockerAvailable)("gcp-secrets-kms", () => {
+describe("gcp-secrets-kms", () => {
   const stack = beforeAll(
     Effect.gen(function* () {
       const outputs = yield* deploy(Stack);
       // The secret is created empty on purpose — the value is an operator
       // step. Add the version the service will read.
       yield* secretmanager
-        .addVersionProjectsSecrets({
-          parent: outputs.secretName,
-          body: { payload: { data: btoa(API_KEY) } },
-        })
+        .addVersionProjectsSecrets({ payload: { data: btoa(API_KEY) }, parent: outputs.secretName })
         .pipe(Effect.orDie, Effect.provide(GcpHttp));
       return outputs;
     }),
@@ -176,10 +168,7 @@ describe.skipIf(!dockerAvailable)("gcp-secrets-kms", () => {
 
       // The ciphertext is real KMS output: decrypt it directly with the key.
       const direct = yield* kms
-        .decryptProjectsLocationsKeyRingsCryptoKeys({
-          name: cryptoKeyName,
-          body: { ciphertext },
-        })
+        .decryptProjectsLocationsKeyRingsCryptoKeys({ ciphertext, name: cryptoKeyName })
         .pipe(Effect.orDie, Effect.provide(GcpHttp));
       expect(Buffer.from(direct.plaintext ?? "", "base64").toString("utf8")).toEqual(plaintext);
 

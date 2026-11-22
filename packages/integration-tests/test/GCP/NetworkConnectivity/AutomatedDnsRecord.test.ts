@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as networkconnectivity from "@distilled.cloud/gcp/networkconnectivity_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -88,6 +89,20 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { network, subnet, policy, record };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkConnectivity.AutomatedDnsRecord.lookup({
+          automatedDnsRecordId: created.record.automatedDnsRecordId,
+          location: created.record.location,
+        }),
+        created.record,
+      );
+      yield* expectFound(
+        GCP.NetworkConnectivity.ServiceConnectionPolicy.lookup({
+          serviceConnectionPolicyId: created.policy.serviceConnectionPolicyId,
+          location: created.policy.location,
+        }),
+        created.policy,
       );
 
       expect(created.record.name).toContain("/automatedDnsRecords/");

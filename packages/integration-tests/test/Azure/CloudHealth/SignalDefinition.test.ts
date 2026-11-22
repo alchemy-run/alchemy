@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudhealth from "@distilled.cloud/azure/cloudhealth";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { gone, logLevel, modelProgram, modelWhere, tags } from "./util.ts";
 
@@ -11,6 +11,16 @@ const getDefinition = (rg: string, model: string, signalDefinitionName: string) 
   Effect.flatMap(modelWhere(rg, model), (where) =>
     cloudhealth.GetSignalDefinition({ ...where, signalDefinitionName }),
   );
+
+const metricOf = (properties: cloudhealth.SignalDefinitionProperties | undefined) =>
+  typeof properties === "object" && properties.signalKind === "AzureResourceMetric"
+    ? properties
+    : undefined;
+
+const queryOf = (properties: cloudhealth.SignalDefinitionProperties | undefined) =>
+  typeof properties === "object" && properties.signalKind === "LogAnalyticsQuery"
+    ? properties
+    : undefined;
 
 const metric = (props: { threshold: number; env: string }) =>
   ({
@@ -65,26 +75,28 @@ test.provider(
       expect(signal.signalKind).toEqual("AzureResourceMetric");
       expect(signal.tags).toEqual({ env: "test" });
       const observed = yield* getDefinition(rg, hm, signal.signalDefinitionName);
-      expect(observed.properties?.metricName).toEqual("Availability");
-      expect(observed.properties?.metricNamespace).toEqual("microsoft.storage/storageaccounts");
-      expect(observed.properties?.aggregationType).toEqual("Average");
-      expect(observed.properties?.evaluationRules.unhealthyRule.threshold).toEqual(99);
-      expect(observed.properties?.tags?.["alchemy::id"]).toEqual("Signal");
+      expect(metricOf(observed.properties)?.metricName).toEqual("Availability");
+      expect(metricOf(observed.properties)?.metricNamespace).toEqual(
+        "microsoft.storage/storageaccounts",
+      );
+      expect(metricOf(observed.properties)?.aggregationType).toEqual("Average");
+      expect(metricOf(observed.properties)?.evaluationRules.unhealthyRule.threshold).toEqual(99);
+      expect(metricOf(observed.properties)?.tags?.["alchemy::id"]).toEqual("Signal");
 
       // In place: thresholds and tags.
       const updated = yield* stack.deploy(program(metric({ threshold: 95, env: "prod" })));
       expect(updated.signal.signalDefinitionId).toEqual(signal.signalDefinitionId);
       const reobserved = yield* getDefinition(rg, hm, signal.signalDefinitionName);
-      expect(reobserved.properties?.evaluationRules.unhealthyRule.threshold).toEqual(95);
-      expect(reobserved.properties?.tags?.env).toEqual("prod");
+      expect(metricOf(reobserved.properties)?.evaluationRules.unhealthyRule.threshold).toEqual(95);
+      expect(metricOf(reobserved.properties)?.tags?.env).toEqual("prod");
 
       // Replacement: the signal kind is fixed.
       const replaced = yield* stack.deploy(program(query));
       expect(replaced.signal.signalDefinitionName).not.toEqual(signal.signalDefinitionName);
       const fresh = yield* getDefinition(rg, hm, replaced.signal.signalDefinitionName);
-      expect(fresh.properties?.signalKind).toEqual("LogAnalyticsQuery");
-      expect(fresh.properties?.queryText).toEqual(query.queryText);
-      expect(fresh.properties?.refreshInterval).toEqual("PT5M");
+      expect(queryOf(fresh.properties)?.signalKind).toEqual("LogAnalyticsQuery");
+      expect(queryOf(fresh.properties)?.queryText).toEqual(query.queryText);
+      expect(queryOf(fresh.properties)?.refreshInterval).toEqual("PT5M");
       const replacedOld = yield* gone(getDefinition(rg, hm, signal.signalDefinitionName));
       expect(replacedOld).toEqual("gone");
 

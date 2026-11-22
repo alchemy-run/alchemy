@@ -5,10 +5,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./internal.ts";
+
+export class RouteCalculatorUnexpectedResponse extends Data.TaggedError(
+  "RouteCalculatorUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface RouteCalculatorProps {
   /**
@@ -48,8 +56,18 @@ export interface RouteCalculator extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  RouteCalculatorLookup
 > {}
+
+/**
+ * Props for {@link RouteCalculator.lookup}: find a route calculator this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RouteCalculatorLookup {
+  /** The calculator name of the existing route calculator. */
+  calculatorName: string;
+}
 
 /**
  * An Amazon Location Service route calculator. A route calculator computes
@@ -66,6 +84,16 @@ export interface RouteCalculator extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing route calculator
+ * `RouteCalculator.lookup` references a route calculator Alchemy doesn't manage (created in the
+ * console or by another stack), found by `calculatorName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing route calculator
+ * ```typescript
+ * const existing = AWS.Location.RouteCalculator.lookup({ calculatorName: "my-route-calculator" });
+ * ```
+ *
  * @resource
  */
 export const RouteCalculator = Resource<RouteCalculator>("AWS.Location.RouteCalculator");
@@ -79,7 +107,7 @@ const createCalculatorName = (id: string, props: { calculatorName?: string | und
 const readCalculator = Effect.fn(function* (calculatorName: string) {
   const found = yield* location
     .describeRouteCalculator({ CalculatorName: calculatorName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!found) return undefined;
   return {
     calculatorName: found.CalculatorName,
@@ -113,6 +141,11 @@ export const RouteCalculatorProvider = () =>
               (attrs): attrs is RouteCalculator["Attributes"] => attrs !== undefined,
             );
           }),
+        lookup: Effect.fn(function* ({ calculatorName }) {
+          const state = yield* readCalculator(calculatorName);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const calculatorName =
             output?.calculatorName ?? (yield* createCalculatorName(id, olds ?? {}));
@@ -146,9 +179,9 @@ export const RouteCalculatorProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             state = yield* readCalculator(calculatorName);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created route calculator ${calculatorName}`),
-              );
+              return yield* new RouteCalculatorUnexpectedResponse({
+                message: `failed to read created route calculator ${calculatorName}`,
+              });
             }
           }
 
@@ -177,9 +210,9 @@ export const RouteCalculatorProvider = () =>
 
           const final = yield* readCalculator(calculatorName);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled route calculator ${calculatorName}`),
-            );
+            return yield* new RouteCalculatorUnexpectedResponse({
+              message: `failed to read reconciled route calculator ${calculatorName}`,
+            });
           }
           return final;
         }),

@@ -1,13 +1,13 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as cloudfunctions from "@distilled.cloud/gcp/cloudfunctions_v2";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
-import { describe, expect } from "alchemy-test";
 import { DestroyError } from "alchemy/Apply";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -400,8 +400,8 @@ describe.skipIf(!!process.env.FAST).sequential(
       (_stack) =>
         Effect.gen(function* () {
           const published = yield* pubsub.publishProjectsTopics({
+            messages: [{ data: btoa("probe") }],
             topic: outputs.topicName,
-            body: { messages: [{ data: btoa("probe") }] },
           });
           const messageId = published.messageIds?.[0];
           expect(messageId).toEqual(expect.any(String));

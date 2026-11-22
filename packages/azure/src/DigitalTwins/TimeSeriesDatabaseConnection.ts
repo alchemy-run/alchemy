@@ -312,10 +312,7 @@ export const TimeSeriesDatabaseConnectionProvider = () =>
             eventHubEndpointUri: news.eventHubEndpointUri,
             eventHubEntityPath: news.eventHubEntityPath,
             eventHubConsumerGroup: news.eventHubConsumerGroup,
-            recordPropertyAndItemRemovals:
-              news.recordPropertyAndItemRemovals === undefined
-                ? undefined
-                : String(news.recordPropertyAndItemRemovals),
+            recordPropertyAndItemRemovals: news.recordPropertyAndItemRemovals,
           },
         });
       }

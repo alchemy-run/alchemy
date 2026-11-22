@@ -8,11 +8,12 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type TrustStoreArn =
-  `arn:aws:elasticloadbalancing:${RegionID}:${AccountID}:truststore/${string}`;
+  `arn:${Partition}:elasticloadbalancing:${RegionID}:${AccountID}:truststore/${string}`;
 
 export interface TrustStoreProps {
   /** The trust store name. If omitted, a unique name is generated. Changing it replaces the trust store. */
@@ -43,8 +44,18 @@ export interface TrustStore extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  TrustStoreLookup
 > {}
+
+/**
+ * Props for {@link TrustStore.lookup}: find a trust store this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TrustStoreLookup {
+  /** The ARN of the existing trust store. */
+  trustStoreArn: string;
+}
 
 /**
  * An ELBv2 trust store. A trust store holds the CA certificate bundle used by
@@ -74,6 +85,16 @@ export interface TrustStore extends Resource<
  *     { type: "forward", targetGroups: [{ targetGroupArn: tg.targetGroupArn }] },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing trust store
+ * `TrustStore.lookup` references a trust store Alchemy doesn't manage (created in the
+ * console or by another stack), found by `trustStoreArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing trust store
+ * ```typescript
+ * const existing = AWS.ELBv2.TrustStore.lookup({ trustStoreArn: "..." });
  * ```
  *
  * @resource
@@ -112,6 +133,24 @@ export const TrustStoreProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ trustStoreArn }) {
+          const described = yield* elbv2
+            .describeTrustStores({
+              TrustStoreArns: [trustStoreArn],
+            })
+            .pipe(Effect.catchTag("TrustStoreNotFoundException", () => Effect.undefined));
+          const trustStore = described?.TrustStores?.[0];
+          if (!trustStore?.TrustStoreArn) {
+            return undefined;
+          }
+          return {
+            trustStoreArn: trustStore.TrustStoreArn as TrustStoreArn,
+            tags: yield* observedTags(trustStore.TrustStoreArn),
+            name: trustStore.Name!,
+            status: trustStore.Status!,
+            numberOfCaCertificates: trustStore.NumberOfCaCertificates ?? 0,
+          };
+        }),
         read: Effect.fn(function* ({ output }) {
           if (!output) {
             return undefined;
@@ -120,7 +159,7 @@ export const TrustStoreProvider = () =>
             .describeTrustStores({
               TrustStoreArns: [output.trustStoreArn],
             })
-            .pipe(Effect.catchTag("TrustStoreNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("TrustStoreNotFoundException", () => Effect.undefined));
           const trustStore = described?.TrustStores?.[0];
           if (!trustStore?.TrustStoreArn) {
             return undefined;
@@ -175,7 +214,7 @@ export const TrustStoreProvider = () =>
           // Observe — look up by deterministic name.
           const described = yield* elbv2
             .describeTrustStores({ Names: [name] })
-            .pipe(Effect.catchTag("TrustStoreNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("TrustStoreNotFoundException", () => Effect.undefined));
           let trustStore = described?.TrustStores?.[0];
 
           // Ensure — create if missing.

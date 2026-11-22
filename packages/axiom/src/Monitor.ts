@@ -12,8 +12,18 @@ export type Monitor = Resource<
   MonitorProps,
   Axiom.CreateMonitorResponse,
   never,
-  Providers
+  Providers,
+  MonitorLookup
 >;
+
+/**
+ * Props for {@link Monitor.lookup}: find a monitor this stack
+ * doesn't manage by its id.
+ */
+export interface MonitorLookup {
+  /** Axiom monitor id. */
+  id: string;
+}
 
 /**
  * An Axiom monitor — a scheduled APL/MPL query that evaluates on a fixed
@@ -79,6 +89,16 @@ export type Monitor = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing monitor
+ * `Monitor.lookup` references a monitor Alchemy doesn't manage (created in
+ * the Axiom console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing monitor
+ * ```typescript
+ * const ref = Axiom.Monitor.lookup({ id: "m_abc123" });
+ * ```
+ *
  * @resource
  * @product Monitor
  */
@@ -121,7 +141,7 @@ export const MonitorProvider = () =>
           // re-creating.
           const observed = output?.id
             ? yield* get({ id: output.id }).pipe(
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
 
@@ -137,10 +157,14 @@ export const MonitorProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* del({ id: output.id }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
+        lookup: Effect.fn(function* ({ id }) {
+          return yield* get({ id }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
+        }),
+
         read: Effect.fn(function* ({ output }) {
           if (!output?.id) return undefined;
           return yield* get({ id: output.id }).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
         }),
       };

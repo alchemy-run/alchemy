@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -37,14 +38,11 @@ test.provider(
       const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         compute.insertRegionInstantSnapshotGroups({
+          name: "alchemy-risg-probe",
+          description: "alchemy entitlement probe",
           project,
           region,
           sourceConsistencyGroup: "does-not-exist",
-          body: {
-            name: "alchemy-risg-probe",
-            description: "alchemy entitlement probe",
-            sourceConsistencyGroup: "does-not-exist",
-          },
         }),
       );
       expect(error._tag).toEqual("BadRequest");
@@ -75,15 +73,13 @@ test.provider(
       );
 
       yield* compute.addResourcePoliciesRegionDisks({
+        resourcePolicies: [
+          created.policy.selfLink ??
+            `projects/${created.disk.project}/regions/${region}/resourcePolicies/${created.policy.resourcePolicyName}`,
+        ],
         project: created.disk.project,
         region,
         disk: created.disk.diskName,
-        body: {
-          resourcePolicies: [
-            created.policy.selfLink ??
-              `projects/${created.disk.project}/regions/${region}/resourcePolicies/${created.policy.resourcePolicyName}`,
-          ],
-        },
       });
 
       const withGroup = yield* stack.deploy(
@@ -107,6 +103,13 @@ test.provider(
           });
           return { policy, disk, group };
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.RegionInstantSnapshotGroup.lookup({
+          instantSnapshotGroupName: withGroup.group.instantSnapshotGroupName,
+          region: withGroup.group.region,
+        }),
+        withGroup.group,
       );
 
       expect(withGroup.group.instantSnapshotGroupName).toEqual(expect.any(String));

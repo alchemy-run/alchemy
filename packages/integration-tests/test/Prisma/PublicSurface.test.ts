@@ -1,7 +1,7 @@
 import * as PrismaPackage from "@alchemy.run/prisma";
 import * as Prisma from "@alchemy.run/prisma";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -24,6 +24,59 @@ const publicExports = [
   "UnknownError",
   "Website",
   "wrapPrismaError",
+
+  // Tagged errors each resource's lifecycle fails with.
+  "AppConflict",
+  "AppInvalidProps",
+  "AppOperationFailed",
+  "AppUnexpectedResponse",
+  "BranchConflict",
+  "BranchOperationFailed",
+  "BranchUnexpectedResponse",
+  "ComputeArchiveInvalidProps",
+  "ComputeArchiveOperationFailed",
+  "ComputeArchiveOptionsError",
+  "ComputeBuildError",
+  "ComputeBuildInvalidProps",
+  "ComputeConflict",
+  "ComputeDeploymentRecoveryFailed",
+  "ComputeEnvironmentRollbackFailed",
+  "ComputeEnvironmentVariableNotOwned",
+  "ComputeEnvironmentVariableSystemManaged",
+  "ComputeInvalidProps",
+  "ComputeNotReady",
+  "ComputeOperationFailed",
+  "ComputePackageJsonError",
+  "ComputeUnexpectedResponse",
+  "ComputeUrlTimeout",
+  "ConnectionConflict",
+  "ConnectionUnexpectedResponse",
+  "CustomDomainConflict",
+  "CustomDomainInvalidProps",
+  "CustomDomainOperationFailed",
+  "CustomDomainUnexpectedResponse",
+  "DatabaseConflict",
+  "DatabaseInvalidProps",
+  "DatabaseOperationFailed",
+  "DeploymentConflict",
+  "DeploymentInvalidProps",
+  "DeploymentOperationFailed",
+  "DeploymentUnexpectedResponse",
+  "EnvironmentVariableConflict",
+  "EnvironmentVariableInvalidProps",
+  "InvalidArtifactUploadUrlError",
+  "PrismaAppLogicalIdTaken",
+  "PrismaBucketLogicalIdTaken",
+  "PrismaCustomDomainAdoptionRequired",
+  "PrismaDatabaseLogicalIdTaken",
+  "PrismaDeploymentDeleteFailed",
+  "PrismaEnvironmentVariableSystemManaged",
+  "ProjectConflict",
+  "ProjectInvalidProps",
+  "ProjectUnexpectedResponse",
+  "SourceRepositoryConflict",
+  "SourceRepositoryInvalidProps",
+  "SourceRepositoryOperationFailed",
 
   "providers",
   "managementApi",

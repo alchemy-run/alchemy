@@ -1,12 +1,13 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -54,6 +55,10 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(
+        GCP.BigQuery.Table.lookup({ tableId: created.tableId, datasetId: created.datasetId }),
+        created,
+      );
 
       expect(created.tableId).toEqual(expect.any(String));
       expect(created.tableId).toMatch(/^[a-zA-Z0-9_]+$/);
@@ -89,12 +94,10 @@ test.provider(
       expect(fetched.clustering?.fields).toEqual(["id"]);
 
       const inserted = yield* bigquery.insertAllTabledata({
+        rows: [{ json: { id: "row-1", created_at: "2024-01-01T00:00:00Z" } }],
         projectId: created.project,
         datasetId: created.datasetId,
         tableId: created.tableId,
-        body: {
-          rows: [{ json: { id: "row-1", created_at: "2024-01-01T00:00:00Z" } }],
-        },
       });
       expect(inserted.insertErrors ?? []).toEqual([]);
 
@@ -325,12 +328,10 @@ test.provider(
       });
 
       const queried = yield* bigquery.queryJobs({
+        query: `SELECT day, SUM(n) AS total FROM ${created.datasetId}.${created.tableId} GROUP BY day ORDER BY day`,
+        useLegacySql: false,
+        location: created.location,
         projectId: created.project,
-        body: {
-          query: `SELECT day, SUM(n) AS total FROM ${created.datasetId}.${created.tableId} GROUP BY day ORDER BY day`,
-          useLegacySql: false,
-          location: created.location,
-        },
       });
       expect(queried.jobComplete).toEqual(true);
       expect((queried.rows ?? []).map((row) => row.f?.map((cell) => cell.v))).toEqual([
@@ -364,12 +365,10 @@ test.provider(
       );
 
       const filtered = yield* bigquery.queryJobs({
+        query: `SELECT SUM(n) AS total FROM ${created.datasetId}.${created.tableId} WHERE day = '2024-01-01'`,
+        useLegacySql: false,
+        location: created.location,
         projectId: created.project,
-        body: {
-          query: `SELECT SUM(n) AS total FROM ${created.datasetId}.${created.tableId} WHERE day = '2024-01-01'`,
-          useLegacySql: false,
-          location: created.location,
-        },
       });
       expect((filtered.rows ?? []).map((row) => row.f?.map((cell) => cell.v))).toEqual([["3"]]);
 

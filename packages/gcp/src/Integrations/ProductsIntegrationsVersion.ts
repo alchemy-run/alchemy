@@ -151,7 +151,7 @@ export const ProductsIntegrationsVersion = Resource<ProductsIntegrationsVersion>
 export class ProductsIntegrationsVersionNotResolved extends Data.TaggedError(
   "GCP.Integrations.ProductsIntegrationsVersionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const integrationOf = (name: string) => {
@@ -217,10 +217,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : integrations
         .getProjectsLocationsProductsIntegrationsVersions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   integrations.listProjectsLocationsProductsIntegrationsVersions
@@ -242,7 +242,7 @@ const findOwned = (parent: string, id: string) =>
       Stream.filterEffect((version) => ownedByAlchemy(id, version.description)),
       Stream.runHead,
       Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFound", () => Effect.undefined),
     );
 
 const deleteIntegration = (name: string) =>
@@ -381,7 +381,7 @@ export const ProductsIntegrationsVersionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ProductsIntegrationsVersionNotResolved({ name });
+        return yield* new ProductsIntegrationsVersionNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

@@ -479,7 +479,12 @@ export const ServiceProvider = () =>
           ...where,
           location,
           tags,
-          properties: { ...immutableProperties(news), ...mutable },
+          // `serviceKind` is only known at runtime and decides the arm, so
+          // the arm is asserted rather than narrowed.
+          properties: {
+            ...immutableProperties(news),
+            ...mutable,
+          } as sf.ServiceResourcePropertiesInput,
         });
       }
       observed = yield* waitForProvisioned(

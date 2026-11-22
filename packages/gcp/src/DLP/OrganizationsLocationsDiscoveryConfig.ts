@@ -207,10 +207,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getOrganizationsLocationsDiscoveryConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, organization: string, project: string) =>
   dlp.listOrganizationsLocationsDiscoveryConfigs.pages({ parent, pageSize: 100 }).pipe(
@@ -296,26 +296,24 @@ export const OrganizationsLocationsDiscoveryConfigProvider = () =>
       if (current === undefined) {
         const created = yield* dlp
           .createOrganizationsLocationsDiscoveryConfigs({
-            parent,
-            body: {
-              configId,
-              discoveryConfig: {
-                displayName,
-                status,
-                orgConfig,
-                targets,
-                inspectTemplates,
-                processingLocation,
-                otherCloudStartingLocation,
-              },
+            configId,
+            discoveryConfig: {
+              displayName,
+              status,
+              orgConfig,
+              targets,
+              inspectTemplates,
+              processingLocation,
+              otherCloudStartingLocation,
             },
+            parent,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new DlpNotResolved({ name });
+        return yield* new DlpNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -341,19 +339,17 @@ export const OrganizationsLocationsDiscoveryConfigProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* dlp.patchOrganizationsLocationsDiscoveryConfigs({
-          name: currentName,
-          body: {
-            updateMask,
-            discoveryConfig: {
-              displayName,
-              status,
-              orgConfig,
-              targets,
-              inspectTemplates,
-              processingLocation,
-              otherCloudStartingLocation,
-            },
+          updateMask,
+          discoveryConfig: {
+            displayName,
+            status,
+            orgConfig,
+            targets,
+            inspectTemplates,
+            processingLocation,
+            otherCloudStartingLocation,
           },
+          name: currentName,
         });
       }
 

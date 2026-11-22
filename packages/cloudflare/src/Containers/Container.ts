@@ -78,6 +78,7 @@ export type ContainerStartupOptions = cf.ContainerStartupOptions;
 import type {
   DurableObjectContainerProps,
   EffectfulContainerProps,
+  EffectfulDurableObjectContainerProps,
   ExternalContainerProps,
   RemoteContainerProps,
 } from "./ContainerApplication.ts";
@@ -85,9 +86,19 @@ import type {
 export type {
   DurableObjectContainerProps,
   EffectfulContainerProps,
+  EffectfulDurableObjectContainerProps,
   ExternalContainerProps,
   RemoteContainerProps,
 };
+
+/**
+ * Props for an Effect-native (`main`) container's `.make()`: a Durable
+ * Object-managed application (the default), or a fleet one with
+ * `schedulingPolicy: "default"` or `"regional"`.
+ */
+export type MakeContainerProps =
+  | InputProps<EffectfulContainerProps>
+  | InputProps<EffectfulDurableObjectContainerProps>;
 
 /**
  * Props for an image-backed container declaration — either the plain props
@@ -271,8 +282,9 @@ type ContainerShape<Shape> = {
  * ### Native Durable Object Containers
  * Use `schedulingPolicy: "durable_object"` to let a Durable Object pick its
  * image and instance size at runtime. One Container is one image: `image`
- * copies a registry image, `context`/`dockerfile` builds one. Alchemy pins the
- * image to a digest and prepares it before the Worker is uploaded.
+ * copies a registry image, `context`/`dockerfile` builds one, and `main`
+ * bundles an Effect program into one. Alchemy pins the image to a digest and
+ * prepares it before the Worker is uploaded.
  *
  * `yield* Node` returns the container's handle without starting it.
  * `start()` starts the Container's own image. Its `exec` takes an argument
@@ -377,6 +389,103 @@ type ContainerShape<Shape> = {
  * when needed. Scope closure kills an unfinished exec process, but does not
  * signal its descendants. Use an Effect timeout to bound a command's lifetime.
  *
+ * ### Effect-native Containers in a Durable Object
+ * An Effect-native Container (`main`) is Durable Object-managed unless it
+ * names a fleet policy. Alchemy bundles the program into the Container's
+ * image, and the handle carries both the lifecycle (`start`,
+ * `snapshotContainer`, `destroy`, `image`) and the program's RPC methods.
+ * `env` reaches the program through `start()`, which the handle calls with
+ * it; an `env` passed to `start()` overrides it by name.
+ *
+ * **Example:** An Effect-native Container the Durable Object snapshots
+ * ```typescript
+ * // src/Sandbox.ts
+ * export class Sandbox extends Cloudflare.Container<
+ *   Sandbox,
+ *   { read: (path: string) => Effect.Effect<string> }
+ * >()("Sandbox") {}
+ *
+ * // src/Sandbox.runtime.ts
+ * export default Sandbox.make(
+ *   {
+ *     main: import.meta.url,
+ *     dockerfile: Dockerfile.inline`FROM oven/bun:1
+ * RUN apt-get update && apt-get install -y poppler-utils`,
+ *   },
+ *   Effect.gen(function* () {
+ *     const fs = yield* FileSystem.FileSystem;
+ *     return Sandbox.of({ read: (path) => Effect.orDie(fs.readFileString(path)) });
+ *   }),
+ * );
+ *
+ * // src/Agent.ts
+ * export class Agent extends Cloudflare.DurableObject<Agent>()(
+ *   "Agent",
+ *   Effect.gen(function* () {
+ *     const sandbox = yield* Sandbox;
+ *     const state = yield* Cloudflare.DurableObjectState;
+ *     return Effect.succeed({
+ *       read: (path: string) =>
+ *         sandbox
+ *           .start({ enableInternet: false })
+ *           .pipe(Effect.andThen(sandbox.read(path))),
+ *       sleep: () =>
+ *         Effect.gen(function* () {
+ *           const snapshot = yield* sandbox.snapshotContainer();
+ *           // A snapshot restores only on the image it was taken on.
+ *           yield* state.storage.put("snapshot", { snapshot, image: yield* sandbox.image });
+ *           yield* sandbox.destroy();
+ *         }),
+ *     });
+ *   }),
+ * ) {}
+ * ```
+ *
+ * **Example:** Select an Effect-native Container per request
+ * ```typescript
+ * export class Selector extends Cloudflare.DurableObject<Selector>()(
+ *   "Selector",
+ *   Effect.gen(function* () {
+ *     const boxes = { bun: yield* BunBox, node: yield* NodeBox };
+ *     const state = yield* Cloudflare.DurableObjectState;
+ *     return Effect.succeed({
+ *       run: (name: "bun" | "node") =>
+ *         Effect.gen(function* () {
+ *           const box = boxes[name];
+ *           // Every handle controls the object's one instance.
+ *           if ((yield* state.storage.get("current")) !== name && (yield* box.running)) {
+ *             yield* box.destroy();
+ *           }
+ *           yield* state.storage.put("current", name);
+ *           yield* box.start({ enableInternet: false });
+ *           return yield* box.whoami();
+ *         }),
+ *     });
+ *   }),
+ * ) {}
+ * ```
+ *
+ * **Example:** A fleet-scheduled Effect-native Container
+ * ```typescript
+ * // Cloudflare places the instances, scales to maxInstances, and rolls out
+ * // new versions; the Durable Object starts the one image.
+ * export default Sandbox.make(
+ *   { schedulingPolicy: "default", main: import.meta.url, maxInstances: 50 },
+ *   Effect.gen(function* () {
+ *     const fs = yield* FileSystem.FileSystem;
+ *     return Sandbox.of({ read: (path) => Effect.orDie(fs.readFileString(path)) });
+ *   }),
+ * );
+ * ```
+ *
+ * An Effect-native Container deployed on a fleet application before
+ * Durable Object scheduling became the default moves to it on the next
+ * deploy. Cloudflare cannot change a policy in place, so Alchemy deletes the
+ * fleet application and creates the Durable Object-managed one on the same
+ * namespace: the Durable Objects and their storage stay, running containers
+ * stop, and the next `start()` starts them under the new policy. Name
+ * `schedulingPolicy: "default"` to stay on fleet scheduling instead.
+ *
  * ### Native Durable Objects on Async Workers
  * A plain Durable Object class on an async Worker attaches its Containers
  * through its Durable Object binding:
@@ -434,13 +543,15 @@ type ContainerShape<Shape> = {
  *
  * Local development runs every image through workerd and Docker.
  *
- * Switching an existing application to this scheduling policy requires a new
- * application and a new Durable Object class/namespace. Alchemy rejects an
- * in-place policy change; existing Durable Object storage is not transferred.
- * Replacing only a wrapper with the native API while retaining the original
- * policy and class preserves the namespace. Deployment properties such as
- * `maxInstances`, `instanceType`, `env`, and `rollout` are not valid with the
- * new policy; pass per-instance settings to `start()`.
+ * Switching a fleet Container to this scheduling policy replaces its
+ * application on the same Durable Object namespace: the class keeps its
+ * Durable Objects and their storage, and running containers stop. The class
+ * must call the Durable Object Container API itself, because the
+ * `@cloudflare/containers` `Container` class does not support this policy.
+ * Switching back to fleet scheduling needs a new Durable Object class.
+ * Deployment properties such as `maxInstances`, `instanceType`, `env`, and
+ * `rollout` are not valid with the new policy; pass per-instance settings to
+ * `start()`.
  *
  * ### Image Sources
  * A container's image comes from one of three sources, picked by which
@@ -448,7 +559,7 @@ type ContainerShape<Shape> = {
  *
  * - `main` — bundle your Effect program into a generated image.
  * - `context` (+ optional `dockerfile`) — build your own Dockerfile.
- * - `image` — pull a pre-built remote image and re-push it.
+ * - `image` — pull a pre-built image and re-push it.
  *
  * Only the `main` source bundles and injects an Effect runtime — so it
  * has a typed shape and a `.make(props, impl)` runtime. The other two
@@ -486,6 +597,25 @@ type ContainerShape<Shape> = {
  * }) {}
  * ```
  *
+ * **Example:** Build args and secrets
+ * ```typescript
+ * // Dockerfile:
+ * //   ARG NODE_ENV
+ * //   RUN --mount=type=secret,id=NPM_TOKEN,env=NPM_TOKEN npm ci
+ * export class Api extends Cloudflare.Container<Api>()("Api", {
+ *   context: `${import.meta.dirname}/api`,
+ *   build: {
+ *     args: { NODE_ENV: "production" },
+ *     // Resolved at deploy time; mounted only into the `RUN` step that asks
+ *     // for it, never written to a layer or the build history.
+ *     secrets: { NPM_TOKEN: Config.Redacted("NPM_TOKEN") },
+ *   },
+ * }) {}
+ * ```
+ *
+ * `build.args` are part of the image hash, so changing one rebuilds the
+ * image. `build.secrets` are not: rotating a token reuses the published image.
+ *
  * Builds are cached by default at
  * `registry.cloudflare.com/<account-id>/<application-physical-name>`.
  * The generated physical name includes the stage and resource instance, so
@@ -510,18 +640,43 @@ type ContainerShape<Shape> = {
  *
  * ```text
  * Published build:  registry.cloudflare.com/<account-id>/web:<build-hash>
- * Build cache:      registry.cloudflare.com/<account-id>/web:buildcache
  * Deployed image:   registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
  * ```
  *
  * The build hash identifies the inputs; the manifest digest identifies the
  * published artifact. Applications and stages in the same account can use
- * `publish: { repository: "web" }` to reuse matching published builds. Changed
- * inputs produce another hash tag in the same repository. Builds targeting
- * that repository import reusable layers from its shared `:buildcache` tag,
- * including when full input hashes differ. This mutable tag points to the
- * latest exported inline cache, not a combined cache of every historical
- * image. Reusing a finished image does not move the layer-cache tag.
+ * `publish: { repository: "web" }` to reuse matching published builds without
+ * invoking Docker. Changed inputs produce another hash tag in the same
+ * repository.
+ *
+ * ### Caching Build Layers
+ * A changed build reuses the layers in the local BuildKit cache of the
+ * machine it runs on. A builder that has never built the image, such as a
+ * fresh CI runner, reruns every step. Set `build.cache: true` to keep every
+ * stage's layers at the repository's `:buildcache` tag, so fresh builders
+ * resume from the last unchanged step, including steps in earlier stages of
+ * a multi-stage Dockerfile.
+ *
+ * **Example:** Cache build layers in the registry
+ * ```typescript
+ * export class Agent extends Cloudflare.Container<Agent>()("Agent", {
+ *   context: `${import.meta.dirname}/context`,
+ *   build: { cache: true },
+ * }) {}
+ * ```
+ *
+ * **Example:** Cache build layers in GitHub Actions
+ * ```typescript
+ * export class Agent extends Cloudflare.Container<Agent>()("Agent", {
+ *   context: `${import.meta.dirname}/context`,
+ *   build: {
+ *     cache: {
+ *       from: ["type=gha,scope=agent"],
+ *       to: ["type=gha,scope=agent,mode=max"],
+ *     },
+ *   },
+ * }) {}
+ * ```
  *
  * Pin base images and downloaded dependencies: changes outside the build
  * context cannot invalidate the input hash. Each stage still has its own
@@ -550,6 +705,28 @@ type ContainerShape<Shape> = {
  *   image: "mendhak/http-https-echo:latest",
  * }) {}
  * ```
+ *
+ * Alchemy pulls an `image` as `linux/amd64` on every deploy and every
+ * `alchemy dev` start, so a mutable tag like `:latest` picks up a newly
+ * pushed image. A private registry needs a `docker login` first.
+ *
+ * **Example:** Image built on this machine
+ * ```typescript
+ * // docker build --platform linux/amd64 -t local-only/app:dev .
+ * export class App extends Cloudflare.Container<App>()("App", {
+ *   image: "local-only/app:dev",
+ * }) {}
+ * ```
+ *
+ * An image only in the local Docker, built on this machine or loaded with
+ * `docker load`, has no registry to pull from. When the pull fails and the
+ * image is present locally, Alchemy uses the local copy, in `alchemy dev`
+ * and on deploy. Build it with `--platform linux/amd64`, the platform
+ * Cloudflare runs: deploy fails on an image built only for another
+ * platform. When the image can be neither pulled nor found locally,
+ * Alchemy fails with the image name and the commands that fix it. The
+ * image name alone is the identity, so rebuilding under the same tag does
+ * not redeploy; give each build its own tag.
  *
  * **Example:** Reaching an arbitrary image's port from a Durable Object
  * ```typescript
@@ -601,16 +778,17 @@ type ContainerShape<Shape> = {
  *
  * ### Configuration
  * The props object — the first argument to `.make()` — accepts `main`
- * (entrypoint file), `instanceType` (compute size), `runtime`
- * (`"bun"` or `"node"`), and `observability` settings. Use
- * `Stack.useSync` to read the surrounding stack and pick a beefier
- * `instanceType` in prod while keeping the cheap `dev` instance for
- * preview environments.
+ * (entrypoint file), `runtime` (`"bun"` or `"node"`), and `observability`
+ * settings. A Durable Object-managed Container picks its compute size per
+ * instance with `start({ instance })`. A fleet application sets
+ * `instanceType` for every instance; use `Stack.useSync` to read the
+ * surrounding stack and pick a beefier one in prod.
  *
  * **Example:** Stage-dependent configuration
  * ```typescript
  * export const SandboxLive = Sandbox.make(
  *   Stack.useSync((stack) => ({
+ *     schedulingPolicy: "default",
  *     main: import.meta.url,
  *     instanceType: stack.stage === "prod" ? "standard-1" : "dev",
  *     observability: { logs: { enabled: true } },
@@ -623,9 +801,10 @@ type ContainerShape<Shape> = {
  *
  * ### Environment Variables
  * A container is a process, not a Worker: it has no bindings, so every
- * piece of configuration reaches it through `env`. Each entry lands on
- * the deployment and shows up in `process.env` inside the image —
- * generated (`main`), built (`context`), or pre-built (`image`) alike.
+ * piece of configuration reaches it through `env`. Each entry shows up in
+ * `process.env` inside the image — generated (`main`), built (`context`), or
+ * pre-built (`image`) alike. A fleet application sets it on the deployment;
+ * a Durable Object-managed one passes it to every `start()`.
  * Wrap a secret in `Redacted` to keep it encrypted in state and out of
  * plan output; the container still reads a plain string.
  *
@@ -932,9 +1111,7 @@ export declare namespace Container {
      */
     Application: Effect.Effect<ContainerApplication<Self>, never, Providers | Req>;
     make: <InitReq = never, WorkerReq = never, PropsReq = never>(
-      props:
-        | InputProps<EffectfulContainerProps>
-        | Effect.Effect<InputProps<EffectfulContainerProps>, Config.ConfigError, PropsReq>,
+      props: MakeContainerProps | Effect.Effect<MakeContainerProps, Config.ConfigError, PropsReq>,
       impl: Effect.Effect<Shape & WorkerShape<WorkerReq>, Config.ConfigError, InitReq>,
     ) => Layer.Layer<Application<Self>, never, Providers>;
     of(shape: Shape & WorkerShape): Shape;

@@ -1,20 +1,12 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials, CredentialsFromEnv } from "@distilled.cloud/fly-io";
-import {
-  deferUntilFirstUse,
-  orDieCredentialsUnavailable,
-  resolveProviderConfig,
-} from "alchemy/Auth/Resolve";
+import { lazyCredentials, orDieCredentialsUnavailable } from "alchemy/Auth/Resolve";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import {
-  FLY_AUTH_PROVIDER_NAME,
-  type FlyAuthConfig,
-  type FlyResolvedCredentials,
-} from "./AuthProvider.ts";
+import { FLY_AUTH_PROVIDER_NAME, type FlyResolvedCredentials } from "./AuthProvider.ts";
 
 export {
   Credentials,
@@ -32,13 +24,19 @@ export {
  */
 export const bindFlyApiToken = (): Effect.Effect<void, never, Credentials> =>
   Effect.gen(function* () {
+    // Bound as Redacted so a Service that owns its App stores the token
+    // as an App secret, not plain Machine env. The runtime reads it back
+    // with `CredentialsFromEnv`.
     const token = globalThis.__ALCHEMY_RUNTIME__
-      ? ""
+      ? Redacted.make("")
       : yield* Credentials.pipe(
           Effect.flatMap((resolve) => resolve),
-          Effect.map((cfg) => Redacted.value(cfg.apiKey)),
+          Effect.map((cfg) => cfg.apiKey),
+          // Binding initialization cannot fail; the engine reports this
+          // defect as `CredentialsRequired`.
+          orDieCredentialsUnavailable("Fly"),
         );
-    yield* Output.named(Output.asOutput(token), "FLY_API_TOKEN").asEffect().pipe(Effect.asVoid);
+    yield* Output.named(Output.literal(token), "FLY_API_TOKEN").asEffect().pipe(Effect.asVoid);
   });
 
 /**
@@ -49,9 +47,10 @@ export const bindFlyApiToken = (): Effect.Effect<void, never, Credentials> =>
  * `Credentials`, and the binding must use them — a laptop deploy has no
  * `FLY_API_TOKEN` in its env once the token lives in the Alchemy profile.
  * Inside a deployed Machine there is no profile; `bindFlyApiToken`
- * has already `RuntimeContext.set` the org token, which Platform copies
- * into Machine env as `FLY_API_TOKEN`. So: reuse the ambient
- * `Credentials` when present, otherwise read the env.
+ * has already `RuntimeContext.set` the org token, which reaches the
+ * Machine as `FLY_API_TOKEN` (an App secret, or Machine env in a shared
+ * App). So: reuse the ambient `Credentials` when present, otherwise read
+ * it with {@link CredentialsFromEnv}.
  */
 export const CredentialsFromAmbientOrEnv: Layer.Layer<Credentials> = Layer.effect(
   Credentials,
@@ -73,30 +72,8 @@ export const CredentialsFromAmbientOrEnv: Layer.Layer<Credentials> = Layer.effec
 export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
-    Effect.gen(function* () {
-      // Defer profile lookup and credential resolution until first use, so
-      // building the provider layers never requires a configured profile.
-      const resolve = yield* resolveProviderConfig<FlyAuthConfig, FlyResolvedCredentials>(
-        FLY_AUTH_PROVIDER_NAME,
-      ).pipe(
-        Effect.flatMap(({ profileName, resolve }) =>
-          resolve.pipe(
-            Effect.map((creds) => ({
-              apiKey: creds.apiKey,
-              apiBaseUrl: creds.apiBaseUrl,
-            })),
-            Effect.mapError((e) =>
-              ConfigError.make({
-                message: `Failed to resolve Fly credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-              }),
-            ),
-          ),
-        ),
-        deferUntilFirstUse,
-      );
-      return yield* resolve.pipe(
-        orDieCredentialsUnavailable(FLY_AUTH_PROVIDER_NAME),
-        Effect.cached,
-      );
-    }),
+    lazyCredentials<FlyResolvedCredentials, ConfigError>()(FLY_AUTH_PROVIDER_NAME, (creds) => ({
+      apiKey: creds.apiKey,
+      apiBaseUrl: creds.apiBaseUrl,
+    })),
   );

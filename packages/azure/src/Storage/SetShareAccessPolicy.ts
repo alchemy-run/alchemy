@@ -47,8 +47,14 @@ export interface SetShareAccessPolicy extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: SetShareAccessPolicyRequest,
-    ) => Effect.Effect<files.SetShareAccessPolicyResponse, files.SetShareAccessPolicyError, RuntimeContext>
+    ) => Effect.Effect<
+      files.SetShareAccessPolicyResponse,
+      files.SetShareAccessPolicyError,
+      RuntimeContext
+    >
   >
 > {}
 
-export const SetShareAccessPolicy = Binding.Service<SetShareAccessPolicy>("Azure.Storage.SetShareAccessPolicy");
+export const SetShareAccessPolicy = Binding.Service<SetShareAccessPolicy>(
+  "Azure.Storage.SetShareAccessPolicy",
+);

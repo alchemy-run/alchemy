@@ -1,13 +1,37 @@
 import type { HttpEffect } from "alchemy/Http";
 import * as Context from "effect/Context";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
-import type * as Aggregate from "./Aggregate.ts";
+import * as Aggregate from "./Aggregate.ts";
+import type { Plan } from "./Backfill.ts";
+import type { ReplayInput, ReplayResult } from "./CatchUp.ts";
+import type * as Decision from "./Decision.ts";
+import { ModelHostedTwice } from "./DefinitionError.ts";
+import { DefinitionError } from "./internal.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
 import type * as DomainStream from "./Stream.ts";
-import type { TraceJson } from "./Telemetry.ts";
+import { TraceJson } from "./Telemetry.ts";
 import type * as View from "./View.ts";
+
+/**
+ * Capture the services `R` for later use, minus the `Scope`: a captured
+ * construction-time scope must never replace the scope of a later request or
+ * event (finalizers would attach to the wrong lifetime, and on workerd the
+ * work would be pinned to another request's I/O context). Platforms that host
+ * a model call this when they are built.
+ */
+export const captureContext = <R = never>(): Effect.Effect<
+  Context.Context<Exclude<R, Scope>>,
+  never,
+  R
+> =>
+  Effect.map(
+    Effect.context<R>(),
+    (context) => Context.omit(Scope)(context) as Context.Context<Exclude<R, Scope>>,
+  );
 
 /**
  * Everything a platform persists or sends is plain JSON. The kernel owns the
@@ -18,17 +42,15 @@ export type Json = unknown;
 /**
  * An event envelope in JSON form. `at` is epoch milliseconds.
  */
-export interface EnvelopeJson {
-  readonly id: string;
-  readonly stream: string;
-  readonly seq: number;
-  readonly at: number;
-  readonly commandId: string;
+export const EnvelopeJson = Schema.Struct({
+  ...Aggregate.Envelope.fields,
+  at: Schema.Number,
   /** Absent on events stored before correlation ids: the command id stands in. */
-  readonly correlationId?: string;
+  correlationId: Schema.optionalKey(Schema.String),
   /** The span that committed the event, so its reactions continue or link to it. */
-  readonly trace?: TraceJson;
-}
+  trace: Schema.optionalKey(TraceJson),
+});
+export type EnvelopeJson = typeof EnvelopeJson.Type;
 
 /**
  * A committed event as stored by an aggregate.
@@ -45,7 +67,14 @@ export interface StoredEvent {
  * `(source, target)`.
  */
 export interface Delivery {
-  readonly target: { readonly kind: "view" | "policy" | "projection"; readonly name: string };
+  readonly target: {
+    readonly kind: "view" | "policy" | "projection";
+    readonly name: string;
+    /** The consumer's generation (see `Kernel.generationOf`), when it has been rebuilt. */
+    readonly generation?: number;
+    /** Rebuilt in the storage it had (see `Kernel.inPlace`): its id says `@` for `#`. */
+    readonly inPlace?: boolean;
+  };
   /** The target partition: a key's id, or the source stream for an unkeyed policy. */
   readonly key: string;
   /** Named routes (from `keyOf`) the event takes into this key; absent for the default route. */
@@ -60,9 +89,26 @@ export interface Delivery {
   readonly event: Json;
   readonly envelope: EnvelopeJson;
   /** For an event from a view: the view's encoded state after it. */
-  readonly state?: Json | null;
-  /** Seeded history (story `given`): views and projections apply it, policies ignore it. */
+  readonly state?: Json;
+  /**
+   * History: seeded (story `given`) or replayed to a consumer added after the
+   * event (see `CatchUp`). Views and projections apply it, policies ignore it.
+   */
   readonly history?: boolean;
+  /**
+   * For an event from a view: the aggregate event it derives from. Absent,
+   * the delivery's own `source` and `seq` are its root.
+   */
+  readonly root?: Root;
+}
+
+/**
+ * The aggregate event a delivery derives from, through any views: its stream
+ * and seq. A rebuilt view numbers its entries afresh, but its roots stay.
+ */
+export interface Root {
+  readonly source: string;
+  readonly seq: number;
 }
 
 /**
@@ -71,19 +117,39 @@ export interface Delivery {
  * attachment, so a hibernated object can resume pushing) and asks the kit's
  * `push` what to send after each commit.
  */
-export interface Subscription {
+export const Subscription = Schema.Struct({
   /** The client's request id, echoed as is (the client matches it by identity). */
-  readonly requestId: string | number;
-  readonly mode: "watch" | "events";
+  requestId: Schema.Union([Schema.String, Schema.Number]),
+  mode: Schema.Literals(["watch", "events"]),
   /** The client's filter: it narrows what a permitted read sends. */
-  readonly where?: Json;
+  where: Schema.optionalKey(Schema.Unknown),
   /** The context the read's middleware provided (see `Domain.RequestContext`), for `validate`. */
-  readonly context: Readonly<Record<string, Json>>;
+  context: Schema.Record(Schema.String, Schema.Unknown),
   /** Progress: the last state version (`watch`) or event `seq` (`events`) sent. */
-  readonly cursor: number;
+  cursor: Schema.Number,
   /** Set when the read was refused before reaching the key: the encoded `Exit` to send. */
-  readonly refused?: Json;
-}
+  refused: Schema.optionalKey(Schema.Unknown),
+  /** `events` only: set once the `CaughtUp` frame after the read's history was sent. */
+  caughtUpSent: Schema.optionalKey(Schema.Boolean),
+  /**
+   * Epoch milliseconds until which the read's middleware vouched for the
+   * caller (see `Domain.setExpiry`). Once it passes, the platform closes the
+   * connection with {@link REAUTHORIZE_CLOSE_CODE} instead of sending more.
+   */
+  validUntil: Schema.optionalKey(Schema.Number),
+});
+export type Subscription = typeof Subscription.Type;
+
+/**
+ * The close code of a live read's connection whose middleware must run again.
+ * The client reconnects at once and resumes from its cursor, so the read's
+ * middleware judges the caller afresh.
+ */
+export const REAUTHORIZE_CLOSE_CODE = 4000;
+
+/** Whether a subscription must be judged again before anything more is sent. */
+export const mustReauthorize = (subscription: Subscription, now: number): boolean =>
+  subscription.validUntil !== undefined && now >= subscription.validUntil;
 
 /**
  * What to send a subscriber, from a kit's `push`.
@@ -103,7 +169,7 @@ export interface Push {
 export interface HandleInput {
   readonly id: string;
   /** The stored state, or `null` for an instance that has never committed. */
-  readonly state: Json | null;
+  readonly state: Json;
   readonly version: number;
   readonly command: Json;
   readonly commandId: string;
@@ -129,7 +195,7 @@ export type HandleResult =
       readonly state: Json;
       readonly version: number;
       readonly events: ReadonlyArray<StoredEvent>;
-      readonly reply: Json | null;
+      readonly reply: Json;
       readonly deliveries: ReadonlyArray<Delivery>;
     };
 
@@ -140,7 +206,7 @@ export interface ReceiptJson {
   readonly stream: string;
   readonly version: number;
   readonly events: ReadonlyArray<Json>;
-  readonly reply: Json | null;
+  readonly reply: Json;
 }
 
 /**
@@ -149,6 +215,36 @@ export interface ReceiptJson {
 export type SendResult =
   | { readonly _tag: "Rejected"; readonly rejection: Json }
   | { readonly _tag: "Accepted"; readonly receipt: ReceiptJson };
+
+/**
+ * Result of {@link AggregateStore.import}: the receipt, or the version the
+ * instance was at when it was not the one expected.
+ */
+export type ImportResult =
+  | { readonly _tag: "Imported"; readonly receipt: ReceiptJson }
+  | { readonly _tag: "UnexpectedVersion"; readonly version: number }
+  | {
+      readonly _tag: "OutOfOrder";
+      /** The position of the first event out of order. */
+      readonly index: number;
+      /** Its commit time, in epoch milliseconds. */
+      readonly at: number;
+      /** The commit time it may not precede (or the clock it may not pass), in epoch milliseconds. */
+      readonly after: number;
+    };
+
+/**
+ * What {@link AggregateStore.import} receives with the events.
+ */
+export interface ImportMeta {
+  readonly commandId: string;
+  readonly expectedVersion: number;
+  /**
+   * Each event's original commit time, in epoch milliseconds, by position;
+   * `null` (or no list) for the platform's current time.
+   */
+  readonly at?: ReadonlyArray<number | null>;
+}
 
 /**
  * The kernel for one aggregate type, handed to a platform.
@@ -162,21 +258,22 @@ export interface AggregateKit {
   readonly handle: (input: HandleInput) => Effect.Effect<HandleResult>;
   /**
    * Fold already-decided events into state and route them, without running
-   * `decide`. Used to seed history (story `given`).
+   * `decide`. Used to seed history (story `given`) and to import it.
    */
-  readonly seed: (input: SeedInput) => SeedResult;
+  readonly seed: (input: SeedInput) => Effect.Effect<SeedResult>;
+  /**
+   * Fold the events a decision recorded on an instance into its state and
+   * route them, without running `decide`: they reach policies like any other.
+   */
+  readonly record: (input: RecordInput) => Effect.Effect<SeedResult>;
   /** Route a delivery produced by `handle` to its target's host. */
   readonly deliver: (delivery: Delivery) => Effect.Effect<void>;
-  /**
-   * What a subscriber of instance `id` receives, given its current state and
-   * the events committed since (at least those after the subscription's cursor).
-   */
-  readonly push: (
-    id: string,
-    subscription: Subscription,
-    current: { readonly state: Json | null; readonly version: number },
-    events: ReadonlyArray<StoredEvent>,
-  ) => Effect.Effect<Push>;
+  /** The views and projections that consume this aggregate, by `CatchUp.targetId`. */
+  readonly targets: ReadonlyArray<string>;
+  /** Whether each key of a consumer it feeds hears only from the instance with its own id. */
+  readonly consumerSingleSource: (target: string) => boolean;
+  /** Route stored events to the consumers lagging behind them (see `CatchUp`). */
+  readonly replay: (input: ReplayInput<StoredEvent>) => Effect.Effect<ReplayResult>;
 }
 
 /**
@@ -184,11 +281,13 @@ export interface AggregateKit {
  */
 export interface SeedInput {
   readonly id: string;
-  readonly state: Json | null;
+  readonly state: Json;
   readonly version: number;
   readonly events: ReadonlyArray<Json>;
   readonly commandId: string;
   readonly now: number;
+  /** Each event's commit time by position, overriding `now` where it isn't `null`. */
+  readonly at?: ReadonlyArray<number | null>;
 }
 
 /**
@@ -199,6 +298,107 @@ export interface SeedResult {
   readonly version: number;
   readonly events: ReadonlyArray<StoredEvent>;
   readonly deliveries: ReadonlyArray<Delivery>;
+}
+
+/** Input to {@link AggregateKit.record}. */
+export interface RecordInput {
+  readonly id: string;
+  readonly state: Json;
+  readonly version: number;
+  /** The events a decision recorded on this instance, encoded. */
+  readonly events: ReadonlyArray<Json>;
+  readonly commandId: string;
+  /** Epoch milliseconds the decision was made at. */
+  readonly now: number;
+  readonly correlationId: string;
+  readonly trace?: TraceJson;
+}
+
+/** One aggregate instance a decision reads, by the name `reads` gives it. */
+export interface DecisionRead {
+  /** The names `reads` gives the instance: more than one when it is named twice. */
+  readonly keys: ReadonlyArray<string>;
+  readonly aggregate: string;
+  readonly id: string;
+  /** The instance's stream, e.g. `Account/a-1`. */
+  readonly stream: string;
+}
+
+/** A read instance with the state and version it was read at. */
+export interface DecisionState extends DecisionRead {
+  /** The stored state, or `null` for an instance that has never committed. */
+  readonly state: Json;
+  readonly version: number;
+}
+
+/** What a decision writes to one instance it read: nothing, when `events` is empty. */
+export interface DecisionWrite extends DecisionRead {
+  /** The version the instance was read at: it must still have it. */
+  readonly version: number;
+  readonly events: ReadonlyArray<Json>;
+}
+
+/** The receipt of an accepted decision, in JSON form. */
+export interface DecisionReceiptJson {
+  readonly commits: ReadonlyArray<{ readonly stream: string; readonly version: number }>;
+  readonly events: ReadonlyArray<Json>;
+  readonly reply: Json;
+}
+
+/** Input to {@link DecisionKit.decide}. */
+export interface DecideInput {
+  readonly command: Json;
+  readonly commandId: string;
+  readonly context: Readonly<Record<string, Json>>;
+  /** Epoch milliseconds. */
+  readonly now: number;
+  readonly correlationId?: string;
+  readonly trace?: TraceJson;
+  readonly link?: boolean;
+  /** Every instance {@link DecisionKit.reads} named, as it was read. */
+  readonly states: ReadonlyArray<DecisionState>;
+}
+
+/** Result of {@link DecisionKit.decide}. */
+export type DecideResult =
+  | { readonly _tag: "Rejected"; readonly rejection: Json }
+  | {
+      readonly _tag: "Accepted";
+      /** One per instance read, in stream order: its events, or none. */
+      readonly writes: ReadonlyArray<DecisionWrite>;
+      readonly receipt: DecisionReceiptJson;
+      readonly correlationId: string;
+      /** The span that decided, so the events' reactions continue it. */
+      readonly trace?: TraceJson;
+    };
+
+/** Result of {@link DecisionStore.send}. */
+export type DecisionResult =
+  | { readonly _tag: "Rejected"; readonly rejection: Json }
+  | { readonly _tag: "Accepted"; readonly receipt: DecisionReceiptJson };
+
+/**
+ * The kernel for one decision, handed to a platform.
+ */
+export interface DecisionKit {
+  readonly name: string;
+  /** The instances a command involves, each once, ordered by stream. */
+  readonly reads: (command: Json) => Effect.Effect<ReadonlyArray<DecisionRead>>;
+  /** Decide purely against the states read: a rejection, or what to write to each instance. */
+  readonly decide: (input: DecideInput) => Effect.Effect<DecideResult>;
+}
+
+/**
+ * What a platform provides for a decision.
+ */
+export interface DecisionStore {
+  /**
+   * Handle a command across the instances it reads: decide against their
+   * states, and commit every write or none. Nothing commits unless each
+   * instance still has the version it was read at; a command id already
+   * committed returns its first receipt.
+   */
+  readonly send: (command: Json, meta: Aggregate.SendMeta) => Effect.Effect<DecisionResult>;
 }
 
 /**
@@ -213,26 +413,45 @@ export interface AggregateStore {
   readonly send: (id: string, command: Json, meta: Aggregate.SendMeta) => Effect.Effect<SendResult>;
   /**
    * Send a command to one instance when it is due, durably (it survives
-   * restarts) and at least once. Replaces a pending one with the same
-   * `commandId`. Rejections are impossible: only non-rejecting commands are
-   * scheduled.
+   * restarts) and at least once. `name` is the scheduled command's id on the
+   * instance; `meta.commandId` is this arming's, the one the command commits
+   * with. Scheduling under a `name` replaces its command, pending or already
+   * run, unless that command has the same `meta.commandId`: then it is the
+   * same arming again (a policy or step that ran again) and nothing changes,
+   * not even when it is due. Rejections are impossible: only non-rejecting
+   * commands are scheduled. Returns when it is due, in epoch milliseconds on
+   * the platform's clock.
    */
   readonly schedule: (
     id: string,
+    name: string,
     command: Json,
     meta: Aggregate.SendMeta,
     due: Aggregate.Due,
-  ) => Effect.Effect<void>;
-  /** Read the stored state of an instance. */
-  readonly state: (
+  ) => Effect.Effect<number>;
+  /**
+   * Cancel the pending scheduled command named `commandId` on one instance,
+   * durably, and remember the cancel. Once this succeeds, the command never
+   * runs, even one already due. Fails with `AlreadyExecuted` when the
+   * command under that name already ran, `AlreadyCancelled` when it was
+   * cancelled before (and not scheduled again since), and `NotScheduled`
+   * when nothing was scheduled under it.
+   */
+  readonly unschedule: (
     id: string,
-  ) => Effect.Effect<{ readonly state: Json | null; readonly version: number }>;
+    commandId: string,
+  ) => Effect.Effect<
+    void,
+    Aggregate.AlreadyExecuted | Aggregate.AlreadyCancelled | Aggregate.NotScheduled
+  >;
+  /** Read the stored state of an instance. */
+  readonly state: (id: string) => Effect.Effect<{ readonly state: Json; readonly version: number }>;
   /** Read the committed events of an instance (tests and diagnostics; optional). */
   readonly events?: (id: string) => Effect.Effect<ReadonlyArray<StoredEvent>>;
   /** The stored state and version of an instance, then every new one. */
   readonly changes: (
     id: string,
-  ) => Stream.Stream<{ readonly state: Json | null; readonly version: number }>;
+  ) => Stream.Stream<{ readonly state: Json; readonly version: number }>;
   /** Committed events with `seq > after`, then live ones. */
   readonly tail: (id: string, after: number) => Stream.Stream<StoredEvent>;
   /**
@@ -241,11 +460,24 @@ export interface AggregateStore {
    */
   readonly seed?: (id: string, events: ReadonlyArray<Json>) => Effect.Effect<void>;
   /**
-   * Accept a WebSocket upgrade (the current request) for a live read of
-   * `key`, then push to it on every commit. Optional: without it, live reads
-   * are streamed responses over `changes` and `tail`.
+   * Append events without deciding, once per `meta.commandId`: single writer
+   * per id; a seen `commandId` answers its stored receipt; otherwise, unless
+   * the instance is at `meta.expectedVersion`, commit nothing and answer
+   * `UnexpectedVersion`. Persist events, state, receipt and deliveries
+   * atomically, as `send` does. The events reach views and projections as
+   * history, and never trigger policies. Optional: a client fails with a
+   * defect on a platform without it.
    */
-  readonly connect?: (key: string, subscription: Subscription) => HttpEffect;
+  readonly import?: (
+    id: string,
+    events: ReadonlyArray<Json>,
+    meta: ImportMeta,
+  ) => Effect.Effect<ImportResult>;
+}
+
+/** How much history has reached a consumer: see `View.History`. */
+export interface HistoryJson {
+  readonly complete: boolean;
 }
 
 /**
@@ -253,13 +485,44 @@ export interface AggregateStore {
  */
 export interface ViewSnapshot {
   /** The encoded state, or `null` when the key does not exist. */
-  readonly state: Json | null;
+  readonly state: Json;
   /** Number of applied deliveries. */
   readonly version: number;
-  /** Last applied `seq` per source. */
+  /**
+   * Last applied `seq` per source.
+   *
+   * A command that waits for its views (`consistency: "strong"`) and a read's
+   * `atLeast` both answer once a `seq` is reported here, and promise that any
+   * read after that includes it. So a platform that serves a key's reads from
+   * more than one copy (read replicas) reports a `seq` only once every copy
+   * that serves reads has applied it.
+   */
   readonly checkpoints: Readonly<Record<string, number>>;
   /** Number of events the key has emitted. */
   readonly seq: number;
+  /** The view's generation the key was built by: an earlier one is stale and starts over. */
+  readonly generation?: number;
+  /**
+   * Per source, what the last command to reach the key from it became: see
+   * {@link EmittedRange}. A reader finds a command's emissions with it instead
+   * of scanning entries. Absent from snapshots written before it existed, and
+   * for a source until the key next applies a delivery from it.
+   */
+  readonly emitted?: Readonly<Record<string, EmittedRange>>;
+}
+
+/**
+ * The entries a view key emitted for one command's deliveries from one source.
+ */
+export interface EmittedRange {
+  /** The command the deliveries came from. */
+  readonly commandId: string;
+  /** The last of its deliveries' `seq` (on the source) the key applied. */
+  readonly sourceSeq: number;
+  /** The key's `seq` before the first of them: its entries are those after it… */
+  readonly after: number;
+  /** …through this one (`after` itself when they emitted nothing). */
+  readonly through: number;
 }
 
 /** The snapshot of a key that has never received a delivery. */
@@ -272,7 +535,9 @@ export interface ViewEntry {
   readonly seq: number;
   readonly event: Json;
   readonly envelope: EnvelopeJson;
-  readonly state: Json | null;
+  readonly state: Json;
+  /** The aggregate event the entry derives from; absent on entries written before roots were. */
+  readonly root?: Root;
 }
 
 /**
@@ -289,15 +554,51 @@ export interface ViewKit {
     key: string,
     snapshot: ViewSnapshot,
     deliveries: ReadonlyArray<Delivery>,
-  ) => {
+  ) => Effect.Effect<{
     readonly snapshot: ViewSnapshot;
     /** `false` when every delivery was a duplicate. */
     readonly changed: boolean;
     readonly entries: ReadonlyArray<ViewEntry>;
     readonly downstream: ReadonlyArray<Delivery>;
-  };
+  }>;
   /** Route a downstream delivery to its target's host. */
   readonly deliver: (delivery: Delivery) => Effect.Effect<void>;
+  /** The views and projections that consume this view, by `CatchUp.targetId`. */
+  readonly targets: ReadonlyArray<string>;
+  /** Whether each key of a consumer it feeds hears only from the instance with its own id. */
+  readonly consumerSingleSource: (target: string) => boolean;
+  /**
+   * This view's generation. A stored key built by an earlier one is reset
+   * (state, entries, input log and cursors) before it is read or applied to.
+   */
+  readonly generation: number;
+  /** The generation of the view's storage: its generation, unless it is rebuilt in place. */
+  readonly classGeneration: number;
+  /** The view's id, by `CatchUp.targetId`, in this code. */
+  readonly target: string;
+  /**
+   * Set for a view keyed by the one aggregate it reads (`source`): before a key
+   * answers a read, it reads its history from the instance with its own id, so
+   * every answer covers the whole history even when no backfill filled it.
+   */
+  readonly catchUp?: { readonly source: string };
+  /** Whether each key hears only from the source instance with its own id (see `Kernel.singleSource`). */
+  readonly singleSource: boolean;
+  /**
+   * Route a source instance's stored rows (as its backfill `log` returns them)
+   * to one consumer (by `CatchUp.targetId`), as history: each row's seq and its
+   * deliveries. What a key keyed by its source runs on the rows it reads.
+   */
+  readonly history: (
+    target: string,
+    source: string,
+    id: string,
+    rows: ReadonlyArray<unknown>,
+  ) => Effect.Effect<
+    ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }>
+  >;
+  /** Route emitted entries to the consumers lagging behind them (see `CatchUp`). */
+  readonly replay: (input: ReplayInput<ViewEntry>) => Effect.Effect<ReplayResult>;
   /** Trace an `apply` of these deliveries to `key` (wrap the work that applies and persists them). */
   readonly observe: (
     key: string,
@@ -316,6 +617,55 @@ export interface ViewKit {
 }
 
 /**
+ * Which entries of a key a `list` reads, by `seq`. Without a range, every
+ * entry, oldest first.
+ */
+export interface ListRange {
+  /** Oldest first (`"asc"`, the default) or newest first. */
+  readonly order?: "asc" | "desc";
+  /** Only entries after this `seq` in `order`: greater for `"asc"`, smaller for `"desc"`. */
+  readonly after?: number;
+  /** At most this many entries. */
+  readonly limit?: number;
+}
+
+/**
+ * The first imported event whose commit time comes before the event ahead of
+ * it (`latest` for the first: the instance's last commit time, `0` if it has
+ * none) or after `now`, or `undefined` when they are in order. An event
+ * without a time (`null`) commits at `now`. Views are rebuilt in commit-time
+ * order, so a history out of order would replay out of order.
+ */
+export const outOfOrder = (
+  at: ReadonlyArray<number | null> | undefined,
+  count: number,
+  latest: number,
+  now: number,
+): Extract<ImportResult, { readonly _tag: "OutOfOrder" }> | undefined => {
+  let after = latest;
+  for (let index = 0; index < count; index++) {
+    const time = at?.[index] ?? now;
+    if (time < after) return { _tag: "OutOfOrder", index, at: time, after };
+    if (time > now) return { _tag: "OutOfOrder", index, at: time, after: now };
+    after = time;
+  }
+  return undefined;
+};
+
+/** The entries of `entries` (sorted by `seq`) in `range`, for platforms that hold them in memory. */
+export const inRange = <A extends { readonly seq: number }>(
+  entries: ReadonlyArray<A>,
+  range: ListRange | undefined,
+): ReadonlyArray<A> => {
+  const desc = range?.order === "desc";
+  const after = range?.after;
+  const ordered = (desc ? [...entries].reverse() : entries).filter(
+    (entry) => after === undefined || (desc ? entry.seq < after : entry.seq > after),
+  );
+  return range?.limit === undefined ? ordered : ordered.slice(0, Math.max(0, range.limit));
+};
+
+/**
  * What a platform provides for a view.
  */
 export interface ViewStore {
@@ -324,8 +674,8 @@ export interface ViewStore {
   readonly read: (key: string) => Effect.Effect<ViewSnapshot>;
   /** The current snapshot, then every new one. */
   readonly changes: (key: string) => Stream.Stream<ViewSnapshot>;
-  /** Every entry of a key. */
-  readonly list: (key: string) => Effect.Effect<ReadonlyArray<ViewEntry>>;
+  /** A key's entries in `range`: only these are read from storage. */
+  readonly list: (key: string, range?: ListRange) => Effect.Effect<ReadonlyArray<ViewEntry>>;
   /** Entries with `seq > after`, then live entries. */
   readonly tail: (key: string, after: number) => Stream.Stream<ViewEntry>;
   /**
@@ -379,6 +729,26 @@ export interface ProjectionKit {
   readonly name: string;
   readonly options: ProjectionOptions;
   /**
+   * This projection's generation. A key's log from an earlier one is reset;
+   * deliveries for an earlier one are dropped.
+   */
+  readonly generation: number;
+  /** Whether each key hears only from the source instance with its own id (see `Kernel.singleSource`). */
+  readonly singleSource: boolean;
+  /**
+   * Route a source instance's stored rows (as its backfill `log` returns them)
+   * to one consumer (by `CatchUp.targetId`), as history: each row's seq and its
+   * deliveries. What a key keyed by its source runs on the rows it reads.
+   */
+  readonly history: (
+    target: string,
+    source: string,
+    id: string,
+    rows: ReadonlyArray<unknown>,
+  ) => Effect.Effect<
+    ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }>
+  >;
+  /**
    * Run the handler for a run of one key's input log, in order. Succeeds only
    * when every write the handler made succeeded; the platform then records
    * the run as processed.
@@ -418,6 +788,15 @@ export interface StreamMeta {
   readonly checkpoints: Readonly<Record<string, number>>;
   /** The last write applied: the writer's input-log position and its append index there. */
   readonly origin: readonly [number, number];
+  /** The writer generation `origin` belongs to (see `Kernel.generationOf`); 0 when absent. */
+  readonly generation?: number;
+  /** The last root seq the writer has handled, per aggregate stream, over every generation. */
+  readonly roots?: Readonly<Record<string, number>>;
+  /**
+   * `roots` as of when this generation started writing: a rebuilt writer's
+   * replay of these appends nothing again.
+   */
+  readonly inherited?: Readonly<Record<string, number>>;
 }
 
 /** The meta of a stream key nothing has written. */
@@ -427,14 +806,29 @@ export const emptyStreamMeta: StreamMeta = { seq: 0, checkpoints: {}, origin: [0
  * One append to a stream key, made by its writer while handling an input.
  */
 export interface StreamWrite {
+  /** The writer's generation: its input log starts over at each one. */
+  readonly generation: number;
   /** Where the write comes from: the writer's input-log position and the append's index there. */
   readonly origin: readonly [number, number];
+  /** The aggregate event the input being handled derives from. */
+  readonly root: Root;
   /** The source event being handled. */
   readonly source: string;
   readonly sourceSeq: number;
   readonly at: number;
   readonly commandId: string;
   readonly events: ReadonlyArray<Json>;
+}
+
+/**
+ * What a writer's run handled, appends or not.
+ */
+export interface StreamHandled {
+  readonly generation: number;
+  /** The last source `seq` handled, per source stream. */
+  readonly checkpoints: Readonly<Record<string, number>>;
+  /** The last root seq handled, per aggregate stream. */
+  readonly roots: Readonly<Record<string, number>>;
 }
 
 /**
@@ -460,20 +854,18 @@ export interface StreamKit {
  */
 export interface StreamStore {
   /**
-   * Append a write to one key (single writer per key). A write whose origin is
-   * not after the last applied one is a repeat and is dropped.
+   * Append a write to one key (single writer per key), as the platform's
+   * stream rules decide: a repeat, a write from an older generation, or a rebuilt
+   * writer's replay of a root an earlier generation handled is dropped.
    */
   readonly append: (key: string, write: StreamWrite) => Effect.Effect<void>;
   /** Record that the writer handled source events without appending. */
-  readonly advance: (
-    key: string,
-    checkpoints: Readonly<Record<string, number>>,
-  ) => Effect.Effect<void>;
+  readonly advance: (key: string, handled: StreamHandled) => Effect.Effect<void>;
   readonly read: (key: string) => Effect.Effect<StreamMeta>;
   /** The current meta, then every new one. */
   readonly changes: (key: string) => Stream.Stream<StreamMeta>;
-  /** Every entry of a key. */
-  readonly list: (key: string) => Effect.Effect<ReadonlyArray<StreamEntry>>;
+  /** A key's entries in `range`: only these are read from storage. */
+  readonly list: (key: string, range?: ListRange) => Effect.Effect<ReadonlyArray<StreamEntry>>;
   /** Entries with `seq > after`, then live entries. */
   readonly tail: (key: string, after: number) => Stream.Stream<StreamEntry>;
   /** Accept a WebSocket upgrade for a live read of `key` (optional, like views). */
@@ -481,9 +873,67 @@ export interface StreamStore {
 }
 
 /**
- * How a Domain is hosted. One factory per concept, each called once per entity
- * while the Domain's Layer is built. A factory may declare any infrastructure
- * (Durable Objects, buckets, queues) and returns the store the kernel talks to.
+ * Where one model is hosted. One factory per concept, each called once per
+ * entity while the model's Layer is built. A factory may declare any
+ * infrastructure (Durable Objects, buckets, queues) and returns the store the
+ * kernel talks to.
+ */
+export interface ModelHost {
+  readonly aggregate: (
+    aggregate: Aggregate.Any,
+    kit: AggregateKit,
+  ) => Effect.Effect<AggregateStore>;
+  /**
+   * Called after every aggregate's factory. A platform without it can't host
+   * a model that has decisions.
+   */
+  readonly decision?: (decision: Decision.Any, kit: DecisionKit) => Effect.Effect<DecisionStore>;
+  readonly view: (view: View.Any, kit: ViewKit) => Effect.Effect<ViewStore>;
+  readonly policy: (policy: Policy.Any, kit: PolicyKit) => Effect.Effect<PolicyStore>;
+  readonly projection: (
+    projection: Projection.Any,
+    kit: ProjectionKit,
+  ) => Effect.Effect<ProjectionStore>;
+  readonly stream: (stream: DomainStream.Any, kit: StreamKit) => Effect.Effect<StreamStore>;
+  /**
+   * Called once every store is built. A platform that keeps events across
+   * deploys starts catching up the views and projections in `targets` (every
+   * consumer in the model, by `CatchUp.targetId`) that are new to it.
+   */
+  readonly start?: (
+    targets: ReadonlyArray<string>,
+    /** What a backfill needs to know of each consumer: the sources it reads, and its keys' shape. */
+    planOf: (target: string) => Plan | undefined,
+    /**
+     * The consumers among `targets` the deploy backfills. The others fill each
+     * key themselves, from its own instance (see `ViewKit.catchUp`).
+     */
+    backfill: ReadonlyArray<string>,
+  ) => Effect.Effect<void>;
+  /**
+   * How much of the history recorded before a consumer (by
+   * `CatchUp.targetId`) has reached it. A platform without it keeps nothing
+   * across deploys, so there is no history to wait for.
+   */
+  readonly history?: (target: string) => Effect.Effect<HistoryJson>;
+}
+
+/** What a platform is told about a model it hosts. */
+export interface HostedModel {
+  readonly modelName: string;
+  /** The same for every Layer of one model, and different for another model with the same name. */
+  readonly id: object;
+  /** The names of the model's sagas, which run on the workflow engine. */
+  readonly sagas: ReadonlyArray<string>;
+  /** Whether this model takes over data it shared with other models before Domain version 0: `legacyData` on its `layer`. */
+  readonly legacyData: boolean;
+}
+
+/**
+ * How a Domain is hosted. `model` is called once per model while its Layer is
+ * built, and gives that model storage of its own: two models that use the
+ * same aggregate, view or stream definition never share its data. Hosting
+ * two models with the same name on one platform fails.
  *
  * Swap the platform Layer to move a Domain between infrastructures: in-memory
  * for tests and single processes, Durable Objects on Cloudflare, and so on.
@@ -491,16 +941,65 @@ export interface StreamStore {
 export class Platform extends Context.Service<
   Platform,
   {
-    readonly aggregate: (
-      aggregate: Aggregate.Any,
-      kit: AggregateKit,
-    ) => Effect.Effect<AggregateStore>;
-    readonly view: (view: View.Any, kit: ViewKit) => Effect.Effect<ViewStore>;
-    readonly policy: (policy: Policy.Any, kit: PolicyKit) => Effect.Effect<PolicyStore>;
-    readonly projection: (
-      projection: Projection.Any,
-      kit: ProjectionKit,
-    ) => Effect.Effect<ProjectionStore>;
-    readonly stream: (stream: DomainStream.Any, kit: StreamKit) => Effect.Effect<StreamStore>;
+    readonly model: (model: HostedModel) => Effect.Effect<ModelHost, never, Scope>;
   }
 >()("alchemy/Domain/Platform") {}
+
+/**
+ * Track the models a platform hosts: `claim` fails while a different model
+ * with the same name is hosted, since both would address the same storage.
+ * The same model may be built again while an earlier build is open.
+ *
+ * @internal
+ */
+export const hostedModels = ({
+  release,
+}: {
+  /**
+   * Free a model's name when its build closes, so it can be built again as
+   * a redeploy. A platform whose builds outlive their scope, like a Worker's
+   * init, keeps every name for as long as it runs.
+   */
+  readonly release: boolean;
+}) => {
+  const hosted = new Map<string, { readonly id: object; builds: number }>();
+  return (modelName: string, id: object): Effect.Effect<void, never, Scope> =>
+    Effect.acquireRelease(
+      Effect.suspend(() => {
+        const held = hosted.get(modelName);
+        if (held !== undefined && held.id !== id) {
+          return Effect.die(
+            new DefinitionError({ reason: new ModelHostedTwice({ model: modelName }) }),
+          );
+        }
+        if (held === undefined) hosted.set(modelName, { id, builds: 1 });
+        else held.builds++;
+        return Effect.void;
+      }),
+      // Built again after this build closes (a redeploy), the name is free.
+      () =>
+        Effect.sync(() => {
+          if (!release) return;
+          const held = hosted.get(modelName);
+          if (held !== undefined && --held.builds === 0) hosted.delete(modelName);
+        }),
+    );
+};
+
+/**
+ * How a platform counts a run that waits for another run's work: a read
+ * `atLeast` a write that polls until its view or projection has it. The
+ * manual in-memory platform (a story) runs one queued item at a time, until
+ * every run it started is finished or waiting; it provides this so a poll is
+ * waiting and the run it waits for can start. Other platforms run their work
+ * concurrently and leave it as is.
+ *
+ * @internal
+ */
+export const RunWait = Context.Reference<
+  <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+>("alchemy/Domain/Platform/RunWait", { defaultValue: () => runDirectly });
+
+/** {@link RunWait} on a platform that does not manage its runs' waits. @internal */
+export const runDirectly = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  effect;

@@ -2,9 +2,15 @@ import * as lexm from "@distilled.cloud/aws/lex-models-v2";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import { retryWhileConflict, waitForBotSettled, waitForLocaleBuilt } from "./internal.ts";
+
+export class BotVersionUnexpectedResponse extends Data.TaggedError("BotVersionUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface BotVersionProps {
   /**
@@ -74,7 +80,7 @@ export const BotVersion = Resource<BotVersion>("AWS.LexV2.BotVersion");
 const describeVersion = Effect.fn(function* (botId: string, botVersion: string) {
   return yield* lexm
     .describeBotVersion({ botId, botVersion })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 });
 
 export const BotVersionProvider = () =>
@@ -166,9 +172,9 @@ export const BotVersionProvider = () =>
           yield* waitForBotSettled(news.botId);
           const observed = yield* describeVersion(news.botId, botVersion);
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`failed to read created Lex bot version ${news.botId}/${botVersion}`),
-            );
+            return yield* new BotVersionUnexpectedResponse({
+              message: `failed to read created Lex bot version ${news.botId}/${botVersion}`,
+            });
           }
 
           yield* session.note(`${news.botId}/${botVersion}`);

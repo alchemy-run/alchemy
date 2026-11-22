@@ -1,8 +1,8 @@
 import * as Azure from "@alchemy.run/azure";
 import { ensureRegistered } from "@alchemy.run/azure/Arm";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as purview from "@distilled.cloud/azure/purview";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runPaidOnly } from "../gates.ts";
 import { getKafkaConfiguration, gone, location, logLevel, subscriptionId, tags } from "./util.ts";

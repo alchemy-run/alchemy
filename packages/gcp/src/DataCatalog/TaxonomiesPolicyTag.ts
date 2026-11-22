@@ -85,8 +85,22 @@ export type TaxonomiesPolicyTag = Resource<
     childPolicyTags: string[];
   },
   never,
-  Providers
+  Providers,
+  TaxonomiesPolicyTagLookup
 >;
+
+/**
+ * Props for {@link TaxonomiesPolicyTag.lookup}: find a taxonomies policy
+ * tag this stack doesn't manage by its identifiers.
+ */
+export interface TaxonomiesPolicyTagLookup {
+  /**
+   * Full resource name of the policy tag
+   * (`projects/{project}/locations/{loc
+   * ation}/taxonomies/{taxonomy}/policyTags/{id}`).
+   */
+  name: string;
+}
 
 /**
  * A Data Catalog policy tag inside a taxonomy.
@@ -103,6 +117,19 @@ export type TaxonomiesPolicyTag = Resource<
  *   taxonomy: taxonomy.name,
  *   displayName: "email",
  *   description: "email addresses",
+ * });
+ * ```
+ *
+ * ### Looking up an existing taxonomies policy tag
+ * `TaxonomiesPolicyTag.lookup` references a taxonomies policy tag Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared taxonomies policy tag.
+ *
+ * **Example:** Reference an existing taxonomies policy tag
+ * ```typescript
+ * const taxonomiesPolicyTag = GCP.DataCatalog.TaxonomiesPolicyTag.lookup({
+ *   name: "projects/my-project/locations/us/taxonomies/123/policyTags/456",
  * });
  * ```
  *
@@ -206,6 +233,13 @@ export const TaxonomiesPolicyTagProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ name }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location, env.region);
@@ -248,20 +282,18 @@ export const TaxonomiesPolicyTagProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           datacatalog.createProjectsLocationsTaxonomiesPolicyTags({
+            displayName,
+            description,
+            parentPolicyTag,
             parent: taxonomy,
-            body: {
-              displayName,
-              description,
-              parentPolicyTag,
-            },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? (yield* observe(id, undefined, taxonomy));
       }
 
       if (current === undefined) {
         return yield* new DatacatalogNotResolved({
-          name: output?.name ?? `${taxonomy}/policyTags`,
+          resourceName: output?.name ?? `${taxonomy}/policyTags`,
         });
       }
 
@@ -272,17 +304,14 @@ export const TaxonomiesPolicyTagProvider = () =>
       if (displayChanged || descriptionChanged) {
         current = yield* retryTransient(
           datacatalog.patchProjectsLocationsTaxonomiesPolicyTags({
+            displayName,
+            description,
+            parentPolicyTag,
             name: currentName,
             updateMask: updateMaskOf(
               displayChanged ? "display_name" : undefined,
               descriptionChanged ? "description" : undefined,
             ),
-            body: {
-              name: currentName,
-              displayName,
-              description,
-              parentPolicyTag,
-            },
           }),
         );
       }

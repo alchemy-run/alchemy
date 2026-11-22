@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "COPY",
+          "line": 2,
+          "flags": [
+            {
+              "name": "chmod",
+              "value": "755"
+            }
+          ],
+          "heredocs": [
+            {
+              "name": "EOF",
+              "content": "#!/bin/sh\necho hello\n",
+              "stripTabs": false,
+              "quoted": false
+            }
+          ],
+          "sources": [
+            "\u003c\u003cEOF"
+          ],
+          "destination": "/usr/local/bin/hello"
+        }
+      ]
+    }
+  ]
+}

@@ -1,11 +1,14 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as alertsmanagement from "@distilled.cloud/azure/alertsmanagement";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Azure.providers() });
+
+const weeklyOf = (recurrence: alertsmanagement.Recurrence | undefined) =>
+  recurrence?.recurrenceType === "Weekly" ? recurrence : undefined;
 
 const getRule = (resourceGroupName: string, alertProcessingRuleName: string) =>
   Effect.gen(function* () {
@@ -106,7 +109,7 @@ test.provider(
       const reobserved = yield* getRule(rg, first.ruleName);
       expect(reobserved.properties?.enabled).toEqual(false);
       expect(reobserved.properties?.description).toEqual("second");
-      expect(reobserved.properties?.schedule?.recurrences?.[0]?.daysOfWeek).toEqual([
+      expect(weeklyOf(reobserved.properties?.schedule?.recurrences?.[0])?.daysOfWeek).toEqual([
         "Saturday",
         "Sunday",
       ]);

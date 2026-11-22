@@ -1,8 +1,9 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cnr from "@distilled.cloud/gcp/cloudnumberregistry_v1alpha";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import {
   location,
   logLevel,
@@ -70,6 +71,27 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { book, realm, range };
         }),
+      );
+      yield* expectFound(
+        GCP.CloudNumberRegistry.CustomRange.lookup({
+          customRangeId: created.range.customRangeId,
+          location: created.range.location,
+        }),
+        created.range,
+      );
+      yield* expectFound(
+        GCP.CloudNumberRegistry.Realm.lookup({
+          realmId: created.realm.realmId,
+          location: created.realm.location,
+        }),
+        created.realm,
+      );
+      yield* expectFound(
+        GCP.CloudNumberRegistry.RegistryBook.lookup({
+          registryBookId: created.book.registryBookId,
+          location: created.book.location,
+        }),
+        created.book,
       );
 
       expect(created.range.customRangeId).toEqual(expect.any(String));

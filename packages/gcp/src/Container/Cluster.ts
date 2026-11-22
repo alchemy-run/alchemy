@@ -16,6 +16,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -199,13 +200,16 @@ export type ClusterProps = {
    */
   preemptible?: boolean;
   /**
-   * Service account email for the default pool's nodes. Changing it
-   * replaces the cluster unless `removeDefaultNodePool` is set.
+   * Service account email for the default pool's nodes, or for every node
+   * Autopilot provisions. Changing it replaces the cluster unless
+   * `removeDefaultNodePool` is set.
+   * @default the Compute Engine default service account
    */
   serviceAccount?: string;
   /**
-   * OAuth scopes for the default pool's nodes. Changing them replaces the
-   * cluster unless `removeDefaultNodePool` is set.
+   * OAuth scopes for the default pool's nodes, or for every node Autopilot
+   * provisions. Changing them replaces the cluster unless
+   * `removeDefaultNodePool` is set.
    */
   oauthScopes?: string[];
   /**
@@ -313,18 +317,45 @@ export type Cluster = Resource<
     createTime: string | undefined;
   },
   KubernetesObjectBinding,
-  Providers
+  Providers,
+  ClusterLookup
 >;
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ClusterLookup {
+  /**
+   * Cluster id (the `{cluster}` segment of
+   * `projects/{project}/locations/{location}/clusters/{cluster}`). Must be
+   * 1-40 characters, start with a letter, and match
+   * `[a-z]([a-z0-9-]*[a-z0-9])?`.
+   */
+  clusterId: string;
+  /**
+   * Zone or region (`us-central1-a`, `us-central1`, …). Autopilot clusters
+   * must be regional. `US-CENTRAL1-A` is accepted and normalized to
+   * `us-central1-a`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Kubernetes Engine cluster.
  *
  * Changing `clusterId`, `location`, `description`, `network`,
  * `subnetwork`, `ipAllocationPolicy`, private-node topology, `autopilot`,
- * `enableKubernetesAlpha`, or default-pool node shape
- * (`initialNodeCount`, `machineType`, `diskSizeGb`, `diskType`, `spot`,
- * `preemptible`, `serviceAccount`, `oauthScopes`) replaces the cluster —
- * except that default-pool props are ignored on update while
+ * `enableKubernetesAlpha`, the node identity (`serviceAccount`,
+ * `oauthScopes`), or default-pool node shape (`initialNodeCount`,
+ * `machineType`, `diskSizeGb`, `diskType`, `spot`, `preemptible`) replaces
+ * the cluster — except that default-pool props are ignored on update while
  * `removeDefaultNodePool` is set. Labels, endpoint access, Shielded Nodes,
  * addons, datapath, logging/monitoring, cost management, release channel,
  * and node locations update in place.
@@ -392,6 +423,22 @@ export type Cluster = Resource<
  * });
  * ```
  *
+ * **Example:** Autopilot nodes with a dedicated service account
+ * ```typescript
+ * const nodes = yield* GCP.IAM.ServiceAccount("GkeNodes", {});
+ * yield* GCP.IAM.Member("GkeNodesRole", {
+ *   kind: "project",
+ *   name: "my-project",
+ *   role: "roles/container.defaultNodeServiceAccount",
+ *   member: Output.interpolate`serviceAccount:${nodes.email}`,
+ * });
+ * const cluster = yield* GCP.Container.Cluster("App", {
+ *   location: "us-central1",
+ *   autopilot: true,
+ *   serviceAccount: nodes.email,
+ * });
+ * ```
+ *
  * ### Reading a Cluster
  * **Example:** Get the bound cluster
  * ```typescript
@@ -410,17 +457,27 @@ export type Cluster = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared cluster.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const cluster = GCP.Container.Cluster.lookup({ clusterId: "my-cluster" });
+ * ```
+ *
  * @resource
  * @category Container
  */
 export const Cluster = Resource<Cluster>("GCP.Container.Cluster");
 
 export class ClusterNotResolved extends Data.TaggedError("GCP.Container.ClusterNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ClusterNotReady extends Data.TaggedError("GCP.Container.ClusterNotReady")<{
-  name: string;
+  resourceName: string;
   status: string;
 }> {}
 
@@ -432,13 +489,13 @@ export class ClusterOperationFailed extends Data.TaggedError(
 }> {}
 
 export class ClusterStillExists extends Data.TaggedError("GCP.Container.ClusterStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ClusterDeletionProtected extends Data.TaggedError(
   "GCP.Container.ClusterDeletionProtected",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -607,7 +664,7 @@ const getKubernetesTransport = (
 const getByName = (name: string) =>
   container
     .getProjectsLocationsClusters({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const operationResourceName = (
   project: string,
@@ -665,7 +722,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (cluster): cluster is container.Cluster => cluster !== undefined,
-      () => new ClusterNotResolved({ name }),
+      () => new ClusterNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Container.ClusterNotResolved",
@@ -678,7 +735,7 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (cluster): cluster is container.Cluster => cluster !== undefined,
-      () => new ClusterNotResolved({ name }),
+      () => new ClusterNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (cluster) => (cluster.status ?? "STATUS_UNSPECIFIED") !== "ERROR",
@@ -695,7 +752,7 @@ const waitUntilReady = (name: string) =>
       },
       (cluster) =>
         new ClusterNotReady({
-          name,
+          resourceName: name,
           status: cluster.status ?? "STATUS_UNSPECIFIED",
         }),
     ),
@@ -710,7 +767,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cluster) =>
-      cluster === undefined ? Effect.void : Effect.fail(new ClusterStillExists({ name })),
+      cluster === undefined
+        ? Effect.void
+        : Effect.fail(new ClusterStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Container.ClusterStillExists",
@@ -733,7 +792,7 @@ const waitUntilSettled = (name: string) =>
       },
       (cluster) =>
         new ClusterNotReady({
-          name,
+          resourceName: name,
           status: cluster?.status ?? "STATUS_UNSPECIFIED",
         }),
     ),
@@ -751,7 +810,7 @@ const ensureDefaultPoolRemoved = (project: string, location: string, clusterName
         name: `${clusterName}/nodePools/${DEFAULT_POOL_NAME}`,
       })
       .pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
         Effect.retry({
           while: (error) => error._tag === "Conflict",
           times: 8,
@@ -809,6 +868,17 @@ const toCreateBody = (
     enableKubernetesAlpha: news.enableKubernetesAlpha === true,
     locations: news.nodeLocations,
     autopilot: autopilot ? { enabled: true } : undefined,
+    // Autopilot has no default pool: its nodes take their identity from the
+    // node auto-provisioning defaults instead.
+    autoscaling:
+      autopilot && (news.serviceAccount !== undefined || news.oauthScopes !== undefined)
+        ? {
+            autoprovisioningNodePoolDefaults: {
+              serviceAccount: news.serviceAccount,
+              oauthScopes: news.oauthScopes,
+            },
+          }
+        : undefined,
     workloadIdentityConfig: { workloadPool: workloadPoolOf(project) },
     releaseChannel:
       channel.length > 0 ? { channel: channel as container.ReleaseChannelChannelEnum } : undefined,
@@ -903,6 +973,12 @@ export const ClusterProvider = () =>
           (olds.preemptible === true) !== (news.preemptible === true) ||
           previousServiceAccount !== nextServiceAccount ||
           (news.oauthScopes !== undefined && !sameStrings(previousOauthScopes, nextOauthScopes)));
+      // Autopilot fixes its nodes' identity at cluster creation.
+      const autopilotIdentityChanged =
+        nextAutopilot &&
+        olds !== undefined &&
+        (previousServiceAccount !== nextServiceAccount ||
+          (news.oauthScopes !== undefined && !sameStrings(previousOauthScopes, nextOauthScopes)));
 
       const replace =
         (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
@@ -915,7 +991,8 @@ export const ClusterProvider = () =>
         ipAllocationChanged ||
         privateTopologyChanged ||
         defaultPoolRestored ||
-        nodeShapeChanged;
+        nodeShapeChanged ||
+        autopilotIdentityChanged;
 
       if (!replace) return undefined;
       // A replacement deletes the old cluster with the OLD props, so it would
@@ -924,7 +1001,7 @@ export const ClusterProvider = () =>
       // delete-side guard is the backstop there.)
       if (olds?.deletionProtection === true) {
         return yield* new ClusterDeletionProtected({
-          name: output?.name ?? previousId ?? nextId ?? "",
+          resourceName: output?.name ?? previousId ?? nextId ?? "",
         });
       }
       return {
@@ -933,6 +1010,15 @@ export const ClusterProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ clusterId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, clusterId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, []);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -987,12 +1073,10 @@ export const ClusterProvider = () =>
         const create = Effect.gen(function* () {
           const created = yield* container
             .createProjectsLocationsClusters({
+              cluster: toCreateBody(news, clusterId, desiredLabels, autopilot, env.project),
               parent: `projects/${env.project}/locations/${location}`,
-              body: {
-                cluster: toCreateBody(news, clusterId, desiredLabels, autopilot, env.project),
-              },
             })
-            .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
           if (created !== undefined) {
             yield* waitForOperation(env.project, location, created);
           }
@@ -1001,7 +1085,7 @@ export const ClusterProvider = () =>
         // cluster") and leaves the cluster in ERROR; delete it and try again.
         const removeFailed = Effect.gen(function* () {
           const operation = yield* container.deleteProjectsLocationsClusters({ name }).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
             Effect.retry({
               while: (error) => error._tag === "Conflict",
               times: 8,
@@ -1015,7 +1099,7 @@ export const ClusterProvider = () =>
           }
           yield* waitUntilGone(name);
         });
-        const isInternal = (error: { _tag: string; code?: number }) =>
+        const isInternal = (error: { _tag: string; code?: unknown }) =>
           error._tag === "GCP.OperationFailed" && error.code === 13;
         yield* create.pipe(
           Effect.tapError((error) => (isInternal(error) ? removeFailed : Effect.void)),
@@ -1029,7 +1113,7 @@ export const ClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ClusterNotResolved({ name });
+        return yield* new ClusterNotResolved({ resourceName: name });
       }
 
       let live = current;
@@ -1048,11 +1132,9 @@ export const ClusterProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       if (labelsChanged) {
         const labeled = yield* container.setResourceLabelsProjectsLocationsClusters({
+          resourceLabels: desiredLabels,
+          labelFingerprint: live.labelFingerprint,
           name,
-          body: {
-            resourceLabels: desiredLabels,
-            labelFingerprint: live.labelFingerprint,
-          },
         });
         yield* waitForOperation(env.project, location, labeled);
         live = yield* waitUntilReady(name);
@@ -1067,13 +1149,11 @@ export const ClusterProvider = () =>
         (live.monitoringService ?? "") !== (desiredMonitoring ?? "")
       ) {
         const serviced = yield* container.updateProjectsLocationsClusters({
-          name,
-          body: {
-            update: {
-              desiredLoggingService: desiredLogging,
-              desiredMonitoringService: desiredMonitoring,
-            },
+          update: {
+            desiredLoggingService: desiredLogging,
+            desiredMonitoringService: desiredMonitoring,
           },
+          name,
         });
         yield* waitForOperation(env.project, location, serviced);
         live = yield* waitUntilReady(name);
@@ -1089,10 +1169,7 @@ export const ClusterProvider = () =>
       // GKE applies exactly one `desired*` field per update request.
       const applyUpdate = (update: container.ClusterUpdate) =>
         Effect.gen(function* () {
-          const updated = yield* container.updateProjectsLocationsClusters({
-            name,
-            body: { update },
-          });
+          const updated = yield* container.updateProjectsLocationsClusters({ update, name });
           yield* waitForOperation(env.project, location, updated);
           return yield* waitUntilReady(name);
         });
@@ -1197,12 +1274,10 @@ export const ClusterProvider = () =>
       const observedPool = live.workloadIdentityConfig?.workloadPool ?? "";
       if (observedPool !== desiredPool) {
         const identified = yield* container.updateProjectsLocationsClusters({
-          name,
-          body: {
-            update: {
-              desiredWorkloadIdentityConfig: { workloadPool: desiredPool },
-            },
+          update: {
+            desiredWorkloadIdentityConfig: { workloadPool: desiredPool },
           },
+          name,
         });
         yield* waitForOperation(env.project, location, identified);
         live = yield* waitUntilReady(name);
@@ -1219,7 +1294,7 @@ export const ClusterProvider = () =>
 
     delete: Effect.fn(function* ({ olds, output, force }) {
       if (olds.deletionProtection === true && force !== true) {
-        return yield* new ClusterDeletionProtected({ name: output.name });
+        return yield* new ClusterDeletionProtected({ resourceName: output.name });
       }
       if ((output.kubernetesObjects ?? []).length > 0) {
         yield* deleteObjects({
@@ -1233,7 +1308,7 @@ export const ClusterProvider = () =>
       const operation = yield* container
         .deleteProjectsLocationsClusters({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) =>
               error._tag === "Conflict" ||

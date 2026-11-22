@@ -350,7 +350,7 @@ export class SandboxFailed extends Data.TaggedError("Railway.SandboxFailed")<{
 
 export class SandboxCheckpointNotFound extends Data.TaggedError(
   "Railway.SandboxCheckpointNotFound",
-)<{ environmentId: string; name: string }> {}
+)<{ environmentId: string; checkpointName: string }> {}
 
 class SandboxPending extends Data.TaggedError("Railway.SandboxPending")<{
   sandboxId: string;
@@ -579,7 +579,7 @@ export const renameSandboxCheckpoint = Effect.fn(function* (input: {
   if (found === undefined) {
     return yield* new SandboxCheckpointNotFound({
       environmentId: input.environmentId,
-      name: input.name,
+      checkpointName: input.name,
     });
   }
   return yield* sandboxCheckpointRename({

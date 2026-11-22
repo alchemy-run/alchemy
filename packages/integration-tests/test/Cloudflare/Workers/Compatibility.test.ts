@@ -3,7 +3,7 @@ import {
   getToolingCompatibility,
 } from "@alchemy.run/cloudflare/Workers/Compatibility";
 import type { WorkerProps } from "@alchemy.run/cloudflare/Workers/Worker";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
 
 describe(
@@ -88,7 +88,7 @@ describe(
     // 2026-08-04, so Alchemy's newer default no longer emits a redundant flag.
     test("uses date-default Node.js compatibility for Effect-native workers", () => {
       const { date, flags } = getCompatibility({} as WorkerProps);
-      expect(date).toBe("2026-08-31");
+      expect(date).toBe("2026-11-17");
       expect(flags).not.toContain("nodejs_compat");
     });
 

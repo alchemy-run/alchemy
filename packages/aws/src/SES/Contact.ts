@@ -115,9 +115,8 @@ export const Contact = Resource<Contact>("AWS.SES.Contact");
 // SES stores contact metadata as an opaque JSON string. Serialize only at the
 // API boundary, and compare on a canonical (sorted-key) form so a re-ordered
 // object is not mistaken for a change.
-const stringifyAttributes = (
-  attributes: Record<string, unknown> | undefined,
-): string | undefined => (attributes === undefined ? undefined : JSON.stringify(attributes));
+const stringifyAttributes = (attributes: Record<string, unknown> | undefined): string | undefined =>
+  attributes === undefined ? undefined : JSON.stringify(attributes);
 
 const normalizeAttributes = (
   attributes: Record<string, unknown> | string | undefined,
@@ -171,7 +170,7 @@ export const ContactProvider = () =>
             ContactListName: contactListName,
             EmailAddress: emailAddress,
           })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       });
 
       return Contact.Provider.of({

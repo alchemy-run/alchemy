@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as discovery from "@distilled.cloud/azure/discovery";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runPaidOnly } from "../gates.ts";
 import { location, logLevel, probeGroup, subscription, tags, waitGone } from "./util.ts";
@@ -16,6 +16,9 @@ const getContainer = (resourceGroupName: string, storageContainerName: string) =
       storageContainerName,
     });
   });
+
+const blobStoreOf = (store: discovery.StorageStore | undefined) =>
+  store?.kind === "AzureStorageBlob" ? store : undefined;
 
 const program = (props: { account: "First" | "Second"; tags: Record<string, string> }) =>
   Effect.gen(function* () {
@@ -56,9 +59,9 @@ test.provider.skip(
       );
       const observed = yield* getContainer(group.resourceGroupName, container.storageContainerName);
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
-      expect(observed.properties?.storageStore.storageAccountId?.toLowerCase()).toEqual(
-        account.storageAccountId.toLowerCase(),
-      );
+      expect(
+        blobStoreOf(observed.properties?.storageStore)?.storageAccountId.toLowerCase(),
+      ).toEqual(account.storageAccountId.toLowerCase());
       expect(observed.tags?.env).toEqual("test");
 
       // In place: tags.

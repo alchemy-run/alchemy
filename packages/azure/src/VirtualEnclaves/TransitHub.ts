@@ -310,25 +310,27 @@ export const TransitHubProvider = () =>
       const tagsChanged = tagsDiffer(observed.tags, tags);
       if (properties !== undefined || tagsChanged) {
         const current = observed.properties;
-        yield* mission
-          .TransitHubCreateOrUpdate({
-            ...where,
-            location: observed.location,
-            tags,
-            properties: {
-              state: desired.state ?? current?.state,
-              transitOption: desired.transitOption ?? current?.transitOption,
-              securityProvider: desired.securityProvider ?? current?.securityProvider,
-            },
-          })
-          // The create's ARM operation can outlive the `Succeeded` state.
-          .pipe(
-            Effect.retry({
-              while: (e) => e._tag === "HybridNetworkOperationInProgress",
-              schedule: Schedule.spaced("30 seconds"),
-              times: 60,
-            }),
-          );
+        yield* (
+          mission
+            .TransitHubCreateOrUpdate({
+              ...where,
+              location: observed.location,
+              tags,
+              properties: {
+                state: desired.state ?? current?.state,
+                transitOption: desired.transitOption ?? current?.transitOption,
+                securityProvider: desired.securityProvider ?? current?.securityProvider,
+              },
+            })
+            // The create's ARM operation can outlive the `Succeeded` state.
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "HybridNetworkOperationInProgress",
+                schedule: Schedule.spaced("30 seconds"),
+                times: 60,
+              }),
+            )
+        );
         // The PUT is applied asynchronously and the hub may still report
         // its previous `Succeeded` state; wait until the tags are visible.
         observed = yield* waitForProvisioned(

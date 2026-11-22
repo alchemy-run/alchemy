@@ -1,3 +1,12 @@
+import {
+  diffMigrations,
+  migrationAttributesOf,
+  migrationsAttrs,
+  migrationsInputOf,
+  stampedOf,
+  type MigrationAttributes,
+  type MigrationsInput,
+} from "@alchemy.run/sql/Migrations";
 import * as spanner from "@distilled.cloud/gcp/spanner_v1";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -8,8 +17,10 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { ALCHEMY_LABEL_PREFIX } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { runDatabaseMigrations } from "./Migrations.ts";
 import { waitForOperation } from "./operations.ts";
 
 const DEFAULT_DIALECT = "GOOGLE_STANDARD_SQL";
@@ -53,9 +64,33 @@ export type DatabaseProps = {
   databaseDialect?: DatabaseDialect;
   /**
    * Extra DDL statements run atomically with create. Immutable —
-   * changing them replaces the database.
+   * changing them replaces the database, so evolve a schema with
+   * `migrations` instead.
    */
   extraStatements?: string[];
+  /**
+   * SQL migrations to apply on deploy, once the database is ready. Accepts
+   * a directory path, a `{ dir, table }` object, or a `Drizzle.Schema`
+   * output. Only pending migrations run; editing or removing an applied
+   * file fails the deploy. Works on both dialects.
+   *
+   * Spanner can't commit DDL and DML together. A migration's DDL runs one
+   * statement per schema operation, each named after the migration and
+   * the statement: a deploy after a crash waits for the operations it
+   * started instead of rerunning them, and after a failed statement is
+   * fixed only that statement and the ones after it run. Its trailing DML
+   * commits with the bookkeeping row. DML between DDL statements fails the
+   * deploy; split it into its own migration. Bookkeeping lives in the `alchemy_migrations` table
+   * (Spanner names can't start with `_`).
+   *
+   * History is forward-only and linear. A new file must sort after every
+   * applied one, or the deploy fails with `NonLinearMigrationHistoryError`;
+   * an edited or deleted applied file fails with
+   * `RewrittenMigrationHistoryError`. Renaming an applied file without
+   * changing its contents keeps it applied. See
+   * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
+   */
+  migrations?: MigrationsInput;
   /**
    * Customer-managed encryption. Immutable — changing it replaces the
    * database.
@@ -63,7 +98,8 @@ export type DatabaseProps = {
   encryptionConfig?: EncryptionConfig;
   /**
    * Drop protection. Alchemy defaults to disabled so `destroy` can drop
-   * the database. Delete disables protection first when it is on.
+   * the database. While it is on, `destroy` and replacement fail until it is
+   * turned off and deployed.
    * @default false
    */
   enableDropProtection?: boolean;
@@ -99,10 +135,51 @@ export type Database = Resource<
     reconciling: boolean | undefined;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;
+    /** Directory of the applied SQL migrations. */
+    migrationsDir: string | undefined;
+    /** Migration bookkeeping table. */
+    migrationsTable: string | undefined;
+    /** Applied migration content hashes. */
+    migrationsHashes: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DatabaseLookup
 >;
+
+/**
+ * Props for {@link Database.lookup}: find a database this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+/**
+ * Deletion was refused because the database has drop protection on, set
+ * through `enableDropProtection` or outside the stack. Turn it off and deploy
+ * (or turn it off in the console) before deleting it.
+ */
+export class DatabaseDropProtected extends Data.TaggedError("GCP.Spanner.DatabaseDropProtected")<{
+  readonly resourceName: string;
+  readonly message: string;
+}> {}
+
+export interface DatabaseLookup {
+  /**
+   * Database id (the `{database}` segment of
+   * `projects/{project}/instances/{instance}/databases/{database}`). Must
+   * match `^[a-z][-a-z0-9]*[a-z0-9]$` (2–30 characters).
+   */
+  databaseId: string;
+  /**
+   * Parent instance id or full name
+   * (`projects/{project}/instances/{instance}`).
+   */
+  instance: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Spanner database inside an instance.
@@ -146,22 +223,49 @@ export type Database = Resource<
  * const { statements } = yield* getDdl();
  * ```
  *
+ * ### Migrations
+ * **Example:** Apply migrations on deploy
+ * ```typescript
+ * const database = yield* GCP.Spanner.Database("AppDb", {
+ *   instance: instance.instanceId,
+ *   migrations: "./migrations",
+ * });
+ * ```
+ *
+ * Each file in `./migrations` holds GoogleSQL (or PostgreSQL, with
+ * `databaseDialect: "POSTGRESQL"`) statements separated by `;`. Migrations
+ * run as the deploying identity, which needs `spanner.databases.updateDdl`
+ * and `spanner.databases.write`.
+ *
+ * ### Looking up an existing database
+ * `Database.lookup` references a database Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared database.
+ *
+ * **Example:** Reference an existing database
+ * ```typescript
+ * const database = GCP.Spanner.Database.lookup({
+ *   databaseId: "my-database",
+ *   instance: "my-instance",
+ * });
+ * ```
+ *
  * @resource
  * @category Spanner
  */
 export const Database = Resource<Database>("GCP.Spanner.Database");
 
 export class DatabaseNotResolved extends Data.TaggedError("GCP.Spanner.DatabaseNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class DatabaseNotReady extends Data.TaggedError("GCP.Spanner.DatabaseNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class DatabaseStillExists extends Data.TaggedError("GCP.Spanner.DatabaseStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -250,7 +354,11 @@ const encryptionKey = (config: EncryptionConfig | undefined) =>
 
 const extraKey = (statements: string[] | undefined) => JSON.stringify(statements ?? []);
 
-const toAttrs = (database: spanner.Database, project: string): Database["Attributes"] => {
+const toAttrs = (
+  database: spanner.Database,
+  project: string,
+  migrations?: Partial<MigrationAttributes>,
+): Database["Attributes"] => {
   const name = database.name ?? "";
   const parsed = parseName(name);
   return {
@@ -267,18 +375,21 @@ const toAttrs = (database: spanner.Database, project: string): Database["Attribu
     encryptionConfig: encryptionOf(database.encryptionConfig),
     reconciling: database.reconciling,
     createTime: database.createTime,
+    ...migrationAttributesOf(migrations),
   };
 };
 
 const getByName = (name: string) =>
   spanner
     .getProjectsInstancesDatabases({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((database) =>
-      database ? Effect.succeed(database) : Effect.fail(new DatabaseNotResolved({ name })),
+      database
+        ? Effect.succeed(database)
+        : Effect.fail(new DatabaseNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.DatabaseNotResolved",
@@ -294,13 +405,13 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (database): database is spanner.Database => database !== undefined,
-      () => new DatabaseNotResolved({ name }),
+      () => new DatabaseNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (database) => isReadyState(database.state),
       (database) =>
         new DatabaseNotReady({
-          name,
+          resourceName: name,
           state: database.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -316,7 +427,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((database) =>
-      database === undefined ? Effect.void : Effect.fail(new DatabaseStillExists({ name })),
+      database === undefined
+        ? Effect.void
+        : Effect.fail(new DatabaseStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.DatabaseStillExists",
@@ -384,12 +497,27 @@ export const DatabaseProvider = () =>
         previousKms !== nextKms ||
         extraChanged;
 
-      if (!replace) return undefined;
+      if (!replace) {
+        if (yield* diffMigrations({ news, output })) {
+          return { action: "update" as const };
+        }
+        return undefined;
+      }
       return {
         action: "replace" as const,
         deleteFirst: !instanceChanged && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ databaseId, instance }) {
+      const env = yield* GcpEnvironment.current;
+      const instanceId = instanceIdOf(instance ?? "");
+      if (instanceId.length === 0) return undefined;
+      const name = resourceName(env.project, instanceId, databaseId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, undefined);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -399,7 +527,7 @@ export const DatabaseProvider = () =>
       const name = output?.name ?? resourceName(env.project, instanceId, databaseId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      return toAttrs(existing, env.project);
+      return toAttrs(existing, env.project, output);
     }),
 
     list: () =>
@@ -444,15 +572,13 @@ export const DatabaseProvider = () =>
       if (current === undefined) {
         const created = yield* spanner
           .createProjectsInstancesDatabases({
+            createStatement: createStatementOf(databaseId, dialect),
+            extraStatements: news.extraStatements,
+            encryptionConfig: news.encryptionConfig,
+            databaseDialect: dialect === DEFAULT_DIALECT ? undefined : dialect,
             parent: instanceName(env.project, instanceId),
-            body: {
-              createStatement: createStatementOf(databaseId, dialect),
-              extraStatements: news.extraStatements,
-              encryptionConfig: news.encryptionConfig,
-              databaseDialect: dialect === DEFAULT_DIALECT ? undefined : dialect,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -460,7 +586,7 @@ export const DatabaseProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DatabaseNotResolved({ name });
+        return yield* new DatabaseNotResolved({ resourceName: name });
       }
 
       if (!isReadyState(current.state)) {
@@ -471,34 +597,52 @@ export const DatabaseProvider = () =>
       if (observedProtection !== desiredProtection) {
         const patched = yield* retryConcurrentChanges(
           spanner.patchProjectsInstancesDatabases({
+            enableDropProtection: desiredProtection,
             name,
             updateMask: "enableDropProtection",
-            body: {
-              name,
-              enableDropProtection: desiredProtection,
-            },
           }),
         );
         yield* waitForOperation(patched);
         current = yield* waitUntilReady(name);
       }
 
-      return toAttrs(current, env.project);
+      // Sync migrations — the shared pipeline skips already-applied ones.
+      const migrationsInput = migrationsInputOf(news);
+      const migrations = migrationsInput
+        ? yield* runDatabaseMigrations({
+            database: current.name ?? name,
+            dialect:
+              normalizeDialect(current.databaseDialect) === "POSTGRESQL" ? "postgres" : "googlesql",
+            input: migrationsInput,
+            stamped: stampedOf(output),
+          })
+        : undefined;
+
+      return toAttrs(
+        current,
+        env.project,
+        migrationsAttrs({ input: migrationsInput, run: migrations, output }),
+      );
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getByName(output.name);
       if (current === undefined) return;
 
+      // Drop protection, set by this stack or outside it, refuses the delete.
+      // Only an account-wide nuke (`force`) lifts it.
       if (current.enableDropProtection === true) {
+        if (force !== true) {
+          return yield* new DatabaseDropProtected({
+            resourceName: output.name,
+            message: `Spanner database '${output.name}' has drop protection on. Set \`enableDropProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         const patched = yield* retryConcurrentChanges(
           spanner.patchProjectsInstancesDatabases({
+            enableDropProtection: false,
             name: output.name,
             updateMask: "enableDropProtection",
-            body: {
-              name: output.name,
-              enableDropProtection: false,
-            },
           }),
         );
         yield* waitForOperation(patched);

@@ -89,7 +89,7 @@ export const makeRedisBinding = <Client>(options: {
         authInstanceOf(instance),
         `GCP_REDIS_AUTH_INSTANCE_${instance.FQN}`,
       );
-      const missing = new RedisUrlMissing({ name: instance.LogicalId });
+      const missing = new RedisUrlMissing({ resourceName: instance.LogicalId });
       // One AUTH lookup per instance for the life of the runtime; a failed
       // lookup is not cached, so the next command retries it.
       let cachedPassword: string | undefined;

@@ -88,7 +88,7 @@ export const LakesEntitiesPartition = Resource<LakesEntitiesPartition>(
 export class LakesEntitiesPartitionNotResolved extends Data.TaggedError(
   "GCP.Dataplex.LakesEntitiesPartitionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const encodeValue = (value: string) => encodeURIComponent(encodeURIComponent(value));
@@ -117,7 +117,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   dataplex
     .getProjectsLocationsLakesZonesEntitiesPartitions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwnedEntityNames = (project: string, region: string) =>
   Effect.gen(function* () {
@@ -208,11 +208,9 @@ export const LakesEntitiesPartitionProvider = () =>
       if (current === undefined) {
         const created = yield* dataplex
           .createProjectsLocationsLakesZonesEntitiesPartitions({
+            values: news.values,
+            location: news.location,
             parent: entity,
-            body: {
-              values: news.values,
-              location: news.location,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -222,7 +220,7 @@ export const LakesEntitiesPartitionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LakesEntitiesPartitionNotResolved({ name });
+        return yield* new LakesEntitiesPartitionNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, entity);

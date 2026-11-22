@@ -98,7 +98,7 @@ export default class LanguageFunction extends Azure.Functions.Function<LanguageF
     const listItems = yield* Azure.CognitiveServices.ListTextBlocklistItems(language);
 
     // The account has no managed identity, so the job's document fails reading the blob.
-    const documentJob = {
+    const documentJob: Azure.CognitiveServices.SubmitAnalyzeDocumentsJobRequest = {
       displayName: "alchemy-documents",
       analysisInput: {
         documents: [
@@ -120,9 +120,11 @@ export default class LanguageFunction extends Azure.Functions.Function<LanguageF
     };
     const summarize = (text: string) => ({
       analysisInput: { documents: [{ id: "1", text, language: "en" }] },
-      tasks: [{ kind: "AbstractiveSummarization", parameters: { sentenceCount: 3 } }],
+      tasks: [{ kind: "AbstractiveSummarization" as const, parameters: { sentenceCount: 3 } }],
     });
-    const conversation = (text: string) => ({
+    const conversation = (
+      text: string,
+    ): Pick<Azure.CognitiveServices.SubmitAnalyzeConversationsJobRequest, "analysisInput"> => ({
       analysisInput: {
         conversations: [
           {
@@ -153,9 +155,11 @@ export default class LanguageFunction extends Azure.Functions.Function<LanguageF
           case "/analyze-text":
             return yield* respond(
               analyzeText({
-                kind: "SentimentAnalysis",
-                analysisInput: {
-                  documents: [{ id: "1", text: "I love this sunny day!", language: "en" }],
+                body: {
+                  kind: "SentimentAnalysis",
+                  analysisInput: {
+                    documents: [{ id: "1", text: "I love this sunny day!", language: "en" }],
+                  },
                 },
               }),
             );
@@ -191,11 +195,13 @@ export default class LanguageFunction extends Azure.Functions.Function<LanguageF
             return yield* respond(
               failureTag(
                 analyzeConversations({
-                  kind: "Conversation",
-                  analysisInput: {
-                    conversationItem: { id: "1", participantId: "user", text: "Book a flight" },
+                  body: {
+                    kind: "Conversation",
+                    analysisInput: {
+                      conversationItem: { id: "1", participantId: "user", text: "Book a flight" },
+                    },
+                    parameters: { projectName: "alchemy-missing", deploymentName: "production" },
                   },
-                  parameters: { projectName: "alchemy-missing", deploymentName: "production" },
                 }),
               ),
             );

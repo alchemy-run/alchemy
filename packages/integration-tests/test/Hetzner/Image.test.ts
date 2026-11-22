@@ -1,17 +1,18 @@
 import * as Hetzner from "@alchemy.run/hetzner";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as images from "@distilled.cloud/hetzner/images";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../expectDeleteRefused.ts";
+import { hetznerPrimaryIps } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 
-const { test } = Test.make({ providers: Hetzner.providers() });
+const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const waitUntilGone = (id: number) =>
   images.getImage({ id }).pipe(
@@ -24,7 +25,7 @@ const waitUntilGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create, update, and delete a snapshot image",
   (stack) =>
     Effect.gen(function* () {
@@ -44,6 +45,7 @@ test.provider.skipIf(!hasHetznerCreds)(
           });
         }),
       );
+      yield* expectFound(Hetzner.Image.lookup({ id: created.id }), created);
 
       expect(created.id).toEqual(expect.any(Number));
       expect(created.type).toEqual("snapshot");
@@ -96,6 +98,43 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(found?.description).toEqual("alchemy-image-golden-v2");
       expect(found?.type).toEqual("snapshot");
 
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const server = yield* Hetzner.Server("Web", {
+            serverType: "cpx12",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+          });
+          return yield* Hetzner.Image("Golden", {
+            server,
+            description: "alchemy-image-golden-v2",
+            labels: { env: "prod", role: "golden" },
+            deleteProtection: true,
+          });
+        }),
+      );
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "Golden",
+        tag: "Hetzner.ImageDeleteProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const server = yield* Hetzner.Server("Web", {
+            serverType: "cpx12",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+          });
+          return yield* Hetzner.Image("Golden", {
+            server,
+            description: "alchemy-image-golden-v2",
+            labels: { env: "prod", role: "golden" },
+            deleteProtection: false,
+          });
+        }),
+      );
+
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.id);
@@ -110,6 +149,57 @@ test.provider.skipIf(!hasHetznerCreds)(
       "live",
     ],
     timeout: 180_000,
-    exclusive: true,
+  },
+);
+
+test.provider(
+  "replace when the source server changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // Both servers stay deployed across the replacement, so the image
+      // replacement never runs alongside removing its old dependency.
+      const program = (source: "First" | "Second") =>
+        Effect.gen(function* () {
+          const first = yield* Hetzner.Server("First", {
+            serverType: "cpx12",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+          });
+          const second = yield* Hetzner.Server("Second", {
+            serverType: "cpx12",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+          });
+          const image = yield* Hetzner.Image("Snapshot", {
+            server: source === "First" ? first : second,
+          });
+          return { first, second, image };
+        });
+
+      const created = yield* stack.deploy(program("First"));
+      expect(created.image.createdFromId).toEqual(created.first.id);
+
+      const replaced = yield* stack.deploy(program("Second"));
+      expect(replaced.image.id).not.toEqual(created.image.id);
+      expect(replaced.image.createdFromId).toEqual(replaced.second.id);
+
+      const fetched = yield* images.getImage({ id: replaced.image.id });
+      expect(fetched.image?.created_from?.id).toEqual(replaced.second.id);
+      expect(yield* waitUntilGone(created.image.id)).toEqual("gone");
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(replaced.image.id)).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:image",
+      "provider:hetzner:server",
+      "provider:hetzner:service",
+      "live",
+    ],
+    timeout: 240_000,
   },
 );

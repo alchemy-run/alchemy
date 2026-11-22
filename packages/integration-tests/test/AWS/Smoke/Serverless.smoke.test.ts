@@ -1,4 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import * as ddb from "@distilled.cloud/aws/dynamodb";
@@ -6,10 +9,7 @@ import * as lambda from "@distilled.cloud/aws/lambda";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as sfn from "@distilled.cloud/aws/sfn";
 import * as sqs from "@distilled.cloud/aws/sqs";
-import { describe, expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -65,7 +65,12 @@ class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
 class UnexpectedStatus extends Data.TaggedError("UnexpectedStatus")<{
   readonly status: number;
   readonly expected: number;
-}> {}
+  readonly body: string;
+}> {
+  override get message() {
+    return `expected HTTP ${this.expected}, got ${this.status}: ${this.body}`;
+  }
+}
 
 class StillExists extends Data.TaggedError("StillExists")<{ readonly what: string }> {}
 
@@ -99,7 +104,11 @@ const awaitStatus = (request: HttpClientRequest.HttpClientRequest, expected: num
     Effect.flatMap((response) =>
       response.status === expected
         ? Effect.succeed(response)
-        : Effect.fail(new UnexpectedStatus({ status: response.status, expected })),
+        : response.text.pipe(
+            Effect.flatMap((body) =>
+              Effect.fail(new UnexpectedStatus({ status: response.status, expected, body })),
+            ),
+          ),
     ),
     Effect.retry({
       while: (e) => e._tag === "UnexpectedStatus",

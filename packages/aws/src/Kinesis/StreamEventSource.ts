@@ -2,10 +2,28 @@ import type * as Lambda from "@distilled.cloud/aws/lambda";
 import * as Binding from "alchemy/Binding";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import type { Stream as KinesisStream } from "./Stream.ts";
 
 export type KinesisEventRecord = import("aws-lambda").KinesisStreamRecord;
+
+export type KinesisStreamEvent = import("aws-lambda").KinesisStreamEvent;
+
+/**
+ * Lambda's partial-batch response for Kinesis. Report the `sequenceNumber`
+ * of the first record that failed as `itemIdentifier`; Lambda checkpoints
+ * before it and retries from there.
+ */
+export type KinesisStreamBatchResponse = import("aws-lambda").KinesisStreamBatchResponse;
+
+/**
+ * Handler for one delivered batch of Kinesis records: receives the
+ * {@link KinesisStreamEvent} and returns Lambda's
+ * {@link KinesisStreamBatchResponse} (or `void` when every record succeeded).
+ * A failure or defect retries the whole batch.
+ */
+export type StreamRecordsHandler<E = never, Req = never> = (
+  event: KinesisStreamEvent,
+) => Effect.Effect<KinesisStreamBatchResponse | void, E, Req>;
 
 export interface StreamEventSourceProps {
   /**
@@ -83,8 +101,8 @@ export interface StreamEventSourceProps {
  *
  * The contract is a `Binding.Service`; the Lambda implementation layer
  * (`AWS.Lambda.StreamEventSource`) creates an event source mapping on the
- * stream, grants the read IAM actions, and forwards `aws:kinesis` records
- * into the handler's `Stream`. Use the {@link consumeStreamRecords} helper
+ * stream, grants the read IAM actions, and hands each delivered batch of
+ * `aws:kinesis` records to the handler. Use the {@link consumeStreamRecords} helper
  * rather than calling the service directly.
  * ### Consuming Records
  * **Example:** Process Stream Records in a Lambda Function
@@ -98,14 +116,11 @@ export interface StreamEventSourceProps {
  *     yield* AWS.Kinesis.consumeStreamRecords(
  *       stream,
  *       { startingPosition: "LATEST", batchSize: 10 },
- *       (records) =>
- *         records.pipe(
- *           Stream.runForEach((record) =>
- *             Effect.log(
- *               Buffer.from(record.kinesis.data, "base64").toString("utf8"),
- *             ),
- *           ),
- *         ),
+ *       Effect.fn(function* (event) {
+ *         for (const record of event.Records) {
+ *           yield* Effect.log(Buffer.from(record.kinesis.data, "base64").toString("utf8"));
+ *         }
+ *       }),
  *     );
  *
  *     return {};
@@ -125,42 +140,49 @@ export const StreamEventSource = Binding.Service<StreamEventSource>(
   "AWS.Kinesis.StreamEventSource",
 );
 
-export type StreamEventSourceService = <StreamReq = never, Req = never>(
+export type StreamEventSourceService = <E = never, Req = never>(
   stream: KinesisStream,
   props: StreamEventSourceProps,
-  process: (
-    stream: Stream.Stream<KinesisEventRecord, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: StreamRecordsHandler<E, Req>,
 ) => Effect.Effect<void, never, never>;
 
 /**
- * Subscribe a runtime to records from a Kinesis stream.
+ * Subscribe a runtime to batches of records from a Kinesis stream.
  *
- * The Lambda runtime implementation creates an event source mapping and forwards
- * matching `aws:kinesis` records into the supplied `Stream`.
+ * The Lambda runtime implementation creates an event source mapping and hands
+ * each delivered {@link KinesisStreamEvent} (only the records from `stream`)
+ * to the handler. Return a {@link KinesisStreamBatchResponse} naming the
+ * first failed record's `sequenceNumber` to checkpoint before it, or `void`
+ * when every record succeeded. If the handler fails, the whole batch is
+ * retried.
  *
- * @example Forward stream records into an SQS queue
+ * Each batch runs inside a `process <stream>` span (`SpanKind.CONSUMER`).
+ *
+ * @example Checkpoint at the first failed record
  * ```typescript
- * const sink = yield* AWS.SQS.QueueSink(queue);
+ * const sendMessage = yield* AWS.SQS.SendMessage(queue);
  *
  * yield* AWS.Kinesis.consumeStreamRecords(
  *   stream,
  *   { startingPosition: "LATEST" },
- *   (records) =>
- *     records.pipe(
- *       Stream.map((record) => ({
+ *   Effect.fn(function* (event) {
+ *     for (const record of event.Records) {
+ *       const ok = yield* sendMessage({
  *         MessageBody: Buffer.from(record.kinesis.data, "base64").toString("utf8"),
- *       })),
- *       Stream.run(sink),
- *       Effect.orDie,
- *     ),
+ *       }).pipe(
+ *         Effect.as(true),
+ *         Effect.catchCause(() => Effect.succeed(false)),
+ *       );
+ *       if (!ok) {
+ *         return { batchItemFailures: [{ itemIdentifier: record.kinesis.sequenceNumber }] };
+ *       }
+ *     }
+ *   }),
  * );
  * ```
  */
-export const consumeStreamRecords = <S extends KinesisStream, Req = never, StreamReq = never>(
+export const consumeStreamRecords = <S extends KinesisStream, E = never, Req = never>(
   stream: S,
   props: StreamEventSourceProps = {},
-  process: (
-    stream: Stream.Stream<KinesisEventRecord, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: StreamRecordsHandler<E, Req>,
 ) => StreamEventSource.use((source) => source(stream, props, process));

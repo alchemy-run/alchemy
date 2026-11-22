@@ -14,13 +14,13 @@ export const PAGE_SIZE = 1000;
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.ArtifactRegistry.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError(
   "GCP.ArtifactRegistry.ResourceStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -198,7 +198,7 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
 export const waitUntilExists = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value ? Effect.succeed(value) : Effect.fail(new ResourceNotResolved({ name })),
+      value ? Effect.succeed(value) : Effect.fail(new ResourceNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceNotResolved,
@@ -210,7 +210,9 @@ export const waitUntilExists = <A, E, R>(get: Effect.Effect<A | undefined, E, R>
 export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined ? Effect.void : Effect.fail(new ResourceStillExists({ name })),
+      value === undefined
+        ? Effect.void
+        : Effect.fail(new ResourceStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceStillExists,
@@ -304,11 +306,11 @@ export const missingGet =
   ) =>
   (name: string) =>
     name.length === 0
-      ? Effect.succeed(undefined)
+      ? Effect.undefined
       : effect({ name }).pipe(
           Effect.catchIf(
             (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
-            () => Effect.succeed(undefined),
+            () => Effect.undefined,
           ),
         );
 

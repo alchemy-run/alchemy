@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteRadarValueListItem,
   GetRadarValueListItems,
@@ -109,7 +108,7 @@ const toAttrs = (item: StripeRadarValueListItem): RadarValueListItemAttributes =
 const isMissing = isMissingStripeResource;
 
 const getById = (item: string) =>
-  GetRadarValueListItem({ item }).pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
+  GetRadarValueListItem({ item }).pipe(Effect.catchIf(isMissing, () => Effect.undefined));
 
 const listItems = Effect.fn(function* (valueList: string) {
   const items: StripeRadarValueListItem[] = [];
@@ -119,7 +118,7 @@ const listItems = Effect.fn(function* (valueList: string) {
       value_list: valueList,
       limit: LIST_PAGE_SIZE,
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
-    }).pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
+    }).pipe(Effect.catchIf(isMissing, () => Effect.undefined));
     if (response === undefined) {
       break;
     }
@@ -144,7 +143,7 @@ const findByValue = Effect.fn(function* (valueList: string, value: string) {
       value,
       limit: LIST_PAGE_SIZE,
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
-    }).pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
+    }).pipe(Effect.catchIf(isMissing, () => Effect.undefined));
     if (response === undefined) {
       break;
     }
@@ -263,10 +262,8 @@ export const RadarValueListItemProvider = () =>
         current = yield* CreateRadarValueListItem({
           value_list: news.valueList,
           value: news.value,
+          idempotencyKey: `alchemy-radar-value-list-item-${instanceId}`,
         }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-radar-value-list-item-${instanceId}`,
-          }),
           Effect.catchIf(
             (e) => e._tag === "InvalidRequestError" || e._tag === "Conflict",
             (e) =>

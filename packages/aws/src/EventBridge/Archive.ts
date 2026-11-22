@@ -8,13 +8,14 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type { ArchiveState } from "@distilled.cloud/aws/eventbridge";
 
 export type ArchiveName = string;
-export type ArchiveArn = `arn:aws:events:${RegionID}:${AccountID}:archive/${ArchiveName}`;
+export type ArchiveArn = `arn:${Partition}:events:${RegionID}:${AccountID}:archive/${ArchiveName}`;
 
 export interface ArchiveProps {
   /**
@@ -99,8 +100,28 @@ export interface Archive extends Resource<
     eventSourceArn: string;
   },
   never,
-  Providers
+  Providers,
+  ArchiveLookup
 > {}
+
+/**
+ * Props for {@link Archive.lookup}: find an archive this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ArchiveLookup {
+  /** The name of the existing archive. *
+   * ### Looking up an existing archive
+   * `Archive.lookup` references an archive Alchemy doesn't manage (created in the
+   * console or by another stack), found by `archiveName`. It is read during
+   * plan/deploy and never created, updated or deleted.
+   *
+   * **Example:** Reference an existing archive
+   * ```typescript
+   * const existing = AWS.EventBridge.Archive.lookup({ archiveName: "..." });
+   * ```
+   */
+  archiveName: string;
+}
 export const Archive = Resource<Archive>("AWS.EventBridge.Archive");
 
 export const ArchiveProvider = () =>
@@ -149,13 +170,26 @@ export const ArchiveProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ archiveName }) {
+          const described = yield* eventbridge
+            .describeArchive({ ArchiveName: archiveName })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (!described?.ArchiveName || !described.ArchiveArn) {
+            return undefined;
+          }
+          return {
+            archiveName: described.ArchiveName,
+            archiveArn: described.ArchiveArn as ArchiveArn,
+            eventSourceArn: described.EventSourceArn ?? "",
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           // Archives don't support tags; the deterministic physical name is
           // the ownership signal (it embeds app/stage/logical id).
           const archiveName = output?.archiveName ?? (yield* createArchiveName(id, olds ?? {}));
           const described = yield* eventbridge
             .describeArchive({ ArchiveName: archiveName })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (!described?.ArchiveName || !described.ArchiveArn) {
             return undefined;
           }
@@ -185,7 +219,7 @@ export const ArchiveProvider = () =>
                 attrs.push({
                   archiveName: archive.ArchiveName,
                   archiveArn:
-                    `arn:aws:events:${region}:${accountId}:archive/${archive.ArchiveName}` as ArchiveArn,
+                    `arn:${partitionOf(region)}:events:${region}:${accountId}:archive/${archive.ArchiveName}` as ArchiveArn,
                   eventSourceArn: archive.EventSourceArn ?? "",
                 });
               }
@@ -202,7 +236,7 @@ export const ArchiveProvider = () =>
           // falls through to create.
           const observed = yield* eventbridge
             .describeArchive({ ArchiveName: archiveName })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (!observed?.ArchiveArn) {
             // Ensure — create the archive; tolerate an AlreadyExists race

@@ -13,17 +13,49 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, hasTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import type { AccountID } from "../Environment.ts";
+import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { managedPolicyArn, type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { eksConnectionOf, makeEksTransport } from "./KubernetesAdapter.ts";
 
+export class EKSClusterUnexpectedResponse extends Data.TaggedError("EKSClusterUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+/**
+ * Deletion was refused because the cluster has deletion protection on, set
+ * through `deletionProtection` or outside the stack. Turn it off and deploy
+ * (or turn it off in the console) before deleting it.
+ */
+export class EKSClusterDeletionProtected extends Data.TaggedError("EKSClusterDeletionProtected")<{
+  readonly clusterName: string;
+  readonly message: string;
+}> {}
+
+export class EKSClusterInvalidProps extends Data.TaggedError("EKSClusterInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class EKSClusterConflict extends Data.TaggedError("EKSClusterConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class EKSClusterOperationFailed extends Data.TaggedError("EKSClusterOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type ClusterName = string;
-export type ClusterArn = `arn:aws:eks:${RegionID}:${AccountID}:cluster/${ClusterName}`;
+export type ClusterArn = `arn:${Partition}:eks:${RegionID}:${AccountID}:cluster/${ClusterName}`;
 
 export interface ClusterProps {
   /**
@@ -144,8 +176,18 @@ export interface Cluster extends Resource<
     managedNodeRoleName: string | undefined;
   },
   KubernetesObjectBinding,
-  Providers
+  Providers,
+  ClusterLookup
 > {}
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterLookup {
+  /** The name of the existing cluster. */
+  clusterName: string;
+}
 
 /**
  * An Amazon EKS cluster with support for EKS Auto Mode settings.
@@ -209,6 +251,22 @@ export interface Cluster extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add a node group to an existing cluster
+ * ```typescript
+ * const cluster = AWS.EKS.Cluster.lookup({ clusterName: "platform" });
+ *
+ * yield* AWS.EKS.Nodegroup("Workers", {
+ *   clusterName: cluster.clusterName,
+ *   nodeRole: nodeRole.roleArn,
+ *   subnets: subnetIds,
+ * });
+ * ```
+ *
  * @resource
  */
 export const Cluster = Resource<Cluster>("AWS.EKS.Cluster");
@@ -269,17 +327,17 @@ const getDesiredKubernetesObjects = (
     )
     .map((binding) => binding.data.object);
 
-const autoClusterManagedPolicyArns = [
-  "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy",
-  "arn:aws:iam::aws:policy/AmazonEKSComputePolicy",
-  "arn:aws:iam::aws:policy/AmazonEKSBlockStoragePolicy",
-  "arn:aws:iam::aws:policy/AmazonEKSLoadBalancingPolicy",
-  "arn:aws:iam::aws:policy/AmazonEKSNetworkingPolicy",
+const autoClusterManagedPolicies = [
+  "AmazonEKSClusterPolicy",
+  "AmazonEKSComputePolicy",
+  "AmazonEKSBlockStoragePolicy",
+  "AmazonEKSLoadBalancingPolicy",
+  "AmazonEKSNetworkingPolicy",
 ];
 
-const autoNodeManagedPolicyArns = [
-  "arn:aws:iam::aws:policy/AmazonEKSWorkerNodeMinimalPolicy",
-  "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly",
+const autoNodeManagedPolicies = [
+  "AmazonEKSWorkerNodeMinimalPolicy",
+  "AmazonEC2ContainerRegistryPullOnly",
 ];
 
 /**
@@ -336,7 +394,7 @@ const loggingByType = (logging: eks.Logging | undefined) => {
 };
 
 interface ClusterConfigUpdate {
-  /** Stable category slug — also feeds the per-category idempotency token. */
+  /** Stable category slug, used in progress notes. */
   category: string;
   request: Omit<eks.UpdateClusterConfigRequest, "name" | "clientRequestToken">;
 }
@@ -563,32 +621,26 @@ export const ClusterProvider = () =>
           ? Effect.succeed(props.clusterName)
           : createPhysicalName({ id, maxLength: 100 });
 
-      const toClientRequestToken = (id: string, action: string) =>
-        createPhysicalName({
-          id: `${id}-${action}`,
-          maxLength: 64,
-          delimiter: "-",
-        });
-
       const validateProps = Effect.fn(function* (props: ClusterProps) {
         const subnetIds = props.resourcesVpcConfig.subnetIds ?? [];
         if (subnetIds.length < 2) {
-          return yield* Effect.fail(new Error("AWS.EKS.Cluster requires at least two subnet IDs"));
+          return yield* new EKSClusterInvalidProps({
+            message: "AWS.EKS.Cluster requires at least two subnet IDs",
+          });
         }
         if (!props.roleArn && props.compute !== "auto") {
-          return yield* Effect.fail(
-            new Error("AWS.EKS.Cluster requires roleArn unless compute is 'auto'"),
-          );
+          return yield* new EKSClusterInvalidProps({
+            message: "AWS.EKS.Cluster requires roleArn unless compute is 'auto'",
+          });
         }
         if (
           props.computeConfig?.enabled &&
           props.accessConfig?.authenticationMode === "CONFIG_MAP"
         ) {
-          return yield* Effect.fail(
-            new Error(
+          return yield* new EKSClusterInvalidProps({
+            message:
               "AWS.EKS.Cluster Auto Mode requires accessConfig.authenticationMode to include API access",
-            ),
-          );
+          });
         }
       });
 
@@ -632,7 +684,9 @@ export const ClusterProvider = () =>
                 Effect.filterOrFail(
                   (existing) => hasTags(tags, existing.Role?.Tags),
                   () =>
-                    new Error(`Role '${roleName}' already exists and is not managed by alchemy`),
+                    new EKSClusterConflict({
+                      message: `Role '${roleName}' already exists and is not managed by alchemy`,
+                    }),
                 ),
               ),
             ),
@@ -691,7 +745,7 @@ export const ClusterProvider = () =>
           .describeCluster({
             name: clusterName,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         const cluster = described?.cluster;
         if (!cluster?.arn || !cluster.name || !cluster.roleArn) {
           return undefined;
@@ -700,7 +754,7 @@ export const ClusterProvider = () =>
           .listTagsForResource({
             resourceArn: cluster.arn,
           })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
         const tags = normalizeTags(listedTags?.tags ?? cluster.tags);
         return mapClusterState(cluster, tags, kubernetesObjects ?? [], managedRoles);
       });
@@ -718,28 +772,28 @@ export const ClusterProvider = () =>
           kubernetesObjects,
           managedRoles,
         }).pipe(
-          Effect.flatMap((state) => {
-            if (!state) {
-              return Effect.fail(
-                new ClusterNotReady({
+          Effect.flatMap(
+            Effect.fnUntraced(function* (state) {
+              if (!state) {
+                return yield* new ClusterNotReady({
                   status: undefined,
-                }),
-              );
-            }
-            if (state.status === "ACTIVE") {
-              return Effect.succeed(state);
-            }
-            if (state.status === "FAILED") {
-              return Effect.fail(new Error(`EKS cluster '${clusterName}' entered FAILED state`));
-            }
-            return Effect.fail(
-              new ClusterNotReady({
+                });
+              }
+              if (state.status === "ACTIVE") {
+                return state;
+              }
+              if (state.status === "FAILED") {
+                return yield* new EKSClusterOperationFailed({
+                  message: `EKS cluster '${clusterName}' entered FAILED state`,
+                });
+              }
+              return yield* new ClusterNotReady({
                 status: state.status,
-              }),
-            );
-          }),
+              });
+            }),
+          ),
           Effect.retry({
-            while: (error) => error instanceof ClusterNotReady,
+            while: (error) => error._tag === "EKS.ClusterNotReady",
             schedule: updateRetrySchedule,
           }),
         );
@@ -749,10 +803,10 @@ export const ClusterProvider = () =>
           clusterName,
         }).pipe(
           Effect.flatMap((state) =>
-            state ? Effect.fail(new ClusterStillExists()) : Effect.succeed(undefined),
+            state ? Effect.fail(new ClusterStillExists()) : Effect.undefined,
           ),
           Effect.retry({
-            while: (error) => error instanceof ClusterStillExists,
+            while: (error) => error._tag === "EKS.ClusterStillExists",
             schedule: updateRetrySchedule,
           }),
         );
@@ -764,25 +818,23 @@ export const ClusterProvider = () =>
             updateId,
           })
           .pipe(
-            Effect.flatMap(({ update }) => {
-              if (update?.status === "Successful") {
-                return Effect.succeed(update);
-              }
-              if (update?.status === "Failed" || update?.status === "Cancelled") {
-                return Effect.fail(
-                  new Error(
-                    `EKS cluster update '${updateId}' failed with status '${update?.status}'`,
-                  ),
-                );
-              }
-              return Effect.fail(
-                new ClusterUpdateNotComplete({
+            Effect.flatMap(
+              Effect.fnUntraced(function* ({ update }) {
+                if (update?.status === "Successful") {
+                  return update;
+                }
+                if (update?.status === "Failed" || update?.status === "Cancelled") {
+                  return yield* new EKSClusterOperationFailed({
+                    message: `EKS cluster update '${updateId}' failed with status '${update?.status}'`,
+                  });
+                }
+                return yield* new ClusterUpdateNotComplete({
                   status: update?.status,
-                }),
-              );
-            }),
+                });
+              }),
+            ),
             Effect.retry({
-              while: (error) => error instanceof ClusterUpdateNotComplete,
+              while: (error) => error._tag === "EKS.ClusterUpdateNotComplete",
               schedule: updateRetrySchedule,
             }),
           );
@@ -835,6 +887,7 @@ export const ClusterProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: ({ clusterName }) => readCluster({ clusterName }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const clusterName = output?.clusterName ?? (yield* toClusterName(id, olds ?? {}));
           const state = yield* readCluster({
@@ -846,6 +899,7 @@ export const ClusterProvider = () =>
           return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
+          const random = yield* SecureRandom.SecureRandom;
           yield* validateProps(news);
 
           const clusterName = yield* toClusterName(id, news);
@@ -859,6 +913,7 @@ export const ClusterProvider = () =>
           // cluster. Physical names are cached in the output so re-runs and
           // updates converge on the same roles.
           const auto = news.compute === "auto";
+          const { partition } = yield* AWSEnvironment.current;
           let managedClusterRoleName = output?.managedClusterRoleName;
           let managedNodeRoleName = output?.managedNodeRoleName;
           let roleArn = news.roleArn;
@@ -872,7 +927,9 @@ export const ClusterProvider = () =>
               roleName: managedClusterRoleName,
               service: "eks.amazonaws.com",
               actions: ["sts:AssumeRole", "sts:TagSession"],
-              managedPolicyArns: autoClusterManagedPolicyArns,
+              managedPolicyArns: autoClusterManagedPolicies.map((name) =>
+                managedPolicyArn(partition, name),
+              ),
               userTags: news.tags,
             });
           } else if (roleArn) {
@@ -889,16 +946,18 @@ export const ClusterProvider = () =>
               roleName: managedNodeRoleName,
               service: "ec2.amazonaws.com",
               actions: ["sts:AssumeRole"],
-              managedPolicyArns: autoNodeManagedPolicyArns,
+              managedPolicyArns: autoNodeManagedPolicies.map((name) =>
+                managedPolicyArn(partition, name),
+              ),
               userTags: news.tags,
             });
           } else if (nodeRoleArn) {
             managedNodeRoleName = undefined;
           }
           if (!roleArn) {
-            return yield* Effect.fail(
-              new Error("AWS.EKS.Cluster requires roleArn unless compute is 'auto'"),
-            );
+            return yield* new EKSClusterInvalidProps({
+              message: "AWS.EKS.Cluster requires roleArn unless compute is 'auto'",
+            });
           }
           const managedRoles = { managedClusterRoleName, managedNodeRoleName };
           const effective = applyAutoModeDefaults(news, {
@@ -913,6 +972,14 @@ export const ClusterProvider = () =>
             kubernetesObjects: output?.kubernetesObjects,
             managedRoles,
           });
+          // Let a create or update a crashed deploy left in flight finish before diffing against it.
+          if (state?.status === "CREATING" || state?.status === "UPDATING") {
+            state = yield* waitForClusterActive(
+              clusterName,
+              output?.kubernetesObjects ?? [],
+              managedRoles,
+            );
+          }
 
           // Ensure — create cluster if missing. Tolerate
           // `ResourceInUseException` as a race with a peer reconciler:
@@ -933,7 +1000,7 @@ export const ClusterProvider = () =>
                 deletionProtection: effective.deletionProtection,
                 upgradePolicy: effective.upgradePolicy,
                 tags: desiredTags,
-                clientRequestToken: yield* toClientRequestToken(id, "create"),
+                clientRequestToken: yield* random.uuidV4(),
               })
               .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
 
@@ -955,7 +1022,7 @@ export const ClusterProvider = () =>
             const configUpdate = yield* eks.updateClusterConfig({
               name: clusterName,
               ...request,
-              clientRequestToken: yield* toClientRequestToken(id, `config-${category}`),
+              clientRequestToken: yield* random.uuidV4(),
             });
             if (configUpdate.update?.id) {
               yield* session.note(`Updating EKS cluster ${category} config (${clusterName})...`);
@@ -974,7 +1041,7 @@ export const ClusterProvider = () =>
             const versionUpdate = yield* eks.updateClusterVersion({
               name: clusterName,
               version: effective.version,
-              clientRequestToken: yield* toClientRequestToken(id, "version"),
+              clientRequestToken: yield* random.uuidV4(),
             });
             if (versionUpdate.update?.id) {
               yield* session.note(`Updating EKS cluster version ${clusterName}...`);
@@ -1013,9 +1080,9 @@ export const ClusterProvider = () =>
             managedRoles,
           });
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`EKS cluster '${clusterName}' could not be read after reconcile`),
-            );
+            return yield* new EKSClusterUnexpectedResponse({
+              message: `EKS cluster '${clusterName}' could not be read after reconcile`,
+            });
           }
 
           const kubernetesObjects = yield* reconcileObjects({
@@ -1029,7 +1096,21 @@ export const ClusterProvider = () =>
             kubernetesObjects,
           };
         }),
-        delete: Effect.fn(function* ({ id, output }) {
+        delete: Effect.fn(function* ({ output, force }) {
+          const random = yield* SecureRandom.SecureRandom;
+          // Deletion protection, set by this stack or outside it, refuses the
+          // delete — before any Kubernetes object is removed. Only an
+          // account-wide nuke (`force`) lifts it.
+          const observedProtection = yield* eks.describeCluster({ name: output.clusterName }).pipe(
+            Effect.map((response) => response.cluster?.deletionProtection === true),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(false)),
+          );
+          if (observedProtection && force !== true) {
+            return yield* new EKSClusterDeletionProtected({
+              clusterName: output.clusterName,
+              message: `EKS cluster '${output.clusterName}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+            });
+          }
           if ((output.kubernetesObjects ?? []).length > 0) {
             yield* deleteObjects({
               transport: yield* getKubernetesTransport(output),
@@ -1037,16 +1118,32 @@ export const ClusterProvider = () =>
             });
           }
 
-          if (output.deletionProtection) {
+          if (observedProtection) {
             const disableDeletionProtection = yield* eks.updateClusterConfig({
               name: output.clusterName,
               deletionProtection: false,
-              clientRequestToken: yield* toClientRequestToken(id, "disable-deletion-protection"),
+              clientRequestToken: yield* random.uuidV4(),
             });
             if (disableDeletionProtection.update?.id) {
               yield* waitForUpdate(output.clusterName, disableDeletionProtection.update.id);
               yield* waitForClusterActive(output.clusterName, output.kubernetesObjects ?? []);
             }
+          }
+
+          // A cluster with an update in flight (an access-entry or config change
+          // a crashed deploy left behind) refuses deletion with
+          // ResourceInUseException: let its updates settle first.
+          const updateIds = yield* eks.listUpdates({ name: output.clusterName }).pipe(
+            Effect.map((response) => response.updateIds ?? []),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([] as string[])),
+          );
+          for (const updateId of updateIds) {
+            yield* waitForUpdate(output.clusterName, updateId).pipe(
+              Effect.catchTag(
+                ["EKSClusterOperationFailed", "ResourceNotFoundException"],
+                () => Effect.void,
+              ),
+            );
           }
 
           yield* eks

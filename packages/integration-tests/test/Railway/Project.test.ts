@@ -1,14 +1,16 @@
 import * as Railway from "@alchemy.run/railway";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Query } from "@distilled.cloud/core/query";
 import { Railway as RailwaySdk } from "@distilled.cloud/railway";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { railwayApi } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 
-const { test } = Test.make({ providers: Railway.providers() });
+const { test } = Test.make({ limit: railwayApi, providers: Railway.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -48,6 +50,7 @@ test.provider(
           return yield* Railway.Project("Site", { description: "v1" });
         }),
       );
+      yield* expectFound(Railway.Project.lookup({ projectId: created.projectId }), created);
 
       expect(created.projectId).toEqual(expect.any(String));
       expect(created.projectId.length).toBeGreaterThan(0);

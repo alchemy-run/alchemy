@@ -113,7 +113,7 @@ export const AgentsFlowsVersion = Resource<AgentsFlowsVersion>("GCP.Dialogflow.A
 export class AgentsFlowsVersionNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsFlowsVersionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (version: dialogflow.GoogleCloudDialogflowCxV3Version, project: string) => {
@@ -134,10 +134,10 @@ const toAttrs = (version: dialogflow.GoogleCloudDialogflowCxV3Version, project: 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsFlowsVersions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
@@ -255,11 +255,8 @@ export const AgentsFlowsVersionProvider = () =>
 
       if (current === undefined) {
         const operation = yield* dialogflow
-          .createProjectsLocationsAgentsFlowsVersions({
-            parent: flow,
-            body,
-          })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .createProjectsLocationsAgentsFlowsVersions({ ...body, parent: flow })
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {
           const done = yield* waitForOperation(operation);
           const name = resourceNameFromOperation(done) ?? resourceNameFromOperation(operation);
@@ -274,7 +271,7 @@ export const AgentsFlowsVersionProvider = () =>
 
       if (current === undefined) {
         return yield* new AgentsFlowsVersionNotResolved({
-          name: output?.name ?? `${flow}/versions/${news.versionId ?? "unknown"}`,
+          resourceName: output?.name ?? `${flow}/versions/${news.versionId ?? "unknown"}`,
         });
       }
 
@@ -288,12 +285,13 @@ export const AgentsFlowsVersionProvider = () =>
 
       if (displayChanged || descriptionChanged) {
         current = yield* dialogflow.patchProjectsLocationsAgentsFlowsVersions({
+          displayName,
+          description,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
             descriptionChanged ? "description" : undefined,
           ),
-          body: { displayName, description, name: currentName },
         });
       }
 

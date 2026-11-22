@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as SQS from "@distilled.cloud/aws/sqs";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -376,6 +376,22 @@ describe(
             expect(event.source).toBe("alchemy.test.custom");
             expect(event.detailType).toBe("TestEvent");
             expect(event.detail.marker).toBe("consume-loop-custom");
+          }),
+        { timeout: 120_000 },
+      );
+
+      test.provider(
+        "consume loop matches a pattern against an array field",
+        (_stack) =>
+          Effect.gen(function* () {
+            const event = yield* publishUntilReceived(
+              "/publish-tagged",
+              customQueueUrl,
+              "consume-loop-tagged",
+            );
+
+            expect(event.source).toBe("alchemy.test.tagged");
+            expect(event.detail.marker).toBe("consume-loop-tagged");
           }),
         { timeout: 120_000 },
       );

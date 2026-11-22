@@ -1,12 +1,13 @@
 import * as AWS from "@alchemy.run/aws";
 import { DbInstance } from "@alchemy.run/aws/Timestream";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as influxdb from "@distilled.cloud/aws/timestream-influxdb";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import { interruptDestroy } from "../../interruptDestroy.ts";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -75,7 +76,7 @@ describe(
     );
 
     test.provider.skipIf(!!process.env.FAST)(
-      "create, wait, and delete an InfluxDB instance",
+      "create, wait, and delete an InfluxDB instance through an interrupted destroy",
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
@@ -105,6 +106,14 @@ describe(
           const described = yield* influxdb.getDbInstance({ identifier: instance.id });
           expect(described.name).toBe(instance.name);
 
+          // The destroy is interrupted once the instance is DELETING, so the
+          // next one has to finish a delete already under way.
+          yield* interruptDestroy(stack, {
+            status: influxdb
+              .getDbInstance({ identifier: instance.id })
+              .pipe(Effect.map((observed) => observed.status)),
+            deleting: "DELETING",
+          });
           yield* stack.destroy();
 
           yield* Effect.gen(function* () {

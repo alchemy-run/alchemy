@@ -45,8 +45,14 @@ export interface SetShareProperties extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: SetSharePropertiesRequest,
-    ) => Effect.Effect<files.SetSharePropertiesResponse, files.SetSharePropertiesError, RuntimeContext>
+    ) => Effect.Effect<
+      files.SetSharePropertiesResponse,
+      files.SetSharePropertiesError,
+      RuntimeContext
+    >
   >
 > {}
 
-export const SetShareProperties = Binding.Service<SetShareProperties>("Azure.Storage.SetShareProperties");
+export const SetShareProperties = Binding.Service<SetShareProperties>(
+  "Azure.Storage.SetShareProperties",
+);

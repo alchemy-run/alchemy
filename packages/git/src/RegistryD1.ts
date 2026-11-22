@@ -38,6 +38,8 @@ import type { QueryDatabaseClient } from "@alchemy.run/cloudflare/D1";
  */
 import type * as runtime from "@cloudflare/workers-types";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { RepoAlreadyExists, ValidationError } from "./Api.ts";
@@ -69,7 +71,7 @@ const d1 = <A>(
   effect: Effect.Effect<A, never, RuntimeContext>,
 ): Effect.Effect<A, StoreError, RuntimeContext> =>
   Effect.catchCause(effect, (cause) =>
-    Effect.fail(StoreError.make({ reason: `registry ${what}: ${cause}` })),
+    Effect.fail(StoreError.make({ reason: `registry ${what}: ${Cause.pretty(cause)}` })),
   );
 
 /**
@@ -104,7 +106,7 @@ export const RegistryD1 = (database: Database): Layer.Layer<RegistryStore> =>
           }
           yield* schema;
           const repoId = yield* ulid();
-          const createdAt = Date.now();
+          const createdAt = yield* Clock.currentTimeMillis;
 
           // Guarded insert: SQLite evaluates the NOT EXISTS and the write
           // atomically, so this is the CAS the DO gets from its single
@@ -255,11 +257,12 @@ export const RegistryD1 = (database: Database): Layer.Layer<RegistryStore> =>
 
         markDeleted: Effect.fn(function* (repoId: string) {
           yield* schema;
+          const deletedAt = yield* Clock.currentTimeMillis;
           yield* d1(
             "markDeleted",
             db
               .prepare(`UPDATE repos SET deleted_at = ? WHERE repo_id = ? AND deleted_at IS NULL`)
-              .bind(Date.now(), repoId)
+              .bind(deletedAt, repoId)
               .run(),
           );
         }),

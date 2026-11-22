@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { RollTemplate } from "./_roll";
-import { Line, sleep, TermChrome, useSpinner } from "./_terminal";
+import { Line, prefersReducedMotion, sleep, TermChrome, useSpinner } from "./_terminal";
 import {
   compactValues,
   HOST_TEMPLATE,
@@ -11,10 +11,11 @@ import {
 import "./HeroHosts.css";
 
 /*
- * The hero: one API cycling through eight providers. Each turn rolls the parts
- * of the code that change (the host, its props, the Photos Layer) the way
- * the talk deck's Roll does, then deploys it, showing the resources that host needs and the binding.
- * Clicking a host in the reel jumps to it.
+ * The hero: one model cycling through seven providers. Each turn rolls the
+ * parts that change (the host, its props, the Bank Layer) the way the talk
+ * deck's Roll does, then runs the tests and deploys it, showing the resources
+ * that provider needs and the binding.
+ * Clicking a provider in the reel jumps to it.
  */
 
 type Status = "ready" | "creating" | "created";
@@ -40,8 +41,10 @@ export default function HeroHosts() {
     n: number;
   }>({ was: HOSTS[0]!.values, now: HOSTS[0]!.values, n: 0 });
 
+  const [testCmd, setTestCmd] = useState("");
+  const [tested, setTested] = useState(false);
   const [cmd, setCmd] = useState("");
-  const [caret, setCaret] = useState(false);
+  const [caret, setCaret] = useState<"test" | "deploy" | null>(null);
   const [header, setHeader] = useState<number | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [done, setDone] = useState(false);
@@ -61,6 +64,8 @@ export default function HeroHosts() {
       const next = HOSTS[i]!.values;
       setHost(i);
       // The terminal waits for the new code.
+      setTestCmd("");
+      setTested(false);
       setCmd("");
       setHeader(null);
       setRows([]);
@@ -77,7 +82,20 @@ export default function HeroHosts() {
       setRows([]);
       setDone(false);
       setCmd("");
-      setCaret(true);
+      setTestCmd("");
+      setTested(false);
+      setCaret("test");
+      const test = "pnpm test";
+      for (let n = 1; n <= test.length; n++) {
+        if (aborted()) return;
+        setTestCmd(test.slice(0, n));
+        await sleep(16);
+      }
+      await sleep(260);
+      if (aborted()) return;
+      setTested(true);
+      await sleep(180);
+      setCaret("deploy");
       const text = "alchemy deploy";
       for (let n = 1; n <= text.length; n++) {
         if (aborted()) return;
@@ -85,7 +103,7 @@ export default function HeroHosts() {
         await sleep(16);
       }
       await sleep(80);
-      setCaret(false);
+      setCaret(null);
       setHeader(resources.length);
       for (const r of resources) {
         if (aborted()) return;
@@ -108,6 +126,8 @@ export default function HeroHosts() {
       while (!aborted()) {
         await deploy(i);
         if (aborted()) return;
+        // Reduced motion: show the finished deploy and stop cycling hosts.
+        if (prefersReducedMotion()) return;
         await sleep(1300);
         if (aborted()) return;
         i = (i + 1) % HOSTS.length;
@@ -118,7 +138,6 @@ export default function HeroHosts() {
     return () => {
       signal.aborted = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [start]);
 
   // On phones the reel is one scrolling line: keep the current host in view.
@@ -165,22 +184,37 @@ export default function HeroHosts() {
       <div className="v2-hero__code" aria-hidden>
         <div className="alc-code-block alc-code-block--compact">
           <div className="alc-code-block__header">
-            <span className="alc-code-block__filename">src/api.ts</span>
+            <span className="alc-code-block__filename">src/Bank.ts</span>
           </div>
           <pre className="alc-code-block__pre hh-pre--full">{code}</pre>
           <pre className="alc-code-block__pre hh-pre--compact">{compact}</pre>
         </div>
       </div>
       <div className="v2-hero__term" aria-hidden>
-        <TermChrome title="~/my-app" badge="DEPLOY" badgeColor={GREEN} maxLines={9}>
+        <TermChrome title="~/bank" badge="DEPLOY" badgeColor={GREEN} maxLines={10}>
           <Line>
             <span style={{ color: GREEN }}>$ </span>
-            {cmd}
-            {caret && <span style={{ color: "var(--alc-fg-invert)" }}>▍</span>}
+            {testCmd}
+            {caret === "test" && !tested && (
+              <span style={{ color: "var(--alc-fg-invert)" }}>▍</span>
+            )}
           </Line>
+          {tested && (
+            <Line>
+              <span style={{ color: GREEN }}>✓ </span>
+              14 stories
+              <span style={{ color: GREEN }}>{"  ✓ "}</span>6 rules proved and checked
+            </Line>
+          )}
+          {tested && (
+            <Line>
+              <span style={{ color: GREEN }}>$ </span>
+              {cmd}
+              {caret === "deploy" && <span style={{ color: "var(--alc-fg-invert)" }}>▍</span>}
+            </Line>
+          )}
           {header !== null && (
             <>
-              <Line> </Line>
               <Line>
                 <span
                   style={{

@@ -1,0 +1,699 @@
+---
+/**
+ * `<Tree />` — a hierarchy drawn as nested borders, and what applies to each
+ * part of it. A node with children is a container around them; a node without
+ * is a box inside its container. Use it when things nest to any depth and rules
+ * flow down: an AWS organization's root, OUs and accounts with service control
+ * policies, a folder tree with inherited IAM roles.
+ *
+ *   <Tree
+ *     nodes={[
+ *       { id: "root", label: "Root", type: "organization" },
+ *       { id: "workloads", label: "Workloads", type: "OU", parent: "root" },
+ *       { id: "prod", label: "prod", type: "account", parent: "workloads" },
+ *     ]}
+ *     scopes={[{ on: "workloads", label: "SCP DenyOtherRegions" }]}
+ *   />
+ *
+ * A scope tags a container and tints its border, so a policy attached to an
+ * OU visibly covers everything inside it. `dashed` draws a softer border (a
+ * subnet, a security group, a node), `wide` gives a node its own full row,
+ * `specs` lists [key, value] lines inside a box (an instance's type and image),
+ * `tone: "muted"` greys out something finished or idle, and `side` stacks a
+ * node in a column beside its siblings (small branches next to a big one, so
+ * a short branch doesn't get a whole empty row). `icon` puts a symbol on a
+ * node, so kinds of thing read at a glance rather than by their type line:
+ * a lucide name (`database`, `server`) or `brand:<name>` (`brand:docker`).
+ * Give icons to every node of a kind, or to none of that kind.
+ *
+ * `links` draw arrows for what calls what, so a diagram shows both how things
+ * nest and how they connect (`{ from: "api", to: "rooms", label: "binds" }`;
+ * an arrow to a container ends on its border). Place boxes with `areas` on a
+ * container (or on the Tree, for top-level boxes) so each arrow runs short and
+ * straight, `phoneAreas` for phones, and `colGap` so labels fit. Arrows that
+ * must go around boxes get a gutter on the left, added only where and when one
+ * is needed. Check the result at both widths with the
+ * write-docs skill's `scripts/tree-check.mjs`.
+ */
+import "./diagram.css";
+import { diagramIcon } from "../../docs-icons";
+
+interface TreeNode {
+  id: string;
+  label: string;
+  type?: string;
+  parent?: string;
+  tone?: "default" | "accent" | "muted";
+  dashed?: boolean;
+  wide?: boolean;
+  specs?: [string, string][];
+  side?: boolean;
+  icon?: string;
+  /**
+   * Where this container's children sit, as CSS grid-template-areas rows
+   * naming child ids: `["zone api uploads", "zone api jobs"]`. A child named
+   * in several cells spans them. Use it when `links` need a layout where each
+   * arrow runs straight between neighbours.
+   */
+  areas?: string[];
+  /** The same for phones (up to 40rem). Without it, children stack in order. */
+  phoneAreas?: string[];
+  /** Space between columns of `areas`, in rem, so link labels fit. */
+  colGap?: number;
+}
+interface Link {
+  from: string;
+  to: string;
+  label?: string;
+  /** Dashed: something the platform delivers, rather than a call you make. */
+  dashed?: boolean;
+}
+interface Props {
+  nodes: TreeNode[];
+  scopes?: { on: string; label: string }[];
+  /**
+   * Arrows between nodes (or containers, ending on their border), routed in
+   * the gaps around boxes after layout, so they follow the phone layout too.
+   */
+  links?: Link[];
+  /**
+   * Where the top-level boxes sit, like a container's `areas`: the platform
+   * beside something outside it that calls in, such as your Worker.
+   */
+  areas?: string[];
+  phoneAreas?: string[];
+  colGap?: number;
+  caption?: string;
+  /** Internal: the node this (recursive) instance renders. */
+  at?: string;
+  /** Internal: this top-level node is placed by the Tree's `areas`. */
+  placed?: boolean;
+}
+
+const props = Astro.props as Props;
+const { nodes, scopes = [], links = [], caption, at, placed } = props;
+const kids = (id: string) => nodes.filter((n) => n.parent === id);
+const scopeOf = (id: string) => scopes.filter((s) => s.on === id);
+const roots = nodes.filter((n) => !n.parent);
+const node = at ? nodes.find((n) => n.id === at)! : undefined;
+const icon = node?.icon ? diagramIcon(node.icon) : undefined;
+const parentNode = node?.parent ? nodes.find((n) => n.id === node.parent) : undefined;
+const area = placed || parentNode?.areas || parentNode?.phoneAreas ? `grid-area: ${node!.id}` : undefined;
+const rows = (a: string[]) => a.map((r) => `"${r}"`).join(" ");
+const gridStyle = (n: Pick<TreeNode, "areas" | "phoneAreas" | "colGap">) =>
+  [
+    n.areas && `--areas: ${rows(n.areas)}`,
+    n.phoneAreas && `--phone-areas: ${rows(n.phoneAreas)}`,
+    // Always set: a custom property inherits, so a nested grid would
+    // otherwise take its parent's gap.
+    (n.areas || n.phoneAreas) && `--col-gap: ${n.colGap ?? 0.625}rem`,
+  ]
+    .filter(Boolean)
+    .join("; ") || undefined;
+---
+
+{
+  node ? (
+    kids(node.id).length === 0 ? (
+      <div
+        class:list={[
+          "alc-tree__leaf",
+          node.tone === "accent" && "alc-tree__leaf--accent",
+          node.tone === "muted" && "alc-tree__leaf--muted",
+          node.wide && "alc-tree__wide",
+          node.specs && "alc-tree__leaf--specs",
+        ]}
+        data-node={node.id}
+        style={area}
+      >
+        {icon && (
+          <svg class="alc-tree__icon alc-tree__icon--leaf" viewBox="0 0 24 24" aria-hidden="true" set:html={icon} />
+        )}
+        <span class="alc-tree__label">{node.label}</span>
+        {node.type && <span class="alc-tree__type">{node.type}</span>}
+        {node.specs && (
+          <dl class="alc-tree__specs">
+            {node.specs.map(([k, v]) => (
+              <>
+                <dt>{k}</dt>
+                <dd>{v}</dd>
+              </>
+            ))}
+          </dl>
+        )}
+      </div>
+    ) : (
+      <div
+        class:list={[
+          "alc-tree__box",
+          node.dashed && "alc-tree__box--dashed",
+          node.wide && "alc-tree__wide",
+          scopeOf(node.id).length > 0 && "alc-tree__box--scoped",
+        ]}
+        data-node={node.id}
+        style={area}
+      >
+        <div class="alc-tree__head">
+          {icon && <svg class="alc-tree__icon" viewBox="0 0 24 24" aria-hidden="true" set:html={icon} />}
+          <span class="alc-tree__label">{node.label}</span>
+          {node.type && <span class="alc-tree__type">{node.type}</span>}
+          {scopeOf(node.id).map((s) => <span class="alc-tree__scope">{s.label}</span>)}
+        </div>
+        {!node.areas && kids(node.id).some((k) => k.side) ? (
+          <div class="alc-tree__split">
+            <div class="alc-tree__side">
+              {kids(node.id)
+                .filter((k) => k.side)
+                .map((k) => <Astro.self nodes={nodes} scopes={scopes} at={k.id} />)}
+            </div>
+            <div class="alc-tree__kids">
+              {kids(node.id)
+                .filter((k) => !k.side)
+                .map((k) => <Astro.self nodes={nodes} scopes={scopes} at={k.id} />)}
+            </div>
+          </div>
+        ) : (
+          <div
+            class:list={[
+              "alc-tree__kids",
+              node.areas && "alc-tree__kids--grid",
+              node.phoneAreas && "alc-tree__kids--phone-grid",
+            ]}
+            style={gridStyle(node)}
+          >
+            {kids(node.id).map((k) => <Astro.self nodes={nodes} scopes={scopes} at={k.id} />)}
+          </div>
+        )}
+      </div>
+    )
+  ) : (
+    <figure class="alc-fig not-content" data-nosnippet role="img" aria-label={caption ?? "Tree"}>
+      <div class="alc-fig__panel">
+      <div class="alc-tree" data-links={links.length > 0 ? JSON.stringify(links) : undefined}>
+        {props.areas || props.phoneAreas ? (
+          <div
+            class:list={[
+              "alc-tree__kids",
+              props.areas && "alc-tree__kids--grid",
+              props.phoneAreas && "alc-tree__kids--phone-grid",
+            ]}
+            style={gridStyle(props)}
+          >
+            {roots.map((r) => <Astro.self nodes={nodes} scopes={scopes} at={r.id} placed />)}
+          </div>
+        ) : (
+          roots.map((r) => <Astro.self nodes={nodes} scopes={scopes} at={r.id} />)
+        )}
+      </div>
+      </div>
+      {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
+    </figure>
+  )
+}
+
+<script>
+  // Draw each Tree's links after layout, and again whenever its size changes
+  // (the phone layout moves boxes). Each arrow takes the first route that
+  // crosses no box it doesn't start or end in: straight down or across where
+  // the boxes overlap, an elbow, or around the boxes through a side gutter.
+  type Link = { from: string; to: string; label?: string; dashed?: boolean };
+  type R = { l: number; t: number; r: number; b: number };
+  type Pt = [number, number];
+  const NS = "http://www.w3.org/2000/svg";
+  const SHRINK = 2;
+
+  const draw = (tree: HTMLElement) => {
+    const links: Link[] = JSON.parse(tree.dataset.links ?? "[]");
+    // A gutter is only kept where an arrow has to go around boxes, so start
+    // without any and add them after a first routing pass.
+    for (const k of tree.querySelectorAll(".alc-tree__kids--gutter")) k.classList.remove("alc-tree__kids--gutter");
+    let origin = tree.getBoundingClientRect();
+    const rect = (el: Element): R => {
+      const r = el.getBoundingClientRect();
+      return { l: r.left - origin.left, t: r.top - origin.top, r: r.right - origin.left, b: r.bottom - origin.top };
+    };
+    const node = (id: string) => tree.querySelector<HTMLElement>(`[data-node="${id}"]`);
+    const all = [...tree.querySelectorAll<HTMLElement>("[data-node]")];
+
+    const obstaclesFor = (a: HTMLElement, b: HTMLElement): R[] =>
+      all.flatMap((el) => {
+        if (a.contains(el) && el !== a) return [];
+        if (b.contains(el) && el !== b) return [];
+        const holds = el.contains(a) || el.contains(b);
+        // A container the arrow starts or ends inside: its border may be
+        // crossed, but not the text of its heading.
+        if (holds && el !== a && el !== b) {
+          // The heading's words as one block, with room to spare.
+          const words = [...el.querySelectorAll(":scope > .alc-tree__head > *")].map(rect);
+          if (words.length === 0) return [];
+          const pad = 6;
+          return [{
+            l: Math.min(...words.map((w) => w.l)) - pad, r: Math.max(...words.map((w) => w.r)) + pad,
+            t: Math.min(...words.map((w) => w.t)), b: Math.max(...words.map((w) => w.b)),
+          }];
+        }
+        return [rect(el)];
+      });
+
+    const crosses = (pts: Pt[], obs: R[]) =>
+      pts.slice(1).some(([x2, y2], i) => {
+        const [x1, y1] = pts[i]!;
+        return obs.some((o) => {
+          const l = o.l + SHRINK, r = o.r - SHRINK, t = o.t + SHRINK, b = o.b - SHRINK;
+          if (y1 === y2) return y1 > t && y1 < b && Math.max(x1, x2) > l && Math.min(x1, x2) < r;
+          return x1 > l && x1 < r && Math.max(y1, y2) > t && Math.min(y1, y2) < b;
+        });
+      });
+
+    const routes = (a: R, b: R): { pts: Pt[]; kind: string }[] => {
+      const out: { pts: Pt[]; kind: string }[] = [];
+      const ox0 = Math.max(a.l, b.l), ox1 = Math.min(a.r, b.r);
+      const oy0 = Math.max(a.t, b.t), oy1 = Math.min(a.b, b.b);
+      const fractions = [0.5, 0.35, 0.65, 0.2, 0.8, 0.1, 0.9];
+      if (ox1 - ox0 > 12 && (b.t >= a.b || b.b <= a.t))
+        for (const f of fractions) {
+          const x = Math.round(ox0 + (ox1 - ox0) * f);
+          out.push({ kind: "v", pts: b.t >= a.b ? [[x, a.b], [x, b.t]] : [[x, a.t], [x, b.b]] });
+        }
+      if (oy1 - oy0 > 12 && (b.l >= a.r || b.r <= a.l))
+        for (const f of fractions) {
+          const y = Math.round(oy0 + (oy1 - oy0) * f);
+          out.push({ kind: "h", pts: b.l >= a.r ? [[a.r, y], [b.l, y]] : [[a.l, y], [b.r, y]] });
+        }
+      const ac: Pt = [(a.l + a.r) / 2, (a.t + a.b) / 2];
+      const bc: Pt = [(b.l + b.r) / 2, (b.t + b.b) / 2];
+      // Down or up out of a, then across into b's side.
+      if (bc[1] > a.b || bc[1] < a.t) {
+        const y0 = bc[1] > a.b ? a.b : a.t;
+        const x1 = bc[0] > ac[0] ? b.l : b.r;
+        out.push({ kind: "vh", pts: [[ac[0], y0], [ac[0], bc[1]], [x1, bc[1]]] });
+      }
+      // Across out of a, then down or up into b's top or bottom.
+      if (bc[0] > a.r || bc[0] < a.l) {
+        const x0 = bc[0] > a.r ? a.r : a.l;
+        const y1 = bc[1] > ac[1] ? b.t : b.b;
+        out.push({ kind: "hv", pts: [[x0, ac[1]], [bc[0], ac[1]], [bc[0], y1]] });
+      }
+      // Around everything, through the gutter on the left.
+      const g = Math.min(a.l, b.l) - 20;
+      const ay = Math.min(a.b - 14, a.t + 16);
+      const by = b.t >= a.t ? b.t + Math.min(16, (b.b - b.t) / 2) : b.b - Math.min(16, (b.b - b.t) / 2);
+      out.push({ kind: "gutter", pts: [[a.l, ay], [g, ay], [g, by], [b.l, by]] });
+      return out;
+    };
+
+    let svg = tree.querySelector<SVGSVGElement>(":scope > svg.alc-tree__links");
+    if (!svg) {
+      svg = document.createElementNS(NS, "svg");
+      svg.setAttribute("class", "alc-tree__links");
+      svg.setAttribute("aria-hidden", "true");
+      tree.append(svg);
+    }
+    const id = (tree.dataset.linksId ??= Math.random().toString(36).slice(2, 8));
+    svg.innerHTML = `<defs><marker id="alc-tree-tip-${id}" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" class="alc-tree__tip" /></marker></defs>`;
+    svg.setAttribute("width", String(origin.width));
+    svg.setAttribute("height", String(origin.height));
+
+    // Route every link first, then place labels where they clear everything.
+    type Route = { pts: Pt[]; kind: string };
+    const segsOf = (r: Route) => r.pts.slice(1).map((p, i) => [r.pts[i]!, p] as [Pt, Pt]);
+    const cuts = (pts: Pt[], lines: [Pt, Pt][]) =>
+      pts.slice(1).some(([x2, y2], i) => {
+        const [x1, y1] = pts[i]!;
+        return lines.some(([[u1, v1], [u2, v2]]) => {
+          if ((y1 === y2) === (v1 === v2)) {
+            // Running along the same line counts too.
+            const [p1, p2, q1, q2, c, d] = y1 === y2 ? [x1, x2, u1, u2, y1, v1] : [y1, y2, v1, v2, x1, u1];
+            return Math.abs(c - d) < 3 && Math.min(Math.max(p1, p2), Math.max(q1, q2)) - Math.max(Math.min(p1, p2), Math.min(q1, q2)) > 2;
+          }
+          const [hx1, hx2, hy, vx, vy1, vy2] = y1 === y2 ? [x1, x2, y1, u1, v1, v2] : [u1, u2, v1, x1, y1, y2];
+          return vx > Math.min(hx1, hx2) + 1 && vx < Math.max(hx1, hx2) - 1 && hy > Math.min(vy1, vy2) + 1 && hy < Math.max(vy1, vy2) - 1;
+        });
+      });
+    const plan = () => {
+      const plans = links.flatMap((link) => {
+        const a = node(link.from), b = node(link.to);
+        if (!a || !b) return [];
+        const candidates = routes(rect(a), rect(b));
+        const open = candidates.filter((c) => !crosses(c.pts, obstaclesFor(a, b)));
+        return [{ link, a, b, candidates, open, route: open[0] ?? candidates[0]!, blocked: open.length === 0 }];
+      });
+      // Re-route each arrow against all the others, so no two cross where
+      // another clear route exists, whichever was listed first.
+      for (let pass = 0; pass < 3; pass++)
+        for (const p of plans) {
+          // Arrows from one box, or into one box, may share a trunk.
+          const others = plans
+            .filter((q) => q !== p && q.link.from !== p.link.from && q.link.to !== p.link.to)
+            .flatMap((q) => segsOf(q.route));
+          p.route = p.open.find((c) => !cuts(c.pts, others)) ?? p.route;
+        }
+      return plans;
+    };
+    let plans = plan();
+    // Open a gutter in the container that holds both ends of each arrow that
+    // goes around, then route again with the room it makes.
+    const holder = (a: HTMLElement, b: HTMLElement) => {
+      let el = a.parentElement;
+      while (el && el !== tree && !(el.classList.contains("alc-tree__kids") && el.contains(b))) el = el.parentElement;
+      return el && el !== tree ? el : undefined;
+    };
+    const needs = new Set(plans.filter((p) => p.route.kind === "gutter").map((p) => holder(p.a, p.b)).filter((k) => k !== undefined));
+    if (needs.size > 0) {
+      for (const k of needs) k.classList.add("alc-tree__kids--gutter");
+      origin = tree.getBoundingClientRect();
+      svg.setAttribute("width", String(origin.width));
+      svg.setAttribute("height", String(origin.height));
+      plans = plan();
+    }
+    const drawn = plans.map(({ link, a, b, route, blocked }) => {
+      const path = document.createElementNS(NS, "path");
+      path.setAttribute("d", route.pts.map(([x, y], i) => `${i ? "L" : "M"} ${x} ${y}`).join(" "));
+      path.setAttribute("class", link.dashed ? "alc-tree__link alc-tree__link--dashed" : "alc-tree__link");
+      path.setAttribute("marker-end", `url(#alc-tree-tip-${id})`);
+      if (blocked) path.dataset.blocked = "true";
+      path.dataset.from = link.from;
+      path.dataset.to = link.to;
+      svg.append(path);
+      return { link, route, a, b };
+    });
+
+    const boxes = all.map(rect);
+    const texts = [...tree.querySelectorAll(".alc-tree__label, .alc-tree__type, .alc-tree__icon, .alc-tree__scope, .alc-tree__specs")].map(rect);
+    const segments = drawn.flatMap(({ route }) => route.pts.slice(1).map((p, i) => [route.pts[i]!, p] as [Pt, Pt]));
+    const placed: R[] = [];
+    const meet = (p: R, q: R) => p.l < q.r && p.r > q.l && p.t < q.b && p.b > q.t;
+    const within = (p: R, q: R) => p.l >= q.l && p.r <= q.r && p.t >= q.t && p.b <= q.b;
+    const clear = (L: R) =>
+      L.l >= 0 && L.r <= origin.width &&
+      boxes.every((q) => !meet(L, q) || within(L, q)) &&
+      texts.every((q) => !meet(L, q)) &&
+      placed.every((q) => !meet(L, q)) &&
+      segments.every(([[x1, y1], [x2, y2]]) =>
+        y1 === y2
+          ? !(y1 > L.t - 1 && y1 < L.b + 1 && Math.max(x1, x2) > L.l && Math.min(x1, x2) < L.r)
+          : !(x1 > L.l - 1 && x1 < L.r + 1 && Math.max(y1, y2) > L.t && Math.min(y1, y2) < L.b));
+    // Split a run of a line at every border that crosses it, widest piece first.
+    const pieces = (lo: number, hi: number, cuts: number[]) => {
+      const xs = [lo, ...cuts.filter((c) => c > lo + 1 && c < hi - 1).sort((m, n) => m - n), hi];
+      return xs.slice(1).map((x, i) => [xs[i]!, x] as [number, number]).sort((m, n) => n[1] - n[0] - (m[1] - m[0]));
+    };
+
+    const labelled = new Set<string>();
+    for (const { link, route, b } of drawn) {
+      if (!link.label) continue;
+      // Arrows that end on the same stub with the same label share one label.
+      const end = route.pts[route.pts.length - 1]!;
+      const key = `${end[0]},${end[1]}\u0000${link.label}`;
+      if (labelled.has(key)) continue;
+      labelled.add(key);
+      const w = link.label.length * 6.3, h = 11;
+      const spots: { x: number; y: number; anchor: string }[] = [];
+      const segs = route.pts.slice(1).map((p, i) => [route.pts[i]!, p] as [Pt, Pt]);
+      const ordered = [segs[segs.length - 1]!, ...segs.slice(0, -1).sort((m, n) =>
+        Math.hypot(n[1][0] - n[0][0], n[1][1] - n[0][1]) - Math.hypot(m[1][0] - m[0][0], m[1][1] - m[0][1]))];
+      if (route.kind === "gutter") {
+        const tb = rect(b);
+        spots.push({ x: tb.l + 4, y: tb.t - 5, anchor: "start" });
+      }
+      for (const [[x1, y1], [x2, y2]] of ordered) {
+        if (y1 === y2) {
+          // Cut where any box near enough to touch the label begins or ends.
+          const cuts = boxes.filter((q) => y1 - h - 8 < q.b && y1 + h + 8 > q.t).flatMap((q) => [q.l, q.r]);
+          for (const [lo, hi] of pieces(Math.min(x1, x2), Math.max(x1, x2), cuts)) {
+            spots.push({ x: (lo + hi) / 2, y: y1 - 6, anchor: "middle" });
+            spots.push({ x: (lo + hi) / 2, y: y1 + 14, anchor: "middle" });
+          }
+        } else {
+          const cuts = boxes.filter((q) => x1 - w - 10 < q.r && x1 + w + 10 > q.l).flatMap((q) => [q.t, q.b]);
+          for (const [lo, hi] of pieces(Math.min(y1, y2), Math.max(y1, y2), cuts)) {
+            spots.push({ x: x1 + 7, y: (lo + hi) / 2 + 4, anchor: "start" });
+            spots.push({ x: x1 - 7, y: (lo + hi) / 2 + 4, anchor: "end" });
+          }
+        }
+      }
+      const box = (s: { x: number; y: number; anchor: string }): R => {
+        const l = s.anchor === "middle" ? s.x - w / 2 : s.anchor === "end" ? s.x - w : s.x;
+        return { l, r: l + w, t: s.y - h + 2, b: s.y + 2 };
+      };
+      const spot = spots.find((s) => clear(box(s))) ?? spots[0]!;
+      placed.push(box(spot));
+      const text = document.createElementNS(NS, "text");
+      text.setAttribute("class", "alc-tree__link-label");
+      text.textContent = link.label;
+      text.setAttribute("x", String(spot.x));
+      text.setAttribute("y", String(spot.y));
+      text.setAttribute("text-anchor", spot.anchor);
+      svg.append(text);
+    }
+  };
+
+  const start = () => {
+    for (const tree of document.querySelectorAll<HTMLElement>(".alc-tree[data-links]")) {
+      new ResizeObserver(() => draw(tree)).observe(tree);
+    }
+  };
+  // Wait for fonts, so boxes have their final size before the first draw.
+  if (document.fonts) void document.fonts.ready.then(start, start);
+  else start();
+</script>
+
+<style>
+  /* The tree spans the panel, and every box and leaf grows to fill its row. */
+  .alc-tree {
+    position: relative;
+    width: 100%;
+    font-family: var(--alc-font-mono);
+  }
+  /* Links sit over the boxes, so arrowheads land on their borders. */
+  .alc-tree :global(.alc-tree__links) {
+    position: absolute;
+    inset: 0;
+    overflow: visible;
+    pointer-events: none;
+  }
+  .alc-tree :global(.alc-tree__link) {
+    fill: none;
+    stroke: var(--alc-accent-60);
+    stroke-width: 1.5;
+  }
+  .alc-tree :global(.alc-tree__link--dashed) {
+    stroke-dasharray: 4 4;
+  }
+  .alc-tree :global(.alc-tree__tip) {
+    fill: var(--alc-accent);
+  }
+  .alc-tree :global(.alc-tree__link-label) {
+    font-family: var(--alc-font-mono);
+    font-size: 10.5px;
+    fill: var(--alc-fg-3);
+  }
+  /* A container laid out by `areas`. */
+  .alc-tree__kids.alc-tree__kids--grid {
+    display: grid;
+    grid-template-areas: var(--areas);
+    grid-auto-columns: auto;
+    column-gap: var(--col-gap, 0.625rem);
+    row-gap: 1.25rem;
+  }
+  /* Placed boxes keep their own height and sit in the middle of the rows
+     they span; the arrows bend to reach them. */
+  .alc-tree__kids.alc-tree__kids--grid > :global(*) {
+    align-self: center;
+    min-width: 0;
+  }
+  /* A placed leaf's name and type stay on one line; the columns size to them. */
+  @media (min-width: 40.0625rem) {
+    .alc-tree__kids--grid > .alc-tree__leaf > .alc-tree__label,
+    .alc-tree__kids--grid > .alc-tree__leaf > .alc-tree__type {
+      white-space: nowrap;
+    }
+  }
+  @media (max-width: 40rem) {
+    .alc-tree__kids.alc-tree__kids--grid {
+      display: flex;
+      flex-direction: column;
+      row-gap: 1.5rem;
+    }
+    .alc-tree__kids.alc-tree__kids--grid > :global(*) {
+      align-self: stretch;
+    }
+    .alc-tree__kids.alc-tree__kids--phone-grid {
+      display: grid;
+      grid-template-areas: var(--phone-areas);
+      grid-auto-columns: minmax(0, 1fr);
+      column-gap: min(var(--col-gap, 0.625rem), 2.5rem);
+      row-gap: 1.5rem;
+    }
+  }
+  /* Added by the router only when an arrow must go around boxes. */
+  .alc-tree__kids.alc-tree__kids--gutter {
+    padding-left: 2rem;
+  }
+  /* A box is a column: its head, then its contents growing to fill it, so a
+     box stretched to its row's height has no empty space at the bottom. */
+  .alc-tree__box {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    border: 1.5px solid var(--alc-accent-40);
+    border-radius: 10px;
+    padding: 0.5rem 0.625rem 0.625rem;
+  }
+  .alc-tree__box--dashed {
+    border-style: dashed;
+    border-color: var(--alc-hairline-3);
+  }
+  .alc-tree__wide {
+    flex-basis: 100%;
+  }
+  .alc-tree__box--scoped {
+    border: 1.5px dashed color-mix(in srgb, var(--alc-warn) 70%, transparent);
+    background: color-mix(in srgb, var(--alc-warn) 8%, transparent);
+  }
+  .alc-tree__split {
+    display: flex;
+    gap: 0.625rem;
+    align-items: stretch;
+  }
+  .alc-tree__split > .alc-tree__kids {
+    flex: 1 1 auto;
+  }
+  .alc-tree__side {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+  }
+  .alc-tree__side > .alc-tree__leaf {
+    align-self: stretch;
+    /* Leaves share the column's height, so a tall branch beside them leaves
+       no empty space under the last one. */
+    flex: 1 1 auto;
+  }
+  .alc-tree__side > .alc-tree__box {
+    flex: 1 1 auto;
+  }
+  /* A side column is only as wide as its widest label, so labels never wrap
+     inside it. */
+  .alc-tree__side .alc-tree__label,
+  .alc-tree__side .alc-tree__type {
+    white-space: nowrap;
+  }
+  @media (max-width: 40rem) {
+    .alc-tree__split {
+      flex-direction: column;
+    }
+    /* Stacked above the main branch, the side nodes share a row instead of
+       taking one each. */
+    .alc-tree__side {
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+    .alc-tree__side > .alc-tree__leaf,
+    .alc-tree__side > .alc-tree__box {
+      flex: 1 1 0;
+    }
+  }
+  .alc-tree__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .alc-tree__box > .alc-tree__kids,
+  .alc-tree__box > .alc-tree__split {
+    flex: 1 1 auto;
+  }
+  .alc-tree__kids {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 0.625rem;
+  }
+  /* Leaves stretch to their row's height, so boxes side by side end flush. */
+  .alc-tree__leaf {
+    flex: 1 1 auto;
+    align-self: stretch;
+    min-width: 6.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 0.875rem;
+    text-align: center;
+    border: 1.5px solid var(--alc-accent-40);
+    border-radius: 8px;
+    background: var(--alc-bg-elev-2);
+  }
+  /* `.alc-tree__leaf`'s flex shorthand comes later than `.alc-tree__wide`,
+     so a wide leaf needs the higher specificity to get its own row. */
+  .alc-tree__leaf.alc-tree__wide {
+    flex-basis: 100%;
+  }
+  .alc-tree__leaf--accent {
+    border-color: var(--alc-accent);
+    background: color-mix(in srgb, var(--alc-accent-soft) 60%, var(--alc-bg-elev-2));
+  }
+  .alc-tree__leaf--muted {
+    border-style: dashed;
+    border-color: var(--alc-hairline-3);
+    background: transparent;
+    opacity: 0.75;
+  }
+  .alc-tree__leaf--specs {
+    align-items: stretch;
+    text-align: center;
+  }
+  .alc-tree__specs {
+    display: grid;
+    grid-template-columns: auto auto;
+    justify-content: center;
+    gap: 0.25rem 0.75rem;
+    margin: 0.5rem 0 0;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--alc-hairline-2);
+    font-size: 11px;
+    text-align: left;
+  }
+  .alc-tree__specs dt {
+    color: var(--alc-fg-3);
+  }
+  .alc-tree__specs dd {
+    margin: 0;
+    color: var(--alc-fg-1);
+  }
+  .alc-tree__icon {
+    flex: none;
+    width: 15px;
+    height: 15px;
+    align-self: center;
+    color: var(--alc-accent);
+  }
+  .alc-tree__icon--leaf {
+    width: 22px;
+    height: 22px;
+    margin-bottom: 0.375rem;
+  }
+  .alc-tree__leaf--specs .alc-tree__icon--leaf {
+    align-self: center;
+  }
+  .alc-tree__label {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--alc-fg-1);
+  }
+  .alc-tree__type {
+    font-size: 10.5px;
+    color: var(--alc-fg-3);
+  }
+  .alc-tree__scope {
+    margin-left: auto;
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 0.0625rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--alc-warn) 70%, transparent);
+    color: var(--alc-fg-2);
+  }
+</style>

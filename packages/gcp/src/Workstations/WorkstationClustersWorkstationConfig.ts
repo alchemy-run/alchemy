@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -435,8 +436,37 @@ export type WorkstationClustersWorkstationConfig = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  WorkstationClustersWorkstationConfigLookup
 >;
+
+/**
+ * Props for {@link WorkstationClustersWorkstationConfig.lookup}: find a
+ * workstation clusters workstation config this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface WorkstationClustersWorkstationConfigLookup {
+  /**
+   * Configuration id (the `{workstationConfig}` segment).
+   */
+  workstationConfigId: string;
+  /**
+   * Parent workstation cluster. Full name
+   * `projects/{project}/locations/{loc
+   * ation}/workstationClusters/{workstationCluster}` or a cluster id
+   * (combined with `location`).
+   */
+  workstationCluster: string;
+  /**
+   * Region used when `workstationCluster` is a bare id.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Workstations configuration — the template for workstation VMs
@@ -481,6 +511,21 @@ export type WorkstationClustersWorkstationConfig = Resource<
  *     idleTimeout: "3600s",
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing workstation clusters workstation config
+ * `WorkstationClustersWorkstationConfig.lookup` references a workstation
+ * clusters workstation config Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared workstation
+ * clusters workstation config.
+ *
+ * **Example:** Reference an existing workstation clusters workstation config
+ * ```typescript
+ * const workstationClustersWorkstationConfig = GCP.Workstations.WorkstationClustersWorkstationConfig.lookup({
+ *   workstationConfigId: "my-workstation-config",
+ *   workstationCluster: "my-workstation-cluster",
+ * });
  * ```
  *
  * @resource
@@ -609,7 +654,7 @@ const toAttrs = (item: workstations.WorkstationConfig, project: string, region: 
 const getByName = (name: string) =>
   workstations
     .getProjectsLocationsWorkstationClustersWorkstationConfigs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listAtNested(project, region, "workstationClusters/-", (parent) =>
@@ -663,6 +708,27 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
             replicaKey(previousZones) !== replicaKey(news.replicaZones)),
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      workstationConfigId,
+      workstationCluster,
+      location: lookupLocation,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      // A config cannot exist before its cluster's name resolved.
+      if (!workstationCluster) return undefined;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const cluster = expandParent(
+        workstationCluster ?? "",
+        env.project,
+        location,
+        "workstationClusters",
+      );
+      const name = resourceName(cluster, workstationConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -718,29 +784,27 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
       if (current === undefined) {
         const created = yield* workstations
           .createProjectsLocationsWorkstationClustersWorkstationConfigs({
+            displayName: news.displayName,
+            labels: desiredLabels,
+            annotations: desiredAnnotations,
+            container: news.container,
+            host: news.host,
+            readinessChecks: news.readinessChecks,
+            idleTimeout: news.idleTimeout,
+            runningTimeout: news.runningTimeout,
+            persistentDirectories: news.persistentDirectories,
+            ephemeralDirectories: news.ephemeralDirectories,
+            encryptionKey: news.encryptionKey,
+            replicaZones: news.replicaZones,
+            maxUsableWorkstations: news.maxUsableWorkstations,
+            enableAuditAgent: news.enableAuditAgent,
+            disableTcpConnections: news.disableTcpConnections,
+            allowedPorts: news.allowedPorts,
+            grantWorkstationAdminRoleOnCreate: news.grantWorkstationAdminRoleOnCreate,
             parent: cluster,
             workstationConfigId,
-            body: {
-              displayName: news.displayName,
-              labels: desiredLabels,
-              annotations: desiredAnnotations,
-              container: news.container,
-              host: news.host,
-              readinessChecks: news.readinessChecks,
-              idleTimeout: news.idleTimeout,
-              runningTimeout: news.runningTimeout,
-              persistentDirectories: news.persistentDirectories,
-              ephemeralDirectories: news.ephemeralDirectories,
-              encryptionKey: news.encryptionKey,
-              replicaZones: news.replicaZones,
-              maxUsableWorkstations: news.maxUsableWorkstations,
-              enableAuditAgent: news.enableAuditAgent,
-              disableTcpConnections: news.disableTcpConnections,
-              allowedPorts: news.allowedPorts,
-              grantWorkstationAdminRoleOnCreate: news.grantWorkstationAdminRoleOnCreate,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -753,7 +817,7 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -808,26 +872,24 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
       if (mask.length > 0) {
         const operation = yield* workstations
           .patchProjectsLocationsWorkstationClustersWorkstationConfigs({
+            etag: current.etag,
+            labels: desiredLabels,
+            displayName: news.displayName,
+            annotations: desiredAnnotations,
+            container: news.container,
+            host: news.host,
+            readinessChecks: news.readinessChecks,
+            idleTimeout: news.idleTimeout,
+            runningTimeout: news.runningTimeout,
+            persistentDirectories: news.persistentDirectories,
+            ephemeralDirectories: news.ephemeralDirectories,
+            maxUsableWorkstations: news.maxUsableWorkstations,
+            enableAuditAgent: news.enableAuditAgent,
+            disableTcpConnections: news.disableTcpConnections,
+            allowedPorts: news.allowedPorts,
+            grantWorkstationAdminRoleOnCreate: news.grantWorkstationAdminRoleOnCreate,
             name: current.name ?? name,
             updateMask: mask,
-            body: {
-              etag: current.etag,
-              labels: desiredLabels,
-              displayName: news.displayName,
-              annotations: desiredAnnotations,
-              container: news.container,
-              host: news.host,
-              readinessChecks: news.readinessChecks,
-              idleTimeout: news.idleTimeout,
-              runningTimeout: news.runningTimeout,
-              persistentDirectories: news.persistentDirectories,
-              ephemeralDirectories: news.ephemeralDirectories,
-              maxUsableWorkstations: news.maxUsableWorkstations,
-              enableAuditAgent: news.enableAuditAgent,
-              disableTcpConnections: news.disableTcpConnections,
-              allowedPorts: news.allowedPorts,
-              grantWorkstationAdminRoleOnCreate: news.grantWorkstationAdminRoleOnCreate,
-            },
           })
           .pipe(
             Effect.retry({
@@ -855,7 +917,7 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.

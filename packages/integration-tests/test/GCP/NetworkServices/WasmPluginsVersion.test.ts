@@ -1,16 +1,17 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as networkservices from "@distilled.cloud/gcp/networkservices_v1";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -129,6 +130,14 @@ test.provider.skipIf(!!process.env.FAST)(
           });
           return { artifacts, plugin, version };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkServices.WasmPluginsVersion.lookup({
+          wasmPluginVersionId: created.version.wasmPluginVersionId,
+          location: created.version.location,
+          wasmPlugin: created.version.wasmPlugin,
+        }),
+        created.version,
       );
 
       expect(created.version.name).toContain("/versions/");

@@ -268,7 +268,9 @@ export const AgentDeploymentProvider = () =>
             appName: application,
             deploymentName: name,
             properties: {
-              deploymentType: news.deploymentType,
+              // The SDK has no union arm for `Custom`.
+              deploymentType:
+                news.deploymentType as cognitiveservices.AgentDeploymentPropertiesInput["deploymentType"],
               agents: news.agents,
               protocols: news.protocols,
               displayName: news.displayName,

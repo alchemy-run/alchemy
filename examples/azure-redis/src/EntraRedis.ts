@@ -1,5 +1,5 @@
 import * as Redis from "@alchemy.run/redis";
-import { makeTokenCache, requestManagedIdentityToken } from "@distilled.cloud/azure";
+import { Credentials, fromManagedIdentity } from "@distilled.cloud/azure";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -43,11 +43,15 @@ const objectIdOf = (token: string) =>
 export const makeEntraRedis = <E, R>(
   endpoint: Effect.Effect<{ readonly host: string; readonly port: number }, E, R>,
 ) => {
-  const tokenFor = makeTokenCache((scope: string) => requestManagedIdentityToken({}, scope));
+  // One layer value, so one token cache for every request.
+  const identity = fromManagedIdentity();
+  const redisToken = Effect.flatMap(Credentials, (config) =>
+    Effect.flatMap(config, (c) => c.token(REDIS_SCOPE)),
+  ).pipe(Effect.provide(identity));
 
   const url = Effect.gen(function* () {
     const { host, port } = yield* endpoint;
-    const redacted = yield* tokenFor(REDIS_SCOPE);
+    const redacted = yield* redisToken;
     const token = Redacted.value(redacted);
     const objectId = yield* objectIdOf(token);
     return Redis.connectionUrl({ host, port, username: objectId, password: token, tls: true });

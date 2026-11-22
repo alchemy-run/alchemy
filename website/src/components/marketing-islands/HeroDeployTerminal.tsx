@@ -173,7 +173,7 @@ export default function HeroDeployTerminal({
       }
     };
 
-    run();
+    void run();
     return () => {
       cancelRef.current = true;
     };

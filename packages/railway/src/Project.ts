@@ -1,6 +1,6 @@
 import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
 import { Railway, type Project as RailwayProject } from "@distilled.cloud/railway";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, stripUnowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -64,8 +64,18 @@ export type Project = Resource<
     url: string;
   },
   never,
-  Providers
+  Providers,
+  ProjectLookup
 >;
+
+/**
+ * Props for {@link Project.lookup}: find a project this stack
+ * doesn't manage by its id.
+ */
+export interface ProjectLookup {
+  /** Railway project id. */
+  projectId: string;
+}
 
 /**
  * A Railway.Project is a workspace-scoped namespace. It owns environments
@@ -147,13 +157,24 @@ export type Project = Resource<
  * export const Site = Railway.Project("Site");
  * ```
  *
+ * ### Looking up an existing project
+ * `Project.lookup` references a project Alchemy doesn't manage (created in
+ * the Railway dashboard or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted.
+ *
+ * **Example:** Add a database to an existing project
+ * ```typescript
+ * const project = Railway.Project.lookup({ projectId: "a1b2c3d4-…" });
+ * const db = yield* Railway.Postgres("Db", { project });
+ * ```
+ *
  * @resource
  * @product Project
  */
 export const Project = Resource<Project>("Railway.Project");
 
 export class ProjectNotCreated extends Data.TaggedError("Railway.ProjectNotCreated")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 /** Workspace id from a get-by-id or list-node Project payload. */
@@ -222,7 +243,7 @@ const readProject = Query.fn((id: string) => projectFields(Railway.project({ id 
 const getById = (projectId: string) =>
   readProject(projectId).pipe(
     Effect.map((project) => (isGone(project) ? undefined : project)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const currentWorkspaceId = Effect.fn(function* () {
@@ -312,6 +333,32 @@ export const projectEnvironmentIds = (project: { projectId: string; environmentI
     ),
   );
 
+/**
+ * Observe a Project from its last known attributes or its props. `lookup`
+ * passes the ids it was given as a partial `output`, as a refresh would.
+ */
+const readProjectAttributes = Effect.fn(function* ({
+  id,
+  olds,
+  output,
+}: {
+  id: string;
+  olds?: ProjectProps;
+  output?: Partial<Project["Attributes"]>;
+}) {
+  const name = yield* resolveName(id, olds?.name, output?.name);
+  const workspaceId = output?.workspaceId ?? olds?.workspaceId ?? (yield* currentWorkspaceId());
+  const found =
+    (output?.projectId !== undefined ? yield* getById(output.projectId) : undefined) ??
+    (yield* findByName(workspaceId, name));
+  if (found === undefined) return undefined;
+  const attrs = yield* fillEnvironmentId(
+    toAttrs(found, { name, workspaceId, environmentId: output?.environmentId }),
+  );
+  if (output !== undefined) return attrs;
+  return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
+});
+
 export const ProjectProvider = () =>
   Provider.succeed(Project, {
     stables: ["projectId", "workspaceId", "environmentId"],
@@ -327,19 +374,16 @@ export const ProjectProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
-      const name = yield* resolveName(id, olds?.name, output?.name);
-      const workspaceId = output?.workspaceId ?? olds?.workspaceId ?? (yield* currentWorkspaceId());
-      const found =
-        (output?.projectId !== undefined ? yield* getById(output.projectId) : undefined) ??
-        (yield* findByName(workspaceId, name));
-      if (found === undefined) return undefined;
-      const attrs = yield* fillEnvironmentId(
-        toAttrs(found, { name, workspaceId, environmentId: output?.environmentId }),
-      );
-      if (output !== undefined) return attrs;
-      return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
-    }),
+    lookup: ({ projectId }) =>
+      // The ids find it; an empty name only stops `read` deriving a physical
+      // name, which needs a deploy's resource context. Railway answers an id
+      // it doesn't know with Not Authorized, so that is a miss too.
+      readProjectAttributes({ id: projectId, output: { projectId, name: "" } }).pipe(
+        Effect.map((attrs) => (attrs === undefined ? undefined : stripUnowned(attrs))),
+        Effect.catchTag("RailwayForbidden", () => Effect.undefined),
+      ),
+
+    read: readProjectAttributes,
 
     list: listOwnedProjects,
 
@@ -362,12 +406,12 @@ export const ProjectProvider = () =>
           ...(props.defaultEnvironmentName !== undefined
             ? { defaultEnvironmentName: props.defaultEnvironmentName }
             : {}),
-        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
         current = created ?? (yield* findByName(workspaceId, name));
       }
 
       if (current === undefined || isGone(current)) {
-        return yield* new ProjectNotCreated({ name });
+        return yield* new ProjectNotCreated({ resourceName: name });
       }
 
       const nameChanged = current.name !== name;

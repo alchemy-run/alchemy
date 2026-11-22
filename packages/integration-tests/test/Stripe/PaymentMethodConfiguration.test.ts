@@ -1,12 +1,13 @@
 import * as Stripe from "@alchemy.run/stripe";
 import { isMissingStripeResource } from "@alchemy.run/stripe/missing";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { GetPaymentMethodConfiguration } from "@distilled.cloud/stripe/stripe";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
@@ -42,6 +43,7 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(Stripe.PaymentMethodConfiguration.lookup({ id: created.id }), created);
 
       expect(created.id).toMatch(/^pmc_/);
       expect(created.name).toEqual("Alchemy Checkout PMC");
@@ -132,6 +134,50 @@ test.provider(
 
       const after = yield* provider.list();
       expect(after.find((configuration) => configuration.id === deployed.id)).toBeUndefined();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:paymentmethodconfiguration", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "set display preferences for newer payment methods",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.PaymentMethodConfiguration("NewerMethods", {
+            name: "Alchemy Newer Methods PMC",
+            // Stripe accepts Apple Pay Later but reports it back only where it
+            // is available, so only PayPay is visible on a US test account.
+            // Conecs and SeQura are refused outside France and Spain.
+            applePayLater: { displayPreference: { preference: "off" } },
+            paypay: { displayPreference: { preference: "off" } },
+          });
+        }),
+      );
+      expect(created.paypay?.displayPreference.preference).toEqual("off");
+
+      const fetched = yield* GetPaymentMethodConfiguration({ configuration: created.id });
+      expect(fetched.paypay?.display_preference.preference).toEqual("off");
+
+      const updated = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.PaymentMethodConfiguration("NewerMethods", {
+            name: "Alchemy Newer Methods PMC",
+            paypay: { displayPreference: { preference: "on" } },
+          });
+        }),
+      );
+      expect(updated.id).toEqual(created.id);
+      expect(updated.paypay?.displayPreference.preference).toEqual("on");
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilInactive(created.id)).toEqual("inactive");
     }).pipe(logLevel),
   {
     tags: ["provider:stripe", "provider:stripe:paymentmethodconfiguration", "live"],

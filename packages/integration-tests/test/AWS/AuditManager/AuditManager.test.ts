@@ -1,11 +1,12 @@
 import * as AWS from "@alchemy.run/aws";
 import { Assessment, Control, Framework } from "@alchemy.run/aws/AuditManager";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as auditmanager from "@distilled.cloud/aws/auditmanager";
-import { describe, expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { ensureRegistered } from "./registration.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -70,25 +71,8 @@ describe(
         Effect.gen(function* () {
           yield* stack.destroy();
 
-          // Ensure the account is registered and wait for ACTIVE. On accounts
-          // that never enabled Audit Manager this fails with the typed
-          // AuditManagerMaintenanceMode tag — the service is in maintenance
-          // mode and new registrations are permanently rejected.
-          const { status } = yield* auditmanager.getAccountStatus({});
-          if (status !== "ACTIVE") {
-            yield* auditmanager.registerAccount({});
-            yield* Effect.gen(function* () {
-              const current = yield* auditmanager.getAccountStatus({});
-              if (current.status !== "ACTIVE") {
-                return yield* Effect.fail({ _tag: "NotActive" as const, status: current.status });
-              }
-            }).pipe(
-              Effect.retry({
-                while: (e) => e._tag === "NotActive",
-                schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
-              }),
-            );
-          }
+          // Ensure the account is registered and wait for ACTIVE.
+          yield* ensureRegistered;
 
           const deploy = (props: {
             controlDescription?: string;

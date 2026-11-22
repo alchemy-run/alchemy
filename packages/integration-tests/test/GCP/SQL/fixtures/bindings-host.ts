@@ -15,7 +15,7 @@ export const Db = Effect.gen(function* () {
     edition: "ENTERPRISE",
     tier: "db-f1-micro",
     availabilityType: "ZONAL",
-    backupEnabled: false,
+    backup: { enabled: false },
     deletionProtectionEnabled: false,
     dataApiAccess: true,
   });
@@ -77,12 +77,10 @@ export default class SqlBindingsHost extends GCP.Function<SqlBindingsHost>()(
         }),
         executeSql: Effect.gen(function* () {
           const response = yield* executeSql({
-            body: {
-              database: yield* databaseName,
-              user: yield* userName,
-              passwordSecretVersion: `${yield* secretName}/versions/latest`,
-              sqlStatement: "SELECT current_user AS who, 41 + 1 AS answer",
-            },
+            database: yield* databaseName,
+            user: yield* userName,
+            passwordSecretVersion: `${yield* secretName}/versions/latest`,
+            sqlStatement: "SELECT current_user AS who, 41 + 1 AS answer",
           });
           return {
             status: response.status,

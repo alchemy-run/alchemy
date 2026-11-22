@@ -1,10 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { expectFound } from "../lookup.ts";
 import { KEY_RING_ID, kmsTestId } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -50,6 +51,14 @@ test.provider(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.KMS.CryptoKey.lookup({
+          cryptoKeyId: created.cryptoKeyId,
+          keyRing: created.keyRing,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.cryptoKeyId).toEqual(expect.any(String));
@@ -108,13 +117,10 @@ const roundTrip = (name: string, text: string) =>
   Effect.gen(function* () {
     const plaintext = yield* Effect.sync(() => Buffer.from(text, "utf8").toString("base64"));
     const { ciphertext } = yield* kms.encryptProjectsLocationsKeyRingsCryptoKeys({
+      plaintext,
       name,
-      body: { plaintext },
     });
-    const decrypted = yield* kms.decryptProjectsLocationsKeyRingsCryptoKeys({
-      name,
-      body: { ciphertext },
-    });
+    const decrypted = yield* kms.decryptProjectsLocationsKeyRingsCryptoKeys({ ciphertext, name });
     return decrypted.plaintext === plaintext;
   });
 

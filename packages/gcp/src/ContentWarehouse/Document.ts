@@ -185,10 +185,10 @@ const toAttrs = (item: cw.GoogleCloudContentwarehouseV1Document, project: string
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cw
         .getProjectsLocationsDocuments({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DocumentProvider = () =>
   Provider.succeed(Document, {
@@ -255,21 +255,19 @@ export const DocumentProvider = () =>
       if (current === undefined) {
         const created = yield* cw
           .createProjectsLocationsDocuments({
-            parent,
-            body: {
-              document: {
-                displayName,
-                title,
-                plainText: news.plainText ?? title,
-                documentSchemaName: news.documentSchemaName,
-                referenceId,
-                rawDocumentPath: news.rawDocumentPath,
-                displayUri: news.displayUri,
-                contentCategory: news.contentCategory,
-                textExtractionDisabled,
-                properties: news.properties,
-              },
+            document: {
+              displayName,
+              title,
+              plainText: news.plainText ?? title,
+              documentSchemaName: news.documentSchemaName,
+              referenceId,
+              rawDocumentPath: news.rawDocumentPath,
+              displayUri: news.displayUri,
+              contentCategory: news.contentCategory,
+              textExtractionDisabled,
+              properties: news.properties,
             },
+            parent,
           })
           .pipe(
             Effect.map((response) => response.document),
@@ -286,7 +284,7 @@ export const DocumentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name: lookup });
+        return yield* new ResourceNotResolved({ resourceName: lookup });
       }
 
       const currentName = current.name ?? lookup;
@@ -305,24 +303,22 @@ export const DocumentProvider = () =>
         propertiesChanged
       ) {
         const updated = yield* cw.patchProjectsLocationsDocuments({
-          name: currentName,
-          body: {
-            document: {
-              name: currentName,
-              displayName,
-              title,
-              plainText: news.plainText ?? title,
-              documentSchemaName: news.documentSchemaName,
-              referenceId,
-              rawDocumentPath: news.rawDocumentPath,
-              displayUri: news.displayUri,
-              contentCategory: news.contentCategory,
-              properties: news.properties,
-            },
-            updateOptions: {
-              updateType: "UPDATE_TYPE_REPLACE",
-            },
+          document: {
+            name: currentName,
+            displayName,
+            title,
+            plainText: news.plainText ?? title,
+            documentSchemaName: news.documentSchemaName,
+            referenceId,
+            rawDocumentPath: news.rawDocumentPath,
+            displayUri: news.displayUri,
+            contentCategory: news.contentCategory,
+            properties: news.properties,
           },
+          updateOptions: {
+            updateType: "UPDATE_TYPE_REPLACE",
+          },
+          name: currentName,
         });
         current = updated.document ?? current;
       }

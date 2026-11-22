@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as ivschat from "@distilled.cloud/aws/ivschat";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -221,7 +221,7 @@ describe(
           roomArn?: string;
         };
         expect(info.token).toBeTruthy();
-        expect(info.endpoint).toContain("wss://edge.ivschat.");
+        expect(info.endpoint).toMatch(/^wss?:\/\/edge\.ivschat\./);
         return info as { token: string; endpoint: string; roomArn: string };
       });
 

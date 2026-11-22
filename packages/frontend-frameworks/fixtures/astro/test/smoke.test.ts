@@ -51,6 +51,21 @@ for (const mode of Playwright.SERVER_METHODS) {
       expect(html).toContain(FIXTURE_VALUE);
     });
 
+    it("serves an astro:assets image from a prerendered page", async ({ server }) => {
+      const response = await server.fetch("/prerendered-image/");
+      expect(response.status).toBe(200);
+      const img = (await response.text()).match(/<img[^>]*id="swatch"[^>]*>/)?.[0];
+      const src = img?.match(/src="([^"]+)"/)?.[1]?.replaceAll("&amp;", "&");
+      // The passthrough image service never emits static variants, so even a
+      // prerendered page points at the image endpoint.
+      expect(src).toMatch(/^\/_image\?href=/);
+
+      const image = await server.fetch(src!);
+      expect(image.status).toBe(200);
+      const bytes = new Uint8Array(await image.arrayBuffer());
+      expect([...bytes.subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    });
+
     it("reads the binding from the API route", async ({ server }) => {
       const json = await server.fetchJson<{
         value: string | null;

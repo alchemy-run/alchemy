@@ -1,7 +1,7 @@
 import { classifyMigrationHistory, rewrittenMigrationHistory } from "@alchemy.run/sql/Migrations";
 import { hashMigrations } from "@alchemy.run/sql/SqlFile";
+import { expect, layer } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -42,6 +42,20 @@ describe("rewrittenMigrationHistory", (it) => {
             { "0001.sql": "ccc", "0002.sql": "bbb" },
           ),
         ).toEqual({ changed: ["0001.sql"], removed: [] });
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
+    "treats a file renamed with unchanged contents as not rewritten",
+    () =>
+      Effect.sync(() => {
+        expect(
+          rewrittenMigrationHistory(
+            { "0001.sql": "aaa", "0002.sql": "bbb" },
+            { "0002.sql": "bbb", "0003.sql": "aaa" },
+          ),
+        ).toBeUndefined();
       }),
     { tags: ["unit", "local"] },
   );

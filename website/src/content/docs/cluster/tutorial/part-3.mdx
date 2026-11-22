@@ -1,0 +1,179 @@
+---
+title: "Part 3: Invitations"
+description: Add a durable workflow that invites someone to a room, waits for their answer, and lets them in.
+sidebar:
+  order: 3
+---
+
+An invitation can wait hours for an answer, through deploys and restarts. In this part, it's a workflow: it waits durably for the guest's answer, then adds them to the room.
+
+## Add a message to let someone in
+
+```diff lang="typescript"
+// src/Room.ts
+import * as Cluster from "@alchemy.run/effect-cluster";
+import { Rpc } from "effect/rpc";
+import * as Schema from "effect/Schema";
+import { Auth } from "./Auth.ts";
+
+export class Room extends Cluster.Entity<Room>()("Room", [
+  Rpc.make("Join", { success: Schema.Int }).middleware(Auth),
++  Rpc.make("Admit", { payload: { name: Schema.String }, success: Schema.Int }),
+]) {}
+```
+
+`Admit` adds a guest by name. Only the workflow calls it, from inside the cluster.
+
+## Handle it
+
+```diff lang="typescript"
+// src/RoomLive.ts
+      return Room.of({
+        Join: () =>
+          Effect.gen(function* () {
+            const user = yield* CurrentUser;
+            return yield* Ref.modify(members, (all) => {
+              const next = new Set(all).add(user.name);
+              return [next.size, next];
+            });
+          }),
++        Admit: ({ payload }) =>
++          Ref.modify(members, (all) => {
++            const next = new Set(all).add(payload.name);
++            return [next.size, next];
++          }),
+      });
+```
+
+## Declare the workflow
+
+```diff lang="typescript"
++// src/Invite.ts
++import * as Cluster from "@alchemy.run/effect-cluster";
++import * as Schema from "effect/Schema";
++import { DurableDeferred } from "effect/workflow";
++
++export const Answer = DurableDeferred.make("answer", { success: Schema.Boolean });
++
++export class Invite extends Cluster.Workflow<Invite>()("Invite", {
++  payload: { room: Schema.String, guest: Schema.String },
++  success: Schema.Boolean,
++  idempotencyKey: ({ room, guest }) => `${room}/${guest}`,
++}) {}
+```
+
+The workflow's id comes from its key, so inviting the same guest to the same room twice is one invitation. `Answer` is what the invitation waits for.
+
+## Wait for the answer
+
+```diff lang="typescript"
++// src/InviteLive.ts
++import * as Effect from "effect/Effect";
++import { DurableDeferred } from "effect/workflow";
++import { Default } from "./Cluster.ts";
++import { Answer, Invite } from "./Invite.ts";
++
++export default Invite.make(
++  { main: import.meta.url },
++  Effect.gen(function* () {
++    return Invite.of(
++      Effect.fn(function* () {
++        return yield* DurableDeferred.await(Answer);
++      }),
++    );
++  }).pipe(Effect.provide(Default)),
++);
+```
+
+`DurableDeferred.await` suspends the run until someone signals `Answer`. Nothing holds a runner while it waits; a deploy in between doesn't lose it.
+
+## Let the guest in
+
+```diff lang="typescript"
+// src/InviteLive.ts
+import * as Effect from "effect/Effect";
+-import { DurableDeferred } from "effect/workflow";
++import * as Schema from "effect/Schema";
++import { Activity, DurableDeferred } from "effect/workflow";
+import { Default } from "./Cluster.ts";
+import { Answer, Invite } from "./Invite.ts";
++import { Room } from "./Room.ts";
+
+export default Invite.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
++    const rooms = yield* Room;
+    return Invite.of(
+-      Effect.fn(function* () {
+-        return yield* DurableDeferred.await(Answer);
++      Effect.fn(function* ({ room, guest }) {
++        const accepted = yield* DurableDeferred.await(Answer);
++        if (!accepted) return false;
++        yield* Activity.make({
++          name: "admit",
++          success: Schema.Int,
++          execute: rooms.getByName(room).pipe(
++            Effect.flatMap((target) => target.Admit({ name: guest })),
++            Effect.orDie,
++          ),
++        });
++        return true;
+      }),
+    );
+  }).pipe(Effect.provide(Default)),
+);
+```
+
+Admitting the guest is an activity: once it has run, a replay of the workflow skips it.
+
+## Invite and answer from the API
+
+```diff lang="typescript"
+// src/Api.ts
++import { Answer, Invite } from "./Invite.ts";
+  Effect.gen(function* () {
+    const rooms = yield* Room;
++    const invites = yield* Invite;
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://api");
++        if (url.pathname === "/invite") {
++          const run = yield* invites.start({
++            room: url.searchParams.get("room") ?? "lobby",
++            guest: url.searchParams.get("guest") ?? "guest",
++          });
++          return yield* HttpServerResponse.json({ executionId: run.executionId });
++        }
++        if (url.pathname === "/answer") {
++          const run = invites.get(url.searchParams.get("executionId") ?? "");
++          yield* run.signal(Answer, url.searchParams.get("accept") === "true");
++          return yield* HttpServerResponse.json(yield* run.status);
++        }
+```
+
+`start` begins a run and returns at once. `get` reads one again by its id, and `signal` delivers the answer it waits for.
+
+## Add it to the Stack
+
+```diff lang="typescript"
+// alchemy.run.ts
++import InviteLive from "./src/InviteLive.ts";
+import RoomLive from "./src/RoomLive.ts";
+-  }).pipe(Effect.provide(RoomLive)),
++  }).pipe(Effect.provide(Layer.mergeAll(RoomLive, InviteLive))),
+```
+
+The workflow runs in the same pool as the rooms.
+
+```sh
+alchemy deploy
+curl "localhost:8080/invite?room=lobby&guest=ada"
+# {"executionId":"..."}
+curl "localhost:8080/answer?executionId=...&accept=true"
+# {"_tag":"Running"}
+```
+
+The run finishes moments later, with Ada in the lobby.
+
+Next, move the whole cluster to AWS, in [Part 4](/cluster/tutorial/part-4).

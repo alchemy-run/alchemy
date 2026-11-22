@@ -44,8 +44,14 @@ export interface AcquireShareLease extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: AcquireShareLeaseRequest,
-    ) => Effect.Effect<files.ShareAcquireLeaseResponse, files.ShareAcquireLeaseError, RuntimeContext>
+    ) => Effect.Effect<
+      files.ShareAcquireLeaseResponse,
+      files.ShareAcquireLeaseError,
+      RuntimeContext
+    >
   >
 > {}
 
-export const AcquireShareLease = Binding.Service<AcquireShareLease>("Azure.Storage.AcquireShareLease");
+export const AcquireShareLease = Binding.Service<AcquireShareLease>(
+  "Azure.Storage.AcquireShareLease",
+);

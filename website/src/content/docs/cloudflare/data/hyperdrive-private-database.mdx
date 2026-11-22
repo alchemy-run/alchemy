@@ -2,13 +2,14 @@
 title: Private database (Workers VPC)
 description: Connect Hyperdrive to a database inside a private network — such as Aurora in an AWS VPC — through a Cloudflare Tunnel and a Workers VPC Service, with no public endpoint.
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 [Hyperdrive](/cloudflare/data/hyperdrive) can reach a database that has no
 public endpoint. A `cloudflared` connector runs inside the private network
 and dials out to Cloudflare. A TCP VPC Service names the database host
 behind it, and Hyperdrive egresses through that service.
 
-This guide connects a Worker to Aurora PostgreSQL in private AWS subnets.
+Take a Worker that connects to Aurora PostgreSQL in private AWS subnets.
 The same three Cloudflare resources work for any private network that can
 run `cloudflared`. The finished project is in
 [`examples/cloudflare-hyperdrive-aws-vpc`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-hyperdrive-aws-vpc).
@@ -281,9 +282,7 @@ export default Alchemy.Stack(
 
 ## Deploy
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Open the Worker URL. It returns the Aurora Postgres version, read through
 Hyperdrive, the VPC Service, and the tunnel.

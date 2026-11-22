@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Kubernetes from "@alchemy.run/kubernetes";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -13,6 +13,7 @@ import * as Schedule from "effect/Schedule";
 import {
   destroyKindStack,
   KindTestCluster,
+  decodeBase64,
   kubectlGet,
   removeRbac,
   restrictedConnection,
@@ -67,12 +68,13 @@ describe(
           times: 20,
         }),
       );
-    const envOf = (job: any): Record<string, string> =>
-      Object.fromEntries(
-        (job.spec.template.spec.containers[0].env as { name: string; value: string }[]).map(
-          (entry) => [entry.name, entry.value],
-        ),
-      );
+    const tokenRefOf = (job: any) =>
+      (
+        job.spec.template.spec.containers[0].env as {
+          name: string;
+          valueFrom?: { secretKeyRef?: unknown };
+        }[]
+      ).find((entry) => entry.name === "TOKEN")?.valueFrom?.secretKeyRef;
 
     beforeAll(
       Effect.gen(function* () {
@@ -88,7 +90,7 @@ describe(
     );
 
     test.provider(
-      "one-shot job names follow unwrapped Redacted env values",
+      "a Job reads Redacted env from its own Secret, and a rotated secret runs a new Job",
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
@@ -101,8 +103,16 @@ describe(
               env: { TOKEN: Redacted.make(token) },
             });
 
+          const secretToken = Effect.gen(function* () {
+            const secret = yield* kubectlGet(cluster, ["secret", "rotate-env", ...ns]);
+            return yield* decodeBase64(secret.data.TOKEN);
+          });
           const first = yield* stack.deploy(job("job-token-sentinel-a"));
-          expect(envOf(yield* readJob(first.jobName)).TOKEN).toBe("job-token-sentinel-a");
+          const firstJob = yield* readJob(first.jobName);
+          // The Job names its Secret; the value lives only there.
+          expect(JSON.stringify(firstJob.spec)).not.toContain("sentinel");
+          expect(tokenRefOf(firstJob)).toEqual({ name: "rotate-env", key: "TOKEN" });
+          expect(yield* secretToken).toBe("job-token-sentinel-a");
           expect(JSON.stringify(first.kubernetesObjects)).not.toContain("sentinel");
 
           // Same secret value, fresh Redacted wrapper: same content address.
@@ -112,12 +122,17 @@ describe(
           // A rotated secret is a new spec: a new Job replaces the old one.
           const rotated = yield* stack.deploy(job("job-token-sentinel-b"));
           expect(rotated.jobName).not.toBe(first.jobName);
-          expect(envOf(yield* readJob(rotated.jobName)).TOKEN).toBe("job-token-sentinel-b");
+          expect(tokenRefOf(yield* readJob(rotated.jobName))).toEqual({
+            name: "rotate-env",
+            key: "TOKEN",
+          });
+          expect(yield* secretToken).toBe("job-token-sentinel-b");
           expect(yield* waitGone(first.jobName)).toBe(undefined);
 
           yield* stack.destroy();
           expect(yield* waitGone(rotated.jobName)).toBe(undefined);
           expect(yield* kubectlGet(cluster, ["serviceaccount", "rotate", ...ns])).toBe(undefined);
+          expect(yield* kubectlGet(cluster, ["secret", "rotate-env", ...ns])).toBe(undefined);
         }),
       { timeout: 120_000 },
     );

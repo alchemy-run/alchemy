@@ -1,12 +1,26 @@
 ---
 title: React to Stripe events
-description: consumeEvents provisions the webhook endpoint and runs one Effect per delivery. When to use it, which events to listen for, and how to manage the endpoint yourself.
+description: consumeEvents creates the webhook and runs one Effect per delivery. Which events to listen for, thin events, delivery to a Lambda through EventBridge, and managing the endpoint yourself.
 ---
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 Stripe tells you what happened asynchronously. A payment succeeded, a
 renewal was declined, a merchant finished onboarding — none of these
 come back on the request that started them. Anything your app needs to
 *know* about billing state, it learns from webhooks.
+
+<Timeline
+  end={10}
+  lanes={[{ id: "evt", label: "evt_1Q…", type: "invoice.paid" }]}
+  bars={[
+    { lane: "evt", start: 0.2, end: 1.4, label: "500", tone: "danger" },
+    { lane: "evt", start: 2.2, end: 3.4, label: "500", tone: "danger" },
+    { lane: "evt", start: 4.6, end: 6.2, label: "timeout", tone: "danger" },
+    { lane: "evt", start: 8.4, end: 9.6, label: "200" },
+  ]}
+  marks={[{ at: 8.4, label: "handled once" }]}
+  caption="Stripe retries a delivery, further apart each time, until your endpoint answers 2xx. The same event can arrive more than once, so check its signature and skip an event id you've already handled."
+/>
 
 There are two levels:
 
@@ -100,6 +114,82 @@ The classes exported from `@alchemy.run/stripe`:
 driving an entitlement record. [Connect](/stripe/guides/connect) shows
 `AccountUpdated` driving a merchant table.
 
+## Thin events
+
+Some events Stripe only sends as **thin events**: every `v1.*` and `v2.*`
+type, such as a meter's usage errors. A thin delivery carries just the
+event's id and type. List them like any other event:
+
+```typescript
+yield* Stripe.consumeEvents(
+  "Events",
+  { events: [Stripe.InvoicePaid, Stripe.MeterErrorReportTriggered] },
+  Effect.fn(function* (event) {
+    switch (event.type) {
+      case "invoice.paid":
+        yield* Effect.log(`paid ${event.object.id}`);
+        return;
+      case "v1.billing.meter.error_report_triggered":
+        yield* Effect.log(`meter ${event.object.relatedObject?.id} has errors`, event.object.data);
+        return;
+    }
+  }),
+);
+```
+
+Your handler gets the full event: the Worker fetches it from Stripe before
+calling you, so its key can also read events. Thin events arrive on their
+own event destination at `/webhooks/stripe/thin`, next to the webhook for
+the rest.
+
+For a thin type without a class of its own, declare one:
+
+```typescript
+class AccountRequirementsUpdated extends Stripe.ThinEvent(
+  "v2.core.account[requirements].updated",
+) {}
+```
+
+## Deliver to a Lambda through EventBridge
+
+On an AWS Lambda Function, Stripe can deliver events through
+[Amazon EventBridge](/aws/messaging/eventbridge) instead of a webhook. Your
+`consumeEvents` code stays the same; provide `ConsumeEventsEventBridge` in
+place of `ConsumeEventsLive`:
+
+```typescript title="src/billing.ts"
+import * as AWS from "@alchemy.run/aws";
+import * as Stripe from "@alchemy.run/stripe";
+import { ConsumeEventsEventBridge } from "@alchemy.run/stripe/AWS";
+import * as Effect from "effect/Effect";
+
+export default class Billing extends AWS.Lambda.Function<Billing>()(
+  "Billing",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    yield* Stripe.consumeEvents(
+      "Events",
+      { events: [Stripe.InvoicePaid, Stripe.MeterErrorReportTriggered] },
+      Effect.fn(function* (event) {
+        yield* Effect.log(event.type);
+      }),
+    );
+    return {};
+  }).pipe(Effect.provide(ConsumeEventsEventBridge)),
+) {}
+```
+
+Deploying creates a Stripe event destination in the Function's account and
+region, the EventBridge event bus Stripe sends to, and a rule that invokes
+the Function for each event type you listed.
+
+The Function needs no public URL and holds no signing secret: AWS checks
+who sends each event. If the Function fails, EventBridge retries it for up
+to a day, and you can archive the bus to replay events later. EventBridge charges for partner
+events, about $1 per million, where a webhook costs nothing extra. Use it
+when losing an event while the Function is down matters, or when several
+AWS services should get the same events.
+
 ## Managing the endpoint yourself
 
 Declare a `WebhookEndpoint` directly when the delivery URL is not a
@@ -116,6 +206,20 @@ const webhook = yield* Stripe.WebhookEndpoint("Events", {
 `webhook.secret` is the signing secret; get it to that service however
 you get secrets there.
 
+For thin events, or to deliver to an EventBridge bus or an Azure Event Grid
+topic you manage, declare an `EventDestination`:
+
+```typescript
+const destination = yield* Stripe.EventDestination("MeterErrors", {
+  enabledEvents: ["v1.billing.meter.error_report_triggered"],
+  webhookEndpoint: { url: "https://api.example.com/stripe/thin" },
+});
+```
+
+`destination.signingSecret` verifies its webhook deliveries. Set
+`amazonEventbridge: { awsAccountId, awsRegion }` or `azureEventGrid` instead
+of `webhookEndpoint` to deliver to a cloud's event bus.
+
 If the target *is* an alchemy Worker but you want the endpoint declared
 in the Stack rather than inside the Worker, bind the secret explicitly:
 
@@ -130,5 +234,7 @@ yield* Stripe.bindWebhookSecret(api, webhook.secret);
 
 ## Reference
 
-[WebhookEndpoint](/providers/stripe/webhookendpoint) ·
-[consumeEvents](/providers/stripe/consumeeventslive)
+[WebhookEndpoint](/providers/stripe/reference/webhook#webhookendpoint) ·
+[EventDestination](/providers/stripe/reference/webhook#eventdestination) ·
+[consumeEvents](/providers/stripe/reference/webhook#consumeeventslive) ·
+[ConsumeEventsEventBridge](/providers/stripe/aws#consumeeventseventbridge)

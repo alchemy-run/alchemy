@@ -1,12 +1,15 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as vmware from "@distilled.cloud/azure/vmware";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runPaidOnly } from "../gates.ts";
 import { AVS_TIMEOUT, logLevel, privateCloud, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
+
+const dhcpServerOf = (properties: vmware.WorkloadNetworkDhcpEntity | undefined) =>
+  properties?.dhcpType === "SERVER" ? properties : undefined;
 
 const program = (props: { leaseTime: number }) =>
   Effect.gen(function* () {
@@ -44,13 +47,13 @@ test.provider.skip(
         });
       const observed = yield* get();
       expect(observed.properties?.dhcpType).toEqual("SERVER");
-      expect(observed.properties?.leaseTime).toEqual(86400);
+      expect(dhcpServerOf(observed.properties)?.leaseTime).toEqual(86400);
 
       // In-place update.
       const updated = yield* stack.deploy(program({ leaseTime: 43200 }));
       expect(updated.resource.dhcpName).toEqual(resource.dhcpName);
       const reobserved = yield* get();
-      expect(reobserved.properties?.leaseTime).toEqual(43200);
+      expect(dhcpServerOf(reobserved.properties)?.leaseTime).toEqual(43200);
 
       yield* stack.destroy();
       expect(yield* waitGone(get())).toEqual("gone");

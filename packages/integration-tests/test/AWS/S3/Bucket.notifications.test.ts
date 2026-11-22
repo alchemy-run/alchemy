@@ -1,13 +1,14 @@
 import * as AWS from "@alchemy.run/aws";
 import { normalizePolicyDocument } from "@alchemy.run/aws/IAM/Policy";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as SNS from "@distilled.cloud/aws/sns";
 import * as SQS from "@distilled.cloud/aws/sqs";
-import { expect } from "alchemy-test";
+import * as Drift from "alchemy/Drift";
 import * as Output from "alchemy/Output";
 import { isResourceState, State } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -825,4 +826,128 @@ test.provider(
       yield* assertBucketDeleted(bucket.bucketName);
     }),
   { tags: ["provider:aws", "provider:aws:s3", "live"], timeout: 120_000 },
+);
+
+// #1536: state outlives every physical resource of an upload pipeline
+// (bucket -> topic -> queue subscription). `drift --repair` must recreate
+// them in dependency order so the bucket's topic notification and the
+// subscription land on live targets, and the next deploy hands downstream
+// consumers the recreated subscription ARN.
+test.provider(
+  "drift repair recreates a deleted bucket -> topic -> queue pipeline in dependency order",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const pipeline = Effect.gen(function* () {
+        const bucket = yield* AWS.S3.Bucket("Uploads", { forceDestroy: true });
+        const topic = yield* AWS.SNS.Topic("Events", {
+          attributes: {
+            Policy: bucket.bucketArn.pipe(
+              Output.mapEffect((bucketArn) =>
+                Effect.sync(() =>
+                  JSON.stringify({
+                    Version: "2012-10-17",
+                    Statement: [
+                      {
+                        Effect: "Allow",
+                        Principal: { Service: "s3.amazonaws.com" },
+                        Action: "sns:Publish",
+                        Resource: "*",
+                        Condition: { ArnEquals: { "aws:SourceArn": bucketArn } },
+                      },
+                    ],
+                  }),
+                ),
+              ),
+            ),
+          },
+        });
+        const queue = yield* AWS.SQS.Queue("Processing");
+        yield* queue.bind("AllowTopic", {
+          policyStatements: [
+            {
+              Sid: "AllowTopic",
+              Effect: "Allow",
+              Principal: { Service: "sns.amazonaws.com" },
+              Action: ["sqs:SendMessage"],
+              Resource: [queue.queueArn],
+              Condition: { ArnEquals: { "aws:SourceArn": topic.topicArn } },
+            },
+          ],
+        });
+        const subscription = yield* AWS.SNS.Subscription("Subscription", {
+          topicArn: topic.topicArn,
+          protocol: "sqs",
+          endpoint: queue.queueArn,
+          returnSubscriptionArn: true,
+        });
+        yield* bucket.bind("TopicNotifications", {
+          notificationConfiguration: {
+            TopicConfigurations: [{ TopicArn: topic.topicArn, Events: ["s3:ObjectCreated:*"] }],
+          },
+        });
+        return {
+          bucketName: bucket.bucketName,
+          topicArn: topic.topicArn,
+          queueUrl: queue.queueUrl,
+          subscriptionArn: subscription.subscriptionArn,
+        };
+      });
+
+      const before = yield* stack.deploy(pipeline);
+
+      yield* SNS.unsubscribe({ SubscriptionArn: before.subscriptionArn });
+      yield* SQS.deleteQueue({ QueueUrl: before.queueUrl });
+      yield* SNS.deleteTopic({ TopicArn: before.topicArn });
+      yield* S3.deleteBucket({ Bucket: before.bucketName });
+      yield* assertBucketDeleted(before.bucketName);
+      yield* assertQueueDeleted(before.queueUrl);
+
+      const target = { name: stack.name, stage: stack.stage };
+      const detected = yield* Drift.detect(target).pipe(Effect.provide(stack.state));
+      for (const fqn of ["Uploads", "Events", "Processing", "Subscription"]) {
+        expect(detected.resources[fqn]?.action).toBe("missing");
+      }
+
+      const repaired = yield* Drift.repair(target).pipe(Effect.provide(stack.state));
+      for (const fqn of ["Uploads", "Events", "Processing", "Subscription"]) {
+        expect(repaired.resources[fqn]?.action).toBe("recreated");
+      }
+
+      // The next unchanged deploy reports the recreated subscription.
+      const after = yield* stack.deploy(pipeline);
+      expect(after.bucketName).toBe(before.bucketName);
+      expect(after.topicArn).toBe(before.topicArn);
+      expect(after.subscriptionArn).not.toBe(before.subscriptionArn);
+      const subscription = yield* SNS.getSubscriptionAttributes({
+        SubscriptionArn: after.subscriptionArn,
+      });
+      expect(subscription.Attributes?.TopicArn).toBe(after.topicArn);
+      expect(canonical(yield* readNotifications(after.bucketName)).TopicConfigurations).toEqual([
+        expect.objectContaining({ TopicArn: after.topicArn }),
+      ]);
+
+      // An upload flows end to end: S3 -> SNS -> SQS.
+      yield* S3.putObject({ Bucket: after.bucketName, Key: "recovered.txt", Body: "recovered" });
+      const bodies = yield* SQS.receiveMessage({
+        QueueUrl: after.queueUrl,
+        WaitTimeSeconds: 5,
+        MaxNumberOfMessages: 10,
+      }).pipe(
+        Effect.map((response) => (response.Messages ?? []).map((message) => message.Body ?? "")),
+        Effect.repeat({
+          until: (bodies) => bodies.some((body) => body.includes("recovered.txt")),
+          times: 8,
+        }),
+      );
+      expect(bodies.some((body) => body.includes("recovered.txt"))).toBe(true);
+
+      yield* stack.destroy();
+      yield* assertBucketDeleted(after.bucketName);
+      yield* assertQueueDeleted(after.queueUrl);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:s3", "provider:aws:sns", "provider:aws:sqs", "live"],
+    timeout: 180_000,
+  },
 );

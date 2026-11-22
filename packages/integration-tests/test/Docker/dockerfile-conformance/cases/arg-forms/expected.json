@@ -1,0 +1,61 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "ARG",
+          "line": 2,
+          "flags": [],
+          "vars": [
+            [
+              "A",
+              null
+            ]
+          ]
+        },
+        {
+          "tag": "ARG",
+          "line": 3,
+          "flags": [],
+          "vars": [
+            [
+              "B",
+              "default"
+            ]
+          ]
+        },
+        {
+          "tag": "ARG",
+          "line": 4,
+          "flags": [],
+          "vars": [
+            [
+              "C",
+              "quoted value"
+            ],
+            [
+              "D",
+              "4"
+            ]
+          ]
+        },
+        {
+          "tag": "ARG",
+          "line": 5,
+          "flags": [],
+          "vars": [
+            [
+              "E",
+              ""
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

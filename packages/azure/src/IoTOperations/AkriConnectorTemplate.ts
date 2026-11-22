@@ -27,7 +27,7 @@ export interface AkriConnectorTemplateProps {
    * { imageName, registrySettings, tagDigestSettings, replicas? }, allocation?,
    * persistentVolumeClaims?, additionalConfiguration?, secrets? } }`.
    */
-  runtimeConfiguration: iot.AkriConnectorTemplateRuntimeConfiguration;
+  runtimeConfiguration: iot.AkriConnectorTemplatePropertiesInput["runtimeConfiguration"];
   /** Device inbound endpoint types the connector handles (e.g. `Microsoft.Rest`). */
   deviceInboundEndpointTypes: iot.AkriConnectorTemplateDeviceInboundEndpointType[];
   /**

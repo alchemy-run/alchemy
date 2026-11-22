@@ -1,8 +1,8 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cosmos from "@distilled.cloud/azure/cosmos_db";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { COSMOS_LOCATION, logLevel, subscriptionId, waitGone } from "./helpers.ts";
 

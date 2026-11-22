@@ -1,12 +1,12 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import * as KV from "@alchemy.run/cloudflare/KV";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as kv from "@distilled.cloud/cloudflare/kv";
-import { expect } from "alchemy-test";
 import { Action } from "alchemy/Action";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -220,7 +220,16 @@ test.provider(
               const namespaceId = yield* namespace.namespaceId;
 
               return Effect.fn(function* () {
-                yield* kv.put("greeting", "hello world");
+                // A fresh namespace can 404 on the data plane for a few seconds.
+                yield* kv.put("greeting", "hello world").pipe(
+                  Effect.retry({
+                    schedule: Schedule.spaced("1 second"),
+                    while: (error) =>
+                      error._tag === "NamespaceError" &&
+                      error.message.includes("namespace not found"),
+                    times: 10,
+                  }),
+                );
 
                 // Retry only propagation mismatches; surface API errors immediately.
                 const value = yield* kv.get("greeting").pipe(

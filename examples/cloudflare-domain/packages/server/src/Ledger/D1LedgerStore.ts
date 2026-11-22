@@ -1,5 +1,10 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { type LedgerRow, LedgerStore } from "@bank/domain/Ledger/LedgerStore";
+import {
+  cursorOf,
+  type LedgerRow,
+  LedgerStore,
+  parseCursor,
+} from "@bank/domain/Ledger/LedgerStore";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { LedgerDatabase } from "./LedgerDatabase.ts";
@@ -24,14 +29,27 @@ export const D1LedgerStore = Layer.effect(
                 ),
               )
               .pipe(Effect.asVoid),
-      forAccount: (accountId) =>
-        db
+      // Keyset paging on (at, id): one row more than asked says whether a next page exists.
+      forAccount: (accountId, { after, take }) => {
+        const from = after === undefined ? undefined : parseCursor(after);
+        return db
           .prepare(
-            "SELECT id, account_id AS accountId, kind, amount, balance_after AS balanceAfter, at FROM ledger WHERE account_id = ? ORDER BY at, id",
+            `SELECT id, account_id AS accountId, kind, amount, balance_after AS balanceAfter, at FROM ledger WHERE account_id = ?${
+              from ? " AND (at > ? OR (at = ? AND id > ?))" : ""
+            } ORDER BY at, id LIMIT ?`,
           )
-          .bind(accountId)
+          .bind(accountId, ...(from ? [from.at, from.at, from.id] : []), take + 1)
           .all<LedgerRow>()
-          .pipe(Effect.map((result) => result.results)),
+          .pipe(
+            Effect.map(({ results }) => {
+              const entries = results.slice(0, take);
+              return {
+                entries,
+                cursor: results.length > take ? cursorOf(entries[take - 1]!) : null,
+              };
+            }),
+          );
+      },
     };
   }),
 );

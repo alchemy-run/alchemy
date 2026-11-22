@@ -26,6 +26,10 @@
     "effect": "catalog:"
   },
   "devDependencies": {
-    "drizzle-kit": "catalog:"
+    "@alchemy.run/test": "workspace:*",
+    "@electric-sql/pglite": "catalog:",
+    "@libsql/client": "catalog:",
+    "drizzle-kit": "catalog:",
+    "valibot": "1.2.0"
   }
 }

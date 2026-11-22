@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -132,8 +133,18 @@ export interface Pipeline extends Resource<
     pipelineVersion: number;
   },
   never,
-  Providers
+  Providers,
+  PipelineLookup
 > {}
+
+/**
+ * Props for {@link Pipeline.lookup}: find a pipeline this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PipelineLookup {
+  /** The pipeline name of the existing pipeline. */
+  pipelineName: string;
+}
 
 /**
  * An AWS CodePipeline continuous-delivery pipeline: an ordered set of
@@ -178,6 +189,16 @@ export interface Pipeline extends Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing pipeline
+ * `Pipeline.lookup` references a pipeline Alchemy doesn't manage (created in the
+ * console or by another stack), found by `pipelineName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing pipeline
+ * ```typescript
+ * const existing = AWS.CodePipeline.Pipeline.lookup({ pipelineName: "my-pipeline" });
  * ```
  *
  * @resource
@@ -274,7 +295,7 @@ export const PipelineProvider = () =>
       const getPipeline = Effect.fn(function* (name: string) {
         return yield* codepipeline
           .getPipeline({ name })
-          .pipe(Effect.catchTag("PipelineNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("PipelineNotFoundException", () => Effect.undefined));
       });
 
       const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
@@ -304,6 +325,17 @@ export const PipelineProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ pipelineName: name }) {
+          const found = yield* getPipeline(name);
+          if (found?.metadata?.pipelineArn === undefined) return undefined;
+          const attrs = {
+            pipelineName: found.pipeline?.name ?? name,
+            pipelineArn: found.metadata.pipelineArn,
+            pipelineVersion: found.pipeline?.version ?? 1,
+          };
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -354,7 +386,7 @@ export const PipelineProvider = () =>
 
           const arn =
             observed?.metadata?.pipelineArn ??
-            `arn:aws:codepipeline:${region}:${accountId}:${name}`;
+            `arn:${partitionOf(region)}:codepipeline:${region}:${accountId}:${name}`;
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.
           yield* syncTags(arn, desiredTags);
@@ -386,7 +418,7 @@ export const PipelineProvider = () =>
                       ? [
                           {
                             pipelineName: p.name,
-                            pipelineArn: `arn:aws:codepipeline:${region}:${accountId}:${p.name}`,
+                            pipelineArn: `arn:${partitionOf(region)}:codepipeline:${region}:${accountId}:${p.name}`,
                             pipelineVersion: p.version ?? 1,
                           },
                         ]

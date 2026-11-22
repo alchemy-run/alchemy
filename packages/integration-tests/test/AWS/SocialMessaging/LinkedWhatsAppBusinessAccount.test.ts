@@ -1,8 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { LinkedWhatsAppBusinessAccount } from "@alchemy.run/aws/SocialMessaging";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as socialmessaging from "@distilled.cloud/aws/socialmessaging";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { adopt } from "alchemy/AdoptPolicy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -68,10 +69,12 @@ test.provider.skipIf(
 
       const { account } = yield* stack.deploy(
         Effect.gen(function* () {
+          // The account was linked outside alchemy (Meta signup), so it is
+          // always foreign on the first deploy: take it over explicitly.
           const account = yield* LinkedWhatsAppBusinessAccount("Business", {
             accountId: wabaId,
             tags: { fixture: "socialmessaging" },
-          });
+          }).pipe(adopt(true));
           return { account };
         }),
       );

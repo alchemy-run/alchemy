@@ -1,5 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
-import { Credentials } from "@distilled.cloud/azure";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import { armScopeFor, Credentials } from "@distilled.cloud/azure";
 import * as authorization from "@distilled.cloud/azure/authorization";
 import * as geolocation from "@distilled.cloud/azure/maps-geolocation";
 import * as render from "@distilled.cloud/azure/maps-render";
@@ -9,10 +11,8 @@ import * as timezone from "@distilled.cloud/azure/maps-timezone";
 import * as traffic from "@distilled.cloud/azure/maps-traffic";
 import * as weather from "@distilled.cloud/azure/maps-weather";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -36,7 +36,7 @@ const AZURE_MAPS_DATA_READ_AND_BATCH = "d6470a16-71bd-43ab-86b3-6f3a73f4e787";
 /** Object ID (`oid` claim) of the identity running the tests. */
 const deployerObjectId = Effect.gen(function* () {
   const config = yield* yield* Credentials;
-  const token = Redacted.value(config.bearerToken);
+  const token = Redacted.value(yield* config.token(armScopeFor(config.apiBaseUrl)));
   return yield* Effect.sync(
     () =>
       JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"))

@@ -66,6 +66,7 @@ export const RegistryLive = Layer.effect(
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* Paths.state("alchemy", "registry");
+    const heartbeatInterval = yield* System.registryHeartbeat;
 
     const isNonStale = (entryPath: string) =>
       Effect.zip(readMtime(entryPath), DateTime.nowAsDate, {
@@ -157,7 +158,7 @@ export const RegistryLive = Layer.effect(
         const serialized = JSON.stringify(entry, null, 2);
         // Publish complete files atomically so other registry processes never
         // observe a truncated entry during creation or replacement.
-        return Effect.scoped(
+        const publish = Effect.scoped(
           Effect.gen(function* () {
             const temporaryPath = yield* fs.makeTempFileScoped({
               directory,
@@ -173,6 +174,22 @@ export const RegistryLive = Layer.effect(
             SubscriptionRef.update(ref, (map) => MutableHashMap.set(map, entry.scriptName, entry)),
           ),
           updateLock.withPermits(1),
+        );
+        // Refresh the `mtime` so readers don't reap the entry as stale. Timers
+        // don't run while the host sleeps, so after a long sleep another
+        // process may already have reaped the entry; publish it again rather
+        // than letting `utimes` fail with ENOENT. A failed beat is logged and
+        // the next one retries, so the entry is never abandoned.
+        const heartbeat = DateTime.nowAsDate.pipe(
+          Effect.flatMap((now) => fs.utimes(entryPath, now, now)),
+          Effect.catchTag("PlatformError", (error) =>
+            error.reason._tag === "NotFound" ? publish : Effect.fail(error),
+          ),
+          Effect.catchCause((cause) =>
+            Effect.logWarning(`Failed to refresh registry entry ${entry.scriptName}`, cause),
+          ),
+        );
+        return publish.pipe(
           // Remove the entry from the filesystem when the scope closes — but
           // only while the file still holds THIS write's content. A
           // replacement instance of the same script re-registers under the
@@ -190,12 +207,7 @@ export const RegistryLive = Layer.effect(
             ),
           ),
           Effect.tap(() =>
-            // Update the `mtime` every 30 seconds so the entry is not considered stale.
-            DateTime.nowAsDate.pipe(
-              Effect.flatMap((now) => fs.utimes(entryPath, now, now)),
-              Effect.schedule(Schedule.spaced("30 seconds")),
-              Effect.forkScoped,
-            ),
+            heartbeat.pipe(Effect.delay(heartbeatInterval), Effect.forever, Effect.forkScoped),
           ),
           Effect.mapError((error) =>
             SystemError.make({
@@ -225,6 +237,7 @@ const pickSubscriberServices =
             ...service,
             scriptName: entry.scriptName,
             debugPortAddress: entry.debugPortAddress,
+            instanceId: entry.instanceId,
           };
           break;
         }

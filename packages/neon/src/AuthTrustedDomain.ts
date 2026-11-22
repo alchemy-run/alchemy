@@ -3,9 +3,17 @@ import { OwnedBySomeoneElse, Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { authPlanScope, authRequest, InvalidManagedAuth } from "./Auth.ts";
 import type { Providers } from "./Providers.ts";
+
+export class AuthTrustedDomainUnexpectedResponse extends Data.TaggedError(
+  "AuthTrustedDomainUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface AuthTrustedDomainProps {
   /** Managed Auth integration to trust the origin on. */
@@ -128,7 +136,9 @@ export const AuthTrustedDomainProvider = () =>
         );
       }
       if (!(yield* observe(news.auth, news.domain))) {
-        return yield* Effect.fail(new Error("Trusted origin was not visible after reconciliation"));
+        return yield* new AuthTrustedDomainUnexpectedResponse({
+          message: "Trusted origin was not visible after reconciliation",
+        });
       }
       return {
         projectId: news.auth.projectId,

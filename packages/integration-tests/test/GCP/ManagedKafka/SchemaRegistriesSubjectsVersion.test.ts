@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as kafka from "@distilled.cloud/gcp/managedkafka_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withKafkaClusterSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -86,6 +87,22 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { registry, version };
         }),
+      );
+      yield* expectFound(
+        GCP.ManagedKafka.SchemaRegistry.lookup({
+          schemaRegistryId: created.registry.schemaRegistryId,
+          location: created.registry.location,
+        }),
+        created.registry,
+      );
+      yield* expectFound(
+        GCP.ManagedKafka.SchemaRegistriesSubjectsVersion.lookup({
+          subject: created.version.subject,
+          location: created.version.location,
+          version: created.version.version,
+          schemaRegistry: created.version.schemaRegistry,
+        }),
+        created.version,
       );
 
       expect(created.version.name).toContain("/subjects/");

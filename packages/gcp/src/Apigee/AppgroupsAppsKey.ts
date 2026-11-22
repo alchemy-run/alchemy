@@ -146,7 +146,7 @@ export const AppgroupsAppsKey = Resource<AppgroupsAppsKey>("GCP.Apigee.Appgroups
 export class AppgroupsAppsKeyNotResolved extends Data.TaggedError(
   "GCP.Apigee.AppgroupsAppsKeyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const appGroupIdOf = (appGroup: string) =>
@@ -203,7 +203,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsAppgroupsAppsKeys({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const listAppGroups = (organization: string) =>
   collectPages(
@@ -356,20 +356,18 @@ export const AppgroupsAppsKeyProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsAppgroupsAppsKeys({
+            consumerKey,
+            consumerSecret,
+            expiresInSeconds: news.expiresInSeconds,
+            attributes: recordToAttributes(attributes),
             parent,
-            body: {
-              consumerKey,
-              consumerSecret,
-              expiresInSeconds: news.expiresInSeconds,
-              attributes: recordToAttributes(attributes),
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new AppgroupsAppsKeyNotResolved({ name });
+        return yield* new AppgroupsAppsKeyNotResolved({ resourceName: name });
       }
 
       const observedAttributes = attributesToRecord(current.attributes);
@@ -383,16 +381,14 @@ export const AppgroupsAppsKeyProvider = () =>
 
       if (scopesChanged || productsChanged || statusChanged || attributesChanged) {
         current = yield* apigee.updateAppGroupAppKeyOrganizationsAppgroupsAppsKeys({
-          name,
-          body: {
-            action: statusChanged ? status : undefined,
-            apiProducts: news.apiProducts,
-            appGroupAppKey: {
-              consumerKey,
-              scopes: news.scopes,
-              attributes: recordToAttributes(attributes),
-            },
+          action: statusChanged ? status : undefined,
+          apiProducts: news.apiProducts,
+          appGroupAppKey: {
+            consumerKey,
+            scopes: news.scopes,
+            attributes: recordToAttributes(attributes),
           },
+          name,
         });
       }
 

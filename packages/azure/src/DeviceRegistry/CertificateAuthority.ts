@@ -202,13 +202,23 @@ const getCertificateAuthority = (
     }),
   );
 
+/**
+ * The CA's properties. The SDK union also lists the issuer object as an
+ * arm, which a certificate authority never returns.
+ */
+const propertiesOf = (observed: deviceregistry.GetCertificateAuthorityResponse) => {
+  const props = observed.properties;
+  return props !== undefined && "certificateAuthorityType" in props ? props : undefined;
+};
+
 const toAttrs = (
   resourceGroup: string,
   namespaceName: string,
   name: string,
   observed: deviceregistry.GetCertificateAuthorityResponse,
 ): CertificateAuthority["Attributes"] => {
-  const props = observed.properties;
+  const props = propertiesOf(observed);
+  const issuer = props?.certificateAuthorityType === "ICA" ? props.issuer : undefined;
   return {
     certificateAuthorityName: name,
     certificateAuthorityId: observed.id ?? "",
@@ -218,11 +228,11 @@ const toAttrs = (
     uuid: props?.uuid,
     type: props?.certificateAuthorityType ?? "Root",
     keyType: props?.keyType ?? "ECC",
-    issuerType: props?.issuer?.issuerType,
-    issuerCertificateAuthorityId: props?.issuer?.certificateAuthorityResourceId,
-    certificateSigningRequest: props?.issuer?.certificateSigningRequest,
-    thumbprint: props?.issuer?.thumbprint,
-    status: props?.issuer?.status,
+    issuerType: issuer?.issuerType,
+    issuerCertificateAuthorityId: issuer?.certificateAuthorityResourceId,
+    certificateSigningRequest: issuer?.certificateSigningRequest,
+    thumbprint: issuer?.thumbprint,
+    status: issuer?.status,
     subject: props?.subject,
     validityNotBefore: props?.validityNotBefore,
     validityNotAfter: props?.validityNotAfter,
@@ -331,7 +341,7 @@ export const CertificateAuthorityProvider = () =>
       const get = getCertificateAuthority(subscriptionId, resourceGroup, namespaceName, name);
       const label = `device registry certificate authority ${namespaceName}/${name}`;
       const state = (ca: deviceregistry.GetCertificateAuthorityResponse) =>
-        ca.properties?.provisioningState;
+        propertiesOf(ca)?.provisioningState;
 
       // Observe.
       let observed = yield* get;
@@ -350,11 +360,13 @@ export const CertificateAuthorityProvider = () =>
           ...where,
           location,
           tags,
+          // `type` and `issuer` are separate props, so TypeScript cannot
+          // pick the SDK union arm (`issuer` belongs to `ICA`).
           properties: {
             certificateAuthorityType: news.type ?? "Root",
             keyType: news.keyType ?? "ECC",
             issuer: toIssuer(news.issuer),
-          },
+          } as deviceregistry.CertificateAuthorityPropertiesInput,
         });
       }
       observed = yield* waitForProvisioned(label, get, state, DEVICE_REGISTRY_WAIT);

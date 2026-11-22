@@ -1,11 +1,14 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as backup from "@distilled.cloud/azure/recoveryservicesbackup";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { createVault, deleteVault, groupOnly, logLevel, subscription, tags } from "./vault.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
+
+const storageContainerOf = (container: backup.ProtectionContainer | undefined) =>
+  container?.containerType === "StorageContainer" ? container : undefined;
 
 const VAULT = "alchemy-test-rsv-container";
 
@@ -69,7 +72,7 @@ test.provider(
       expect(created.container.registrationStatus).toEqual("Registered");
       const observed = yield* getContainer(rg, created.container.containerName);
       expect(observed.properties?.registrationStatus).toEqual("Registered");
-      expect(observed.properties?.sourceResourceId?.toLowerCase()).toEqual(
+      expect(storageContainerOf(observed.properties)?.sourceResourceId?.toLowerCase()).toEqual(
         created.account.storageAccountId.toLowerCase(),
       );
 

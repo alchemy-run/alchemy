@@ -44,7 +44,7 @@ export const encodeValue = (value: unknown): firestore.Value => {
   if (typeof value === "object") {
     return { mapValue: { fields: encodeFields(value as object) } };
   }
-  return { stringValue: String(value) };
+  return { stringValue: String(value as symbol | ((...args: never[]) => unknown)) };
 };
 
 /** Encode a plain object's own enumerable keys; `undefined` keys are dropped. */

@@ -19,6 +19,13 @@ import {
 } from "./defaultVpcScope.ts";
 import type { SecurityGroupId, SecurityGroupRuleData } from "./SecurityGroup.ts";
 
+export class SecurityGroupRuleUnexpectedResponse extends Data.TaggedError(
+  "SecurityGroupRuleUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type SecurityGroupRuleId<ID extends string = string> = `sgr-${ID}`;
 export const SecurityGroupRuleId = <ID extends string>(id: ID): ID & SecurityGroupRuleId<ID> =>
   `sgr-${id}` as ID & SecurityGroupRuleId<ID>;
@@ -358,7 +365,11 @@ export const SecurityGroupRuleProvider = () =>
           Effect.flatMap((rule) =>
             rule
               ? Effect.succeed(rule)
-              : Effect.fail(new Error(`Security Group Rule ${ruleId} not found`)),
+              : Effect.fail(
+                  new SecurityGroupRuleUnexpectedResponse({
+                    message: `Security Group Rule ${ruleId} not found`,
+                  }),
+                ),
           ),
         );
 
@@ -400,7 +411,7 @@ export const SecurityGroupRuleProvider = () =>
           if (!output) return undefined;
           return yield* describeRule(output.securityGroupRuleId).pipe(
             Effect.map(toAttrs),
-            Effect.catchTag("InvalidSecurityGroupRuleId.NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("InvalidSecurityGroupRuleId.NotFound", () => Effect.undefined),
           );
         }),
 
@@ -469,9 +480,7 @@ export const SecurityGroupRuleProvider = () =>
           const { group: _group, groupId: _groupId, ...oldRule } = olds;
           if (output) {
             const observed = yield* describeRule(output.securityGroupRuleId).pipe(
-              Effect.catchTag("InvalidSecurityGroupRuleId.NotFound", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("InvalidSecurityGroupRuleId.NotFound", () => Effect.undefined),
             );
             if (!observed) {
               return { action: "update", stables: ["groupOwnerId"] };
@@ -712,12 +721,28 @@ export const declaredSecurityGroupRuleIds = Effect.fn(function* (groupId: string
       const target = group ?? declaredId;
       // Evaluate only the declared target, never infer ownership from cloud tags.
       const declared = yield* Output.evaluate(target, upstream).pipe(
-        Effect.catchTag(["MissingSourceError", "InvalidReferenceError"], () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag(["MissingSourceError", "InvalidReferenceError"], () => Effect.undefined),
       );
       const declaredGroupId = typeof declared === "string" ? declared : declared?.groupId;
       if (declaredGroupId === groupId) ids.add(attrs.securityGroupRuleId);
+    }
+  }
+  return ids;
+});
+
+// The rules this stack's persisted SecurityGroupRule rows own on `groupId`.
+// `read` has no program to evaluate (drift runs from state alone), so it
+// trusts the state store rather than the current declarations.
+export const persistedSecurityGroupRuleIds = Effect.fn(function* (groupId: string) {
+  const stack = yield* Stack;
+  const state = yield* yield* State;
+  const ids = new Set<string>();
+  for (const fqn of yield* state.list({ stack: stack.name, stage: stack.stage })) {
+    const row = yield* state.get({ stack: stack.name, stage: stack.stage, fqn });
+    if (!row || isActionState(row) || row.resourceType !== "AWS.EC2.SecurityGroupRule") continue;
+    const attrs = row.attr ?? ("old" in row ? row.old.attr : undefined);
+    if (attrs?.groupId === groupId && typeof attrs.securityGroupRuleId === "string") {
+      ids.add(attrs.securityGroupRuleId);
     }
   }
   return ids;

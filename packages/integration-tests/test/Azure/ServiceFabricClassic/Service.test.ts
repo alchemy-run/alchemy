@@ -1,12 +1,15 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as servicefabric from "@distilled.cloud/azure/servicefabric";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runExpensive } from "../gates.ts";
 import { logLevel, readyCluster, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
+
+const statelessOf = (properties: servicefabric.ServiceResourceProperties | undefined) =>
+  properties?.serviceKind === "Stateless" ? properties : undefined;
 
 const getService = (
   resourceGroupName: string,
@@ -80,7 +83,7 @@ test.provider.skipIf(!runExpensive || readyCluster === undefined)(
         app.applicationName,
         service.serviceName,
       );
-      expect(observed.properties?.instanceCount).toEqual(1);
+      expect(statelessOf(observed.properties)?.instanceCount).toEqual(1);
 
       // In-place: instance count and tags (PATCH).
       const updated = yield* stack.deploy(program({ instanceCount: -1, tags: { env: "prod" } }));
@@ -91,7 +94,7 @@ test.provider.skipIf(!runExpensive || readyCluster === undefined)(
         app.applicationName,
         service.serviceName,
       );
-      expect(after.properties?.instanceCount).toEqual(-1);
+      expect(statelessOf(after.properties)?.instanceCount).toEqual(-1);
       expect(after.tags?.env).toEqual("prod");
 
       // Replacement: a new name.

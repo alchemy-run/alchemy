@@ -248,8 +248,24 @@ const getSiteKeys = (
 
 type ObservedChannel = botservice.GetChannelResponse | botservice.BotChannel;
 
-const propertiesOf = (channel: ObservedChannel | undefined) =>
-  (channel?.properties?.properties ?? {}) as Record<string, unknown>;
+const propertiesOf = (channel: ObservedChannel | undefined) => {
+  const definition = channel?.properties;
+  // Some channel types (e.g. `Omnichannel`) carry no `properties`.
+  return (
+    definition !== undefined && "properties" in definition ? (definition.properties ?? {}) : {}
+  ) as Record<string, unknown>;
+};
+
+/**
+ * The channel definition for `channelName`. `properties` is the
+ * channel-specific bag from {@link ChannelProps}, so TypeScript cannot pick
+ * the union arm for a `channelName` known only at runtime.
+ */
+const channelInput = (
+  channelName: ChannelName,
+  location: string,
+  properties: Record<string, unknown>,
+) => ({ channelName, location, properties }) as botservice.ChannelInput;
 
 /**
  * Sites are matched by name; the observed site's `siteId` is sent back so
@@ -385,7 +401,7 @@ export const ChannelProvider = () =>
         observed = yield* botservice.CreateChannel({
           ...where,
           location,
-          properties: { channelName, location, properties: desired },
+          properties: channelInput(channelName, location, desired),
         });
       }
 
@@ -398,11 +414,7 @@ export const ChannelProvider = () =>
         yield* botservice.UpdateChannel({
           ...where,
           location,
-          properties: {
-            channelName,
-            location,
-            properties: withSiteIds(desired, current),
-          },
+          properties: channelInput(channelName, location, withSiteIds(desired, current)),
         });
         observed = (yield* get) ?? observed;
       }

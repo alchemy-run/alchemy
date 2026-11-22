@@ -3,10 +3,10 @@ import { fromAuthProvider } from "@alchemy.run/neon/Credentials";
 import { Function } from "@alchemy.run/neon/Function";
 import { FunctionLogs } from "@alchemy.run/neon/FunctionProvider";
 import { providers } from "@alchemy.run/neon/Providers";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as NeonApi from "@distilled.cloud/neon";
 import * as Alchemy from "alchemy";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
@@ -100,9 +100,16 @@ test(
       { concurrency: 4 },
     );
     expect(parallel).toEqual(["effect", "effect", "effect", "effect"]);
-    const finalized = yield* client
-      .get(`${url}finalized`)
-      .pipe(Effect.flatMap((response) => response.json));
+    // Finalizers run after each response is sent, and other tests in this
+    // file share the Function: wait until nothing is in flight.
+    const finalized = yield* client.get(`${url}finalized`).pipe(
+      Effect.flatMap((response) => response.json),
+      Effect.repeat({
+        schedule: Schedule.spaced("500 millis"),
+        times: 10,
+        until: (body) => (body as { active?: number } | null)?.active === 0,
+      }),
+    );
     expect(finalized).toMatchObject({ active: 0 });
     expect(finalized).toMatchObject({
       finalized: expect.arrayContaining([

@@ -32,8 +32,7 @@ const makeAwsFinishTarget = (config: FoldkitAwsTargetConfig = {}): FoldkitTarget
         if (!context.entry) return output;
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        if (!output.distDirectory)
-          return yield* Effect.fail(fail("Foldkit produced no deployment directory."));
+        if (!output.distDirectory) return yield* fail("Foldkit produced no deployment directory.");
         const server = path.join(output.distDirectory, "server");
         const adapter = yield* Effect.try({
           try: () =>

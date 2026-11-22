@@ -2,12 +2,14 @@ import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 import * as Railway from "@alchemy.run/railway";
 import { RailwayAuth } from "@alchemy.run/railway/AuthProvider";
 import { fromAuthProvider } from "@alchemy.run/railway/Credentials";
+import { resolveConnectionOptions } from "@alchemy.run/sql/PostgresTls";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Query } from "@distilled.cloud/core/query";
 import { GraphQLLive, Railway as RailwayApi } from "@distilled.cloud/railway";
+import * as PgClient from "@effect/sql-pg/PgClient";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -17,10 +19,12 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { PostgresFn } from "./fixtures/async-postgres-fn.ts";
 import PostgresApi, { Db, Site } from "./fixtures/postgres-api.ts";
+import { railwayApi } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 import { suitePartition } from "./suiteProject.ts";
 import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 
-const { test } = Test.make({ providers: Railway.providers() });
+const { test } = Test.make({ limit: railwayApi, providers: Railway.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -36,28 +40,26 @@ const firstOk = (rows: unknown): unknown => {
   return (rows[0] as { ok?: unknown }).ok;
 };
 
-const selectOne = (url: string) =>
-  Effect.tryPromise({
-    try: async () => {
-      const pg = await import("pg");
-      const client = new pg.Client({
-        connectionString: url,
-        ssl: { rejectUnauthorized: false },
-        // pg has no default connect timeout; bound each attempt so the
-        // retry schedule (not a hung socket) owns the readiness budget.
-        connectionTimeoutMillis: 10_000,
-      });
-      await client.connect();
-      try {
-        return (await client.query("select 1 as ok")).rows;
-      } finally {
-        await client.end();
-      }
-    },
-    catch: (cause) => new Error(String(cause)),
-    // Allow the new database and TCP proxy to become ready. Ten retries
-    // bound backoff to 50 seconds; each connection attempt also has a timeout.
-  }).pipe(Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 10 }));
+const selectOne = Effect.fn(
+  function* (_url: string) {
+    const sql = yield* PgClient.PgClient;
+    return yield* sql`select 1 as ok`;
+  },
+  (effect, url) =>
+    effect.pipe(
+      Effect.provide(
+        PgClient.layer({
+          ...resolveConnectionOptions(Redacted.make(url), { rejectUnauthorized: false }),
+          // Bound each attempt so the retry schedule (not a hung socket) owns
+          // the readiness budget.
+          connectTimeout: "10 seconds",
+        }),
+      ),
+      // Allow the new database and TCP proxy to become ready. Ten retries
+      // bound backoff to 50 seconds; each connection attempt also has a timeout.
+      Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 10 }),
+    ),
+);
 
 const readVariables = Query.fn((projectId: string, environmentId: string, serviceId: string) =>
   RailwayApi.variables({ projectId, environmentId, serviceId, unrendered: true }),
@@ -188,6 +190,14 @@ test.provider(
           return { project, environment, db };
         }),
       );
+      yield* expectFound(
+        Railway.Postgres.lookup({
+          projectId: created.db.projectId,
+          environmentId: created.db.environmentId,
+          serviceId: created.db.serviceId,
+        }),
+        created.db,
+      );
 
       expect(created.db.serviceId).toEqual(expect.any(String));
       expect(created.db.serviceId.length).toBeGreaterThan(0);
@@ -302,6 +312,7 @@ describe(
   },
   () => {
     const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+      limit: railwayApi,
       providers: Railway.providers(),
     });
 

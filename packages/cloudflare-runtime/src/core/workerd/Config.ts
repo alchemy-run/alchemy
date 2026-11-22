@@ -1,5 +1,6 @@
 import type {
   HttpOptions_Style,
+  Socket_TcpTlsMode,
   TlsOptions_Version,
   Worker_Binding_CryptoKey_Usage,
 } from "./internal/config.capnp.ts";
@@ -8,6 +9,7 @@ import type {
 
 export {
   HttpOptions_Style,
+  Socket_TcpTlsMode,
   TlsOptions_Version,
   Worker_Binding_CryptoKey_Usage,
 } from "./internal/config.capnp.ts";
@@ -18,7 +20,7 @@ export type Void = typeof kVoid;
 export interface Config {
   services?: Array<Service>;
   sockets?: Array<Socket>;
-  v8Flags?: Array<string>;
+  v8Flags?: ReadonlyArray<string>;
   extensions?: Array<Extension>;
   autogates?: Array<string>;
   structuredLogging?: boolean;
@@ -44,6 +46,7 @@ export interface Socket_Https {
 
 export interface Socket_Tcp {
   tlsOptions?: TlsOptions;
+  tlsMode?: Socket_TcpTlsMode;
 }
 
 export type Service = {
@@ -78,6 +81,15 @@ export type Worker_DockerConfiguration = {
    * from containers back through workerd (e.g. for `interceptOutboundHttp`).
    */
   containerEgressInterceptorImage?: string;
+  /**
+   * Scopes the Docker resources workerd creates to a session chosen by the
+   * supervisor. Container and sidecar names include it, so different sessions
+   * never share or adopt each other's containers, while a workerd started with
+   * the same session adopts the ones an earlier process left running.
+   * Session-scoped resources carry the label `dev.workerd.session=<sessionId>`.
+   * Only letters, digits, `_`, `.` and `-`.
+   */
+  sessionId?: string;
 };
 
 export type Worker_ContainerEngine = {
@@ -172,12 +184,6 @@ export type Worker_Binding_Type =
 export type Worker_Binding_DurableObjectNamespaceDesignator = {
   className?: string;
   serviceName?: string;
-  retryPolicy?: {
-    /** Retries after the initial attempt. Defaults to 4; zero disables retries. */
-    maxAttempts?: number;
-    /** Retry deadline in milliseconds (500–60,000). Defaults to 10,000. */
-    timeoutMs?: number;
-  };
 };
 
 export type Worker_Binding_CryptoKey = (

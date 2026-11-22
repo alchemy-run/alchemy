@@ -26,5 +26,8 @@
     "alchemy": "workspace:*",
     "better-auth": "catalog:",
     "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@alchemy.run/test": "workspace:*"
   }
 }

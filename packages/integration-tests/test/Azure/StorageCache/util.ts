@@ -1,8 +1,8 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
 import type { AzureOpError } from "@distilled.cloud/azure";
 import * as storage from "@distilled.cloud/azure/storage";
 import * as servicePrincipals from "@distilled.cloud/microsoft-graph/servicePrincipals";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

@@ -1,12 +1,11 @@
 import { describe, expect } from "bun:test";
-import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
+import * as Test from "@alchemy.run/test/Bun";
 import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as run from "@distilled.cloud/gcp/run_v2";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -28,12 +27,8 @@ const { getWhenReady } = Test;
 // the deploy uses, so the test runs against the configured profile.
 const GcpHttp = Layer.mergeAll(GCP.GcpAuth, GCP.fromAuthProvider(), FetchHttpClient.layer);
 
-// The services are built from `main`, which needs a local image build.
-const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-
 // Deploy, tests and destroy all sit behind the same Docker guard.
-describe.skipIf(!dockerAvailable)("gcp-pubsub-fanout", () => {
+describe("gcp-pubsub-fanout", () => {
   const stack = beforeAll(deploy(Stack), { timeout: 900_000 });
 
   const baseUrlOf = (url: string | undefined) => {
@@ -114,22 +109,20 @@ describe.skipIf(!dockerAvailable)("gcp-pubsub-fanout", () => {
     Effect.gen(function* () {
       const { projectId, datasetId, tableId } = tableRefOf(tableName);
       const result = yield* bigquery.queryJobs({
-        projectId,
-        body: {
-          query: `SELECT eventId, type, orderId FROM \`${datasetId}.${tableId}\` WHERE eventId IN UNNEST(@ids)`,
-          useLegacySql: false,
-          parameterMode: "NAMED",
-          queryParameters: [
-            {
-              name: "ids",
-              parameterType: { type: "ARRAY", arrayType: { type: "STRING" } },
-              parameterValue: {
-                arrayValues: eventIds.map((value) => ({ value })),
-              },
+        query: `SELECT eventId, type, orderId FROM \`${datasetId}.${tableId}\` WHERE eventId IN UNNEST(@ids)`,
+        useLegacySql: false,
+        parameterMode: "NAMED",
+        queryParameters: [
+          {
+            name: "ids",
+            parameterType: { type: "ARRAY", arrayType: { type: "STRING" } },
+            parameterValue: {
+              arrayValues: eventIds.map((value) => ({ value })),
             },
-          ],
-          timeoutMs: 20_000,
-        },
+          },
+        ],
+        timeoutMs: 20_000,
+        projectId,
       });
       return (result.rows ?? []).map((row): AnalyticsRow => ({
         eventId: String(row.f?.[0]?.v),
@@ -300,8 +293,9 @@ describe.skipIf(!dockerAvailable)("gcp-pubsub-fanout", () => {
 
       const pullDeadLetters = pubsub
         .pullProjectsSubscriptions({
+          maxMessages: 10,
+          returnImmediately: true,
           subscription: deadLetterSubscription,
-          body: { maxMessages: 10, returnImmediately: true },
         })
         .pipe(Effect.provide(GcpHttp));
 
@@ -313,10 +307,7 @@ describe.skipIf(!dockerAvailable)("gcp-pubsub-fanout", () => {
             const ackIds = receivedMessages.flatMap((m) => (m.ackId ? [m.ackId] : []));
             if (ackIds.length > 0) {
               yield* pubsub
-                .acknowledgeProjectsSubscriptions({
-                  subscription: deadLetterSubscription,
-                  body: { ackIds },
-                })
+                .acknowledgeProjectsSubscriptions({ ackIds, subscription: deadLetterSubscription })
                 .pipe(Effect.provide(GcpHttp));
             }
           }),

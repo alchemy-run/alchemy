@@ -11,6 +11,13 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class NeptuneGraphGraphUnexpectedResponse extends Data.TaggedError(
+  "NeptuneGraphGraphUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface GraphProps {
   /**
    * Name of the graph (lowercase letters, numbers, and hyphens; must start
@@ -51,8 +58,9 @@ export interface GraphProps {
     dimension: number;
   };
   /**
-   * Block accidental deletion. In-place modify.
-   * @default true
+   * Refuse deletion while on: `destroy` and replacement fail until it is
+   * turned off and deployed. In-place modify.
+   * @default false
    */
   deletionProtection?: boolean;
   /**
@@ -93,8 +101,23 @@ export interface Graph extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  GraphLookup
 > {}
+
+/**
+ * Props for {@link Graph.lookup}: find a graph this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type GraphLookup =
+  | {
+      /** The id of the existing graph. */
+      graphId: string;
+    }
+  | {
+      /** The name of the existing graph. */
+      graphName: string;
+    };
 
 /**
  * An Amazon Neptune Analytics graph — a serverless, memory-optimized graph
@@ -137,6 +160,17 @@ export interface Graph extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing graph
+ * `Graph.lookup` references a graph Alchemy doesn't manage (created in the
+ * console or by another stack), found by `graphId` or `graphName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing graph
+ * ```typescript
+ * const social = AWS.NeptuneGraph.Graph.lookup({ graphName: "social" });
+ * const endpoint = social.endpoint;
+ * ```
+ *
  * @resource
  */
 export const Graph = Resource<Graph>("AWS.NeptuneGraph.Graph");
@@ -147,6 +181,16 @@ type GraphOutput = neptunegraph.GetGraphOutput;
  * The graph entered the terminal `FAILED` state during provisioning or a
  * modification. Not retried.
  */
+/**
+ * Deletion was refused because the Neptune Analytics graph has deletion protection on, set
+ * through `deletionProtection` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class GraphDeletionProtected extends Data.TaggedError("GraphDeletionProtected")<{
+  readonly graphId: string;
+  readonly message: string;
+}> {}
+
 export class GraphProvisioningFailed extends Data.TaggedError("GraphProvisioningFailed")<{
   readonly graphId: string;
   readonly reason: string;
@@ -200,7 +244,7 @@ export const GraphProvider = () =>
       const getGraph = Effect.fn(function* (graphId: string) {
         return yield* neptunegraph
           .getGraph({ graphIdentifier: graphId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       // Graph names are unique per account/region — resolve a graph by name
@@ -226,7 +270,7 @@ export const GraphProvider = () =>
       const readTags = Effect.fn(function* (arn: string) {
         const response = yield* neptunegraph
           .listTagsForResource({ resourceArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return toTagRecord(response?.tags);
       });
 
@@ -311,6 +355,14 @@ export const GraphProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* (props) {
+          const graph = yield* observeGraph(
+            "graphId" in props ? props.graphId : undefined,
+            "graphName" in props ? props.graphName : "",
+          );
+          if (graph === undefined) return undefined;
+          return toAttrs({ graph, tags: yield* readTags(graph.arn) });
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.graphName ??
@@ -341,13 +393,15 @@ export const GraphProvider = () =>
                 replicaCount: news.replicaCount,
                 kmsKeyIdentifier: news.kmsKeyIdentifier,
                 vectorSearchConfiguration: news.vectorSearchConfiguration,
-                deletionProtection: news.deletionProtection,
+                deletionProtection: news.deletionProtection ?? false,
                 tags: desiredTags,
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             const graphId = created?.id ?? (yield* findGraphByName(name))?.id;
             if (graphId === undefined) {
-              return yield* Effect.fail(new Error(`Failed to create graph '${name}'`));
+              return yield* new NeptuneGraphGraphUnexpectedResponse({
+                message: `Failed to create graph '${name}'`,
+              });
             }
             observed = yield* waitForGraph(graphId);
           } else {
@@ -373,11 +427,9 @@ export const GraphProvider = () =>
               update.publicConnectivity = news.publicConnectivity;
               dirty = true;
             }
-            if (
-              news.deletionProtection !== undefined &&
-              news.deletionProtection !== observed.deletionProtection
-            ) {
-              update.deletionProtection = news.deletionProtection;
+            const deletionProtection = news.deletionProtection ?? false;
+            if (deletionProtection !== observed.deletionProtection) {
+              update.deletionProtection = deletionProtection;
               dirty = true;
             }
             if (dirty) {
@@ -408,25 +460,35 @@ export const GraphProvider = () =>
           yield* session.note(observed.arn);
           return toAttrs({ graph: observed, tags: desiredTags });
         }),
-        delete: Effect.fn(function* ({ output }) {
-          // Deletion is blocked while delete-protection is on — disable it
-          // first if the live graph still has it enabled.
+        delete: Effect.fn(function* ({ output, force }) {
           const observed = yield* getGraph(output.graphId);
           if (observed === undefined) return;
+          // Deletion protection, set by this stack or outside it, refuses the
+          // delete. Only an account-wide nuke (`force`) lifts it.
           if (observed.deletionProtection === true) {
+            if (force !== true) {
+              return yield* new GraphDeletionProtected({
+                graphId: output.graphId,
+                message: `Neptune Analytics graph '${output.graphId}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+              });
+            }
             yield* neptunegraph
               .updateGraph({
                 graphIdentifier: output.graphId,
                 deletionProtection: false,
               })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           }
-          yield* neptunegraph
-            .deleteGraph({
-              graphIdentifier: output.graphId,
-              skipSnapshot: true,
-            })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          // A delete already under way (an interrupted destroy) is refused
+          // with ConflictException; wait for it instead of starting another.
+          if (observed.status !== "DELETING") {
+            yield* neptunegraph
+              .deleteGraph({
+                graphIdentifier: output.graphId,
+                skipSnapshot: true,
+              })
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          }
           // Block until the graph is fully gone — deletion is async and the
           // graph bills until it disappears.
           yield* Effect.repeat(

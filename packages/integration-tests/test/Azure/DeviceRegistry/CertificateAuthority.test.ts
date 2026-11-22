@@ -1,13 +1,17 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as deviceregistry from "@distilled.cloud/azure/deviceregistry";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { logLevel, registryLocation as location, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
-const getCa = (resourceGroupName: string, namespaceName: string, certificateAuthorityName: string) =>
+const getCa = (
+  resourceGroupName: string,
+  namespaceName: string,
+  certificateAuthorityName: string,
+) =>
   Effect.gen(function* () {
     return yield* deviceregistry.GetCertificateAuthority({
       subscriptionId: yield* subscription,
@@ -16,6 +20,15 @@ const getCa = (resourceGroupName: string, namespaceName: string, certificateAuth
       certificateAuthorityName,
     });
   });
+
+// The SDK union also lists the issuer shape; it has no `certificateAuthorityType`.
+const caOf = (properties: deviceregistry.CertificateAuthorityProperties | undefined) =>
+  properties !== undefined && "certificateAuthorityType" in properties ? properties : undefined;
+
+const icaOf = (properties: deviceregistry.CertificateAuthorityProperties | undefined) => {
+  const ca = caOf(properties);
+  return ca?.certificateAuthorityType === "ICA" ? ca : undefined;
+};
 
 const program = (props: { icaName?: string; tags: Record<string, string> }) =>
   Effect.gen(function* () {
@@ -47,26 +60,24 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { group, namespace, root, ica } = yield* stack.deploy(
-        program({ tags: { env: "a" } }),
-      );
+      const { group, namespace, root, ica } = yield* stack.deploy(program({ tags: { env: "a" } }));
       const get = (name: string) => getCa(group.resourceGroupName, namespace.namespaceName, name);
 
       const observedRoot = yield* get(root.certificateAuthorityName);
-      expect(observedRoot.properties?.provisioningState).toEqual("Succeeded");
-      expect(observedRoot.properties?.certificateAuthorityType).toEqual("Root");
-      expect(observedRoot.properties?.keyType).toEqual("ECC");
+      expect(caOf(observedRoot.properties)?.provisioningState).toEqual("Succeeded");
+      expect(caOf(observedRoot.properties)?.certificateAuthorityType).toEqual("Root");
+      expect(caOf(observedRoot.properties)?.keyType).toEqual("ECC");
       expect(observedRoot.tags?.env).toEqual("a");
       expect(observedRoot.tags?.["alchemy::id"]).toEqual("Root");
       expect(root.type).toEqual("Root");
       expect(root.uuid).toMatch(/^[0-9a-f-]{36}$/i);
 
       const observedIca = yield* get(ica.certificateAuthorityName);
-      expect(observedIca.properties?.certificateAuthorityType).toEqual("ICA");
-      expect(observedIca.properties?.issuer?.issuerType).toEqual("Microsoft");
-      expect(observedIca.properties?.issuer?.certificateAuthorityResourceId?.toLowerCase()).toEqual(
-        root.certificateAuthorityId.toLowerCase(),
-      );
+      expect(caOf(observedIca.properties)?.certificateAuthorityType).toEqual("ICA");
+      expect(icaOf(observedIca.properties)?.issuer.issuerType).toEqual("Microsoft");
+      expect(
+        icaOf(observedIca.properties)?.issuer.certificateAuthorityResourceId?.toLowerCase(),
+      ).toEqual(root.certificateAuthorityId.toLowerCase());
       expect(ica.issuerType).toEqual("Microsoft");
 
       // In place: tags.

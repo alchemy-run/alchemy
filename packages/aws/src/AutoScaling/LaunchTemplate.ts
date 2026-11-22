@@ -7,10 +7,11 @@ import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import { type LookupMethod, Resource } from "alchemy/Resource";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { createInternalTags, diffTags, hasTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Stream from "effect/Stream";
@@ -19,19 +20,33 @@ import {
   createEc2HostRuntimeContext,
   createEc2HostedSupport,
   type Ec2HostRuntimeContext,
+  type InstanceEnclaveOptions,
   type InstanceMetadataOptions,
 } from "../EC2/hosted.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { AWSEnvironment } from "../index.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+
+export class LaunchTemplateUnexpectedResponse extends Data.TaggedError(
+  "LaunchTemplateUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class LaunchTemplateConflict extends Data.TaggedError("LaunchTemplateConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type LaunchTemplateId = `lt-${string}`;
 export type LaunchTemplateName = string;
 export type LaunchTemplateArn =
-  `arn:aws:ec2:${RegionID}:${AccountID}:launch-template/${LaunchTemplateId}`;
+  `arn:${Partition}:ec2:${RegionID}:${AccountID}:launch-template/${LaunchTemplateId}`;
 
 export interface LaunchTemplateProps extends PlatformProps {
   /**
@@ -72,6 +87,13 @@ export interface LaunchTemplateProps extends PlatformProps {
    * template version. Unset fields keep the AMI / account defaults.
    */
   metadataOptions?: InstanceMetadataOptions;
+  /**
+   * Enable AWS Nitro Enclaves on launched instances, which also lets them run
+   * [Nitro Sandboxes](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/amazon-ec2-nitro-sandboxes.html).
+   * EKS node groups need it to run `isolated-sandbox` and
+   * `confidential-sandbox` pods. Changes publish a new template version.
+   */
+  enclaveOptions?: InstanceEnclaveOptions;
   /**
    * User-defined tags to apply to the launch template and launched instances.
    */
@@ -187,8 +209,23 @@ export interface LaunchTemplate extends Resource<
      */
     policyStatements?: PolicyStatement[];
   },
-  Providers
+  Providers,
+  LaunchTemplateLookup
 > {}
+
+/**
+ * Props for {@link LaunchTemplate.lookup}: find a launch template this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type LaunchTemplateLookup =
+  | {
+      /** The id of the existing launch template. */
+      launchTemplateId: string;
+    }
+  | {
+      /** The name of the existing launch template. */
+      launchTemplateName: string;
+    };
 
 export type LaunchTemplateServices = Credentials | Region;
 
@@ -242,6 +279,24 @@ export type LaunchTemplateRuntimeContext = Ec2HostRuntimeContext;
  * );
  * ```
  *
+ * ### Looking up an existing launch template
+ * `LaunchTemplate.lookup` references a launch template Alchemy doesn't manage (created in the
+ * console or by another stack), found by `launchTemplateId` or
+`launchTemplateName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Scale an existing launch template
+ * ```typescript
+ * const template = AWS.AutoScaling.LaunchTemplate.lookup({ launchTemplateName: "web" });
+ *
+ * yield* AWS.AutoScaling.AutoScalingGroup("Web", {
+ *   launchTemplate: template,
+ *   subnetIds,
+ *   minSize: 1,
+ *   maxSize: 3,
+ * });
+ * ```
+ *
  * @resource
  */
 export const LaunchTemplate: Platform<
@@ -249,7 +304,8 @@ export const LaunchTemplate: Platform<
   LaunchTemplateServices,
   LaunchTemplateShape,
   LaunchTemplateRuntimeContext
-> = Platform("AWS.AutoScaling.LaunchTemplate", {
+> &
+  LookupMethod<LaunchTemplate> = Platform("AWS.AutoScaling.LaunchTemplate", {
   createRuntimeContext: createEc2HostRuntimeContext("AWS.AutoScaling.LaunchTemplate"),
 });
 
@@ -279,7 +335,7 @@ export const LaunchTemplateProvider = () =>
         AWSEnvironment.current.pipe(
           Effect.map(
             (env) =>
-              `arn:aws:ec2:${env.region}:${env.accountId}:launch-template/${launchTemplateId}` as LaunchTemplateArn,
+              `arn:${partitionOf(env.region)}:ec2:${env.region}:${env.accountId}:launch-template/${launchTemplateId}` as LaunchTemplateArn,
           ),
         );
 
@@ -290,7 +346,7 @@ export const LaunchTemplateProvider = () =>
           } as any)
           .pipe(
             Effect.map((result) => result.LaunchTemplates?.[0]),
-            Effect.catchIf(isLaunchTemplateNotFound, () => Effect.succeed(undefined)),
+            Effect.catchIf(isLaunchTemplateNotFound, () => Effect.undefined),
           );
 
       const describeByName = (launchTemplateName: string) =>
@@ -300,7 +356,7 @@ export const LaunchTemplateProvider = () =>
           } as any)
           .pipe(
             Effect.map((result) => result.LaunchTemplates?.[0]),
-            Effect.catchIf(isLaunchTemplateNotFound, () => Effect.succeed(undefined)),
+            Effect.catchIf(isLaunchTemplateNotFound, () => Effect.undefined),
           );
 
       const syncTemplateTags = Effect.fn(function* ({
@@ -353,6 +409,7 @@ export const LaunchTemplateProvider = () =>
               securityGroupIds: news.securityGroupIds as string[] | undefined,
               associatePublicIpAddress: news.associatePublicIpAddress,
               metadataOptions: news.metadataOptions,
+              enclaveOptions: news.enclaveOptions,
               tags: news.tags,
             },
             runtime,
@@ -361,9 +418,9 @@ export const LaunchTemplateProvider = () =>
 
         const versionNumber = created.LaunchTemplateVersion?.VersionNumber;
         if (versionNumber === undefined) {
-          return yield* Effect.fail(
-            new Error(`createLaunchTemplateVersion returned no version for '${launchTemplateId}'`),
-          );
+          return yield* new LaunchTemplateUnexpectedResponse({
+            message: `createLaunchTemplateVersion returned no version for '${launchTemplateId}'`,
+          });
         }
 
         yield* ec2.modifyLaunchTemplate({
@@ -430,6 +487,13 @@ export const LaunchTemplateProvider = () =>
               } as const;
             }
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          const template =
+            "launchTemplateId" in props
+              ? yield* describeById(props.launchTemplateId)
+              : yield* describeByName(props.launchTemplateName);
+          return template ? yield* toAttributes(template) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const template =
@@ -503,6 +567,7 @@ export const LaunchTemplateProvider = () =>
                   securityGroupIds: news.securityGroupIds as string[] | undefined,
                   associatePublicIpAddress: news.associatePublicIpAddress,
                   metadataOptions: news.metadataOptions,
+                  enclaveOptions: news.enclaveOptions,
                   tags: desiredTags,
                 },
                 runtime,
@@ -510,20 +575,18 @@ export const LaunchTemplateProvider = () =>
             } as any);
             const template = created.LaunchTemplate;
             if (!template?.LaunchTemplateId || !template.LaunchTemplateName) {
-              return yield* Effect.fail(
-                new Error(`createLaunchTemplate returned no launch template for '${id}'`),
-              );
+              return yield* new LaunchTemplateUnexpectedResponse({
+                message: `createLaunchTemplate returned no launch template for '${id}'`,
+              });
             }
             yield* session.note(template.LaunchTemplateId);
             return yield* toAttributes(template as ec2.LaunchTemplate, runtime);
           }
 
           if (!hasTags(desiredTags, toTagRecord(existing.Tags))) {
-            return yield* Effect.fail(
-              new Error(
-                `Launch template '${launchTemplateName}' already exists and is not managed by alchemy`,
-              ),
-            );
+            return yield* new LaunchTemplateConflict({
+              message: `Launch template '${launchTemplateName}' already exists and is not managed by alchemy`,
+            });
           }
 
           // Sync version — each reconcile creates a new version pinned as
@@ -544,9 +607,9 @@ export const LaunchTemplateProvider = () =>
 
           const refreshed = yield* describeById(existing.LaunchTemplateId!);
           if (!refreshed) {
-            return yield* Effect.fail(
-              new Error(`Launch template '${launchTemplateName}' was not readable after reconcile`),
-            );
+            return yield* new LaunchTemplateUnexpectedResponse({
+              message: `Launch template '${launchTemplateName}' was not readable after reconcile`,
+            });
           }
           yield* session.note(refreshed.LaunchTemplateId!);
           return yield* toAttributes(refreshed, runtime);

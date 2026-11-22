@@ -26,9 +26,6 @@ const alchemyBin = path.join(root, "node_modules", "alchemy", "bin", "alchemy.js
 // session (default stage) over state rows.
 const STAGE = "dev-cli-test";
 
-// The whole suite needs docker (floci and the MicroVM containers).
-const dockerAvailable = spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
-
 let proc: ReturnType<typeof spawn> | undefined;
 let ws: WebSocket | undefined;
 let output = "";
@@ -106,7 +103,7 @@ afterAll(async () => {
       await Promise.race([exited, Bun.sleep(5_000)]);
     }
   }
-  if (!process.env.NO_DESTROY && dockerAvailable) {
+  if (!process.env.NO_DESTROY) {
     spawnSync("bun", [alchemyBin, "destroy", "--stage", STAGE, "--yes"], {
       cwd: root,
       stdio: "inherit",
@@ -127,61 +124,57 @@ afterAll(async () => {
   }
 }, 400_000);
 
-test.skipIf(!dockerAvailable)(
-  "alchemy dev serves a browser shell backed by a local MicroVM",
-  async () => {
-    proc = spawn("bun", [alchemyBin, "dev", "--stage", STAGE], {
-      cwd: root,
-      // Own process group, so teardown can deliver Ctrl-C to the whole
-      // tree the way a terminal would.
-      detached: true,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    pump(proc.stdout!);
-    pump(proc.stderr!);
+test("alchemy dev serves a browser shell backed by a local MicroVM", async () => {
+  proc = spawn("bun", [alchemyBin, "dev", "--stage", STAGE], {
+    cwd: root,
+    // Own process group, so teardown can deliver Ctrl-C to the whole
+    // tree the way a terminal would.
+    detached: true,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  pump(proc.stdout!);
+  pump(proc.stderr!);
 
-    // First dev deploy builds the ShellMicrovm image before printing
-    // stack outputs.
-    const url = await pollUntil("url in stack outputs", () => outputUrl("url"), {
-      tries: 600,
-      delayMs: 1000,
-    });
+  // First dev deploy builds the ShellMicrovm image before printing
+  // stack outputs.
+  const url = await pollUntil("url in stack outputs", () => outputUrl("url"), {
+    tries: 600,
+    delayMs: 1000,
+  });
 
-    // Dev identity: the Worker is local workerd; no real cloud.
-    expect(url).toContain("localhost");
-    expect(output).not.toContain("apply failed");
+  // Dev identity: the Worker is local workerd; no real cloud.
+  expect(url).toContain("localhost");
+  expect(output).not.toContain("apply failed");
 
-    // The Worker serves the terminal SPA.
-    const html = await fetch(url).then((r) => r.text());
-    expect(html).toContain("microvm@shell");
+  // The Worker serves the terminal SPA.
+  const html = await fetch(url).then((r) => r.text());
+  expect(html).toContain("microvm@shell");
 
-    // One session socket: the Worker provisions the session's MicroVM
-    // (assume-role control plane against floci) and hands it to the DO.
-    const wsUrl = new URL(url);
-    wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
-    wsUrl.pathname = `/session/dev-test-${Math.random().toString(36).slice(2, 8)}/ws`;
-    const socket = new WebSocket(wsUrl);
-    ws = socket;
-    await new Promise<void>((resolve, reject) => {
-      socket.addEventListener("open", () => resolve());
-      socket.addEventListener("error", () => reject(new Error("socket error")));
-    });
+  // One session socket: the Worker provisions the session's MicroVM
+  // (assume-role control plane against floci) and hands it to the DO.
+  const wsUrl = new URL(url);
+  wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
+  wsUrl.pathname = `/session/dev-test-${Math.random().toString(36).slice(2, 8)}/ws`;
+  const socket = new WebSocket(wsUrl);
+  ws = socket;
+  await new Promise<void>((resolve, reject) => {
+    socket.addEventListener("open", () => resolve());
+    socket.addEventListener("error", () => reject(new Error("socket error")));
+  });
 
-    // Command round-trip, streamed back through DO → Worker → browser.
-    const marker = "hello-from-microvm";
-    const first = await run(socket, `echo ${marker}`, marker);
-    expect(first).toContain(`${marker}\n`);
+  // Command round-trip, streamed back through DO → Worker → browser.
+  const marker = "hello-from-microvm";
+  const first = await run(socket, `echo ${marker}`, marker);
+  expect(first).toContain(`${marker}\n`);
 
-    // Real-shell rendering: no exit-status chatter, no blank-line padding.
-    expect(first).not.toContain("[exit");
-    expect(first).not.toMatch(/\n\n/);
+  // Real-shell rendering: no exit-status chatter, no blank-line padding.
+  expect(first).not.toContain("[exit");
+  expect(first).not.toMatch(/\n\n/);
 
-    // Two more commands on the SAME socket → same cached VM: a file written
-    // by one command is read back by the next (state persists, no re-boot).
-    await run(socket, "echo persisted-$$ > /tmp/marker.txt && echo written", "written");
-    const readBack = await run(socket, "cat /tmp/marker.txt", "persisted-");
-    expect(readBack).toMatch(/persisted-\d+\n/);
-    expect(readBack).not.toMatch(/\n\n/);
-  },
-  600_000,
-);
+  // Two more commands on the SAME socket → same cached VM: a file written
+  // by one command is read back by the next (state persists, no re-boot).
+  await run(socket, "echo persisted-$$ > /tmp/marker.txt && echo written", "written");
+  const readBack = await run(socket, "cat /tmp/marker.txt", "persisted-");
+  expect(readBack).toMatch(/persisted-\d+\n/);
+  expect(readBack).not.toMatch(/\n\n/);
+}, 600_000);

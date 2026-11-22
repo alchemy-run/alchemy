@@ -1,4 +1,4 @@
-import { reifyBoundConfigProvider } from "alchemy/Runtime";
+import { RuntimeConfigProviderLive } from "alchemy/Runtime";
 import {
   entrypointLayer,
   resolveProgram,
@@ -13,7 +13,7 @@ import {
  * rather than imported here. The generated entry imports one of those and
  * the user's `main`, nothing else — see `alchemy/Runtime/Bootstrap` for why.
  */
-import * as ConfigProvider from "effect/ConfigProvider";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -42,11 +42,12 @@ export const bootstrapContainer = (
   const platform = Layer.mergeAll(
     runtime.services,
     FetchHttpClient.layer,
+    SecureRandom.layerWebCrypto,
     // TODO(sam): wire this up to telemetry more directly
     Logger.layer([Logger.consolePretty()]),
   );
 
-  const program = resolveProgram("default", { telemetry: true }).pipe(
+  const program = resolveProgram("default").pipe(
     Effect.provide(
       entrypointLayer(entrypoint).pipe(
         Layer.provideMerge(stackConstant(options.stack.name, options.stack.stage)),
@@ -67,15 +68,7 @@ export const bootstrapContainer = (
           ),
         ),
         Layer.provideMerge(platform),
-        Layer.provideMerge(
-          Layer.succeed(
-            ConfigProvider.ConfigProvider,
-            // Auto-bound `Config` values arrive in the env as
-            // `{"_tag":"Redacted","value":...}` markers; reify them so a
-            // `Config` re-read inside a handler decodes the raw source value.
-            reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env),
-          ),
-        ),
+        Layer.provideMerge(RuntimeConfigProviderLive),
         Layer.provideMerge(Layer.succeed(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info")),
       ),
     ),

@@ -4,12 +4,19 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import { syncGrafanaTags, toTagRecord, unredact } from "./internal.ts";
+
+export class GrafanaWorkspaceNotReady extends Data.TaggedError("GrafanaWorkspaceNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface WorkspaceProps {
   /**
@@ -79,8 +86,18 @@ export interface Workspace extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  WorkspaceLookup
 > {}
+
+/**
+ * Props for {@link Workspace.lookup}: find a workspace this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface WorkspaceLookup {
+  /** The id of the existing workspace. */
+  workspaceId: string;
+}
 
 /**
  * An Amazon Managed Grafana workspace — a fully-managed Grafana server for
@@ -101,6 +118,16 @@ export interface Workspace extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing workspace
+ * `Workspace.lookup` references a workspace Alchemy doesn't manage (created in the
+ * console or by another stack), found by `workspaceId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing workspace
+ * ```typescript
+ * const existing = AWS.Grafana.Workspace.lookup({ workspaceId: "..." });
+ * ```
+ *
  * @resource
  */
 export const Workspace = Resource<Workspace>("AWS.Grafana.Workspace");
@@ -110,7 +137,7 @@ export const WorkspaceProvider = () =>
     Workspace,
     Effect.gen(function* () {
       const arnFor = (accountId: string, region: string, id: string) =>
-        `arn:aws:grafana:${region}:${accountId}:/workspaces/${id}`;
+        `arn:${partitionOf(region)}:grafana:${region}:${accountId}:/workspaces/${id}`;
 
       const toAttrs = (accountId: string, region: string, ws: grafana.WorkspaceDescription) => ({
         workspaceId: ws.id,
@@ -124,7 +151,7 @@ export const WorkspaceProvider = () =>
       const describe = Effect.fn(function* (id: string) {
         const response = yield* grafana
           .describeWorkspace({ workspaceId: id })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.workspace;
       });
 
@@ -138,9 +165,9 @@ export const WorkspaceProvider = () =>
           }),
         );
         if (ws.status !== "ACTIVE") {
-          return yield* Effect.fail(
-            new Error(`Grafana workspace ${id} did not become ACTIVE (status: ${ws.status})`),
-          );
+          return yield* new GrafanaWorkspaceNotReady({
+            message: `Grafana workspace ${id} did not become ACTIVE (status: ${ws.status})`,
+          });
         }
         return ws;
       });
@@ -162,6 +189,14 @@ export const WorkspaceProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ workspaceId }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const ws = yield* describe(workspaceId);
+          if (ws === undefined) return undefined;
+          const attrs = toAttrs(accountId, region, ws);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, output }) {

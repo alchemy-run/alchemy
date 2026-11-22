@@ -1,8 +1,8 @@
-import type { AzureOpError } from "@distilled.cloud/azure";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import type { Queue } from "./Queue.ts";
+import type { StorageQueueError } from "./QueueSend.ts";
 
 export interface StorageQueueReceiveOptions {
   /** Messages to dequeue, 1-32. @default 1 */
@@ -34,7 +34,7 @@ export interface PeekStorageQueueClient {
   /** Read up to `maxMessages` (1-32) visible messages without hiding them. @default 1 */
   peek(
     maxMessages?: number,
-  ): Effect.Effect<StorageQueuePeekedMessage[], AzureOpError, RuntimeContext>;
+  ): Effect.Effect<StorageQueuePeekedMessage[], StorageQueueError, RuntimeContext>;
 }
 
 /** Receive + delete + peek client for one storage queue. */
@@ -42,11 +42,11 @@ export interface ReceiveStorageQueueClient extends PeekStorageQueueClient {
   /** Dequeue up to `maxMessages` messages (possibly none). */
   receive(
     options?: StorageQueueReceiveOptions,
-  ): Effect.Effect<StorageQueueMessage[], AzureOpError, RuntimeContext>;
+  ): Effect.Effect<StorageQueueMessage[], StorageQueueError, RuntimeContext>;
   /** Delete a received message; succeeds when it is already gone. */
   delete(
     message: Pick<StorageQueueMessage, "messageId" | "popReceipt">,
-  ): Effect.Effect<void, AzureOpError, RuntimeContext>;
+  ): Effect.Effect<void, StorageQueueError, RuntimeContext>;
 }
 
 /**

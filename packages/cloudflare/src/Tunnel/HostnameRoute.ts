@@ -220,7 +220,7 @@ type ObservedRoute = {
 const observeRoute = (accountId: string, hostnameRouteId: string) =>
   zeroTrust.getNetworkHostnameRoute({ accountId, hostnameRouteId }).pipe(
     Effect.map((route) => (route.deletedAt != null ? undefined : route)),
-    Effect.catchTag("HostnameRouteNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("HostnameRouteNotFound", () => Effect.undefined),
   );
 
 /**

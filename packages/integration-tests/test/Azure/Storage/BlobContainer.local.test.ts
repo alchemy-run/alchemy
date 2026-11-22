@@ -1,9 +1,9 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as storage from "@distilled.cloud/azure/storage";
 import * as blob from "@distilled.cloud/azure/storage-blob";
 import * as Alchemy from "alchemy";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { onAzurite } from "../azurite.ts";

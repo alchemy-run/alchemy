@@ -287,7 +287,10 @@ export const ProtectedItemProvider = () =>
           properties: {
             policyName: news.policyName,
             replicationExtensionName: news.replicationExtensionName,
-            customProperties: news.customProperties,
+            // `instanceType` is any subtype, so TypeScript cannot pick the
+            // SDK union arm.
+            customProperties:
+              news.customProperties as unknown as dr.ProtectedItemModelCustomPropertiesInput,
           },
         });
         observed = yield* settle;
@@ -297,7 +300,10 @@ export const ProtectedItemProvider = () =>
       if (!matchesDesired(customOf(observed), news.customProperties)) {
         yield* dr.UpdateProtectedItem({
           ...where,
-          properties: { customProperties: news.customProperties },
+          properties: {
+            customProperties:
+              news.customProperties as dr.ProtectedItemModelCustomPropertiesUpdateInput,
+          },
         });
         observed = yield* settle;
       }

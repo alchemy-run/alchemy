@@ -2,11 +2,12 @@ import * as AWS from "@alchemy.run/aws";
 import { Subnet, Vpc } from "@alchemy.run/aws/EC2";
 import { LogGroup } from "@alchemy.run/aws/Logs";
 import { Firewall, FirewallPolicy, LoggingConfiguration } from "@alchemy.run/aws/NetworkFirewall";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as nfw from "@distilled.cloud/aws/network-firewall";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../../expectDeleteRefused.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -121,6 +122,25 @@ test.provider.skipIf(!process.env.AWS_TEST_NETWORKFIREWALL)(
       expect(observedLogging.LoggingConfiguration?.LogDestinationConfigs?.[0]?.LogType).toBe(
         "FLOW",
       );
+
+      // Delete protection turned on outside the stack refuses the destroy: the
+      // provider never lifts it. Turn it off the same way, then destroy.
+      const setDeleteProtection = Effect.fn(function* (enabled: boolean) {
+        const { UpdateToken } = yield* nfw.describeFirewall({
+          FirewallName: firewall.firewallName,
+        });
+        yield* nfw.updateFirewallDeleteProtection({
+          FirewallName: firewall.firewallName,
+          UpdateToken,
+          DeleteProtection: enabled,
+        });
+      });
+      yield* setDeleteProtection(true);
+      yield* expectDeleteRefused(stack, {
+        logicalId: "Firewall",
+        tag: "FirewallDeleteProtected",
+      });
+      yield* setDeleteProtection(false);
 
       // Destroy immediately (delete waits for endpoint deprovisioning) and
       // verify the firewall is gone out-of-band.

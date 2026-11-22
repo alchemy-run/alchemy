@@ -1,10 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
 import * as Region from "@distilled.cloud/gcp/Region";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({
   providers: GCP.providers().pipe(
@@ -20,6 +21,13 @@ test.provider(
       yield* stack.destroy();
       const repo = yield* stack.deploy(
         GCP.ArtifactRegistry.Repository("PreferRepo", { format: "DOCKER" }),
+      );
+      yield* expectFound(
+        GCP.ArtifactRegistry.Repository.lookup({
+          repositoryId: repo.repositoryId,
+          location: repo.location,
+        }),
+        repo,
       );
       expect(repo.name).toContain("/locations/us-east4/");
       // The same resource is reachable through the regional host directly.

@@ -178,7 +178,7 @@ export const UserGroupMembershipProvider = () =>
         // bubbles to the retry below.
         const observed = yield* iam.getUserGroupMember({ accountId, userGroupId, memberId }).pipe(
           Effect.map((m): ObservedMember | undefined => m),
-          Effect.catchTag("UserGroupMemberNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("UserGroupMemberNotFound", () => Effect.undefined),
         );
         if (observed) {
           return toAttributes(observed, userGroupId, accountId);
@@ -243,9 +243,7 @@ type ObservedMember = {
 const getMembership = (accountId: string, userGroupId: string, memberId: string) =>
   iam.getUserGroupMember({ accountId, userGroupId, memberId }).pipe(
     Effect.map((m): ObservedMember | undefined => m),
-    Effect.catchTag(["UserGroupMemberNotFound", "UserGroupNotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["UserGroupMemberNotFound", "UserGroupNotFound"], () => Effect.undefined),
   );
 
 const toAttributes = (

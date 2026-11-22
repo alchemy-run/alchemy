@@ -4,6 +4,7 @@ import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
 import type * as rolldown from "rolldown";
 
 /**
@@ -25,6 +26,10 @@ export const buildMicrovmDockerfile = (
   userDockerfile: string | undefined,
   runtime: "bun" | "node",
   port: number,
+  options: {
+    /** The bundle ships `.map` files: copy them and have Node apply them. */
+    readonly sourceMaps?: boolean;
+  } = {},
 ): string => {
   const base = userDockerfile?.trim() ?? `FROM ${MICROVM_BASE_DOCKER_IMAGE}`;
   const installRuntime =
@@ -36,6 +41,11 @@ export const buildMicrovmDockerfile = (
         // that AWS request signing needs; `nodejs24` also links `node`.
         "RUN dnf install -y nodejs24 && dnf clean all";
   const runtimeBin = runtime === "bun" ? "bun" : "node";
+  // Bun ignores external source maps, so only Node gets them.
+  const sourceMaps = options.sourceMaps === true && runtime === "node";
+  const command = sourceMaps
+    ? `"${runtimeBin}", "--enable-source-maps", "/app/index.mjs"`
+    : `"${runtimeBin}", "/app/index.mjs"`;
   return [
     base,
     "",
@@ -46,9 +56,10 @@ export const buildMicrovmDockerfile = (
     // imports of a chunk resolve without needing a `package.json` `"type"`
     // marker (which would risk clobbering a user-provided base image's file).
     "COPY *.mjs /app/",
+    ...(sourceMaps ? ["COPY *.map /app/"] : []),
     `EXPOSE ${port}`,
     `ENV PORT=${port}`,
-    `ENTRYPOINT ["${runtimeBin}", "/app/index.mjs"]`,
+    `ENTRYPOINT [${command}]`,
     "",
   ].join("\n");
 };
@@ -110,8 +121,12 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
       {
         ...build?.output,
         format: "esm",
-        sourcemap: build?.output?.sourcemap ?? false,
-        minify: build?.output?.minify ?? false,
+        // Minified like Lambda Functions and Workers; `keepNames` keeps class
+        // and function names in stack traces and Effect spans. Node maps
+        // traces back through the source map; Bun ignores external maps.
+        sourcemap: build?.output?.sourcemap ?? runtime === "node",
+        minify: build?.output?.minify ?? true,
+        keepNames: build?.output?.keepNames ?? true,
         entryFileNames: "index.mjs",
         // Emit chunks as `.mjs` too so Node treats them as ESM unconditionally
         // (no `package.json` `"type":"module"` needed in the image).
@@ -174,7 +189,7 @@ export const readContextDirectory = Effect.fn(function* (dir: string) {
 
   const walk = (
     current: string,
-  ): Effect.Effect<{ path: string; content: Uint8Array }[], any, never> =>
+  ): Effect.Effect<{ path: string; content: Uint8Array }[], PlatformError> =>
     Effect.gen(function* () {
       const entries = yield* fs.readDirectory(current);
       const out: { path: string; content: Uint8Array }[] = [];

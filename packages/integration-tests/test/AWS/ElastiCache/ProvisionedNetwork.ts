@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 
 // Lightweight half of ProvisionedFixture.ts: the shared-network handle that
 // Lambda fixtures read from their init effect. It must NOT import the test
-// harness (`@/Test/Core`) — anything imported here is bundled into the
+// harness (`@alchemy.run/test/Core`) — anything imported here is bundled into the
 // fixture Lambda, and the harness drags in the bundler and engine (a ~19 MB
 // bundle that OOMs a 256 MB Lambda at cold start, surfacing as a 502).
 

@@ -171,7 +171,7 @@ export class SignedNodesNodesDeviceNotResolved extends Data.TaggedError(
   "GCP.SasPortal.SignedNodesNodesDeviceNotResolved",
 )<{
   parent: string;
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (device: sasportal.SasPortalDevice, parent: string, project: string) => {
@@ -283,11 +283,11 @@ export const SignedNodesNodesDeviceProvider = () =>
       if (current === undefined) {
         const created = yield* sasportal
           .createSignedNodesNodesDevices({
-            parent,
-            body: signedDeviceBody({
+            ...signedDeviceBody({
               encodedDevice: news.encodedDevice,
               installerId: news.installerId,
             }),
+            parent,
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -305,7 +305,7 @@ export const SignedNodesNodesDeviceProvider = () =>
       if (current === undefined) {
         return yield* new SignedNodesNodesDeviceNotResolved({
           parent,
-          name: news.name ?? output?.name ?? displayName,
+          resourceName: news.name ?? output?.name ?? displayName,
         });
       }
 
@@ -322,6 +322,7 @@ export const SignedNodesNodesDeviceProvider = () =>
         !sameJson(deviceMetadataOf(current.deviceMetadata), news.deviceMetadata);
       if (nameChanged || allowlistsChanged || configChanged || metadataChanged) {
         current = yield* sasportal.patchNodesDevices({
+          ...desired,
           name,
           updateMask: updateMaskOf(
             "displayName",
@@ -329,7 +330,6 @@ export const SignedNodesNodesDeviceProvider = () =>
             news.preloadedConfig !== undefined ? "preloadedConfig" : undefined,
             news.deviceMetadata !== undefined ? "deviceMetadata" : undefined,
           ),
-          body: desired,
         });
       }
 

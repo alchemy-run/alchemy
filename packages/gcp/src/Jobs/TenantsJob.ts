@@ -23,7 +23,6 @@ import {
   parseJobName,
   parseOwnership,
   replaceOnIdentity,
-  sameStringList,
   sameText,
   tenantNameOf,
   toGeneratedName,
@@ -303,7 +302,7 @@ export type TenantsJob = Resource<
 export const TenantsJob = Resource<TenantsJob>("GCP.Jobs.TenantsJob");
 
 export class TenantsJobNotResolved extends Data.TaggedError("GCP.Jobs.TenantsJobNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toParent = (project: string, parent: string) => tenantNameOf(project, parent);
@@ -448,17 +447,14 @@ export const TenantsJobProvider = () =>
 
       if (current === undefined) {
         const created = yield* jobs
-          .createProjectsTenantsJobs({
-            parent,
-            body: toBody(news, description, requisitionId, title),
-          })
+          .createProjectsTenantsJobs({ ...toBody(news, description, requisitionId, title), parent })
           .pipe(Effect.catchTag("Conflict", () => findOwnedJob(parent, id)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
         return yield* new TenantsJobNotResolved({
-          name: name || `${parent}/jobs/${requisition}`,
+          resourceName: name || `${parent}/jobs/${requisition}`,
         });
       }
 
@@ -509,12 +505,9 @@ export const TenantsJobProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* jobs.patchProjectsTenantsJobs({
+          ...toBody(news, description, requisitionId, title),
           name: currentName,
           updateMask,
-          body: {
-            name: currentName,
-            ...toBody(news, description, requisitionId, title),
-          },
         });
       }
 

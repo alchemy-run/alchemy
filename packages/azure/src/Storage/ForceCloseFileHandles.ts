@@ -48,8 +48,14 @@ export interface ForceCloseFileHandles extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ForceCloseFileHandlesRequest,
-    ) => Effect.Effect<files.FileForceCloseHandlesResponse, files.FileForceCloseHandlesError, RuntimeContext>
+    ) => Effect.Effect<
+      files.FileForceCloseHandlesResponse,
+      files.FileForceCloseHandlesError,
+      RuntimeContext
+    >
   >
 > {}
 
-export const ForceCloseFileHandles = Binding.Service<ForceCloseFileHandles>("Azure.Storage.ForceCloseFileHandles");
+export const ForceCloseFileHandles = Binding.Service<ForceCloseFileHandles>(
+  "Azure.Storage.ForceCloseFileHandles",
+);

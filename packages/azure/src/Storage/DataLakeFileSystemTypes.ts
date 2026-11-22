@@ -1,4 +1,5 @@
 import type { AzureOpError } from "@distilled.cloud/azure";
+import type * as datalake from "@distilled.cloud/azure/storage-datalake";
 
 /**
  * Errors a Data Lake filesystem client operation can fail with: the typed
@@ -6,7 +7,20 @@ import type { AzureOpError } from "@distilled.cloud/azure";
  * `SchemaRegistryStorageAccessDenied` (`AuthorizationPermissionMismatch`)
  * while a new role assignment propagates, or `DirectoryNotEmpty`.
  */
-export type DataLakeFileSystemError = AzureOpError;
+export type DataLakeFileSystemError =
+  | datalake.DirectoryNotEmpty
+  | datalake.FilesystemAlreadyExists
+  | datalake.FilesystemNotFound
+  | datalake.ParentNotFound
+  | datalake.PathAlreadyExists
+  | datalake.PathNotFound
+  | datalake.StorageAuthenticationFailed
+  | datalake.StorageAuthorizationFailure
+  | datalake.StorageBeingDeleted
+  | datalake.StorageHierarchicalNamespaceNotEnabled
+  | datalake.StorageLeaseConflict
+  | datalake.StorageResourceAlreadyExists
+  | AzureOpError;
 
 /** A file or directory, from `HEAD` or a listing. */
 export interface DataLakePathInfo {

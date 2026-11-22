@@ -45,8 +45,23 @@ export interface Sink extends Resource<
     sinkId: string;
   },
   never,
-  Providers
+  Providers,
+  SinkLookup
 > {}
+
+/**
+ * Props for {@link Sink.lookup}: find an observability sink this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type SinkLookup =
+  | {
+      /** The ARN of the existing sink. */
+      sinkArn: string;
+    }
+  | {
+      /** The name of the existing sink. */
+      sinkName: string;
+    };
 
 /**
  * A CloudWatch cross-account observability **sink** — the attachment point
@@ -110,6 +125,17 @@ export interface Sink extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing observability sink
+ * `Sink.lookup` references an observability sink Alchemy doesn't manage (created in the
+ * console or by another stack), found by `sinkArn` or `sinkName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing observability sink
+ * ```typescript
+ * const monitoring = AWS.OAM.Sink.lookup({ sinkName: "monitoring" });
+ * const sinkArn = monitoring.sinkArn;
+ * ```
+ *
  * @resource
  */
 export const Sink = Resource<Sink>("AWS.OAM.Sink");
@@ -168,12 +194,22 @@ export const SinkProvider = () =>
               ),
             ),
           ),
+        lookup: Effect.fn(function* (props) {
+          const found =
+            "sinkArn" in props
+              ? yield* oam
+                  .getSink({ Identifier: props.sinkArn })
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
+              : yield* findByName(props.sinkName);
+          if (!found?.Arn) return undefined;
+          return { sinkName: found.Name!, sinkArn: found.Arn, sinkId: found.Id! };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const sinkName = output?.sinkName ?? (yield* createName(id, olds ?? {}));
           const found = output?.sinkArn
             ? yield* oam
                 .getSink({ Identifier: output.sinkArn })
-                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
             : yield* findByName(sinkName);
           if (!found?.Arn) return undefined;
           const attrs = {
@@ -200,7 +236,7 @@ export const SinkProvider = () =>
           let live = output?.sinkArn
             ? yield* oam
                 .getSink({ Identifier: output.sinkArn })
-                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
             : yield* findByName(sinkName);
 
           // ENSURE — create when missing; a ConflictException means a peer
@@ -221,7 +257,7 @@ export const SinkProvider = () =>
             const desired = toPolicyString(desiredPolicy);
             const observed = yield* oam.getSinkPolicy({ SinkIdentifier: sinkArn }).pipe(
               Effect.map((r) => r.Policy),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
             if (!samePolicy(observed, desired)) {
               yield* retryOamMutation(

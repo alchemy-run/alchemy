@@ -97,7 +97,7 @@ export type Tenant = Resource<
 export const Tenant = Resource<Tenant>("GCP.Jobs.Tenant");
 
 export class TenantNotResolved extends Data.TaggedError("GCP.Jobs.TenantNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (tenant: jobs.Tenant, project: string) => {
@@ -157,26 +157,23 @@ export const TenantProvider = () =>
 
       if (current === undefined) {
         const created = yield* jobs
-          .createProjectsTenants({
-            parent: projectParent(env.project),
-            body: { externalId },
-          })
+          .createProjectsTenants({ externalId, parent: projectParent(env.project) })
           .pipe(Effect.catchTag("Conflict", () => findOwnedTenant(env.project, id)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
         return yield* new TenantNotResolved({
-          name: name || `projects/${env.project}/tenants/${clientId}`,
+          resourceName: name || `projects/${env.project}/tenants/${clientId}`,
         });
       }
 
       const currentName = current.name ?? name;
       if (!sameText(current.externalId, externalId)) {
         current = yield* jobs.patchProjectsTenants({
+          externalId,
           name: currentName,
           updateMask: "externalId",
-          body: { name: currentName, externalId },
         });
       }
 

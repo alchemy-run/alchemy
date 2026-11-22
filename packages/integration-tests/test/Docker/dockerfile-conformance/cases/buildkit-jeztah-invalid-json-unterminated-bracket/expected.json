@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "scratch",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "CMD",
+          "line": 2,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "[\"echo\", \"Please, close the brackets when you're done\""
+          }
+        }
+      ]
+    }
+  ]
+}

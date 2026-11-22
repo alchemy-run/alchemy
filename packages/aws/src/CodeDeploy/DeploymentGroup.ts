@@ -10,6 +10,7 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -166,8 +167,20 @@ export interface DeploymentGroup extends Resource<
     serviceRoleArn: string;
   },
   never,
-  Providers
+  Providers,
+  DeploymentGroupLookup
 > {}
+
+/**
+ * Props for {@link DeploymentGroup.lookup}: find a deployment group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DeploymentGroupLookup {
+  /** The application the group belongs to. */
+  applicationName: string;
+  /** The name of the existing deployment group. */
+  deploymentGroupName: string;
+}
 
 /**
  * An AWS CodeDeploy deployment group — the set of target instances/functions
@@ -194,6 +207,16 @@ export interface DeploymentGroup extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing deployment group
+ * `DeploymentGroup.lookup` references a deployment group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationName` and `deploymentGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing deployment group
+ * ```typescript
+ * const prod = AWS.CodeDeploy.DeploymentGroup.lookup({ applicationName: "web", deploymentGroupName: "prod" });
+ * ```
+ *
  * @resource
  */
 export const DeploymentGroup = Resource<DeploymentGroup>("AWS.CodeDeploy.DeploymentGroup");
@@ -204,7 +227,8 @@ const deploymentGroupArn = (
   account: string,
   appName: string,
   groupName: string,
-): string => `arn:aws:codedeploy:${region}:${account}:deploymentgroup:${appName}/${groupName}`;
+): string =>
+  `arn:${partitionOf(region)}:codedeploy:${region}:${account}:deploymentgroup:${appName}/${groupName}`;
 
 /**
  * Retry an effect while CodeDeploy reports that it cannot yet assume the
@@ -255,7 +279,7 @@ export const DeploymentGroupProvider = () =>
           .pipe(
             Effect.catchTag(
               ["DeploymentGroupDoesNotExistException", "ApplicationDoesNotExistException"],
-              () => Effect.succeed(undefined),
+              () => Effect.undefined,
             ),
           );
         return response?.deploymentGroupInfo;
@@ -291,6 +315,23 @@ export const DeploymentGroupProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ applicationName, deploymentGroupName }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const group = yield* getGroup(applicationName, deploymentGroupName);
+          if (group?.deploymentGroupId === undefined) return undefined;
+          return {
+            deploymentGroupName: group.deploymentGroupName ?? deploymentGroupName,
+            deploymentGroupId: group.deploymentGroupId,
+            deploymentGroupArn: deploymentGroupArn(
+              region,
+              accountId,
+              applicationName,
+              deploymentGroupName,
+            ),
+            applicationName: group.applicationName ?? applicationName,
+            serviceRoleArn: group.serviceRoleArn ?? "",
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const appName = output?.applicationName ?? olds?.applicationName;
@@ -349,9 +390,7 @@ export const DeploymentGroupProvider = () =>
                 })),
               }),
             ).pipe(
-              Effect.catchTag("DeploymentGroupAlreadyExistsException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("DeploymentGroupAlreadyExistsException", () => Effect.undefined),
             );
             group = yield* getGroup(appName, name);
           } else {

@@ -94,7 +94,7 @@ export const ExtensionAssociationProvider = () =>
           .getExtensionAssociation({
             ExtensionAssociationId: extensionAssociationId,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       /**
@@ -113,7 +113,7 @@ export const ExtensionAssociationProvider = () =>
         }
         const extension = yield* appconfig
           .getExtension({ ExtensionIdentifier: props.extensionIdentifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         if (extension?.Id === undefined) return undefined;
         const summaries = yield* appconfig.listExtensionAssociations
           .pages({ ResourceIdentifier: props.resourceIdentifier })

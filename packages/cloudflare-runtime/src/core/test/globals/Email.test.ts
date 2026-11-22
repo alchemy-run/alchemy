@@ -19,6 +19,7 @@
  */
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it, layer } from "@effect/vitest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -57,6 +58,7 @@ export default {
       from: message.from,
       to: message.to,
       rawSize: message.rawSize,
+      canBeForwarded: message.canBeForwarded,
       raw: await new Response(message.raw).text(),
       subject,
       messageIdHeader: message.headers.get("message-id"),
@@ -137,6 +139,7 @@ interface ReceivedEmail {
   from: string;
   to: string;
   rawSize: number;
+  canBeForwarded: boolean;
   raw: string;
   subject: string;
   messageIdHeader: string | null;
@@ -173,6 +176,7 @@ layer(localRuntimeLayer)("inbound email trigger route", (it) => {
       expect(message.to).toBe("someone-else@example.com");
       expect(message.raw).toBe(VALID_EMAIL);
       expect(message.rawSize).toBe(new TextEncoder().encode(VALID_EMAIL).byteLength);
+      expect(message.canBeForwarded).toBe(true);
       expect(message.messageIdHeader).toBe("<im-a-random-message-id@example.com>");
     }),
   );
@@ -559,7 +563,9 @@ describe("inbound email reply persistence", () => {
       Layer.provide(Paths.PathsLive),
       Layer.provide(Docker.DockerLive),
       Layer.provide(Workerd.WorkerdLive),
-      Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
+      Layer.provideMerge(
+        Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer, SecureRandom.layerWebCrypto),
+      ),
     );
 
   it.effect(

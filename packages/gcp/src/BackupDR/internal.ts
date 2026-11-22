@@ -12,20 +12,20 @@ export const MAX_NAME_LENGTH = 63;
 export const DEFAULT_RETENTION = "86400s";
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.BackupDR.ResourceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError("GCP.BackupDR.ResourceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceNotReady extends Data.TaggedError("GCP.BackupDR.ResourceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class ResourceFailed extends Data.TaggedError("GCP.BackupDR.ResourceFailed")<{
-  name: string;
+  resourceName: string;
   state: string;
   details: string | undefined;
 }> {}
@@ -209,7 +209,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value != null,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.BackupDR.ResourceNotResolved",
@@ -225,7 +225,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new ResourceStillExists({ name }),
+      () => new ResourceStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.BackupDR.ResourceStillExists",
@@ -248,7 +248,7 @@ export const waitUntilReady = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value != null,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (value) => {
@@ -259,12 +259,12 @@ export const waitUntilReady = <A, E extends { readonly _tag: string }, R>(
         const state = stateOf(value) ?? "";
         if (isFailedState(state)) {
           return new ResourceFailed({
-            name,
+            resourceName: name,
             state,
             details: detailsOf?.(value),
           });
         }
-        return new ResourceNotReady({ name, state });
+        return new ResourceNotReady({ resourceName: name, state });
       },
     ),
     Effect.retry({

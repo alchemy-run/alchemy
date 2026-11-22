@@ -1,11 +1,13 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../../expectDeleteRefused.ts";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -81,6 +83,14 @@ test.provider.skipIf(!runLifecycle)(
           return { instance, table, view };
         }),
       );
+      yield* expectFound(
+        GCP.Bigtable.InstancesTablesAuthorizedView.lookup({
+          authorizedViewId: created.view.authorizedViewId,
+          instance: created.view.instance,
+          table: created.view.table,
+        }),
+        created.view,
+      );
 
       expect(created.view.name).toContain("/authorizedViews/");
       expect(created.view.authorizedViewId).toEqual(expect.any(String));
@@ -138,6 +148,46 @@ test.provider.skipIf(!runLifecycle)(
       });
       expect(refetched.deletionProtection).toEqual(true);
 
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "Public",
+        tag: "GCP.Bigtable.AuthorizedViewDeletionProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const instance = yield* GCP.Bigtable.Instance("Data", {
+            instanceId: created.instance.instanceId,
+            displayName: "alchemy-test-bt-authview",
+            type: "PRODUCTION",
+            clusters: {
+              cluster: {
+                location: "us-central1-b",
+                serveNodes: 1,
+                defaultStorageType: "HDD",
+              },
+            },
+          });
+          const table = yield* GCP.Bigtable.Table("Users", {
+            instance: instance.name,
+            tableId: created.table.tableId,
+            columnFamilies: { cf: { gcRule: { maxNumVersions: 1 } } },
+          });
+          const view = yield* GCP.Bigtable.InstancesTablesAuthorizedView("Public", {
+            instance: instance.name,
+            table: table.name,
+            authorizedViewId: created.view.authorizedViewId,
+            subsetView: {
+              rowPrefixes: [""],
+              familySubsets: {
+                cf: { qualifierPrefixes: [""] },
+              },
+            },
+            deletionProtection: false,
+          });
+          return { instance, table, view };
+        }),
+      );
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.view.name);

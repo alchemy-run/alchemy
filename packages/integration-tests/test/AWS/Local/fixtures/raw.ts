@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 /**
  * Raw (non-distilled) HTTP helpers against the floci emulator gateway —
  * out-of-band proof that a resource exists IN THE EMULATOR, not the real
@@ -12,19 +11,6 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
 export const FLOCI_ENDPOINT = "http://localhost:4566";
-
-/**
- * skipIf gate: floci runs as a Docker container. `docker info` proves the
- * daemon is reachable (a mere `docker --version` would pass with the daemon
- * down). Sync probe at collection time — skipIf needs a plain boolean.
- */
-export const dockerAvailable = (() => {
-  try {
-    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-  } catch {
-    return false;
-  }
-})();
 
 /** POST an AWS-JSON operation straight at the emulator gateway. */
 export const rawAwsJson = Effect.fn(function* (options: {

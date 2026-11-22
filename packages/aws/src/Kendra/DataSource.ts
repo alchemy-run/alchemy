@@ -10,7 +10,20 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
+
+export class KendraDataSourceInvalidProps extends Data.TaggedError("KendraDataSourceInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class KendraDataSourceUnexpectedResponse extends Data.TaggedError(
+  "KendraDataSourceUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type DataSourceStatus = kendra.DataSourceStatus;
 export type DataSourceType = kendra.DataSourceType;
@@ -104,8 +117,27 @@ export interface DataSource extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DataSourceLookup
 > {}
+
+/**
+ * Props for {@link DataSource.lookup}: find a data source this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type DataSourceLookup =
+  | {
+      /** The index the data source feeds. */
+      indexId: string;
+      /** The id of the existing data source. */
+      id: string;
+    }
+  | {
+      /** The index the data source feeds. */
+      indexId: string;
+      /** The name of the existing data source. */
+      name: string;
+    };
 
 /**
  * An Amazon Kendra data source — a connector that syncs documents from a
@@ -141,6 +173,16 @@ export interface DataSource extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing data source
+ * `DataSource.lookup` references a data source Alchemy doesn't manage (created in the
+ * console or by another stack), found by `indexId` with `id` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing data source
+ * ```typescript
+ * const wiki = AWS.Kendra.DataSource.lookup({ indexId, name: "wiki" });
+ * ```
+ *
  * @resource
  */
 export const DataSource = Resource<DataSource>("AWS.Kendra.DataSource");
@@ -152,8 +194,9 @@ const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* kendra
     .listTagsForResource({ ResourceARN: arn })
     .pipe(
-      Effect.catchTag(["ResourceNotFoundException", "ResourceUnavailableException"], () =>
-        Effect.succeed(undefined),
+      Effect.catchTag(
+        ["ResourceNotFoundException", "ResourceUnavailableException"],
+        () => Effect.undefined,
       ),
     );
   return Object.fromEntries((response?.Tags ?? []).map((tag) => [tag.Key, tag.Value]));
@@ -162,7 +205,7 @@ const fetchTags = Effect.fn(function* (arn: string) {
 const currentArnOf = Effect.gen(function* () {
   const { accountId, region } = yield* AWSEnvironment.current;
   return (indexId: string, dataSourceId: string) =>
-    `arn:aws:kendra:${region}:${accountId}:index/${indexId}/data-source/${dataSourceId}`;
+    `arn:${partitionOf(region)}:kendra:${region}:${accountId}:index/${indexId}/data-source/${dataSourceId}`;
 });
 
 interface DataSourceState {
@@ -177,7 +220,7 @@ const readDataSourceById = Effect.fn(function* (
 ) {
   const described = yield* kendra
     .describeDataSource({ IndexId: indexId, Id: dataSourceId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described || described.Status === "DELETING") return undefined;
   const arn = arnOf(described.IndexId ?? indexId, described.Id ?? dataSourceId);
   const state: DataSourceState = {
@@ -261,7 +304,7 @@ const waitForDataSourceStatus = (indexId: string, id: string, target: "ACTIVE" |
     Effect.gen(function* () {
       const described = yield* kendra
         .describeDataSource({ IndexId: indexId, Id: id })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* new DataSourceNotReady({ id, status: described.Status });
@@ -287,6 +330,14 @@ export const DataSourceProvider = () =>
         // iterating every index — treated as a sub-resource per the factory
         // list() convention.
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* (props) {
+          const arnOf = yield* currentArnOf;
+          const state =
+            "id" in props
+              ? yield* readDataSourceById(props.indexId, props.id, arnOf)
+              : yield* findDataSourceByName(props.indexId, props.name, arnOf);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arnOf = yield* currentArnOf;
           const indexId = output?.indexId ?? olds?.indexId;
@@ -313,7 +364,9 @@ export const DataSourceProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("Kendra DataSource requires props"));
+            return yield* new KendraDataSourceInvalidProps({
+              message: "Kendra DataSource requires props",
+            });
           }
           const arnOf = yield* currentArnOf;
           const indexId = news.indexId;
@@ -351,7 +404,9 @@ export const DataSourceProvider = () =>
             yield* waitForDataSourceStatus(indexId, created.Id, "ACTIVE");
             state = yield* readDataSourceById(indexId, created.Id, arnOf);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created data source ${name}`));
+              return yield* new KendraDataSourceUnexpectedResponse({
+                message: `failed to read created data source ${name}`,
+              });
             }
           }
 
@@ -402,7 +457,9 @@ export const DataSourceProvider = () =>
 
           const final = yield* readDataSourceById(indexId, state.attrs.id, arnOf);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled data source ${name}`));
+            return yield* new KendraDataSourceUnexpectedResponse({
+              message: `failed to read reconciled data source ${name}`,
+            });
           }
           return final.attrs;
         }),

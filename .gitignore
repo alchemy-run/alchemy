@@ -26,6 +26,7 @@ wrangler.jsonc
 smoke
 .svelte-kit
 .astro
+.vinext
 .wrangler
 
 *.tgz
@@ -60,7 +61,6 @@ packages/cloudflare-runtime/src/rolldown/out/
 .turbo
 coverage
 test-results
-.external
 .bundle-benchmark
 packages/alchemy/docs
 .sonda
@@ -78,6 +78,7 @@ examples/cloudflare-worker/src/scratch.ts
 !/packages/alchemy/bin/register-dev-mode.js
 !/packages/alchemy/bin/register-oxc.js
 .tmp
+build:*
 # the lockfile-pinning test fixture is a checked-in lockfile, not a generated one
 !packages/integration-tests/test/AWS/Lambda/fixtures/lockfile-pinning/pnpm/pnpm-lock.yaml
 
@@ -91,12 +92,20 @@ examples/cloudflare-worker/src/scratch.ts
 !packages/aws/src/globals.d.ts
 !packages/kubernetes/src/globals.d.ts
 !packages/fly/src/globals.d.ts
+!packages/e2b/src/globals.d.ts
+!packages/modal/src/globals.d.ts
 !packages/github/src/globals.d.ts
 !packages/stripe/src/globals.d.ts
 !packages/hetzner/src/globals.d.ts
+!packages/convex/src/globals.d.ts
+!packages/digitalocean/src/globals.d.ts
+!packages/archil/src/globals.d.ts
+!packages/boat/src/globals.d.ts
 !packages/neon/src/globals.d.ts
 !packages/railway/src/globals.d.ts
 !packages/azure/src/globals.d.ts
+!packages/daytona/src/globals.d.ts
 
 # pkg pack output (CI artifact hand-off)
 .pkg
+

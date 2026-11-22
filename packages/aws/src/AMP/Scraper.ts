@@ -4,11 +4,17 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { decodeDefinition, encodeDefinition, syncAmpTags, toTagRecord } from "./internal.ts";
+
+export class ScraperNotReady extends Data.TaggedError("ScraperNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ScraperEksSource {
   /**
@@ -107,8 +113,18 @@ export interface Scraper extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  ScraperLookup
 > {}
+
+/**
+ * Props for {@link Scraper.lookup}: find a scraper this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ScraperLookup {
+  /** The id of the existing scraper. */
+  scraperId: string;
+}
 
 /**
  * An Amazon Managed Service for Prometheus scraper — a fully-managed,
@@ -148,6 +164,16 @@ export interface Scraper extends Resource<
  *   },
  *   destinationWorkspaceArn: workspace.workspaceArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing scraper
+ * `Scraper.lookup` references a scraper Alchemy doesn't manage (created in the
+ * console or by another stack), found by `scraperId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing scraper
+ * ```typescript
+ * const existing = AWS.AMP.Scraper.lookup({ scraperId: "..." });
  * ```
  *
  * @resource
@@ -192,7 +218,7 @@ export const ScraperProvider = () =>
       const describe = Effect.fn(function* (scraperId: string) {
         const response = yield* amp
           .describeScraper({ scraperId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.scraper;
       });
 
@@ -228,13 +254,11 @@ export const ScraperProvider = () =>
           }),
         );
         if (scraper.status.statusCode !== "ACTIVE") {
-          return yield* Effect.fail(
-            new Error(
-              `AMP scraper ${scraperId} did not become ACTIVE (status: ${scraper.status.statusCode}${
-                scraper.statusReason ? `: ${scraper.statusReason}` : ""
-              })`,
-            ),
-          );
+          return yield* new ScraperNotReady({
+            message: `AMP scraper ${scraperId} did not become ACTIVE (status: ${scraper.status.statusCode}${
+              scraper.statusReason ? `: ${scraper.statusReason}` : ""
+            })`,
+          });
         }
         return scraper;
       });
@@ -248,6 +272,13 @@ export const ScraperProvider = () =>
           if (olds !== undefined && canonicalSource(olds.source) !== canonicalSource(news.source)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ scraperId }) {
+          const scraper = yield* describe(scraperId);
+          if (scraper === undefined) return undefined;
+          const attrs = toAttrs(scraper);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, output }) {

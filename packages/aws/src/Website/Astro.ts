@@ -1,5 +1,7 @@
 import type { InputProps } from "alchemy/Input";
 import * as Namespace from "alchemy/Namespace";
+import { resolveAstroOutput } from "alchemy/Website/AstroOutput";
+import * as Effect from "effect/Effect";
 import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the Astro build. */
@@ -33,8 +35,9 @@ export type AstroProps = FrameworkSiteProps<{
      * the Lambda; individual pages opt into prerendering with
      * `export const prerender = true`. `"static"` prerenders every
      * page at build time and deploys assets-only (no Lambda).
-     * Supersedes a file-level `output`.
-     * @default "server"
+     * Overrides the `output` in your `astro.config.*`; leave it unset to
+     * use the file's value.
+     * @default the config file's `output`, else `"server"`
      */
     output?: "server" | "static";
     /** Source directory (astro's `srcDir`). */
@@ -53,13 +56,13 @@ export type AstroProps = FrameworkSiteProps<{
   config?: string;
   /**
    * Serve the built error page (e.g. astro's `404.html`) for requests that
-   * match no uploaded file. Only applies to `astro: { output: "static" }`
+   * match no uploaded file. Only applies to `output: "static"`
    * sites — a server-backed site forwards misses to the Lambda instead.
    */
   errorPage?: string;
   /**
    * Answer misses with the index page (200) instead of a 404. Only applies
-   * to `astro: { output: "static" }` sites.
+   * to `output: "static"` sites.
    */
   spa?: boolean;
 }>;
@@ -84,8 +87,9 @@ export type AstroProps = FrameworkSiteProps<{
  *
  * Pages render on demand by default (`output: "server"`); pages that
  * `export const prerender = true` are prerendered at build time and served
- * from S3. With `astro: { output: "static" }` every page is prerendered
- * and the deploy is assets-only — no Lambda.
+ * from S3. When your `astro.config.*` or `astro: { output: "static" }`
+ * declares a static site, every page is prerendered and the deploy is
+ * assets-only — no Lambda.
  *
  * Your `astro.config.*` is the home for Astro configuration and loads
  * natively; the `astro` prop is a deploy-time override bag merged OVER
@@ -146,17 +150,20 @@ export type AstroProps = FrameworkSiteProps<{
  */
 export const Astro = (id: string, props: InputProps<AstroProps, "server"> = {}) => {
   const p = props as AstroProps;
-  // Server output is the documented default: astro's own zero-config
-  // default is `"static"`. The inline config merges OVER the project's
-  // `astro.config.*`, so an explicit file-level `output` is superseded;
-  // opt into a fully prerendered site with `astro: { output: "static" }`.
-  const output = p.astro?.output ?? "server";
-  return makeFrameworkSite(id, props, {
-    name: "Astro",
-    framework: ASTRO_FRAMEWORK_SPECIFIER,
-    target: ASTRO_AWS_TARGET_SPECIFIER,
-    webTarget: ASTRO_WEB_TARGET_SPECIFIER,
-    options: { astro: { ...p.astro, output }, config: p.config },
-    static: output === "static" ? { spa: p.spa, errorPage: p.errorPage } : undefined,
-  }).pipe(Namespace.push(id));
+  // The prop wins, then the config file's `output`, then `"server"` —
+  // astro's own zero-config default is `"static"`. Resolved here because
+  // an assets-only site creates no Lambda.
+  return resolveAstroOutput({ rootDir: p.rootDir, config: p.config, output: p.astro?.output }).pipe(
+    Effect.flatMap((output) =>
+      makeFrameworkSite(id, props, {
+        name: "Astro",
+        framework: ASTRO_FRAMEWORK_SPECIFIER,
+        target: ASTRO_AWS_TARGET_SPECIFIER,
+        webTarget: ASTRO_WEB_TARGET_SPECIFIER,
+        options: { astro: { ...p.astro, output }, config: p.config },
+        static: output === "static" ? { spa: p.spa, errorPage: p.errorPage } : undefined,
+      }),
+    ),
+    Namespace.push(id),
+  );
 };

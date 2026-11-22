@@ -12,6 +12,9 @@
       "path": "./submodules/distilled/packages/aws4signer/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/s3/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/aws/tsconfig.json"
     },
     {
@@ -24,6 +27,27 @@
       "path": "./submodules/distilled/packages/turso/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/convex/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/daytona/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/archil/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/boat-dev/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/rivet/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/e2b/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/modal/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/axiom/tsconfig.json"
     },
     {
@@ -34,6 +58,9 @@
     },
     {
       "path": "./submodules/distilled/packages/hetzner/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/digitalocean/tsconfig.json"
     },
     {
       "path": "./submodules/distilled/packages/iceberg/tsconfig.json"
@@ -73,7 +100,10 @@
       "path": "./packages/cloudflare-test-tools/tsconfig.json"
     },
     {
-      "path": "./tsconfig.scripts.json"
+      "path": "./scripts/tsconfig.json"
+    },
+    {
+      "path": "./stacks/tsconfig.json"
     },
     {
       "path": "./packages/alchemy-test/tsconfig.json"
@@ -109,7 +139,43 @@
       "path": "./packages/infisical/tsconfig.json"
     },
     {
+      "path": "./packages/1password/tsconfig.json"
+    },
+    {
       "path": "./packages/turso/tsconfig.json"
+    },
+    {
+      "path": "./packages/convex/tsconfig.json"
+    },
+    {
+      "path": "./packages/daytona/tsconfig.json"
+    },
+    {
+      "path": "./packages/archil/tsconfig.json"
+    },
+    {
+      "path": "./packages/boat/tsconfig.json"
+    },
+    {
+      "path": "./packages/ai/tsconfig.json"
+    },
+    {
+      "path": "./packages/pi/tsconfig.json"
+    },
+    {
+      "path": "./packages/opencode/tsconfig.json"
+    },
+    {
+      "path": "./packages/rivet/tsconfig.json"
+    },
+    {
+      "path": "./packages/effect-cluster/tsconfig.json"
+    },
+    {
+      "path": "./packages/e2b/tsconfig.json"
+    },
+    {
+      "path": "./packages/modal/tsconfig.json"
     },
     {
       "path": "./packages/planetscale/tsconfig.json"
@@ -122,6 +188,9 @@
     },
     {
       "path": "./packages/hetzner/tsconfig.json"
+    },
+    {
+      "path": "./packages/digitalocean/tsconfig.json"
     },
     {
       "path": "./packages/railway/tsconfig.json"
@@ -148,6 +217,9 @@
       "path": "./packages/domain/tsconfig.json"
     },
     {
+      "path": "./packages/domain/test/types/tsconfig.json"
+    },
+    {
       "path": "./packages/docker/tsconfig.json"
     },
     {
@@ -163,6 +235,18 @@
       "path": "./packages/integration-tests/tsconfig.json"
     },
     {
+      "path": "./packages/integration-tests/test/Cloudflare/Workers/fixtures/ambient-types/tsconfig.json"
+    },
+    {
+      "path": "./packages/integration-tests/test/Cloudflare/Workers/fixtures/ambient-types/declarations/tsconfig.ambient.json"
+    },
+    {
+      "path": "./packages/integration-tests/test/Cloudflare/Workers/fixtures/ambient-types/declarations/tsconfig.module.json"
+    },
+    {
+      "path": "./packages/integration-tests/test/Cloudflare/Workers/fixtures/ambient-types/declarations/tsconfig.cloudflare-module.json"
+    },
+    {
       "path": "./packages/pkg/tsconfig.json"
     },
     // TODO(sam): fix by upgrading starlight to ^0.39.2
@@ -174,6 +258,9 @@
     },
     {
       "path": "./examples/cloudflare-better-auth/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-domain-better-auth/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-federated-api/tsconfig.json"
@@ -237,6 +324,9 @@
     },
     {
       "path": "./examples/aws-ecs/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-ecs-sandboxes/tsconfig.json"
     },
     {
       "path": "./examples/aws-eks/tsconfig.json"
@@ -326,6 +416,15 @@
       "path": "./examples/cloudflare-neon-prisma-psl/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-pi/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-pi-github/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-opencode-github/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-planetscale-mysql-drizzle/tsconfig.json"
     },
     {
@@ -333,6 +432,39 @@
     },
     {
       "path": "./examples/cloudflare-turso-drizzle/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-convex-worker/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-convex-tanstack-start/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-convex-self-hosted/tsconfig.json"
+    },
+    {
+      "path": "./examples/e2b-agent-sandbox/tsconfig.json"
+    },
+    {
+      "path": "./examples/e2b-program/tsconfig.json"
+    },
+    {
+      "path": "./examples/boat-agent-sandbox/tsconfig.json"
+    },
+    {
+      "path": "./examples/boat-program/tsconfig.json"
+    },
+    {
+      "path": "./examples/e2b-program-async/tsconfig.json"
+    },
+    {
+      "path": "./examples/daytona-sandboxes/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-modal-sandbox/tsconfig.json"
+    },
+    {
+      "path": "./examples/modal-functions/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-secrets-store/tsconfig.json"
@@ -552,6 +684,9 @@
     },
     {
       "path": "./examples/hetzner-app/tsconfig.json"
+    },
+    {
+      "path": "./examples/digitalocean-app/tsconfig.json"
     },
     {
       "path": "./examples/hetzner-website-vite/tsconfig.json"

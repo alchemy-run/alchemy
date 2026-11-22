@@ -5,10 +5,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class StudioUnexpectedResponse extends Data.TaggedError("StudioUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface StudioProps {
   /**
@@ -114,8 +120,18 @@ export interface Studio extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  StudioLookup
 > {}
+
+/**
+ * Props for {@link Studio.lookup}: find a studio this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface StudioLookup {
+  /** The id of the existing studio. */
+  studioId: string;
+}
 
 /**
  * An Amazon EMR Studio — a web-based IDE for notebooks and interactive
@@ -151,6 +167,16 @@ export interface Studio extends Resource<
  *   description: "Data-science notebooks",
  *   tags: { team: "analytics" },
  * });
+ * ```
+ *
+ * ### Looking up an existing studio
+ * `Studio.lookup` references a studio Alchemy doesn't manage (created in the
+ * console or by another stack), found by `studioId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing studio
+ * ```typescript
+ * const existing = AWS.EMR.Studio.lookup({ studioId: "..." });
  * ```
  *
  * @resource
@@ -212,7 +238,7 @@ export const StudioProvider = () =>
       const readStudio = Effect.fn(function* (studioId: string) {
         const response = yield* emr
           .describeStudio({ StudioId: studioId })
-          .pipe(Effect.catchTag("StudioNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("StudioNotFound", () => Effect.undefined));
         return response?.Studio;
       });
 
@@ -230,9 +256,9 @@ export const StudioProvider = () =>
 
       const toAttrs = Effect.fn(function* (studio: emr.Studio) {
         if (!studio.StudioId || !studio.StudioArn || !studio.Name) {
-          return yield* Effect.fail(
-            new Error(`EMR Studio '${studio.StudioId}' is missing its ARN`),
-          );
+          return yield* new StudioUnexpectedResponse({
+            message: `EMR Studio '${studio.StudioId}' is missing its ARN`,
+          });
         }
         return {
           studioId: studio.StudioId,
@@ -297,6 +323,13 @@ export const StudioProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ studioId }) {
+          const studio = yield* readStudio(studioId);
+          if (!studio) return undefined;
+          const attrs = yield* toAttrs(studio);
+          return attrs;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const studio = output?.studioId
             ? yield* readStudio(output.studioId)
@@ -346,15 +379,15 @@ export const StudioProvider = () =>
               }),
             );
             if (!created.StudioId) {
-              return yield* Effect.fail(
-                new Error(`CreateStudio for '${name}' returned no StudioId`),
-              );
+              return yield* new StudioUnexpectedResponse({
+                message: `CreateStudio for '${name}' returned no StudioId`,
+              });
             }
             observed = yield* readStudio(created.StudioId);
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(`EMR Studio '${created.StudioId}' not visible after create`),
-              );
+              return yield* new StudioUnexpectedResponse({
+                message: `EMR Studio '${created.StudioId}' not visible after create`,
+              });
             }
           }
           const studioId = observed.StudioId!;

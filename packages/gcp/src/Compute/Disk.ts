@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -129,8 +130,29 @@ export type Disk = Resource<
     users: ReadonlyArray<string>;
   },
   never,
-  Providers
+  Providers,
+  DiskLookup
 >;
+
+/**
+ * Props for {@link Disk.lookup}: find a disk this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface DiskLookup {
+  /**
+   * Disk name (RFC1035, 1-63 characters).
+   */
+  diskName: string;
+  /**
+   * Zone the disk lives in (e.g. `us-central1-a`).
+   */
+  zone?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A zonal Compute Engine persistent disk.
@@ -164,6 +186,16 @@ export type Disk = Resource<
  *   diskName: "app-data",
  *   sizeGb: 50,
  * });
+ * ```
+ *
+ * ### Looking up an existing disk
+ * `Disk.lookup` references a disk Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared disk.
+ *
+ * **Example:** Reference an existing disk
+ * ```typescript
+ * const disk = GCP.Compute.Disk.lookup({ diskName: "my-disk" });
  * ```
  *
  * @resource
@@ -244,7 +276,7 @@ const toAttrs = (disk: compute.Disk, project: string) => ({
 const getByName = (project: string, zone: string, disk: string) =>
   compute
     .getDisks({ project, zone, disk })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitDiskReady = (project: string, zone: string, diskName: string) =>
   getByName(project, zone, diskName).pipe(
@@ -339,6 +371,14 @@ export const DiskProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ diskName, zone: lookupZone }) {
+      const env = yield* GcpEnvironment.current;
+      const zone = lastSegment(lookupZone) ?? DEFAULT_ZONE;
+      const existing = yield* getByName(env.project, zone, diskName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const diskName = yield* toName(id, olds?.diskName, output?.diskName);
@@ -391,32 +431,30 @@ export const DiskProvider = () =>
       if (current === undefined) {
         const inserted = yield* compute
           .insertDisks({
+            name: diskName,
+            sizeGb: String(sizeGb),
+            type: diskTypeUrl(env.project, zone, diskType),
+            description: news.description,
+            labels: desiredLabels,
+            sourceImage: news.sourceImage,
+            sourceSnapshot: news.sourceSnapshot,
+            sourceDisk: news.sourceDisk,
+            architecture: news.architecture,
+            physicalBlockSizeBytes:
+              news.physicalBlockSizeBytes !== undefined
+                ? String(news.physicalBlockSizeBytes)
+                : undefined,
+            provisionedIops:
+              news.provisionedIops !== undefined ? String(news.provisionedIops) : undefined,
+            provisionedThroughput:
+              news.provisionedThroughput !== undefined
+                ? String(news.provisionedThroughput)
+                : undefined,
+            enableConfidentialCompute: news.enableConfidentialCompute,
             project: env.project,
             zone,
-            body: {
-              name: diskName,
-              sizeGb: String(sizeGb),
-              type: diskTypeUrl(env.project, zone, diskType),
-              description: news.description,
-              labels: desiredLabels,
-              sourceImage: news.sourceImage,
-              sourceSnapshot: news.sourceSnapshot,
-              sourceDisk: news.sourceDisk,
-              architecture: news.architecture,
-              physicalBlockSizeBytes:
-                news.physicalBlockSizeBytes !== undefined
-                  ? String(news.physicalBlockSizeBytes)
-                  : undefined,
-              provisionedIops:
-                news.provisionedIops !== undefined ? String(news.provisionedIops) : undefined,
-              provisionedThroughput:
-                news.provisionedThroughput !== undefined
-                  ? String(news.provisionedThroughput)
-                  : undefined,
-              enableConfidentialCompute: news.enableConfidentialCompute,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitZoneOperation(env.project, zone, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -432,10 +470,10 @@ export const DiskProvider = () =>
       const observedSize = parseSizeGb(current.sizeGb);
       if (sizeGb > observedSize) {
         const resized = yield* compute.resizeDisks({
+          sizeGb: String(sizeGb),
           project: env.project,
           zone,
           disk: diskName,
-          body: { sizeGb: String(sizeGb) },
         });
         yield* waitZoneOperation(env.project, zone, resized);
         current = yield* waitDiskReady(env.project, zone, diskName);
@@ -449,13 +487,11 @@ export const DiskProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       if (upsert.length > 0 || removed.length > 0) {
         const labeled = yield* compute.setLabelsDisks({
+          labels: desiredLabels,
+          labelFingerprint: current.labelFingerprint,
           project: env.project,
           zone,
           resource: diskName,
-          body: {
-            labels: desiredLabels,
-            labelFingerprint: current.labelFingerprint,
-          },
         });
         yield* waitZoneOperation(env.project, zone, labeled);
         current = yield* getByName(env.project, zone, diskName);
@@ -475,6 +511,13 @@ export const DiskProvider = () =>
 
       if (descriptionChanged || iopsChanged || throughputChanged) {
         const updated = yield* compute.updateDisks({
+          description: news.description,
+          provisionedIops:
+            news.provisionedIops !== undefined ? String(news.provisionedIops) : undefined,
+          provisionedThroughput:
+            news.provisionedThroughput !== undefined
+              ? String(news.provisionedThroughput)
+              : undefined,
           project: env.project,
           zone,
           disk: diskName,
@@ -485,15 +528,6 @@ export const DiskProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            description: news.description,
-            provisionedIops:
-              news.provisionedIops !== undefined ? String(news.provisionedIops) : undefined,
-            provisionedThroughput:
-              news.provisionedThroughput !== undefined
-                ? String(news.provisionedThroughput)
-                : undefined,
-          },
         });
         yield* waitZoneOperation(env.project, zone, updated);
         current = yield* getByName(env.project, zone, diskName);
@@ -513,7 +547,7 @@ export const DiskProvider = () =>
           zone: output.zone,
           disk: output.diskName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (deleted !== undefined) {
         yield* waitZoneOperation(output.project, output.zone, deleted, {
           ignore: ["RESOURCE_NOT_FOUND"],

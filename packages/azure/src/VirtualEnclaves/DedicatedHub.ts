@@ -269,23 +269,25 @@ export const DedicatedHubProvider = () =>
       const properties = changedProperties(desired, observed.properties);
       const tagsChanged = tagsDiffer(observed.tags, tags);
       if (properties !== undefined || tagsChanged) {
-        yield* mission
-          .DedicatedHubCreateOrUpdate({
-            ...where,
-            location: observed.location,
-            tags,
-            properties: {
-              designation: desired.designation ?? observed.properties?.designation,
-            },
-          })
-          // The create's ARM operation can outlive the `Succeeded` state.
-          .pipe(
-            Effect.retry({
-              while: (e) => e._tag === "HybridNetworkOperationInProgress",
-              schedule: Schedule.spaced("30 seconds"),
-              times: 60,
-            }),
-          );
+        yield* (
+          mission
+            .DedicatedHubCreateOrUpdate({
+              ...where,
+              location: observed.location,
+              tags,
+              properties: {
+                designation: desired.designation ?? observed.properties?.designation,
+              },
+            })
+            // The create's ARM operation can outlive the `Succeeded` state.
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "HybridNetworkOperationInProgress",
+                schedule: Schedule.spaced("30 seconds"),
+                times: 60,
+              }),
+            )
+        );
         // The PUT is applied asynchronously and the hub may still report
         // its previous `Succeeded` state; wait until the delta is visible.
         observed = yield* waitForProvisioned(

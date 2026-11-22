@@ -287,9 +287,12 @@ export const SecurityMLAnalyticsSettingProvider = () =>
             resourceGroupName: resourceGroup,
             workspaceName: workspace,
             settingsResourceName: name,
-            kind: (news.kind ?? "Anomaly") as securityinsights.SecurityMLAnalyticsSettingsKind,
-            etag: observed?.etag,
-            properties: desired,
+            // `kind` is only known at runtime, so the arm is asserted.
+            body: {
+              kind: news.kind ?? "Anomaly",
+              etag: observed?.etag,
+              properties: desired,
+            } as securityinsights.AnomalySecurityMLAnalyticsSettingsInput,
           })
           .pipe(
             // Sentinel provisions the anomalies backend a few seconds after

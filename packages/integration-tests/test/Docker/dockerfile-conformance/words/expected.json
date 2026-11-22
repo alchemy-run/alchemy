@@ -1,0 +1,9244 @@
+[
+  {
+    "input": "hello",
+    "word": {
+      "ok": true,
+      "word": "hello"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello"
+      ]
+    }
+  },
+  {
+    "input": "he'll'o",
+    "word": {
+      "ok": true,
+      "word": "hello"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "he'll'o"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "he'll'o"
+      ]
+    }
+  },
+  {
+    "input": "he'llo",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "he\\'llo",
+    "word": {
+      "ok": true,
+      "word": "he'llo"
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "he'llo"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "he\\'llo"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "he'llo"
+      ]
+    }
+  },
+  {
+    "input": "he\\\\'llo",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "abc\\tdef",
+    "word": {
+      "ok": true,
+      "word": "abctdef"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "abc\\tdef"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "abctdef"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "abc\\tdef"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "abctdef"
+      ]
+    }
+  },
+  {
+    "input": "\"abc\\tdef\"",
+    "word": {
+      "ok": true,
+      "word": "abc\\tdef"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "abc\\tdef"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "abc\\tdef"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"abc\\tdef\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"abc\\tdef\""
+      ]
+    }
+  },
+  {
+    "input": "\"abc\\\\tdef\"",
+    "word": {
+      "ok": true,
+      "word": "abc\\tdef"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "abc\\\\tdef"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "abc\\tdef"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"abc\\\\tdef\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"abc\\tdef\""
+      ]
+    }
+  },
+  {
+    "input": "'abc\\tdef'",
+    "word": {
+      "ok": true,
+      "word": "abc\\tdef"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "abc\\tdef"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "abc\\tdef"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "'abc\\tdef'"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "'abc\\tdef'"
+      ]
+    }
+  },
+  {
+    "input": "hello\\",
+    "word": {
+      "ok": true,
+      "word": "hello"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello\\"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello\\"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello"
+      ]
+    }
+  },
+  {
+    "input": "hello\\\\",
+    "word": {
+      "ok": true,
+      "word": "hello\\"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello\\\\"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello\\"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello\\\\"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello\\"
+      ]
+    }
+  },
+  {
+    "input": "\"hello",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "\"hello\\\"",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello\\"
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "\"hel'lo\"",
+    "word": {
+      "ok": true,
+      "word": "hel'lo"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hel'lo"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hel'lo"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"hel'lo\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"hel'lo\""
+      ]
+    }
+  },
+  {
+    "input": "'hello",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "'hello\\'",
+    "word": {
+      "ok": true,
+      "word": "hello\\"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello\\"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello\\"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "'hello\\'"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "'hello\\'"
+      ]
+    }
+  },
+  {
+    "input": "'hello\\there'",
+    "word": {
+      "ok": true,
+      "word": "hello\\there"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello\\there"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello\\there"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "'hello\\there'"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "'hello\\there'"
+      ]
+    }
+  },
+  {
+    "input": "'hello\\\\there'",
+    "word": {
+      "ok": true,
+      "word": "hello\\\\there"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello\\\\there"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello\\\\there"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "'hello\\\\there'"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "'hello\\\\there'"
+      ]
+    }
+  },
+  {
+    "input": "\"''\"",
+    "word": {
+      "ok": true,
+      "word": "''"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "''"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "''"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"''\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"''\""
+      ]
+    }
+  },
+  {
+    "input": "$.",
+    "word": {
+      "ok": true,
+      "word": "$."
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$."
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$."
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$."
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$."
+      ]
+    }
+  },
+  {
+    "input": "he$1x",
+    "word": {
+      "ok": true,
+      "word": "he$1x"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he$1x"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "he$1x"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "he$1x"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "he$1x"
+      ]
+    }
+  },
+  {
+    "input": "he$.x",
+    "word": {
+      "ok": true,
+      "word": "he$.x"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he$.x"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "he$.x"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "he$.x"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "he$.x"
+      ]
+    }
+  },
+  {
+    "input": "he$pwd.",
+    "word": {
+      "ok": true,
+      "word": "he$pwd."
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he$pwd."
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "he$pwd."
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "he$pwd."
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "he$pwd."
+      ]
+    }
+  },
+  {
+    "input": "he$PWD",
+    "word": {
+      "ok": true,
+      "word": "he$PWD"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he$PWD"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "he$PWD"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "he$PWD"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "he$PWD"
+      ]
+    }
+  },
+  {
+    "input": "he\\$PWD",
+    "word": {
+      "ok": true,
+      "word": "he$PWD"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he\\$PWD"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "he$PWD"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "he\\$PWD"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "he$PWD"
+      ]
+    }
+  },
+  {
+    "input": "he\\\\$PWD",
+    "word": {
+      "ok": true,
+      "word": "he\\$PWD"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he\\\\$PWD"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "he\\$PWD"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "he\\\\$PWD"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "he\\$PWD"
+      ]
+    }
+  },
+  {
+    "input": "\"he\\$PWD\"",
+    "word": {
+      "ok": true,
+      "word": "he$PWD"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he\\$PWD"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "he$PWD"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"he\\$PWD\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"he$PWD\""
+      ]
+    }
+  },
+  {
+    "input": "\"he\\\\$PWD\"",
+    "word": {
+      "ok": true,
+      "word": "he\\$PWD"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he\\\\$PWD"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "he\\$PWD"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"he\\\\$PWD\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"he\\$PWD\""
+      ]
+    }
+  },
+  {
+    "input": "\\${}",
+    "word": {
+      "ok": true,
+      "word": "${}"
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\\${}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${}"
+      ]
+    }
+  },
+  {
+    "input": "\\${}aaa",
+    "word": {
+      "ok": true,
+      "word": "${}aaa"
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${}aaa"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\\${}aaa"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${}aaa"
+      ]
+    }
+  },
+  {
+    "input": "he\\${}",
+    "word": {
+      "ok": true,
+      "word": "he${}"
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "he${}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "he\\${}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "he${}"
+      ]
+    }
+  },
+  {
+    "input": "he\\${}xx",
+    "word": {
+      "ok": true,
+      "word": "he${}xx"
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "he${}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "he\\${}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "he${}xx"
+      ]
+    }
+  },
+  {
+    "input": "${}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${}aaa",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "he${}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "he${}xx",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "he${hi}",
+    "word": {
+      "ok": true,
+      "word": "he${hi}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${hi}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "he${hi}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "he${hi}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "he${hi}"
+      ]
+    }
+  },
+  {
+    "input": "he${hi}xx",
+    "word": {
+      "ok": true,
+      "word": "he${hi}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${hi}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "he${hi}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "he${hi}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "he${hi}xx"
+      ]
+    }
+  },
+  {
+    "input": "he${PWD}",
+    "word": {
+      "ok": true,
+      "word": "he${PWD}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${PWD}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "he${PWD}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "he${PWD}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "he${PWD}"
+      ]
+    }
+  },
+  {
+    "input": "he${.}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "he${XXX:-000}xx",
+    "word": {
+      "ok": true,
+      "word": "he${XXX:-000}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${XXX:-000}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX:-000}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX:-000}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX:-000}xx"
+      ]
+    }
+  },
+  {
+    "input": "he${PWD:-000}xx",
+    "word": {
+      "ok": true,
+      "word": "he${PWD:-000}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${PWD:-000}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${PWD:-000}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${PWD:-000}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${PWD:-000}xx"
+      ]
+    }
+  },
+  {
+    "input": "he${XXX:-$PWD}xx",
+    "word": {
+      "ok": true,
+      "word": "he${XXX:-$PWD}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${XXX:-$PWD}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX:-$PWD}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX:-$PWD}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX:-$PWD}xx"
+      ]
+    }
+  },
+  {
+    "input": "he${XXX:-${PWD:-yyy}}xx",
+    "word": {
+      "ok": true,
+      "word": "he${XXX:-${PWD:-yyy}}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${XXX:-${PWD:-yyy}}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX:-${PWD:-yyy}}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX:-${PWD:-yyy}}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX:-${PWD:-yyy}}xx"
+      ]
+    }
+  },
+  {
+    "input": "he${XXX:-${YYY:-yyy}}xx",
+    "word": {
+      "ok": true,
+      "word": "he${XXX:-${YYY:-yyy}}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${XXX:-${YYY:-yyy}}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX:-${YYY:-yyy}}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX:-${YYY:-yyy}}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX:-${YYY:-yyy}}xx"
+      ]
+    }
+  },
+  {
+    "input": "he${XXX:YYY}",
+    "word": {
+      "ok": true,
+      "word": "he${XXX:YYY}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${XXX:YYY}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX:YYY}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX:YYY}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX:YYY}"
+      ]
+    }
+  },
+  {
+    "input": "he${XXX?}",
+    "word": {
+      "ok": true,
+      "word": "he${XXX?}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${XXX?}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX?}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX?}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX?}"
+      ]
+    }
+  },
+  {
+    "input": "he${XXX:?}",
+    "word": {
+      "ok": true,
+      "word": "he${XXX:?}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${XXX:?}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX:?}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX:?}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX:?}"
+      ]
+    }
+  },
+  {
+    "input": "he${PWD?}",
+    "word": {
+      "ok": true,
+      "word": "he${PWD?}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${PWD?}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${PWD?}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${PWD?}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${PWD?}"
+      ]
+    }
+  },
+  {
+    "input": "he${PWD:?}",
+    "word": {
+      "ok": true,
+      "word": "he${PWD:?}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${PWD:?}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${PWD:?}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${PWD:?}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${PWD:?}"
+      ]
+    }
+  },
+  {
+    "input": "he${NULL?}",
+    "word": {
+      "ok": true,
+      "word": "he${NULL?}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${NULL?}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${NULL?}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${NULL?}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${NULL?}"
+      ]
+    }
+  },
+  {
+    "input": "he${NULL:?}",
+    "word": {
+      "ok": true,
+      "word": "he${NULL:?}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${NULL:?}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${NULL:?}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${NULL:?}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${NULL:?}"
+      ]
+    }
+  },
+  {
+    "input": "he${XXX:+${PWD}}xx",
+    "word": {
+      "ok": true,
+      "word": "he${XXX:+${PWD}}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${XXX:+${PWD}}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX:+${PWD}}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX:+${PWD}}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX:+${PWD}}xx"
+      ]
+    }
+  },
+  {
+    "input": "he${PWD:+${XXX}}xx",
+    "word": {
+      "ok": true,
+      "word": "he${PWD:+${XXX}}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${PWD:+${XXX}}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${PWD:+${XXX}}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${PWD:+${XXX}}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${PWD:+${XXX}}xx"
+      ]
+    }
+  },
+  {
+    "input": "he${PWD:+${SHELL}}xx",
+    "word": {
+      "ok": true,
+      "word": "he${PWD:+${SHELL}}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${PWD:+${SHELL}}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${PWD:+${SHELL}}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${PWD:+${SHELL}}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${PWD:+${SHELL}}xx"
+      ]
+    }
+  },
+  {
+    "input": "he${XXX:+000}xx",
+    "word": {
+      "ok": true,
+      "word": "he${XXX:+000}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${XXX:+000}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX:+000}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX:+000}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX:+000}xx"
+      ]
+    }
+  },
+  {
+    "input": "he${PWD:+000}xx",
+    "word": {
+      "ok": true,
+      "word": "he${PWD:+000}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${PWD:+000}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${PWD:+000}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${PWD:+000}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${PWD:+000}xx"
+      ]
+    }
+  },
+  {
+    "input": "'he${XX}'",
+    "word": {
+      "ok": true,
+      "word": "he${XX}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${XX}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "he${XX}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "'he${XX}'"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "'he${XX}'"
+      ]
+    }
+  },
+  {
+    "input": "\"he${PWD}\"",
+    "word": {
+      "ok": true,
+      "word": "he${PWD}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${PWD}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "he${PWD}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"he${PWD}\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"he${PWD}\""
+      ]
+    }
+  },
+  {
+    "input": "\"he'$PWD'\"",
+    "word": {
+      "ok": true,
+      "word": "he'$PWD'"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he'$PWD'"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "he'$PWD'"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"he'$PWD'\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"he'$PWD'\""
+      ]
+    }
+  },
+  {
+    "input": "\"$PWD\"",
+    "word": {
+      "ok": true,
+      "word": "$PWD"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$PWD"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$PWD"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"$PWD\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"$PWD\""
+      ]
+    }
+  },
+  {
+    "input": "'$PWD'",
+    "word": {
+      "ok": true,
+      "word": "$PWD"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$PWD"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$PWD"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "'$PWD'"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "'$PWD'"
+      ]
+    }
+  },
+  {
+    "input": "'\\$PWD'",
+    "word": {
+      "ok": true,
+      "word": "\\$PWD"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "\\$PWD"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "\\$PWD"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "'\\$PWD'"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "'\\$PWD'"
+      ]
+    }
+  },
+  {
+    "input": "'\"hello\"'",
+    "word": {
+      "ok": true,
+      "word": "\"hello\""
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "\"hello\""
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "\"hello\""
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "'\"hello\"'"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "'\"hello\"'"
+      ]
+    }
+  },
+  {
+    "input": "'he\\$PWD'",
+    "word": {
+      "ok": true,
+      "word": "he\\$PWD"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he\\$PWD"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "he\\$PWD"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "'he\\$PWD'"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "'he\\$PWD'"
+      ]
+    }
+  },
+  {
+    "input": "he${PWD",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "he${PWD:=000}xx",
+    "word": {
+      "ok": true,
+      "word": "he${PWD:=000}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${PWD:=000}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${PWD:=000}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${PWD:=000}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${PWD:=000}xx"
+      ]
+    }
+  },
+  {
+    "input": "he${PWD:+${PWD}:}xx",
+    "word": {
+      "ok": true,
+      "word": "he${PWD:+${PWD}:}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${PWD:+${PWD}:}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${PWD:+${PWD}:}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${PWD:+${PWD}:}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${PWD:+${PWD}:}xx"
+      ]
+    }
+  },
+  {
+    "input": "he${XXX:-\\$PWD:}xx",
+    "word": {
+      "ok": true,
+      "word": "he${XXX:-$PWD:}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${XXX:-\\$PWD:}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX:-$PWD:}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX:-$PWD:}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX:-$PWD:}xx"
+      ]
+    }
+  },
+  {
+    "input": "he${XXX:-\\${PWD}z}xx",
+    "word": {
+      "ok": true,
+      "word": "he${XXX:-${PWD}z}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "he${XXX:-\\${PWD}z}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX:-${PWD}z}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX:-${PWD}z}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX:-${PWD}z}xx"
+      ]
+    }
+  },
+  {
+    "input": "안녕하세요",
+    "word": {
+      "ok": true,
+      "word": "안녕하세요"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕하세요"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕하세요"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "안녕하세요"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "안녕하세요"
+      ]
+    }
+  },
+  {
+    "input": "안'녕'하세요",
+    "word": {
+      "ok": true,
+      "word": "안녕하세요"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕하세요"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕하세요"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "안'녕'하세요"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "안'녕'하세요"
+      ]
+    }
+  },
+  {
+    "input": "안'녕하세요",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "안녕\\'하세요",
+    "word": {
+      "ok": true,
+      "word": "안녕'하세요"
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕'하세요"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "안녕\\'하세요"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "안녕'하세요"
+      ]
+    }
+  },
+  {
+    "input": "안\\\\'녕하세요",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "안녕\\t하세요",
+    "word": {
+      "ok": true,
+      "word": "안녕t하세요"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕\\t하세요"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕t하세요"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "안녕\\t하세요"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "안녕t하세요"
+      ]
+    }
+  },
+  {
+    "input": "\"안녕\\t하세요\"",
+    "word": {
+      "ok": true,
+      "word": "안녕\\t하세요"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕\\t하세요"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕\\t하세요"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"안녕\\t하세요\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"안녕\\t하세요\""
+      ]
+    }
+  },
+  {
+    "input": "'안녕\\t하세요",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "안녕하세요\\",
+    "word": {
+      "ok": true,
+      "word": "안녕하세요"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕하세요\\"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕하세요"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "안녕하세요\\"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "안녕하세요"
+      ]
+    }
+  },
+  {
+    "input": "안녕하세요\\\\",
+    "word": {
+      "ok": true,
+      "word": "안녕하세요\\"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕하세요\\\\"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕하세요\\"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "안녕하세요\\\\"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "안녕하세요\\"
+      ]
+    }
+  },
+  {
+    "input": "\"안녕하세요",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "\"안녕하세요\\\"",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕하세요\\"
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "\"안녕'하세요\"",
+    "word": {
+      "ok": true,
+      "word": "안녕'하세요"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕'하세요"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕'하세요"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"안녕'하세요\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"안녕'하세요\""
+      ]
+    }
+  },
+  {
+    "input": "'안녕하세요",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "'안녕하세요\\'",
+    "word": {
+      "ok": true,
+      "word": "안녕하세요\\"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕하세요\\"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕하세요\\"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "'안녕하세요\\'"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "'안녕하세요\\'"
+      ]
+    }
+  },
+  {
+    "input": "안녕$1x",
+    "word": {
+      "ok": true,
+      "word": "안녕$1x"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕$1x"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕$1x"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "안녕$1x"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "안녕$1x"
+      ]
+    }
+  },
+  {
+    "input": "안녕$.x",
+    "word": {
+      "ok": true,
+      "word": "안녕$.x"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕$.x"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕$.x"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "안녕$.x"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "안녕$.x"
+      ]
+    }
+  },
+  {
+    "input": "안녕$pwd.",
+    "word": {
+      "ok": true,
+      "word": "안녕$pwd."
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕$pwd."
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕$pwd."
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "안녕$pwd."
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "안녕$pwd."
+      ]
+    }
+  },
+  {
+    "input": "안녕$PWD",
+    "word": {
+      "ok": true,
+      "word": "안녕$PWD"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕$PWD"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕$PWD"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "안녕$PWD"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "안녕$PWD"
+      ]
+    }
+  },
+  {
+    "input": "안녕\\$PWD",
+    "word": {
+      "ok": true,
+      "word": "안녕$PWD"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕\\$PWD"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕$PWD"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "안녕\\$PWD"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "안녕$PWD"
+      ]
+    }
+  },
+  {
+    "input": "안녕\\\\$PWD",
+    "word": {
+      "ok": true,
+      "word": "안녕\\$PWD"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕\\\\$PWD"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕\\$PWD"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "안녕\\\\$PWD"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "안녕\\$PWD"
+      ]
+    }
+  },
+  {
+    "input": "안녕\\${}",
+    "word": {
+      "ok": true,
+      "word": "안녕${}"
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕${}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "안녕\\${}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "안녕${}"
+      ]
+    }
+  },
+  {
+    "input": "안녕\\${}xx",
+    "word": {
+      "ok": true,
+      "word": "안녕${}xx"
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕${}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "안녕\\${}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "안녕${}xx"
+      ]
+    }
+  },
+  {
+    "input": "안녕${}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "안녕${}xx",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "안녕${hi}",
+    "word": {
+      "ok": true,
+      "word": "안녕${hi}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${hi}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕${hi}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "안녕${hi}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "안녕${hi}"
+      ]
+    }
+  },
+  {
+    "input": "안녕${hi}xx",
+    "word": {
+      "ok": true,
+      "word": "안녕${hi}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${hi}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕${hi}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "안녕${hi}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "안녕${hi}xx"
+      ]
+    }
+  },
+  {
+    "input": "안녕${PWD}",
+    "word": {
+      "ok": true,
+      "word": "안녕${PWD}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${PWD}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕${PWD}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "안녕${PWD}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "안녕${PWD}"
+      ]
+    }
+  },
+  {
+    "input": "안녕${.}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "안녕${XXX:-000}xx",
+    "word": {
+      "ok": true,
+      "word": "안녕${XXX:-000}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${XXX:-000}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX:-000}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX:-000}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX:-000}xx"
+      ]
+    }
+  },
+  {
+    "input": "안녕${PWD:-000}xx",
+    "word": {
+      "ok": true,
+      "word": "안녕${PWD:-000}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${PWD:-000}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${PWD:-000}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${PWD:-000}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${PWD:-000}xx"
+      ]
+    }
+  },
+  {
+    "input": "안녕${XXX:-$PWD}xx",
+    "word": {
+      "ok": true,
+      "word": "안녕${XXX:-$PWD}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${XXX:-$PWD}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX:-$PWD}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX:-$PWD}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX:-$PWD}xx"
+      ]
+    }
+  },
+  {
+    "input": "안녕${XXX:-${PWD:-yyy}}xx",
+    "word": {
+      "ok": true,
+      "word": "안녕${XXX:-${PWD:-yyy}}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${XXX:-${PWD:-yyy}}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX:-${PWD:-yyy}}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX:-${PWD:-yyy}}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX:-${PWD:-yyy}}xx"
+      ]
+    }
+  },
+  {
+    "input": "안녕${XXX:-${YYY:-yyy}}xx",
+    "word": {
+      "ok": true,
+      "word": "안녕${XXX:-${YYY:-yyy}}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${XXX:-${YYY:-yyy}}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX:-${YYY:-yyy}}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX:-${YYY:-yyy}}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX:-${YYY:-yyy}}xx"
+      ]
+    }
+  },
+  {
+    "input": "안녕${XXX:YYY}",
+    "word": {
+      "ok": true,
+      "word": "안녕${XXX:YYY}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${XXX:YYY}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX:YYY}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX:YYY}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX:YYY}"
+      ]
+    }
+  },
+  {
+    "input": "안녕${XXX:+${PWD}}xx",
+    "word": {
+      "ok": true,
+      "word": "안녕${XXX:+${PWD}}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${XXX:+${PWD}}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX:+${PWD}}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX:+${PWD}}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX:+${PWD}}xx"
+      ]
+    }
+  },
+  {
+    "input": "안녕${PWD:+${XXX}}xx",
+    "word": {
+      "ok": true,
+      "word": "안녕${PWD:+${XXX}}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${PWD:+${XXX}}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${PWD:+${XXX}}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${PWD:+${XXX}}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${PWD:+${XXX}}xx"
+      ]
+    }
+  },
+  {
+    "input": "안녕${PWD:+${SHELL}}xx",
+    "word": {
+      "ok": true,
+      "word": "안녕${PWD:+${SHELL}}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${PWD:+${SHELL}}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${PWD:+${SHELL}}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${PWD:+${SHELL}}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${PWD:+${SHELL}}xx"
+      ]
+    }
+  },
+  {
+    "input": "안녕${XXX:+000}xx",
+    "word": {
+      "ok": true,
+      "word": "안녕${XXX:+000}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${XXX:+000}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX:+000}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX:+000}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX:+000}xx"
+      ]
+    }
+  },
+  {
+    "input": "안녕${PWD:+000}xx",
+    "word": {
+      "ok": true,
+      "word": "안녕${PWD:+000}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${PWD:+000}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${PWD:+000}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${PWD:+000}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${PWD:+000}xx"
+      ]
+    }
+  },
+  {
+    "input": "'안녕${XX}'",
+    "word": {
+      "ok": true,
+      "word": "안녕${XX}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${XX}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕${XX}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "'안녕${XX}'"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "'안녕${XX}'"
+      ]
+    }
+  },
+  {
+    "input": "\"안녕${PWD}\"",
+    "word": {
+      "ok": true,
+      "word": "안녕${PWD}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${PWD}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕${PWD}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"안녕${PWD}\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"안녕${PWD}\""
+      ]
+    }
+  },
+  {
+    "input": "\"안녕'$PWD'\"",
+    "word": {
+      "ok": true,
+      "word": "안녕'$PWD'"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕'$PWD'"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕'$PWD'"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"안녕'$PWD'\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"안녕'$PWD'\""
+      ]
+    }
+  },
+  {
+    "input": "'\"안녕\"'",
+    "word": {
+      "ok": true,
+      "word": "\"안녕\""
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "\"안녕\""
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "\"안녕\""
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "'\"안녕\"'"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "'\"안녕\"'"
+      ]
+    }
+  },
+  {
+    "input": "\"안녕\\$PWD\"",
+    "word": {
+      "ok": true,
+      "word": "안녕$PWD"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕\\$PWD"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕$PWD"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"안녕\\$PWD\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"안녕$PWD\""
+      ]
+    }
+  },
+  {
+    "input": "'안녕\\$PWD'",
+    "word": {
+      "ok": true,
+      "word": "안녕\\$PWD"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕\\$PWD"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕\\$PWD"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "'안녕\\$PWD'"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "'안녕\\$PWD'"
+      ]
+    }
+  },
+  {
+    "input": "안녕${PWD",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "안녕${PWD:=000}xx",
+    "word": {
+      "ok": true,
+      "word": "안녕${PWD:=000}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${PWD:=000}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${PWD:=000}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${PWD:=000}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${PWD:=000}xx"
+      ]
+    }
+  },
+  {
+    "input": "안녕${PWD:+${PWD}:}xx",
+    "word": {
+      "ok": true,
+      "word": "안녕${PWD:+${PWD}:}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${PWD:+${PWD}:}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${PWD:+${PWD}:}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${PWD:+${PWD}:}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${PWD:+${PWD}:}xx"
+      ]
+    }
+  },
+  {
+    "input": "안녕${XXX:-\\$PWD:}xx",
+    "word": {
+      "ok": true,
+      "word": "안녕${XXX:-$PWD:}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${XXX:-\\$PWD:}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX:-$PWD:}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX:-$PWD:}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX:-$PWD:}xx"
+      ]
+    }
+  },
+  {
+    "input": "안녕${XXX:-\\${PWD}z}xx",
+    "word": {
+      "ok": true,
+      "word": "안녕${XXX:-${PWD}z}xx"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕${XXX:-\\${PWD}z}xx"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${XXX:-${PWD}z}xx"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${XXX:-${PWD}z}xx"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${XXX:-${PWD}z}xx"
+      ]
+    }
+  },
+  {
+    "input": "$KOREAN",
+    "word": {
+      "ok": true,
+      "word": "$KOREAN"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$KOREAN"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$KOREAN"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$KOREAN"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$KOREAN"
+      ]
+    }
+  },
+  {
+    "input": "안녕$KOREAN",
+    "word": {
+      "ok": true,
+      "word": "안녕$KOREAN"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "안녕$KOREAN"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "안녕$KOREAN"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "안녕$KOREAN"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "안녕$KOREAN"
+      ]
+    }
+  },
+  {
+    "input": "${{aaa}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${aaa}}",
+    "word": {
+      "ok": true,
+      "word": "${aaa}}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${aaa}}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${aaa}}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${aaa}}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${aaa}}"
+      ]
+    }
+  },
+  {
+    "input": "${aaa",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${{aaa:-bbb}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${aaa:-bbb}}",
+    "word": {
+      "ok": true,
+      "word": "${aaa:-bbb}}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${aaa:-bbb}}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${aaa:-bbb}}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${aaa:-bbb}}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${aaa:-bbb}}"
+      ]
+    }
+  },
+  {
+    "input": "${aaa:-bbb",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${aaa:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${aaa:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${aaa:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${aaa:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${aaa:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${aaa:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${aaa:-${bbb:-ccc}}",
+    "word": {
+      "ok": true,
+      "word": "${aaa:-${bbb:-ccc}}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${aaa:-${bbb:-ccc}}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${aaa:-${bbb:-ccc}}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${aaa:-${bbb:-ccc}}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${aaa:-${bbb:-ccc}}"
+      ]
+    }
+  },
+  {
+    "input": "${aaa:-bbb ${foo}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${aaa:-bbb {foo}",
+    "word": {
+      "ok": true,
+      "word": "${aaa:-bbb {foo}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${aaa:-bbb {foo}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${aaa:-bbb",
+        "{foo}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${aaa:-bbb",
+        "{foo}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${aaa:-bbb",
+        "{foo}"
+      ]
+    }
+  },
+  {
+    "input": "${:}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${:-bbb}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${:+bbb}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "$1",
+    "word": {
+      "ok": true,
+      "word": "$1"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$1"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$1"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$1"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$1"
+      ]
+    }
+  },
+  {
+    "input": "${1}",
+    "word": {
+      "ok": true,
+      "word": "${1}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${1}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${1}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${1}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${1}"
+      ]
+    }
+  },
+  {
+    "input": "${1:+bbb}",
+    "word": {
+      "ok": true,
+      "word": "${1:+bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${1:+bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${1:+bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${1:+bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${1:+bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${1:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${1:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${1:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${1:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${1:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${1:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "$2",
+    "word": {
+      "ok": true,
+      "word": "$2"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$2"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$2"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$2"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$2"
+      ]
+    }
+  },
+  {
+    "input": "${2}",
+    "word": {
+      "ok": true,
+      "word": "${2}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${2}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${2}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${2}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${2}"
+      ]
+    }
+  },
+  {
+    "input": "${2:+bbb}",
+    "word": {
+      "ok": true,
+      "word": "${2:+bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${2:+bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${2:+bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${2:+bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${2:+bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${2:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${2:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${2:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${2:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${2:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${2:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "$3",
+    "word": {
+      "ok": true,
+      "word": "$3"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$3"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$3"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$3"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$3"
+      ]
+    }
+  },
+  {
+    "input": "${3}",
+    "word": {
+      "ok": true,
+      "word": "${3}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${3}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${3}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${3}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${3}"
+      ]
+    }
+  },
+  {
+    "input": "${3:+bbb}",
+    "word": {
+      "ok": true,
+      "word": "${3:+bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${3:+bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${3:+bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${3:+bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${3:+bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${3:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${3:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${3:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${3:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${3:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${3:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "$4",
+    "word": {
+      "ok": true,
+      "word": "$4"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$4"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$4"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$4"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$4"
+      ]
+    }
+  },
+  {
+    "input": "${4}",
+    "word": {
+      "ok": true,
+      "word": "${4}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${4}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${4}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${4}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${4}"
+      ]
+    }
+  },
+  {
+    "input": "${4:+bbb}",
+    "word": {
+      "ok": true,
+      "word": "${4:+bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${4:+bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${4:+bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${4:+bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${4:+bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${4:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${4:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${4:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${4:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${4:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${4:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "$5",
+    "word": {
+      "ok": true,
+      "word": "$5"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$5"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$5"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$5"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$5"
+      ]
+    }
+  },
+  {
+    "input": "${5}",
+    "word": {
+      "ok": true,
+      "word": "${5}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${5}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${5}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${5}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${5}"
+      ]
+    }
+  },
+  {
+    "input": "${5:+bbb}",
+    "word": {
+      "ok": true,
+      "word": "${5:+bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${5:+bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${5:+bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${5:+bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${5:+bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${5:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${5:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${5:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${5:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${5:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${5:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "$6",
+    "word": {
+      "ok": true,
+      "word": "$6"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$6"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$6"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$6"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$6"
+      ]
+    }
+  },
+  {
+    "input": "${6}",
+    "word": {
+      "ok": true,
+      "word": "${6}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${6}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${6}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${6}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${6}"
+      ]
+    }
+  },
+  {
+    "input": "${6:+bbb}",
+    "word": {
+      "ok": true,
+      "word": "${6:+bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${6:+bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${6:+bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${6:+bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${6:+bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${6:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${6:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${6:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${6:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${6:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${6:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "$7",
+    "word": {
+      "ok": true,
+      "word": "$7"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$7"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$7"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$7"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$7"
+      ]
+    }
+  },
+  {
+    "input": "${7}",
+    "word": {
+      "ok": true,
+      "word": "${7}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${7}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${7}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${7}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${7}"
+      ]
+    }
+  },
+  {
+    "input": "${7:+bbb}",
+    "word": {
+      "ok": true,
+      "word": "${7:+bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${7:+bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${7:+bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${7:+bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${7:+bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${7:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${7:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${7:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${7:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${7:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${7:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "$8",
+    "word": {
+      "ok": true,
+      "word": "$8"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$8"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$8"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$8"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$8"
+      ]
+    }
+  },
+  {
+    "input": "${8}",
+    "word": {
+      "ok": true,
+      "word": "${8}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${8}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${8}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${8}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${8}"
+      ]
+    }
+  },
+  {
+    "input": "${8:+bbb}",
+    "word": {
+      "ok": true,
+      "word": "${8:+bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${8:+bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${8:+bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${8:+bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${8:+bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${8:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${8:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${8:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${8:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${8:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${8:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "$9",
+    "word": {
+      "ok": true,
+      "word": "$9"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$9"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$9"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$9"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$9"
+      ]
+    }
+  },
+  {
+    "input": "${9}",
+    "word": {
+      "ok": true,
+      "word": "${9}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${9}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${9}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${9}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${9}"
+      ]
+    }
+  },
+  {
+    "input": "${9:+bbb}",
+    "word": {
+      "ok": true,
+      "word": "${9:+bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${9:+bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${9:+bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${9:+bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${9:+bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${9:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${9:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${9:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${9:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${9:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${9:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "$999",
+    "word": {
+      "ok": true,
+      "word": "$999"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$999"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$999"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$999"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$999"
+      ]
+    }
+  },
+  {
+    "input": "${999}",
+    "word": {
+      "ok": true,
+      "word": "${999}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${999}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${999}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${999}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${999}"
+      ]
+    }
+  },
+  {
+    "input": "${999:+bbb}",
+    "word": {
+      "ok": true,
+      "word": "${999:+bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${999:+bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${999:+bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${999:+bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${999:+bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${999:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${999:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${999:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${999:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${999:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${999:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "$999aaa",
+    "word": {
+      "ok": true,
+      "word": "$999aaa"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$999aaa"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$999aaa"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$999aaa"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$999aaa"
+      ]
+    }
+  },
+  {
+    "input": "${999}aaa",
+    "word": {
+      "ok": true,
+      "word": "${999}aaa"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${999}aaa"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${999}aaa"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${999}aaa"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${999}aaa"
+      ]
+    }
+  },
+  {
+    "input": "${999:+bbb}aaa",
+    "word": {
+      "ok": true,
+      "word": "${999:+bbb}aaa"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${999:+bbb}aaa"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${999:+bbb}aaa"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${999:+bbb}aaa"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${999:+bbb}aaa"
+      ]
+    }
+  },
+  {
+    "input": "${999:-bbb}aaa",
+    "word": {
+      "ok": true,
+      "word": "${999:-bbb}aaa"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${999:-bbb}aaa"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${999:-bbb}aaa"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${999:-bbb}aaa"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${999:-bbb}aaa"
+      ]
+    }
+  },
+  {
+    "input": "$001",
+    "word": {
+      "ok": true,
+      "word": "$001"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$001"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$001"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$001"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$001"
+      ]
+    }
+  },
+  {
+    "input": "${001}",
+    "word": {
+      "ok": true,
+      "word": "${001}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${001}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${001}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${001}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${001}"
+      ]
+    }
+  },
+  {
+    "input": "${001:+bbb}",
+    "word": {
+      "ok": true,
+      "word": "${001:+bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${001:+bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${001:+bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${001:+bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${001:+bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${001:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${001:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${001:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${001:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${001:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${001:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "$001aaa",
+    "word": {
+      "ok": true,
+      "word": "$001aaa"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$001aaa"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$001aaa"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$001aaa"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$001aaa"
+      ]
+    }
+  },
+  {
+    "input": "${001}aaa",
+    "word": {
+      "ok": true,
+      "word": "${001}aaa"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${001}aaa"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${001}aaa"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${001}aaa"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${001}aaa"
+      ]
+    }
+  },
+  {
+    "input": "${001:+bbb}aaa",
+    "word": {
+      "ok": true,
+      "word": "${001:+bbb}aaa"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${001:+bbb}aaa"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${001:+bbb}aaa"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${001:+bbb}aaa"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${001:+bbb}aaa"
+      ]
+    }
+  },
+  {
+    "input": "${001:-bbb}aaa",
+    "word": {
+      "ok": true,
+      "word": "${001:-bbb}aaa"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${001:-bbb}aaa"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${001:-bbb}aaa"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${001:-bbb}aaa"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${001:-bbb}aaa"
+      ]
+    }
+  },
+  {
+    "input": "$@",
+    "word": {
+      "ok": true,
+      "word": "$@"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$@"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$@"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$@"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$@"
+      ]
+    }
+  },
+  {
+    "input": "${@}",
+    "word": {
+      "ok": true,
+      "word": "${@}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${@}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${@}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${@}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${@}"
+      ]
+    }
+  },
+  {
+    "input": "${@:+bbb}",
+    "word": {
+      "ok": true,
+      "word": "${@:+bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${@:+bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${@:+bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${@:+bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${@:+bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${@:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${@:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${@:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${@:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${@:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${@:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "$@@@",
+    "word": {
+      "ok": true,
+      "word": "$@@@"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$@@@"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$@@@"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$@@@"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$@@@"
+      ]
+    }
+  },
+  {
+    "input": "$@aaa",
+    "word": {
+      "ok": true,
+      "word": "$@aaa"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$@aaa"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$@aaa"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$@aaa"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$@aaa"
+      ]
+    }
+  },
+  {
+    "input": "${@}aaa",
+    "word": {
+      "ok": true,
+      "word": "${@}aaa"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${@}aaa"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${@}aaa"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${@}aaa"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${@}aaa"
+      ]
+    }
+  },
+  {
+    "input": "${@:+bbb}aaa",
+    "word": {
+      "ok": true,
+      "word": "${@:+bbb}aaa"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${@:+bbb}aaa"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${@:+bbb}aaa"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${@:+bbb}aaa"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${@:+bbb}aaa"
+      ]
+    }
+  },
+  {
+    "input": "${@:-bbb}aaa",
+    "word": {
+      "ok": true,
+      "word": "${@:-bbb}aaa"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${@:-bbb}aaa"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${@:-bbb}aaa"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${@:-bbb}aaa"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${@:-bbb}aaa"
+      ]
+    }
+  },
+  {
+    "input": "$*",
+    "word": {
+      "ok": true,
+      "word": "$*"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$*"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$*"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$*"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$*"
+      ]
+    }
+  },
+  {
+    "input": "${*}",
+    "word": {
+      "ok": true,
+      "word": "${*}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${*}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${*}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${*}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${*}"
+      ]
+    }
+  },
+  {
+    "input": "${*:+bbb}",
+    "word": {
+      "ok": true,
+      "word": "${*:+bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${*:+bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${*:+bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${*:+bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${*:+bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${*:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${*:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${*:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${*:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${*:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${*:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "$#",
+    "word": {
+      "ok": true,
+      "word": "$#"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$#"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$#"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$#"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$#"
+      ]
+    }
+  },
+  {
+    "input": "${#}",
+    "word": {
+      "ok": true,
+      "word": "${#}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${#}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${#}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${#}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${#}"
+      ]
+    }
+  },
+  {
+    "input": "${#:+bbb}",
+    "word": {
+      "ok": true,
+      "word": "${#:+bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${#:+bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${#:+bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${#:+bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${#:+bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${#:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${#:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${#:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${#:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${#:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${#:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "$?",
+    "word": {
+      "ok": true,
+      "word": "$?"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$?"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$?"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$?"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$?"
+      ]
+    }
+  },
+  {
+    "input": "${?}",
+    "word": {
+      "ok": true,
+      "word": "${?}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${?}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${?}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${?}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${?}"
+      ]
+    }
+  },
+  {
+    "input": "${?:+bbb}",
+    "word": {
+      "ok": true,
+      "word": "${?:+bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${?:+bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${?:+bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${?:+bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${?:+bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${?:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${?:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${?:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${?:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${?:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${?:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "$-",
+    "word": {
+      "ok": true,
+      "word": "$-"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$-"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$-"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$-"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$-"
+      ]
+    }
+  },
+  {
+    "input": "${-}",
+    "word": {
+      "ok": true,
+      "word": "${-}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${-}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${-}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${-}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${-}"
+      ]
+    }
+  },
+  {
+    "input": "${-:+bbb}",
+    "word": {
+      "ok": true,
+      "word": "${-:+bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${-:+bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${-:+bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${-:+bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${-:+bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${-:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${-:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${-:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${-:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${-:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${-:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "$$",
+    "word": {
+      "ok": true,
+      "word": "$$"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$$"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$$"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$$"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$$"
+      ]
+    }
+  },
+  {
+    "input": "${$}",
+    "word": {
+      "ok": true,
+      "word": "${$}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${$}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${$}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${$}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${$}"
+      ]
+    }
+  },
+  {
+    "input": "${$:+bbb}",
+    "word": {
+      "ok": true,
+      "word": "${$:+bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${$:+bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${$:+bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${$:+bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${$:+bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${$:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${$:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${$:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${$:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${$:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${$:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "$!",
+    "word": {
+      "ok": true,
+      "word": "$!"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$!"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$!"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$!"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$!"
+      ]
+    }
+  },
+  {
+    "input": "${!}",
+    "word": {
+      "ok": true,
+      "word": "${!}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${!}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${!}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${!}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${!}"
+      ]
+    }
+  },
+  {
+    "input": "${!:+bbb}",
+    "word": {
+      "ok": true,
+      "word": "${!:+bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${!:+bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${!:+bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${!:+bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${!:+bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${!:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${!:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${!:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${!:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${!:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${!:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "$0",
+    "word": {
+      "ok": true,
+      "word": "$0"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$0"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$0"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$0"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$0"
+      ]
+    }
+  },
+  {
+    "input": "${0}",
+    "word": {
+      "ok": true,
+      "word": "${0}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${0}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${0}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${0}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${0}"
+      ]
+    }
+  },
+  {
+    "input": "${0:+bbb}",
+    "word": {
+      "ok": true,
+      "word": "${0:+bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${0:+bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${0:+bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${0:+bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${0:+bbb}"
+      ]
+    }
+  },
+  {
+    "input": "${0:-bbb}",
+    "word": {
+      "ok": true,
+      "word": "${0:-bbb}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${0:-bbb}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${0:-bbb}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${0:-bbb}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${0:-bbb}"
+      ]
+    }
+  },
+  {
+    "input": "hello${hi}bye",
+    "word": {
+      "ok": true,
+      "word": "hello${hi}bye"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello${hi}bye"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello${hi}bye"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello${hi}bye"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello${hi}bye"
+      ]
+    }
+  },
+  {
+    "input": "hello${space}bye",
+    "word": {
+      "ok": true,
+      "word": "hello${space}bye"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello${space}bye"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello${space}bye"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello${space}bye"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello${space}bye"
+      ]
+    }
+  },
+  {
+    "input": "hello\"${space}\"bye",
+    "word": {
+      "ok": true,
+      "word": "hello${space}bye"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello${space}bye"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello${space}bye"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello\"${space}\"bye"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello\"${space}\"bye"
+      ]
+    }
+  },
+  {
+    "input": "hello \"${space}\"bye",
+    "word": {
+      "ok": true,
+      "word": "hello ${space}bye"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello ${space}bye"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello",
+        "${space}bye"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello",
+        "\"${space}\"bye"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello",
+        "\"${space}\"bye"
+      ]
+    }
+  },
+  {
+    "input": "hello${leading}def",
+    "word": {
+      "ok": true,
+      "word": "hello${leading}def"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello${leading}def"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello${leading}def"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello${leading}def"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello${leading}def"
+      ]
+    }
+  },
+  {
+    "input": "hello\"${leading}\" def",
+    "word": {
+      "ok": true,
+      "word": "hello${leading} def"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello${leading} def"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello${leading}",
+        "def"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello\"${leading}\"",
+        "def"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello\"${leading}\"",
+        "def"
+      ]
+    }
+  },
+  {
+    "input": "hello\"${leading}\"",
+    "word": {
+      "ok": true,
+      "word": "hello${leading}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello${leading}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello${leading}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello\"${leading}\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello\"${leading}\""
+      ]
+    }
+  },
+  {
+    "input": "hello${leading}",
+    "word": {
+      "ok": true,
+      "word": "hello${leading}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello${leading}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello${leading}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello${leading}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello${leading}"
+      ]
+    }
+  },
+  {
+    "input": "hello${trailing}",
+    "word": {
+      "ok": true,
+      "word": "hello${trailing}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello${trailing}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello${trailing}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello${trailing}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello${trailing}"
+      ]
+    }
+  },
+  {
+    "input": "hello${trailing}d",
+    "word": {
+      "ok": true,
+      "word": "hello${trailing}d"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello${trailing}d"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello${trailing}d"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello${trailing}d"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello${trailing}d"
+      ]
+    }
+  },
+  {
+    "input": "hello\"${trailing}\"d",
+    "word": {
+      "ok": true,
+      "word": "hello${trailing}d"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello${trailing}d"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello${trailing}d"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello\"${trailing}\"d"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello\"${trailing}\"d"
+      ]
+    }
+  },
+  {
+    "input": "hel\"lo${trailing}\"",
+    "word": {
+      "ok": true,
+      "word": "hello${trailing}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello${trailing}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello${trailing}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hel\"lo${trailing}\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hel\"lo${trailing}\""
+      ]
+    }
+  },
+  {
+    "input": "hello\" there  \"",
+    "word": {
+      "ok": true,
+      "word": "hello there  "
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello there  "
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello there  "
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello\" there  \""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello\" there  \""
+      ]
+    }
+  },
+  {
+    "input": "hello there",
+    "word": {
+      "ok": true,
+      "word": "hello there"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello there"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello",
+        "there"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello",
+        "there"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello",
+        "there"
+      ]
+    }
+  },
+  {
+    "input": "hello\\ there",
+    "word": {
+      "ok": true,
+      "word": "hello there"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello\\ there"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello there"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello\\ there"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello there"
+      ]
+    }
+  },
+  {
+    "input": "hello\" there",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "hello\\\" there",
+    "word": {
+      "ok": true,
+      "word": "hello\" there"
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello\"",
+        "there"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello\\\"",
+        "there"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello\"",
+        "there"
+      ]
+    }
+  },
+  {
+    "input": "hello\"\\\\there\"",
+    "word": {
+      "ok": true,
+      "word": "hello\\there"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello\\\\there"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello\\there"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello\"\\\\there\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello\"\\there\""
+      ]
+    }
+  },
+  {
+    "input": "hello\"\\there\"",
+    "word": {
+      "ok": true,
+      "word": "hello\\there"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello\\there"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello\\there"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello\"\\there\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello\"\\there\""
+      ]
+    }
+  },
+  {
+    "input": "hello'\\\\there'",
+    "word": {
+      "ok": true,
+      "word": "hello\\\\there"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello\\\\there"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello\\\\there"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello'\\\\there'"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello'\\\\there'"
+      ]
+    }
+  },
+  {
+    "input": "hello'\\there'",
+    "word": {
+      "ok": true,
+      "word": "hello\\there"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello\\there"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello\\there"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello'\\there'"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello'\\there'"
+      ]
+    }
+  },
+  {
+    "input": "hello'$there'",
+    "word": {
+      "ok": true,
+      "word": "hello$there"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "hello$there"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "hello$there"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "hello'$there'"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "hello'$there'"
+      ]
+    }
+  },
+  {
+    "input": "${a:-x}",
+    "word": {
+      "ok": true,
+      "word": "${a:-x}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a:-x}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a:-x}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a:-x}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a:-x}"
+      ]
+    }
+  },
+  {
+    "input": "${a:+x}",
+    "word": {
+      "ok": true,
+      "word": "${a:+x}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a:+x}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a:+x}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a:+x}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a:+x}"
+      ]
+    }
+  },
+  {
+    "input": "${a:?msg}",
+    "word": {
+      "ok": true,
+      "word": "${a:?msg}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a:?msg}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a:?msg}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a:?msg}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a:?msg}"
+      ]
+    }
+  },
+  {
+    "input": "${a-x}",
+    "word": {
+      "ok": true,
+      "word": "${a-x}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a-x}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a-x}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a-x}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a-x}"
+      ]
+    }
+  },
+  {
+    "input": "${a+x}",
+    "word": {
+      "ok": true,
+      "word": "${a+x}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a+x}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a+x}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a+x}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a+x}"
+      ]
+    }
+  },
+  {
+    "input": "${a?}",
+    "word": {
+      "ok": true,
+      "word": "${a?}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a?}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a?}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a?}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a?}"
+      ]
+    }
+  },
+  {
+    "input": "${a#pre}",
+    "word": {
+      "ok": true,
+      "word": "${a#pre}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a#pre}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a#pre}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a#pre}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a#pre}"
+      ]
+    }
+  },
+  {
+    "input": "${a##*/}",
+    "word": {
+      "ok": true,
+      "word": "${a##*/}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a##*/}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a##*/}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a##*/}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a##*/}"
+      ]
+    }
+  },
+  {
+    "input": "${a%suf}",
+    "word": {
+      "ok": true,
+      "word": "${a%suf}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a%suf}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a%suf}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a%suf}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a%suf}"
+      ]
+    }
+  },
+  {
+    "input": "${a%%.*}",
+    "word": {
+      "ok": true,
+      "word": "${a%%.*}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a%%.*}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a%%.*}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a%%.*}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a%%.*}"
+      ]
+    }
+  },
+  {
+    "input": "${a/x/y}",
+    "word": {
+      "ok": true,
+      "word": "${a/x/y}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a/x/y}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a/x/y}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a/x/y}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a/x/y}"
+      ]
+    }
+  },
+  {
+    "input": "${a//x/y}",
+    "word": {
+      "ok": true,
+      "word": "${a/x/y}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a/x/y}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a/x/y}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a/x/y}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a/x/y}"
+      ]
+    }
+  },
+  {
+    "input": "${a:#x}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${a:%x}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${a",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${:a}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${{a}}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${a!}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "$",
+    "word": {
+      "ok": true,
+      "word": "$"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$"
+      ]
+    }
+  },
+  {
+    "input": "$12x",
+    "word": {
+      "ok": true,
+      "word": "$12x"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$12x"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$12x"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$12x"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$12x"
+      ]
+    }
+  },
+  {
+    "input": "${a:-\"q u\"}",
+    "word": {
+      "ok": true,
+      "word": "${a:-q u}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a:-q u}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a:-q",
+        "u}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a:-\"q",
+        "u\"}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a:-\"q",
+        "u\"}"
+      ]
+    }
+  },
+  {
+    "input": "${a:-'q'}",
+    "word": {
+      "ok": true,
+      "word": "${a:-q}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a:-q}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a:-q}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a:-'q'}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a:-'q'}"
+      ]
+    }
+  },
+  {
+    "input": "${a:-${b:-c}}",
+    "word": {
+      "ok": true,
+      "word": "${a:-${b:-c}}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a:-${b:-c}}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a:-${b:-c}}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a:-${b:-c}}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a:-${b:-c}}"
+      ]
+    }
+  },
+  {
+    "input": "${a/\\//_}",
+    "word": {
+      "ok": true,
+      "word": "${a/\\//_}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a/\\//_}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a/\\//_}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a/\\//_}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a/\\//_}"
+      ]
+    }
+  },
+  {
+    "input": "${a/x}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "\"a\\\"b\"",
+    "word": {
+      "ok": true,
+      "word": "a\"b"
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "a\"b"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"a\\\"b\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"a\"b\""
+      ]
+    }
+  },
+  {
+    "input": "\"a\\\\b\"",
+    "word": {
+      "ok": true,
+      "word": "a\\b"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "a\\\\b"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "a\\b"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"a\\\\b\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"a\\b\""
+      ]
+    }
+  },
+  {
+    "input": "\"a\\$b\"",
+    "word": {
+      "ok": true,
+      "word": "a$b"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "a\\$b"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "a$b"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"a\\$b\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"a$b\""
+      ]
+    }
+  },
+  {
+    "input": "\"a\\xb\"",
+    "word": {
+      "ok": true,
+      "word": "a\\xb"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "a\\xb"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "a\\xb"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"a\\xb\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"a\\xb\""
+      ]
+    }
+  },
+  {
+    "input": "'a\\'",
+    "word": {
+      "ok": true,
+      "word": "a\\"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "a\\"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "a\\"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "'a\\'"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "'a\\'"
+      ]
+    }
+  },
+  {
+    "input": "a\\ b",
+    "word": {
+      "ok": true,
+      "word": "a b"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "a\\ b"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "a b"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "a\\ b"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "a b"
+      ]
+    }
+  },
+  {
+    "input": "a\\",
+    "word": {
+      "ok": true,
+      "word": "a"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "a\\"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "a"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "a\\"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "a"
+      ]
+    }
+  },
+  {
+    "input": "\\",
+    "word": {
+      "ok": true,
+      "word": ""
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "\\"
+    },
+    "words": {
+      "ok": true
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\\"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true
+    }
+  },
+  {
+    "input": "a b  c",
+    "word": {
+      "ok": true,
+      "word": "a b  c"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "a b  c"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "a",
+        "b",
+        "c"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "a",
+        "b",
+        "c"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "a",
+        "b",
+        "c"
+      ]
+    }
+  },
+  {
+    "input": "\"a b\" c",
+    "word": {
+      "ok": true,
+      "word": "a b c"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "a b c"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "a b",
+        "c"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"a b\"",
+        "c"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"a b\"",
+        "c"
+      ]
+    }
+  },
+  {
+    "input": "a\"b c\"d",
+    "word": {
+      "ok": true,
+      "word": "ab cd"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "ab cd"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "ab cd"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "a\"b c\"d"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "a\"b c\"d"
+      ]
+    }
+  },
+  {
+    "input": "\u003c\u003cEOF",
+    "word": {
+      "ok": true,
+      "word": "\u003c\u003cEOF"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "\u003c\u003cEOF"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "\u003c\u003cEOF"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\u003c\u003cEOF"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\u003c\u003cEOF"
+      ]
+    }
+  },
+  {
+    "input": "\u003c\u003c-EOF",
+    "word": {
+      "ok": true,
+      "word": "\u003c\u003c-EOF"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "\u003c\u003c-EOF"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "\u003c\u003c-EOF"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\u003c\u003c-EOF"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\u003c\u003c-EOF"
+      ]
+    }
+  },
+  {
+    "input": "\u003c\u003c EOF",
+    "word": {
+      "ok": true,
+      "word": "\u003c\u003c EOF"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "\u003c\u003c EOF"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "\u003c\u003c EOF"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\u003c\u003c EOF"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\u003c\u003c EOF"
+      ]
+    }
+  },
+  {
+    "input": "\u003c\u003c  'E F'",
+    "word": {
+      "ok": true,
+      "word": "\u003c\u003c  E F"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "\u003c\u003c  E F"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "\u003c\u003c  E F"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\u003c\u003c  'E F'"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\u003c\u003c  'E F'"
+      ]
+    }
+  },
+  {
+    "input": "3\u003c\u003cEOF",
+    "word": {
+      "ok": true,
+      "word": "3\u003c\u003cEOF"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "3\u003c\u003cEOF"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "3\u003c\u003cEOF"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "3\u003c\u003cEOF"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "3\u003c\u003cEOF"
+      ]
+    }
+  },
+  {
+    "input": "a\u003cb",
+    "word": {
+      "ok": true,
+      "word": "a\u003cb"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "a\u003cb"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "a\u003cb"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "a\u003cb"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "a\u003cb"
+      ]
+    }
+  },
+  {
+    "input": "a\u003c\u003cb",
+    "word": {
+      "ok": true,
+      "word": "a\u003c\u003cb"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "a\u003c\u003cb"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "a\u003c\u003cb"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "a\u003c\u003cb"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "a\u003c\u003cb"
+      ]
+    }
+  },
+  {
+    "input": "\"\u003c\u003cEOF\"",
+    "word": {
+      "ok": true,
+      "word": "\u003c\u003cEOF"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "\u003c\u003cEOF"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "\u003c\u003cEOF"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"\u003c\u003cEOF\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"\u003c\u003cEOF\""
+      ]
+    }
+  },
+  {
+    "input": "x \u003c\u003cEOF y",
+    "word": {
+      "ok": true,
+      "word": "x \u003c\u003cEOF y"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "x \u003c\u003cEOF y"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "x",
+        "\u003c\u003cEOF",
+        "y"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "x",
+        "\u003c\u003cEOF",
+        "y"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "x",
+        "\u003c\u003cEOF",
+        "y"
+      ]
+    }
+  },
+  {
+    "input": "été",
+    "word": {
+      "ok": true,
+      "word": "été"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "été"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "été"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "été"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "été"
+      ]
+    }
+  },
+  {
+    "input": "한국어",
+    "word": {
+      "ok": true,
+      "word": "한국어"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "한국어"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "한국어"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "한국어"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "한국어"
+      ]
+    }
+  },
+  {
+    "input": "${été}",
+    "word": {
+      "ok": true,
+      "word": "${été}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${été}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${été}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${été}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${été}"
+      ]
+    }
+  },
+  {
+    "input": "$é",
+    "word": {
+      "ok": true,
+      "word": "$é"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$é"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$é"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$é"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$é"
+      ]
+    }
+  },
+  {
+    "input": "\ta\t",
+    "word": {
+      "ok": true,
+      "word": "\ta\t"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "\ta\t"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "a"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "a"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "a"
+      ]
+    }
+  },
+  {
+    "input": "``",
+    "word": {
+      "ok": true,
+      "word": "``"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "`"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "``"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "``"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "``"
+      ]
+    }
+  },
+  {
+    "input": "a`b",
+    "word": {
+      "ok": true,
+      "word": "a`b"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "ab"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "a`b"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "a`b"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "a`b"
+      ]
+    }
+  },
+  {
+    "input": "\"a`\"b\"",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "a\"b"
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "`$x",
+    "word": {
+      "ok": true,
+      "word": "`$x"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$x"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "`$x"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "`$x"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "`$x"
+      ]
+    }
+  },
+  {
+    "input": "a\r\nb",
+    "word": {
+      "ok": true,
+      "word": "a\r\nb"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "a\r\nb"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "a",
+        "b"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "a",
+        "b"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "a",
+        "b"
+      ]
+    }
+  },
+  {
+    "input": "${a#'x\\y'}",
+    "word": {
+      "ok": true,
+      "word": "${a#x\\\\y}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a#x\\y}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a#x\\\\y}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a#'x\\\\y'}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a#'x\\\\y'}"
+      ]
+    }
+  },
+  {
+    "input": "${a%'q'}",
+    "word": {
+      "ok": true,
+      "word": "${a%q}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a%q}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a%q}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a%'q'}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a%'q'}"
+      ]
+    }
+  },
+  {
+    "input": "\"${a\"",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "\"a\\",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "\"${\"",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${a:-\"x\"",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${a/'p'/'r'}",
+    "word": {
+      "ok": true,
+      "word": "${a/p/r}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a/p/r}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a/p/r}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a/'p'/'r'}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a/'p'/'r'}"
+      ]
+    }
+  },
+  {
+    "input": "${a/x/y",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${a/x",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${a:+${b}}",
+    "word": {
+      "ok": true,
+      "word": "${a:+${b}}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a:+${b}}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a:+${b}}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a:+${b}}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a:+${b}}"
+      ]
+    }
+  },
+  {
+    "input": "\"$a\"",
+    "word": {
+      "ok": true,
+      "word": "$a"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$a"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$a"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"$a\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"$a\""
+      ]
+    }
+  },
+  {
+    "input": "\"${a}\"",
+    "word": {
+      "ok": true,
+      "word": "${a}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"${a}\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"${a}\""
+      ]
+    }
+  },
+  {
+    "input": "\"\\$a\"",
+    "word": {
+      "ok": true,
+      "word": "$a"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "\\$a"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$a"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"\\$a\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"$a\""
+      ]
+    }
+  },
+  {
+    "input": "\"a\\zb\"",
+    "word": {
+      "ok": true,
+      "word": "a\\zb"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "a\\zb"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "a\\zb"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"a\\zb\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"a\\zb\""
+      ]
+    }
+  },
+  {
+    "input": "'a\\b'",
+    "word": {
+      "ok": true,
+      "word": "a\\b"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "a\\b"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "a\\b"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "'a\\b'"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "'a\\b'"
+      ]
+    }
+  },
+  {
+    "input": "${a#\\*}",
+    "word": {
+      "ok": true,
+      "word": "${a#\\*}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a#\\*}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a#\\*}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a#\\*}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a#\\*}"
+      ]
+    }
+  },
+  {
+    "input": "${a%%\\?}",
+    "word": {
+      "ok": true,
+      "word": "${a%%\\?}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a%%\\?}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a%%\\?}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a%%\\?}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a%%\\?}"
+      ]
+    }
+  },
+  {
+    "input": "${a:-a b}",
+    "word": {
+      "ok": true,
+      "word": "${a:-a b}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a:-a b}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a:-a",
+        "b}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a:-a",
+        "b}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a:-a",
+        "b}"
+      ]
+    }
+  },
+  {
+    "input": "a${b:-c}d e",
+    "word": {
+      "ok": true,
+      "word": "a${b:-c}d e"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "a${b:-c}d e"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${b:-c}d",
+        "e"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${b:-c}d",
+        "e"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${b:-c}d",
+        "e"
+      ]
+    }
+  },
+  {
+    "input": "x\\",
+    "word": {
+      "ok": true,
+      "word": "x"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "x\\"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "x"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "x\\"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "x"
+      ]
+    }
+  },
+  {
+    "input": "\"x\\\"",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "x\\"
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${a:=b}",
+    "word": {
+      "ok": true,
+      "word": "${a:=b}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a:=b}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a:=b}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a:=b}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a:=b}"
+      ]
+    }
+  },
+  {
+    "input": "${a:x}",
+    "word": {
+      "ok": true,
+      "word": "${a:x}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a:x}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a:x}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a:x}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a:x}"
+      ]
+    }
+  },
+  {
+    "input": "${a@}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "$_",
+    "word": {
+      "ok": true,
+      "word": "$_"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "$_"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "$_"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "$_"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "$_"
+      ]
+    }
+  },
+  {
+    "input": "${_a}",
+    "word": {
+      "ok": true,
+      "word": "${_a}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${_a}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${_a}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${_a}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${_a}"
+      ]
+    }
+  },
+  {
+    "input": "${a_1}",
+    "word": {
+      "ok": true,
+      "word": "${a_1}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${a_1}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${a_1}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${a_1}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${a_1}"
+      ]
+    }
+  },
+  {
+    "input": "${12}",
+    "word": {
+      "ok": true,
+      "word": "${12}"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "${12}"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "${12}"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "${12}"
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "${12}"
+      ]
+    }
+  },
+  {
+    "input": "${a:-'x}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${a/'x/y}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${a/x/'y}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "\"${a:-b\"",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "${a:-\"b}",
+    "word": {
+      "ok": false
+    },
+    "wordBacktick": {
+      "ok": false
+    },
+    "words": {
+      "ok": false
+    },
+    "wordsRaw": {
+      "ok": false
+    },
+    "wordsRawQuotes": {
+      "ok": false
+    }
+  },
+  {
+    "input": "\"a\\\\\"",
+    "word": {
+      "ok": true,
+      "word": "a\\"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "a\\\\"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "a\\"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"a\\\\\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"a\\\""
+      ]
+    }
+  },
+  {
+    "input": "\"\\a\"",
+    "word": {
+      "ok": true,
+      "word": "\\a"
+    },
+    "wordBacktick": {
+      "ok": true,
+      "word": "\\a"
+    },
+    "words": {
+      "ok": true,
+      "words": [
+        "\\a"
+      ]
+    },
+    "wordsRaw": {
+      "ok": true,
+      "words": [
+        "\"\\a\""
+      ]
+    },
+    "wordsRawQuotes": {
+      "ok": true,
+      "words": [
+        "\"\\a\""
+      ]
+    }
+  }
+]

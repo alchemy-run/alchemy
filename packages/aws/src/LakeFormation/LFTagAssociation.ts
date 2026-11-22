@@ -233,7 +233,9 @@ export const LFTagAssociationProvider = () =>
           }
 
           // 3. RETURN
-          yield* session.note(news.lfTags.map((t) => `${t.tagKey}=${t.tagValues}`).join(", "));
+          yield* session.note(
+            news.lfTags.map((t) => `${t.tagKey}=${t.tagValues.join(",")}`).join(", "),
+          );
           return {
             resource,
             lfTags: news.lfTags.map((t) => ({

@@ -202,7 +202,25 @@ export type ListAttributes = {
   modifiedOn: string;
 };
 
-export type List = Resource<TypeId, ListProps, ListAttributes, never, Providers>;
+/**
+ * Props for {@link List.lookup}: find a list this stack doesn't manage, by
+ * its id or its name.
+ */
+export type ListLookup =
+  | {
+      /**
+       * The Cloudflare-assigned ID of the existing list.
+       */
+      listId: string;
+    }
+  | {
+      /**
+       * The name of the existing list (the `$name` rule expressions use).
+       */
+      name: string;
+    };
+
+export type List = Resource<TypeId, ListProps, ListAttributes, never, Providers, ListLookup>;
 
 /**
  * A Cloudflare account-level List (Lists API) — a named collection of IP
@@ -235,16 +253,37 @@ export type List = Resource<TypeId, ListProps, ListAttributes, never, Providers>
  * });
  * ```
  *
- * **Example:** Redirect list for Bulk Redirects
+ * ### Bulk Redirects
+ * A zone's `http_request_dynamic_redirect` phase caps the number of rules
+ * (10 on most plans). Bulk Redirects scale past that: put every mapping in a
+ * `redirect` list and reference it from a single rule in the account's
+ * `http_request_redirect` phase.
+ *
+ * **Example:** Redirect retired paths with one rule
  * ```typescript
- * const redirects = yield* Cloudflare.Rules.List("redirects", {
+ * const retired = yield* Cloudflare.Rules.List("RetiredSlugs", {
  *   kind: "redirect",
  *   items: [
  *     {
  *       redirect: {
- *         sourceUrl: "example.com/old",
- *         targetUrl: "https://example.com/new",
+ *         sourceUrl: "example.com/services/old-slug",
+ *         targetUrl: "https://example.com/services/new-slug",
  *         statusCode: 301,
+ *         preserveQueryString: true,
+ *       },
+ *     },
+ *   ],
+ * });
+ *
+ * yield* Cloudflare.Ruleset.AccountEntrypoint("BulkRedirects", {
+ *   phase: "http_request_redirect",
+ *   rules: [
+ *     {
+ *       ref: "retired_slugs",
+ *       expression: Output.interpolate`http.request.full_uri in $${retired.name}`,
+ *       action: "redirect",
+ *       actionParameters: {
+ *         fromList: { name: retired.name, key: "http.request.full_uri" },
  *       },
  *     },
  *   ],
@@ -259,6 +298,18 @@ export type List = Resource<TypeId, ListProps, ListAttributes, never, Providers>
  * // The stable `name` attribute interpolates into rule expressions:
  * // `ip.src in $<name>`
  * const expression = list.name.apply((name) => `ip.src in $${name}`);
+ * ```
+ *
+ * ### Looking up an existing List
+ * `List.lookup` reads a list Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by `listId` or `name`, so rules can
+ * reference it. It is read during plan/deploy and never created, updated
+ * or deleted.
+ *
+ * **Example:** Block an existing IP list
+ * ```typescript
+ * const blocklist = Cloudflare.Rules.List.lookup({ name: "blocklist" });
+ * const expression = Output.interpolate`ip.src in $${blocklist.name}`;
  * ```
  *
  * @see https://developers.cloudflare.com/waf/tools/lists/
@@ -319,6 +370,14 @@ export const ListProvider = () =>
         return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "listId" in props
+          ? yield* getListById(accountId, props.listId)
+          : yield* findByName(accountId, props.name);
+      return observed ? toAttributes(observed, accountId) : undefined;
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -446,7 +505,7 @@ const createListName = (id: string, name: string | undefined) =>
 const getListById = (accountId: string, listId: string) =>
   rules
     .getList({ accountId, listId })
-    .pipe(Effect.catchTag("ListNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ListNotFound", () => Effect.undefined));
 
 /**
  * Find a list by exact name. List names are unique per account.

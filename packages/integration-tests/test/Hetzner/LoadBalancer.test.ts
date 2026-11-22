@@ -1,17 +1,18 @@
 import * as Hetzner from "@alchemy.run/hetzner";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as loadBalancers from "@distilled.cloud/hetzner/load_balancers";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../expectDeleteRefused.ts";
+import { hetznerLoadBalancers, hetznerPrimaryIps } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 
-const { test } = Test.make({ providers: Hetzner.providers() });
+const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const waitUntilGone = (id: number) =>
   loadBalancers.getLoadBalancer({ id }).pipe(
@@ -37,7 +38,7 @@ const tcpService = (listenPort: number, destinationPort: number) => ({
   },
 });
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create, update, and delete a load balancer",
   (stack) =>
     Effect.gen(function* () {
@@ -77,6 +78,7 @@ test.provider.skipIf(!hasHetznerCreds)(
           };
         }),
       );
+      yield* expectFound(Hetzner.LoadBalancer.lookup({ name: created.lb.name }), created.lb);
 
       expect(created.lb.id).toEqual(expect.any(Number));
       expect(created.lb.name).toEqual(expect.any(String));
@@ -207,6 +209,42 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(listed?.algorithm).toEqual("least_connections");
       expect(listed?.loadBalancerType).toEqual("lb11");
 
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "Edge",
+        tag: "Hetzner.LoadBalancerDeleteProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const server = yield* Hetzner.Server("Target", {
+            serverType: "cx23",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+            startAfterCreate: false,
+          });
+          const network = yield* Hetzner.Network("LbNet", {
+            ipRange: "10.30.0.0/16",
+            subnets: [
+              {
+                type: "cloud",
+                ipRange: "10.30.1.0/24",
+                networkZone: "eu-central",
+              },
+            ],
+          });
+          return yield* Hetzner.LoadBalancer("Edge", {
+            location: "nbg1",
+            loadBalancerType: "lb11",
+            algorithm: "least_connections",
+            services: [tcpService(80, 8080)],
+            targets: [{ type: "server", server }],
+            networks: [network],
+            deleteProtection: false,
+            labels: { env: "prod", role: "lb" },
+          });
+        }),
+      );
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.lb.id);
@@ -222,10 +260,11 @@ test.provider.skipIf(!hasHetznerCreds)(
       "live",
     ],
     timeout: 180_000,
+    exclusive: hetznerLoadBalancers,
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "replace when location changes",
   (stack) =>
     Effect.gen(function* () {
@@ -272,5 +311,6 @@ test.provider.skipIf(!hasHetznerCreds)(
   {
     tags: ["provider:hetzner", "provider:hetzner:loadbalancer", "provider:hetzner:service", "live"],
     timeout: 180_000,
+    exclusive: hetznerLoadBalancers,
   },
 );

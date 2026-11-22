@@ -31,6 +31,8 @@ export default LambdaBindingsTestFunction.make(
       handler: "handler",
       isExternal: true,
       functionUrl: false,
+      // Invoke bindings follow the alias instead of `$LATEST`.
+      alias: "live",
     });
 
     const invokeFunction = yield* Lambda.InvokeFunction(target);

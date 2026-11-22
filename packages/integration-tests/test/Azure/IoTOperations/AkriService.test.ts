@@ -1,8 +1,8 @@
 import * as Azure from "@alchemy.run/azure";
 import { ensureRegistered } from "@alchemy.run/azure/Arm";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as iot from "@distilled.cloud/azure/iotoperations";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runPaidOnly } from "../gates.ts";
 import {
@@ -50,7 +50,8 @@ test.provider.skipIf(!runPaidOnly)(
       yield* stack.destroy();
 
       const { group, instance, resource } = yield* stack.deploy(program({}));
-      const get = (name: string) => getAkriService(group.resourceGroupName, instance.instanceName, name);
+      const get = (name: string) =>
+        getAkriService(group.resourceGroupName, instance.instanceName, name);
       const observed = yield* get(resource.akriServiceName);
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
       expect(resource.akriServiceId.toLowerCase()).toEqual((observed.id ?? "").toLowerCase());

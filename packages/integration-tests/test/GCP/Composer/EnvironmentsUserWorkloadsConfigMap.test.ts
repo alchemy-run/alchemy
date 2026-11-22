@@ -1,8 +1,8 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as composer from "@distilled.cloud/gcp/composer_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -47,11 +47,9 @@ test.provider(
 
       const created = yield* Effect.flip(
         composer.createProjectsLocationsEnvironmentsUserWorkloadsConfigMaps({
+          name: `${missingParent}/userWorkloadsConfigMaps/alchemy-missing`,
+          data: { LOG_LEVEL: "INFO" },
           parent: missingParent,
-          body: {
-            name: `${missingParent}/userWorkloadsConfigMaps/alchemy-missing`,
-            data: { LOG_LEVEL: "INFO" },
-          },
         }),
       );
       expect(created._tag).toEqual("NotFound");

@@ -1,6 +1,6 @@
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -225,7 +225,7 @@ const projectParent = (project: string) =>
         ? normalizeParent(resource.parent)
         : undefined,
     ),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const resolveParent = (news: { parent?: string }, output: { parent?: string } | undefined) =>
@@ -380,7 +380,7 @@ const toAttrs = (
 const getById = (securityPolicy: string) =>
   compute
     .getOrganizationSecurityPolicies({ securityPolicy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findByShortName = (parentId: string, shortName: string) =>
   compute.listOrganizationSecurityPolicies
@@ -393,7 +393,7 @@ const findByShortName = (parentId: string, shortName: string) =>
       Stream.filter((policy) => policy.shortName === shortName),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)[0]),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFound", () => Effect.undefined),
     );
 
 const observe = (securityPolicyId: string | undefined, parentId: string, shortName: string) =>
@@ -478,8 +478,8 @@ const syncRules = (
           securityPolicyId,
           parentId,
           compute.addRuleOrganizationSecurityPolicies({
+            ...toRuleBody(rule),
             securityPolicy: securityPolicyId,
-            body: toRuleBody(rule),
           }),
           { ignoreAlreadyExists: true },
         );
@@ -490,9 +490,9 @@ const syncRules = (
           securityPolicyId,
           parentId,
           compute.patchRuleOrganizationSecurityPolicies({
+            ...toRuleBody(rule),
             securityPolicy: securityPolicyId,
-            priority,
-            body: toRuleBody(rule),
+            rulePriority: priority,
           }),
         );
       }
@@ -509,7 +509,7 @@ const syncRules = (
           priority,
         }),
         { ignoreNotFound: true },
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     }
   });
 
@@ -549,7 +549,7 @@ export const OrganizationSecurityPolicyProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const shortName = yield* toPhysicalName(id, olds?.shortName, output?.shortName, "policy");
       const parent = yield* resolveParent(olds ?? {}, output).pipe(
@@ -561,7 +561,9 @@ export const OrganizationSecurityPolicyProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "shortName");
     }),
 
     list: () =>
@@ -605,21 +607,19 @@ export const OrganizationSecurityPolicyProvider = () =>
           shortName,
           parentId,
           compute.insertOrganizationSecurityPolicies({
+            shortName,
+            description: desiredDescription,
+            type: typeOf(news.type),
+            rules: withDefaultRule(news.rules),
+            advancedOptionsConfig: news.advancedOptionsConfig,
+            adaptiveProtectionConfig: news.adaptiveProtectionConfig,
+            recaptchaOptionsConfig: news.recaptchaOptionsConfig,
+            ddosProtectionConfig: news.ddosProtectionConfig,
+            userDefinedFields: news.userDefinedFields,
             parentId,
-            body: {
-              shortName,
-              description: desiredDescription,
-              type: typeOf(news.type),
-              rules: withDefaultRule(news.rules),
-              advancedOptionsConfig: news.advancedOptionsConfig,
-              adaptiveProtectionConfig: news.adaptiveProtectionConfig,
-              recaptchaOptionsConfig: news.recaptchaOptionsConfig,
-              ddosProtectionConfig: news.ddosProtectionConfig,
-              userDefinedFields: news.userDefinedFields,
-            },
           }),
           { ignoreAlreadyExists: true },
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         const createdId = inserted !== undefined ? idFromOperation(inserted) : "";
         current = yield* awaitResource(
           createdId.length > 0 ? createdId : (output?.securityPolicyId ?? ""),
@@ -683,10 +683,7 @@ export const OrganizationSecurityPolicyProvider = () =>
         yield* runOp(
           securityPolicyId,
           parentId,
-          compute.patchOrganizationSecurityPolicies({
-            securityPolicy: securityPolicyId,
-            body: patch,
-          }),
+          compute.patchOrganizationSecurityPolicies({ ...patch, securityPolicy: securityPolicyId }),
         );
         current = (yield* getById(securityPolicyId)) ?? current;
       }
@@ -721,7 +718,7 @@ export const OrganizationSecurityPolicyProvider = () =>
               ignore: ["RESOURCE_NOT_FOUND"],
             }),
           ),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

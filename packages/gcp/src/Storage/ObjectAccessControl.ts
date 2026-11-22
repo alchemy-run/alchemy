@@ -144,7 +144,7 @@ const getByEntity = (bucketName: string, object: string, entity: string, generat
       entity,
       generation,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOnObject = (bucketName: string, object: string) =>
   storage.listObjectAccessControls({ bucket: bucketName, object }).pipe(
@@ -285,12 +285,7 @@ export const ObjectAccessControlProvider = () =>
 
       if (current === undefined) {
         const created = yield* storage
-          .insertObjectAccessControls({
-            bucket: bucketName,
-            object,
-            generation,
-            body: { entity, role },
-          })
+          .insertObjectAccessControls({ entity, role, bucket: bucketName, object, generation })
           .pipe(
             Effect.catchTag("Conflict", () => getByEntity(bucketName, object, entity, generation)),
           );
@@ -307,11 +302,11 @@ export const ObjectAccessControlProvider = () =>
 
       if (normalizeRole(current.role ?? "") !== role) {
         current = yield* storage.patchObjectAccessControls({
+          role,
           bucket: bucketName,
           object,
           entity,
           generation,
-          body: { entity, role },
         });
       }
 

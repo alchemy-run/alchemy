@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as chaos from "@distilled.cloud/azure/chaos";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
@@ -70,8 +70,15 @@ const program = (props: { location: string; duration: string; tags: Record<strin
     return { group, target, experiment };
   });
 
-const actionOf = (observed: chaos.GetExperimentResponse) =>
-  observed.properties.steps[0]?.branches[0]?.actions[0];
+const actionOf = (observed: chaos.GetExperimentResponse) => {
+  const action = observed.properties.steps[0]?.branches[0]?.actions[0];
+  return action?.type === "continuous" ? action : undefined;
+};
+
+const targetsOf = (observed: chaos.GetExperimentResponse) => {
+  const selector = observed.properties.selectors[0];
+  return selector?.type === "List" ? selector.targets : undefined;
+};
 
 // Experiments are free unless started (the test never starts one);
 // provisions in ~1-2 minutes.
@@ -96,9 +103,7 @@ test.provider(
       const observed = yield* get(experiment.experimentName);
       expect(actionOf(observed)?.duration).toEqual("PT5M");
       expect(actionOf(observed)?.parameters?.length).toEqual(9);
-      expect(observed.properties.selectors[0]?.targets?.[0]?.id.toLowerCase()).toEqual(
-        target.targetId.toLowerCase(),
-      );
+      expect(targetsOf(observed)?.[0]?.id.toLowerCase()).toEqual(target.targetId.toLowerCase());
       expect(observed.tags?.env).toEqual("a");
 
       // In place: definition and tags.

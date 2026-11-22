@@ -2,9 +2,17 @@ import * as appflow from "@distilled.cloud/aws/appflow";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class ConnectorProfileUnexpectedResponse extends Data.TaggedError(
+  "ConnectorProfileUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ConnectorProfileProps {
   /**
@@ -50,8 +58,18 @@ export interface ConnectorProfile extends Resource<
     credentialsArn: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ConnectorProfileLookup
 > {}
+
+/**
+ * Props for {@link ConnectorProfile.lookup}: find a connector profile this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ConnectorProfileLookup {
+  /** The connector profile name of the existing connector profile. */
+  connectorProfileName: string;
+}
 
 /**
  * An Amazon AppFlow connector profile. A connector profile stores the
@@ -82,6 +100,16 @@ export interface ConnectorProfile extends Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing connector profile
+ * `ConnectorProfile.lookup` references a connector profile Alchemy doesn't manage (created in the
+ * console or by another stack), found by `connectorProfileName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing connector profile
+ * ```typescript
+ * const existing = AWS.AppFlow.ConnectorProfile.lookup({ connectorProfileName: "my-connector-profile" });
  * ```
  *
  * @resource
@@ -123,6 +151,13 @@ export const ConnectorProfileProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ connectorProfileName: name }) {
+          if (name === undefined) return undefined;
+          const profile = yield* observe(name);
+          if (profile === undefined || profile.connectorProfileArn === undefined) return undefined;
+          return toAttrs(name, profile);
+        }),
+
         read: Effect.fn(function* ({ olds, output }) {
           const name = output?.connectorProfileName ?? olds?.connectorProfileName;
           if (name === undefined) return undefined;
@@ -158,9 +193,9 @@ export const ConnectorProfileProvider = () =>
           }
           live = yield* observe(name);
           if (live === undefined || live.connectorProfileArn === undefined) {
-            return yield* Effect.fail(
-              new Error(`Connector profile '${name}' was not found after reconcile`),
-            );
+            return yield* new ConnectorProfileUnexpectedResponse({
+              message: `Connector profile '${name}' was not found after reconcile`,
+            });
           }
 
           yield* session.note(name);

@@ -94,7 +94,7 @@ export const SpecialistPool = Resource<SpecialistPool>("GCP.AIPlatform.Specialis
 export class SpecialistPoolNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.SpecialistPoolNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const sorted = (values: readonly string[] | undefined) =>
@@ -121,15 +121,17 @@ const toAttrs = (pool: aiplatform.GoogleCloudAiplatformV1SpecialistPool, project
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsSpecialistPools({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((pool) =>
-      pool ? Effect.succeed(pool) : Effect.fail(new SpecialistPoolNotResolved({ name })),
+      pool
+        ? Effect.succeed(pool)
+        : Effect.fail(new SpecialistPoolNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.SpecialistPoolNotResolved",
@@ -154,7 +156,7 @@ const findByDisplayName = (parent: string, displayName: string) =>
     Stream.filter((pool) => pool.displayName === displayName),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const SpecialistPoolProvider = () =>
@@ -213,14 +215,12 @@ export const SpecialistPoolProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsSpecialistPools({
+            displayName,
+            specialistManagerEmails: managers,
+            specialistWorkerEmails: workers,
             parent,
-            body: {
-              displayName,
-              specialistManagerEmails: managers,
-              specialistWorkerEmails: workers,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created, {
             alreadyExistsOk: true,
@@ -237,7 +237,7 @@ export const SpecialistPoolProvider = () =>
 
       if (current === undefined) {
         return yield* new SpecialistPoolNotResolved({
-          name: output?.name ?? `${parent}/specialistPools/-`,
+          resourceName: output?.name ?? `${parent}/specialistPools/-`,
         });
       }
 
@@ -248,6 +248,9 @@ export const SpecialistPoolProvider = () =>
 
       if (displayChanged || managersChanged || workersChanged) {
         const patched = yield* aiplatform.patchProjectsLocationsSpecialistPools({
+          displayName,
+          specialistManagerEmails: managers,
+          specialistWorkerEmails: workers,
           name,
           updateMask: [
             displayChanged ? "displayName" : undefined,
@@ -256,12 +259,6 @@ export const SpecialistPoolProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            specialistManagerEmails: managers,
-            specialistWorkerEmails: workers,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilExists(name);
@@ -278,7 +275,7 @@ export const SpecialistPoolProvider = () =>
           name: output.name,
           force: true,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

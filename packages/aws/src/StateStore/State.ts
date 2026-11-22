@@ -5,11 +5,15 @@ import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { type BucketObjects, makeBucketState } from "alchemy/State/BucketState";
 import * as Provisioning from "alchemy/State/Provisioning";
 import { State, StateStoreError } from "alchemy/State/State";
+import { makeSealingCodec, StateEncryption } from "alchemy/State/StateEncryption";
 import { recordStateStoreInit } from "alchemy/Telemetry/Metrics";
+import { globalLogs } from "alchemy/Util/LogRecord";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as LogLevel from "effect/LogLevel";
+import * as Option from "effect/Option";
 import * as References from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
@@ -20,6 +24,7 @@ import * as Endpoint from "../Endpoint.ts";
 import { AWSEnvironment, providedOrDefault } from "../Environment.ts";
 import * as AwsRegion from "../Region.ts";
 import { syncBucketEncryption, type BucketEncryption } from "../S3/Bucket.ts";
+import { customerKeyArn, kmsKeyring, resolveStateKey, StateKmsKey } from "./Key.ts";
 
 /** Maximum number of keys S3 accepts in a single DeleteObjects call. */
 const DELETE_BATCH_SIZE = 1000;
@@ -52,14 +57,20 @@ export interface S3StateOptions {
   prefix?: string;
   /**
    * Default encryption enforced on every fresh state-service initialization.
-   * Omission restores AES256, no KMS key, bucket keys disabled, and no blocked
-   * encryption types. Set `blockedEncryptionTypes: ["SSE-C"]` to block
-   * customer-provided keys. Existing encrypted state objects are not rewritten.
+   * Set `blockedEncryptionTypes: ["SSE-C"]` to block customer-provided keys.
+   * Existing encrypted state objects are not rewritten.
    *
-   * @default `{ sseAlgorithm: "AES256", bucketKeyEnabled: false, blockedEncryptionTypes: [] }`
+   * @default `{ sseAlgorithm: "aws:kms", kmsMasterKeyId: <the store's KMS key>, bucketKeyEnabled: true }`
    */
   encryption?: BucketEncryption;
 }
+
+/** SSE-KMS under the store's key, with a bucket key to keep KMS requests down. */
+export const stateBucketEncryption = (keyArn: string): BucketEncryption => ({
+  sseAlgorithm: "aws:kms",
+  kmsMasterKeyId: keyArn,
+  bucketKeyEnabled: true,
+});
 
 /** Whether a state bucket exists. */
 export const stateBucketExists = (bucket: string) =>
@@ -80,7 +91,7 @@ type S3Deps = Credentials | HttpClient | Region;
  * the store is built (the CLI's run log sets one) must not reach them. Floors
  * already stricter than Info are left alone.
  */
-const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLevel, (level) =>
+export const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLevel, (level) =>
   LogLevel.isLessThan(level, "Info") ? "Info" : level,
 );
 
@@ -110,8 +121,8 @@ const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLevel, (le
  *
  *
  * ### Using the S3 State Store
- * Pass `AWS.state()` as the `state` option of a Stack. By default the
- * state is stored in an account-regional bucket named
+ * Pass `AWS.state({ backend: "s3" })` as the `state` option of a Stack. By
+ * default the state is stored in an account-regional bucket named
  * `alchemy-state-{accountId}-{region}-an`.
  *
  * **Example:** Default bucket
@@ -121,7 +132,7 @@ const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLevel, (le
  *
  * const Stack = Alchemy.Stack(
  *   "my-stack",
- *   { providers: AWS.providers(), state: AWS.state() },
+ *   { providers: AWS.providers(), state: AWS.state({ backend: "s3" }) },
  *   Effect.gen(function* () {
  *     // ...
  *   }),
@@ -182,23 +193,39 @@ const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLevel, (le
  *
  * Omitted `blockedEncryptionTypes` is equivalent to `[]`: no encryption types
  * are blocked, so SSE-C writes are permitted via AWS's `NONE` value. Removing
- * an explicit block clears it. Omitting `encryption` restores AES256, no KMS
- * key, disabled bucket keys, and no encryption restrictions. Existing objects
- * are not rewritten.
+ * an explicit block clears it. Omitting `encryption` restores SSE-KMS under
+ * the store's key with a bucket key, and no encryption restrictions. Existing
+ * objects are not rewritten.
  *
- * @resource
+ * ### Encryption
+ * The store encrypts the bucket with SSE-KMS under its own key,
+ * `alias/alchemy-state`, which it shares with the DynamoDB store of the same
+ * name. Every secret in state (a `Redacted` value) is encrypted with a data
+ * key from that key before it is written, one data key per stage per
+ * deploy. A record written with a secret in plaintext is encrypted the
+ * first time the store reads it. Provide `AWS.stateEncryption()` to choose
+ * the key, or another `StateEncryption` to encrypt secrets with it instead.
+ *
+ * **Example:** Your own KMS key
+ * ```typescript
+ * const stateStore = AWS.state({ backend: "s3" }).pipe(
+ *   Layer.provide(AWS.stateEncryption({ kmsKeyId: "alias/my-state-key" })),
+ * );
+ * ```
  */
-export const state = (options: S3StateOptions = {}) =>
+export const s3State = (options: S3StateOptions = {}) =>
   Layer.effect(
     State,
     Effect.gen(function* () {
       const scope = yield* Effect.scope;
-      const context = yield* Effect.context<S3Deps | AWSEnvironment>();
+      const context = yield* Effect.context<S3Deps | AWSEnvironment | SecureRandom.SecureRandom>();
 
       // Bind the lease to this layer's scope. The cached effect runs on
       // the first state operation, which may sit in a shorter scope.
       const make = Scope.provide(makeS3State(options), scope).pipe(
         recordStateStoreInit,
+        // Account-level: filed in the global run log, not the project's.
+        globalLogs,
         Effect.orDie,
         Effect.provideContext(context),
       );
@@ -219,6 +246,11 @@ export const makeS3State = (options: S3StateOptions = {}) =>
     // Captured under `withoutSdkDebugLogs` (below), so every store call runs
     // with the raised floor.
     const context = yield* Effect.context<S3Deps | AWSEnvironment>();
+    const encryption = yield* Effect.serviceOption(StateEncryption);
+    // The KMS key of the AWS.stateEncryption() provided to the store, or
+    // else the store's own; it encrypts the bucket unless `encryption` does.
+    const kmsKey = yield* Effect.serviceOption(StateKmsKey);
+    if (Option.isSome(kmsKey)) yield* kmsKey.value.forStore(options.name);
 
     const toError = (cause: unknown) =>
       new StateStoreError({
@@ -232,26 +264,57 @@ export const makeS3State = (options: S3StateOptions = {}) =>
 
     // Anything that touches AWS credentials must NOT run at layer
     // construction time. Resolving the environment (account/region),
-    // deriving the bucket name, and ensuring the bucket exists all run on
-    // the first state operation; `makeBucketState` caches the result.
-    const objects = Effect.gen(function* () {
-      const { accountId, region } = yield* AWSEnvironment.current;
-      if (options.name !== undefined) yield* Provisioning.storeName(options.name);
-      const bucketName =
-        options.bucketName ?? createStateBucketName(accountId, region, options.name);
-      const ensure = ensureStateBucket(bucketName, region, options);
-      // First use creates the bucket (except in CI); every use converges
-      // its settings.
-      yield* (yield* stateBucketExists(bucketName))
-        ? ensure
-        : Provisioning.deployMissing(
-            { backend: "aws", name: options.name, label: `S3 state bucket '${bucketName}'` },
-            ensure,
-          );
-      return s3Objects(bucketName, run);
-    }).pipe(Effect.provideContext(context), Effect.mapError(toError));
+    // deriving the bucket name, resolving the KMS key and ensuring the bucket
+    // exists all run once, on the first state operation.
+    const resolved = yield* Effect.cached(
+      Effect.gen(function* () {
+        const { accountId, region } = yield* AWSEnvironment.current;
+        if (options.name !== undefined) yield* Provisioning.storeName(options.name);
+        const bucketName =
+          options.bucketName ?? createStateBucketName(accountId, region, options.name);
+        const store = {
+          backend: "aws-s3",
+          flags: { name: options.name },
+          label: `S3 state bucket '${bucketName}'`,
+          configured: options.bucketName !== undefined,
+        };
+        // A bucket whose `encryption` names a customer-managed key seals
+        // secrets with that key too, unless a layer picks one.
+        const configuredKey =
+          Option.isNone(kmsKey) &&
+          options.encryption?.sseAlgorithm !== "AES256" &&
+          options.encryption?.kmsMasterKeyId !== undefined
+            ? yield* customerKeyArn(options.encryption.kmsMasterKeyId)
+            : undefined;
+        const keyArn = Option.isSome(kmsKey)
+          ? yield* kmsKey.value.arn
+          : (configuredKey ?? (yield* resolveStateKey({ name: options.name, store })));
+        const ensure = ensureStateBucket(bucketName, region, {
+          ...options,
+          encryption: options.encryption ?? stateBucketEncryption(keyArn),
+        });
+        // First use creates the bucket (except in CI); every use converges
+        // its settings.
+        yield* (yield* stateBucketExists(bucketName))
+          ? ensure
+          : Provisioning.deployMissing(store, ensure);
+        return { objects: s3Objects(bucketName, run), keyArn };
+      }).pipe(Effect.provideContext(context), Effect.mapError(toError)),
+    );
 
-    return yield* makeBucketState({ id: "s3", label: "S3", prefix: options.prefix, objects });
+    return yield* makeBucketState({
+      id: "s3",
+      label: "S3",
+      prefix: options.prefix,
+      objects: resolved.pipe(Effect.map(({ objects }) => objects)),
+      // Secrets are encrypted with the StateEncryption provided to the store,
+      // and otherwise with data keys from the store's own KMS key.
+      codec: makeSealingCodec(
+        Option.getOrElse(encryption, () =>
+          kmsKeyring(resolved.pipe(Effect.map(({ keyArn }) => keyArn)), run),
+        ),
+      ),
+    });
   }).pipe(withoutSdkDebugLogs);
 
 /** The S3 {@link BucketObjects} of `bucket`, versioned by ETag. */
@@ -286,12 +349,14 @@ const s3Objects = (
       s3.getObject({ Bucket: bucket, Key: key }).pipe(
         Effect.flatMap((result) =>
           result.Body === undefined
-            ? Effect.succeed(undefined)
-            : Stream.mkString(Stream.decodeText(result.Body)).pipe(
+            ? Effect.undefined
+            : result.Body.pipe(
+                Stream.decodeText,
+                Stream.mkString,
                 Effect.map((text) => ({ text, version: result.ETag ?? "" })),
               ),
         ),
-        Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
+        Effect.catchTag("NoSuchKey", () => Effect.undefined),
       ),
     ),
   write: (key, body, condition) =>
@@ -324,8 +389,9 @@ const s3Objects = (
             times: 4,
           }),
           // A lost condition: 412, or 409 after retries.
-          Effect.catchTag(["PreconditionFailed", "ConditionalRequestConflict"], () =>
-            Effect.succeed(undefined),
+          Effect.catchTag(
+            ["PreconditionFailed", "ConditionalRequestConflict"],
+            () => Effect.undefined,
           ),
         ),
     ),
@@ -444,9 +510,7 @@ const ensureStateBucket = (bucket: string, region: string, options: S3StateOptio
     };
     const observedPublicAccess = yield* s3.getPublicAccessBlock({ Bucket: bucket }).pipe(
       Effect.map((result) => result.PublicAccessBlockConfiguration),
-      Effect.catchTag("NoSuchPublicAccessBlockConfiguration", () =>
-        Effect.succeed<s3.PublicAccessBlockConfiguration | undefined>(undefined),
-      ),
+      Effect.catchTag("NoSuchPublicAccessBlockConfiguration", () => Effect.undefined),
     );
     const publicAccessFingerprint = (config: s3.PublicAccessBlockConfiguration | undefined) =>
       JSON.stringify({
@@ -467,9 +531,7 @@ const ensureStateBucket = (bucket: string, region: string, options: S3StateOptio
     const desiredOwnership = "BucketOwnerEnforced";
     const observedOwnership = yield* s3.getBucketOwnershipControls({ Bucket: bucket }).pipe(
       Effect.map((result) => result.OwnershipControls?.Rules?.[0]?.ObjectOwnership),
-      Effect.catchTag("OwnershipControlsNotFoundError", () =>
-        Effect.succeed<string | undefined>(undefined),
-      ),
+      Effect.catchTag("OwnershipControlsNotFoundError", () => Effect.undefined),
     );
     if (observedOwnership !== desiredOwnership) {
       yield* s3.putBucketOwnershipControls({
@@ -507,13 +569,15 @@ export const stateEnvironment = () =>
 
 /**
  * Create the state bucket with its secure defaults, or converge an existing
- * one to them: what first use of {@link state} does.
+ * one to them: what first use of {@link state} does. Objects are encrypted
+ * with SSE-KMS under `keyArn`.
  */
 export const provisionStateBucket = (
   bucket: string,
   region: string,
+  keyArn: string,
 ): Effect.Effect<void, StateStoreError, S3Deps> =>
-  ensureStateBucket(bucket, region, {}).pipe(
+  ensureStateBucket(bucket, region, { encryption: stateBucketEncryption(keyArn) }).pipe(
     Effect.mapError(
       (cause) =>
         new StateStoreError({

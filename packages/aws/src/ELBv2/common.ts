@@ -351,3 +351,36 @@ export const serializeConditions = (conditions: ListenerRuleCondition[]): elbv2.
     }
     return out;
   });
+
+/**
+ * Project an observed ELBv2 attribute list (load balancer, target group, or
+ * listener) onto the keys declared in `props.attributes`. AWS reports every
+ * attribute, defaults included, so comparing only the declared keys keeps
+ * defaults out of drift. Returns `undefined` when nothing is declared.
+ */
+export const observedAttributes = (
+  declared: Record<string, string> | undefined,
+  observed: readonly { Key?: string; Value?: string }[] | undefined,
+): Record<string, string> | undefined => {
+  if (!declared || Object.keys(declared).length === 0) return undefined;
+  const values = new Map(
+    (observed ?? []).flatMap((a) =>
+      a.Key !== undefined && a.Value !== undefined ? [[a.Key, a.Value] as const] : [],
+    ),
+  );
+  return Object.fromEntries(
+    Object.keys(declared).flatMap((key) => {
+      const value = values.get(key);
+      return value === undefined ? [] : [[key, value] as const];
+    }),
+  );
+};
+
+/** The declared attributes whose observed value differs, shaped for `modify*Attributes`. */
+export const attributeDelta = (
+  declared: Record<string, string> | undefined,
+  observed: Record<string, string> | undefined,
+): { Key: string; Value: string }[] =>
+  Object.entries(declared ?? {}).flatMap(([Key, Value]) =>
+    observed?.[Key] === Value ? [] : [{ Key, Value }],
+  );

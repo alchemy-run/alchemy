@@ -220,7 +220,7 @@ export const SecurityConfigProvider = () =>
       const observe = Effect.fn(function* (configId: string) {
         return yield* aoss.getSecurityConfig({ id: configId }).pipe(
           Effect.map((r) => r.securityConfigDetail),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

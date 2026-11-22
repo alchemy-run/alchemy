@@ -189,8 +189,31 @@ export type OrganizationsVpcFlowLogsConfig = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationsVpcFlowLogsConfigLookup
 >;
+
+/**
+ * Props for {@link OrganizationsVpcFlowLogsConfig.lookup}: find an
+ * organizations vpc flow logs config this stack doesn't manage by its
+ * identifiers.
+ */
+export interface OrganizationsVpcFlowLogsConfigLookup {
+  /**
+   * Config id (the `{vpc_flow_logs_config}` segment of
+   * `organizations/{organ
+   * ization}/locations/global/vpcFlowLogsConfigs/{vpc_flow_logs_config}`).
+   */
+  vpcFlowLogsConfigId: string;
+  /**
+   * Organization id or `organizations/{organization}`.
+   */
+  organization?: string;
+  /**
+   * Location. Must be `global`.
+   */
+  location?: string;
+}
 
 /**
  * An organization-level VPC Flow Logs configuration.
@@ -223,6 +246,19 @@ export type OrganizationsVpcFlowLogsConfig = Resource<
  *     crossProjectMetadata: "CROSS_PROJECT_METADATA_ENABLED",
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing organizations vpc flow logs config
+ * `OrganizationsVpcFlowLogsConfig.lookup` references an organizations vpc
+ * flow logs config Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared organizations vpc flow logs config.
+ *
+ * **Example:** Reference an existing organizations vpc flow logs config
+ * ```typescript
+ * const organizationsVpcFlowLogsConfig = GCP.NetworkManagement.OrganizationsVpcFlowLogsConfig.lookup({
+ *   vpcFlowLogsConfigId: "my-vpc-flow-logs-config",
+ * });
  * ```
  *
  * @resource
@@ -325,7 +361,7 @@ const toAttrs = (config: networkmanagement.VpcFlowLogsConfig) => {
 const getByName = (name: string) =>
   networkmanagement
     .getOrganizationsLocationsVpcFlowLogsConfigs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (organization: string) =>
   collectPages(
@@ -379,6 +415,23 @@ export const OrganizationsVpcFlowLogsConfigProvider = () =>
         return { action: "replace" as const };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({
+      vpcFlowLogsConfigId,
+      organization: lookupOrganization,
+      location: lookupLocation,
+    }) {
+      const organization = yield* resolveOrganization(lookupOrganization, undefined).pipe(
+        Effect.catchTag("GCP.NetworkManagement.OrganizationRequired", () => Effect.succeed("")),
+      );
+      const location = normalizeLocation(lookupLocation, DEFAULT_GLOBAL);
+      const name =
+        organization.length > 0 ? resourceName(organization, location, vpcFlowLogsConfigId) : "";
+      if (name.length === 0) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -451,20 +504,18 @@ export const OrganizationsVpcFlowLogsConfigProvider = () =>
       if (current === undefined) {
         const created = yield* networkmanagement
           .createOrganizationsLocationsVpcFlowLogsConfigs({
+            description: news.description,
+            labels: desiredLabels,
+            state: createState,
+            aggregationInterval,
+            flowSampling,
+            metadata,
+            metadataFields: metadataFields.length > 0 ? metadataFields : undefined,
+            filterExpr,
+            crossProjectMetadata,
+            ...target,
             parent: organizationParent(organization, location),
             vpcFlowLogsConfigId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              state: createState,
-              aggregationInterval,
-              flowSampling,
-              metadata,
-              metadataFields: metadataFields.length > 0 ? metadataFields : undefined,
-              filterExpr,
-              crossProjectMetadata,
-              ...target,
-            },
           })
           .pipe(
             Effect.retry({
@@ -472,7 +523,7 @@ export const OrganizationsVpcFlowLogsConfigProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -508,20 +559,17 @@ export const OrganizationsVpcFlowLogsConfigProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkmanagement.patchOrganizationsLocationsVpcFlowLogsConfigs({
+          labels: desiredLabels,
+          description: news.description,
+          state,
+          aggregationInterval,
+          flowSampling,
+          metadata,
+          metadataFields,
+          filterExpr,
+          crossProjectMetadata,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            state,
-            aggregationInterval,
-            flowSampling,
-            metadata,
-            metadataFields,
-            filterExpr,
-            crossProjectMetadata,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
@@ -539,7 +587,7 @@ export const OrganizationsVpcFlowLogsConfigProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

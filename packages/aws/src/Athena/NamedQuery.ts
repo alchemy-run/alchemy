@@ -63,8 +63,18 @@ export interface NamedQuery extends Resource<
     workGroup: string;
   },
   never,
-  Providers
+  Providers,
+  NamedQueryLookup
 > {}
+
+/**
+ * Props for {@link NamedQuery.lookup}: find a named query this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface NamedQueryLookup {
+  /** The id of the existing named query. */
+  namedQueryId: string;
+}
 
 /**
  * An Amazon Athena named (saved) query — a reusable SQL statement stored
@@ -81,6 +91,16 @@ export interface NamedQuery extends Resource<
  *     "FROM orders GROUP BY customer_id ORDER BY total DESC LIMIT 10",
  *   workGroup: wg.workGroupName,
  * });
+ * ```
+ *
+ * ### Looking up an existing named query
+ * `NamedQuery.lookup` references a named query Alchemy doesn't manage (created in the
+ * console or by another stack), found by `namedQueryId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing named query
+ * ```typescript
+ * const existing = AWS.Athena.NamedQuery.lookup({ namedQueryId: "..." });
  * ```
  *
  * @resource
@@ -114,7 +134,7 @@ export const NamedQueryProvider = () =>
       const getOne = (namedQueryId: string) =>
         athena.getNamedQuery({ NamedQueryId: namedQueryId }).pipe(
           Effect.map((res) => res.NamedQuery),
-          Effect.catchTag("NamedQueryNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NamedQueryNotFound", () => Effect.undefined),
         );
 
       return {
@@ -127,6 +147,10 @@ export const NamedQueryProvider = () =>
           if ((olds?.workGroup ?? "primary") !== (news.workGroup ?? "primary")) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ namedQueryId }) {
+          const nq = yield* getOne(namedQueryId);
+          return nq ? toAttributes(nq) : undefined;
         }),
         read: Effect.fn(function* ({ output }) {
           // Named queries have no deterministic name-based lookup — identity is

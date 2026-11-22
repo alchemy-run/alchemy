@@ -2,13 +2,15 @@ import * as AWS from "@alchemy.run/aws";
 import { Network } from "@alchemy.run/aws/EC2/Network";
 import { Cluster } from "@alchemy.run/aws/EKS/Cluster";
 import { makeEksTransport } from "@alchemy.run/aws/EKS/KubernetesAdapter";
+import * as GCP from "@alchemy.run/gcp";
 import * as Kubernetes from "@alchemy.run/kubernetes";
 import { readObject } from "@alchemy.run/kubernetes/Client";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
-import { describe, expect } from "alchemy-test";
+import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -16,10 +18,11 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import EksHostApi from "./fixtures/deployment.ts";
+import EksHostApi, { EKS_GCP_MESSAGE, EksHostEvents } from "./fixtures/deployment.ts";
 import {
   destroyKindStack,
   KindTestCluster,
+  decodeBase64,
   kubectlGet,
   removeRbac,
   restrictedConnection,
@@ -27,7 +30,9 @@ import {
   type KindCluster,
 } from "./fixtures/kind.ts";
 
-const testOptions = { providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()) };
+const testOptions = {
+  providers: Layer.mergeAll(AWS.providers(), GCP.providers(), Kubernetes.providers()),
+};
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 
 // Ungated probe: `Deployment` is a composite host (in-cluster
@@ -89,34 +94,73 @@ describe(
     );
 
     test.provider(
-      "Redacted env values reach the container unwrapped",
+      "Redacted env values live in the workload's own Secret, read by reference",
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
-          const token = "deployment-token-sentinel";
           const nested = "deployment-nested-sentinel";
-          yield* stack.deploy(
-            Kubernetes.Deployment("SecretEnv", {
-              cluster: cluster.connection,
-              name: "secret-env",
-              image,
-              port: 8080,
-              serviceType: "ClusterIP",
-              env: {
-                TOKEN: Redacted.make(token),
-                CONFIG: Redacted.make({ nested }),
-              },
-            }),
-          );
+          const deploy = (token: string) =>
+            stack.deploy(
+              Kubernetes.Deployment("SecretEnv", {
+                cluster: cluster.connection,
+                name: "secret-env",
+                image,
+                port: 8080,
+                serviceType: "ClusterIP",
+                env: {
+                  TOKEN: Redacted.make(token),
+                  CONFIG: Redacted.make({ nested }),
+                  PLAIN: "visible",
+                  POD_NAME: { valueFrom: { fieldRef: { fieldPath: "metadata.name" } } },
+                },
+              }),
+            );
+          const read = Effect.gen(function* () {
+            const { deployment } = yield* objectsOf("secret-env");
+            const template = deployment.spec.template;
+            return {
+              env: Object.fromEntries(
+                (
+                  template.spec.containers[0].env as {
+                    name: string;
+                    value?: string;
+                    valueFrom?: any;
+                  }[]
+                ).map((entry) => [entry.name, entry]),
+              ),
+              digest: template.metadata.annotations?.["alchemy.run/env-secret-digest"],
+              secret: yield* kubectlGet(cluster, ["secret", "secret-env-env", ...ns]),
+            };
+          });
 
-          const { deployment } = yield* objectsOf("secret-env");
-          const env = Object.fromEntries(
-            (
-              deployment.spec.template.spec.containers[0].env as { name: string; value: string }[]
-            ).map((entry) => [entry.name, entry.value]),
+          yield* deploy("deployment-token-sentinel-a");
+          const first = yield* read;
+          // The pod template names the Secret; no value appears in it.
+          expect(JSON.stringify(first.env)).not.toContain("sentinel");
+          expect(first.env.TOKEN).toEqual({
+            name: "TOKEN",
+            valueFrom: { secretKeyRef: { name: "secret-env-env", key: "TOKEN" } },
+          });
+          expect(first.env.CONFIG.valueFrom.secretKeyRef).toEqual({
+            name: "secret-env-env",
+            key: "CONFIG",
+          });
+          expect(first.env.PLAIN).toEqual({ name: "PLAIN", value: "visible" });
+          expect(first.env.POD_NAME.valueFrom).toEqual({
+            fieldRef: { apiVersion: "v1", fieldPath: "metadata.name" },
+          });
+          expect(yield* decodeBase64(first.secret.data.TOKEN)).toBe("deployment-token-sentinel-a");
+          expect(yield* decodeBase64(first.secret.data.CONFIG)).toBe(JSON.stringify({ nested }));
+          expect(first.secret.data.PLAIN).toBeUndefined();
+
+          // A rotated secret updates the Secret and rolls the pods.
+          yield* deploy("deployment-token-sentinel-b");
+          const rotated = yield* read;
+          expect(yield* decodeBase64(rotated.secret.data.TOKEN)).toBe(
+            "deployment-token-sentinel-b",
           );
-          expect(env.TOKEN).toBe(token);
-          expect(env.CONFIG).toBe(JSON.stringify({ nested }));
+          expect(rotated.digest).toMatch(/^[0-9a-f]{16}$/);
+          expect(rotated.digest).not.toBe(first.digest);
 
           yield* stack.destroy();
           expect(yield* objectsOf("secret-env")).toEqual({
@@ -124,6 +168,46 @@ describe(
             deployment: undefined,
             service: undefined,
           });
+          expect(yield* kubectlGet(cluster, ["secret", "secret-env-env", ...ns])).toBeUndefined();
+        }),
+      { timeout: 120_000 },
+    );
+
+    // On EKS `isolated-sandbox` runs each pod in a Nitro Sandbox. kind has no
+    // Nitro, so a RuntimeClass of that name backed by runc stands in: the
+    // case pins that `runtimeClassName` reaches the applied pod template.
+    test.provider(
+      "runtimeClassName reaches the pod template",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          yield* stack.deploy(
+            Effect.gen(function* () {
+              yield* Kubernetes.Manifest("SandboxRuntimeClass", {
+                cluster: cluster.connection,
+                manifest: {
+                  apiVersion: "node.k8s.io/v1",
+                  kind: "RuntimeClass",
+                  metadata: { name: "isolated-sandbox" },
+                  handler: "runc",
+                },
+              });
+              return yield* Kubernetes.Deployment("Sandboxed", {
+                cluster: cluster.connection,
+                name: "sandboxed",
+                image,
+                port: 8080,
+                serviceType: "ClusterIP",
+                runtimeClassName: "isolated-sandbox",
+              });
+            }),
+          );
+
+          const { deployment } = yield* objectsOf("sandboxed");
+          expect(deployment.spec.template.spec.runtimeClassName).toBe("isolated-sandbox");
+
+          yield* stack.destroy();
+          expect((yield* objectsOf("sandboxed")).deployment).toBeUndefined();
         }),
       { timeout: 120_000 },
     );
@@ -234,6 +318,8 @@ describe.skipIf(!!process.env.FAST)(
       "provider:aws:dynamodb",
       "provider:aws:ec2",
       "provider:aws:eks",
+      "provider:gcp",
+      "provider:gcp:pubsub",
       "provider:kubernetes",
       "provider:kubernetes:deployment",
       "provider:kubernetes:helmchart",
@@ -244,6 +330,7 @@ describe.skipIf(!!process.env.FAST)(
     let baseUrl: string;
     let helmRelease: Kubernetes.HelmChart["Attributes"];
     let helmCluster: Cluster["Attributes"];
+    let inbox: string;
 
     beforeAll(
       Effect.gen(function* () {
@@ -252,7 +339,7 @@ describe.skipIf(!!process.env.FAST)(
         yield* sharedStack.deploy(infra);
         // Phase 2: same infra + the Deployment fixture (refs the cluster) +
         // a HelmChart rendering the local fixture chart onto the cluster.
-        const { host, cluster, release } = yield* sharedStack.deploy(
+        const { host, cluster, release, subscription } = yield* sharedStack.deploy(
           Effect.gen(function* () {
             const { cluster } = yield* infra;
             const release = yield* Kubernetes.HelmChart("E2EHelmChart", {
@@ -261,9 +348,14 @@ describe.skipIf(!!process.env.FAST)(
               values: { message: "helm-e2e", secondConfigMap: { enabled: true } },
             });
             const host = yield* EksHostApi;
-            return { host, cluster, release };
+            const events = yield* EksHostEvents;
+            const subscription = yield* GCP.PubSub.Subscription("EksHostInbox", {
+              topic: events.name,
+            });
+            return { host, cluster, release, subscription };
           }),
         );
+        inbox = subscription.name;
         helmRelease = release;
         helmCluster = cluster;
         // `url` is a full URL (`http://<nlb-hostname>:<port>` — the NLB
@@ -313,6 +405,50 @@ describe.skipIf(!!process.env.FAST)(
           expect(got.Item?.pk?.S).toBe(itemId);
         }),
       { timeout: 180_000 },
+    );
+
+    test.provider(
+      "bound GCP Publish reaches Pub/Sub from the pod through workload identity federation",
+      () =>
+        Effect.gen(function* () {
+          // The pod runs as its Pod Identity role: it federates, holding no key.
+          const identity = (yield* HttpClient.get(`${baseUrl}/gcp-identity`).pipe(
+            Effect.flatMap((res) => res.json),
+            Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 12 }),
+          )) as { audience?: string; hasKey: boolean };
+          expect(identity.hasKey).toBe(false);
+          expect(identity.audience).toMatch(
+            /^\/\/iam\.googleapis\.com\/projects\/\d+\/locations\/global\/workloadIdentityPools\/[^/]+\/providers\/alchemy-aws$/,
+          );
+
+          // A grant to a federated principal takes minutes to propagate.
+          const published = yield* HttpClient.get(`${baseUrl}/publish`).pipe(
+            Effect.flatMap((res) =>
+              res.json.pipe(
+                Effect.flatMap((body) =>
+                  res.status === 200
+                    ? Effect.succeed(body as { messageIds?: string[] })
+                    : Effect.fail(new Error(`/publish ${res.status} ${JSON.stringify(body)}`)),
+                ),
+              ),
+            ),
+            Effect.tapError((e) => Effect.logInfo(String(e))),
+            Effect.retry({ schedule: Schedule.spaced("10 seconds"), times: 42 }),
+          );
+          expect(published.messageIds?.length).toBe(1);
+
+          const pulled = yield* pubsub
+            .pullProjectsSubscriptions({ maxMessages: 1, subscription: inbox })
+            .pipe(
+              Effect.repeat({
+                until: (response) => (response.receivedMessages ?? []).length > 0,
+                schedule: Schedule.spaced("2 seconds"),
+                times: 10,
+              }),
+            );
+          expect(atob(pulled.receivedMessages?.[0]?.message?.data ?? "")).toBe(EKS_GCP_MESSAGE);
+        }),
+      { timeout: 600_000 },
     );
 
     test.provider(

@@ -260,7 +260,9 @@ export const LinkedServiceProvider = () =>
           resourceGroupName: resourceGroup,
           factoryName,
           linkedServiceName: name,
-          properties: desired,
+          // `type` is any linked service type and `typeProperties` a loose bag, so TypeScript
+          // cannot pick the SDK union arm.
+          properties: desired as datafactory.LinkedService,
         });
       }
 

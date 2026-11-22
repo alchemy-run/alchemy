@@ -9,11 +9,11 @@ export const MAX_NAME_LENGTH = 63;
 export const MAX_PIPELINE_JOB_ID_LENGTH = 128;
 
 export class AiPlatformNotResolved extends Data.TaggedError("GCP.AIPlatform.NotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class AiPlatformStillExists extends Data.TaggedError("GCP.AIPlatform.StillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export type EncryptionSpec = {

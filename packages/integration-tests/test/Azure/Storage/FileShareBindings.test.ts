@@ -1,13 +1,13 @@
 import * as Azure from "@alchemy.run/azure";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as authorization from "@distilled.cloud/azure/authorization";
 import * as storage from "@distilled.cloud/azure/storage";
 import * as files from "@distilled.cloud/azure/storage-file";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import type * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -634,7 +634,10 @@ describe("Azure Files bindings on an Azure Function", { tags: ["provider:azure",
         // REST callers hold no SMB handles.
         expect(body.result.HandleList ?? []).toEqual([]);
         const missing = yield* op("ListFileHandles", { fileName: "op-handles-missing.txt" });
-        expect({ ok: missing.ok, tag: missing.tag }).toEqual({ ok: false, tag: "ResourceNotFound" });
+        expect({ ok: missing.ok, tag: missing.tag }).toEqual({
+          ok: false,
+          tag: "ResourceNotFound",
+        });
       }).pipe(Effect.provide(azure)),
       { timeout: 360_000 },
     );
@@ -851,7 +854,10 @@ describe("Azure Files bindings on an Azure Function", { tags: ["provider:azure",
           fileName: "op-close-missing.txt",
           xMsHandleId: "*",
         });
-        expect({ ok: missing.ok, tag: missing.tag }).toEqual({ ok: false, tag: "ResourceNotFound" });
+        expect({ ok: missing.ok, tag: missing.tag }).toEqual({
+          ok: false,
+          tag: "ResourceNotFound",
+        });
       }).pipe(Effect.provide(azure)),
       { timeout: 360_000 },
     );

@@ -9,6 +9,13 @@ import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class LinkedWhatsAppBusinessAccountInvalidProps extends Data.TaggedError(
+  "LinkedWhatsAppBusinessAccountInvalidProps",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type RegistrationStatus = socialmessaging.RegistrationStatus;
 export type WhatsAppPhoneNumberSummary = socialmessaging.WhatsAppPhoneNumberSummary;
 
@@ -189,7 +196,7 @@ interface LinkedAccountState {
 const readLinkedAccount = Effect.fn(function* (accountId: string) {
   const response = yield* socialmessaging
     .getLinkedWhatsAppBusinessAccount({ id: accountId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   const account = response?.account;
   if (account === undefined) return undefined;
   const state: LinkedAccountState = {
@@ -278,11 +285,10 @@ export const LinkedWhatsAppBusinessAccountProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news?.accountId) {
-            return yield* Effect.fail(
-              new Error(
+            return yield* new LinkedWhatsAppBusinessAccountInvalidProps({
+              message:
                 "LinkedWhatsAppBusinessAccount requires an accountId (link the WABA in the AWS console first)",
-              ),
-            );
+            });
           }
           const accountId = output?.id ?? news.accountId;
           const internalTags = yield* createInternalTags(id);

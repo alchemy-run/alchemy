@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as bigqueryreservation from "@distilled.cloud/gcp/bigqueryreservation_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -67,13 +68,11 @@ test.provider(
 
       const error = yield* Effect.flip(
         bigqueryreservation.createProjectsLocationsCapacityCommitments({
+          slotCount: "50",
+          plan: "FLEX_FLAT_RATE",
+          edition: "ENTERPRISE",
           parent: `projects/${project}/locations/us-central1`,
           capacityCommitmentId: "alchemy-bq-capacity-probe",
-          body: {
-            slotCount: "50",
-            plan: "FLEX_FLAT_RATE",
-            edition: "ENTERPRISE",
-          },
         }),
       );
       expect(error._tag).toEqual("CommitmentPlanNotSupported");
@@ -101,6 +100,13 @@ test.provider.skipIf(!runLifecycle)(
             edition: "ENTERPRISE",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.BigQueryReservation.CapacityCommitment.lookup({
+          capacityCommitmentId: created.capacityCommitmentId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/capacityCommitments/");

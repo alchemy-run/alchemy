@@ -159,6 +159,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
   never,
   Worker
 > =>
+  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- `RpcWorkerYieldable` extends `Effect<…, never, any>`; the declared return type pins R to `Worker`
   Effect.gen(function* () {
     const schema = (workerEff as unknown as Record<symbol, unknown>)[SchemaSymbol] as
       | RpcGroup.RpcGroup<Rpcs>
@@ -228,6 +229,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
                   (...a: unknown[]) => Effect.Effect<unknown, unknown, unknown>
                 >
               )[method];
+              // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- RPC methods are looked up by name on an untyped stub
               return yield* fn(...args);
             }).pipe(Effect.scoped);
         },
@@ -394,9 +396,9 @@ const bind = <Self, Rpcs extends Rpc.Any>(
  * stack once for the file; each test yields the deploy handle for its
  * URL and calls procedures directly.
  * ```typescript
- * import { expect } from "alchemy-test";
+ * import { expect } from "@alchemy.run/test";
  * import * as Cloudflare from "@alchemy.run/cloudflare";
- * import * as Test from "alchemy/Test/Alchemy";
+ * import * as Test from "@alchemy.run/test/Alchemy";
  * import * as Effect from "effect/Effect";
  * import * as Layer from "effect/Layer";
  * import * as Schedule from "effect/Schedule";

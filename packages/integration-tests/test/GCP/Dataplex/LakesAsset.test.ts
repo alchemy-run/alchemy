@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as dataplex from "@distilled.cloud/gcp/dataplex_v1";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -61,6 +62,21 @@ test.provider.skipIf(!process.env.GCP_TEST_SLOW || !!process.env.FAST)(
           });
           return { bucket, lake, zone, asset };
         }),
+      );
+      yield* expectFound(
+        GCP.Dataplex.LakesAsset.lookup({
+          assetId: created.asset.assetId,
+          zone: created.asset.zone,
+        }),
+        created.asset,
+      );
+      yield* expectFound(
+        GCP.Dataplex.LakesZone.lookup({
+          zoneId: created.zone.zoneId,
+          location: created.zone.location,
+          lake: created.zone.lake,
+        }),
+        created.zone,
       );
 
       expect(created.asset.name).toContain("/assets/");

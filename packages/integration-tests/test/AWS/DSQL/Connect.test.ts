@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as dsql from "@distilled.cloud/aws/dsql";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -197,7 +197,11 @@ describe(
             ssl: boolean;
             urlScheme: string;
           };
-          expect(info.host).toMatch(/^[a-z0-9]+\.dsql\.[a-z0-9-]+\.on\.aws$/);
+          // On floci the cluster endpoint is `<id>.dsql.<region>.localhost.floci.io`,
+          // which resolves to the emulator.
+          expect(info.host).toMatch(
+            /^[a-z0-9]+\.dsql\.[a-z0-9-]+\.(on\.aws|localhost\.floci\.io)$/,
+          );
           expect(info.port).toBe(5432);
           expect(info.database).toBe("postgres");
           expect(info.username).toBe("admin");
@@ -225,7 +229,7 @@ describe(
     );
 
     test.provider(
-      "connects DIRECTLY to the public endpoint (raw pg, no Drizzle, no VPC)",
+      "connects DIRECTLY to the public endpoint (raw @effect/sql-pg, no Drizzle, no VPC)",
       (_stack) =>
         Effect.gen(function* () {
           const roundtrip = (yield* postJson(`${directUrl}/roundtrip`, {})) as {

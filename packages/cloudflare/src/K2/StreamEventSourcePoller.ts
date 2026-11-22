@@ -3,6 +3,7 @@ import * as Namespace from "alchemy/Namespace";
 import { ServerHost } from "alchemy/Runtime/Process";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -56,11 +57,12 @@ export const StreamEventSourcePolling = Layer.effect(
   Effect.gen(function* () {
     const { run } = yield* ServerHost;
     const readSubscription = yield* ReadSubscription;
+    const random = yield* SecureRandom.SecureRandom;
 
-    return Effect.fn(function* (
+    return Effect.fn(function* <Req>(
       stream: K2Stream<any>,
       props: ConsumeStreamRecordsProps,
-      process: ConsumeStreamRecordsHandler<any, any>,
+      process: ConsumeStreamRecordsHandler<any, Req>,
     ) {
       const host = yield* Binding.Host;
       const hostId = host?.LogicalId ?? "Host";
@@ -82,9 +84,7 @@ export const StreamEventSourcePolling = Layer.effect(
 
       yield* run(
         Effect.gen(function* () {
-          const workerId =
-            props.workerId ??
-            `${hostId}-${(yield* Effect.sync(() => crypto.randomUUID())).slice(0, 8)}`;
+          const workerId = props.workerId ?? `${hostId}-${(yield* random.uuidV4()).slice(0, 8)}`;
           yield* pollSubscription({
             client,
             workerId,
@@ -116,7 +116,7 @@ const consumeRetry = Schedule.max([
   Schedule.recurs(8),
 ]);
 
-interface PollOptions<A, Req> {
+interface PollOptions<A, E, Req> {
   client: ReadSubscriptionClient;
   /** Worker id holding the leases. Must be unique per concurrent poller. */
   workerId: string;
@@ -130,7 +130,7 @@ interface PollOptions<A, Req> {
   decode: (
     records: ReadonlyArray<ConsumedRecord>,
   ) => Effect.Effect<ReadonlyArray<A>, K2SchemaError>;
-  process: (records: Stream.Stream<A>) => Effect.Effect<void, unknown, Req>;
+  process: (records: Stream.Stream<A>) => Effect.Effect<void, E, Req>;
 }
 
 /**
@@ -153,9 +153,7 @@ const keepLeaseAlive = (client: ReadSubscriptionClient, batch: Batch, every: Dur
  * One poll: lease a batch, run the handler, then ack it on success or nack
  * it on failure. Returns whether a batch was processed.
  */
-const pollOnce = <A, Req>(
-  options: PollOptions<A, Req>,
-): Effect.Effect<boolean, unknown, Req | RuntimeContext> =>
+const pollOnce = <A, E, Req>(options: PollOptions<A, E, Req>) =>
   Effect.gen(function* () {
     const { client } = options;
     const leased = yield* client
@@ -196,8 +194,8 @@ const pollOnce = <A, Req>(
  * Poll forever: an empty batch or a failed iteration sleeps `idleBackoff`;
  * a processed batch polls again immediately. Never fails.
  */
-const pollForever = <A, Req>(
-  options: PollOptions<A, Req>,
+const pollForever = <A, E, Req>(
+  options: PollOptions<A, E, Req>,
 ): Effect.Effect<never, never, Req | RuntimeContext> =>
   pollOnce(options).pipe(
     Effect.catchCause((cause) =>
@@ -212,8 +210,8 @@ const pollForever = <A, Req>(
   );
 
 /** Run `concurrency` pollers, each with its own worker id (`${workerId}-${i}`). */
-const pollSubscription = <A, Req>(
-  options: PollOptions<A, Req> & { concurrency?: number },
+const pollSubscription = <A, E, Req>(
+  options: PollOptions<A, E, Req> & { concurrency?: number },
 ): Effect.Effect<void, never, Req | RuntimeContext> =>
   Effect.forEach(
     Array.from({ length: Math.max(1, options.concurrency ?? 1) }, (_, i) => i),

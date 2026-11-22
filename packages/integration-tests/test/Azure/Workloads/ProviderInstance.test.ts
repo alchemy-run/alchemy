@@ -1,13 +1,16 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as workloads from "@distilled.cloud/azure/workloads";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runExpensive, withVcpus } from "../gates.ts";
 import { AMS_LOCATION, logLevel, monitorStack, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
+
+const prometheusOsOf = (settings: workloads.ProviderSpecificProperties | undefined) =>
+  settings?.providerType === "PrometheusOS" ? settings : undefined;
 
 const PUBLIC_KEY =
   "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDENxJhC8/syZZ882HXvsvtHroY2qgTIi0Pbxn3I8ypeeKuerxliUK1Ht9xFcz2phTMNwoHzDcS5hdHT6GiYX+kxhbrrWA/b7D1MoqRu0WlIhB/vocs4WU06nWGQi0UXKWfVyfIHGZKgnw9vTcIutmW8KbQySIzgCYtYMD6a9PLL61O0LJaDcH5XDXEeygGLN9yVWitUJy0RNCZmS4qHB3QYzrXisDD0lzxRleIlp4KDpWvriuI8Chswe5rQ6RAEZXpEXYQfEwXm7jO7yO7ZSACh22am2suq4TRcTKlEFPw0V8ksCNzstQdbGsCStfB396XqmPEvz2IqSzMDljGodF/ alchemy-test-1";
@@ -85,8 +88,8 @@ test.provider.skipIf(!runExpensive)(
         monitor.monitorName,
         instance.providerInstanceName,
       );
-      expect(observed.properties?.providerSettings?.sapSid).toEqual("S4H");
-      expect(observed.properties?.providerSettings?.prometheusUrl).toMatch(
+      expect(prometheusOsOf(observed.properties?.providerSettings)?.sapSid).toEqual("S4H");
+      expect(prometheusOsOf(observed.properties?.providerSettings)?.prometheusUrl).toMatch(
         /^http:\/\/10\.20\.2\.\d+:9100\/metrics$/,
       );
 
@@ -98,7 +101,7 @@ test.provider.skipIf(!runExpensive)(
         monitor.monitorName,
         replaced.instance.providerInstanceName,
       );
-      expect(replacedObserved.properties?.providerSettings?.sapSid).toEqual("S4Q");
+      expect(prometheusOsOf(replacedObserved.properties?.providerSettings)?.sapSid).toEqual("S4Q");
       expect(
         yield* waitGone(
           getInstance(group.resourceGroupName, monitor.monitorName, instance.providerInstanceName),

@@ -1,5 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 
 /**
  * Compile-time pins for the framework Website resources' prop surfaces.
@@ -45,7 +45,7 @@ describe(
         }),
       () =>
         Cloudflare.Website.Astro("A", {
-          // @ts-expect-error `main` is not supported (no custom-entry seam)
+          // `main` is the custom Worker entry seam
           main: "worker.ts",
         }),
       () =>

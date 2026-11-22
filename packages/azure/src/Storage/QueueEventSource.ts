@@ -63,9 +63,7 @@ export interface QueueEventSource extends Binding.Service<
   QueueEventSourceService
 > {}
 
-export const QueueEventSource = Binding.Service<QueueEventSource>(
-  "Azure.Storage.QueueEventSource",
-);
+export const QueueEventSource = Binding.Service<QueueEventSource>("Azure.Storage.QueueEventSource");
 
 /**
  * Run `handler` for every message added to `queue`.
@@ -86,7 +84,9 @@ export function consumeQueueMessages<Q extends Queue, Req = never, QueueReq = ne
 ): Effect.Effect<void, never, QueueEventSource | QueueReq>;
 export function consumeQueueMessages<Q extends Queue, Req = never, QueueReq = never>(
   queue: Q | Effect.Effect<Q, never, QueueReq>,
-  propsOrHandler: QueueEventSourceProps | ((message: QueueMessage) => Effect.Effect<void, never, Req>),
+  propsOrHandler:
+    | QueueEventSourceProps
+    | ((message: QueueMessage) => Effect.Effect<void, never, Req>),
   maybeHandler?: (message: QueueMessage) => Effect.Effect<void, never, Req>,
 ): Effect.Effect<void, never, QueueEventSource | QueueReq> {
   const [props, handler] =

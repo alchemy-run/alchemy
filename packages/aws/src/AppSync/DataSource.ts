@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import {
   retryConcurrentModification,
@@ -111,8 +112,20 @@ export interface AppSyncDataSource extends Resource<
     roleName: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AppSyncDataSourceLookup
 > {}
+
+/**
+ * Props for {@link AppSyncDataSource.lookup}: find a data source this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AppSyncDataSourceLookup {
+  /** The API the data source belongs to. */
+  apiId: string;
+  /** The name of the existing data source. */
+  name: string;
+}
 
 /**
  * An AppSync data source — the target a resolver reads from or writes to.
@@ -146,6 +159,16 @@ export interface AppSyncDataSource extends Resource<
  *   type: "AMAZON_DYNAMODB",
  *   dynamodbConfig: { tableName: table.tableName },
  * });
+ * ```
+ *
+ * ### Looking up an existing data source
+ * `AppSyncDataSource.lookup` references a data source Alchemy doesn't manage (created in the
+ * console or by another stack), found by `apiId` and `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing data source
+ * ```typescript
+ * const orders = AWS.AppSync.DataSource.lookup({ apiId, name: "orders" });
  * ```
  *
  * @resource
@@ -194,7 +217,7 @@ export const DataSourceProvider = () =>
       const getDataSourceSafe = (apiId: string, name: string) =>
         appsync.getDataSource({ apiId, name }).pipe(
           Effect.map((response) => response.dataSource),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       /**
@@ -217,7 +240,7 @@ export const DataSourceProvider = () =>
         }
         if (news.type === "AMAZON_DYNAMODB" && news.dynamodbConfig !== undefined) {
           const tableRegion = news.dynamodbConfig.awsRegion ?? region;
-          const tableArn = `arn:aws:dynamodb:${tableRegion}:${accountId}:table/${news.dynamodbConfig.tableName}`;
+          const tableArn = `arn:${partitionOf(tableRegion)}:dynamodb:${tableRegion}:${accountId}:table/${news.dynamodbConfig.tableName}`;
           statements.push({
             Effect: "Allow",
             Action: [
@@ -355,6 +378,10 @@ export const DataSourceProvider = () =>
         // doctrine.
         list: () => Effect.succeed([]),
 
+        lookup: Effect.fn(function* ({ apiId, name }) {
+          const ds = yield* getDataSourceSafe(apiId, name);
+          return ds?.name == null ? undefined : toAttributes(apiId, ds, undefined);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const apiId = output?.apiId ?? olds?.apiId;
           if (apiId === undefined) return undefined;

@@ -7,6 +7,7 @@ import { createInternalTags, diffTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface AdapterProps {
@@ -72,8 +73,18 @@ export interface Adapter extends Resource<
     creationTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AdapterLookup
 > {}
+
+/**
+ * Props for {@link Adapter.lookup}: find an adapter this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AdapterLookup {
+  /** The adapter id of the existing adapter. */
+  adapterId: string;
+}
 
 /**
  * An Amazon Textract adapter — a container for custom, trained adapter
@@ -103,6 +114,16 @@ export interface Adapter extends Resource<
  *     Adapters: [{ AdapterId: adapter.adapterId, Version: "1" }],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing adapter
+ * `Adapter.lookup` references an adapter Alchemy doesn't manage (created in the
+ * console or by another stack), found by `adapterId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing adapter
+ * ```typescript
+ * const existing = AWS.Textract.Adapter.lookup({ adapterId: "my-adapter" });
  * ```
  *
  * @resource
@@ -157,13 +178,13 @@ export const AdapterProvider = () =>
       const adapterArn = (adapterId: string) =>
         Effect.gen(function* () {
           const { accountId, region } = yield* AWSEnvironment.current;
-          return `arn:aws:textract:${region}:${accountId}:/adapters/${adapterId}`;
+          return `arn:${partitionOf(region)}:textract:${region}:${accountId}:/adapters/${adapterId}`;
         });
 
       const getOne = (adapterId: string) =>
         throttleRetry(textract.getAdapter({ AdapterId: adapterId })).pipe(
           Effect.map((adapter) => ({ ...adapter, AdapterId: adapterId })),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       // Adapter ids are server-assigned, so recovery without persisted
@@ -193,6 +214,12 @@ export const AdapterProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ adapterId }) {
+          if (!adapterId) return undefined;
+          const found = yield* getOne(adapterId);
+          if (!found) return undefined;
+          return toAttributes(yield* adapterArn(adapterId), found);
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const adapterId =
@@ -243,7 +270,7 @@ export const AdapterProvider = () =>
                 AutoUpdate: news.autoUpdate,
                 Tags: desiredTags,
               }),
-            ).pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+            ).pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             adapterId = created?.AdapterId ?? (yield* findByName(name));
             if (!adapterId) {
               return yield* Effect.die(

@@ -1,10 +1,11 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { jsonStrings } from "../../JsonStrings.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import Stack from "./fixtures/env/stack.ts";
 
@@ -12,6 +13,7 @@ import Stack from "./fixtures/env/stack.ts";
 // `Config.xxx(...)` reads resolve at deploy time (default provider).
 const CONFIG_STR_VALUE = (process.env.CONFIG_STR = "config-string-value");
 const CONFIG_NUM_VALUE = (process.env.CONFIG_NUM = "1234");
+process.env.CONFIG_JSON_LONG = "12345678901.12345678901234";
 const CONFIG_REDACTED_VALUE = (process.env.CONFIG_REDACTED = "config-redacted-value");
 const CONFIG_REDACTED_INIT_VALUE = (process.env.CONFIG_REDACTED_INIT =
   "config-redacted-init-value");
@@ -111,6 +113,24 @@ describe.concurrent(
     );
 
     test(
+      "effect worker reads env strings that parse as JSON unchanged (#2847, #3497)",
+      Effect.gen(function* () {
+        const { effectUrl } = yield* stack;
+
+        const body = yield* expectUrlContains(`${effectUrl}/json-strings`, '"PLAIN"', {
+          timeout: "60 seconds",
+          label: "effect env-worker /json-strings",
+        });
+        expect(JSON.parse(body)).toEqual({
+          init: { ...jsonStrings, JSON_FALSE_BOOL: false, JSON_NUM_NUMBER: 42 },
+          runtime: { ...jsonStrings, JSON_FALSE_BOOL: false, JSON_NUM_NUMBER: 42 },
+          env: jsonStrings,
+          bound: { init: "12345678901.12345678901234", runtime: "12345678901.12345678901234" },
+        });
+      }).pipe(logLevel),
+    );
+
+    test(
       "effect worker resolves the yielded VersionMetadata binding",
       Effect.gen(function* () {
         const { effectUrl } = yield* stack;
@@ -124,6 +144,19 @@ describe.concurrent(
           tag: expect.any(String),
           timestamp: expect.any(String),
         });
+      }).pipe(logLevel),
+    );
+
+    test(
+      "effect worker has no binding for an undefined env entry",
+      Effect.gen(function* () {
+        const { effectUrl } = yield* stack;
+
+        const body = yield* expectUrlContains(`${effectUrl}/unset`, '"UNSET"', {
+          timeout: "60 seconds",
+          label: "effect env-worker /unset",
+        });
+        expect(JSON.parse(body)).toEqual({ UNSET: false, UNSET_OUTPUT: false });
       }).pipe(logLevel),
     );
 

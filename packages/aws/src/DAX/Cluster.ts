@@ -5,10 +5,21 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
 import { readDaxTags, sameStringSet } from "./internal.ts";
+
+export class DAXClusterNotReady extends Data.TaggedError("DAXClusterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class DAXClusterUnexpectedResponse extends Data.TaggedError("DAXClusterUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ClusterProps {
   /**
@@ -134,8 +145,18 @@ export interface Cluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 > {}
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterLookup {
+  /** The cluster name of the existing cluster. */
+  clusterName: string;
+}
 
 /**
  * An Amazon DAX cluster — a fully managed, in-memory write-through cache for
@@ -183,6 +204,16 @@ export interface Cluster extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const existing = AWS.DAX.Cluster.lookup({ clusterName: "my-cluster" });
+ * ```
+ *
  * @resource
  */
 export const Cluster = Resource<Cluster>("AWS.DAX.Cluster");
@@ -207,15 +238,20 @@ export const ClusterProvider = () =>
   Provider.effect(
     Cluster,
     Effect.gen(function* () {
+      // DAX cluster names must start with a letter. At its 20-character limit
+      // a generated name is all hash and instance suffix, which can start
+      // with a digit, so lead with a letter then.
       const toName = (id: string, props: Partial<ClusterProps>) =>
         props.clusterName
           ? Effect.succeed(props.clusterName)
-          : createPhysicalName({ id, maxLength: 20, lowercase: true });
+          : createPhysicalName({ id, maxLength: 20, lowercase: true }).pipe(
+              Effect.map((name) => (/^[a-z]/.test(name) ? name : `d${name.slice(0, 19)}`)),
+            );
 
       const readCluster = Effect.fn(function* (name: string) {
         const response = yield* dax
           .describeClusters({ ClusterNames: [name] })
-          .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.undefined));
         return response?.Clusters?.[0];
       });
 
@@ -226,11 +262,15 @@ export const ClusterProvider = () =>
         return yield* readCluster(name).pipe(
           Effect.flatMap((cluster) => {
             if (!cluster?.ClusterArn) {
-              return Effect.fail(new Error(`DAX cluster '${name}' not found`));
+              return Effect.fail(
+                new DAXClusterNotReady({ message: `DAX cluster '${name}' not found` }),
+              );
             }
             if (cluster.Status !== "available") {
               return Effect.fail(
-                new Error(`DAX cluster '${name}' not available (status: ${cluster.Status})`),
+                new DAXClusterNotReady({
+                  message: `DAX cluster '${name}' not available (status: ${cluster.Status})`,
+                }),
               );
             }
             return Effect.succeed(cluster);
@@ -251,7 +291,9 @@ export const ClusterProvider = () =>
               cluster.Status !== "deleting"
             ) {
               return Effect.fail(
-                new Error(`DAX cluster '${name}' still settling (status: ${cluster.Status})`),
+                new DAXClusterNotReady({
+                  message: `DAX cluster '${name}' still settling (status: ${cluster.Status})`,
+                }),
               );
             }
             return Effect.succeed(cluster);
@@ -262,9 +304,9 @@ export const ClusterProvider = () =>
 
       const toAttrs = Effect.fn(function* (cluster: dax.Cluster) {
         if (!cluster.ClusterName || !cluster.ClusterArn) {
-          return yield* Effect.fail(
-            new Error(`DAX cluster '${cluster.ClusterName}' is missing its ARN`),
-          );
+          return yield* new DAXClusterUnexpectedResponse({
+            message: `DAX cluster '${cluster.ClusterName}' is missing its ARN`,
+          });
         }
         return {
           clusterName: cluster.ClusterName,
@@ -326,6 +368,13 @@ export const ClusterProvider = () =>
           if (!sameStringSet(n.availabilityZones, o.availabilityZones)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ clusterName: name }) {
+          const cluster = yield* readCluster(name);
+          if (!cluster?.ClusterArn) return undefined;
+          const attrs = yield* toAttrs(cluster);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -490,7 +539,9 @@ export const ClusterProvider = () =>
               cluster === undefined
                 ? Effect.void
                 : Effect.fail(
-                    new Error(`DAX cluster '${name}' still deleting (status: ${cluster.Status})`),
+                    new DAXClusterNotReady({
+                      message: `DAX cluster '${name}' still deleting (status: ${cluster.Status})`,
+                    }),
                   ),
             ),
             Effect.retry({

@@ -44,7 +44,6 @@ export default class Api extends Railway.Service<Api>()(
   {
     project: Site,
     main: import.meta.url,
-    build: { install: ["pg"] },
   },
   Effect.gen(function* () {
     const conn = yield* Railway.ConnectPostgres(Db);
@@ -67,9 +66,6 @@ To store Railway's `${{Db.DATABASE_URL}}` template instead of a
 resolved URI, pass [`Railway.ref`](/providers/railway/ref)
 (`Railway.ref(Db, "DATABASE_URL")`) as a
 [Variable](/railway/data/variables) `value`.
-
-`build.install: ["pg"]` is required. Rolldown's CJS interop breaks
-`pg.Client` if you bundle it.
 
 ## Public TCP
 

@@ -5,6 +5,8 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import type * as Redacted from "effect/Redacted";
+import { type BuildCacheOptions, buildCacheRef, resolveBuildCache } from "./BuildCache.ts";
 import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 import {
@@ -15,7 +17,7 @@ import {
   withRegistryHost,
 } from "./Registry.ts";
 
-export interface DockerBuildOptions {
+export interface DockerBuildOptions extends BuildCacheOptions {
   /**
    * Build context directory.
    *
@@ -30,14 +32,20 @@ export interface DockerBuildOptions {
   dockerfile?: string;
   /** Target platform, e.g. `"linux/amd64"`. */
   platform?: string;
-  /** Docker build arguments. */
+  /**
+   * Docker build arguments (`--build-arg`). Never pass secrets here: build
+   * args are visible in the image history. Use {@link secrets} instead.
+   */
   args?: Record<string, string>;
+  /**
+   * BuildKit secrets, keyed by id. Mount one in a `RUN` step with
+   * `--mount=type=secret,id=<id>` and read it from `/run/secrets/<id>`, or
+   * add `env=<NAME>` to expose it as an environment variable for that step.
+   * A secret never enters the image, its build history, or `docker`'s argv.
+   */
+  secrets?: Record<string, Redacted.Redacted<string>>;
   /** Multi-stage build target. */
   target?: string;
-  /** Cache sources passed as `--cache-from`. */
-  cacheFrom?: string[];
-  /** Cache destinations passed as `--cache-to`. */
-  cacheTo?: string[];
   /** Additional Docker build options. */
   options?: string[];
 }
@@ -117,6 +125,23 @@ export interface Image extends Resource<
  * });
  * ```
  *
+ * ### Build Secrets
+ * **Example:** Install from a private npm registry
+ * ```typescript
+ * // Dockerfile:
+ * //   RUN --mount=type=secret,id=NPM_TOKEN,env=NPM_TOKEN npm ci
+ * const image = yield* Docker.Image("app", {
+ *   name: "my-app",
+ *   build: {
+ *     context: "./app",
+ *     secrets: { NPM_TOKEN: Config.Redacted("NPM_TOKEN") },
+ *   },
+ * });
+ * ```
+ *
+ * The secret is mounted only into the `RUN` step that asks for it; it never
+ * lands in an image layer or the build history.
+ *
  * ### Registry Push
  * **Example:** Push with Redacted credentials
  * ```typescript
@@ -131,22 +156,53 @@ export interface Image extends Resource<
  * });
  * ```
  *
- * ### Private Base Images and Registry Caches
- * **Example:** Build FROM a private base image with a registry cache
+ * ### Private Base Images
+ * **Example:** Build FROM a private base image
  * ```typescript
  * // Dockerfile: FROM registry.example.com/base:v1
  * const image = yield* Docker.Image("app", {
  *   name: "registry.example.com/app",
- *   build: {
- *     context: "./app",
- *     cacheFrom: ["type=registry,ref=registry.example.com/app:buildcache"],
- *     cacheTo: ["type=registry,ref=registry.example.com/app:buildcache,mode=max"],
- *   },
- *   // Authenticates the base-image pull and cache import/export, then the push.
+ *   build: { context: "./app" },
+ *   // Authenticates the base-image pull, then the push.
  *   registry: {
  *     server: "registry.example.com",
  *     username: "deploy",
  *     password: Config.Redacted("REGISTRY_PASSWORD"),
+ *   },
+ * });
+ * ```
+ *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
+ *
+ * **Example:** Cache layers in the image's registry
+ * ```typescript
+ * const image = yield* Docker.Image("app", {
+ *   name: "registry.example.com/app",
+ *   build: { context: "./app", cache: true },
+ *   registry: {
+ *     server: "registry.example.com",
+ *     username: "deploy",
+ *     password: Config.Redacted("REGISTRY_PASSWORD"),
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const image = yield* Docker.Image("app", {
+ *   name: "my-app",
+ *   build: {
+ *     context: "./app",
+ *     cache: {
+ *       from: ["type=gha,scope=app"],
+ *       to: ["type=gha,scope=app,mode=max"],
+ *     },
  *   },
  * });
  * ```
@@ -192,8 +248,12 @@ export const ImageProvider = () =>
           platform: props.build.platform,
           target: props.build.target,
           "build-arg": props.build.args,
-          "cache-from": props.build.cacheFrom,
-          "cache-to": props.build.cacheTo,
+          secrets: props.build.secrets,
+          // The registry cache lives next to the image.
+          ...resolveBuildCache(
+            props.build.cache,
+            buildCacheRef(props.registry ? withRegistryHost(ref, props.registry) : ref),
+          ),
           args: props.build.options,
           engineContext,
           // Base images and registry caches may live in the same registry;

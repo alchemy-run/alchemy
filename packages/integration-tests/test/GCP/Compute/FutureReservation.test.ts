@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -50,15 +51,12 @@ test.provider.skipIf(runLifecycle)(
       const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         compute.insertFutureReservations({
+          name: "alchemy-fr-probe",
+          description: "alchemy entitlement probe",
+          autoDeleteAutoCreatedReservations: false,
+          ...draftProps,
           project,
           zone,
-          body: {
-            name: "alchemy-fr-probe",
-            description: "alchemy entitlement probe",
-            autoDeleteAutoCreatedReservations: false,
-            ...draftProps,
-            zone: undefined,
-          },
         }),
       );
       expect(error._tag).toEqual("FutureReservationsNotEligible");
@@ -79,6 +77,13 @@ test.provider.skipIf(!runLifecycle)(
             description: "draft capacity",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.FutureReservation.lookup({
+          futureReservationName: created.futureReservationName,
+          zone: created.zone,
+        }),
+        created,
       );
 
       expect(created.futureReservationName).toEqual(expect.any(String));

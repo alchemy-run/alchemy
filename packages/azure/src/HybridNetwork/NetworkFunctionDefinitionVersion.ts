@@ -359,12 +359,14 @@ export const NetworkFunctionDefinitionVersionProvider = () =>
             ...where,
             location,
             tags,
+            // `networkFunctionTemplate` is a loose bag, so TypeScript cannot
+            // pick the SDK union arm for `networkFunctionType`.
             properties: {
               networkFunctionType: news.networkFunctionType,
               description: news.description,
               deployParameters: news.deployParameters,
               networkFunctionTemplate: news.networkFunctionTemplate,
-            },
+            } as unknown as hybridnetwork.NetworkFunctionDefinitionVersionPropertiesFormatInput,
           }),
         );
       }

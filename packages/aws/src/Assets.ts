@@ -285,7 +285,7 @@ export const LAMBDA_WEB_CODE_ACCESS_SID = "AlchemyLambdaWebFunctionCode";
  * missing, so concurrent deploys converge on the same configuration.
  */
 export const ensureLambdaWebCodeAccess = Effect.fn(function* (bucketName: string) {
-  const { accountId } = yield* AWSEnvironment.current;
+  const { accountId, partition } = yield* AWSEnvironment.current;
 
   const versioning = yield* s3.getBucketVersioning({ Bucket: bucketName });
   if (versioning.Status !== "Enabled") {
@@ -300,18 +300,20 @@ export const ensureLambdaWebCodeAccess = Effect.fn(function* (bucketName: string
     Effect: "Allow",
     Principal: { Service: "lambda.amazonaws.com" },
     Action: ["s3:GetObject", "s3:GetObjectVersion"],
-    Resource: `arn:aws:s3:::${bucketName}/lambda/*`,
+    Resource: `arn:${partition}:s3:::${bucketName}/lambda/*`,
     Condition: {
       StringEquals: { "aws:SourceAccount": accountId },
-      ArnLike: { "aws:SourceArn": `arn:aws:lambda:*:${accountId}:web-function/*/revision/*` },
+      ArnLike: {
+        "aws:SourceArn": `arn:${partition}:lambda:*:${accountId}:web-function/*/revision/*`,
+      },
     },
   };
   const observed = yield* s3.getBucketPolicy({ Bucket: bucketName }).pipe(
     Effect.map((response) => response.Policy),
-    Effect.catchTag("NoSuchBucketPolicy", () => Effect.succeed(undefined)),
+    Effect.catchTag("NoSuchBucketPolicy", () => Effect.undefined),
     Effect.flatMap((policy) =>
       policy === undefined
-        ? Effect.succeed(undefined)
+        ? Effect.undefined
         : Effect.try({
             try: () => JSON.parse(policy) as { Version?: string; Statement?: unknown[] },
             catch: (cause) => new AssetsBucketPolicyInvalid({ bucketName, message: String(cause) }),

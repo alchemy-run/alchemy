@@ -1,27 +1,22 @@
 ---
 title: "Part 1: Model an account"
-description: Declare events, commands and rejections, decide them in an aggregate, and check it with stories.
+description: Declare events, commands and rejections, decide them in an aggregate, check it with stories, and prove a rule about it.
 sidebar:
   order: 1
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
-Build a bank in six parts, starting with an account that opens, takes deposits and refuses overdrafts. This part runs on your machine: no cloud account needed yet.
+Build a bank in eight parts, starting with an account that opens, takes deposits and refuses overdrafts. This part runs on your machine: no cloud account needed yet.
 
 If commands, aggregates and events are new to you, read [What is Domain-Driven Design?](/domain/what-is-ddd) first.
 
 ## Install
 
-```sh
-bun add alchemy effect
-bun add -d vitest @effect/vitest
-```
+<PackageManagers add="alchemy @alchemy.run/domain effect" dev="vitest @effect/vitest @effect/platform-node" />
 
 ## Give your coding agent the skill
 
-```sh
-bun add -d skills-npm
-bunx skills-npm setup
-```
+<PackageManagers dev="skills-npm" run="skills-npm setup" />
 
 alchemy ships an `alchemy-domain` skill, and `skills-npm` links it into your coding agent's skills folder on every install, matching the alchemy version you have. Your agent then knows the building blocks and conventions this tutorial uses. For other ways to install it, see [Build it with your coding agent](/domain#build-it-with-your-coding-agent).
 
@@ -75,8 +70,7 @@ export class AccountOpened extends Domain.Event("AccountOpened", { owner: Schema
 export class AlreadyOpen extends Domain.Rejection("AlreadyOpen") {}
 +
 +export class OpenAccount extends Domain.Command("OpenAccount", {
-+  target: AccountId,
-+  input: { owner: Schema.String },
++  input: { accountId: AccountId, owner: Schema.String },
 +  events: [AccountOpened],
 +  rejects: [AlreadyOpen],
 +}) {}
@@ -104,9 +98,10 @@ export class Account extends Domain.Aggregate("Account", {
   state: State,
   initial: { _tag: "Unopened" },
   commands: [OpenAccount],
+  keyOf: (cmd) => cmd.accountId,
   decide: {
-    OpenAccount: (s, cmd) =>
-      s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
+    OpenAccount: (account, cmd) =>
+      account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
   },
   evolve: {
     AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
@@ -114,7 +109,7 @@ export class Account extends Domain.Aggregate("Account", {
 }) {}
 ```
 
-The account is an aggregate. `decide` takes a command and the current state, and returns events or a rejection. `evolve` folds each event into the next state.
+The account is an aggregate. `keyOf` says which account a command is for. `decide` takes a command and that account's current state, and returns events or a rejection. `evolve` folds each event into the next state.
 
 ## Group it in a model
 
@@ -145,7 +140,7 @@ const account = Account.ref("a-1");
 
 it.effect("opens an account", () =>
   story(
-    Story.when(account, new OpenAccount({ owner: "sam" })),
+    Story.when(new OpenAccount({ accountId: account.id, owner: "sam" })),
     Story.then(account, new AccountOpened({ owner: "sam" })),
   ),
 );
@@ -153,7 +148,7 @@ it.effect("opens an account", () =>
 it.effect("refuses to open an account twice", () =>
   story(
     Story.given(account, new AccountOpened({ owner: "sam" })),
-    Story.when(account, new OpenAccount({ owner: "sam" })),
+    Story.when(new OpenAccount({ accountId: account.id, owner: "sam" })),
     Story.rejected(new AlreadyOpen()),
   ),
 );
@@ -203,16 +198,12 @@ import * as Schema from "effect/Schema";
 +import { NotOpen } from "./NotOpen.rejection.ts";
 
 export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
-```
-
-```diff lang="typescript"
-// src/DepositMoney.command.ts
+  amount: Schema.Int,
   balanceAfter: Schema.Int,
 }) {}
 +
 +export class DepositMoney extends Domain.Command("DepositMoney", {
-+  target: AccountId,
-+  input: { amount: Schema.Int },
++  input: { accountId: AccountId, amount: Schema.Int },
 +  events: [MoneyDeposited],
 +  rejects: [NotOpen],
 +  reply: { balance: Schema.Int },
@@ -230,44 +221,35 @@ import { AccountId } from "./Account.id.ts";
 +import { DepositMoney, MoneyDeposited } from "./DepositMoney.command.ts";
 +import { NotOpen } from "./NotOpen.rejection.ts";
 import { AccountOpened, AlreadyOpen, OpenAccount } from "./OpenAccount.command.ts";
-
-```
-
-```diff lang="typescript"
-// src/Account.aggregate.ts
+// ...
 type State = typeof State.Type;
 
-+// An event can only follow an open account; anything else is a bug.
-+const mustBeOpen = (s: State) => {
-+  if (s._tag !== "Open") throw new Error(`expected an open account, got ${s._tag}`);
-+  return s;
-+};
-+
 export class Account extends Domain.Aggregate("Account", {
   id: AccountId,
   state: State,
   initial: { _tag: "Unopened" },
 -  commands: [OpenAccount],
 +  commands: [OpenAccount, DepositMoney],
+  keyOf: (cmd) => cmd.accountId,
   decide: {
-    OpenAccount: (s, cmd) =>
-      s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
-+    DepositMoney: (s, cmd) =>
-+      s._tag !== "Open"
+    OpenAccount: (account, cmd) =>
+      account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
++    DepositMoney: (account, cmd) =>
++      account._tag !== "Open"
 +        ? new NotOpen()
-+        : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
++        : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: account.balance + cmd.amount })],
   },
   evolve: {
     AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
-+    MoneyDeposited: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
++    MoneyDeposited: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
 +  },
 +  reply: {
-+    DepositMoney: (s) => ({ balance: mustBeOpen(s).balance }),
++    DepositMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
   },
 }) {}
 ```
 
-`evolve` never refuses an event, because it already happened. An event that can't follow the current state is a bug, so `mustBeOpen` throws and the command that caused it is rolled back. `reply` answers from the state after the deposit.
+`evolve` never refuses an event, because it already happened. `decide` already returned `NotOpen` for an account that isn't open, so `evolve` and `reply` just cover every state. `reply` answers from the state after the deposit.
 
 ## Test deposits
 
@@ -278,11 +260,7 @@ import { Bank } from "../src/Bank.model.ts";
 +import { DepositMoney, MoneyDeposited } from "../src/DepositMoney.command.ts";
 +import { NotOpen } from "../src/NotOpen.rejection.ts";
 import { AccountOpened, AlreadyOpen, OpenAccount } from "../src/OpenAccount.command.ts";
-
-```
-
-```diff lang="typescript"
-// test/Account.test.ts
+    // ...
     Story.rejected(new AlreadyOpen()),
   ),
 );
@@ -290,14 +268,14 @@ import { AccountOpened, AlreadyOpen, OpenAccount } from "../src/OpenAccount.comm
 +it.effect("deposits into an open account and replies with the balance", () =>
 +  story(
 +    Story.given(account, new AccountOpened({ owner: "sam" })),
-+    Story.when(account, new DepositMoney({ amount: 100 })),
++    Story.when(new DepositMoney({ accountId: account.id, amount: 100 })),
 +    Story.then(account, new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
 +    Story.replied({ balance: 100 }),
 +  ),
 +);
 +
 +it.effect("refuses a deposit into an account that isn't open", () =>
-+  story(Story.when(account, new DepositMoney({ amount: 100 })), Story.rejected(new NotOpen())),
++  story(Story.when(new DepositMoney({ accountId: account.id, amount: 100 })), Story.rejected(new NotOpen())),
 +);
 ```
 
@@ -323,8 +301,7 @@ export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
 }) {}
 
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
-  target: AccountId,
-  input: { amount: Schema.Int },
+  input: { accountId: AccountId, amount: Schema.Int },
   events: [MoneyWithdrawn],
   rejects: [NotOpen, InsufficientFunds],
   reply: { balance: Schema.Int },
@@ -342,37 +319,38 @@ import { AccountOpened, AlreadyOpen, OpenAccount } from "./OpenAccount.command.t
 +import { InsufficientFunds, MoneyWithdrawn, WithdrawMoney } from "./WithdrawMoney.command.ts";
 
 const State = Schema.Union([
-```
-
-```diff lang="typescript"
-// src/Account.aggregate.ts
+  // ...
+]);
+// ...
+export class Account extends Domain.Aggregate("Account", {
+  id: AccountId,
   state: State,
   initial: { _tag: "Unopened" },
 -  commands: [OpenAccount, DepositMoney],
 +  commands: [OpenAccount, DepositMoney, WithdrawMoney],
+  keyOf: (cmd) => cmd.accountId,
   decide: {
-    OpenAccount: (s, cmd) =>
-```
-
-```diff lang="typescript"
-// src/Account.aggregate.ts
+    OpenAccount: (account, cmd) =>
+      account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
+    DepositMoney: (account, cmd) =>
+      account._tag !== "Open"
         ? new NotOpen()
-        : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
-+    WithdrawMoney: (s, cmd) =>
-+      s._tag !== "Open"
+        : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: account.balance + cmd.amount })],
++    WithdrawMoney: (account, cmd) =>
++      account._tag !== "Open"
 +        ? new NotOpen()
-+        : cmd.amount > s.balance
-+          ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
-+          : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
++        : cmd.amount > account.balance
++          ? new InsufficientFunds({ balance: account.balance, requested: cmd.amount })
++          : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: account.balance - cmd.amount })],
   },
   evolve: {
     AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
-    MoneyDeposited: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
-+    MoneyWithdrawn: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
+    MoneyDeposited: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
++    MoneyWithdrawn: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
   },
   reply: {
-    DepositMoney: (s) => ({ balance: mustBeOpen(s).balance }),
-+    WithdrawMoney: (s) => ({ balance: mustBeOpen(s).balance }),
+    DepositMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
++    WithdrawMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
   },
 }) {}
 ```
@@ -388,11 +366,8 @@ import { AccountOpened, AlreadyOpen, OpenAccount } from "../src/OpenAccount.comm
 +import { InsufficientFunds, WithdrawMoney } from "../src/WithdrawMoney.command.ts";
 
 const story = Story.make(Bank);
-```
-
-```diff lang="typescript"
-// test/Account.test.ts
-  story(Story.when(account, new DepositMoney({ amount: 100 })), Story.rejected(new NotOpen())),
+  // ...
+  story(Story.when(new DepositMoney({ accountId: account.id, amount: 100 })), Story.rejected(new NotOpen())),
 );
 +
 +it.effect("refuses to withdraw more than the balance", () =>
@@ -402,7 +377,7 @@ const story = Story.make(Bank);
 +      new AccountOpened({ owner: "sam" }),
 +      new MoneyDeposited({ amount: 100, balanceAfter: 100 }),
 +    ),
-+    Story.when(account, new WithdrawMoney({ amount: 150 })),
++    Story.when(new WithdrawMoney({ accountId: account.id, amount: 150 })),
 +    Story.rejected(new InsufficientFunds({ balance: 100, requested: 150 })),
 +  ),
 +);
@@ -412,8 +387,133 @@ const story = Story.make(Bank);
 bun vitest run
 ```
 
-All five stories pass. You have an account that opens once, takes deposits, and never goes below zero.
+All five stories pass.
+
+## Say what must never happen
+
+```diff lang="typescript"
+// src/Account.aggregate.ts
+export class Account extends Domain.Aggregate("Account", {
+  id: AccountId,
+  state: State,
+  initial: { _tag: "Unopened" },
++  invariants: {
++    NeverNegative: (account) => account._tag !== "Open" || account.balance >= 0,
++  },
+  commands: [OpenAccount, DepositMoney, WithdrawMoney],
+```
+
+A story checks one example. An invariant says what is true of every state the account can be in: `true` while the rule holds. Nothing runs it when a command arrives. It is there to be verified.
+
+## Verify the account
+
+```typescript
+// test/verify.test.ts
+import { it } from "@effect/vitest";
+import * as Verify from "@alchemy.run/domain/Verify";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Effect from "effect/Effect";
+import { Account } from "../src/Account.aggregate.ts";
+
+it.effect("the account keeps its rules", () =>
+  Verify.aggregate(Account).pipe(Effect.provide(NodeServices.layer)),
+);
+```
+
+`Verify.aggregate` reads `decide` and `evolve` as logic and asks a solver whether any state and any input break a rule. It picks every value itself.
+
+```sh
+bun vitest run
+```
+
+The stories pass, and this test fails:
+
+```text
+✗ NeverNegative
+    ✓ holds on the initial state
+    ✓ proved for OpenAccount, WithdrawMoney
+    ✗ DepositMoney: violated
+        state    { _tag: "Open", owner: "", balance: 0 }
+        command  DepositMoney { accountId: "", amount: -1 }
+        events   MoneyDeposited { amount: -1, balanceAfter: -1 }
+        after    { _tag: "Open", owner: "", balance: -1 }
+```
+
+Nobody wrote a story that deposits a negative amount, so nothing caught it. The solver found the input, and the real `decide` and `evolve` were run on it to confirm the balance goes below zero.
+
+## Name an amount of money
+
+```typescript
+// src/Amount.ts
+import * as Schema from "effect/Schema";
+
+export const Amount = Schema.Int.check(Schema.isGreaterThan(0));
+```
+
+An amount is a whole number above zero. A command whose input fails its schema is refused before the account sees it.
+
+## Take only positive amounts
+
+```diff lang="typescript"
+// src/DepositMoney.command.ts
+import { AccountId } from "./Account.id.ts";
++import { Amount } from "./Amount.ts";
+import { NotOpen } from "./NotOpen.rejection.ts";
+// ...
+export class DepositMoney extends Domain.Command("DepositMoney", {
+-  input: { accountId: AccountId, amount: Schema.Int },
++  input: { accountId: AccountId, amount: Amount },
+  events: [MoneyDeposited],
+```
+
+```diff lang="typescript"
+// src/WithdrawMoney.command.ts
+import { AccountId } from "./Account.id.ts";
++import { Amount } from "./Amount.ts";
+import { NotOpen } from "./NotOpen.rejection.ts";
+// ...
+export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
+-  input: { accountId: AccountId, amount: Schema.Int },
++  input: { accountId: AccountId, amount: Amount },
+  events: [MoneyWithdrawn],
+```
+
+Run `bun vitest run` again and the rule is proved:
+
+```text
+Account: 1 rules, 3 commands
+
+Proved: for every state and every input, after any number of commands
+  ✓ NeverNegative
+```
+
+Proved is stronger than tested. No state the rule allows and no input a command accepts lead to a negative balance, after any number of commands.
+
+## Say what a command must never do
+
+```diff lang="typescript"
+// src/Account.aggregate.ts
+  invariants: {
+    NeverNegative: (account) => account._tag !== "Open" || account.balance >= 0,
+  },
++  transitions: {
++    AWithdrawalNeverAddsMoney: ({ before, after, command }) =>
++      command._tag !== "WithdrawMoney" ||
++      before._tag !== "Open" ||
++      after._tag !== "Open" ||
++      after.balance <= before.balance,
++  },
+  commands: [OpenAccount, DepositMoney, WithdrawMoney],
+```
+
+An invariant looks at one state. A transition looks at one step: the state before, the state after, the command and the events it recorded. The same test proves it. Before amounts had to be positive it failed too, on a withdrawal of `-1`.
+
+```sh
+bun vitest run
+```
+
+You have an account that opens once, takes deposits, and is proved never to go below zero.
 
 :::note
-Next, show the balance and a statement with [views](/domain/tutorial/part-2). The full design of aggregates is in [Aggregate](/domain/aggregate).
+Next, show the balance and a statement with [views](/domain/tutorial/part-2). The full design of aggregates is in [Aggregate](/domain/aggregate), and every kind of rule is in [Verifying a model](/domain/verifying-models).
 :::

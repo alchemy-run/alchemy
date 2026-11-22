@@ -1,5 +1,5 @@
 import { matches, sort } from "@alchemy.run/domain/Filter";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as DateTime from "effect/DateTime";
 
 interface Row {
@@ -20,7 +20,7 @@ const row: Row = {
   owner: { country: "NZ" },
 };
 
-describe("Domain Filter", () => {
+describe("Domain Filter", { tags: ["unit", "local"] }, () => {
   it("treats bare values as equality and sibling keys as AND", () => {
     expect(matches<Row>({ frozen: false, name: "savings" }, row)).toBe(true);
     expect(matches<Row>({ frozen: true, name: "savings" }, row)).toBe(false);

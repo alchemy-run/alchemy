@@ -1,9 +1,24 @@
 import * as identitystore from "@distilled.cloud/aws/identitystore";
 import * as ssoAdmin from "@distilled.cloud/aws/sso-admin";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+
+export class IdentityCenterCommonUnexpectedResponse extends Data.TaggedError(
+  "IdentityCenterCommonUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class IdentityCenterCommonInvalidProps extends Data.TaggedError(
+  "IdentityCenterCommonInvalidProps",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Unwrap an identity-store sensitive field. Distilled decodes
@@ -46,9 +61,9 @@ export const resolveInstance = Effect.fn(function* (instanceArn?: string) {
   if (instanceArn) {
     const selected = instances.find((instance) => instance.InstanceArn === instanceArn);
     if (!selected?.InstanceArn || !selected.IdentityStoreId) {
-      return yield* Effect.fail(
-        new Error(`Identity Center instance '${instanceArn}' was not found`),
-      );
+      return yield* new IdentityCenterCommonUnexpectedResponse({
+        message: `Identity Center instance '${instanceArn}' was not found`,
+      });
     }
     return selected;
   }
@@ -62,11 +77,10 @@ export const resolveInstance = Effect.fn(function* (instanceArn?: string) {
     return active[0]!;
   }
 
-  return yield* Effect.fail(
-    new Error(
+  return yield* new IdentityCenterCommonInvalidProps({
+    message:
       "Unable to resolve a single visible Identity Center instance; pass instanceArn explicitly",
-    ),
-  );
+  });
 });
 
 export const resolveIdentityStoreId = Effect.fn(function* ({
@@ -82,11 +96,9 @@ export const resolveIdentityStoreId = Effect.fn(function* ({
 
   const instance = yield* resolveInstance(instanceArn);
   if (!instance.IdentityStoreId) {
-    return yield* Effect.fail(
-      new Error(
-        `Identity Center instance '${instance.InstanceArn}' is missing an identity store ID`,
-      ),
-    );
+    return yield* new IdentityCenterCommonUnexpectedResponse({
+      message: `Identity Center instance '${instance.InstanceArn}' is missing an identity store ID`,
+    });
   }
 
   return instance.IdentityStoreId;

@@ -102,93 +102,97 @@ export const LocalFunctionProvider = () =>
           } satisfies LocalFunctionConfig;
         }),
 
-        start: Effect.fn(function* ({ id, fqn, news, config, invalidate }) {
-          const cached = bundles.get(fqn);
-          const { files } =
-            cached?.codeHash === config.codeHash
-              ? cached
-              : yield* bundle({ ...(news as FunctionProps), local: true });
-          const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-azure-function-" });
-          for (const file of files) {
-            const target = path.join(dir, file.path);
-            yield* fs.makeDirectory(path.dirname(target), { recursive: true });
-            yield* typeof file.content === "string"
-              ? fs.writeFileString(target, file.content)
-              : fs.writeFile(target, file.content);
-          }
-          const port = ports.get(fqn) ?? (yield* freePort);
-          ports.set(fqn, port);
-          const emulator = yield* azuriteEnv;
-          const child = yield* spawner.spawn(
-            ChildProcess.make("node", ["index.mjs"], {
-              cwd: dir,
-              env: { ...config.env, ...emulator, PORT: String(port) },
-              extendEnv: true,
-            }),
-          );
-
-          // Mirror the process output into the dev log; readiness is the
-          // server's READY line.
-          const log = makeResourceLogger(fqn);
-          const ready = yield* Deferred.make<void>();
-          const mirror = (channel: "stdout" | "stderr") =>
-            child[channel].pipe(
-              Stream.decodeText,
-              Stream.splitLines,
-              Stream.runForEach((line) =>
-                line === READY_LINE ? Deferred.succeed(ready, undefined) : log(channel, line),
-              ),
-              Effect.forkScoped,
+        start: Effect.fn(
+          function* ({ id, fqn, news, config, invalidate }) {
+            const cached = bundles.get(fqn);
+            const { files } =
+              cached?.codeHash === config.codeHash
+                ? cached
+                : yield* bundle({ ...(news as FunctionProps), local: true });
+            const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-azure-function-" });
+            for (const file of files) {
+              const target = path.join(dir, file.path);
+              yield* fs.makeDirectory(path.dirname(target), { recursive: true });
+              yield* typeof file.content === "string"
+                ? fs.writeFileString(target, file.content)
+                : fs.writeFile(target, file.content);
+            }
+            const port = ports.get(fqn) ?? (yield* freePort);
+            ports.set(fqn, port);
+            const emulator = yield* azuriteEnv;
+            const child = yield* spawner.spawn(
+              ChildProcess.make("node", ["index.mjs"], {
+                cwd: dir,
+                env: { ...config.env, ...emulator, PORT: String(port) },
+                extendEnv: true,
+              }),
             );
-          yield* mirror("stdout");
-          yield* mirror("stderr");
-          yield* Effect.raceFirst(
-            Deferred.await(ready).pipe(
-              Effect.timeoutOrElse({
-                duration: "60 seconds",
-                orElse: () =>
+
+            // Mirror the process output into the dev log; readiness is the
+            // server's READY line.
+            const log = makeResourceLogger(fqn);
+            const ready = yield* Deferred.make<void>();
+            const mirror = (channel: "stdout" | "stderr") =>
+              child[channel].pipe(
+                Stream.decodeText,
+                Stream.splitLines,
+                Stream.runForEach((line) =>
+                  line === READY_LINE ? Deferred.succeed(ready, undefined) : log(channel, line),
+                ),
+                Effect.forkScoped,
+              );
+            yield* mirror("stdout");
+            yield* mirror("stderr");
+            yield* Effect.raceFirst(
+              Deferred.await(ready).pipe(
+                Effect.timeoutOrElse({
+                  duration: "60 seconds",
+                  orElse: () =>
+                    Effect.fail(
+                      new LocalFunctionFailed({
+                        fqn,
+                        message: "the process did not start serving in 60 s",
+                      }),
+                    ),
+                }),
+              ),
+              child.exitCode.pipe(
+                Effect.flatMap((exitCode) =>
                   Effect.fail(
                     new LocalFunctionFailed({
                       fqn,
-                      message: "the process did not start serving in 60 s",
+                      message: `the process exited with code ${exitCode}`,
                     }),
                   ),
-              }),
-            ),
-            child.exitCode.pipe(
-              Effect.flatMap((exitCode) =>
-                Effect.fail(
-                  new LocalFunctionFailed({
-                    fqn,
-                    message: `the process exited with code ${exitCode}`,
-                  }),
                 ),
               ),
-            ),
-          );
-          // A crash after readiness drops the instance, so the next plan restarts it.
-          yield* child.exitCode.pipe(
-            Effect.exit,
-            Effect.flatMap(() => invalidate),
-            Effect.forkScoped,
-          );
+            );
+            // A crash after readiness drops the instance, so the next plan restarts it.
+            yield* child.exitCode.pipe(
+              Effect.exit,
+              Effect.flatMap(() => invalidate),
+              Effect.forkScoped,
+            );
 
-          const host = `localhost:${port}`;
-          return {
-            functionAppName: config.name ?? id,
-            functionAppId: `${LOCAL_ID_PREFIX}${fqn}`,
-            resourceGroup: config.resourceGroup,
-            location: "local",
-            defaultHostName: host,
-            url: `http://${host}`,
-            principalId: undefined,
-            storageAccountName: undefined,
-            managedApp: true,
-            codeHash: config.codeHash,
-            settingKeys: Object.keys(config.env).sort(),
-            eventSubscriptions: [],
-          } satisfies FunctionAttributes;
-        }, Effect.provideService(FileSystem.FileSystem, fs), Effect.provideService(Path.Path, path)),
+            const host = `localhost:${port}`;
+            return {
+              functionAppName: config.name ?? id,
+              functionAppId: `${LOCAL_ID_PREFIX}${fqn}`,
+              resourceGroup: config.resourceGroup,
+              location: "local",
+              defaultHostName: host,
+              url: `http://${host}`,
+              principalId: undefined,
+              storageAccountName: undefined,
+              managedApp: true,
+              codeHash: config.codeHash,
+              settingKeys: Object.keys(config.env).sort(),
+              eventSubscriptions: [],
+            } satisfies FunctionAttributes;
+          },
+          Effect.provideService(FileSystem.FileSystem, fs),
+          Effect.provideService(Path.Path, path),
+        ),
 
         stop: ({ fqn }) =>
           Effect.sync(() => {

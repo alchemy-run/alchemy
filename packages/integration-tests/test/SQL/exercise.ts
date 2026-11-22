@@ -1,4 +1,4 @@
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -52,7 +52,7 @@ export const getJson = (url: string) =>
  * - `sql.unsafe` (raw DDL) — `/init`
  * - the `sql(table)` identifier helper — `/reset` (and every later route)
  * - single-row `sql.insert` nested in an outer template + `sql.and` over
- *   nested fragments — `/users` (the original proxyChain regression)
+ *   nested fragments — `/users`
  * - multi-row `sql.insert` + `sql.literal` — `/users/batch`
  * - `sql.update(row, omit)` — `PUT /users`
  * - `sql.in(column, values)` — `/users/in`

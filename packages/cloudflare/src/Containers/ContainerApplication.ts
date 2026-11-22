@@ -1,7 +1,10 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
+import type { DockerfileBuild, DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
+import type { MountCapability } from "alchemy/Mount";
 import { type Main, type PlatformProps, type PlatformServices } from "alchemy/Platform";
 import { Resource } from "alchemy/Resource";
 import type { ProcessServices } from "alchemy/Runtime/Process";
@@ -106,9 +109,13 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    */
   className?: string;
   /**
-   * Initial number of instances to maintain. Matches wrangler, which forces
-   * this to 0 whenever {@link maxInstances} is set (pure scale-from-zero).
-   * @default 0
+   * Number of instances to keep running.
+   *
+   * Set it to own the count: every deploy restores it if it drifted, without
+   * rolling out an unchanged configuration. Omit it to leave capacity to
+   * Cloudflare: a new application starts at 0 (pure scale-from-zero, like
+   * wrangler) and later deploys never reset the live count.
+   * @default 0 when the application is created; the live count afterwards
    */
   instances?: number;
   /**
@@ -171,7 +178,10 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    */
   labels?: ContainerApplication.Label[];
   /**
-   * Network configuration for the deployment.
+   * Network configuration for the deployment: IPv4/IPv6 address assignment
+   * (`"none"` or `"predefined"`) and `mode` (`"private"` or `"public"`).
+   * `assignIpv4: "predefined"` implies `mode: "public"`, so private-only
+   * accounts set both families to `"none"`.
    */
   network?: ContainerApplication.Network;
   /**
@@ -238,12 +248,9 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
      * instance; an explicit repository allows cross-stage reuse.
      *
      * For Dockerfile and Effect-native builds, Alchemy publishes a content-hash
-     * tag and an inline layer-cache tag, then deploys an immutable manifest
-     * digest. The build hash and manifest digest are different identifiers.
-     * Builds targeting this repository import reusable layers from its shared
-     * `:buildcache` tag, even when their full input hashes differ. The tag points
-     * to the latest exported inline cache, not an aggregate of all historical
-     * images. A finished-image cache hit leaves this layer-cache tag unchanged.
+     * tag, then deploys an immutable manifest digest. The build hash and
+     * manifest digest are different identifiers. With `build.cache: true`,
+     * builds also keep their layers at this repository's `:buildcache` tag.
      *
      * Applications and stages in the same account can share `"web"`. Matching
      * build inputs reuse the published image; changed inputs produce another
@@ -265,8 +272,6 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
      *
      * // Published build:
      * // registry.cloudflare.com/<account-id>/web:<build-hash>
-     * // Shared build-layer cache:
-     * // registry.cloudflare.com/<account-id>/web:buildcache
      * // Deployed image (app.configuration.image):
      * // registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
      * ```
@@ -284,13 +289,13 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
 }
 
 /**
- * Bundle an Effect-native program into a generated image. Alchemy bundles
- * {@link main} and bakes it in as the container's entrypoint. The
- * environment the program runs in comes from {@link image} or an inline
- * {@link dockerfile} (exclusive with each other), defaulting to the
- * runtime's base image.
+ * The Effect-native image source: Alchemy bundles {@link main} and bakes it
+ * into a generated image as the container's entrypoint. The environment the
+ * program runs in comes from {@link image} or an inline {@link dockerfile}
+ * (exclusive with each other), defaulting to the runtime's base image.
+ * Shared by fleet-scheduled and Durable Object-managed Containers.
  */
-export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
+export interface EffectfulImageProps {
   /** Entrypoint file for the Effect program, typically `import.meta.url`. */
   main: string;
   /**
@@ -353,16 +358,34 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
    * Bundler configuration for {@link main}. Unused code is tree-shaken.
    * `effect`, alchemy, and `@distilled.cloud` are marked pure so unused
    * parts prune more aggressively. List extra packages with
-   * `pure.packages`, or disable with `pure: false`.
+   * `pure.packages`, or disable with `pure: false`. `cache: true` keeps the
+   * image build's layers in the repository's `:buildcache` tag.
    */
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig & BuildCacheOptions;
+}
+
+/**
+ * Bundle an Effect-native program into a generated image and run it on a
+ * fleet-scheduled application. An Effect-native Container is Durable
+ * Object-managed unless it names a fleet policy. See
+ * {@link EffectfulImageProps}.
+ */
+export interface EffectfulContainerProps
+  extends Omit<ContainerApplicationPropsBase, "schedulingPolicy">, EffectfulImageProps {
+  /**
+   * Run the program on a fleet-scheduled application: Cloudflare picks
+   * where instances run and applies `maxInstances`, rollouts, and placement.
+   * Omit it for a Durable Object-managed Container.
+   */
+  schedulingPolicy: "default" | "regional";
 }
 
 /**
  * Build the container image from your own Dockerfile — no Effect program is
  * bundled. The image is shipped as-is.
  */
-export interface ExternalContainerProps extends ContainerApplicationPropsBase {
+export interface ExternalContainerProps
+  extends ContainerApplicationPropsBase, DockerfileBuildOptions {
   /**
    * The build context directory containing the Dockerfile and any files it
    * copies. Only valid with a `dockerfile` PATH (not inline content).
@@ -371,8 +394,9 @@ export interface ExternalContainerProps extends ContainerApplicationPropsBase {
    */
   context?: string;
   /**
-   * The Dockerfile to build. A string is a **path** resolved relative to
-   * {@link context} (default `<context>/Dockerfile`); an
+   * The Dockerfile to build. A string is a **path** (default
+   * `<context>/Dockerfile`). A relative path is resolved against
+   * {@link context}. An
    * {@link InlineDockerfile} (typically `Dockerfile.inline`) is the whole
    * Dockerfile's content, built in an empty generated context (exclusive
    * with {@link context}).
@@ -389,6 +413,12 @@ export interface RemoteContainerProps extends ContainerApplicationPropsBase {
    * The pre-built image to pull and re-push.
    *
    * E.g. `ghcr.io/alpine/alpine:latest`
+   *
+   * Alchemy pulls the image as `linux/amd64` on every deploy and every
+   * `alchemy dev` start, so a mutable tag picks up a newly pushed image.
+   * An image that exists only in the local Docker (built on this machine
+   * or `docker load`ed) is used as-is when the pull fails; build it with
+   * `--platform linux/amd64`, the platform Cloudflare runs.
    *
    * When the reference already points at the target registry (the
    * {@link ContainerApplicationPropsBase.registryId | registryId} host,
@@ -439,25 +469,22 @@ export interface DurableObjectApplicationSettings {
  * The policy is immutable: migrating an existing fleet application requires a
  * new application and Durable Object namespace.
  */
-export interface DurableObjectContainerProps
+export interface DurableObjectContainerPropsBase
   extends DurableObjectApplicationSettings, PlatformProps {
   /** Select images and instance sizes in `ctx.container.start()`. */
   schedulingPolicy: "durable_object";
   /**
-   * Registry image to copy into Cloudflare's managed registry, e.g.
-   * `"node:24-slim"`. Exclusive with {@link context} and {@link dockerfile}.
-   * Omit every image source to contribute no image: `start()` then uses the
-   * managed `cloudflare/debian-trixie` image unless given another.
+   * Environment variables for the container process. A Durable
+   * Object-managed application has no deployment environment, so the
+   * Durable Object's handle passes them to every `start()`; an `env` given
+   * to `start()` overrides them by name. Wrap a secret in `Redacted`: the
+   * values reach the hosting Worker as one `secret_text` binding.
+   *
+   * Only an Effect-native Durable Object's handle passes them. An async
+   * class that calls `ctx.container.start()` itself passes its own `env`.
    */
-  image?: string;
-  /**
-   * Docker build context. Setting `context` or `dockerfile` builds the image;
-   * `context` defaults to the current directory.
-   */
-  context?: string;
-  /** Dockerfile path or inline content. Defaults to the context's Dockerfile. */
-  dockerfile?: string | InlineDockerfile;
-  /** Image publication and build-cache configuration. */
+  env?: Record<string, any>;
+  /** Image publication configuration. */
   publish?: ContainerApplicationPropsBase["publish"];
   /**
    * Maximum wait for Cloudflare to prepare the published image, including API calls.
@@ -470,16 +497,61 @@ export interface DurableObjectContainerProps
 }
 
 /**
+ * A Durable Object-managed Container whose image is a registry `image` or a
+ * Dockerfile build. See {@link DurableObjectContainerPropsBase}.
+ */
+export interface DurableObjectContainerProps
+  extends DurableObjectContainerPropsBase, DockerfileBuildOptions {
+  /**
+   * Registry image to copy into Cloudflare's managed registry, e.g.
+   * `"node:24-slim"`. Exclusive with {@link context} and {@link dockerfile}.
+   * Omit every image source to contribute no image: `start()` then uses the
+   * managed `cloudflare/debian-trixie` image unless given another.
+   *
+   * Alchemy pulls the image as `linux/amd64` on every deploy and every
+   * `alchemy dev` start, so a mutable tag picks up a newly pushed image.
+   * An image that exists only in the local Docker (built on this machine
+   * or `docker load`ed) is used as-is when the pull fails; build it with
+   * `--platform linux/amd64`, the platform Cloudflare runs.
+   */
+  image?: string;
+  /**
+   * Docker build context. Setting `context` or `dockerfile` builds the image;
+   * `context` defaults to the current directory.
+   */
+  context?: string;
+  /** Dockerfile path or inline content. Defaults to the context's Dockerfile. */
+  dockerfile?: string | InlineDockerfile;
+}
+
+/**
+ * A Durable Object-managed Container that runs an Effect program. Alchemy
+ * bundles {@link EffectfulImageProps.main | main} into the Container's one
+ * image, and the Durable Object reaches the program's methods over RPC. See
+ * {@link EffectfulImageProps} and {@link DurableObjectContainerPropsBase}.
+ */
+export interface EffectfulDurableObjectContainerProps
+  extends Omit<DurableObjectContainerPropsBase, "schedulingPolicy">, EffectfulImageProps {
+  /**
+   * Select images and instance sizes in `ctx.container.start()`. This is an
+   * Effect-native Container's default.
+   * @default "durable_object"
+   */
+  schedulingPolicy?: "durable_object";
+}
+
+/**
  * Fleet-scheduled applications select a deployment image through `main`
  * (bundled Effect program), `context`/`dockerfile`, or a pre-built `image`.
- * A Durable Object-managed Container publishes one image that its Durable
- * Object selects at runtime.
+ * A Durable Object-managed Container publishes one image, from the same
+ * sources, that its Durable Object selects at runtime.
  */
 export type ContainerApplicationProps =
   | EffectfulContainerProps
   | ExternalContainerProps
   | RemoteContainerProps
-  | DurableObjectContainerProps;
+  | DurableObjectContainerProps
+  | EffectfulDurableObjectContainerProps;
 
 /**
  * INTERNAL — the loose provider-side view across the variants: every
@@ -495,6 +567,11 @@ export interface AnyContainerApplicationProps extends Omit<
   ssh?: ContainerSshConfiguration;
   authorizedKeys?: Containers.UserSSHPublicKeyList;
   imagePreparationTimeout?: Duration.Input;
+  /**
+   * @internal Dockerfile lines contributed by mount bindings, folded in from
+   * the bindings by the provider before the image is computed.
+   */
+  imageInstall?: ReadonlyArray<string>;
   main?: string;
   image?: string;
   context?: string;
@@ -503,7 +580,8 @@ export interface AnyContainerApplicationProps extends Omit<
   runtime?: "bun" | "node";
   external?: string[];
   autoInstallExternals?: boolean;
-  build?: Bundle.BundleConfig;
+  /** Bundler config for `main`; Docker build args and secrets for `context`; the layer cache for both. */
+  build?: Bundle.BundleConfig & DockerfileBuild;
 }
 
 export type ContainerServices = ContainerApplication | PlatformServices | ProcessServices;
@@ -567,13 +645,13 @@ export type ContainerShape = Main<ContainerServices>;
  * ```typescript
  * export class Web extends Cloudflare.Container<Web>()("Web", {
  *   context: `${import.meta.dirname}/context`,
- *   dockerfile: "Dockerfile",
+ *   dockerfile: "Dockerfile.web",
  * }) {}
  * ```
  *
  * Alchemy builds `dockerfile` against the `context` directory with no `main`
- * bundling. `dockerfile` is resolved relative to `context` and defaults to
- * `<context>/Dockerfile`.
+ * bundling. `dockerfile` defaults to `<context>/Dockerfile`; a relative
+ * path is resolved against `context`.
  *
  * **Example:** Remote image (`image`)
  * ```typescript
@@ -742,7 +820,7 @@ export type ContainerShape = Main<ContainerServices>;
  * export class Web extends Cloudflare.Container<Web>()("Web", {
  *   main: import.meta.url,
  *   ports: [{ name: "http", port: 8080 }],
- *   network: { assignIpv4: "predefined", mode: "public" },
+ *   network: { assignIpv4: "none", assignIpv6: "none", mode: "private" },
  *   dns: { servers: ["1.1.1.1"], searches: ["internal"] },
  *   checks: [{ name: "ready", type: "http", port: "8080", tls: false }],
  * }) {}
@@ -752,6 +830,11 @@ export type ContainerShape = Main<ContainerServices>;
  * assignment and public/private reachability, `dns` overrides resolver settings,
  * and `checks` tells Cloudflare how to probe the container before routing
  * traffic to it.
+ *
+ * The example is the private shape, which every account accepts.
+ * `assignIpv4: "predefined"` requests public reachability: Cloudflare infers
+ * `mode: "public"` when `mode` is omitted, rejects it on accounts that only
+ * permit private networking, and refuses it alongside `mode: "private"`.
  *
  * ### Observability & Access
  * Turn on log shipping with `observability` and install `sshPublicKeyIds` for
@@ -890,6 +973,13 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      */
     image?: string;
     /**
+     * The environment a Durable Object-managed Container's handle passes to
+     * `start()`: the declared `env`, the env its capabilities bind, and
+     * `ALCHEMY_CLOUDFLARE_ACCOUNT_ID`. Unset for fleet applications, which
+     * deploy their environment with the application.
+     */
+    runtimeEnv?: Record<string, string | Redacted.Redacted<string>>;
+    /**
      * The Durable Object namespace attached to the application, if it is bound
      * to one.
      */
@@ -915,6 +1005,11 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
       image: string;
       digest?: string;
       configuration?: string;
+      /**
+       * Hash of the container configuration alone. Only a change to it
+       * creates a rollout; scaling and placement changes apply in place.
+       */
+      rollout?: string;
     };
     dev: DevContainerImage | undefined;
   },
@@ -929,6 +1024,12 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      * Environment variables injected into the container runtime via the binding.
      */
     env?: Record<string, any>;
+    /**
+     * Filesystem clients bound by mount bindings (e.g. `Archil.MountDisk`):
+     * installed into the generated image so the program can mount at run
+     * time. Cloudflare Containers provide FUSE by default.
+     */
+    mounts?: ReadonlyArray<MountCapability>;
   },
   Providers
 > {
@@ -953,6 +1054,7 @@ export declare namespace DevContainerImage {
     readonly dockerfile: string;
     readonly context?: string;
     readonly buildArgs?: Record<string, string>;
+    readonly buildSecrets?: Record<string, string | Redacted.Redacted<string>>;
   }
   export interface Pull extends Base {
     readonly imageUri: string;

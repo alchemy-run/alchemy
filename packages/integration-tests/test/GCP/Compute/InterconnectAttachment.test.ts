@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { DEFAULT_NETWORK } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -65,14 +66,12 @@ test.provider(
       const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         compute.insertInterconnectAttachments({
+          name: "alchemy-vlan-probe",
+          description: "alchemy entitlement probe",
+          router: "does-not-exist",
+          type: "PARTNER",
           project,
           region,
-          body: {
-            name: "alchemy-vlan-probe",
-            description: "alchemy entitlement probe",
-            router: "does-not-exist",
-            type: "PARTNER",
-          },
         }),
       );
       expect(error._tag).toEqual("BadRequest");
@@ -101,6 +100,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { router, attachment };
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.InterconnectAttachment.lookup({
+          interconnectAttachmentName: created.attachment.interconnectAttachmentName,
+          region: created.attachment.region,
+        }),
+        created.attachment,
       );
 
       expect(created.attachment.interconnectAttachmentName).toEqual(expect.any(String));

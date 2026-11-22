@@ -188,13 +188,19 @@ const MAX_WORKLOAD_VM_NAME_LENGTH = 84;
 
 type Observed = backup.GetProtectionContainerResponse;
 
+// `sourceResourceId` and `acquireStorageAccountLock` live on some container arms only.
+const sourceResourceIdOf = (container: backup.ProtectionContainer | undefined) =>
+  container !== undefined && "sourceResourceId" in container
+    ? container.sourceResourceId
+    : undefined;
+const storageLockOf = (container: backup.ProtectionContainer | undefined) =>
+  container !== undefined && "acquireStorageAccountLock" in container
+    ? container.acquireStorageAccountLock
+    : undefined;
 const nameOf = (armId: string) => armId.split("/").filter(Boolean).at(-1) ?? "";
 
 /** Default container name for a source resource. */
-export const backupContainerName = (
-  containerType: BackupContainerType,
-  sourceResourceId: string,
-) =>
+export const backupContainerName = (containerType: BackupContainerType, sourceResourceId: string) =>
   containerType === "StorageContainer"
     ? `StorageContainer;Storage;${resourceGroupOf(sourceResourceId)};${nameOf(sourceResourceId)}`
     : `VMAppContainer;Compute;${resourceGroupOf(sourceResourceId)};${nameOf(sourceResourceId)}`;
@@ -245,7 +251,7 @@ const toAttrs = (
   fabricName: BACKUP_FABRIC,
   containerId: observed.id ?? "",
   containerType: observed.properties?.containerType ?? "",
-  sourceResourceId: observed.properties?.sourceResourceId ?? "",
+  sourceResourceId: sourceResourceIdOf(observed.properties) ?? "",
   registrationStatus: observed.properties?.registrationStatus ?? "",
   healthStatus: observed.properties?.healthStatus ?? "",
 });
@@ -316,8 +322,7 @@ export const BackupProtectionContainerProvider = () =>
       const observed = yield* get;
       // GET does not always echo the lock setting; fall back to the last
       // applied value.
-      const observedLock =
-        observed?.properties?.acquireStorageAccountLock ?? olds?.acquireStorageAccountLock;
+      const observedLock = storageLockOf(observed?.properties) ?? olds?.acquireStorageAccountLock;
       const lockDrift =
         news.acquireStorageAccountLock !== undefined &&
         observedLock !== undefined &&

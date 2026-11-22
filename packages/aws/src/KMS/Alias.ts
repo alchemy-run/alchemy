@@ -8,12 +8,13 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
-import type { KeyArn, KeyId } from "./Key.ts";
+import type { KeyId } from "./Key.ts";
 
 export type AliasName = `alias/${string}`;
-export type AliasArn = `arn:aws:kms:${RegionID}:${AccountID}:${AliasName}`;
+export type AliasArn = `arn:${Partition}:kms:${RegionID}:${AccountID}:${AliasName}`;
 
 export interface AliasProps {
   /**
@@ -23,7 +24,7 @@ export interface AliasProps {
   /**
    * Target KMS key ID or ARN for this alias.
    */
-  targetKeyId: KeyId | KeyArn;
+  targetKeyId: KeyId;
 }
 
 export interface Alias extends Resource<
@@ -35,8 +36,18 @@ export interface Alias extends Resource<
     targetKeyId: KeyId;
   },
   never,
-  Providers
+  Providers,
+  AliasLookup
 > {}
+
+/**
+ * Props for {@link Alias.lookup}: find a KMS alias this stack doesn't
+ * manage, in the ambient account and region, by name.
+ */
+export interface AliasLookup {
+  /** The alias name, including its `alias/` prefix. */
+  aliasName: string;
+}
 
 /**
  * An AWS KMS alias that points to a customer managed key.
@@ -51,6 +62,16 @@ export interface Alias extends Resource<
  *   aliasName: "alias/app",
  *   targetKeyId: key.keyId,
  * });
+ * ```
+ *
+ * ### Looking up an existing alias
+ * `Alias.lookup` references an alias Alchemy doesn't manage (created in the console or by another stack), found by `aliasName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Encrypt with the key an existing alias points to
+ * ```typescript
+ * const alias = KMS.Alias.lookup({ aliasName: "alias/app" });
+ * const key = KMS.Key.lookup({ keyId: alias.targetKeyId });
  * ```
  */
 export const Alias = Resource<Alias>("AWS.KMS.Alias");
@@ -84,6 +105,7 @@ export const AliasProvider = () =>
             targetKeyId: alias.TargetKeyId,
           }));
       }),
+    lookup: ({ aliasName }) => readAlias(aliasName as AliasName),
     read: Effect.fn(function* ({ id, olds, output }) {
       const aliasName = output?.aliasName ?? (yield* toAliasName(id, olds ?? {}));
       const state = yield* readAlias(aliasName);
@@ -193,7 +215,7 @@ const findAlias = Effect.fn(function* (aliasName: AliasName) {
 
 const aliasArn = Effect.fn(function* (aliasName: AliasName) {
   const { accountId, region } = yield* AWSEnvironment.current;
-  return `arn:aws:kms:${region}:${accountId}:${aliasName}` as AliasArn;
+  return `arn:${partitionOf(region)}:kms:${region}:${accountId}:${aliasName}` as AliasArn;
 });
 
 const resolveTargetKeyId = Effect.fn(function* (targetKeyId: string) {

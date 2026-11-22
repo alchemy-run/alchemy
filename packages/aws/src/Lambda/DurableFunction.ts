@@ -5,7 +5,7 @@ import * as Output from "alchemy/Output";
 import type { PlatformServices } from "alchemy/Platform";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { toSeconds, toWireDays } from "alchemy/Util/Duration";
-import { effectClass, taggedFunction } from "alchemy/Util/effect";
+import { effectClass, taggedFunction, isEffectOf } from "alchemy/Util/effect";
 import type { DistributiveOmit } from "alchemy/Util/types";
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
@@ -19,6 +19,7 @@ import type { DurableExecutionContext, DurableStep } from "./Durable.ts";
 import { DURABLE_SDK_MODULE, encodeDurableEnvelope, makeDurableListener } from "./DurableBridge.ts";
 import { Function, type FunctionProps, type FunctionServices } from "./Function.ts";
 import type { HandlerContext } from "./InvocationDeadline.ts";
+import { qualifierOf } from "./QualifiedArn.ts";
 
 type TypeId = "AWS.Lambda.DurableFunction";
 const TypeId = "AWS.Lambda.DurableFunction" as const;
@@ -130,6 +131,7 @@ export interface DurableStartOptions<Input = unknown> {
    * replay against the version they started on. `$LATEST` is suitable for
    * disposable development; production starts should target an immutable
    * numbered {@link Version} or a stable {@link Alias}.
+   * @default the function's `alias` when set, otherwise `$LATEST`
    */
   qualifier?: string;
 }
@@ -320,9 +322,8 @@ const mapDurableProps = (props: DurableFunctionProps): FunctionProps => {
 };
 
 const mapDurablePropsInput = (props: unknown) =>
-  Effect.isEffect(props)
-    ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- props are untyped; Effect-valued props are resolved by the engine
-      Effect.map(props as Effect.Effect<DurableFunctionProps>, mapDurableProps)
+  isEffectOf<DurableFunctionProps>(props)
+    ? Effect.map(props, mapDurableProps)
     : mapDurableProps(props as DurableFunctionProps);
 
 const resolveDurableHandle = (id: string) => (instance: unknown) => {
@@ -373,6 +374,13 @@ const composeDurableImpl = (
     // finish). Resolve it lazily inside the runtime callables instead, the
     // same posture as `InvokeFunctionHttp`.
     const FunctionName = host.functionName;
+    // Executions start on the alias when the function sets one.
+    // Typed like the iterator `FunctionName` resolves through, whose
+    // RuntimeContext the host always provides.
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the host provides RuntimeContext at runtime
+    const Qualifier = qualifierOf(host).bind(`${host.LogicalId}.qualifier`) as Effect.Effect<
+      Effect.Effect<string>
+    >;
 
     if (!globalThis.__ALCHEMY_RUNTIME__) {
       // Self-binding: the statements land on this function's own execution
@@ -426,7 +434,7 @@ const composeDurableImpl = (
             FunctionName: functionName,
             InvocationType: "Event",
             DurableExecutionName: options?.name,
-            Qualifier: options?.qualifier,
+            Qualifier: options?.qualifier ?? (yield* yield* Qualifier),
             Payload: encodeDurableEnvelope(name, options?.params),
           });
           return {
@@ -466,6 +474,7 @@ const composeDurableImpl = (
     // Resolve the body function. Bindings resolved in the impl's init close
     // over their services; the returned closure's only leftover requirements
     // are DurableRunServices, provided per invocation by the bridge.
+    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the impl's init requirements are the host's, erased by composeDurableImpl
     const fn = yield* (impl as Effect.Effect<DurableFunctionImpl<any, any>>).pipe(
       Effect.provideService(DurableFunctionScope, handle),
     );

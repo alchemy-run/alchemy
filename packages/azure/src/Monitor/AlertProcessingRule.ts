@@ -331,7 +331,9 @@ const toProperties = (
   scopes: news.scopes,
   actions: news.actions,
   conditions: news.conditions,
-  schedule: news.schedule,
+  // Each recurrence's `recurrenceType` is only known at runtime and decides
+  // its arm, so the schedule is asserted rather than narrowed.
+  schedule: news.schedule as alertsmanagement.Schedule | undefined,
   description: news.description,
   enabled: news.enabled ?? true,
 });

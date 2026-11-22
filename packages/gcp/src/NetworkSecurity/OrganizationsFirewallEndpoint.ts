@@ -116,8 +116,29 @@ export type OrganizationsFirewallEndpoint = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationsFirewallEndpointLookup
 >;
+
+/**
+ * Props for {@link OrganizationsFirewallEndpoint.lookup}: find an
+ * organizations firewall endpoint this stack doesn't manage by its
+ * identifiers.
+ */
+export interface OrganizationsFirewallEndpointLookup {
+  /**
+   * Firewall endpoint id.
+   */
+  firewallEndpointId: string;
+  /**
+   * Organization id or `organizations/{organization}`.
+   */
+  organization?: string;
+  /**
+   * Zone (`us-central1-a`, …). Firewall endpoints are zonal.
+   */
+  location?: string;
+}
 
 /**
  * An organization-scoped Cloud NGFW firewall endpoint.
@@ -149,6 +170,19 @@ export type OrganizationsFirewallEndpoint = Resource<
  *     labels: { env: "prod" },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing organizations firewall endpoint
+ * `OrganizationsFirewallEndpoint.lookup` references an organizations
+ * firewall endpoint Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared organizations firewall endpoint.
+ *
+ * **Example:** Reference an existing organizations firewall endpoint
+ * ```typescript
+ * const organizationsFirewallEndpoint = GCP.NetworkSecurity.OrganizationsFirewallEndpoint.lookup({
+ *   firewallEndpointId: "my-firewall-endpoint",
+ * });
  * ```
  *
  * @resource
@@ -191,7 +225,7 @@ const toAttrs = (endpoint: networksecurity.FirewallEndpoint) => {
 const getByName = (name: string) =>
   networksecurity
     .getOrganizationsLocationsFirewallEndpoints({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isPendingState = (state: string | undefined) =>
   state === "CREATING" || state === "DELETING" || state === "STATE_UNSPECIFIED";
@@ -200,11 +234,11 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (endpoint): endpoint is networksecurity.FirewallEndpoint => endpoint !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (endpoint) => !isPendingState(endpoint.state),
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.ResourceNotResolved",
@@ -276,6 +310,23 @@ export const OrganizationsFirewallEndpointProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({
+      firewallEndpointId,
+      organization: lookupOrganization,
+      location: lookupLocation,
+    }) {
+      const organization = yield* resolveOrganization(lookupOrganization, undefined).pipe(
+        Effect.catchTag("GCP.NetworkSecurity.OrganizationRequired", () => Effect.succeed("")),
+      );
+      const location = normalizeZone(lookupLocation);
+      const name =
+        organization.length > 0 ? resourceName(organization, location, firewallEndpointId) : "";
+      if (name.length === 0) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const firewallEndpointId = yield* toPhysicalId(
         id,
@@ -339,14 +390,12 @@ export const OrganizationsFirewallEndpointProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createOrganizationsLocationsFirewallEndpoints({
+            billingProjectId,
+            description: news.description,
+            labels: desiredLabels,
+            endpointSettings: { jumboFramesEnabled },
             parent: organizationParent(organization, location),
             firewallEndpointId,
-            body: {
-              billingProjectId,
-              description: news.description,
-              labels: desiredLabels,
-              endpointSettings: { jumboFramesEnabled },
-            },
           })
           .pipe(
             Effect.retry({
@@ -354,7 +403,7 @@ export const OrganizationsFirewallEndpointProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -363,7 +412,7 @@ export const OrganizationsFirewallEndpointProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -378,13 +427,10 @@ export const OrganizationsFirewallEndpointProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* networksecurity.patchOrganizationsLocationsFirewallEndpoints({
+          labels: desiredLabels,
+          description: news.description,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
@@ -402,7 +448,7 @@ export const OrganizationsFirewallEndpointProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

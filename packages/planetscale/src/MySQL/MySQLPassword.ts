@@ -189,7 +189,7 @@ export const MySQLPasswordProvider = () =>
               branch: output.branch,
             }),
           ),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
     }),
 
@@ -217,7 +217,7 @@ export const MySQLPasswordProvider = () =>
               branch: branchName,
               id: output.id,
             })
-            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)))
+            .pipe(Effect.catchTag("NotFound", () => Effect.undefined))
         : undefined;
 
       // 2. Ensure — create the password if it doesn't exist live.

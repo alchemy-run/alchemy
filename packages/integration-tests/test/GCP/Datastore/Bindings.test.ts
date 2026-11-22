@@ -1,11 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as datastore from "@distilled.cloud/gcp/datastore_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import DatastoreBindingsHost, {
   apiDatabaseId,
   COMMITTED,
@@ -35,28 +35,27 @@ const requestParams = () =>
 /** Look an entity up out of band, as the deployer. */
 const lookupOutOfBand = (path: { kind: string; name: string }) =>
   datastore.lookupProjects({
+    databaseId,
+    keys: [keyOf(path)],
     projectId: project,
     requestParams: requestParams(),
-    body: { databaseId, keys: [keyOf(path)] },
   });
 
 /** Seed the entity the Lookup / RunQuery probes read, as the deployer. */
 const seed = Effect.suspend(() =>
   datastore.commitProjects({
+    databaseId,
+    mode: "NON_TRANSACTIONAL",
+    mutations: [
+      {
+        upsert: {
+          key: keyOf(SEEDED),
+          properties: { title: { stringValue: "seeded" } },
+        },
+      },
+    ],
     projectId: project,
     requestParams: requestParams(),
-    body: {
-      databaseId,
-      mode: "NON_TRANSACTIONAL",
-      mutations: [
-        {
-          upsert: {
-            key: keyOf(SEEDED),
-            properties: { title: { stringValue: "seeded" } },
-          },
-        },
-      ],
-    },
   }),
 );
 
@@ -67,8 +66,8 @@ const seed = Effect.suspend(() =>
  */
 const projectGrants = Effect.gen(function* () {
   const policy = yield* crm.getIamPolicyProjects({
+    options: { requestedPolicyVersion: 3 },
     resource: `projects/${project}`,
-    body: { options: { requestedPolicyVersion: 3 } },
   });
   return (policy.bindings ?? [])
     .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
@@ -87,7 +86,7 @@ const expectScopedGrants = Effect.gen(function* () {
   ]);
 });
 
-describe.skipIf(!dockerAvailable || !!process.env.FAST)(
+describe.skipIf(!!process.env.FAST)(
   "Datastore Bindings",
   {
     tags: [

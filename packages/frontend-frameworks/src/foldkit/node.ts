@@ -24,7 +24,7 @@ const makeNodeFinishTarget = (config: FoldkitTargetConfig = {}): FoldkitTarget =
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         if (!output.distDirectory || !output.clientDirectory)
-          return yield* Effect.fail(fail("Foldkit produced no deployment or client directory."));
+          return yield* fail("Foldkit produced no deployment or client directory.");
         const server = path.join(output.distDirectory, "server");
         yield* fs.makeDirectory(server, { recursive: true });
         yield* fs.writeFileString(path.join(server, "package.json"), '{"type":"module"}\n');

@@ -140,7 +140,7 @@ export const SnippetRulesProvider = () =>
             // reject the route; skip them. (`listObservedRules` already maps
             // the snippet-rules 404 to an empty list, which becomes
             // `undefined` above.)
-            Effect.catchTag(["Forbidden", "Unauthorized"], () => Effect.succeed(undefined)),
+            Effect.catchTag(["Forbidden", "Unauthorized"], () => Effect.undefined),
           ),
         { concurrency: 10 },
       );

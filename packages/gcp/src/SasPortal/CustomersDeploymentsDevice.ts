@@ -161,7 +161,7 @@ export class CustomersDeploymentsDeviceNotResolved extends Data.TaggedError(
   "GCP.SasPortal.CustomersDeploymentsDeviceNotResolved",
 )<{
   parent: string;
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (device: sasportal.SasPortalDevice, parent: string, project: string) => {
@@ -272,10 +272,7 @@ export const CustomersDeploymentsDeviceProvider = () =>
 
       if (current === undefined) {
         const created = yield* sasportal
-          .createCustomersDeploymentsDevices({
-            parent,
-            body: desired,
-          })
+          .createCustomersDeploymentsDevices({ ...desired, parent })
           .pipe(
             Effect.catchTag("Conflict", () =>
               findOwnedCustomerDeploymentDevice(id, parent).pipe(Effect.map((found) => found?.row)),
@@ -287,7 +284,7 @@ export const CustomersDeploymentsDeviceProvider = () =>
       if (current === undefined) {
         return yield* new CustomersDeploymentsDeviceNotResolved({
           parent,
-          name: news.name ?? output?.name ?? displayName,
+          resourceName: news.name ?? output?.name ?? displayName,
         });
       }
 
@@ -304,6 +301,7 @@ export const CustomersDeploymentsDeviceProvider = () =>
         !sameJson(deviceMetadataOf(current.deviceMetadata), news.deviceMetadata);
       if (nameChanged || allowlistsChanged || configChanged || metadataChanged) {
         current = yield* sasportal.patchDeploymentsDevices({
+          ...desired,
           name,
           updateMask: updateMaskOf(
             "displayName",
@@ -311,7 +309,6 @@ export const CustomersDeploymentsDeviceProvider = () =>
             news.preloadedConfig !== undefined ? "preloadedConfig" : undefined,
             news.deviceMetadata !== undefined ? "deviceMetadata" : undefined,
           ),
-          body: desired,
         });
       }
 

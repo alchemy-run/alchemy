@@ -1,4 +1,6 @@
 import assert from "node:assert";
+import { existsSync } from "node:fs";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -6,13 +8,16 @@ import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
+import pathe from "pathe";
 import type * as rolldown from "rolldown";
 import { dotAlchemyDirectory } from "../AlchemyContext.ts";
 import { encodeFqn } from "../FQN.ts";
 import { ResourceContext } from "../ResourceContext.ts";
 import { StackContext } from "../StackContext.ts";
+import { LogAnnotation } from "../Util/LogAnnotation.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import { bundleAnalyzerPlugin, type BundleAnalyzerPluginOptions } from "./BundleAnalyzerPlugin.ts";
+import { namespaceImportPlugin } from "./NamespaceImportPlugin.ts";
 import { purePlugin, type PurePluginOptions } from "./PurePlugin.ts";
 import { rawPlugin } from "./RawPlugin.ts";
 import { unreachableChunksPlugin } from "./UnreachableChunksPlugin.ts";
@@ -119,6 +124,11 @@ export interface BundleFile {
   readonly path: string;
   readonly content: string | Uint8Array<ArrayBufferLike>;
   readonly hash: string;
+  /**
+   * The platform's module type for this file, when its extension doesn't
+   * decide it (e.g. a Cloudflare `Text` rule over `.md` files).
+   */
+  readonly type?: string;
 }
 
 export class BundleError extends Schema.TaggedError<BundleError>()("BundleError", {
@@ -185,9 +195,18 @@ const ALCHEMY_MODULE_TYPES: NonNullable<rolldown.InputOptions["moduleTypes"]> = 
  * framework flags win over any caller-provided keys) and
  * {@link ALCHEMY_MODULE_TYPES} into the caller's `moduleTypes` (caller
  * keys win, so an extension can be remapped or disabled per bundle).
+ *
+ * Also enables `experimental.lazyBarrel` unless the caller sets it, so a
+ * runtime importing one service from `@alchemy.run/aws` (a barrel of every
+ * AWS service) compiles that service, not all of them. See
+ * {@link namespaceImportPlugin} for `import * as AWS`.
  */
 const withAlchemyDefine = (inputOptions: rolldown.InputOptions): rolldown.InputOptions => ({
   ...inputOptions,
+  experimental: {
+    lazyBarrel: true,
+    ...inputOptions.experimental,
+  },
   transform: {
     ...inputOptions.transform,
     define: {
@@ -210,6 +229,52 @@ const withAlchemyDefine = (inputOptions: rolldown.InputOptions): rolldown.InputO
 const withDceDefault = (outputOptions?: rolldown.OutputOptions): rolldown.OutputOptions => ({
   ...outputOptions,
   minify: outputOptions?.minify ?? "dce-only",
+});
+
+/** Where pnpm and bun keep their one copy of each installed package. */
+const PACKAGE_STORES = ["/node_modules/.pnpm/", "/node_modules/.bun/"];
+
+/**
+ * Makes a source map path the same on every machine, so the bundle hash
+ * (which covers the map) doesn't change between CI jobs.
+ *
+ * - A dependency in a pnpm/bun store is written as if the store were inside
+ *   `cwd`, wherever the store really is.
+ * - A plugin's virtual module (`builtin:…`) keeps just its id. Rolldown puts
+ *   the process directory in front of it; a path that exists on disk is a
+ *   real file and is left alone.
+ *
+ * Every other path is kept as rolldown wrote it.
+ */
+const stableSourcePath =
+  (cwd: string) =>
+  (source: string, sourcemapPath: string): string => {
+    const directory = pathe.dirname(sourcemapPath);
+    const file = pathe.resolve(directory, source);
+    const store = Math.max(...PACKAGE_STORES.map((marker) => file.lastIndexOf(marker)));
+    if (store !== -1) {
+      return pathe.relative(directory, pathe.join(pathe.resolve(cwd), file.slice(store + 1)));
+    }
+    const id = pathe.relative(pathe.resolve(process.cwd()), file);
+    const isId = !id.startsWith("../") && /^[a-z][a-z0-9+.-]+:/i.test(id) && !existsSync(file);
+    return isId ? id : source;
+  };
+
+/**
+ * Default `sourcemapPathTransform` to {@link stableSourcePath} for a one-shot
+ * build, so its source map, and with it the bundle hash, is the same wherever
+ * it is built. `watch` keeps rolldown's paths: they lead from the map to the
+ * files on disk, which a debugger attached to a dev session needs. A watcher
+ * that compares its builds with a deployed bundle's hash passes its output
+ * options through this, so an unchanged source hashes the same.
+ */
+export const withStableSourcePaths = (
+  inputOptions: rolldown.InputOptions,
+  outputOptions?: rolldown.OutputOptions,
+): rolldown.OutputOptions => ({
+  ...outputOptions,
+  sourcemapPathTransform:
+    outputOptions?.sourcemapPathTransform ?? stableSourcePath(inputOptions.cwd ?? process.cwd()),
 });
 
 /** Whether the caller chose where the bundle is written (`dir` or `file`). */
@@ -284,6 +349,35 @@ const bundleConcurrency = (() => {
 const buildPermits = Semaphore.makeUnsafe(bundleConcurrency);
 
 /**
+ * Rolldown's own logs (warnings such as `UNRESOLVED_IMPORT`, plugin timings)
+ * as `output` records in the context of the build: the resource's `fqn` and
+ * trace, one record per log instead of raw lines on stderr. Like any tool
+ * output, they stay in the run log and are never exported. A caller's own
+ * `onLog` wins.
+ */
+const withRolldownLogs = (
+  inputOptions: rolldown.InputOptions,
+  context: Context.Context<never>,
+): rolldown.InputOptions =>
+  inputOptions.onLog !== undefined
+    ? inputOptions
+    : {
+        ...inputOptions,
+        onLog: (level, log) =>
+          Effect.runSyncWith(context)(
+            Effect.logWithLevel(level === "warn" ? "Warn" : level === "debug" ? "Debug" : "Info")(
+              log.frame === undefined ? log.message : `${log.message}\n${log.frame}`,
+            ).pipe(
+              Effect.annotateLogs({
+                [LogAnnotation.stream]: "stderr",
+                ...(log.code === undefined ? {} : { code: log.code }),
+                ...(log.plugin === undefined ? {} : { plugin: log.plugin }),
+              }),
+            ),
+          ),
+      };
+
+/**
  * Build a bundle using rolldown from the given input options and output options.
  * @param inputOptions - The input options for the bundle.
  * @param outputOptions - The output options for the bundle.
@@ -294,13 +388,16 @@ export const build = (
   outputOptions?: rolldown.OutputOptions,
   extra?: BundleExtraOptions,
 ): Effect.Effect<BundleOutput, BundleError> =>
-  resolveOutputOptions(outputOptions).pipe(
-    Effect.flatMap((options) =>
+  Effect.zip(
+    resolveOutputOptions(withStableSourcePaths(inputOptions, outputOptions)),
+    Effect.context<never>(),
+  ).pipe(
+    Effect.flatMap(([options, context]) =>
       Effect.tryPromise({
         try: async () => {
           const rolldown = await loadRolldown();
           const bundle = await rolldown.rolldown({
-            ...withAlchemyDefine(inputOptions),
+            ...withAlchemyDefine(withRolldownLogs(inputOptions, context)),
             plugins: [inputOptions.plugins, await builtInPlugins(extra)],
             optimization: inputOptions.optimization ?? {
               inlineConst: {
@@ -334,8 +431,37 @@ export const watch = (
   extra?: BundleExtraOptions,
 ): Stream.Stream<BundleWatchEvent> =>
   Stream.unwrap(
-    Effect.map(resolveOutputOptions(outputOptions), watchResolved(inputOptions, extra)),
+    Effect.zipWith(
+      resolveOutputOptions(outputOptions),
+      Effect.context<never>(),
+      (options, context) => watchResolved(withRolldownLogs(inputOptions, context), extra)(options),
+    ),
   );
+
+/**
+ * The framework's own sources, when alchemy runs from its source checkout
+ * rather than from `node_modules`.
+ *
+ * On macOS each watched directory holds a handle on itself and every
+ * ancestor, and every Worker's watcher holds its own. An Effect Worker's
+ * graph reaches dozens of the checkout's `packages/<name>/src` and
+ * `submodules/distilled` directories, so a dev session with a few dozen
+ * Workers (the test suite runs them all in one sidecar) passes the ~10k
+ * descriptors past which `posix_spawn` fails with EBADF: workerd then exits
+ * with `--control-fd=3: Bad file descriptor` and Docker builds fail. An
+ * installed alchemy lives under `node_modules`, which is never watched, so
+ * this only drops framework edits from hot reload in the alchemy repo.
+ */
+const frameworkSourceGlobs = (() => {
+  const packageRoot = import.meta.dirname.replace(/\/src\/Bundle$|\/lib\/Bundle$/, "");
+  if (packageRoot === import.meta.dirname || packageRoot.includes("/node_modules/")) {
+    return [];
+  }
+  // `<repo>/packages/alchemy` → `<repo>`.
+  const repoRoot = packageRoot.replace(/\/packages\/alchemy$/, "");
+  if (repoRoot === packageRoot) return [];
+  return [`${repoRoot}/packages/*/src/**`, `${repoRoot}/submodules/**`];
+})();
 
 const watchResolved =
   (inputOptions: rolldown.InputOptions, extra: BundleExtraOptions | undefined) =>
@@ -376,10 +502,11 @@ const watchResolved =
             // `effect`, `alchemy`, `@distilled.cloud/*`) registers thousands
             // of OS watch handles *per worker*; with several Effect workers
             // this exhausts the process fd table and the next `posix_spawn`
-            // (workerd / docker) fails with `spawn EBADF`. Workspace packages
-            // resolve to their real source paths (outside `node_modules`), so
-            // they stay watched and local HMR is unaffected.
-            exclude: ["**/node_modules/**"],
+            // (workerd / docker) fails with `spawn EBADF`. A user's own
+            // workspace packages resolve to their real source paths (outside
+            // `node_modules`), so they stay watched; the framework's sources
+            // in an alchemy checkout do not (see `frameworkSourceGlobs`).
+            exclude: ["**/node_modules/**", ...frameworkSourceGlobs],
             // `generateBundle` still fires, so the output is captured either way.
             skipWrite: !hasOutputLocation(outputOptions),
           },
@@ -405,11 +532,12 @@ const watchResolved =
         Effect.gen(function* () {
           // Hold a build permit until the watcher's initial build settles.
           yield* buildPermits.take(1);
+          const context = yield* Effect.context();
           let initialBuildSettled = false;
           const settleInitialBuild = () => {
             if (initialBuildSettled) return;
             initialBuildSettled = true;
-            Effect.runFork(buildPermits.release(1));
+            Effect.runForkWith(context)(buildPermits.release(1));
           };
           const watcher = yield* Effect.promise(() => createWatcher(settleInitialBuild)).pipe(
             Effect.onError(() => Effect.sync(settleInitialBuild)),
@@ -444,14 +572,12 @@ const watchResolved =
     );
 
 const ENTRY_PREFIX = "\0virtual:alchemy-entry:";
-// oxlint-disable-next-line no-control-regex
 const ENTRY_REGEX = /^\0virtual:alchemy-entry:/;
 /**
  * Ids the `resolveId` hook looks at: the virtual entry ids themselves, plus
  * bare package specifiers (not starting with `.`, `/` or `\0`) so an
  * unresolvable import in a generated entry fails the build (below).
  */
-// oxlint-disable-next-line no-control-regex
 const ENTRY_OR_BARE_REGEX = /^(?:\0virtual:alchemy-entry:|[^./\0])/;
 
 export const virtualEntryPlugin = Effect.gen(function* () {
@@ -563,6 +689,7 @@ async function builtInPlugins(extra?: BundleExtraOptions): Promise<rolldown.Roll
     extra?.bundleAnalyzer
       ? await bundleAnalyzerPlugin(extra.bundleAnalyzer === true ? {} : extra.bundleAnalyzer)
       : undefined,
+    namespaceImportPlugin(),
     extra?.pure !== false ? purePlugin(extra?.pure ?? {}) : undefined,
     rawPlugin(),
     unreachableChunksPlugin(),
@@ -585,6 +712,7 @@ export function bundleOutputFromFiles(
       files.map((file) => ({
         path: file.path,
         hash: file.hash,
+        ...(file.type ? { type: file.type } : {}),
       })),
     ),
     (hash) => ({ files, hash }),

@@ -170,7 +170,7 @@ export const SettingsSearchapplication = Resource<SettingsSearchapplication>(
 export class SettingsSearchapplicationNotResolved extends Data.TaggedError(
   "GCP.CloudSearch.SettingsSearchapplicationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (app: cloudsearch.SearchApplication, project: string) => {
@@ -270,16 +270,14 @@ export const SettingsSearchapplicationProvider = () =>
 
       if (current === undefined) {
         const created = yield* cloudsearch
-          .createSettingsSearchapplications({ body: desired })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .createSettingsSearchapplications({ ...desired })
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
           const createdName = operationResourceName(done);
           if (createdName !== undefined) {
             current = yield* waitUntilExists(getSearchApplication(createdName), createdName).pipe(
-              Effect.catchTag("GCP.CloudSearch.ResourceNotResolved", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("GCP.CloudSearch.ResourceNotResolved", () => Effect.undefined),
             );
           }
         }
@@ -290,7 +288,7 @@ export const SettingsSearchapplicationProvider = () =>
 
       if (current === undefined) {
         return yield* new SettingsSearchapplicationNotResolved({
-          name: name || displayName,
+          resourceName: name || displayName,
         });
       }
 
@@ -325,9 +323,9 @@ export const SettingsSearchapplicationProvider = () =>
 
       if (updateMask.length > 0) {
         const patched = yield* cloudsearch.patchSettingsSearchapplications({
+          ...desired,
           name: toSearchApplicationName(resourceName),
           updateMask,
-          body: desired,
         });
         yield* waitForOperation(patched);
         const refreshed = yield* waitUntilExists(getSearchApplication(resourceName), resourceName);
@@ -344,7 +342,7 @@ export const SettingsSearchapplicationProvider = () =>
       const name = toSearchApplicationName(output.name || output.searchApplicationId);
       const operation = yield* cloudsearch
         .deleteSettingsSearchapplications({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

@@ -1,0 +1,221 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import { inMemoryState } from "alchemy/State";
+import * as Clock from "effect/Clock";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import { requestWorker } from "../Utils/WorkerRequest.ts";
+import makeStack from "./fixtures/batches-stack.ts";
+import type { Answer, Reset } from "./fixtures/batches.ts";
+
+/** A route answered with something other than 200. */
+class BatchRequestFailed extends Data.TaggedError("BatchRequestFailed")<{
+  readonly status: number;
+}> {}
+
+/** Call a route; right after a deploy, retry until the Worker serves it. */
+const call = (request: HttpClientRequest.HttpClientRequest) =>
+  requestWorker(request.pipe(HttpClientRequest.setHeader("connection", "close"))).pipe(
+    Effect.filterOrFail(
+      (res) => res.status === 200,
+      (res) => new BatchRequestFailed({ status: res.status }),
+    ),
+    Effect.flatMap((res) => res.text),
+    Effect.retry({ schedule: Schedule.spaced("1 second"), times: 10 }),
+  );
+
+describe.concurrent.each([
+  { dev: true, stage: `${Test.defaultStage()}-domain-batches-local` },
+  { dev: false, stage: `${Test.defaultStage()}-domain-batches-live` },
+] as const)("batched projections on Durable Objects (dev: $dev)", ({ dev, stage }) => {
+  const tags = ["provider:cloudflare", "provider:cloudflare:worker", dev ? "local" : "live"];
+  const state = dev ? inMemoryState() : Cloudflare.state();
+  const Stack = makeStack(state);
+  const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+    providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
+    state,
+    dev,
+    stage,
+  });
+
+  const stack = beforeAll(
+    Effect.gen(function* () {
+      yield* destroy(Stack);
+      return yield* deploy(Stack);
+    }),
+    { timeout: 240_000 },
+  );
+  afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 60_000 });
+
+  /** A fresh group's routes, so a retried test never reads an earlier attempt's pongs. */
+  const group = Effect.gen(function* () {
+    const { url } = yield* stack;
+    const base = url.replace(/\/+$/, "");
+    const group = yield* Effect.sync(() => crypto.randomUUID());
+    return {
+      ping: (
+        id: string,
+        options: {
+          readonly slow?: boolean;
+          readonly reset?: Reset;
+          readonly answer?: Answer;
+          readonly commandId?: string;
+        } = {},
+      ) => {
+        const query = new URLSearchParams({
+          slow: String(options.slow ?? false),
+          reset: options.reset ?? "none",
+          answer: options.answer ?? "none",
+          ...(options.commandId === undefined ? {} : { commandId: options.commandId }),
+        });
+        return call(HttpClientRequest.post(`${base}/ping/${group}/${id}?${query}`));
+      },
+      pongs: call(HttpClientRequest.get(`${base}/pongs/${group}`)).pipe(
+        Effect.map((body) => JSON.parse(body) as string[]),
+      ),
+      count: call(HttpClientRequest.get(`${base}/count/${group}`)).pipe(
+        Effect.map((body) => JSON.parse(body) as number),
+      ),
+    };
+  });
+
+  test(
+    "resending a command delivers what its first commit left staged",
+    Effect.gen(function* () {
+      const { ping, count } = yield* group;
+      const counted = (n: number) =>
+        count.pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("250 millis"),
+            until: (c) => c === n,
+            times: 160,
+          }),
+        );
+      // The pinger's first ping reaches the count through backfill, which then
+      // hands the count over to live delivery; the second arrives live.
+      yield* ping("pinger");
+      yield* counted(1);
+      yield* ping("pinger");
+      yield* counted(2);
+
+      const started = yield* Clock.currentTimeMillis;
+      // Its first delivery fails, so it stays staged on the pinger until the
+      // backstop, 10 seconds on, as it would if the pinger's object died
+      // before delivering it. The resend delivers it now.
+      yield* ping("pinger", { reset: "view", commandId: "flaky" });
+      yield* ping("pinger", { reset: "view", commandId: "flaky" });
+      yield* counted(3);
+      expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(6_000);
+    }),
+    { tags, timeout: 120_000 },
+  );
+
+  test(
+    "a short batch runs once its wait is up",
+    Effect.gen(function* () {
+      const { ping, pongs } = yield* group;
+      const started = yield* Clock.currentTimeMillis;
+      yield* ping("only");
+      const answered = yield* pongs.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("500 millis"),
+          until: (entries) => entries.length > 0,
+          times: 80,
+        }),
+      );
+      expect(answered).toEqual(["only"]);
+      // A new key's first ping arrives through backfill, from inside one of
+      // its callbacks, after a 5-second poll; then the batch waits 5 seconds:
+      // about 10. A wake-up lost with that callback's invocation leaves it to
+      // the backstop, which inherits the callback's 30-second backoff: about 35.
+      expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(20_000);
+    }),
+    { tags, timeout: 120_000 },
+  );
+
+  test(
+    "a batch that starts while another runs waits its batch wait, not a retry backoff",
+    Effect.gen(function* () {
+      const { ping, pongs } = yield* group;
+      // A new key's first ping arrives through backfill; once it's answered,
+      // the next ones arrive live.
+      yield* ping("warm");
+      yield* pongs.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("500 millis"),
+          until: (entries) => entries.length > 0,
+          times: 80,
+        }),
+      );
+
+      const started = yield* Clock.currentTimeMillis;
+      // The slow ping's batch waits 5 seconds, then the drain's own callback
+      // runs it for 12.
+      yield* ping("slow", { slow: true });
+      // Halfway through that run, a second ping arrives. The drain finds it
+      // when the slow run ends, younger than the batch wait, and waits for it
+      // from inside its own callback.
+      yield* Effect.sleep("14 seconds");
+      yield* ping("late");
+      const answered = yield* pongs.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          until: (entries) => entries.includes("late"),
+          times: 60,
+        }),
+      );
+      expect(answered).toEqual(["warm", "slow", "late"]);
+      // On time: answered about 19 seconds in. Waiting out the drain's 30-second
+      // retry backoff instead: about 47.
+      expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(32_000);
+    }),
+    { tags, timeout: 150_000 },
+  );
+
+  /** The pongs of the answers the policy sent to `id`: one per run of its reaction. */
+  const answersTo = (entries: ReadonlyArray<string>, id: string) =>
+    entries.filter((entry) => entry.startsWith(`${id}-answer-`));
+
+  test(
+    "a projection whose object resets during a batch runs the batch once the lease ends",
+    Effect.gen(function* () {
+      const { ping, pongs } = yield* group;
+      // The batch runs after its 5-second wait; the projection's object resets
+      // in it, holding the batch's lease. The next object runs it when the
+      // lease ends, 60 seconds after it was taken.
+      yield* ping("reset-projection", { reset: "projection" });
+      const answered = yield* pongs.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (entries) => entries.length > 0,
+          times: 70,
+        }),
+      );
+      expect(answered).toEqual(["reset-projection"]);
+    }),
+    { tags, timeout: 180_000 },
+  );
+
+  test(
+    "a policy whose object resets during a reaction runs it once the lease ends",
+    Effect.gen(function* () {
+      const { ping, pongs } = yield* group;
+      yield* ping("reset-policy", { reset: "policy", answer: "now" });
+      const answered = yield* pongs.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (entries) => answersTo(entries, "reset-policy").length > 0,
+          times: 70,
+        }),
+      );
+      expect(answersTo(answered, "reset-policy")).toHaveLength(1);
+      expect(answered).toContain("reset-policy");
+    }),
+    { tags, timeout: 180_000 },
+  );
+});

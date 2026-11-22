@@ -1,11 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as recaptchaenterprise from "@distilled.cloud/gcp/recaptchaenterprise_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import RecaptchaBindingsHost, { Signup } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -18,7 +18,7 @@ let project: string;
 let keyName: string;
 let keyId: string;
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "RecaptchaEnterprise Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:recaptchaenterprise", "provider:gcp:run", "live"],
@@ -69,14 +69,14 @@ describe.skipIf(!dockerAvailable)(
 
             // The assessment exists server-side: annotating it succeeds.
             yield* recaptchaenterprise.annotateProjectsAssessments({
+              annotation: "LEGITIMATE",
               name: assessment.name ?? "",
-              body: { annotation: "LEGITIMATE" },
             });
 
             // reCAPTCHA keys have no IAM policy of their own.
             const policy = yield* crm.getIamPolicyProjects({
+              options: { requestedPolicyVersion: 3 },
               resource: `projects/${project}`,
-              body: { options: { requestedPolicyVersion: 3 } },
             });
             const roles = (policy.bindings ?? [])
               .filter((binding) =>

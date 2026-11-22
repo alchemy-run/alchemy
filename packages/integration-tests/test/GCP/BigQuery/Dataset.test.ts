@@ -1,10 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -37,6 +38,7 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(GCP.BigQuery.Dataset.lookup({ datasetId: created.datasetId }), created);
 
       expect(created.datasetId).toEqual(expect.any(String));
       expect(created.datasetId).toMatch(/^[a-zA-Z0-9_]+$/);
@@ -53,16 +55,14 @@ test.provider(
       expect(fetched.description).toEqual("alchemy test dataset");
 
       const queried = yield* bigquery.queryJobs({
-        projectId: created.project,
-        body: {
-          query: "SELECT 1 AS n",
-          useLegacySql: false,
-          location: created.location,
-          defaultDataset: {
-            projectId: created.project,
-            datasetId: created.datasetId,
-          },
+        query: "SELECT 1 AS n",
+        useLegacySql: false,
+        location: created.location,
+        defaultDataset: {
+          projectId: created.project,
+          datasetId: created.datasetId,
         },
+        projectId: created.project,
       });
       expect(queried.jobComplete).toEqual(true);
 

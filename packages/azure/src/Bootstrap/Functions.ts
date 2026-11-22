@@ -12,9 +12,8 @@
  */
 import { fromManagedIdentity } from "@distilled.cloud/azure/Credentials";
 import { NodeServices } from "@effect/platform-node";
-import { reifyBoundConfigProvider } from "alchemy/Runtime";
+import { RuntimeConfigProviderLive } from "alchemy/Runtime";
 import { entrypointLayer, stackFromEnv } from "alchemy/Runtime/Bootstrap";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -38,12 +37,7 @@ export const bootstrap = async (entrypoint: unknown): Promise<void> => {
         Layer.provideMerge(stackFromEnv),
         Layer.provideMerge(fromManagedIdentity()),
         Layer.provideMerge(platform),
-        Layer.provideMerge(
-          Layer.succeed(
-            ConfigProvider.ConfigProvider,
-            reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env),
-          ),
-        ),
+        Layer.provideMerge(RuntimeConfigProviderLive),
       ),
     ),
     Effect.scoped,

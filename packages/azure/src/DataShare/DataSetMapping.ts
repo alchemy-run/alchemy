@@ -190,7 +190,8 @@ export interface DataSetMapping extends Resource<
  */
 export const DataSetMapping = GroupedResource<DataSetMapping>("Azure.DataShare.DataSetMapping");
 
-type ObservedMapping = datashare.GetDataSetMappingResponse | datashare.CreateDataSetMappingResponse;
+/** What GET and PUT return. */
+type ObservedMapping = datashare.DataSetMapping;
 
 const getMapping = (
   subscriptionId: string,
@@ -314,8 +315,12 @@ export const DataSetMappingProvider = () =>
           accountName: account,
           shareSubscriptionName: shareSubscription,
           dataSetMappingName: name,
-          kind: news.kind,
-          properties: { ...news.target, dataSetId: news.dataSetId },
+          // `kind` and `target` are separate props, so TypeScript cannot pick
+          // the SDK union arm.
+          body: {
+            kind: news.kind,
+            properties: { ...news.target, dataSetId: news.dataSetId },
+          } as datashare.DataSetMappingInput,
         });
       }
 

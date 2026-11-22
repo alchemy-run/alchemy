@@ -87,8 +87,28 @@ export type IndicatorFeed = Resource<
   IndicatorFeedProps,
   IndicatorFeedAttributes,
   never,
-  Providers
+  Providers,
+  IndicatorFeedLookup
 >;
+
+/**
+ * Props for {@link IndicatorFeed.lookup}: find an indicator feed this stack
+ * doesn't manage, by its id or its name.
+ */
+export type IndicatorFeedLookup =
+  | {
+      /**
+       * The numeric id of the existing feed.
+       */
+      feedId: number;
+    }
+  | {
+      /**
+       * The name of the existing feed. Names are not unique; the first feed
+       * with this exact name is used.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare custom Indicator Feed (Cloudforce One threat intelligence).
@@ -147,6 +167,21 @@ export type IndicatorFeed = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing feed
+ * Feeds can't be deleted, so a feed created once is usually shared.
+ * `IndicatorFeed.lookup` references one Alchemy doesn't manage (created in
+ * the dashboard or by another stack), found by `feedId` or `name`. It is
+ * read during plan/deploy and never created or updated.
+ *
+ * **Example:** Share an existing feed
+ * ```typescript
+ * const feed = Cloudflare.Intel.IndicatorFeed.lookup({ name: "botnet-ips" });
+ * yield* Cloudflare.Intel.IndicatorFeedPermission("partner-access", {
+ *   feedId: feed.feedId,
+ *   accountTag: "023e105f4ecef8ad9ca31a8372d0c353",
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/security-center/indicator-feeds/
  *
  * @resource
@@ -191,7 +226,7 @@ export const IndicatorFeedProvider = () =>
             ),
             // A feed may vanish between list and get, or the account may
             // lack access to an individual feed — skip either case.
-            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+            Effect.catchTag("Forbidden", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -208,6 +243,15 @@ export const IndicatorFeedProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const feedId =
+        "feedId" in props ? props.feedId : (yield* findByName(accountId, props.name))?.id;
+      if (feedId == null) return undefined;
+      const observed = yield* getFeed(accountId, feedId);
+      return observed ? toAttributes(observed, accountId, undefined) : undefined;
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
@@ -230,7 +274,7 @@ export const IndicatorFeedProvider = () =>
       return undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createFeedName(id, news.name);
 
@@ -347,7 +391,7 @@ type ObservedFeed = intel.GetIndicatorFeedResponse;
 const getFeed = (accountId: string, feedId: number) =>
   intel.getIndicatorFeed({ accountId, feedId }).pipe(
     Effect.map((f): ObservedFeed | undefined => f),
-    Effect.catchTag("IndicatorFeedNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("IndicatorFeedNotFound", () => Effect.undefined),
   );
 
 /**

@@ -1,9 +1,6 @@
-import { MigrationError, type SqlExecutor } from "@alchemy.run/sql/Migrations/Format";
-import { makeMySQLMigrationExecutor } from "@alchemy.run/sql/Migrations/MySQLExecutor";
-import { makePgMigrationExecutor } from "@alchemy.run/sql/Migrations/PgExecutor";
-import { importMySql } from "@alchemy.run/sql/MySQLDriver";
-import { importPg } from "@alchemy.run/sql/PostgresDriver";
-import * as Effect from "effect/Effect";
+import { withMySqlExecutor, withPgExecutor } from "@alchemy.run/sql/Migrations/Executors";
+import type { MigrationError, SqlExecutor } from "@alchemy.run/sql/Migrations/Format";
+import type * as Effect from "effect/Effect";
 
 /**
  * Where and as whom a migration connects. Plain JSON: the Lambda transport
@@ -21,12 +18,6 @@ export interface MigrationConnectionTarget {
 // Fail fast on an unreachable endpoint instead of hanging the deploy.
 const CONNECT_TIMEOUT_MILLIS = 15_000;
 
-const toMigrationError = (context: string) => (cause: unknown) =>
-  new MigrationError({
-    message: `${context}: ${cause instanceof Error ? cause.message : String(cause)}`,
-    cause,
-  });
-
 /**
  * Open one `pg` client or `mysql2` connection to an RDS endpoint for the
  * scope of `use`, closing it afterwards. Shared by the direct transport
@@ -40,43 +31,27 @@ export const withMigrationConnection = <A, E, R>(
   use: (executor: SqlExecutor) => Effect.Effect<A, E, R>,
 ): Effect.Effect<A, MigrationError | E, R> =>
   target.dialect === "postgres"
-    ? Effect.acquireUseRelease(
-        Effect.tryPromise({
-          try: async () => {
-            const { Client } = await importPg();
-            const client = new Client({
-              host: target.host,
-              port: target.port,
-              database: target.database,
-              user: target.username,
-              password: target.password,
-              ssl: { rejectUnauthorized: false },
-              connectionTimeoutMillis: CONNECT_TIMEOUT_MILLIS,
-            });
-            await client.connect();
-            return client;
-          },
-          catch: toMigrationError(`Failed to connect to ${target.host}:${target.port}`),
-        }),
-        (client) => use(makePgMigrationExecutor(client)),
-        (client) => Effect.promise(() => client.end().catch(() => {})),
+    ? withPgExecutor(
+        {
+          host: target.host,
+          port: target.port,
+          database: target.database,
+          user: target.username,
+          password: target.password,
+          ssl: { rejectUnauthorized: false },
+          connectionTimeoutMillis: CONNECT_TIMEOUT_MILLIS,
+        },
+        use,
       )
-    : Effect.acquireUseRelease(
-        Effect.tryPromise({
-          try: async () => {
-            const { createConnection } = await importMySql();
-            return createConnection({
-              host: target.host,
-              port: target.port,
-              database: target.database,
-              user: target.username,
-              password: target.password,
-              ssl: { rejectUnauthorized: false },
-              connectTimeout: CONNECT_TIMEOUT_MILLIS,
-            });
-          },
-          catch: toMigrationError(`Failed to connect to ${target.host}:${target.port}`),
-        }),
-        (connection) => use(makeMySQLMigrationExecutor(connection)),
-        (connection) => Effect.promise(() => connection.end().catch(() => {})),
+    : withMySqlExecutor(
+        {
+          host: target.host,
+          port: target.port,
+          database: target.database,
+          user: target.username,
+          password: target.password,
+          ssl: { rejectUnauthorized: false },
+          connectTimeout: CONNECT_TIMEOUT_MILLIS,
+        },
+        use,
       );

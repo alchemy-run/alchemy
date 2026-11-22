@@ -1,4 +1,4 @@
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import { PlanTree } from "@/Cli/components/view/PlanView.tsx";
 import { formatPlanLines } from "@/Cli/LoggingCli.ts";
 /**
@@ -175,10 +175,10 @@ describe("compact plan output", { tags: ["unit", "local"] }, () => {
     );
 
     store.emit({
-      _tag: "apply.resource.status",
+      type: "apply.resource.status",
       fqn: "codex/toolchain",
       id: "toolchain",
-      type: "Test.Resource",
+      resourceType: "Test.Resource",
       status: "updating",
     });
 

@@ -9,6 +9,7 @@ import DevTuiTerminal from "../components/marketing-islands/DevTuiTerminal.tsx";
 import HeroHosts from "../components/marketing-islands/HeroHosts.tsx";
 import { HOSTS, hostSource } from "../components/marketing-islands/heroHosts";
 import { installSpec } from "../../plugins/preview-install.ts";
+import Terminal from "../components/Terminal.astro";
 import Sentiment from "../components/marketing/Sentiment.astro";
 import AlchemicalDivider from "../components/marketing/AlchemicalDivider.astro";
 import TestTerminal from "../components/marketing-islands/TestTerminal.tsx";
@@ -17,14 +18,13 @@ import PreviewComment from "../components/marketing-islands/PreviewComment.tsx";
 import TypePolicy from "../components/marketing-islands/TypePolicy.tsx";
 import ObservabilityDash from "../components/marketing-islands/ObservabilityDash.tsx";
 import CopyForAgent from "../components/marketing-islands/CopyForAgent.tsx";
-import PhotosLayers from "../components/marketing-islands/PhotosLayers.tsx";
 
 const alchemySpec = installSpec("alchemy");
 
 // The hero terminal covers the code card's empty bottom-right corner: it
 // starts below the last line that reaches TERM_COL, so no code is hidden.
 // The code changes per host, so measure every host's version.
-const TERM_COL = 44;
+const TERM_COL = 45;
 const HOST_LINES = HOSTS.map((h) => hostSource(h.values).split("\n"));
 const TERM_LINE = Math.max(
   ...HOST_LINES.map(
@@ -51,22 +51,193 @@ const PREVIEW_COMMENT_LINES: [number, number][] = [[6, 12]];
 
 // The vertical track beside the sections that walk the full picture.
 const RAIL = [
-  {
-    label: "Your machine",
-    steps: [
-      { id: "loop-edit", title: "edit" },
-      { id: "loop-types", title: "type-check" },
-      { id: "loop-local", title: "test, emulated" },
-      { id: "loop-live", title: "test, live" },
-    ],
-  },
-  { label: "CI/CD", steps: [{ id: "loop-pr", title: "preview per PR" }] },
-  { label: "Production", steps: [{ id: "loop-prod", title: "monitoring" }] },
+  { label: "Declare", steps: [{ id: "loop-model", title: "the model" }] },
+  { label: "Specify", steps: [{ id: "loop-stories", title: "stories" }] },
+  { label: "Prove", steps: [{ id: "loop-prove", title: "invariants" }] },
+  { label: "Ground", steps: [{ id: "loop-ground", title: "Layers" }] },
+  { label: "Run", steps: [{ id: "loop-local", title: "on your machine" }] },
+  { label: "Test", steps: [{ id: "loop-live", title: "live cloud" }] },
+  { label: "Ship", steps: [{ id: "loop-pr", title: "preview per PR" }] },
+  { label: "Observe", steps: [{ id: "loop-prod", title: "trace the model" }] },
 ];
 const railKicker = (id: string) => {
   const group = RAIL.find((g) => g.steps.some((s) => s.id === id))!;
   return `${group.label} · ${group.steps.find((s) => s.id === id)!.title}`;
 };
+
+const COMMAND_SRC = `export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
+  target: AccountId,
+  input: { amount: Schema.Int },
+  events: [MoneyWithdrawn],
+  rejects: [NotOpen, InsufficientFunds],
+  reply: { balance: Schema.Int },
+}) {}`;
+
+const DECIDE_SRC = `decide: {
+  WithdrawMoney: (account, cmd) =>
+    account._tag !== "Open"
+      ? new NotOpen()
+      : cmd.amount > account.balance
+        ? new InsufficientFunds({
+            balance: account.balance,
+            requested: cmd.amount,
+          })
+        : [
+            new MoneyWithdrawn({
+              amount: cmd.amount,
+              balanceAfter: account.balance - cmd.amount,
+            }),
+          ],
+},`;
+
+const STORY_RULE_SRC = `it.effect("an overdraft is rejected with the evidence", () =>
+  story(
+    Story.given(
+      account,
+      new AccountOpened({ owner: "sam" }),
+      new MoneyDeposited({ amount: 50, balanceAfter: 50 }),
+    ),
+    Story.when(account, new WithdrawMoney({ amount: 80 })),
+    Story.rejected(
+      new InsufficientFunds({ balance: 50, requested: 80 }),
+    ),
+  ),
+);`;
+
+const STORY_CHAIN_SRC = `it.effect("a risky withdrawal freezes the account", () =>
+  story(
+    Story.given(
+      account,
+      new AccountOpened({ owner: "sam" }),
+      new MoneyDeposited({ amount: 90_000, balanceAfter: 90_000 }),
+    ),
+    Story.when(account, new WithdrawMoney({ amount: 60_000 })),
+    Story.then(
+      account,
+      new MoneyWithdrawn({ amount: 60_000, balanceAfter: 30_000 }),
+    ),
+    // the fraud policy asks the scoring service; the story answers
+    Story.call(FraudCheck.score, {
+      accountId: account.id,
+      amount: 60_000,
+    }),
+    Story.succeed(FraudCheck.score, { risk: 0.95 }),
+    Story.then(
+      account,
+      new AccountFrozen({
+        reason: "fraud risk 0.95",
+        by: system("FraudReview"),
+      }),
+    ),
+  ),
+);`;
+
+const RULES_SRC = `// rules sit on the aggregate, beside decide
+invariants: {
+  NeverOverdrawn: (account) =>
+    account._tag !== "Open" || account.balance >= 0,
+},
+transitions: {
+  AClosedAccountStaysClosed: ({ before, after }) =>
+    before._tag !== "Closed" || after._tag === "Closed",
+},
+
+// one test verifies every rule in the model
+it.effect("the bank keeps its promises", () =>
+  Verify.model(Bank, { apis: [CustomerApi, SupportApi], story }),
+);`;
+
+const VERIFY_OUT = `
+[b]Proved[/b][d]: for every state and every input,
+after any number of commands[/d]
+  [g]✓[/g] Account.NeverOverdrawn
+  [g]✓[/g] Account.WithinDailyLimit
+  [g]✓[/g] Account.AClosedAccountStaysClosed
+
+[b]Checked[/b][d]: every sequence of up to 2 commands,
+each event delivered twice, each saga step run
+twice, every answer FraudCheck can give[/d]
+[d]19,641 sequences, 10,648 states[/d]
+  [g]✓[/g] Bank.TransfersLoseNoMoney
+  [g]✓[/g] Bank.NoTransferLeftPending
+  [g]✓[/g] Bank.EveryTransferEnds
+
+[b]Sampled[/b][d]: 200 longer sequences, of up to
+12 commands picked at random (seed 1)[/d]
+  [g]✓[/g] none breaks a rule`;
+
+// What a Layer can ground a program in, by the contract it answers.
+const LAYERS = [
+  {
+    label: "Actors",
+    items: [
+      { label: "Durable Objects", href: "/domain/cloudflare" },
+      { label: "Rivet", href: "/domain/rivet" },
+      { label: "Effect Cluster", href: "/domain/effect-cluster" },
+      { label: "In memory", href: "/domain/in-memory" },
+    ],
+  },
+  {
+    label: "Sandboxes",
+    items: [
+      { label: "E2B", href: "/e2b" },
+      { label: "Daytona", href: "/daytona" },
+      { label: "Modal", href: "/modal" },
+      { label: "Boat", href: "/boat" },
+      { label: "Archil", href: "/archil" },
+      { label: "AWS", href: "/aws/compute/ecs-sandboxes" },
+    ],
+  },
+  {
+    label: "Compute",
+    items: [
+      { label: "Cloudflare", href: "/cloudflare" },
+      { label: "AWS", href: "/aws" },
+      { label: "GCP", href: "/gcp" },
+      { label: "Fly", href: "/fly" },
+      { label: "Railway", href: "/railway" },
+      { label: "Hetzner", href: "/hetzner" },
+      { label: "Kubernetes", href: "/kubernetes" },
+      { label: "Docker", href: "/docker" },
+    ],
+  },
+  {
+    label: "Data",
+    items: [
+      { label: "Neon", href: "/neon" },
+      { label: "PlanetScale", href: "/planetscale" },
+      { label: "Turso", href: "/turso" },
+      { label: "Prisma", href: "/prisma" },
+    ],
+  },
+  { label: "Agents", items: [{ label: "harnesses, coming soon" }] },
+];
+
+const WIRING_SRC = `const BankLive = Bank.layer(BankHandlers).pipe(
+  // the ledger projection writes to a D1 database
+  Layer.provideMerge(D1LedgerStore),
+  Layer.provide(
+    Layer.mergeAll(
+      // one Durable Object per aggregate
+      DomainCloudflare.layerDurableObjects(),
+      // Payments and FraudCheck, answered by vendors
+      StripePayments,
+      SiftFraudCheck,
+      Cloudflare.D1.QueryDatabaseBinding,
+    ),
+  ),
+);`;
+
+const TRACE_OUT = `
+[b]Domain.send[/b] Account.WithdrawMoney          [d]the Worker[/d]
+└─ [b]Domain.decide[/b] Account.WithdrawMoney     [d]the account's Durable Object[/d]
+   │   [g]event[/g] MoneyWithdrawn
+   ├─ [b]Domain.view[/b] AccountSummary
+   ├─ [b]Domain.view[/b] DailyOutflow
+   └─ [b]Domain.policy[/b] FraudReview
+      ├─ [b]Domain.external[/b] FraudCheck.score
+      └─ [b]Domain.send[/b] Account.FreezeAccount
+         └─ [b]Domain.decide[/b] Account.FreezeAccount`;
 
 const TEST_SRC = `const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -81,14 +252,6 @@ test("PUT + GET round-trips through R2", Effect.gen(function* () {
   const res = yield* HttpClient.get(\`\${url}/object/hello.txt\`);
   expect(yield* res.text).toBe("hi!");
 }));`;
-
-/** The app's layers, bottom-up, and what the Photos module owns in each. */
-const PYRAMID = [
-  { layer: "Infrastructure", slice: "Photos bucket" },
-  { layer: "Configuration & policies", slice: "read/write binding" },
-  { layer: "APIs & business logic", slice: "upload()" },
-  { layer: "Frontend", slice: "upload button" },
-];
 
 const VITE_SRC = `import Api from "./src/api.ts";
 
@@ -108,18 +271,30 @@ export default Alchemy.Stack(
 
 // Marks render monochrome (inheriting the label color) and take on the
 // official brand hue only on hover. `color` values are verified against
-// svgl.app's SVGs; Prisma swaps to its multi-color mark instead.
+// svgl.app's SVGs; Prisma and Modal swap to their multi-color marks instead.
 const PROVIDERS = [
   { label: "Cloudflare", icon: "Cloudflare", href: "/cloudflare", color: "#f4811f" },
   { label: "AWS", icon: "AWS", href: "/aws", color: "#ff9900" },
+  { label: "GCP", icon: "GCP", href: "/gcp", color: "#4285f4" },
   { label: "Azure", icon: "Azure", href: "/azure", color: "#0078d4" },
   { label: "Hetzner", icon: "Hetzner", href: "/hetzner", color: "#d50c2d" },
   { label: "Fly", icon: "Fly", href: "/fly", color: "#996bec" },
   { label: "Railway", icon: "Railway", href: "/railway" },
+  { label: "DigitalOcean", icon: "DigitalOcean", href: "/digitalocean", color: "#0080ff" },
   { label: "Neon", icon: "Neon", href: "/neon", color: "#37c38f" },
   { label: "PlanetScale", icon: "PlanetScale", href: "/planetscale" },
+  { label: "Turso", icon: "Turso", href: "/turso", color: "#4ff8d2" },
   { label: "Prisma", icon: "Prisma", iconHover: "PrismaColor", href: "/prisma" },
   { label: "Docker", icon: "Docker", href: "/docker", color: "#008fe2" },
+  { label: "Kubernetes", icon: "Kubernetes", href: "/kubernetes", color: "#326ce5" },
+  { label: "Effect Cluster", icon: "Effect Cluster", href: "/cluster" },
+  { label: "Rivet", icon: "Rivet", href: "/rivet" },
+  { label: "E2B", icon: "E2B", href: "/e2b" },
+  { label: "Daytona", icon: "Daytona", href: "/daytona" },
+  { label: "Modal", icon: "Modal", iconHover: "ModalColor", href: "/modal" },
+  { label: "Archil", icon: "Archil", href: "/archil" },
+  { label: "Boat", icon: "Boat", href: "/boat" },
+  { label: "Better Auth", icon: "Better Auth", href: "/better-auth" },
   { label: "Stripe", icon: "Stripe", href: "/stripe", color: "#533afd" },
   { label: "GitHub", icon: "GitHub", href: "/github" },
   { label: "Axiom", icon: "Axiom", href: "/axiom" },
@@ -128,8 +303,8 @@ const PROVIDERS = [
 ---
 
 <Marketing
-  title="Alchemy · the tightest feedback loop from edit to production"
-  description="Cloud programs composed from Layers: type-checked, emulated locally, tested live, and deployed per pull request."
+  title="Alchemy · generate and deploy verified, production-ready software"
+  description="Model your business with domain-driven design and your infrastructure as code, in one typed program. Stories and proofs verify the business logic, the type checker verifies the infrastructure, and Layers ground it in any platform."
 >
   <!-- Hero + marquee fill the first screen so the marquee lands just above the fold. -->
   <div class="v2-fold">
@@ -149,7 +324,7 @@ const PROVIDERS = [
             id="hero-h1"
             style="font-size:clamp(38px,3.65vw,52px);"
           >
-            The tightest feedback loop from edit to production
+            Generate and deploy verified, production-ready software
           </h1>
           <p
             data-copy
@@ -157,7 +332,7 @@ const PROVIDERS = [
             id="hero-sub"
             style="font-size:clamp(17px,2.2vw,22px);max-width:560px;"
           >
-            Cloud programs composed from Layers: type-checked, emulated locally, tested live, and deployed per pull request.
+            Model your business with domain-driven design and your infrastructure as code, in one typed program. Stories and proofs verify the business logic, the type checker verifies the infrastructure, and Layers ground it in any platform.
           </p>
           <div class="alc-hero__cta">
             <Button variant="primary" icon="arrow" href="/getting-started">
@@ -263,9 +438,9 @@ const PROVIDERS = [
   <AlchemicalDivider variant="dot" class="v2-divider" />
   <section class="v2-section v2-pat-1 v2-overview">
     <div class="v2-container">
-      <h2 class="v2-h2" data-copy>Every step is optimized</h2>
+      <h2 class="v2-h2" data-copy>One program, from the business rule to the cloud resource</h2>
       <p class="v2-lede" data-copy>
-        Iterate on your machine and then let CI deploy a preview, test it, and ship it on merge. The type checker answers in milliseconds, emulated tests in seconds, and the real cloud in about 20 seconds.
+        You or your agent declare the software against contracts: the business as a model, its behavior as stories and rules, and everything it needs from outside. Layers ground each contract in a real platform. Every step then proves the program works before the next one starts: types, stories and proofs answer in milliseconds, emulated tests in seconds, and the real cloud in about 20 seconds. CI deploys a preview, tests it, and ships it on merge.
       </p>
       <p class="v2-overview__source">
         <a
@@ -281,24 +456,25 @@ const PROVIDERS = [
     </div>
   </section>
 
-  <nav class="v2-rail" aria-label="From an edit to production">
+  <nav class="v2-rail" aria-label="From a declaration to production">
     <span class="v2-rail__track" aria-hidden="true"><span class="v2-rail__fill"></span></span>
-    {RAIL.map((group) => (
-      <div class="v2-rail__group">
-        <span class="v2-rail__label">{group.label}</span>
-        <ol class="v2-rail__steps">
-          {group.steps.map((step) => (
-            <li>
-              <a class="v2-rail__step" href={`#${step.id}`} data-rail={step.id}>
-                <span class="v2-rail__dot" aria-hidden="true"></span>
-                {step.title}
-              </a>
-            </li>
-          ))}
-        </ol>
-      </div>
-    ))}
+    <ol class="v2-rail__steps">
+      {RAIL.flatMap((group) =>
+        group.steps.map((step) => (
+          <li>
+            <a class="v2-rail__step" href={`#${step.id}`} data-rail={step.id}>
+              <span class="v2-rail__dot" aria-hidden="true"></span>
+              <span class="v2-rail__text">
+                <span class="v2-rail__label">{group.label}</span>
+                <span class="v2-rail__title">{step.title}</span>
+              </span>
+            </a>
+          </li>
+        )),
+      )}
+    </ol>
   </nav>
+
   <script>
     // Light the rail's step for the section in the middle of the viewport,
     // fill the track up to it, and show the rail only while those sections
@@ -347,58 +523,98 @@ const PROVIDERS = [
   </script>
 
 
-  <!-- ───────────────── EDIT ───────────────── -->
+  <!-- ───────────────── DECLARE ───────────────── -->
   <AlchemicalDivider variant="line" class="v2-divider" />
-  <section class="v2-section v2-pat-2 v2-feature" id="loop-edit" data-rail-section>
+  <section class="v2-section v2-pat-2 v2-feature" id="loop-model" data-rail-section>
     <div class="v2-container">
-      <p class="v2-kicker">{railKicker("loop-edit")}</p>
-      <h2 class="v2-h2" data-copy>Infrastructure is part of your application</h2>
+      <p class="v2-kicker">{railKicker("loop-model")}</p>
+      <h2 class="v2-h2" data-copy>Declare the whole system in its own language</h2>
       <p class="v2-lede" data-copy>
-        Other IaC tools split an app into two programs, but every feature you build crosses that line. In Alchemy, a Layer owns its infrastructure and service implementation so that features can be decomposed.
+        <a href="/domain">Alchemy Domain</a> gives the words your business already uses a place in the code. A command declares what it asks for and every way it can end, an aggregate decides it in a pure function, and an event records what happened. What the model needs from outside, a payment provider or a database, it declares as a contract and nothing more. You, your agent and the type checker all read the same program.
       </p>
-      <div class="v2-split v2-split--center">
-        <figure class="v2-pyramid" aria-label="The Photos module spans every layer of the app">
-          <div class="v2-pyramid__stack">
-            <span class="v2-pyramid__module" data-copy>PHOTOS MODULE</span>
-            <ol class="v2-pyramid__layers">
-              {PYRAMID.map((row, i) => (
-                <li class="v2-pyramid__layer" style={`--w:${100 - i * 12}%`}>
-                  <span class="v2-pyramid__name" data-copy>{row.layer}</span>
-                  <span class="v2-pyramid__slice" data-copy>{row.slice}</span>
-                </li>
-              ))}
-            </ol>
-          </div>
-          <span class="v2-pyramid__cut" aria-hidden="true"></span>
-          <span class="v2-pyramid__program v2-pyramid__program--above" data-copy>runtime program</span>
-          <span class="v2-pyramid__program v2-pyramid__program--below" data-copy>infrastructure program</span>
-        </figure>
-        <PhotosLayers client:visible />
+      <div class="v2-split">
+        <CodeBlock filename="src/WithdrawMoney.command.ts" code={COMMAND_SRC} compact />
+        <CodeBlock filename="src/Account.aggregate.ts" code={DECIDE_SRC} compact />
       </div>
     </div>
   </section>
 
-  <!-- ───────────────── TYPE-CHECK ───────────────── -->
+  <!-- ───────────────── SPECIFY ───────────────── -->
   <AlchemicalDivider variant="triangle" class="v2-divider" />
-  <section class="v2-section v2-pat-3 v2-feature" id="loop-types" data-rail-section>
+  <section class="v2-section v2-pat-3 v2-feature" id="loop-stories" data-rail-section>
     <div class="v2-container">
-      <p class="v2-kicker">{railKicker("loop-types")}</p>
-      <h2 class="v2-h2" data-copy>Type checking proves your infra is correct</h2>
+      <p class="v2-kicker">{railKicker("loop-stories")}</p>
+      <h2 class="v2-h2" data-copy>Specify behavior as stories, in the words of the business</h2>
       <p class="v2-lede" data-copy>
-        Each Layer declares what it needs in its type: the resources it creates, the access it grants, and the services it calls. Leave one out and the program doesn't compile, so a broken stack fails in your editor in milliseconds, before anything deploys.
+        A <a href="/domain/story">story</a> is a test written in the model's own terms: given this history, when this command, then these events. It reads like the requirement it came from, so the person who asked for the behavior can check it. It runs the real model in memory in milliseconds, policies and sagas included, and fails if anything happens that it doesn't account for. Write the story first, and let your agent change the model until it passes.
+      </p>
+      <div class="v2-split">
+        <CodeBlock filename="test/Account.test.ts" code={STORY_RULE_SRC} compact />
+        <CodeBlock filename="test/Fraud.test.ts" code={STORY_CHAIN_SRC} compact />
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────── PROVE ───────────────── -->
+  <AlchemicalDivider variant="square" class="v2-divider" />
+  <section class="v2-section v2-pat-4 v2-feature" id="loop-prove" data-rail-section>
+    <div class="v2-container">
+      <p class="v2-kicker">{railKicker("loop-prove")}</p>
+      <h2 class="v2-h2" data-copy>State an invariant and have it proved</h2>
+      <p class="v2-lede" data-copy>
+        A story tests the cases you thought of. An invariant is a predicate that must hold in every case, and nobody writes a case for it. One test proves each aggregate's invariants for every state and every input, then explores every short sequence of commands across the model for one that breaks a rule. A broken invariant fails with the shortest sequence that breaks it, written as a story.
+      </p>
+      <div class="v2-split">
+        <CodeBlock filename="src/Account.aggregate.ts" code={RULES_SRC} compact />
+        <Terminal title="pnpm test" content={VERIFY_OUT} />
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────── GROUND ───────────────── -->
+  <AlchemicalDivider variant="pentagon" class="v2-divider" />
+  <section class="v2-section v2-pat-5 v2-feature" id="loop-ground" data-rail-section>
+    <div class="v2-container">
+      <p class="v2-kicker">{railKicker("loop-ground")}</p>
+      <h2 class="v2-h2" data-copy>A Layer grounds it in a real platform</h2>
+      <p class="v2-lede" data-copy>
+        A specified and proved model still knows nothing about the cloud. A Layer answers each contract with a real platform, and owns the resources and the access that takes: Durable Objects for the aggregates, a database for the ledger, a vendor for payments. Swap a Layer and the same program runs in memory, on your machine, or on another platform.
+      </p>
+      <dl class="v2-layers">
+        {LAYERS.map((family) => (
+          <div class="v2-layers__row">
+            <dt>{family.label}</dt>
+            <dd>
+              {family.items.map((item) =>
+                "href" in item ? (
+                  <a href={item.href}>{item.label}</a>
+                ) : (
+                  <span>{item.label}</span>
+                ),
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <div class="v2-split v2-split--narrow">
+        <CodeBlock filename="src/BankWorker.ts" code={WIRING_SRC} compact />
+      </div>
+      <h3 class="v2-h3" data-copy>Guarantee least-privilege IAM at compile time</h3>
+      <p class="v2-lede" data-copy>
+        Each binding grants one permission and returns a client that can only make that call. The policy is inferred from the bindings, so it grants exactly what the code uses: nothing broader slips in, and nothing the code needs is left out. Reach for an operation you didn't bind and the code doesn't compile, so a missing permission shows up in your editor, not as an AccessDenied in production.
       </p>
       <TypePolicy client:visible />
     </div>
   </section>
 
-  <!-- ───────────────── EMULATED ───────────────── -->
-  <AlchemicalDivider variant="square" class="v2-divider" />
-  <section class="v2-section v2-pat-4 v2-feature" id="loop-local" data-rail-section>
+  <!-- ───────────────── RUN ───────────────── -->
+  <AlchemicalDivider variant="hexagon" class="v2-divider" />
+  <section class="v2-section v2-pat-6 v2-feature" id="loop-local" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-local")}</p>
-      <h2 class="v2-h2" data-copy>Get fast feedback with local emulation</h2>
+      <h2 class="v2-h2" data-copy>Run the whole system on your machine</h2>
       <p class="v2-lede" data-copy>
-        <code class="alc-code-inline">alchemy dev</code> runs Workers, Durable Objects, queues and buckets on emulated services on your machine, and the frontend reloads as you type. Set <code class="alc-code-inline">dev: true</code> in a test and the same suite runs against those services in seconds, with nothing deployed.
+        <code class="alc-code-inline">alchemy dev</code> grounds the same program in local Layers: Workers, Durable Objects, queues and buckets run on emulated services on your machine, and the frontend reloads as you type. Set <code class="alc-code-inline">dev: true</code> in a test and the same suite runs against those services in seconds, with nothing deployed.
       </p>
       <div class="v2-split">
         <CodeBlock filename="alchemy.run.ts" code={VITE_SRC} compact />
@@ -407,12 +623,12 @@ const PROVIDERS = [
     </div>
   </section>
 
-  <!-- ───────────────── TESTED LIVE ───────────────── -->
-  <AlchemicalDivider variant="pentagon" class="v2-divider" />
-  <section class="v2-section v2-pat-5 v2-feature" id="loop-live" data-rail-section>
+  <!-- ───────────────── TEST LIVE ───────────────── -->
+  <AlchemicalDivider variant="heptagon" class="v2-divider" />
+  <section class="v2-section v2-pat-1 v2-feature" id="loop-live" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-live")}</p>
-      <h2 class="v2-h2" data-copy>Test a live deployment when ready to PR</h2>
+      <h2 class="v2-h2" data-copy>Test against a live cloud deployment</h2>
       <p class="v2-lede" data-copy>
         Once it works locally, run the same test without <code class="alc-code-inline">LOCAL=1</code>. It deploys the app to a stage of its own, runs against real Workers, buckets and permissions, and destroys the stage afterwards, in about 20 seconds.
       </p>
@@ -423,12 +639,12 @@ const PROVIDERS = [
     </div>
   </section>
 
-  <!-- ───────────────── PER PULL REQUEST ───────────────── -->
-  <AlchemicalDivider variant="hexagon" class="v2-divider" />
-  <section class="v2-section v2-pat-6 v2-feature" id="loop-pr" data-rail-section>
+  <!-- ───────────────── SHIP ───────────────── -->
+  <AlchemicalDivider variant="octagon" class="v2-divider" />
+  <section class="v2-section v2-pat-2 v2-feature" id="loop-pr" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-pr")}</p>
-      <h2 class="v2-h2" data-copy>Deploy a preview stage in CI before merging</h2>
+      <h2 class="v2-h2" data-copy>Every pull request gets its own deployment</h2>
       <p class="v2-lede" data-copy>
         CI deploys each pull request to its own stage, runs the same tests, and comments a link to try it. The comment is a resource in the same program, so it is updated on every push and deleted with the preview. Merging deploys to production.
       </p>
@@ -444,22 +660,25 @@ const PROVIDERS = [
     </div>
   </section>
 
-  <!-- ───────────────── OBSERVABILITY ───────────────── -->
-  <AlchemicalDivider variant="heptagon" class="v2-divider" />
-  <section class="v2-section v2-pat-1 v2-feature" id="loop-prod" data-rail-section>
+  <!-- ───────────────── OBSERVE ───────────────── -->
+  <AlchemicalDivider variant="nonagon" class="v2-divider" />
+  <section class="v2-section v2-pat-3 v2-feature" id="loop-prod" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-prod")}</p>
-      <h2 class="v2-h2" data-copy>Disciplined monitoring on Day 1</h2>
+      <h2 class="v2-h2" data-copy>Production traces speak the model's language</h2>
       <p class="v2-lede" data-copy>
-        Provide one Layer and every request is traced and logged with OpenTelemetry from the first deploy. Its datasets, dashboards and alert monitors are resources in the same program, so monitoring ships with the app. Swap the Layer to send telemetry to a different platform.
+        The model gives telemetry a shape. Every command, event, policy, view and saga records an OpenTelemetry span named after itself and the resource it ran on, and the spans join into one trace from a click to everything it caused. Provide one Layer to export them. Its datasets, dashboards and alert monitors are resources in the same program, so monitoring ships with the app.
       </p>
+      <div class="v2-trace">
+        <Terminal title="trace · Account.WithdrawMoney" content={TRACE_OUT} />
+      </div>
       <ObservabilityDash client:visible />
     </div>
   </section>
 
   <!-- ───────────────── SENTIMENT ───────────────── -->
-  <AlchemicalDivider variant="octagon" class="v2-divider" />
-  <section class="v2-section v2-pat-2" aria-labelledby="sentiment-h">
+  <AlchemicalDivider variant="decagon" class="v2-divider" />
+  <section class="v2-section v2-pat-4" aria-labelledby="sentiment-h">
     <div class="v2-container">
       <h2 class="v2-h2" id="sentiment-h" data-copy>Loved by the people shipping with it</h2>
       <p class="v2-lede" data-copy>
@@ -472,7 +691,7 @@ const PROVIDERS = [
 
   <!-- ───────────────── GET STARTED ───────────────── -->
   <AlchemicalDivider variant="circle" class="v2-divider" />
-  <section class="v2-section v2-pat-3 v2-section--last">
+  <section class="v2-section v2-pat-5 v2-section--last">
     <div class="v2-container">
       <h2 class="v2-h2" data-copy>Get started.</h2>
       <ol class="v2-steps">
@@ -492,6 +711,9 @@ const PROVIDERS = [
       <div class="v2-cta-buttons">
         <Button variant="secondary" icon="arrow" href="/getting-started">
           <span data-copy>Read the tutorial</span>
+        </Button>
+        <Button variant="secondary" icon="arrow" href="/domain">
+          <span data-copy>Model your domain</span>
         </Button>
         <Button
           variant="ghost"
@@ -617,6 +839,20 @@ const PROVIDERS = [
   .v2-hero__copy :global(.alc-hero__subtitle) {
     margin-inline: 0;
   }
+  /* A glow in the page color hugs each letter, so the rings fade out right
+     at the text instead of behind a block that hides the animation. */
+  .v2-hero__copy :global(.alc-hero__title),
+  .v2-hero__copy :global(.alc-hero__subtitle) {
+    --glow: var(--alc-bg);
+    text-shadow:
+      0 0 2px var(--glow),
+      0 0 4px var(--glow),
+      0 0 7px var(--glow),
+      0 0 7px var(--glow),
+      0 0 12px var(--glow),
+      0 0 12px var(--glow),
+      0 0 20px var(--glow);
+  }
   .v2-hero__copy :global(.alc-hero__cta) {
     justify-content: flex-start;
   }
@@ -699,25 +935,6 @@ const PROVIDERS = [
   .v2-hero__copy {
     position: relative;
   }
-  /* Fades the rings behind the headline and subtitle so they stay
-     readable; the mark sits near the edge so the rings still read as
-     emanating from it. */
-  .v2-hero__copy::before {
-    content: "";
-    position: absolute;
-    inset: -60px -160px -90px -160px;
-    z-index: -1;
-    pointer-events: none;
-    /* Same stops as the original centered hero's halo (.alc-hero::after),
-       centered on the headline + subtitle. */
-    background: radial-gradient(
-      closest-side at 50% 62%,
-      color-mix(in srgb, var(--alc-bg) 98%, transparent) 0%,
-      color-mix(in srgb, var(--alc-bg) 94%, transparent) 50%,
-      color-mix(in srgb, var(--alc-bg) 68%, transparent) 78%,
-      transparent 100%
-    );
-  }
   /* Below this the right column is too narrow for the terminal to overlap
      the code, so the hero stacks. */
   @media (max-width: 1260px) {
@@ -744,25 +961,6 @@ const PROVIDERS = [
     }
     .v2-hero__visual :global(.v2-hero__term) {
       display: none;
-    }
-    /* The copy fills the screen width here, so the desktop halo can't fade
-       the rings at its edges. A blurred veil covering the whole copy block
-       keeps the white text readable over the animation. */
-    .v2-hero__copy::before {
-      inset: -28px -32px;
-      background: color-mix(in srgb, var(--alc-bg) 68%, transparent);
-      -webkit-backdrop-filter: blur(4px);
-      backdrop-filter: blur(4px);
-      -webkit-mask-image: radial-gradient(
-        farthest-side at 50% 50%,
-        #000 72%,
-        transparent 100%
-      );
-      mask-image: radial-gradient(
-        farthest-side at 50% 50%,
-        #000 72%,
-        transparent 100%
-      );
     }
     /* Equal-width, stacked CTAs. */
     .v2-hero__copy :global(.alc-hero__cta) {
@@ -814,7 +1012,7 @@ const PROVIDERS = [
   .v2-marquee__track {
     display: flex;
     width: max-content;
-    animation: v2-marquee-scroll 72s linear infinite;
+    animation: v2-marquee-scroll 144s linear infinite;
   }
   .v2-marquee:hover .v2-marquee__track,
   .v2-marquee:focus-within .v2-marquee__track,
@@ -852,8 +1050,8 @@ const PROVIDERS = [
        mass sits above the flex-centered midline; drop the mark to match. */
     transform: translateY(0.5px);
   }
-  /* Monochrome at rest; brand color only under the cursor. Prisma swaps
-     between its mono and multi-color marks instead of tinting. */
+  /* Monochrome at rest; brand color only under the cursor. Prisma and Modal swap
+     between their mono and multi-color marks instead of tinting. */
   .v2-marquee__item:hover .v2-marquee__mark {
     color: var(--brand, currentColor);
   }
@@ -971,6 +1169,61 @@ const PROVIDERS = [
     text-wrap: balance;
   }
 
+  .v2-lede a {
+    color: var(--alc-fg-1);
+    text-decoration: underline;
+    text-decoration-color: var(--alc-hairline-3);
+    text-underline-offset: 3px;
+  }
+  .v2-lede a:hover {
+    text-decoration-color: currentColor;
+  }
+
+  .v2-split + .v2-h3 {
+    margin-top: 48px;
+  }
+  .v2-layers {
+    margin: 0 0 28px;
+    border-top: 1px solid var(--alc-hairline-2);
+  }
+  .v2-layers__row {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 16px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--alc-hairline-2);
+    align-items: baseline;
+  }
+  .v2-layers dt {
+    font-family: var(--alc-font-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--alc-accent-text);
+  }
+  .v2-layers dd {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    font-size: 15px;
+    color: var(--alc-fg-2);
+  }
+  .v2-layers dd a {
+    color: var(--alc-fg-1);
+    text-decoration: none;
+  }
+  .v2-layers dd a:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  @media (max-width: 560px) {
+    .v2-layers__row {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+  }
+
   .v2-split {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -985,6 +1238,19 @@ const PROVIDERS = [
   }
   /* Astro hoists a client:visible loader <script> next to the first such
      island; as a grid child it would otherwise render as text. */
+  .v2-trace {
+    margin: 0 0 24px;
+  }
+  .v2-trace :global(.terminal) {
+    margin: 0;
+  }
+  .v2-trace :global(.terminal-body) {
+    overflow-x: auto;
+  }
+  .v2-split :global(.terminal) {
+    margin: 0;
+    flex: 1;
+  }
   .v2-split > :global(script) {
     display: none !important;
   }
@@ -1043,127 +1309,6 @@ const PROVIDERS = [
     text-decoration-color: currentColor;
   }
 
-  /* ---------- modules: the app's layers, cut by a feature ---------- */
-  .v2-split--center {
-    align-items: center !important;
-  }
-  .v2-pyramid {
-    /* Band height and gap; the cut sits between the 2nd and 3rd bands. */
-    --band: 58px;
-    --gap: 6px;
-    --cut: calc(2 * var(--band) + 1.5 * var(--gap));
-    position: relative;
-    margin: 0;
-  }
-  .v2-pyramid__stack {
-    --slice-left: 46%;
-    --slice-width: 34%;
-    position: relative;
-    width: 76%;
-    padding-top: 30px;
-  }
-  /* The module: one column through every band. */
-  .v2-pyramid__stack::after {
-    content: "";
-    position: absolute;
-    top: 26px;
-    bottom: -4px;
-    left: var(--slice-left);
-    width: var(--slice-width);
-    border: 1.5px solid var(--alc-accent);
-    border-radius: var(--alc-radius);
-    background: color-mix(in srgb, var(--alc-accent) 10%, transparent);
-    pointer-events: none;
-  }
-  .v2-pyramid__module {
-    position: absolute;
-    top: 0;
-    left: var(--slice-left);
-    width: var(--slice-width);
-    text-align: center;
-    font-family: var(--alc-font-mono);
-    font-size: 12px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    white-space: nowrap;
-    color: var(--alc-accent-text);
-  }
-  .v2-pyramid__layers {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column-reverse;
-    gap: var(--gap);
-  }
-  .v2-pyramid__layer {
-    position: relative;
-    min-height: var(--band);
-    display: flex;
-    align-items: center;
-  }
-  .v2-pyramid__layer::before {
-    content: "";
-    position: absolute;
-    inset: 0 calc((100% - var(--w)) / 2);
-    border: 1px solid var(--alc-hairline-3);
-    border-radius: var(--alc-radius);
-    background: color-mix(in srgb, var(--alc-bg) 85%, transparent);
-  }
-  .v2-pyramid__name {
-    position: relative;
-    margin-left: calc((100% - var(--w)) / 2);
-    padding: 0 12px;
-    max-width: calc(var(--slice-left) - (100% - var(--w)) / 2);
-    font-size: 14px;
-    font-weight: 600;
-    line-height: 1.25;
-    color: var(--alc-fg-1);
-  }
-  .v2-pyramid__slice {
-    position: absolute;
-    inset: 0 auto 0 var(--slice-left);
-    width: var(--slice-width);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 0 6px;
-    font-family: var(--alc-font-mono);
-    font-size: 12.5px;
-    color: var(--alc-fg-1);
-  }
-  .v2-pyramid__cut {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: var(--cut);
-    border-top: 1.5px dashed var(--alc-fg-2);
-  }
-  .v2-pyramid__program {
-    position: absolute;
-    right: 0;
-    width: 22%;
-    font-size: 12px;
-    line-height: 1.3;
-    color: var(--alc-fg-2);
-  }
-  .v2-pyramid__program--above {
-    bottom: calc(var(--cut) + 8px);
-  }
-  .v2-pyramid__program--below {
-    top: calc(100% - var(--cut) + 8px);
-  }
-  @media (max-width: 480px) {
-    .v2-pyramid__name {
-      font-size: 12px;
-      padding: 0 8px;
-    }
-    .v2-pyramid__slice {
-      font-size: 11px;
-    }
-  }
-
   /* One card, as wide as one column of a split. */
   .v2-split--narrow {
     grid-template-columns: minmax(0, 720px);
@@ -1180,9 +1325,6 @@ const PROVIDERS = [
     top: 50%;
     left: max(16px, calc((100vw - 1080px) / 2 - 176px));
     z-index: 5;
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
     width: 150px;
     translate: -8px -50%;
     opacity: 0;
@@ -1196,33 +1338,41 @@ const PROVIDERS = [
     translate: 0 -50%;
     pointer-events: auto;
   }
-  .v2-rail__label {
-    display: block;
-    margin-bottom: 8px;
-    padding-left: 21px;
-    font-family: var(--alc-font-mono);
-    font-size: 10.5px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--alc-fg-2);
-  }
   .v2-rail__steps {
     list-style: none;
     margin: 0;
     padding: 0;
-  }
-  .v2-rail__step {
-    position: relative;
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  /* The verb is the step; what it acts on sits under it, quieter. */
+  .v2-rail__step {
+    display: flex;
+    align-items: flex-start;
     gap: 12px;
-    padding: 5px 0;
-    font-size: 13.5px;
-    color: var(--alc-fg-2);
     text-decoration: none;
+  }
+  .v2-rail__text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .v2-rail__label {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 18px;
+    color: var(--alc-fg-2);
     transition: color 160ms ease;
   }
-  .v2-rail__step:hover {
+  .v2-rail__title {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--alc-fg-4);
+    opacity: 0.7;
+    transition: opacity 160ms ease;
+  }
+  .v2-rail__step:hover .v2-rail__label {
     color: var(--alc-fg-1);
   }
   /* One track behind every dot; the fill grows to the current step. */
@@ -1242,9 +1392,8 @@ const PROVIDERS = [
   .v2-rail__dot {
     position: relative;
     z-index: 1;
-  }
-  .v2-rail__dot {
     flex: none;
+    margin-top: 4.5px;
     width: 9px;
     height: 9px;
     border-radius: 50%;
@@ -1259,9 +1408,11 @@ const PROVIDERS = [
     border-color: var(--alc-accent);
     background: var(--alc-accent);
   }
-  .v2-rail__step.is-current {
-    color: var(--alc-fg-1);
-    font-weight: 600;
+  .v2-rail__step.is-current .v2-rail__label {
+    color: var(--alc-accent-text);
+  }
+  .v2-rail__step.is-current .v2-rail__title {
+    opacity: 1;
   }
   .v2-rail__step.is-current .v2-rail__dot {
     border-color: var(--alc-accent);

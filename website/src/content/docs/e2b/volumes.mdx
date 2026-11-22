@@ -1,0 +1,125 @@
+---
+title: Volumes
+description: Keep files that outlive sandboxes, mount them by name, and read or write them without a sandbox.
+---
+
+import Timeline from "../../../components/diagrams/Timeline.astro";
+
+A **volume** is a filesystem that lives outside any sandbox. A sandbox mounts it at a path when it's created, and what it writes there stays after the sandbox is killed, for the next sandbox that mounts it. You can also read and write a volume's files without a sandbox.
+
+## Files outlive the sandbox
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "vol", label: "Cache", type: "volume" },
+    { id: "a", label: "build 1", type: "sandbox" },
+    { id: "b", label: "build 2", type: "sandbox" },
+  ]}
+  bars={[
+    { lane: "vol", start: 0, end: 10, label: "files in /cache", tone: "accent" },
+    { lane: "a", start: 1, end: 4, label: "fills /cache" },
+    { lane: "b", start: 6, end: 9, label: "reuses /cache" },
+  ]}
+  caption="Each build sandbox mounts Cache at /cache. The first fills it and is killed; the files stay on the volume, and the next build starts with them."
+/>
+
+E2B enables volumes per team. On a team without them, deploying a volume fails with `VolumesNotEnabled`.
+
+## Declare a shared volume
+
+```typescript title="src/Storage.ts"
+import * as E2B from "@alchemy.run/e2b";
+
+export const Cache = E2B.Volume("Cache", {});
+```
+
+Changing `name` replaces the volume and loses its files.
+
+## Mount it into a declared sandbox
+
+```typescript title="src/Builder.ts"
+import * as E2B from "@alchemy.run/e2b";
+import { MyTemplate } from "./MyTemplate.ts";
+import { Cache } from "./Storage.ts";
+
+export const Builder = E2B.Sandbox("Builder", {
+  template: MyTemplate,
+  mounts: [{ volume: Cache, path: "/cache" }],
+});
+```
+
+E2B attaches volumes only when a sandbox is created, so changing `mounts` replaces the sandbox.
+
+## Mount it from a Worker
+
+```typescript
+// in the Worker's construction
+const cache = yield* E2B.MountVolume(Cache, { path: "/cache" });
+const sandboxes = yield* E2B.CreateSandbox(MyTemplate);
+// in fetch
+const sandbox = yield* sandboxes.create({ mounts: [cache] });
+```
+
+`MountVolume` returns a reference with the entry's fields, so it goes straight into `mounts`. Provide `E2B.MountVolumeLive`.
+
+## Mount it in a template program
+
+```typescript title="src/Api.ts"
+import * as E2B from "@alchemy.run/e2b";
+import * as Effect from "effect/Effect";
+import { FileSystem } from "effect/FileSystem";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Cache } from "./Storage.ts";
+
+export default class Api extends E2B.Template<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const cache = yield* E2B.MountVolume(Cache, { path: "/cache" });
+    const fs = yield* FileSystem;
+    return {
+      fetch: Effect.gen(function* () {
+        const files = yield* fs.readDirectory(cache.path);
+        return yield* HttpServerResponse.json(files);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(E2B.MountVolumeLive)),
+) {}
+```
+
+Inside a template program, the mount becomes part of the template. Every sandbox created from it, with `CreateSandbox(Api)` or `E2B.Sandbox({ template: Api })`, mounts the volume.
+
+## Create a volume per user
+
+```typescript
+const volumes = yield* E2B.CreateVolume();
+// in fetch:
+const home = yield* volumes.getOrCreate(`home-${user}`);
+const sandbox = yield* sandboxes.create({ mounts: [{ volume: home, path: "/home/user/work" }] });
+```
+
+Provide `E2B.CreateVolumeHttp`. Runtime volumes are not deleted when you destroy the Worker: call `volumes.delete(home.volumeId)` when the user goes away.
+
+## Read files without a sandbox
+
+```typescript
+const reports = yield* E2B.ReadVolume(Reports);
+// in fetch:
+const report = yield* reports.readText("/report.json");
+const entries = yield* reports.list("/");
+```
+
+Provide `E2B.ReadVolumeHttp`. The client uses the volume's own token, looked up with the host's API key.
+
+## Write files without a sandbox
+
+```typescript
+const inputs = yield* E2B.WriteVolume(Inputs);
+// in fetch:
+yield* inputs.write("/task.json", JSON.stringify(task));
+yield* inputs.makeDir("/results");
+yield* inputs.remove("/old");
+```
+
+`E2B.ReadWriteVolume` does both. A runtime volume's `files` is a read-write client too.

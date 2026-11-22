@@ -1,18 +1,19 @@
 import * as Stripe from "@alchemy.run/stripe";
 import { isMissingStripeResource } from "@alchemy.run/stripe/missing";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import {
   GetTerminalReaders,
   GetTerminalReader,
   type DeletedTerminalReader,
   type TerminalReader as StripeTerminalReader,
 } from "@distilled.cloud/stripe/stripe";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
@@ -87,6 +88,10 @@ test.provider(
           return { location, reader };
         }),
       );
+      yield* expectFound(Stripe.TerminalReader.lookup({ id: created.reader.id }), created.reader, {
+        // The reader's heartbeat moves on its own.
+        ignore: ["lastSeenAt"],
+      });
 
       expect(created.reader.id).toMatch(/^tmr_/);
       expect(created.reader.label).toEqual("Alchemy Front Counter");

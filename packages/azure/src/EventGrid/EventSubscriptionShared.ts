@@ -86,7 +86,7 @@ export interface EventSubscriptionDeliveryIdentity {
 /** Advanced filter on an event field. */
 export interface EventSubscriptionAdvancedFilter {
   /** Operator, e.g. `StringIn`, `NumberGreaterThan`, `BoolEquals`. */
-  operatorType: eventgrid.AdvancedFilterOperatorType;
+  operatorType: eventgrid.AdvancedFilter["operatorType"];
   /** Event field to filter on, e.g. `data.api` or `subject`. */
   key: string;
   /**
@@ -257,7 +257,9 @@ export const toWireDestination = (
   destination: EventSubscriptionDestination,
 ): eventgrid.EventSubscriptionDestination => {
   const { endpointType, ...properties } = destination;
-  return { endpointType, properties };
+  // `endpointType` and its properties are destructured apart, so TypeScript
+  // cannot pair them back into one union arm.
+  return { endpointType, properties } as eventgrid.EventSubscriptionDestination;
 };
 
 /** Desired subscription body in wire form. */
@@ -272,7 +274,9 @@ export const desiredSubscription = Effect.fn(function* (
     deliveryWithResourceIdentity: settings.deliveryIdentity
       ? { identity: settings.deliveryIdentity, destination }
       : undefined,
-    filter: settings.filter,
+    // Advanced filters take one shape for every `operatorType`; the SDK
+    // types each operator as its own union arm.
+    filter: settings.filter as eventgrid.EventSubscriptionFilter | undefined,
     labels: [...(settings.labels ?? []), marker],
     expirationTimeUtc: settings.expirationTimeUtc,
     eventDeliverySchema: settings.eventDeliverySchema ?? "EventGridSchema",
@@ -327,8 +331,8 @@ const normalizeFilter = (filter: eventgrid.EventSubscriptionFilter | undefined) 
     advancedFilters: (filter?.advancedFilters ?? []).map((f) => ({
       operatorType: f.operatorType,
       key: f.key,
-      value: f.value,
-      values: f.values,
+      value: "value" in f ? f.value : undefined,
+      values: "values" in f ? f.values : undefined,
     })),
   });
 

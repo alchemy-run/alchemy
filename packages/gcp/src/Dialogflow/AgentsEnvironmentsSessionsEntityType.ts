@@ -114,7 +114,7 @@ export const AgentsEnvironmentsSessionsEntityType = Resource<AgentsEnvironmentsS
 export class AgentsEnvironmentsSessionsEntityTypeNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsEnvironmentsSessionsEntityTypeNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 // Earlier versions stamped a `__alchemy__…` sentinel entity; drop it.
@@ -161,10 +161,10 @@ const entityTypeIdOf = (entityType: string) => lastSegment(entityType);
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsEnvironmentsSessionsEntityTypes({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const AgentsEnvironmentsSessionsEntityTypeProvider = () =>
   Provider.succeed(AgentsEnvironmentsSessionsEntityType, {
@@ -236,8 +236,8 @@ export const AgentsEnvironmentsSessionsEntityTypeProvider = () =>
       if (current === undefined) {
         const created = yield* dialogflow
           .createProjectsLocationsAgentsEnvironmentsSessionsEntityTypes({
+            ...body,
             parent: `${environment}/sessions/${sessionId}`,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -245,7 +245,7 @@ export const AgentsEnvironmentsSessionsEntityTypeProvider = () =>
 
       if (current === undefined) {
         return yield* new AgentsEnvironmentsSessionsEntityTypeNotResolved({
-          name,
+          resourceName: name,
         });
       }
 
@@ -256,10 +256,8 @@ export const AgentsEnvironmentsSessionsEntityTypeProvider = () =>
 
       if (modeChanged || entitiesChanged || legacySentinel) {
         current = yield* dialogflow.patchProjectsLocationsAgentsEnvironmentsSessionsEntityTypes({
-          // An `entities` update mask is silently ignored; the body is
-          // complete, so replace the whole resource.
+          ...body,
           name: currentName,
-          body: { ...body, name: currentName },
         });
       }
 

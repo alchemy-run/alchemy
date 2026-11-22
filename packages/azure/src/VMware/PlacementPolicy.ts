@@ -265,6 +265,8 @@ export const PlacementPolicyProvider = () =>
       if (observed === undefined) {
         yield* vmware.PlacementPoliciesCreateOrUpdate({
           ...where,
+          // `hostMembers` is required on the `VmHost` arm but optional in the
+          // props, so the arm is asserted rather than built.
           properties: {
             type: news.type,
             state,
@@ -274,30 +276,32 @@ export const PlacementPolicyProvider = () =>
             hostMembers: news.hostMembers,
             affinityStrength: news.affinityStrength,
             azureHybridBenefitType: news.azureHybridBenefitType,
-          },
+          } as vmware.PlacementPolicyPropertiesInput,
         });
       }
       observed = yield* wait();
 
       // Sync the mutable members and settings against observed state.
       const props = observed.properties;
+      // Host members and the VM-host settings exist on the `VmHost` arm only.
+      const hostProps = props !== undefined && props.type === "VmHost" ? props : undefined;
       const changed: vmware.PlacementPolicyUpdateProperties = {};
       if (props?.state !== state) changed.state = state;
       if (!sameSet(props?.vmMembers, news.vmMembers)) {
         changed.vmMembers = news.vmMembers;
       }
-      if (news.hostMembers !== undefined && !sameSet(props?.hostMembers, news.hostMembers)) {
+      if (news.hostMembers !== undefined && !sameSet(hostProps?.hostMembers, news.hostMembers)) {
         changed.hostMembers = news.hostMembers;
       }
       if (
         news.affinityStrength !== undefined &&
-        props?.affinityStrength !== news.affinityStrength
+        hostProps?.affinityStrength !== news.affinityStrength
       ) {
         changed.affinityStrength = news.affinityStrength;
       }
       if (
         news.azureHybridBenefitType !== undefined &&
-        props?.azureHybridBenefitType !== news.azureHybridBenefitType
+        hostProps?.azureHybridBenefitType !== news.azureHybridBenefitType
       ) {
         changed.azureHybridBenefitType = news.azureHybridBenefitType;
       }

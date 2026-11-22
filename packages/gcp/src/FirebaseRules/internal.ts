@@ -176,17 +176,17 @@ export const isGeneratedReleaseId = (releaseId: string | undefined) =>
 
 export const getRuleset = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : firebaserules
         .getProjectsRulesets({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const getRelease = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : firebaserules
         .getProjectsReleases({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listRulesetMetas = (project: string) =>
   firebaserules.listProjectsRulesets

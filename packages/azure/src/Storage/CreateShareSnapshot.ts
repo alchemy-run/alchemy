@@ -45,8 +45,14 @@ export interface CreateShareSnapshot extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: CreateShareSnapshotRequest,
-    ) => Effect.Effect<files.CreateShareSnapshotResponse, files.CreateShareSnapshotError, RuntimeContext>
+    ) => Effect.Effect<
+      files.CreateShareSnapshotResponse,
+      files.CreateShareSnapshotError,
+      RuntimeContext
+    >
   >
 > {}
 
-export const CreateShareSnapshot = Binding.Service<CreateShareSnapshot>("Azure.Storage.CreateShareSnapshot");
+export const CreateShareSnapshot = Binding.Service<CreateShareSnapshot>(
+  "Azure.Storage.CreateShareSnapshot",
+);

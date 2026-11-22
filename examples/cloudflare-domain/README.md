@@ -1,6 +1,6 @@
 # cloudflare-domain
 
-A bank built with `@alchemy.run/domain`: customers, accounts and transfers modelled as aggregates, commands, events, views, policies, a saga, projections and streams; hosted on Cloudflare Durable Objects; driven from a foldkit app; traced end to end into Axiom.
+A bank built with `@alchemy.run/domain`: customers, accounts and transfers modelled as aggregates, commands, events, views, policies, a saga, projections, streams and a query; hosted on Cloudflare Durable Objects; driven from a foldkit app; traced end to end into Axiom.
 
 The docs at [alchemy.run/domain](https://alchemy.run/domain) are written around this project, and quote its files.
 

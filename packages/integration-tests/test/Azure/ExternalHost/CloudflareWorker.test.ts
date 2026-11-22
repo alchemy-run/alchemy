@@ -1,14 +1,14 @@
 import * as Azure from "@alchemy.run/azure";
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as authorization from "@distilled.cloud/azure/authorization";
 import * as servicebus from "@distilled.cloud/azure/servicebus";
 import * as applications from "@distilled.cloud/microsoft-graph/applications";
 import * as servicePrincipals from "@distilled.cloud/microsoft-graph/servicePrincipals";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";

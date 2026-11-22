@@ -1,9 +1,9 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { isLocalId } from "@alchemy.run/cloudflare/LocalRuntime";
+import { assert, describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
-import { assert, describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import { initialCwd } from "alchemy/Util/Node";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
@@ -815,6 +815,46 @@ if (el) {
           expect(site3.hash?.input).toEqual(site2.hash?.input);
           expect(site3.hash?.additionalWorkspaces).toEqual(site2.hash?.additionalWorkspaces);
 
+          // ── deploy 4: the sibling package is deleted (#2606) ───────────────
+          // State still lists `../shared`. Planning must count the missing
+          // workspace as a change and rebuild, not fail reading it.
+          const marker4 = `vite-ws-4-${Date.now()}`;
+          yield* fs.writeFileString(
+            path.join(rootDir, "src/main.ts"),
+            `const el = document.getElementById("app");
+if (el) {
+  el.textContent = ${JSON.stringify(marker4)};
+}
+`,
+          );
+          yield* fs.remove(sharedDir, { recursive: true });
+
+          const site4 = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Website.Vite(
+                "ViteWorkspace",
+                viteProps(rootDir, memoInclude),
+              );
+            }),
+          );
+
+          expect(site4.hash?.input).not.toEqual(site3.hash?.input);
+          expect(site4.hash?.additionalWorkspaces ?? []).not.toContain("../shared");
+          yield* expectBundleContains(site4.url!, marker4, {
+            label: "root-only marker after deleting the workspace",
+          });
+
+          // ── deploy 5: unchanged ⇒ the rebuilt workspace set is a memo hit ─
+          const site5 = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Website.Vite(
+                "ViteWorkspace",
+                viteProps(rootDir, memoInclude),
+              );
+            }),
+          );
+          expect(site5.hash?.input).toEqual(site4.hash?.input);
+
           yield* stack.destroy();
           yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
         }).pipe(logLevel),
@@ -1000,6 +1040,78 @@ if (el) {
         tags: ["provider:cloudflare:container", "provider:cloudflare:worker", "live"],
         timeout: 600_000,
       },
+    );
+
+    test.provider(
+      "Vite: R2 S3Credentials on env binds the credentials secret (#2219)",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+
+          yield* stack.destroy();
+
+          const rootDir = yield* cloneFixture(fixtureDir, {
+            prefix: "alchemy-vite-s3-",
+            tempRoot,
+            entries: ["index.html", "package.json", "vite.config.ts", "src"],
+          });
+          // Report which credential fields reached the Worker, never their values.
+          yield* fs.writeFileString(
+            path.join(rootDir, "src/worker.ts"),
+            `type Env = {
+  ASSETS: { fetch: (req: Request) => Promise<Response> };
+  STORAGE_S3: string;
+};
+export default {
+  fetch(request: Request, env: Env): Promise<Response> {
+    if (new URL(request.url).pathname === "/api/s3") {
+      return Response.json({ keys: Object.keys(JSON.parse(env.STORAGE_S3)).sort() });
+    }
+    return env.ASSETS.fetch(request);
+  },
+};
+`,
+          );
+          const memoInclude = ["index.html", "src/**", "package.json", "vite.config.ts"];
+
+          // `S3Credentials` is Effect-shaped; before #2219 the Vite build's
+          // env resolution ran it as an inlined env Effect and the deploy
+          // died with "Service not found: Cloudflare.Workers.WorkerEnvironment".
+          const site = yield* stack.deploy(
+            Effect.gen(function* () {
+              const bucket = yield* Cloudflare.R2.Bucket("ViteS3Bucket", { forceDestroy: true });
+              return yield* Cloudflare.Website.Vite("ViteS3", {
+                ...viteProps(rootDir, memoInclude),
+                assets: { runWorkerFirst: ["/api/*"] },
+                env: {
+                  STORAGE_S3: Cloudflare.R2.S3Credentials(bucket, { access: "read-write" }),
+                },
+              });
+            }),
+          );
+
+          expect(site.url).toBeDefined();
+          yield* expectWorkerExists(site.workerName, accountId);
+
+          const client = yield* HttpClient.HttpClient;
+          const body = yield* client.get(`${site.url!}/api/s3`).pipe(
+            Effect.flatMap((res) =>
+              res.status === 200
+                ? res.json
+                : Effect.fail(new Error(`/api/s3 returned ${res.status}`)),
+            ),
+            Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 10 }),
+          );
+          expect(body).toEqual({
+            keys: ["accessKeyId", "bucketName", "endpoint", "region", "secretAccessKey"],
+          });
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:r2", "provider:cloudflare:worker", "live"], timeout: 360_000 },
     );
 
     // The documented interception pattern (solidstart.mdx hand-rolled SSR /
@@ -1190,7 +1302,9 @@ if (el) {
           expect(assetPath).toBeDefined();
           const bundle = yield* fetchTextReady(`${site.url!}${assetPath}`);
           expect(bundle.length).toBeGreaterThan(0);
-          expect(bundle).not.toContain("<html");
+          // Not the HTML page served in its place. (React Router's bundled
+          // source mentions `<html>` in its doc comments.)
+          expect(bundle.trimStart()).not.toMatch(/^<(!doctype|html)/i);
 
           const render = yield* fetchJsonReady<{ ok: boolean; html: string }>(
             `${site.url!}/worker-render`,

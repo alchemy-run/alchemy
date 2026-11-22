@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 /**
  * Standing prerequisites for the Floci-gated AWS suites (EKS, AMP scraper,
  * SageMaker HyperPod and endpoints, RDS proxy, ECS capacity providers, Flink,
- * custom domains, API Gateway VPC links, SES, OAM, Control Tower). They are
+ * custom domains, API Gateway VPC links, SES, OAM, Q Apps, Shield Advanced, Control Tower). They are
  * created through the emulated AWS APIs before `test:aws:floci` spawns the
  * suite, exported as the env vars the suites read, and removed after the run.
  *
@@ -24,6 +24,7 @@ import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as oam from "@distilled.cloud/aws/oam";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import * as s3 from "@distilled.cloud/aws/s3";
@@ -31,9 +32,11 @@ import * as sagemaker from "@distilled.cloud/aws/sagemaker";
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as ses from "@distilled.cloud/aws/ses";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
+import * as shield from "@distilled.cloud/aws/shield";
+import * as socialmessaging from "@distilled.cloud/aws/socialmessaging";
 import * as ssm from "@distilled.cloud/aws/ssm";
-import * as BunServices from "@effect/platform-bun/BunServices";
 import * as Cause from "effect/Cause";
+import * as Config from "effect/Config";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -47,17 +50,23 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { MEDIACONVERT_INPUT_MP4_BASE64 } from "./floci-fixture-media.ts";
 
 export interface FlociStandingFixtures {
   readonly env: Record<string, string>;
-  readonly teardown: () => Promise<void>;
+  /** Removes every provisioned fixture, newest first. */
+  readonly teardown: Effect.Effect<void, FixtureError, PlatformServices>;
 }
 
 export interface FlociStandingFixtureOptions {
   /** Selected test files (relative or absolute). Omit to provision every group. */
   readonly files?: ReadonlyArray<string>;
-  /** Aborting interrupts provisioning and removes what was already created. */
-  readonly signal?: AbortSignal;
+  /**
+   * The image the run started the emulator with. Without it `ensureFloci`
+   * falls back to the pinned release and recreates the container, discarding
+   * the fixtures and testing the wrong emulator.
+   */
+  readonly image?: string;
 }
 
 const NAME = "alchemy-floci-standing";
@@ -103,8 +112,12 @@ type Group =
   | "vpcLink"
   | "ses"
   | "oam"
+  | "qapps"
+  | "shieldAdvanced"
+  | "socialMessaging"
   | "sagemakerEndpoint"
-  | "controlTower";
+  | "controlTower"
+  | "mediaConvert";
 
 const groupVars: Record<Group, ReadonlyArray<string>> = {
   eksRole: ["AWS_TEST_EKS_ROLE_ARN", "AWS_TEST_EKS_SUBNET_IDS"],
@@ -150,7 +163,11 @@ const groupVars: Record<Group, ReadonlyArray<string>> = {
     "AWS_TEST_SES_VDM",
   ],
   oam: ["AWS_TEST_OAM_SINK_ARN"],
+  qapps: ["AWS_TEST_QAPPS", "QAPPS_INSTANCE_ID"],
+  shieldAdvanced: ["AWS_TEST_SHIELD_ADVANCED"],
+  socialMessaging: ["AWS_TEST_SOCIALMESSAGING", "AWS_TEST_SOCIALMESSAGING_WABA_ID"],
   sagemakerEndpoint: ["AWS_TEST_SAGEMAKER_ENDPOINT", "AWS_TEST_SAGEMAKER_IMAGE"],
+  mediaConvert: ["MEDIACONVERT_ROLE_ARN", "MEDIACONVERT_TEST_INPUT", "MEDIACONVERT_TEST_OUTPUT"],
   controlTower: [
     "AWS_TEST_CONTROLTOWER",
     "AWS_TEST_CONTROLTOWER_CONTROL",
@@ -192,11 +209,18 @@ const groupSuites: Record<Group, ReadonlyArray<string>> = {
     "SES/CustomVerificationEmailTemplate.test.ts",
   ],
   oam: ["OAM/Sink.test.ts"],
+  qapps: ["QApps/QApp.test.ts", "QApps/Bindings.test.ts", "QApps/QAppsMissingLookup.test.ts"],
+  shieldAdvanced: ["Shield/Shield.test.ts"],
+  socialMessaging: [
+    "SocialMessaging/LinkedWhatsAppBusinessAccount.test.ts",
+    "SocialMessaging/Bindings.test.ts",
+  ],
   sagemakerEndpoint: ["SageMaker/Endpoint.test.ts", "SageMaker/EndpointBindings.test.ts"],
   controlTower: ["ControlTower/ControlTower.test.ts"],
+  mediaConvert: ["MediaConvert/MediaConvert.test.ts"],
 };
 
-class FixtureError extends Data.TaggedError("FlociFixtureError")<{
+export class FixtureError extends Data.TaggedError("FlociFixtureError")<{
   readonly message: string;
 }> {}
 
@@ -218,10 +242,12 @@ const fixtureLayer = Layer.mergeAll(
   Layer.succeed(Region, Effect.succeed(REGION)),
   Endpoint.of(`http://localhost:${Floci.DEFAULT_FLOCI_PORT}`),
   FetchHttpClient.layer,
-  BunServices.layer,
 );
 
-type Services = Layer.Success<typeof fixtureLayer>;
+/** Platform services the caller provides (e.g. `NodeServices.layer`). */
+type PlatformServices = Path.Path | ChildProcessSpawner.ChildProcessSpawner;
+
+type Services = Layer.Success<typeof fixtureLayer> | PlatformServices;
 
 interface Cleanup {
   readonly label: string;
@@ -253,16 +279,6 @@ const runCleanups = (ledger: Array<Cleanup>) =>
       return yield* fixtureError(`could not remove standing fixtures:\n${failures.join("\n")}`);
     }
   });
-
-const toPromise = <A>(
-  effect: Effect.Effect<A, unknown, Services>,
-  signal?: AbortSignal,
-): Promise<A> =>
-  Effect.runPromiseExit(effect.pipe(Effect.provide(fixtureLayer)), {
-    signal,
-  }).then((exit) =>
-    Exit.isSuccess(exit) ? exit.value : Promise.reject(new Error(Cause.pretty(exit.cause))),
-  );
 
 // ─── EC2 ─────────────────────────────────────────────────────────────────────
 
@@ -428,7 +444,7 @@ const ensureRole = (
       .getRole({ RoleName: roleName })
       .pipe(Effect.map((response) => response.Role));
     const existing = yield* getRole.pipe(
-      Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+      Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
     );
     const role =
       existing === undefined
@@ -468,7 +484,7 @@ const ensureRole = (
 
 const findEksCluster = eks.describeCluster({ name: NAME }).pipe(
   Effect.map((response) => response.cluster),
-  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
 );
 
 const deleteEksCluster = Effect.gen(function* () {
@@ -799,7 +815,7 @@ const VPC_LINK_NLB = `${NAME}-nlb`;
 
 const findLoadBalancer = elbv2.describeLoadBalancers({ Names: [VPC_LINK_NLB] }).pipe(
   Effect.map((response) => response.LoadBalancers?.[0]),
-  Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
+  Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined),
 );
 
 const deleteLoadBalancer = Effect.gen(function* () {
@@ -920,6 +936,39 @@ const ensureFlinkJar = (ledger: Array<Cleanup>) =>
       ContentType: "application/java-archive",
     });
     return `arn:aws:s3:::${FLINK_BUCKET}`;
+  });
+
+// ─── S3 + IAM (MediaConvert job input) ───────────────────────────────────────
+
+const MEDIACONVERT_BUCKET = `${NAME}-mediaconvert`;
+const MEDIACONVERT_INPUT_KEY = "input/input.mp4";
+
+const ensureMediaConvertInput = (ledger: Array<Cleanup>) =>
+  Effect.gen(function* () {
+    const exists = yield* s3.headBucket({ Bucket: MEDIACONVERT_BUCKET }).pipe(
+      Effect.as(true),
+      Effect.catchTag(["NotFound", "NoSuchBucket"], () => Effect.succeed(false)),
+    );
+    yield* register(ledger, {
+      label: `S3 bucket ${MEDIACONVERT_BUCKET}`,
+      run: deleteBucket(MEDIACONVERT_BUCKET),
+    });
+    if (!exists) {
+      yield* s3
+        .createBucket({ Bucket: MEDIACONVERT_BUCKET })
+        .pipe(Effect.catchTag("BucketAlreadyOwnedByYou", () => Effect.void));
+    }
+    const body = yield* Effect.sync(() => Buffer.from(MEDIACONVERT_INPUT_MP4_BASE64, "base64"));
+    yield* s3.putObject({
+      Bucket: MEDIACONVERT_BUCKET,
+      Key: MEDIACONVERT_INPUT_KEY,
+      Body: new Uint8Array(body),
+      ContentType: "video/mp4",
+    });
+    return {
+      input: `s3://${MEDIACONVERT_BUCKET}/${MEDIACONVERT_INPUT_KEY}`,
+      output: `s3://${MEDIACONVERT_BUCKET}/output/`,
+    };
   });
 
 // ─── Route 53 + ACM ──────────────────────────────────────────────────────────
@@ -1239,6 +1288,80 @@ const ensureSesFixtures = (ledger: Array<Cleanup>) =>
     return { bounceMessageId: sent.MessageId };
   });
 
+// ─── Q Apps instance ────────────────────────────────────────────────────────
+
+// A Q Apps instance is a Q Business application with Q Apps enabled.
+const ensureQAppsInstance = (ledger: Array<Cleanup>) =>
+  Effect.gen(function* () {
+    const listed = yield* qbusiness.listApplications({});
+    const existing = (listed.applications ?? []).find((app) => app.displayName === NAME);
+    const applicationId =
+      existing?.applicationId ??
+      (yield* qbusiness
+        .createApplication({
+          displayName: NAME,
+          identityType: "ANONYMOUS",
+          qAppsConfiguration: { qAppsControlMode: "ENABLED" },
+          tags: [{ key: FIXTURE_TAG_KEY, value: FIXTURE_TAG_VALUE }],
+        })
+        .pipe(Effect.map((created) => created.applicationId)));
+    if (applicationId === undefined) {
+      return yield* fixtureError(`Q Business application ${NAME} has no id`);
+    }
+    const id = applicationId;
+    yield* register(ledger, {
+      label: `Q Business application ${id}`,
+      run: qbusiness
+        .deleteApplication({ applicationId: id })
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
+    });
+    yield* qbusiness.getApplication({ applicationId: id }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("500 millis"),
+        until: (app) => app.status === "ACTIVE",
+        times: 60,
+      }),
+    );
+    return id;
+  });
+
+// ─── WhatsApp (End User Messaging Social) ────────────────────────────────────
+
+/**
+ * Links a WhatsApp Business Account through the two-step signup Floci simulates
+ * (on AWS this is Meta's embedded signup in the console): the callback lists
+ * the account and its phone number, and finalization registers them.
+ */
+const linkWhatsAppBusinessAccount = (ledger: Array<Cleanup>) =>
+  Effect.gen(function* () {
+    const callback = yield* socialmessaging.associateWhatsAppBusinessAccount({
+      signupCallback: { accessToken: NAME },
+    });
+    const result = callback.signupCallbackResult;
+    const [id, pending] = Object.entries(result?.linkedAccountsWithIncompleteSetup ?? {})[0] ?? [];
+    const phoneNumberId = pending?.unregisteredWhatsAppPhoneNumbers?.[0]?.phoneNumberId;
+    if (
+      result?.associateInProgressToken === undefined ||
+      id === undefined ||
+      phoneNumberId === undefined
+    ) {
+      return yield* fixtureError("WhatsApp signup returned no account to finish");
+    }
+    yield* socialmessaging.associateWhatsAppBusinessAccount({
+      setupFinalization: {
+        associateInProgressToken: result.associateInProgressToken,
+        phoneNumbers: [{ id: phoneNumberId, twoFactorPin: "123456" }],
+      },
+    });
+    yield* register(ledger, {
+      label: `WhatsApp Business Account ${id}`,
+      run: socialmessaging
+        .disassociateWhatsAppBusinessAccount({ id })
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
+    });
+    return id;
+  });
+
 // ─── OAM (second account) ────────────────────────────────────────────────────
 
 const OAM_RESOURCE_TYPES = ["AWS::CloudWatch::Metric", "AWS::Logs::LogGroup", "AWS::XRay::Trace"];
@@ -1430,7 +1553,10 @@ const ensureLandingZone = (ledger: Array<Cleanup>) =>
 const matchesSuite = (file: string, suite: string) =>
   file.replaceAll("\\", "/").endsWith(`AWS/${suite}`);
 
-const allVarsSet = (group: Group) => groupVars[group].every((name) => !!process.env[name]);
+const allVarsSet = (group: Group) =>
+  Effect.forEach(groupVars[group], (name) => Config.String(name).pipe(Config.withDefault(""))).pipe(
+    Effect.map((values) => values.every((value) => value !== "")),
+  );
 
 const selectGroups = (files: ReadonlyArray<string> | undefined) =>
   Effect.gen(function* () {
@@ -1440,7 +1566,7 @@ const selectGroups = (files: ReadonlyArray<string> | undefined) =>
         files === undefined ||
         files.some((file) => groupSuites[group].some((suite) => matchesSuite(file, suite)));
       if (!wanted) continue;
-      if (allVarsSet(group)) {
+      if (yield* allVarsSet(group)) {
         yield* log(`fixtures: ${group} uses the caller's env vars`);
         continue;
       }
@@ -1449,9 +1575,14 @@ const selectGroups = (files: ReadonlyArray<string> | undefined) =>
     return selected;
   });
 
-const provision = (external: boolean, groups: ReadonlySet<Group>, ledger: Array<Cleanup>) =>
+const provision = (
+  external: boolean,
+  groups: ReadonlySet<Group>,
+  ledger: Array<Cleanup>,
+  image: string | undefined,
+) =>
   Effect.gen(function* () {
-    yield* Floci.ensureFloci({ port: Floci.DEFAULT_FLOCI_PORT, external });
+    yield* Floci.ensureFloci({ port: Floci.DEFAULT_FLOCI_PORT, external, image });
     yield* log(`fixtures: provisioning ${[...groups].join(", ")}`);
     const env: Record<string, string> = {};
     // Shared by every group that needs subnets; cleanups register once.
@@ -1588,9 +1719,41 @@ const provision = (external: boolean, groups: ReadonlySet<Group>, ledger: Array<
       env.AWS_TEST_OAM_SINK_ARN = yield* ensureOamSink(ledger);
     }
 
+    if (groups.has("qapps")) {
+      env.QAPPS_INSTANCE_ID = yield* ensureQAppsInstance(ledger);
+      env.AWS_TEST_QAPPS = "1";
+    }
+
+    if (groups.has("shieldAdvanced")) {
+      // A Shield Advanced subscription can't be ended inside its one-year
+      // commitment, in Floci as on AWS; it goes with the emulator.
+      yield* shield
+        .createSubscription({})
+        .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
+      env.AWS_TEST_SHIELD_ADVANCED = "1";
+    }
+
+    if (groups.has("socialMessaging")) {
+      env.AWS_TEST_SOCIALMESSAGING_WABA_ID = yield* linkWhatsAppBusinessAccount(ledger);
+      env.AWS_TEST_SOCIALMESSAGING = "1";
+    }
+
     if (groups.has("sagemakerEndpoint")) {
       env.AWS_TEST_SAGEMAKER_ENDPOINT = "1";
       env.AWS_TEST_SAGEMAKER_IMAGE = yield* buildSageMakerServeImage;
+    }
+
+    if (groups.has("mediaConvert")) {
+      env.MEDIACONVERT_ROLE_ARN = yield* ensureRole(
+        ledger,
+        "mediaconvert",
+        "mediaconvert.amazonaws.com",
+        ["sts:AssumeRole"],
+        ["AmazonS3FullAccess"],
+      );
+      const { input, output } = yield* ensureMediaConvertInput(ledger);
+      env.MEDIACONVERT_TEST_INPUT = input;
+      env.MEDIACONVERT_TEST_OUTPUT = output;
     }
 
     if (groups.has("controlTower")) {
@@ -1604,23 +1767,23 @@ const provision = (external: boolean, groups: ReadonlySet<Group>, ledger: Array<
 
 /**
  * Provisions the standing fixtures the selected suites need. On failure or
- * abort, everything already created is removed before the promise rejects.
+ * interruption, everything already created is removed before the effect fails.
  */
-export const provisionFlociStandingFixtures = async (
+export const provisionFlociStandingFixtures = Effect.fn(function* (
   external: boolean,
   options: FlociStandingFixtureOptions = {},
-): Promise<FlociStandingFixtures> => {
+) {
   const ledger: Array<Cleanup> = [];
-  const groups = await toPromise(selectGroups(options.files));
-  const teardown = () => (ledger.length === 0 ? Promise.resolve() : toPromise(runCleanups(ledger)));
-  if (groups.size === 0) return { env: {}, teardown };
-  const env = await toPromise(
-    provision(external, groups, ledger).pipe(
-      Effect.onError(() =>
-        runCleanups(ledger).pipe(Effect.catch((error) => Console.error(String(error.message)))),
-      ),
+  const groups = yield* selectGroups(options.files);
+  const teardown: FlociStandingFixtures["teardown"] = Effect.suspend(() =>
+    ledger.length === 0 ? Effect.void : runCleanups(ledger),
+  ).pipe(Effect.provide(fixtureLayer));
+  if (groups.size === 0) return { env: {}, teardown } satisfies FlociStandingFixtures;
+  const env = yield* provision(external, groups, ledger, options.image).pipe(
+    Effect.onError(() =>
+      runCleanups(ledger).pipe(Effect.catch((error) => Console.error(String(error.message)))),
     ),
-    options.signal,
+    Effect.provide(fixtureLayer),
   );
-  return { env, teardown };
-};
+  return { env, teardown } satisfies FlociStandingFixtures;
+});

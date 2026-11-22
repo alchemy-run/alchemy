@@ -14,7 +14,7 @@ export const MAX_DISPLAY_NAME_LENGTH = 128;
 export const MAX_MODEL_DISPLAY_NAME_LENGTH = 1024;
 
 export class RetailNotResolved extends Data.TaggedError("GCP.Retail.ResourceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {

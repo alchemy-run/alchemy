@@ -160,7 +160,7 @@ export const makeReadSearchIndexClient = Effect.gen(function* () {
     }),
     get: Effect.fn(`${address.tag}.get`)(function* (key: string, select?: string[]) {
       const where = yield* address.at;
-      return yield* getDocument({ ...where, key, _select: select?.join(",") }).pipe(
+      return yield* getDocument({ ...where, key, _select: select }).pipe(
         Effect.map(withoutAnnotations),
         Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
       );

@@ -3,13 +3,14 @@ import * as GCP from "@alchemy.run/gcp";
 import { makeGcsState } from "@alchemy.run/gcp";
 import { createStateBucketName } from "@alchemy.run/gcp/StateStore/State";
 import { makeObjectMedia } from "@alchemy.run/gcp/Storage/ObjectMedia";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
-import { expect } from "alchemy-test";
 import { StateStoreError, type ResourceState, type StateService } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -62,6 +63,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const bucket = yield* stack.deploy(GCP.Storage.Bucket("StateBucket", { forceDestroy: true }));
+      yield* expectFound(GCP.Storage.Bucket.lookup({ bucketName: bucket.bucketName }), bucket);
       const state = yield* makeGcsState({ bucketName: bucket.bucketName, prefix: "test-state" });
       const stage = "round-trip";
 
@@ -225,10 +227,7 @@ test.provider(
         );
 
         // Drift is converged on the next first use.
-        yield* storage.patchBuckets({
-          bucket: bucketName,
-          body: { versioning: { enabled: false } },
-        });
+        yield* storage.patchBuckets({ versioning: { enabled: false }, bucket: bucketName });
         const again = yield* makeGcsState({ name });
         expect(yield* again.listStacks()).toEqual([]);
         expect((yield* storage.getBuckets({ bucket: bucketName })).versioning?.enabled).toBe(true);

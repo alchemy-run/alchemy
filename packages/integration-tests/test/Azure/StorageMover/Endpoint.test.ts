@@ -1,11 +1,17 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as storagemover from "@distilled.cloud/azure/storagemover";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
+
+const blobContainerOf = (properties: storagemover.EndpointBaseProperties) =>
+  properties.endpointType === "AzureStorageBlobContainer" ? properties : undefined;
+
+const nfsMountOf = (properties: storagemover.EndpointBaseProperties) =>
+  properties.endpointType === "NfsMount" ? properties : undefined;
 
 const getEndpoint = (resourceGroupName: string, storageMoverName: string, endpointName: string) =>
   Effect.flatMap(subscription, (subscriptionId) =>
@@ -71,15 +77,17 @@ test.provider(
       expect(source.endpointType).toEqual("NfsMount");
       expect(source.endpointKind).toEqual("Source");
       const observedTarget = yield* get(target.endpointName);
-      expect(observedTarget.properties.blobContainerName).toEqual(container.containerName);
-      expect(observedTarget.properties.storageAccountResourceId?.toLowerCase()).toEqual(
-        account.storageAccountId.toLowerCase(),
+      expect(blobContainerOf(observedTarget.properties)?.blobContainerName).toEqual(
+        container.containerName,
       );
+      expect(
+        blobContainerOf(observedTarget.properties)?.storageAccountResourceId?.toLowerCase(),
+      ).toEqual(account.storageAccountId.toLowerCase());
       expect(observedTarget.properties.description).toMatch(/^first \[alchemy .+\/Target\]$/);
       const observedSource = yield* get(source.endpointName);
-      expect(observedSource.properties.host).toEqual("10.0.0.4");
-      expect(observedSource.properties.export).toEqual("/exports/a");
-      expect(observedSource.properties.nfsVersion).toEqual("NFSv4");
+      expect(nfsMountOf(observedSource.properties)?.host).toEqual("10.0.0.4");
+      expect(nfsMountOf(observedSource.properties)?.export).toEqual("/exports/a");
+      expect(nfsMountOf(observedSource.properties)?.nfsVersion).toEqual("NFSv4");
 
       // In-place: descriptions.
       const updated = yield* stack.deploy(
@@ -99,7 +107,9 @@ test.provider(
         program({ exportPath: "/exports/b", description: "second" }),
       );
       expect(replaced.source.endpointName).not.toEqual(source.endpointName);
-      expect((yield* get(replaced.source.endpointName)).properties.export).toEqual("/exports/b");
+      expect(nfsMountOf((yield* get(replaced.source.endpointName)).properties)?.export).toEqual(
+        "/exports/b",
+      );
       expect(replaced.target.endpointId).toEqual(target.endpointId);
       expect(yield* waitGone(get(source.endpointName))).toEqual("gone");
 

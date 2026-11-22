@@ -1,4 +1,4 @@
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
@@ -20,8 +20,16 @@ export const expectDatabaseReachable = (
     const client = yield* HttpClient.HttpClient;
     const get = (path: string) =>
       client.get(new URL(path, baseUrl)).pipe(
+        // The body names why a request failed (a container that won't
+        // start, a proxy error), so keep it in the error.
         Effect.flatMap((r) =>
-          r.status !== 200 ? Effect.fail(new Error(`not ready: ${r.status}`)) : r.text,
+          r.status !== 200
+            ? r.text.pipe(
+                Effect.flatMap((body) =>
+                  Effect.fail(new Error(`not ready: ${r.status} ${body.slice(0, 500)}`)),
+                ),
+              )
+            : r.text,
         ),
         Effect.timeout("30 seconds"),
         Effect.retry({ schedule: readinessSchedule, times: 30 }),

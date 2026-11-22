@@ -55,9 +55,9 @@ flowchart LR
 [`src/EntraRedis.ts`](./src/EntraRedis.ts) does this per request:
 
 1. It gets a token for `https://redis.azure.com/.default` from the
-   Functions identity endpoint (`requestManagedIdentityToken` from
-   `@distilled.cloud/azure`). `makeTokenCache` keeps the token until
-   5 minutes before it expires.
+   Functions identity endpoint (`fromManagedIdentity()` from
+   `@distilled.cloud/azure`). The layer keeps the token until 5 minutes
+   before it expires.
 2. It reads the identity's object ID from the token's `oid` claim. That
    is the app's `principalId`, the user name Redis expects.
 3. It opens one TLS connection with `@alchemy.run/redis`, sends

@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as licensing from "@distilled.cloud/gcp/licensing_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import {
   customerId,
@@ -44,11 +44,7 @@ test.provider.skipIf(runLifecycle)(
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
-        licensing.insertLicenseAssignments({
-          productId,
-          skuId,
-          body: { userId: missingUserId },
-        }),
+        licensing.insertLicenseAssignments({ userId: missingUserId, productId, skuId }),
       );
       expect(error._tag).toEqual("InsufficientAuthenticationScopes");
 

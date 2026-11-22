@@ -13,6 +13,13 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import type { StreamArn } from "./Stream.ts";
 
+export class StreamConsumerUnexpectedResponse extends Data.TaggedError(
+  "StreamConsumerUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type ConsumerName = string;
 
 export type ConsumerArn = string;
@@ -65,8 +72,25 @@ export interface StreamConsumer extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  StreamConsumerLookup
 > {}
+
+/**
+ * Props for {@link StreamConsumer.lookup}: find a stream consumer this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type StreamConsumerLookup =
+  | {
+      /** The ARN of the existing consumer. */
+      consumerArn: string;
+    }
+  | {
+      /** The stream the consumer reads. */
+      streamArn: string;
+      /** The name of the existing consumer. */
+      consumerName: string;
+    };
 
 /**
  * A registered Kinesis enhanced fan-out consumer.
@@ -79,6 +103,18 @@ export interface StreamConsumer extends Resource<
  * const consumer = yield* StreamConsumer("AnalyticsConsumer", {
  *   streamArn: stream.streamArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing stream consumer
+ * `StreamConsumer.lookup` references a stream consumer Alchemy doesn't manage (created in the
+ * console or by another stack), found by `consumerArn`, or `streamArn` and
+`consumerName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing enhanced fan-out consumer
+ * ```typescript
+ * const analytics = AWS.Kinesis.StreamConsumer.lookup({ streamArn, consumerName: "analytics" });
+ * const consumerArn = analytics.consumerArn;
  * ```
  *
  * @resource
@@ -138,7 +174,7 @@ const readConsumer = Effect.fn(function* ({
       ConsumerName: consumerName,
       ConsumerARN: consumerArn,
     })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
   if (!response) {
     return undefined;
@@ -182,10 +218,11 @@ const adoptExistingConsumer = Effect.fn(function* (streamArn: string, consumerNa
     }),
     Effect.catchTag("ConsumerRegistryNotConsistent", () =>
       Effect.fail(
-        new Error(
-          `consumer ${consumerName} exists but could not be read after ` +
+        new StreamConsumerUnexpectedResponse({
+          message:
+            `consumer ${consumerName} exists but could not be read after ` +
             `~10s of registry-consistency retries`,
-        ),
+        }),
       ),
     ),
   );
@@ -226,6 +263,13 @@ const waitForConsumerDeleted = (consumerArn: string) =>
 export const StreamConsumerProvider = () =>
   Provider.succeed(StreamConsumer, {
     stables: ["consumerArn", "consumerName"],
+    lookup: Effect.fn(function* (props) {
+      return yield* readConsumer(
+        "consumerArn" in props
+          ? { consumerArn: props.consumerArn }
+          : { streamArn: props.streamArn, consumerName: props.consumerName },
+      );
+    }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const consumerName = output?.consumerName ?? (yield* createConsumerName(id, olds ?? {}));
       const streamArn = output?.streamArn ?? olds?.streamArn;
@@ -312,7 +356,9 @@ export const StreamConsumerProvider = () =>
           consumerName,
         });
         if (state === undefined) {
-          return yield* Effect.fail(new Error(`failed to read created consumer ${consumerName}`));
+          return yield* new StreamConsumerUnexpectedResponse({
+            message: `failed to read created consumer ${consumerName}`,
+          });
         }
       }
 
@@ -346,7 +392,9 @@ export const StreamConsumerProvider = () =>
         consumerArn: state.consumerArn,
       });
       if (!final) {
-        return yield* Effect.fail(new Error(`failed to read reconciled consumer ${consumerName}`));
+        return yield* new StreamConsumerUnexpectedResponse({
+          message: `failed to read reconciled consumer ${consumerName}`,
+        });
       }
 
       yield* session.note(final.consumerArn);
@@ -410,7 +458,7 @@ export const StreamConsumerProvider = () =>
               tags: toTagRecord(tagsResponse.Tags),
             })),
             // A consumer may be deregistered between list and tag fetch.
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );

@@ -470,7 +470,7 @@ type ObservedOnRamp = Pick<
 const getOnRamp = (accountId: string, onrampId: string) =>
   mcn.getOnRamp({ accountId, onrampId }).pipe(
     Effect.map((onramp): ObservedOnRamp | undefined => onramp),
-    Effect.catchTag("OnRampNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("OnRampNotFound", () => Effect.undefined),
   );
 
 /**

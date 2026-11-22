@@ -210,8 +210,10 @@ export const EdgeDeviceProvider = () =>
         yield* hci.EdgeDevicesCreateOrUpdate({
           resourceUri: machineId,
           edgeDeviceName: name,
-          kind: "HCI",
-          properties: { deviceConfiguration: news.deviceConfiguration },
+          body: {
+            kind: "HCI",
+            properties: { deviceConfiguration: news.deviceConfiguration },
+          },
         });
       }
 

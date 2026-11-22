@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -61,12 +62,10 @@ test.provider(
 
       const error = yield* Effect.flip(
         discoveryengine.createProjectsLocationsIdentityMappingStores({
+          name: `projects/${project}/locations/global/identityMappingStores/alchemyimismissing`,
           parent: `projects/${project}/locations/global`,
           identityMappingStoreId: "alchemyimismissing",
           disableCmek: true,
-          body: {
-            name: `projects/${project}/locations/global/identityMappingStores/alchemyimismissing`,
-          },
         }),
       );
       expect(error._tag).toEqual("IdentityProviderNotConfigured");
@@ -92,6 +91,13 @@ test.provider.skipIf(!runLifecycle)(
             disableCmek: true,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.DiscoveryEngine.IdentityMappingStore.lookup({
+          identityMappingStoreId: created.identityMappingStoreId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/identityMappingStores/");

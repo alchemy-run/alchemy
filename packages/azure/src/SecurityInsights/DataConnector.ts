@@ -258,9 +258,13 @@ export const DataConnectorProvider = () =>
           resourceGroupName: resourceGroup,
           workspaceName: workspace,
           dataConnectorId: connectorId,
-          kind: news.kind as securityinsights.DataConnectorKind,
-          etag: observed?.etag,
-          properties: desired,
+          // `kind` is only known at runtime and decides the arm, so the arm
+          // is asserted rather than narrowed.
+          body: {
+            kind: news.kind,
+            etag: observed?.etag,
+            properties: desired,
+          } as securityinsights.DataConnectorInput,
         });
       }
       return toAttrs(resourceGroup, workspace, connectorId, observed);

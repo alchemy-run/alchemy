@@ -5,6 +5,8 @@ description: Authenticate every request, carry who is asking into the domain, an
 
 Every command and read starts with a question: who is asking? Middleware answers it before the request reaches the domain, and provides the answer as a request context that `decide` and `validate` read.
 
+Sign sessions by hand: the Worker signs a token, and middleware checks it. To sign users in with GitHub, Google or another provider, see [Sign in with better-auth](/domain/better-auth).
+
 ## Declare who is asking
 
 A request context is a service that travels with the request into the domain. It has a schema, because a command carries it to wherever its aggregate runs.
@@ -24,6 +26,8 @@ export class CurrentActor extends Domain.RequestContext<CurrentActor>()(
   Actor,
 ) {}
 ```
+
+The key (`"Bank/CurrentActor"`) names the value when it travels with a request, so each request context needs its own.
 
 ```typescript
 // packages/domain/src/Actor.ts
@@ -91,7 +95,7 @@ The Worker that serves the Api provides `SessionLive`. A client that isn't a bro
 
 ## Guard commands and views
 
-List the middleware on each command and view that needs it. Middleware runs in order, and what it provides is what `decide` and `validate` may read.
+List the middleware on each command and view that needs it. Middleware runs in list order: the first entry runs first, and what it provides reaches the entries after it and what `decide` and `validate` may read.
 
 ```typescript
 // packages/domain/src/Account/SetNickname.command.ts
@@ -104,15 +108,14 @@ import { NotOwner } from "./NotOwner.rejection.ts";
 export class NicknameSet extends Domain.Event("NicknameSet", { nickname: Schema.String }) {}
 
 export class SetNickname extends Domain.Command("SetNickname", {
-  target: AccountId,
   middleware: [Session],
-  input: { nickname: Schema.String },
+  input: { accountId: AccountId, nickname: Schema.String },
   events: [NicknameSet],
   rejects: [NotOwner],
 }) {}
 ```
 
-`decide` then checks the actor against the account. See [Aggregate](/domain/aggregate#decide).
+`decide` then checks the actor against the account. See [Aggregate](/domain/aggregate#decide-each-command).
 
 ## Sign browsers in with a cookie
 
@@ -145,6 +148,7 @@ import BankWorker from "@bank/server/BankWorker";
 import * as Alchemy from "alchemy";
 import * as Axiom from "@alchemy.run/axiom";
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Stripe from "@alchemy.run/stripe";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -152,7 +156,12 @@ import * as Layer from "effect/Layer";
 export default Alchemy.Stack(
   "CloudflareDomainExample",
   {
-    providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers(), Axiom.providers()),
+    providers: Layer.mergeAll(
+      Cloudflare.providers(),
+      DomainCloudflare.providers(),
+      Stripe.providers(),
+      Axiom.providers(),
+    ),
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
@@ -172,9 +181,198 @@ export default Alchemy.Stack(
 
 `env: { BANK: bank }` gives the app's Worker a binding to the bank, and `runWorkerFirst` sends `/api` through it.
 
+## Sign the session
+
+```typescript
+// packages/server/src/Session.ts
+import { Actor, customer } from "@bank/domain/Actor";
+import { CurrentActor } from "@bank/domain/CurrentActor.context";
+import { CustomerId } from "@bank/domain/Customer/Customer.id";
+import { SESSION_COOKIE, Session, Unauthorized } from "@bank/domain/Session.middleware";
+import * as Domain from "@alchemy.run/domain";
+import * as Alchemy from "alchemy";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Cookies from "effect/http/Cookies";
+import * as Headers from "effect/http/Headers";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+
+/** How long a session lasts. */
+const SESSION_DAYS = 7;
+
+/** The key that signs sessions: the same for every request to this stage. */
+export class SessionKey extends Context.Service<
+  SessionKey,
+  Effect.Effect<Redacted.Redacted<string>>
+>()("Bank/SessionKey") {}
+
+/** A random key, made once when the stage is first deployed and kept in its state. */
+export const SessionKeyLive = Layer.effect(
+  SessionKey,
+  Effect.gen(function* () {
+    const key = yield* Alchemy.Random("SessionKey");
+    return yield* key.text;
+  }),
+);
+
+const hmacKey = Effect.fn(function* () {
+  const secret = Redacted.value(yield* yield* SessionKey);
+  return yield* Effect.promise(() =>
+    crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign", "verify"],
+    ),
+  );
+});
+
+/** What a session token says: who, and until when. */
+const Claims = Schema.fromJsonString(Schema.Struct({ actor: Actor, expires: Schema.Number }));
+
+/** A session token for `actor`: its claims and their HMAC, so no one without the key can make one. */
+export const signSession = Effect.fn(function* (actor: Actor) {
+  const expires = (yield* Clock.currentTimeMillis) + SESSION_DAYS * 24 * 60 * 60 * 1000;
+  // Encoding our own claims can't fail.
+  const json = yield* Schema.encodeEffect(Claims)({ actor, expires }).pipe(Effect.orDie);
+  const claims = Base64Url.encode(json);
+  const key = yield* hmacKey();
+  const mac = yield* Effect.promise(() =>
+    crypto.subtle.sign("HMAC", key, new TextEncoder().encode(claims)),
+  );
+  return `${claims}.${Base64Url.encode(new Uint8Array(mac))}`;
+});
+
+/** What a token says, if its signature checks out and it hasn't expired. */
+const verifySession = Effect.fn(function* (token: string) {
+  const [claims, mac, ...rest] = token.split(".");
+  if (!claims || !mac || rest.length > 0) return Option.none<typeof Claims.Type>();
+  const signature = Base64Url.decode(mac);
+  if (Result.isFailure(signature)) return Option.none<typeof Claims.Type>();
+  const key = yield* hmacKey();
+  // `verify` compares in constant time.
+  const valid = yield* Effect.promise(() =>
+    crypto.subtle.verify(
+      "HMAC",
+      key,
+      new Uint8Array(signature.success),
+      new TextEncoder().encode(claims),
+    ),
+  );
+  const json = Base64Url.decodeString(claims);
+  if (!valid || Result.isFailure(json)) return Option.none<typeof Claims.Type>();
+  const decoded = yield* Schema.decodeEffect(Claims)(json.success).pipe(Effect.option);
+  const now = yield* Clock.currentTimeMillis;
+  return Option.filter(decoded, (c) => c.expires > now);
+});
+
+/** The token a request carries: its session cookie (browsers), or `Authorization: Bearer` (scripts). */
+const tokenOf = (headers: Headers.Headers): Option.Option<string> =>
+  Option.orElse(
+    Option.flatMap(Headers.get(headers, "cookie"), (cookie) =>
+      Option.fromNullishOr(Cookies.parseHeader(cookie)[SESSION_COOKIE]),
+    ),
+    () =>
+      Option.flatMap(Headers.get(headers, "authorization"), (value) =>
+        value.startsWith("Bearer ") ? Option.some(value.slice("Bearer ".length)) : Option.none(),
+      ),
+  );
+
+/** The session a request carries, if it is valid: who, and until when. */
+const sessionOf = Effect.fn(function* (headers: Headers.Headers) {
+  const token = tokenOf(headers);
+  return Option.isNone(token)
+    ? Option.none<typeof Claims.Type>()
+    : yield* verifySession(token.value);
+});
+
+/** Who a request is from, if it carries a valid session. */
+export const actorOf = (headers: Headers.Headers) =>
+  Effect.map(sessionOf(headers), Option.map((session) => session.actor));
+
+/**
+ * The {@link Session} middleware: provides the request's actor, or fails with
+ * Unauthorized. Its verdict holds until the session expires, so a live read
+ * left open is judged again then.
+ */
+export const SessionLive = Layer.effect(
+  Session,
+  Effect.gen(function* () {
+    const key = yield* SessionKey;
+    return Effect.fn(function* (effect, { headers }) {
+      const session = yield* sessionOf(headers).pipe(Effect.provideService(SessionKey, key));
+      if (Option.isNone(session)) return yield* new Unauthorized();
+      yield* Domain.setExpiry(session.value.expires);
+      return yield* Effect.provideService(effect, CurrentActor, session.value.actor);
+    });
+  }),
+);
+
+const SignIn = Schema.Struct({ customerId: CustomerId });
+
+/**
+ * `POST /api/session` signs a customer in: it sets the signed session cookie,
+ * and returns the same token for scripts to send as `Authorization: Bearer`.
+ * `DELETE` signs them out. `HttpOnly` keeps the cookie from scripts, and
+ * `SameSite=Strict` keeps it off cross-site requests, WebSocket upgrades
+ * included. Demo only: anyone may sign in as any customer. Check a password,
+ * a magic link or a provider here before signing.
+ */
+export const sessionRoute = Effect.gen(function* () {
+  const request = yield* HttpServerRequest;
+  const options = { httpOnly: true, secure: true, sameSite: "strict", path: "/" } as const;
+  if (request.method === "DELETE") {
+    return HttpServerResponse.empty({ status: 204 }).pipe(
+      HttpServerResponse.setCookieUnsafe(SESSION_COOKIE, "", { ...options, maxAge: 0 }),
+    );
+  }
+  if (request.method !== "POST") return HttpServerResponse.empty({ status: 405 });
+  const body = yield* request.json.pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(SignIn)),
+    Effect.option,
+  );
+  if (Option.isNone(body))
+    return HttpServerResponse.text("Expected { customerId }", { status: 400 });
+  const token = yield* signSession(customer(body.value.customerId));
+  return yield* HttpServerResponse.json({ token }).pipe(
+    Effect.map(
+      HttpServerResponse.setCookieUnsafe(SESSION_COOKIE, token, {
+        ...options,
+        maxAge: `${SESSION_DAYS} days`,
+      }),
+    ),
+  );
+});
+```
+
+A session token is who is signed in and until when, plus an HMAC of both made with the Worker's key. No one without the key can make one, and editing a token breaks its signature. `crypto.subtle.verify` checks it in constant time.
+
+`SessionKeyLive` makes the key with `Alchemy.Random`: a random secret created on the first deploy, kept in the stage's state and bound to the Worker. Every request to the stage checks against the same key.
+
+`sessionRoute` signs the token at sign-in and sets it as the cookie. It returns the same token for scripts to send as `Authorization: Bearer`. Here anyone may sign in as any customer: put your own check, such as a password or a magic link, before `signSession`.
+
 ## Keep tokens out of URLs
 
 A browser can't set headers on a WebSocket, and a URL ends up in logs. A live read authenticates with what its WebSocket upgrade carries: in a browser, the session cookie. Scripts and tests send `Authorization`, which they can set on their WebSockets too. See [Testing an Api](/domain/testing-apis#test-a-deployment).
+
+## End live reads when the session does
+
+A live read's middleware runs when its WebSocket connects, and the socket can stay open for hours. `SessionLive` says when its verdict expires with `Domain.setExpiry`:
+
+```typescript
+yield* Domain.setExpiry(session.value.expires);
+```
+
+When the session expires, the object that holds the read closes its socket, even if the account has no new commits. The client reconnects at once from its cursor, so the middleware runs again on the new upgrade. A browser whose cookie was renewed carries on with nothing missed or repeated. A caller whose session is gone gets `Unauthorized`, and the read ends with it. Commands and queries are judged on every call, so `setExpiry` changes nothing for them.
 
 ## Ask for a second factor
 

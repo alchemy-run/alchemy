@@ -5,11 +5,20 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import { syncManagedIntegrationsTags, toTagRecord } from "./internal.ts";
+
+export class IoTManagedIntegrationsDestinationUnexpectedResponse extends Data.TaggedError(
+  "IoTManagedIntegrationsDestinationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DestinationProps {
   /**
@@ -60,8 +69,18 @@ export interface Destination extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DestinationLookup
 > {}
+
+/**
+ * Props for {@link Destination.lookup}: find a destination this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DestinationLookup {
+  /** The destination name of the existing destination. */
+  destinationName: string;
+}
 
 /**
  * An AWS IoT Managed Integrations notification destination. Managed
@@ -94,6 +113,16 @@ export interface Destination extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing destination
+ * `Destination.lookup` references a destination Alchemy doesn't manage (created in the
+ * console or by another stack), found by `destinationName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing destination
+ * ```typescript
+ * const existing = AWS.IoTManagedIntegrations.Destination.lookup({ destinationName: "my-destination" });
+ * ```
+ *
  * @resource
  */
 export const Destination = Resource<Destination>("AWS.IoTManagedIntegrations.Destination");
@@ -108,13 +137,13 @@ export const DestinationProvider = () =>
       const observe = (name: string) =>
         mi
           .getDestination({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // GetDestination does not return an ARN; the tag APIs need one, so
       // construct it from the ambient account/region.
       const destinationArn = Effect.fn(function* (name: string) {
         const { accountId, region } = yield* AWSEnvironment.current;
-        return `arn:aws:iotmanagedintegrations:${region}:${accountId}:destination/${name}`;
+        return `arn:${partitionOf(region)}:iotmanagedintegrations:${region}:${accountId}:destination/${name}`;
       });
 
       const toAttributes = Effect.fn(function* (destination: mi.GetDestinationResponse) {
@@ -124,7 +153,9 @@ export const DestinationProvider = () =>
           destination.DeliveryDestinationType === undefined ||
           destination.RoleArn === undefined
         ) {
-          return yield* Effect.fail(new Error("destination response is missing required fields"));
+          return yield* new IoTManagedIntegrationsDestinationUnexpectedResponse({
+            message: "destination response is missing required fields",
+          });
         }
         return {
           destinationName: destination.Name,
@@ -143,6 +174,12 @@ export const DestinationProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ destinationName: name }) {
+          const destination = yield* observe(name);
+          if (destination === undefined) return undefined;
+          const attrs = yield* toAttributes(destination);
+          return attrs;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.destinationName ?? (yield* toName(id, olds ?? {}));
@@ -174,7 +211,9 @@ export const DestinationProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             destination = yield* observe(name);
             if (destination === undefined) {
-              return yield* Effect.fail(new Error(`destination '${name}' vanished after create`));
+              return yield* new IoTManagedIntegrationsDestinationUnexpectedResponse({
+                message: `destination '${name}' vanished after create`,
+              });
             }
           }
 
@@ -204,7 +243,9 @@ export const DestinationProvider = () =>
           // Return fresh attributes.
           const final = yield* observe(name);
           if (final === undefined) {
-            return yield* Effect.fail(new Error(`destination '${name}' vanished during reconcile`));
+            return yield* new IoTManagedIntegrationsDestinationUnexpectedResponse({
+              message: `destination '${name}' vanished during reconcile`,
+            });
           }
           const attrs = yield* toAttributes(final);
           yield* session.note(attrs.destinationName);

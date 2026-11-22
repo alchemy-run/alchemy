@@ -3,6 +3,7 @@ node_modules
 dist/
 dist-static/
 build/
+.react-router/
 .output/
 .next/
 .nuxt/

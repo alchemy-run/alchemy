@@ -1,13 +1,17 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as storage from "@distilled.cloud/azure/storage";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { runPaidOnly } from "../gates.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
+
+// The SDK union also lists the connection and auth shapes; they have no `sourceType`.
+const s3SourceOf = (source: storage.BlobAccessPointSourceProperties) =>
+  "sourceType" in source && source.sourceType === "S3Compatible" ? source : undefined;
 
 const getConfiguration = (rg: string, account: string, name: string) =>
   Effect.gen(function* () {
@@ -151,9 +155,9 @@ test.provider.skipIf(!runPaidOnly)(
       expect(created.accessPoint!.uniqueId).toMatch(/^[0-9a-f-]{36}$/i);
       const observed = yield* getConfiguration(rg, acct, name);
       expect(observed.properties.description).toEqual("first");
-      expect(observed.properties.source.sourceType).toEqual("S3Compatible");
-      expect(observed.properties.source.connection?.endpoint).toEqual(endpoint);
-      expect(observed.properties.source.auth?.accessKeyId).toEqual(accessKeyId);
+      expect(s3SourceOf(observed.properties.source)?.sourceType).toEqual("S3Compatible");
+      expect(s3SourceOf(observed.properties.source)?.connection?.endpoint).toEqual(endpoint);
+      expect(s3SourceOf(observed.properties.source)?.auth?.accessKeyId).toEqual(accessKeyId);
 
       // In-place update: description, state, and a rotated secret key.
       const updated = yield* stack.deploy(

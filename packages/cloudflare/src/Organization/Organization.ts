@@ -268,25 +268,31 @@ export const OrganizationProvider = () =>
         return toAttributes(created);
       }
 
-      // Sync — diff observed cloud state against desired; the update API
-      // is a PUT requiring `name`, so send the full desired shape, but
-      // skip the call entirely on a no-op. The desired profile keeps the
-      // observed one when the props omit it (the PUT would otherwise
-      // clear it).
-      const desiredProfile = news.profile ?? observed.profile ?? undefined;
-      const dirty = observed.name !== name || !sameProfile(observed.profile, news.profile);
+      // Sync — diff observed cloud state against desired and skip each
+      // call on a no-op. The name and the profile have separate APIs; an
+      // omitted profile keeps the observed one.
+      const nameChanged = observed.name !== name;
+      const profileChanged =
+        news.profile !== undefined && !sameProfile(observed.profile, news.profile);
 
-      if (!dirty) {
+      if (!nameChanged && !profileChanged) {
         return toAttributes(observed);
       }
 
-      const updated = yield* organizations.updateOrganization({
-        organizationId: observed.id,
-        name,
-        parent: observed.parent != null ? { id: observed.parent.id } : undefined,
-        profile: desiredProfile,
-      });
-      return toAttributes(updated);
+      if (nameChanged) {
+        yield* organizations.updateOrganization({
+          organizationId: observed.id,
+          name,
+          parentId: observed.parent?.id,
+        });
+      }
+      if (profileChanged && news.profile !== undefined) {
+        yield* organizations.putOrganizationProfile({
+          organizationId: observed.id,
+          ...news.profile,
+        });
+      }
+      return toAttributes((yield* getOrganization(observed.id)) ?? observed);
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -308,7 +314,7 @@ type ObservedOrganization = organizations.GetOrganizationResponse;
 const getOrganization = (organizationId: string) =>
   organizations.getOrganization({ organizationId }).pipe(
     Effect.map((org): ObservedOrganization | undefined => org),
-    Effect.catchTag("OrganizationNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("OrganizationNotFound", () => Effect.undefined),
   );
 
 /**

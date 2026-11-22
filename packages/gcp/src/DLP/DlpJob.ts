@@ -98,7 +98,7 @@ export type DlpJob = Resource<
 export const DlpJob = Resource<DlpJob>("GCP.DLP.DlpJob");
 
 export class DlpJobNotResolved extends Data.TaggedError("GCP.DLP.DlpJobNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const MAX_JOB_ID_LENGTH = 64;
@@ -165,10 +165,8 @@ const toAttrs = (job: dlp.GooglePrivacyDlpV2DlpJob, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
-    : dlp
-        .getProjectsDlpJobs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    ? Effect.undefined
+    : dlp.getProjectsDlpJobs({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DlpJobProvider = () =>
   Provider.succeed(DlpJob, {
@@ -236,19 +234,17 @@ export const DlpJobProvider = () =>
       if (current === undefined) {
         const created = yield* dlp
           .createProjectsDlpJobs({
+            jobId: prefixedJobId(jobId, risk),
+            inspectJob,
+            riskJob: news.riskJob,
             parent: `projects/${env.project}`,
-            body: {
-              jobId: prefixedJobId(jobId, risk),
-              inspectJob,
-              riskJob: news.riskJob,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new DlpJobNotResolved({ name });
+        return yield* new DlpJobNotResolved({ resourceName: name });
       }
 
       if (inspectJob !== undefined && observedHybridLabels(current) === undefined) {
@@ -260,7 +256,7 @@ export const DlpJobProvider = () =>
                 job.state === "FAILED" ||
                 job.state === "DONE" ||
                 job.state === "CANCELED"),
-            () => new DlpJobNotResolved({ name }),
+            () => new DlpJobNotResolved({ resourceName: name }),
           ),
           Effect.retry({
             while: (error) => error._tag === "GCP.DLP.DlpJobNotResolved",
@@ -272,7 +268,7 @@ export const DlpJobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DlpJobNotResolved({ name });
+        return yield* new DlpJobNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

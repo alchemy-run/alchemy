@@ -1,13 +1,17 @@
 import { createHash } from "node:crypto";
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as hybridnetwork from "@distilled.cloud/azure/hybridnetwork";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { location, logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
+
+const openValueOf = (
+  properties: hybridnetwork.ConfigurationGroupValuePropertiesFormat | undefined,
+) => (properties?.configurationType === "Open" ? properties.configurationValue : undefined);
 
 const schemaDefinition = JSON.stringify({
   type: "object",
@@ -70,7 +74,7 @@ test.provider(
         schema.configurationGroupSchemaId.toLowerCase(),
       );
       const observed = yield* get(value.configurationGroupValueName);
-      expect(JSON.parse(observed.properties?.configurationValue ?? "{}")).toEqual({
+      expect(JSON.parse(openValueOf(observed.properties) ?? "{}")).toEqual({
         region: "eastus",
       });
       expect(observed.tags?.env).toEqual("one");
@@ -84,7 +88,7 @@ test.provider(
       );
       expect(updated.value.configurationGroupValueId).toEqual(value.configurationGroupValueId);
       const reobserved = yield* get(value.configurationGroupValueName);
-      expect(JSON.parse(reobserved.properties?.configurationValue ?? "{}")).toEqual({
+      expect(JSON.parse(openValueOf(reobserved.properties) ?? "{}")).toEqual({
         region: "westus3",
       });
       expect(reobserved.tags?.env).toEqual("two");

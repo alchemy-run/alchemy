@@ -146,7 +146,7 @@ export const LoggingConfigurationProvider = () =>
           if (firewallArn === undefined) return undefined;
           const response = yield* nfw
             .describeLoggingConfiguration({ FirewallArn: firewallArn })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           const configs = response?.LoggingConfiguration?.LogDestinationConfigs ?? [];
           if (configs.length === 0) return undefined;
           return { firewallArn };

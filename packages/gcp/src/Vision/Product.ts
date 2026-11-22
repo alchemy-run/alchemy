@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_PRODUCT_CATEGORY,
@@ -89,8 +90,32 @@ export type Product = Resource<
     productLabels: ProductLabel[];
   },
   never,
-  Providers
+  Providers,
+  ProductLookup
 >;
+
+/**
+ * Props for {@link Product.lookup}: find a product this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ProductLookup {
+  /**
+   * Product Search location.
+   */
+  location?: string;
+  /**
+   * Product id (the `{product}` segment of
+   * `projects/{project}/locations/{location}/products/{product}`). At most
+   * 128 characters; cannot contain `/`.
+   */
+  productId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Vision Product Search product. Products hold reference images
@@ -136,13 +161,23 @@ export type Product = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing product
+ * `Product.lookup` references a product Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared product.
+ *
+ * **Example:** Reference an existing product
+ * ```typescript
+ * const product = GCP.Vision.Product.lookup({ productId: "my-product" });
+ * ```
+ *
  * @resource
  * @category Vision
  */
 export const Product = Resource<Product>("GCP.Vision.Product");
 
 export class ProductNotResolved extends Data.TaggedError("GCP.Vision.ProductNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (product: vision.Product, project: string) => {
@@ -184,6 +219,15 @@ export const ProductProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ location: lookupLocation, productId }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = productNameOf(env.project, location, productId ?? "");
+      const existing = yield* getProduct(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
@@ -213,14 +257,12 @@ export const ProductProvider = () =>
       if (current === undefined) {
         const created = yield* vision
           .createProjectsLocationsProducts({
+            displayName,
+            description,
+            productCategory,
+            productLabels,
             parent: locationParent(env.project, location),
             productId,
-            body: {
-              displayName,
-              description,
-              productCategory,
-              productLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getProduct(name)));
         current = created ?? undefined;
@@ -228,7 +270,7 @@ export const ProductProvider = () =>
 
       if (current === undefined) {
         return yield* new ProductNotResolved({
-          name: name || productNameOf(env.project, location, productId),
+          resourceName: name || productNameOf(env.project, location, productId),
         });
       }
 
@@ -242,14 +284,11 @@ export const ProductProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* vision.patchProjectsLocationsProducts({
+          displayName,
+          description,
+          productLabels,
           name: currentName,
           updateMask,
-          body: {
-            name: currentName,
-            displayName,
-            description,
-            productLabels,
-          },
         });
       }
 

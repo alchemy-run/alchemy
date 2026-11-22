@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface ComponentVersionProps {
@@ -173,14 +174,14 @@ export const ComponentVersionProvider = () =>
         return {
           componentName,
           componentVersion,
-          arn: `arn:aws:greengrass:${region}:${accountId}:components:${componentName}:versions:${componentVersion}`,
+          arn: `arn:${partitionOf(region)}:greengrass:${region}:${accountId}:components:${componentName}:versions:${componentVersion}`,
         };
       });
 
       const observeComponent = (arn: string) =>
         greengrassv2
           .describeComponent({ arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       return ComponentVersion.Provider.of({
         stables: ["arn", "componentName", "componentVersion"],
@@ -264,8 +265,9 @@ export const ComponentVersionProvider = () =>
                 tags: desiredTags,
               })
               .pipe(
-                Effect.catchTag(["ConflictException", "RequestAlreadyInProgressException"], () =>
-                  Effect.succeed(undefined),
+                Effect.catchTag(
+                  ["ConflictException", "RequestAlreadyInProgressException"],
+                  () => Effect.undefined,
                 ),
               );
             // Wait until the cloud marks the version DEPLOYABLE (bounded ~30s;

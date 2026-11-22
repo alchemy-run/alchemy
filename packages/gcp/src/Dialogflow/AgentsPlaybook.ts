@@ -192,7 +192,7 @@ export const AgentsPlaybook = Resource<AgentsPlaybook>("GCP.Dialogflow.AgentsPla
 export class AgentsPlaybookNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsPlaybookNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_GOAL = "Handle the user request.";
@@ -255,10 +255,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsPlaybooks({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   dialogflow.listProjectsLocationsAgentsPlaybooks.pages({ parent, pageSize: 100 }).pipe(
@@ -276,7 +276,7 @@ const findByDisplayName = (parent: string, displayName: string) =>
     Stream.filter((playbook) => playbook.displayName === displayName),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const AgentsPlaybookProvider = () =>
@@ -360,16 +360,13 @@ export const AgentsPlaybookProvider = () =>
 
       if (current === undefined) {
         const created = yield* dialogflow
-          .createProjectsLocationsAgentsPlaybooks({
-            parent: agent,
-            body,
-          })
+          .createProjectsLocationsAgentsPlaybooks({ ...body, parent: agent })
           .pipe(Effect.catchTag("Conflict", () => findByDisplayName(agent, displayName)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new AgentsPlaybookNotResolved({ name });
+        return yield* new AgentsPlaybookNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -409,6 +406,7 @@ export const AgentsPlaybookProvider = () =>
         outputChanged
       ) {
         current = yield* dialogflow.patchProjectsLocationsAgentsPlaybooks({
+          ...body,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
@@ -423,7 +421,6 @@ export const AgentsPlaybookProvider = () =>
             inputChanged ? "input_parameter_definitions" : undefined,
             outputChanged ? "output_parameter_definitions" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
       }
 

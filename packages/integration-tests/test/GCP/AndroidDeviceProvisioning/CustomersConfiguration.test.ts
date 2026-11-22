@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as androiddeviceprovisioning from "@distilled.cloud/gcp/androiddeviceprovisioning_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import {
   customerName,
@@ -44,15 +44,13 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         androiddeviceprovisioning.createCustomersConfigurations({
+          configurationName: "Alchemy Probe",
+          dpcResourcePath: `${probeParent}/dpcs/0`,
+          companyName: "Alchemy",
+          contactEmail: "alchemy-test@example.com",
+          contactPhone: "+1 555 0100",
+          isDefault: false,
           parent: probeParent,
-          body: {
-            configurationName: "Alchemy Probe",
-            dpcResourcePath: `${probeParent}/dpcs/0`,
-            companyName: "Alchemy",
-            contactEmail: "alchemy-test@example.com",
-            contactPhone: "+1 555 0100",
-            isDefault: false,
-          },
         }),
       );
       expect(error._tag).toEqual("InsufficientAuthenticationScopes");

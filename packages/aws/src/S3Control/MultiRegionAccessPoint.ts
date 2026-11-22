@@ -4,11 +4,13 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import type { Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface MultiRegionAccessPointProps {
@@ -79,8 +81,18 @@ export interface MultiRegionAccessPoint extends Resource<
     accountId: AccountID;
   },
   never,
-  Providers
+  Providers,
+  MultiRegionAccessPointLookup
 > {}
+
+/**
+ * Props for {@link MultiRegionAccessPoint.lookup}: find a multi region access point this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface MultiRegionAccessPointLookup {
+  /** The name of the existing multi region access point. */
+  multiRegionAccessPointName: string;
+}
 
 /**
  * An Amazon S3 Multi-Region Access Point — a single global endpoint that
@@ -111,6 +123,16 @@ export interface MultiRegionAccessPoint extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing multi region access point
+ * `MultiRegionAccessPoint.lookup` references a multi region access point Alchemy doesn't manage (created in the
+ * console or by another stack), found by `multiRegionAccessPointName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing multi region access point
+ * ```typescript
+ * const existing = AWS.S3Control.MultiRegionAccessPoint.lookup({ multiRegionAccessPointName: "..." });
+ * ```
+ *
  * @resource
  */
 export const MultiRegionAccessPoint = Resource<MultiRegionAccessPoint>(
@@ -123,7 +145,7 @@ export const MultiRegionAccessPoint = Resource<MultiRegionAccessPoint>(
  */
 export class MultiRegionAccessPointNotReady extends Data.TaggedError(
   "MultiRegionAccessPointNotReady",
-)<{ name: string; status: string | undefined }> {}
+)<{ resourceName: string; status: string | undefined }> {}
 
 /**
  * Raised while a Multi-Region Access Point deletion is still in flight —
@@ -131,7 +153,7 @@ export class MultiRegionAccessPointNotReady extends Data.TaggedError(
  */
 export class MultiRegionAccessPointNotDeleted extends Data.TaggedError(
   "MultiRegionAccessPointNotDeleted",
-)<{ name: string; status: string | undefined }> {}
+)<{ resourceName: string; status: string | undefined }> {}
 
 /**
  * Multi-Region Access Point provisioning/deletion legitimately takes
@@ -174,24 +196,25 @@ export const MultiRegionAccessPointProvider = () =>
         );
       });
 
-      const mrapArn = (accountId: string, alias: string | undefined) =>
-        `arn:aws:s3::${accountId}:accesspoint/${alias ?? ""}`;
+      const mrapArn = (partition: Partition, accountId: string, alias: string | undefined) =>
+        `arn:${partition}:s3::${accountId}:accesspoint/${alias ?? ""}`;
 
       const observeMrap = (accountId: string, name: string) =>
         inMrapRegion(
           s3control.getMultiRegionAccessPoint({ AccountId: accountId, Name: name }).pipe(
             Effect.map((r) => r.AccessPoint),
-            Effect.catchTag("NoSuchMultiRegionAccessPoint", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchMultiRegionAccessPoint", () => Effect.undefined),
           ),
         );
 
       const toAttrs = (
+        partition: Partition,
         name: string,
         accountId: AccountID,
         report: s3control.MultiRegionAccessPointReport | undefined,
       ) => ({
         multiRegionAccessPointName: name,
-        multiRegionAccessPointArn: mrapArn(accountId, report?.Alias),
+        multiRegionAccessPointArn: mrapArn(partition, accountId, report?.Alias),
         alias: report?.Alias,
         status: report?.Status,
         accountId,
@@ -208,7 +231,7 @@ export const MultiRegionAccessPointProvider = () =>
                 ? Effect.succeed(report)
                 : Effect.fail(
                     new MultiRegionAccessPointNotReady({
-                      name,
+                      resourceName: name,
                       status: report?.Status,
                     }),
                   ),
@@ -224,7 +247,7 @@ export const MultiRegionAccessPointProvider = () =>
                 ? Effect.void
                 : Effect.fail(
                     new MultiRegionAccessPointNotDeleted({
-                      name,
+                      resourceName: name,
                       status: report.Status,
                     }),
                   ),
@@ -254,7 +277,7 @@ export const MultiRegionAccessPointProvider = () =>
         // name is the ownership scope.
         list: () =>
           Effect.gen(function* () {
-            const { accountId } = yield* AWSEnvironment.current;
+            const { accountId, partition } = yield* AWSEnvironment.current;
             const pages = yield* inMrapRegion(
               s3control.listMultiRegionAccessPoints
                 .pages({ AccountId: accountId })
@@ -262,16 +285,24 @@ export const MultiRegionAccessPointProvider = () =>
             );
             return Array.from(pages).flatMap((page) =>
               (page.AccessPoints ?? []).flatMap((report) =>
-                report.Name !== undefined ? [toAttrs(report.Name, accountId, report)] : [],
+                report.Name !== undefined
+                  ? [toAttrs(partition, report.Name, accountId, report)]
+                  : [],
               ),
             );
           }),
+        lookup: Effect.fn(function* ({ multiRegionAccessPointName: name }) {
+          const { accountId, partition } = yield* AWSEnvironment.current;
+          const report = yield* observeMrap(accountId, name);
+          if (report === undefined) return undefined;
+          return toAttrs(partition, name, accountId, report);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const { accountId } = yield* AWSEnvironment.current;
+          const { accountId, partition } = yield* AWSEnvironment.current;
           const name = output?.multiRegionAccessPointName ?? (yield* createName(id, olds ?? {}));
           const report = yield* observeMrap(accountId, name);
           if (report === undefined) return undefined;
-          return toAttrs(name, accountId, report);
+          return toAttrs(partition, name, accountId, report);
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -286,7 +317,7 @@ export const MultiRegionAccessPointProvider = () =>
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const { accountId } = yield* AWSEnvironment.current;
+          const { accountId, partition } = yield* AWSEnvironment.current;
           const name = output?.multiRegionAccessPointName ?? (yield* createName(id, news));
 
           // 1. OBSERVE — cloud state is authoritative.
@@ -296,7 +327,8 @@ export const MultiRegionAccessPointProvider = () =>
           //    token only needs to be unique per submission; idempotency
           //    across crashed runs comes from observing before creating.
           if (report === undefined) {
-            const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+            const random = yield* SecureRandom.SecureRandom;
+            const clientToken = yield* random.uuidV4();
             yield* session.note(
               `Creating Multi-Region Access Point ${name} (takes several minutes)...`,
             );
@@ -328,7 +360,7 @@ export const MultiRegionAccessPointProvider = () =>
           const ready = yield* awaitReady(accountId, name);
 
           yield* session.note(name);
-          return toAttrs(name, accountId, ready);
+          return toAttrs(partition, name, accountId, ready);
         }),
         delete: Effect.fn(function* ({ output, session }) {
           const { accountId } = yield* AWSEnvironment.current;
@@ -340,7 +372,8 @@ export const MultiRegionAccessPointProvider = () =>
           // Deletion is also asynchronous; only submit when the access
           // point is not already being torn down.
           if (report.Status !== "DELETING") {
-            const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+            const random = yield* SecureRandom.SecureRandom;
+            const clientToken = yield* random.uuidV4();
             yield* session.note(
               `Deleting Multi-Region Access Point ${name} (takes several minutes)...`,
             );

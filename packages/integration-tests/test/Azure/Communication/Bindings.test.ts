@@ -1,4 +1,6 @@
 import * as Azure from "@alchemy.run/azure";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { fromStaticToken } from "@distilled.cloud/azure";
 import * as authorization from "@distilled.cloud/azure/authorization";
 import * as communication from "@distilled.cloud/azure/communication";
@@ -7,10 +9,8 @@ import * as email from "@distilled.cloud/azure/communication-email";
 import * as identity from "@distilled.cloud/azure/communication-identity";
 import * as rooms from "@distilled.cloud/azure/communication-rooms";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -168,7 +168,7 @@ const asUser =
       return yield* operation({ ...request, endpoint: url } as I).pipe(
         Effect.provide(
           Layer.mergeAll(
-            fromStaticToken({ bearerToken: token, subscriptionId: "" }),
+            fromStaticToken({ bearerToken: Redacted.make(token), subscriptionId: "" }),
             FetchHttpClient.layer,
           ),
         ),

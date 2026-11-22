@@ -265,7 +265,7 @@ interface ObservedRoute {
 const getRoute = (accountId: string, routeId: string) =>
   magicTransit.getRoute({ accountId, routeId }).pipe(
     Effect.map((r): ObservedRoute | undefined => r.route ?? undefined),
-    Effect.catchTag("RouteNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RouteNotFound", () => Effect.undefined),
   );
 
 /**

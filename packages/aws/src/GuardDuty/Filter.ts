@@ -8,6 +8,7 @@ import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /** Action taken on findings that match the filter's criteria. */
@@ -76,8 +77,20 @@ export interface Filter extends Resource<
     rank: number | undefined;
   },
   never,
-  Providers
+  Providers,
+  FilterLookup
 > {}
+
+/**
+ * Props for {@link Filter.lookup}: find a findings filter this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FilterLookup {
+  /** The detector the filter belongs to. */
+  detectorId: string;
+  /** The name of the existing filter. */
+  name: string;
+}
 
 /**
  * A GuardDuty findings filter — matches findings against criteria and either
@@ -108,13 +121,23 @@ export interface Filter extends Resource<
  *   },
  * });
  * ```
+ *
+ * ### Looking up an existing findings filter
+ * `Filter.lookup` references a findings filter Alchemy doesn't manage (created in the
+ * console or by another stack), found by `detectorId` and `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing findings filter
+ * ```typescript
+ * const noisy = AWS.GuardDuty.Filter.lookup({ detectorId, name: "suppress-noisy" });
+ * ```
  */
 const FilterResource = Resource<Filter>("AWS.GuardDuty.Filter");
 
 export { FilterResource as Filter };
 
 const filterArn = (region: string, accountId: string, detectorId: string, name: string) =>
-  `arn:aws:guardduty:${region}:${accountId}:detector/${detectorId}/filter/${name}`;
+  `arn:${partitionOf(region)}:guardduty:${region}:${accountId}:detector/${detectorId}/filter/${name}`;
 
 export const FilterProvider = () =>
   Provider.effect(
@@ -127,7 +150,7 @@ export const FilterProvider = () =>
       const getFilter = (detectorId: string, name: string) =>
         guardduty
           .getFilter({ DetectorId: detectorId, FilterName: name })
-          .pipe(Effect.catchTag("BadRequestException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("BadRequestException", () => Effect.undefined));
 
       const buildAttrs = Effect.fn(function* (
         detectorId: string,
@@ -156,6 +179,10 @@ export const FilterProvider = () =>
           if ((yield* toName(id, olds)) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ detectorId, name }) {
+          const f = yield* getFilter(detectorId, name);
+          return f ? yield* buildAttrs(detectorId, name, f) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const detectorId = output?.detectorId ?? olds?.detectorId;

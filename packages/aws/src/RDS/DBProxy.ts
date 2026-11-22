@@ -5,11 +5,17 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
 import { toWireSeconds } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class DBProxyNotReady extends Data.TaggedError("DBProxyNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DBProxyProps {
   /**
@@ -121,8 +127,18 @@ export interface DBProxy extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBProxyLookup
 > {}
+
+/**
+ * Props for {@link DBProxy.lookup}: find a DB proxy this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBProxyLookup {
+  /** The db proxy name of the existing DB proxy. */
+  dbProxyName: string;
+}
 
 /**
  * An RDS Proxy for pooled Lambda-to-Aurora connectivity.
@@ -160,6 +176,17 @@ export interface DBProxy extends Resource<
  *   dbProxyName: proxy.dbProxyName,
  *   dbClusterIdentifiers: [cluster.dbClusterIdentifier],
  * });
+ * ```
+ *
+ * ### Looking up an existing DB proxy
+ * `DBProxy.lookup` references a DB proxy Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbProxyName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing DB proxy
+ * ```typescript
+ * const existing = AWS.RDS.DBProxy.lookup({ dbProxyName: "my-db-proxy" });
+ * const endpoint = existing.endpoint;
  * ```
  *
  * @resource
@@ -202,7 +229,7 @@ export const DBProxyProvider = () =>
           .describeDBProxies({
             DBProxyName: name,
           })
-          .pipe(Effect.catchTag("DBProxyNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBProxyNotFoundFault", () => Effect.undefined));
         return response?.DBProxies?.[0];
       });
 
@@ -212,7 +239,7 @@ export const DBProxyProvider = () =>
           Effect.flatMap((proxy) =>
             proxy?.DBProxyArn
               ? Effect.succeed(proxy)
-              : Effect.fail(new Error(`DB proxy '${name}' not ready`)),
+              : Effect.fail(new DBProxyNotReady({ message: `DB proxy '${name}' not ready` })),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -239,7 +266,7 @@ export const DBProxyProvider = () =>
                   if (!proxy.DBProxyArn) return undefined;
                   const tagResponse = yield* rds
                     .listTagsForResource({ ResourceName: proxy.DBProxyArn })
-                    .pipe(Effect.catchTag("DBProxyNotFoundFault", () => Effect.succeed(undefined)));
+                    .pipe(Effect.catchTag("DBProxyNotFoundFault", () => Effect.undefined));
                   if (tagResponse === undefined) return undefined;
                   const tags = Object.fromEntries(
                     (tagResponse.TagList ?? [])
@@ -260,6 +287,10 @@ export const DBProxyProvider = () =>
           if (olds?.engineFamily !== news.engineFamily) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dbProxyName }) {
+          const proxy = yield* readProxy(dbProxyName);
+          return proxy?.DBProxyArn ? toAttrs({ proxy, tags: {} }) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =

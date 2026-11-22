@@ -80,7 +80,7 @@ export const QueryLoggingConfigurationProvider = () =>
       const describe = Effect.fn(function* (workspaceId: string) {
         const response = yield* amp
           .describeQueryLoggingConfiguration({ workspaceId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.queryLoggingConfiguration;
       });
 

@@ -21,5 +21,8 @@
     "@effect/sql-mssql": "4.0.5",
     "alchemy": "workspace:*",
     "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@alchemy.run/test": "workspace:*"
   }
 }

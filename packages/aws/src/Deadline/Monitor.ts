@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -14,6 +15,18 @@ import {
   retryThroughIamPropagation,
   syncDeadlineTags,
 } from "./internal.ts";
+
+export class DeadlineMonitorInvalidProps extends Data.TaggedError("DeadlineMonitorInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class DeadlineMonitorUnexpectedResponse extends Data.TaggedError(
+  "DeadlineMonitorUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface MonitorProps {
   /**
@@ -88,8 +101,23 @@ export interface Monitor extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  MonitorLookup
 > {}
+
+/**
+ * Props for {@link Monitor.lookup}: find a monitor this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type MonitorLookup =
+  | {
+      /** The id of the existing monitor. */
+      monitorId: string;
+    }
+  | {
+      /** The monitor's subdomain. */
+      subdomain: string;
+    };
 
 /**
  * An AWS Deadline Cloud monitor — the hosted web console where artists and
@@ -120,6 +148,16 @@ export interface Monitor extends Resource<
  * return { monitorUrl: monitor.url };
  * ```
  *
+ * ### Looking up an existing monitor
+ * `Monitor.lookup` references a monitor Alchemy doesn't manage (created in the
+ * console or by another stack), found by `monitorId` or `subdomain`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing monitor
+ * ```typescript
+ * const studio = AWS.Deadline.Monitor.lookup({ subdomain: "studio" });
+ * ```
+ *
  * @resource
  */
 export const Monitor = Resource<Monitor>("AWS.Deadline.Monitor");
@@ -137,7 +175,7 @@ interface MonitorState {
 const readMonitorById = Effect.fn(function* (monitorId: string, arnOf: (path: string) => string) {
   const described = yield* deadline
     .getMonitor({ monitorId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described) return undefined;
   const monitorArn = arnOf(`monitor/${described.monitorId}`);
   const state: MonitorState = {
@@ -197,6 +235,14 @@ export const MonitorProvider = () =>
               .filter((state): state is MonitorState => state !== undefined)
               .map((state) => state.attrs);
           }),
+        lookup: Effect.fn(function* (props) {
+          const arnOf = yield* deadlineArnOf;
+          const state =
+            "monitorId" in props
+              ? yield* readMonitorById(props.monitorId, arnOf)
+              : yield* findMonitorBySubdomain(props.subdomain, arnOf);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arnOf = yield* deadlineArnOf;
           const subdomain = output?.subdomain ?? olds?.subdomain;
@@ -220,7 +266,9 @@ export const MonitorProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (news === undefined) {
-            return yield* Effect.fail(new Error("AWS.Deadline.Monitor requires props"));
+            return yield* new DeadlineMonitorInvalidProps({
+              message: "AWS.Deadline.Monitor requires props",
+            });
           }
           const arnOf = yield* deadlineArnOf;
           const displayName = yield* createMonitorName(id, news);
@@ -247,7 +295,9 @@ export const MonitorProvider = () =>
             yield* session.note(`Created monitor ${displayName} (${created.monitorId})`);
             state = yield* readMonitorById(created.monitorId, arnOf);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created monitor ${displayName}`));
+              return yield* new DeadlineMonitorUnexpectedResponse({
+                message: `failed to read created monitor ${displayName}`,
+              });
             }
           }
 
@@ -273,9 +323,9 @@ export const MonitorProvider = () =>
           yield* session.note(state.attrs.monitorArn);
           const final = yield* readMonitorById(state.attrs.monitorId, arnOf);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled monitor ${displayName}`),
-            );
+            return yield* new DeadlineMonitorUnexpectedResponse({
+              message: `failed to read reconciled monitor ${displayName}`,
+            });
           }
           return final.attrs;
         }),

@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { parentBefore, parseResourceName, sameJson, toResourceId } from "./internal.ts";
 
@@ -78,8 +79,32 @@ export type CollectionsEnginesAssistant = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CollectionsEnginesAssistantLookup
 >;
+
+/**
+ * Props for {@link CollectionsEnginesAssistant.lookup}: find a collections
+ * engines assistant this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface CollectionsEnginesAssistantLookup {
+  /**
+   * Assistant id.
+   */
+  assistantId: string;
+  /**
+   * Parent Engine resource name
+   * `projects/{project}/locations/{location}/col
+   * lections/{collection}/engines/{engine}`.
+   */
+  engine: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Discovery Engine Assistant attached to a collection Engine.
@@ -117,6 +142,20 @@ export type CollectionsEnginesAssistant = Resource<
  * );
  * ```
  *
+ * ### Looking up an existing collections engines assistant
+ * `CollectionsEnginesAssistant.lookup` references a collections engines
+ * assistant Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared collections engines assistant.
+ *
+ * **Example:** Reference an existing collections engines assistant
+ * ```typescript
+ * const collectionsEnginesAssistant = GCP.DiscoveryEngine.CollectionsEnginesAssistant.lookup({
+ *   assistantId: "my-assistant",
+ *   engine: "my-engine",
+ * });
+ * ```
+ *
  * @resource
  * @category DiscoveryEngine
  */
@@ -127,7 +166,7 @@ export const CollectionsEnginesAssistant = Resource<CollectionsEnginesAssistant>
 export class CollectionsEnginesAssistantNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEnginesAssistantNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (engine: string, assistantId: string) => `${engine}/assistants/${assistantId}`;
@@ -135,7 +174,7 @@ const resourceName = (engine: string, assistantId: string) => `${engine}/assista
 const getByName = (name: string) =>
   discoveryengine
     .getProjectsLocationsCollectionsEnginesAssistants({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAttrs = (
   assistant: discoveryengine.GoogleCloudDiscoveryengineV1Assistant,
@@ -177,6 +216,15 @@ export const CollectionsEnginesAssistantProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ assistantId, engine }) {
+      const env = yield* GcpEnvironment.current;
+      const name = engine !== undefined ? resourceName(engine, assistantId) : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = olds?.engine ?? output?.engine;
@@ -204,16 +252,14 @@ export const CollectionsEnginesAssistantProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsCollectionsEnginesAssistants({
+            displayName,
+            description,
+            webGroundingType: news.webGroundingType,
+            defaultWebGroundingToggleOff: groundingOff ? true : undefined,
+            generationConfig: news.generationConfig,
+            customerPolicy: news.customerPolicy,
             parent: news.engine,
             assistantId,
-            body: {
-              displayName,
-              description,
-              webGroundingType: news.webGroundingType,
-              defaultWebGroundingToggleOff: groundingOff ? true : undefined,
-              generationConfig: news.generationConfig,
-              customerPolicy: news.customerPolicy,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(fallbackName)));
         current = created ?? undefined;
@@ -221,7 +267,7 @@ export const CollectionsEnginesAssistantProvider = () =>
 
       if (current === undefined) {
         return yield* new CollectionsEnginesAssistantNotResolved({
-          name: fallbackName,
+          resourceName: fallbackName,
         });
       }
 
@@ -243,6 +289,12 @@ export const CollectionsEnginesAssistantProvider = () =>
         policyChanged
       ) {
         current = yield* discoveryengine.patchProjectsLocationsCollectionsEnginesAssistants({
+          displayName,
+          description,
+          webGroundingType: news.webGroundingType,
+          defaultWebGroundingToggleOff: groundingOff,
+          generationConfig: news.generationConfig,
+          customerPolicy: news.customerPolicy,
           name,
           updateMask: [
             displayNameChanged ? "display_name" : undefined,
@@ -254,15 +306,6 @@ export const CollectionsEnginesAssistantProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            description,
-            webGroundingType: news.webGroundingType,
-            defaultWebGroundingToggleOff: groundingOff,
-            generationConfig: news.generationConfig,
-            customerPolicy: news.customerPolicy,
-          },
         });
       }
 

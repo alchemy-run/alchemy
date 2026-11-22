@@ -159,7 +159,7 @@ export const ApplicationsAuthorizedCertificate = Resource<ApplicationsAuthorized
 export class ApplicationsAuthorizedCertificateNotResolved extends Data.TaggedError(
   "GCP.AppEngine.ApplicationsAuthorizedCertificateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const rawDataOf = (props: ApplicationsAuthorizedCertificateProps) => {
@@ -203,7 +203,7 @@ const getById = (
   certificateId: string,
 ) =>
   certificateId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(
         appengine.getProjectsLocationsApplicationsAuthorizedCertificates({
           projectsId,
@@ -324,13 +324,11 @@ export const ApplicationsAuthorizedCertificateProvider = () =>
       if (current === undefined) {
         const created = yield* appengine
           .createProjectsLocationsApplicationsAuthorizedCertificates({
+            displayName,
+            certificateRawData,
             projectsId: project,
             locationsId: location,
             applicationsId,
-            body: {
-              displayName,
-              certificateRawData,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -347,7 +345,7 @@ export const ApplicationsAuthorizedCertificateProvider = () =>
 
       if (current === undefined) {
         return yield* new ApplicationsAuthorizedCertificateNotResolved({
-          name: `projects/${project}/locations/${location}/applications/${applicationsId}/authorizedCertificates/${news.certificateId ?? ""}`,
+          resourceName: `projects/${project}/locations/${location}/applications/${applicationsId}/authorizedCertificates/${news.certificateId ?? ""}`,
         });
       }
 
@@ -360,15 +358,13 @@ export const ApplicationsAuthorizedCertificateProvider = () =>
       );
       if (updateMask.length > 0) {
         current = yield* appengine.patchProjectsLocationsApplicationsAuthorizedCertificates({
+          displayName,
+          certificateRawData,
           projectsId: project,
           locationsId: location,
           applicationsId,
           authorizedCertificatesId: certificateId,
           updateMask,
-          body: {
-            displayName,
-            certificateRawData,
-          },
         });
       }
 

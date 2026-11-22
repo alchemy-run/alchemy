@@ -6,10 +6,12 @@ import { createInternalTags, diffTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
-export type DataCatalogArn = `arn:aws:athena:${RegionID}:${AccountID}:datacatalog/${string}`;
+export type DataCatalogArn =
+  `arn:${Partition}:athena:${RegionID}:${AccountID}:datacatalog/${string}`;
 
 export interface DataCatalogProps {
   /**
@@ -71,8 +73,18 @@ export interface DataCatalog extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DataCatalogLookup
 > {}
+
+/**
+ * Props for {@link DataCatalog.lookup}: find a data catalog this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DataCatalogLookup {
+  /** The name of the existing data catalog. */
+  name: string;
+}
 
 /**
  * An Amazon Athena data catalog — registers an external metadata source (a
@@ -90,6 +102,17 @@ export interface DataCatalog extends Resource<
  *     "record-function": connector.functionArn,
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing data catalog
+ * `DataCatalog.lookup` references a data catalog Alchemy doesn't manage (created in the
+ * console or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Query through an existing catalog
+ * ```typescript
+ * const catalog = AWS.Athena.DataCatalog.lookup({ name: "warehouse" });
+ * const dataCatalogArn = catalog.dataCatalogArn;
  * ```
  *
  * @resource
@@ -117,7 +140,7 @@ export const DataCatalogProvider = () =>
         // reports even existing catalogs as not-found, so scope to `primary`.
         athena.getDataCatalog({ Name: name, WorkGroup: "primary" }).pipe(
           Effect.map((res) => res.DataCatalog),
-          Effect.catchTag("DataCatalogNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("DataCatalogNotFound", () => Effect.undefined),
         );
 
       const fetchTags = (arn: string) =>
@@ -138,13 +161,29 @@ export const DataCatalogProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ name }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const dc = yield* getOne(name);
+          if (!dc) return undefined;
+          const arn =
+            `arn:${partitionOf(region)}:athena:${region}:${accountId}:datacatalog/${name}` as DataCatalogArn;
+          return {
+            name,
+            dataCatalogArn: arn,
+            type: dc.Type,
+            parameters: paramsOf(dc.Parameters),
+            description: dc.Description,
+            tags: yield* fetchTags(arn),
+          };
+        }),
         read: Effect.fn(function* ({ olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.name ?? olds?.name;
           if (!name) return undefined;
           const dc = yield* getOne(name);
           if (!dc) return undefined;
-          const arn = `arn:aws:athena:${region}:${accountId}:datacatalog/${name}` as DataCatalogArn;
+          const arn =
+            `arn:${partitionOf(region)}:athena:${region}:${accountId}:datacatalog/${name}` as DataCatalogArn;
           return {
             name,
             dataCatalogArn: arn,
@@ -166,7 +205,7 @@ export const DataCatalogProvider = () =>
                       {
                         name: dc.CatalogName,
                         dataCatalogArn:
-                          `arn:aws:athena:${region}:${accountId}:datacatalog/${dc.CatalogName}` as DataCatalogArn,
+                          `arn:${partitionOf(region)}:athena:${region}:${accountId}:datacatalog/${dc.CatalogName}` as DataCatalogArn,
                         type: dc.Type ?? "LAMBDA",
                         parameters: {} as Record<string, string>,
                         description: undefined,
@@ -179,7 +218,8 @@ export const DataCatalogProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = news.name ?? output?.name!;
-          const arn = `arn:aws:athena:${region}:${accountId}:datacatalog/${name}` as DataCatalogArn;
+          const arn =
+            `arn:${partitionOf(region)}:athena:${region}:${accountId}:datacatalog/${name}` as DataCatalogArn;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredParams = news.parameters ?? {};

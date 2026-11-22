@@ -32,8 +32,9 @@ export interface AstroCloudflareConfig {
   /**
    * Options forwarded to `@alchemy.run/cloudflare-runtime/vite`
    * (compatibility date/flags, worker name/bindings/assets, runtime
-   * context). `main`, `viteEnvironments`, and Astro's node-side
-   * environments in `skipEnvironments` are managed by the integration.
+   * context). `viteEnvironments` and Astro's node-side environments in
+   * `skipEnvironments` are managed by the integration; `main` defaults to
+   * the vendored server entrypoint (see `makeIntegrationPluginOptions`).
    */
   readonly worker?: CloudflareVitePluginOptions | undefined;
   /**

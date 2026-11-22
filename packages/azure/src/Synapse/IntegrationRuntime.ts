@@ -200,17 +200,23 @@ const toAttrs = (
   workspaceName,
   resourceGroup,
   type: runtime.properties?.type ?? "",
-  state: runtime.properties?.state,
+  // `state` is no longer declared on the runtime arms; it arrives in the
+  // rest-of-object record.
+  state: typeof runtime.properties?.state === "string" ? runtime.properties.state : undefined,
 });
 
-const desiredRuntime = (news: IntegrationRuntimeProps): synapse.IntegrationRuntime =>
-  news.type === "Managed"
+const desiredRuntime = (news: IntegrationRuntimeProps): synapse.IntegrationRuntime => {
+  const { dataFlowProperties, ...compute } = news.computeProperties ?? {};
+  return news.type === "Managed"
     ? {
         type: "Managed",
         description: news.description,
         typeProperties: {
           computeProperties: {
-            ...news.computeProperties,
+            ...compute,
+            ...(dataFlowProperties !== undefined
+              ? { dataFlowProperties: { ...dataFlowProperties } }
+              : {}),
             location: news.computeProperties?.location ?? "AutoResolve",
           },
         },
@@ -222,6 +228,7 @@ const desiredRuntime = (news: IntegrationRuntimeProps): synapse.IntegrationRunti
           : undefined,
       }
     : { type: "SelfHosted", description: news.description };
+};
 
 export const IntegrationRuntimeProvider = () =>
   Provider.succeed(IntegrationRuntime, {

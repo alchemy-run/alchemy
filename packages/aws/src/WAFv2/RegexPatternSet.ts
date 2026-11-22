@@ -6,6 +6,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import {
@@ -16,6 +17,13 @@ import {
   type WafScope,
   withWafScope,
 } from "./internal.ts";
+
+export class RegexPatternSetUnexpectedResponse extends Data.TaggedError(
+  "RegexPatternSetUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface RegexPatternSetProps {
   /**
@@ -74,8 +82,24 @@ export interface RegexPatternSet extends Resource<
     regularExpressions: string[];
   },
   never,
-  Providers
+  Providers,
+  RegexPatternSetLookup
 > {}
+
+/**
+ * Props for {@link RegexPatternSet.lookup}: find a regex pattern set this stack doesn't
+ * manage, in the ambient account, by name and scope.
+ */
+export interface RegexPatternSetLookup {
+  /** The name of the existing regex pattern set. */
+  regexPatternSetName: string;
+  /**
+   * `REGIONAL` for one in the ambient region, `CLOUDFRONT` for one that
+   * protects CloudFront distributions.
+   * @default "REGIONAL"
+   */
+  scope?: "REGIONAL" | "CLOUDFRONT";
+}
 
 /**
  * An AWS WAFv2 regex pattern set — a named collection of regular expressions
@@ -113,6 +137,17 @@ export interface RegexPatternSet extends Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing regex pattern set
+ * `RegexPatternSet.lookup` references a regex pattern set Alchemy doesn't manage (created in the
+ * console or by another stack), found by `regexPatternSetName` and `scope`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing regex pattern set
+ * ```typescript
+ * const bots = AWS.WAFv2.RegexPatternSet.lookup({ regexPatternSetName: "bad-bots" });
+ * const regexPatternSetArn = bots.regexPatternSetArn;
  * ```
  *
  * @resource
@@ -155,9 +190,7 @@ export const RegexPatternSetProvider = () =>
             scope,
             wafv2
               .getRegexPatternSet({ Name: name, Scope: scope, Id: cachedId })
-              .pipe(
-                Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-              ),
+              .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
           );
           if (byId?.RegexPatternSet) {
             return byId;
@@ -183,9 +216,7 @@ export const RegexPatternSetProvider = () =>
                   Scope: scope,
                   Id: summary.Id,
                 })
-                .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
             );
           }
           if (!listed.NextMarker || (listed.RegexPatternSets?.length ?? 0) === 0) {
@@ -221,13 +252,9 @@ export const RegexPatternSetProvider = () =>
                         Scope: scope,
                         Id: summary.Id,
                       })
-                      .pipe(
-                        Effect.catchTag("WAFNonexistentItemException", () =>
-                          Effect.succeed(undefined),
-                        ),
-                      ),
+                      .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
                   )
-                : Effect.succeed(undefined),
+                : Effect.undefined,
             { concurrency: 5 },
           );
           for (const detail of details) {
@@ -265,6 +292,11 @@ export const RegexPatternSetProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ regexPatternSetName, scope = defaultScope }) {
+          const found = yield* findSet(scope, regexPatternSetName, undefined);
+          return found?.RegexPatternSet ? toAttrs(found.RegexPatternSet, scope) : undefined;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const scope = output?.scope ?? olds?.scope ?? defaultScope;
           const name =
@@ -300,9 +332,7 @@ export const RegexPatternSetProvider = () =>
                   Description: news.description,
                   Tags: createTagsList(desiredTags),
                 })
-                .pipe(
-                  Effect.catchTag("WAFDuplicateItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFDuplicateItemException", () => Effect.undefined)),
             );
             observed = yield* findSet(scope, name, undefined);
           }
@@ -310,9 +340,9 @@ export const RegexPatternSetProvider = () =>
           const set = observed?.RegexPatternSet;
           const arn = set?.ARN;
           if (set === undefined || arn === undefined) {
-            return yield* Effect.fail(
-              new Error(`Failed to observe RegexPatternSet '${name}' after create`),
-            );
+            return yield* new RegexPatternSetUnexpectedResponse({
+              message: `Failed to observe RegexPatternSet '${name}' after create`,
+            });
           }
 
           yield* session.note(arn);
@@ -375,9 +405,7 @@ export const RegexPatternSetProvider = () =>
                   Scope: scope,
                   Id: output.regexPatternSetId,
                 })
-                .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
             );
             if (!found?.RegexPatternSet || found.LockToken === undefined) {
               return;

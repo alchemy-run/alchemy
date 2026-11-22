@@ -266,7 +266,7 @@ type ObservedSchema = Pick<
 const getSchema = (zoneId: string, schemaId: string) =>
   apiGateway.getUserSchema({ zoneId, schemaId }).pipe(
     Effect.map((schema): ObservedSchema | undefined => schema),
-    Effect.catchTag("SchemaNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("SchemaNotFound", () => Effect.undefined),
   );
 
 /**

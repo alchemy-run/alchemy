@@ -1,4 +1,5 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
+import * as LoadBalancerActions from "@distilled.cloud/hetzner/load_balancer_actions";
+import * as LoadBalancers from "@distilled.cloud/hetzner/load_balancers";
 import type {
   CreateLoadBalancerRequestServicesItem,
   GetLoadBalancerResponseLoadBalancer,
@@ -22,6 +23,8 @@ import {
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
+  isReplacedGeneration,
+  keepsName,
   labelSelector,
   stripInternalLabels,
   toLabels,
@@ -62,6 +65,18 @@ export type LoadBalancerProtocol = "tcp" | "http" | "https";
 export type HealthCheckProtocol = "tcp" | "http";
 
 export type TargetHealthStatus = "healthy" | "unhealthy" | "unknown";
+
+/**
+ * Deletion was refused because the load balancer has delete protection on, set
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or
+ * turn it off in the Hetzner Console) before deleting it.
+ */
+export class LoadBalancerDeleteProtected extends Data.TaggedError(
+  "Hetzner.LoadBalancerDeleteProtected",
+)<{
+  readonly id: number;
+  readonly message: string;
+}> {}
 
 export interface LoadBalancerHealthCheckHttp {
   /**
@@ -271,8 +286,8 @@ export interface LoadBalancerProps {
   publicInterface?: boolean;
   /**
    * Prevent the Load Balancer from being deleted in the Cloud Console /
-   * API until this is cleared. The provider disables protection before
-   * delete.
+   * API. While it is on, `destroy` and replacement fail until it is turned off and
+   * deployed.
    * @default false
    */
   deleteProtection?: boolean;
@@ -371,8 +386,18 @@ export type LoadBalancer = Resource<
     created: string;
   },
   never,
-  Providers
+  Providers,
+  LoadBalancerLookup
 >;
+
+/**
+ * Props for {@link LoadBalancer.lookup}: find a load balancer this stack
+ * doesn't manage by its name.
+ */
+export interface LoadBalancerLookup {
+  /** Load balancer name (unique in the project). */
+  name: string;
+}
 
 /**
  * A Hetzner Cloud Load Balancer. Create it in a Location (`nbg1` by
@@ -449,6 +474,16 @@ export type LoadBalancer = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing load balancer
+ * `LoadBalancer.lookup` references a load balancer Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing load balancer
+ * ```typescript
+ * const lb = Hetzner.LoadBalancer.lookup({ name: "ingress" });
+ * ```
+ *
  * @resource
  * @product Load Balancer
  */
@@ -459,7 +494,7 @@ type CloudLoadBalancer =
   | ListLoadBalancersResponseLoadBalancersItem;
 
 export class LoadBalancerNotCreated extends Data.TaggedError("Hetzner.LoadBalancerNotCreated")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const asAlgorithm = (value: string): LoadBalancerAlgorithm =>
@@ -1000,23 +1035,21 @@ const createLoadBalancerName = (id: string, name: string | undefined, existing?:
   });
 
 const getById = (id: number) =>
-  Hetzner.loadBalancers.getLoadBalancer({ id }).pipe(
+  LoadBalancers.getLoadBalancer({ id }).pipe(
     Effect.map(({ load_balancer }) => load_balancer),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const getByName = (name: string) =>
-  Hetzner.loadBalancers
-    .listLoadBalancers({ name, per_page: 50 })
-    .pipe(Effect.map(({ load_balancers }) => load_balancers.find((item) => item.name === name)));
+  LoadBalancers.listLoadBalancers({ name, per_page: 50 }).pipe(
+    Effect.map(({ load_balancers }) => load_balancers.find((item) => item.name === name)),
+  );
 
 const getByLabels = (labels: Record<string, string>) =>
-  Hetzner.loadBalancers
-    .listLoadBalancers({
-      label_selector: labelSelector(labels),
-      per_page: 50,
-    })
-    .pipe(Effect.map(({ load_balancers }) => load_balancers[0]));
+  LoadBalancers.listLoadBalancers({
+    label_selector: labelSelector(labels),
+    per_page: 50,
+  }).pipe(Effect.map(({ load_balancers }) => load_balancers[0]));
 
 const observe = Effect.fn(function* ({
   id,
@@ -1040,7 +1073,7 @@ const observe = Effect.fn(function* ({
 });
 
 const refresh = (id: number) =>
-  Hetzner.loadBalancers.getLoadBalancer({ id }).pipe(
+  LoadBalancers.getLoadBalancer({ id }).pipe(
     Effect.map(({ load_balancer }) => load_balancer),
     Effect.retry({
       while: (e) => e._tag === "NotFound" || retryable(e),
@@ -1082,13 +1115,11 @@ const syncMetadata = (args: {
     const labelsChanged = removed.length > 0 || upsert.length > 0;
     const nameChanged = args.current.name !== args.name;
     if (!labelsChanged && !nameChanged) return args.current;
-    const updated = yield* Hetzner.loadBalancers
-      .updateLoadBalancer({
-        id: args.current.id,
-        name: nameChanged ? args.name : undefined,
-        labels: labelsChanged ? args.labels : undefined,
-      })
-      .pipe(Effect.retry(busyRetry));
+    const updated = yield* LoadBalancers.updateLoadBalancer({
+      id: args.current.id,
+      name: nameChanged ? args.name : undefined,
+      labels: labelsChanged ? args.labels : undefined,
+    }).pipe(Effect.retry(busyRetry));
     return updated.load_balancer;
   });
 
@@ -1096,7 +1127,7 @@ const syncAlgorithm = (current: CloudLoadBalancer, desired: LoadBalancerAlgorith
   Effect.gen(function* () {
     if (asAlgorithm(current.algorithm.type) === desired) return;
     yield* runAction(
-      Hetzner.loadBalancerActions.changeLoadBalancerAlgorithm({
+      LoadBalancerActions.changeLoadBalancerAlgorithm({
         id: current.id,
         type: desired,
       }),
@@ -1107,7 +1138,7 @@ const syncType = (current: CloudLoadBalancer, desired: string) =>
   Effect.gen(function* () {
     if (current.load_balancer_type.name === desired) return;
     yield* runAction(
-      Hetzner.loadBalancerActions.changeLoadBalancerType({
+      LoadBalancerActions.changeLoadBalancerType({
         id: current.id,
         load_balancer_type: desired,
       }),
@@ -1118,7 +1149,7 @@ const syncProtection = (current: CloudLoadBalancer, desired: boolean) =>
   Effect.gen(function* () {
     if (current.protection.delete === desired) return;
     yield* runAction(
-      Hetzner.loadBalancerActions.changeLoadBalancerProtection({
+      LoadBalancerActions.changeLoadBalancerProtection({
         id: current.id,
         delete: desired,
       }),
@@ -1130,14 +1161,14 @@ const syncPublicInterface = (current: CloudLoadBalancer, desired: boolean) =>
     if (current.public_net.enabled === desired) return;
     if (desired) {
       yield* runAction(
-        Hetzner.loadBalancerActions.enableLoadBalancerPublicInterface({
+        LoadBalancerActions.enableLoadBalancerPublicInterface({
           id: current.id,
         }),
       );
       return;
     }
     yield* runAction(
-      Hetzner.loadBalancerActions.disableLoadBalancerPublicInterface({
+      LoadBalancerActions.disableLoadBalancerPublicInterface({
         id: current.id,
       }),
     );
@@ -1155,7 +1186,7 @@ const syncServices = (
     for (const service of observed) {
       if (desiredByPort.has(service.listenPort)) continue;
       yield* runAction(
-        Hetzner.loadBalancerActions.deleteLoadBalancerService({
+        LoadBalancerActions.deleteLoadBalancerService({
           id: loadBalancerId,
           listen_port: service.listenPort,
         }),
@@ -1166,7 +1197,7 @@ const syncServices = (
       const existing = observedByPort.get(service.listenPort);
       if (existing === undefined) {
         yield* runAction(
-          Hetzner.loadBalancerActions.addLoadBalancerService({
+          LoadBalancerActions.addLoadBalancerService({
             id: loadBalancerId,
             protocol: service.protocol,
             listen_port: service.listenPort,
@@ -1187,7 +1218,7 @@ const syncServices = (
         continue;
       }
       yield* runAction(
-        Hetzner.loadBalancerActions.updateLoadBalancerService({
+        LoadBalancerActions.updateLoadBalancerService({
           id: loadBalancerId,
           protocol: service.protocol,
           listen_port: service.listenPort,
@@ -1202,7 +1233,7 @@ const syncServices = (
 
 const addTargetRequest = (loadBalancerId: number, target: NormalizedTarget) => {
   if (target.type === "server") {
-    return Hetzner.loadBalancerActions.addLoadBalancerTarget({
+    return LoadBalancerActions.addLoadBalancerTarget({
       id: loadBalancerId,
       type: "server",
       server: {
@@ -1213,14 +1244,14 @@ const addTargetRequest = (loadBalancerId: number, target: NormalizedTarget) => {
     });
   }
   if (target.type === "label_selector") {
-    return Hetzner.loadBalancerActions.addLoadBalancerTarget({
+    return LoadBalancerActions.addLoadBalancerTarget({
       id: loadBalancerId,
       type: "label_selector",
       label_selector: { selector: target.selector },
       use_private_ip: target.usePrivateIp,
     });
   }
-  return Hetzner.loadBalancerActions.addLoadBalancerTarget({
+  return LoadBalancerActions.addLoadBalancerTarget({
     id: loadBalancerId,
     type: "ip",
     ip: { ip: target.ip },
@@ -1229,7 +1260,7 @@ const addTargetRequest = (loadBalancerId: number, target: NormalizedTarget) => {
 
 const removeTargetRequest = (loadBalancerId: number, target: NormalizedTarget) => {
   if (target.type === "server") {
-    return Hetzner.loadBalancerActions.removeLoadBalancerTarget({
+    return LoadBalancerActions.removeLoadBalancerTarget({
       id: loadBalancerId,
       type: "server",
       server: {
@@ -1239,13 +1270,13 @@ const removeTargetRequest = (loadBalancerId: number, target: NormalizedTarget) =
     });
   }
   if (target.type === "label_selector") {
-    return Hetzner.loadBalancerActions.removeLoadBalancerTarget({
+    return LoadBalancerActions.removeLoadBalancerTarget({
       id: loadBalancerId,
       type: "label_selector",
       label_selector: { selector: target.selector },
     });
   }
-  return Hetzner.loadBalancerActions.removeLoadBalancerTarget({
+  return LoadBalancerActions.removeLoadBalancerTarget({
     id: loadBalancerId,
     type: "ip",
     ip: { ip: target.ip },
@@ -1277,7 +1308,18 @@ const syncTargets = (
           schedule: backoff,
         }),
         Effect.flatMap(({ action }) => waitForAction(action)),
-        Effect.catchIf(alreadyThere, () => Effect.void),
+        // A rejected add is only fine when the target is in fact there.
+        Effect.catchIf(alreadyThere, (error) =>
+          getById(loadBalancerId).pipe(
+            Effect.flatMap((current) =>
+              observedTargets(current?.targets).some(
+                (existing) => targetKey(existing) === targetKey(target),
+              )
+                ? Effect.void
+                : Effect.fail(error),
+            ),
+          ),
+        ),
       );
     }
   });
@@ -1294,7 +1336,7 @@ const syncNetworks = (
     for (const item of observed) {
       if (desiredIds.has(item.networkId)) continue;
       yield* runAction(
-        Hetzner.loadBalancerActions.detachLoadBalancerFromNetwork({
+        LoadBalancerActions.detachLoadBalancerFromNetwork({
           id: loadBalancerId,
           network: item.networkId,
         }),
@@ -1304,7 +1346,7 @@ const syncNetworks = (
     for (const networkId of desired) {
       if (observedIds.has(networkId)) continue;
       yield* runAction(
-        Hetzner.loadBalancerActions.attachLoadBalancerToNetwork({
+        LoadBalancerActions.attachLoadBalancerToNetwork({
           id: loadBalancerId,
           network: networkId,
         }),
@@ -1317,7 +1359,7 @@ export const LoadBalancerProvider = () =>
     stables: ["id", "location", "locationId", "networkZone", "created"],
 
     list: Effect.fn(function* () {
-      const items = yield* Hetzner.loadBalancers.listLoadBalancers
+      const items = yield* LoadBalancers.listLoadBalancers
         .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,
@@ -1330,22 +1372,37 @@ export const LoadBalancerProvider = () =>
       if (!isResolved(news)) return undefined;
       if (output !== undefined) {
         if (news.location !== undefined && news.location !== output.location) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         if (news.networkZone !== undefined && news.networkZone !== output.networkZone) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
       }
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* getByName(name);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const found = yield* observe({
         id,
         name: olds?.name ?? output?.name,
         outputId: output?.id,
       });
       if (found === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: found.id,
+          claimedName: olds?.name,
+          foundName: found.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(found);
       const owned = yield* hasAlchemyLabels(id, tagRecord(found.labels));
       return owned ? attrs : Unowned(attrs);
@@ -1381,22 +1438,20 @@ export const LoadBalancerProvider = () =>
       }
 
       if (current === undefined) {
-        const created = yield* Hetzner.loadBalancers
-          .createLoadBalancer({
-            name,
-            load_balancer_type: loadBalancerType,
-            algorithm: { type: algorithm },
-            labels: desiredLabels,
-            public_interface: publicInterface,
-            ...(location !== undefined ? { location } : {}),
-            ...(networkZone !== undefined ? { network_zone: networkZone } : {}),
-            ...(networks[0] !== undefined ? { network: networks[0] } : {}),
-            ...(services.length > 0 ? { services: services.map(toCreateService) } : {}),
-          })
-          .pipe(
-            Effect.retry(busyRetry),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-          );
+        const created = yield* LoadBalancers.createLoadBalancer({
+          name,
+          load_balancer_type: loadBalancerType,
+          algorithm: { type: algorithm },
+          labels: desiredLabels,
+          public_interface: publicInterface,
+          ...(location !== undefined ? { location } : {}),
+          ...(networkZone !== undefined ? { network_zone: networkZone } : {}),
+          ...(networks[0] !== undefined ? { network: networks[0] } : {}),
+          ...(services.length > 0 ? { services: services.map(toCreateService) } : {}),
+        }).pipe(
+          Effect.retry(busyRetry),
+          Effect.catchTag("Conflict", () => Effect.undefined),
+        );
         if (created !== undefined) {
           if (created.action) {
             yield* waitForAction(created.action);
@@ -1411,7 +1466,7 @@ export const LoadBalancerProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LoadBalancerNotCreated({ name });
+        return yield* new LoadBalancerNotCreated({ resourceName: name });
       }
 
       current = yield* syncMetadata({
@@ -1435,20 +1490,28 @@ export const LoadBalancerProvider = () =>
       return toAttrs(yield* refresh(current.id));
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getById(output.id);
       if (current === undefined) return;
 
+      // Delete protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.protection.delete) {
+        if (force !== true) {
+          return yield* new LoadBalancerDeleteProtected({
+            id: current.id,
+            message: `Hetzner load balancer '${current.id}' has delete protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* runAction(
-          Hetzner.loadBalancerActions.changeLoadBalancerProtection({
+          LoadBalancerActions.changeLoadBalancerProtection({
             id: current.id,
             delete: false,
           }),
         ).pipe(Effect.catchIf(alreadyGone, () => Effect.void));
       }
 
-      yield* Hetzner.loadBalancers.deleteLoadBalancer({ id: current.id }).pipe(
+      yield* LoadBalancers.deleteLoadBalancer({ id: current.id }).pipe(
         Effect.catchTag("NotFound", () => Effect.void),
         Effect.retry({
           while: retryable,

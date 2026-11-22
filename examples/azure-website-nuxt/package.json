@@ -18,8 +18,8 @@
   "dependencies": {
     "@alchemy.run/azure": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "alchemy": "workspace:*",
-    "alchemy-test": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

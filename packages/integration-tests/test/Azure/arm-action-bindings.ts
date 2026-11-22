@@ -3,8 +3,8 @@ import {
   parseArmResourceId,
   type ArmResourceId,
 } from "@alchemy.run/azure/internal/ArmActionBinding";
+import { expect } from "@alchemy.run/test";
 import * as authorization from "@distilled.cloud/azure/authorization";
-import { expect } from "alchemy-test";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Effect from "effect/Effect";

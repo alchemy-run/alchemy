@@ -1,10 +1,13 @@
+import * as NodeFs from "node:fs";
 import * as NodeHttp from "node:http";
+import * as NodeOs from "node:os";
+import * as NodePath from "node:path";
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as WorkerProxy from "../proxy/WorkerProxy.ts";
 import * as Runtime from "../Runtime.ts";
-import { localRuntimeLayer, PredicateFailed } from "./helpers/runtime.ts";
+import { fetchOverSocket, localRuntimeLayer, PredicateFailed } from "./helpers/runtime.ts";
 
 const HELLO_SCRIPT = `
 export default {
@@ -38,6 +41,35 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
         const echo = yield* Effect.promise(() => fetch(new URL("/echo", url), { method: "POST" }));
         expect(yield* Effect.promise(() => echo.text())).toBe("POST");
       }),
+    { timeout: 30_000 },
+  );
+
+  it.effect.skipIf(process.platform === "win32")(
+    "serves the entry on a Unix socket, over a stale file, and removes it on close",
+    () => {
+      const socketPath = NodePath.join(NodeOs.tmpdir(), `alchemy-runtime-test-${process.pid}.sock`);
+      return Effect.gen(function* () {
+        // A file left at the path by an earlier process, which workerd won't
+        // bind over.
+        yield* Effect.sync(() => NodeFs.writeFileSync(socketPath, ""));
+        yield* Effect.gen(function* () {
+          const runtime = yield* Runtime.Runtime;
+          const url = yield* runtime.start({
+            name: "unix-socket",
+            compatibilityDate: "2026-03-10",
+            compatibilityFlags: [],
+            bindings: [],
+            modules: [{ name: "main.js", type: "ESModule", content: HELLO_SCRIPT }],
+            entrySocketPath: socketPath,
+          });
+          expect(yield* fetchOverSocket(socketPath, "/hello")).toBe("hello");
+          // The TCP address keeps serving too.
+          const hello = yield* Effect.promise(() => fetch(new URL("/hello", url)));
+          expect(yield* Effect.promise(() => hello.text())).toBe("hello");
+        }).pipe(Effect.scoped);
+        expect(NodeFs.existsSync(socketPath)).toBe(false);
+      }).pipe(Effect.ensuring(Effect.sync(() => NodeFs.rmSync(socketPath, { force: true }))));
+    },
     { timeout: 30_000 },
   );
 
@@ -190,18 +222,23 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
     { timeout: 30_000 },
   );
 
-  // Miniflare's outbound interceptor: outbound fetches carry `CF-Worker`
-  // with the Worker's zone and drop `CF-Connecting-IP`.
+  // The outbound interceptor drops `CF-Connecting-IP`. Unlike Miniflare it
+  // adds no `CF-Worker`: Cloudflare-fronted sites answer 403 to one sent
+  // from a developer machine (#2965).
   it.effect(
-    "outbound fetches carry CF-Worker and drop CF-Connecting-IP",
+    "outbound fetches drop CF-Connecting-IP and add no CF-Worker",
     () =>
       Effect.gen(function* () {
         const seen: Array<{ cfWorker?: string; connectingIp?: string }> = [];
+        // Only the Worker's own requests count: local tools (T3 Code, VS Code
+        // port detection) probe fresh localhost servers with `GET /`.
         const echo = NodeHttp.createServer((req, res) => {
-          seen.push({
-            cfWorker: req.headers["cf-worker"] as string | undefined,
-            connectingIp: req.headers["cf-connecting-ip"] as string | undefined,
-          });
+          if (req.url === "/echo") {
+            seen.push({
+              cfWorker: req.headers["cf-worker"] as string | undefined,
+              connectingIp: req.headers["cf-connecting-ip"] as string | undefined,
+            });
+          }
           res.end("ok");
         });
         yield* Effect.acquireRelease(
@@ -210,33 +247,28 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
           ),
           () => Effect.promise(() => new Promise<void>((resolve) => echo.close(() => resolve()))),
         );
-        const target = `http://127.0.0.1:${(echo.address() as { port: number }).port}/`;
+        const target = `http://127.0.0.1:${(echo.address() as { port: number }).port}/echo`;
         const runtime = yield* Runtime.Runtime;
-        const start = (name: string, zone?: string) =>
-          runtime.start({
-            name,
-            zone,
-            compatibilityDate: "2026-03-10",
-            compatibilityFlags: [],
-            bindings: [],
-            modules: [
-              {
-                name: "main.js",
-                type: "ESModule",
-                content: `export default {
-  fetch: () => fetch(${JSON.stringify(target)}, { headers: { "CF-Connecting-IP": "1.2.3.4" } }),
+        const url = yield* runtime.start({
+          name: "outbound",
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: [],
+          bindings: [],
+          modules: [
+            {
+              name: "main.js",
+              type: "ESModule",
+              content: `export default {
+  fetch: (request) =>
+    new URL(request.url).pathname === "/outbound"
+      ? fetch(${JSON.stringify(target)}, { headers: { "CF-Connecting-IP": "1.2.3.4" } })
+      : new Response("Not Found", { status: 404 }),
 };`,
-              },
-            ],
-          });
-        const defaultZone = yield* start("outbound-default");
-        yield* Effect.promise(() => fetch(defaultZone).then((r) => r.text()));
-        const customZone = yield* start("outbound-zone", "example.com");
-        yield* Effect.promise(() => fetch(customZone).then((r) => r.text()));
-        expect(seen).toEqual([
-          { cfWorker: "outbound-default.example.com", connectingIp: undefined },
-          { cfWorker: "example.com", connectingIp: undefined },
-        ]);
+            },
+          ],
+        });
+        yield* Effect.promise(() => fetch(new URL("/outbound", url)).then((r) => r.text()));
+        expect(seen).toEqual([{ cfWorker: undefined, connectingIp: undefined }]);
       }).pipe(Effect.scoped),
     { timeout: 30_000 },
   );
@@ -306,8 +338,10 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
             .toBuffer(),
         );
         const via: Array<string | undefined> = [];
+        // Only the Worker's own requests count: local tools (T3 Code, VS Code
+        // port detection) probe fresh localhost servers with `GET /`.
         const origin = NodeHttp.createServer((req, res) => {
-          via.push(req.headers.via as string | undefined);
+          if (req.url === "/image.png") via.push(req.headers.via as string | undefined);
           res.setHeader("content-type", "image/png");
           res.end(png);
         });
@@ -329,12 +363,15 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
               name: "main.js",
               type: "ESModule",
               content: `export default {
-  fetch: () => fetch(${JSON.stringify(target)}, { cf: { image: { width: 4, format: "png" } } }),
+  fetch: (request) =>
+    new URL(request.url).pathname === "/image"
+      ? fetch(${JSON.stringify(target)}, { cf: { image: { width: 4, format: "png" } } })
+      : new Response("Not Found", { status: 404 }),
 };`,
             },
           ],
         });
-        const response = yield* Effect.promise(() => fetch(url));
+        const response = yield* Effect.promise(() => fetch(new URL("/image", url)));
         const body = Buffer.from(yield* Effect.promise(() => response.arrayBuffer()));
         const metadata = yield* Effect.promise(() => sharp(body).metadata());
         expect({

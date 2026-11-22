@@ -1,5 +1,5 @@
 import * as firebaseappcheck from "@distilled.cloud/gcp/firebaseappcheck_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -170,7 +170,7 @@ export const AppsDebugTokenProvider = () =>
       });
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       let existing = yield* getByName(output?.name ?? "");
       if (existing === undefined && olds?.app) {
@@ -179,7 +179,9 @@ export const AppsDebugTokenProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, output?.token);
-      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -205,11 +207,9 @@ export const AppsDebugTokenProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           firebaseappcheck.createProjectsAppsDebugTokens({
+            displayName: desiredDisplay,
+            token: secret,
             parent: app,
-            body: {
-              displayName: desiredDisplay,
-              token: secret,
-            },
           }),
         ).pipe(
           Effect.catchTag("Conflict", () =>
@@ -223,19 +223,17 @@ export const AppsDebugTokenProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: output?.name ?? `${app}/debugTokens`,
+          resourceName: output?.name ?? `${app}/debugTokens`,
         });
       }
 
       if (!sameText(current.displayName, desiredDisplay)) {
         current = yield* retryTransient(
           firebaseappcheck.patchProjectsAppsDebugTokens({
+            displayName: desiredDisplay,
+            etag: current.etag,
             name: current.name ?? "",
             updateMask: "display_name",
-            body: {
-              displayName: desiredDisplay,
-              etag: current.etag,
-            },
           }),
         );
       }

@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -60,9 +61,10 @@ const ensureTargetPool = () =>
     if (existing !== undefined) return existing;
     yield* compute
       .insertTargetPools({
+        name: poolName,
+        description: "alchemy forwarding-rule test",
         project,
         region,
-        body: { name: poolName, description: "alchemy forwarding-rule test" },
       })
       .pipe(
         Effect.flatMap(waitOp),
@@ -104,6 +106,13 @@ test.provider(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.ForwardingRule.lookup({
+          forwardingRuleName: created.forwardingRuleName,
+          region: created.region,
+        }),
+        created,
       );
 
       expect(created.forwardingRuleName).toEqual(expect.any(String));

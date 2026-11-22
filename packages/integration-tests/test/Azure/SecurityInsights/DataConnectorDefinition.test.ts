@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as securityinsights from "@distilled.cloud/azure/securityinsights";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { pollGone, sentinelWorkspace, tags } from "./sentinel.ts";
 
@@ -91,22 +91,12 @@ test.provider(
       const name = created.definition.dataConnectorDefinitionName;
       const observed = yield* getDefinition(rg, ws, name);
       expect(observed.kind).toEqual("Customizable");
-      expect(
-        (
-          (observed.properties as Record<string, unknown>).connectorUiConfig as Record<
-            string,
-            unknown
-          >
-        ).title,
-      ).toEqual("Alchemy v1");
+      expect(observed.properties?.connectorUiConfig.title).toEqual("Alchemy v1");
 
       const updated = yield* stack.deploy(program({ title: "Alchemy v2" }));
       expect(updated.definition.dataConnectorDefinitionName).toEqual(name);
       const after = yield* getDefinition(rg, ws, name);
-      expect(
-        ((after.properties as Record<string, unknown>).connectorUiConfig as Record<string, unknown>)
-          .title,
-      ).toEqual("Alchemy v2");
+      expect(after.properties?.connectorUiConfig.title).toEqual("Alchemy v2");
 
       const replaced = yield* stack.deploy(
         program({ title: "Alchemy v2", name: "AlchemyReplacementConnector" }),

@@ -1,8 +1,8 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as hybridnetwork from "@distilled.cloud/azure/hybridnetwork";
-import { expect } from "alchemy-test";
 import type { Input } from "alchemy/Input";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { ensureFeature } from "../features.ts";
 import { runExpensive } from "../gates.ts";
@@ -21,6 +21,9 @@ import {
 } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
+
+const openValuesOf = (properties: hybridnetwork.NetworkFunctionPropertiesFormat | undefined) =>
+  properties?.configurationType === "Open" ? properties.deploymentValues : undefined;
 
 // Managed Identity Operator (not in `BuiltInRole`).
 const MANAGED_IDENTITY_OPERATOR = "f1a07417-d97a-45cb-824c-7a7467783830";
@@ -202,14 +205,14 @@ test.provider.skip(
       });
       const observed = yield* get;
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
-      expect(JSON.parse(observed.properties?.deploymentValues ?? "{}")).toEqual({ region: "one" });
+      expect(JSON.parse(openValuesOf(observed.properties) ?? "{}")).toEqual({ region: "one" });
       expect(observed.tags?.env).toEqual("one");
 
       // In-place: deployment values (redeploy) and tags.
       const updated = yield* stack.deploy(program({ region: "two", tags: { env: "two" } }));
       expect(updated.nf.networkFunctionId).toEqual(nf.networkFunctionId);
       const reobserved = yield* get;
-      expect(JSON.parse(reobserved.properties?.deploymentValues ?? "{}")).toEqual({
+      expect(JSON.parse(openValuesOf(reobserved.properties) ?? "{}")).toEqual({
         region: "two",
       });
       expect(reobserved.tags?.env).toEqual("two");

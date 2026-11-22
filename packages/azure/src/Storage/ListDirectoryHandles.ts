@@ -43,8 +43,14 @@ export interface ListDirectoryHandles extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListDirectoryHandlesRequest,
-    ) => Effect.Effect<files.ListDirectoryHandlesResponse, files.ListDirectoryHandlesError, RuntimeContext>
+    ) => Effect.Effect<
+      files.ListDirectoryHandlesResponse,
+      files.ListDirectoryHandlesError,
+      RuntimeContext
+    >
   >
 > {}
 
-export const ListDirectoryHandles = Binding.Service<ListDirectoryHandles>("Azure.Storage.ListDirectoryHandles");
+export const ListDirectoryHandles = Binding.Service<ListDirectoryHandles>(
+  "Azure.Storage.ListDirectoryHandles",
+);

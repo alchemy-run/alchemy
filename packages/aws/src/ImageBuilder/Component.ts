@@ -4,6 +4,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -15,6 +16,11 @@ import {
   syncImageBuilderTags,
   toTagRecord,
 } from "./internal.ts";
+
+export class ComponentUnexpectedResponse extends Data.TaggedError("ComponentUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * A Component must define its document inline (`data`) or point at an S3
@@ -111,8 +117,18 @@ export interface Component extends Resource<
     dateCreated: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ComponentLookup
 > {}
+
+/**
+ * Props for {@link Component.lookup}: find a component this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ComponentLookup {
+  /** The component build version arn of the existing component. */
+  componentBuildVersionArn: string;
+}
 
 /**
  * An EC2 Image Builder component — a YAML document that defines the build,
@@ -151,6 +167,16 @@ export interface Component extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing component
+ * `Component.lookup` references a component Alchemy doesn't manage (created in the
+ * console or by another stack), found by `componentBuildVersionArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing component
+ * ```typescript
+ * const existing = AWS.ImageBuilder.Component.lookup({ componentBuildVersionArn: "my-component" });
+ * ```
+ *
  * @resource
  */
 export const Component = Resource<Component>("AWS.ImageBuilder.Component");
@@ -177,15 +203,15 @@ export const ComponentProvider = () =>
       const getComponent = Effect.fn(function* (arn: string) {
         const response = yield* imagebuilder
           .getComponent({ componentBuildVersionArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.component;
       });
 
       const toAttrs = Effect.fn(function* (component: imagebuilder.Component) {
         if (!component.arn || !component.name || !component.version) {
-          return yield* Effect.fail(
-            new Error("Image Builder component is missing its ARN, name, or version"),
-          );
+          return yield* new ComponentUnexpectedResponse({
+            message: "Image Builder component is missing its ARN, name, or version",
+          });
         }
         return {
           componentName: component.name,
@@ -222,6 +248,13 @@ export const ComponentProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ componentBuildVersionArn: arn }) {
+          const component = yield* getComponent(arn);
+          if (component === undefined) return undefined;
+          const attrs = yield* toAttrs(component);
+          return attrs;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const arn =
             output?.componentBuildVersionArn ??
@@ -236,7 +269,8 @@ export const ComponentProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           // One idempotency token per reconcile — retries within this run
           // are deduplicated by the API.
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
           if ((news.data === undefined) === (news.uri === undefined)) {
             return yield* new ComponentSourceInvalid({
               message:
@@ -281,15 +315,15 @@ export const ComponentProvider = () =>
               clientToken,
             });
             if (!created.componentBuildVersionArn) {
-              return yield* Effect.fail(
-                new Error("CreateComponent returned no componentBuildVersionArn"),
-              );
+              return yield* new ComponentUnexpectedResponse({
+                message: "CreateComponent returned no componentBuildVersionArn",
+              });
             }
             observed = yield* getComponent(created.componentBuildVersionArn);
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(`created Image Builder component '${name}' is not readable`),
-              );
+              return yield* new ComponentUnexpectedResponse({
+                message: `created Image Builder component '${name}' is not readable`,
+              });
             }
           }
 

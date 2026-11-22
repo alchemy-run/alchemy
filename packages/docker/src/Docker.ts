@@ -65,6 +65,12 @@ export class Docker extends Context.Service<
         image: string;
         volume: Array<string> | undefined;
         env: Record<string, string> | undefined;
+        /** Overrides the image's ENTRYPOINT executable. */
+        entrypoint?: string | undefined;
+        /** Working directory for the container process. */
+        workdir?: string | undefined;
+        /** Image platform, e.g. `linux/amd64`. */
+        platform?: string | undefined;
         /** Paths to Docker env files, forwarded as repeated `--env-file`. */
         "env-file"?: Array<string> | undefined;
         restart: "no" | "always" | "on-failure" | "unless-stopped";
@@ -81,10 +87,70 @@ export class Docker extends Context.Service<
         p: Array<string> | undefined;
         /** `--add-host` entries, each `hostname:address`. */
         "add-host"?: Array<string> | undefined;
+        /** Container hostname. */
+        hostname?: string | undefined;
+        /** Explicit DNS servers. */
+        dns?: Array<string> | undefined;
+        /** DNS search domains. */
+        "dns-search"?: Array<string> | undefined;
+        /** Resolver options such as `ndots:1`. */
+        "dns-option"?: Array<string> | undefined;
         /** Docker network namespace, including `container:<id>`. */
         network?: string | undefined;
+        /** IPC namespace mode. */
+        ipc?: string | undefined;
+        /** PID namespace mode. */
+        pid?: string | undefined;
+        /** Namespace-scoped sysctls. */
+        sysctl?: Record<string, string> | undefined;
         /** Linux capabilities to add. */
         "cap-add"?: Array<string> | undefined;
+        /** Linux capabilities to drop. */
+        "cap-drop"?: Array<string> | undefined;
+        /** Hard memory limit in Docker's byte-suffix format. */
+        memory?: string | undefined;
+        /** Shared-memory filesystem size (`/dev/shm`). */
+        "shm-size"?: string | undefined;
+        /** Combined memory-and-swap limit in Docker's byte-suffix format. */
+        "memory-swap"?: string | undefined;
+        /** Soft memory reservation for memory contention. */
+        "memory-reservation"?: string | undefined;
+        /** CPU quota, in cores. */
+        cpus?: number | undefined;
+        /** Per-container process and thread limit. */
+        "pids-limit"?: number | undefined;
+        /** Mount the root filesystem read-only. */
+        "read-only"?: boolean | undefined;
+        /** Enable Docker privileged mode. */
+        privileged?: boolean | undefined;
+        /** Security options such as `no-new-privileges` and seccomp/AppArmor profiles. */
+        "security-opt"?: Array<string> | undefined;
+        /** Per-container user namespace; "host" disables daemon user remapping. */
+        userns?: string | undefined;
+        /** Supplemental Linux groups. */
+        "group-add"?: Array<string> | undefined;
+        /** Per-process soft/hard resource limits. */
+        ulimit?: Array<string> | undefined;
+        /** Docker log driver. */
+        "log-driver"?: string | undefined;
+        /** Driver-specific Docker logging options. */
+        "log-opt"?: Array<string> | undefined;
+        /** Kernel OOM score adjustment. */
+        "oom-score-adj"?: number | undefined;
+        /** Signal used on container stop. */
+        "stop-signal"?: string | undefined;
+        /** Run Docker's tiny init process. */
+        init?: boolean | undefined;
+        /** Runtime UID/GID or named user. */
+        user?: string | undefined;
+        /** Keep stdin open when detached. */
+        interactive?: boolean | undefined;
+        /** Allocate a TTY. */
+        tty?: boolean | undefined;
+        /** GPU device request, e.g. `all`. */
+        gpus?: string | undefined;
+        /** Docker tmpfs mount expressions (target[:options]). */
+        tmpfs?: Array<string> | undefined;
         /** Host devices in Docker's `host:container[:permissions]` form. */
         device?: Array<string> | undefined;
         command: Array<string> | undefined;
@@ -130,6 +196,12 @@ export class Docker extends Context.Service<
           platform?: string;
           target?: string;
           "build-arg"?: Record<string, string>;
+          /**
+           * BuildKit secrets, keyed by id (`RUN --mount=type=secret,id=<id>`).
+           * Values reach `docker` through its environment, never its argv,
+           * and are not written to the image.
+           */
+          secrets?: Record<string, string | Redacted.Redacted<string>>;
           "cache-from"?: Array<string>;
           "cache-to"?: Array<string>;
           args?: Array<string>;
@@ -229,7 +301,26 @@ export class Docker extends Context.Service<
       readonly create: (options: {
         name: string;
         driver: string;
+        /** Whether the network is isolated from external connectivity. */
+        internal?: boolean;
+        /** Whether standalone containers may attach to the network. */
+        attachable?: boolean;
+        /** Explicitly enable or disable IPv4 address allocation. */
+        ipv4?: boolean;
         ipv6?: boolean;
+        /** Network driver options, passed as repeated `--opt` arguments. */
+        opt?: Record<string, string>;
+        /** Network IP Address Management settings. */
+        ipam?: {
+          driver?: string;
+          options?: Record<string, string>;
+          config?: Array<{
+            subnet: string;
+            gateway?: string;
+            ipRange?: string;
+            auxAddresses?: Record<string, string>;
+          }>;
+        };
         label?: Record<string, string>;
         context?: string;
       }) => Effect.Effect<CommandOutput, PlatformError>;
@@ -238,6 +329,11 @@ export class Docker extends Context.Service<
         network: string;
         container: string;
         alias?: string[];
+        ip?: string;
+        ip6?: string;
+        "gw-priority"?: number;
+        /** Driver options for the endpoint, not for the network resource. */
+        "driver-opt"?: Record<string, string>;
         context?: string;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Disconnects a container from a network. */
@@ -325,12 +421,16 @@ export class Docker extends Context.Service<
         id: string;
         image: string;
         context?: string;
+        /** `--force`: replace every task, even when the spec is unchanged. */
+        force?: boolean;
         replicas?: number;
         "endpoint-mode"?: "vip" | "dnsrr";
+        /** Networks to detach, by name or id; applied before `network-add`. */
+        "network-rm"?: string[];
+        "network-add"?: string[];
         "constraint-add"?: string[];
         "constraint-rm"?: string[];
         "replicas-max-per-node"?: number;
-        "placement-pref"?: string[];
         "update-parallelism"?: number;
         "update-delay"?: string;
         "update-monitor"?: string;
@@ -356,13 +456,23 @@ export class Docker extends Context.Service<
         "health-start-period"?: string;
         "stop-grace-period"?: string;
         "mount-add"?: string[];
+        /** Mount targets to remove. */
+        "mount-rm"?: string[];
         "secret-add"?: string[];
+        /** Secret names to remove; applied before `secret-add`. */
+        "secret-rm"?: string[];
         "config-add"?: string[];
+        /** Config names to remove; applied before `config-add`. */
+        "config-rm"?: string[];
         "read-only"?: boolean;
         "publish-add"?: string[];
+        /** Published ports to remove, as `target=<port>,protocol=<p>,mode=<m>`. */
+        "publish-rm"?: string[];
         "label-add"?: Record<string, string>;
         "label-rm"?: string[];
         "env-add"?: Record<string, string>;
+        /** Environment variable names to remove. */
+        "env-rm"?: string[];
         args?: string;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Inspects a service. */
@@ -423,6 +533,13 @@ export declare namespace Docker {
       Image: string;
       Cmd: string[] | null;
       Env: string[] | null;
+      Hostname?: string;
+      Entrypoint?: string[] | null;
+      WorkingDir?: string;
+      Tty?: boolean;
+      OpenStdin?: boolean;
+      User?: string;
+      StopSignal?: string;
       Labels: Record<string, string> | null;
       StopTimeout?: number;
       Healthcheck?: {
@@ -438,18 +555,60 @@ export declare namespace Docker {
       PortBindings: Record<string, Array<{ HostIp: string; HostPort: string }> | null> | null;
       Binds: string[] | null;
       ExtraHosts: string[] | null;
+      Dns?: string[];
+      DnsSearch?: string[];
+      DnsOptions?: string[];
       RestartPolicy: { Name: string; MaximumRetryCount: number };
       AutoRemove: boolean;
       NetworkMode?: string;
       CapAdd?: string[] | null;
+      CapDrop?: string[] | null;
+      Memory?: number;
+      ShmSize?: number;
+      IpcMode?: string;
+      PidMode?: string;
+      Sysctls?: Record<string, string> | null;
+      Privileged?: boolean;
+      DeviceRequests?: Array<{
+        Driver?: string;
+        Count?: number;
+        DeviceIDs?: string[] | null;
+        Capabilities?: string[][];
+        Options?: Record<string, string>;
+      }> | null;
+      MemorySwap?: number;
+      MemoryReservation?: number;
+      NanoCpus?: number;
+      PidsLimit?: number;
+      ReadonlyRootfs?: boolean;
+      SecurityOpt?: string[] | null;
+      UsernsMode?: string;
+      GroupAdd?: string[] | null;
+      Ulimits?: Array<{ Name: string; Soft: number; Hard: number }> | null;
+      LogConfig?: { Type: string; Config: Record<string, string> | null };
+      OomScoreAdj?: number;
+      Init?: boolean | null;
+      Tmpfs?: Record<string, string> | null;
       Devices?: Array<{
         PathOnHost: string;
         PathInContainer: string;
         CgroupPermissions: string;
       }> | null;
     };
+    AppArmorProfile?: string;
     NetworkSettings: {
-      Networks: Record<string, { NetworkID: string; Aliases: string[] | null }> | null;
+      Networks: Record<
+        string,
+        {
+          NetworkID: string;
+          Aliases: string[] | null;
+          IPAMConfig?: { IPv4Address?: string; IPv6Address?: string } | null;
+          IPAddress?: string;
+          GlobalIPv6Address?: string;
+          GwPriority?: number;
+          DriverOpts?: Record<string, string> | null;
+        }
+      > | null;
       Ports?: Record<string, Array<{ HostIp: string; HostPort: string }> | null> | null;
     };
   }
@@ -483,7 +642,21 @@ export declare namespace Docker {
     Created: string;
     Scope: string;
     Driver: string;
+    Internal?: boolean;
+    Attachable?: boolean;
+    EnableIPv4?: boolean;
     EnableIPv6: boolean;
+    Options?: Record<string, string> | null;
+    IPAM?: {
+      Driver?: string;
+      Options?: Record<string, string> | null;
+      Config?: Array<{
+        Subnet: string;
+        Gateway?: string;
+        IPRange?: string;
+        AuxiliaryAddresses?: Record<string, string> | null;
+      }> | null;
+    };
     Labels: Record<string, string> | null;
   }
 }
@@ -606,12 +779,24 @@ const makeDocker = (options: DockerOptions) =>
         }),
       );
 
+    // Merge `credentials` into the ambient auth config: the process's
+    // DOCKER_AUTH_CONFIG, overlaid by one provided through DockerEnvironment
+    // (as `run` layers DockerEnvironment over the process environment).
+    // Merging, not replacing, keeps the user's own registry logins.
     const registryEnvironment = Effect.fn("registryEnvironment")(
       (credentials: RegistryCredentials) =>
-        Config.Redacted("DOCKER_AUTH_CONFIG").pipe(
-          Config.withDefault(Redacted.make("{}")),
-          Effect.map((value) => Redacted.value(value) || "{}"),
-          Effect.flatMap(decodeRegistryAuthConfig),
+        Effect.gen(function* () {
+          const value = yield* Config.Redacted("DOCKER_AUTH_CONFIG").pipe(
+            Config.withDefault(Redacted.make("{}")),
+          );
+          const base = yield* decodeRegistryAuthConfig(Redacted.value(value) || "{}");
+          const ambient = yield* DockerEnvironment;
+          const overlay =
+            ambient.DOCKER_AUTH_CONFIG === undefined
+              ? undefined
+              : yield* decodeRegistryAuthConfig(ambient.DOCKER_AUTH_CONFIG || "{}");
+          return { auths: { ...base.auths, ...overlay?.auths } };
+        }).pipe(
           // Schema diagnostics may include credential input. Do not retain them.
           Effect.mapError(() =>
             systemError({
@@ -698,6 +883,30 @@ const makeDocker = (options: DockerOptions) =>
         // race. Only `push` reads this config; `build`/`pull`/`tag` keep using the
         // global docker config (buildx builders, `docker context`, etc. intact).
         const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-" });
+        // The isolated DOCKER_CONFIG holds none of the CLI's contexts. Ask the CLI
+        // (same environment as the push) which context it would use, and copy just
+        // that context's metadata and TLS material in.
+        const selected =
+          context ??
+          (yield* run(["context", "show"]).pipe(
+            Effect.map((result) => result.stdout),
+            Effect.orElseSucceed(() => "default"),
+          ));
+        if (selected && selected !== "default") {
+          const inspected = yield* runInspect<{
+            Storage: { MetadataPath: string; TLSPath: string };
+          }>(["context", "inspect", selected]);
+          for (const [kind, source] of [
+            ["meta", inspected.Storage.MetadataPath],
+            ["tls", inspected.Storage.TLSPath],
+          ] as const) {
+            if (!(yield* fs.exists(source))) continue;
+            const target = path.join(dir, "contexts", kind, path.basename(source));
+            yield* fs.makeDirectory(path.dirname(target), { recursive: true });
+            yield* fs.copy(source, target);
+          }
+        }
+        const pushContext = selected && selected !== "default" ? selected : context;
         const config = yield* Effect.sync(() => {
           const password = Redacted.isRedacted(credentials.password)
             ? Redacted.value(credentials.password)
@@ -711,12 +920,19 @@ const makeDocker = (options: DockerOptions) =>
         const result =
           platform === undefined
             ? yield* run(
-                [...formatArgs({ context }), "push", ...digestArgs, ref],
+                [...formatArgs({ context: pushContext }), "push", ...digestArgs, ref],
                 { DOCKER_CONFIG: dir },
                 outputTap(session),
               )
             : yield* run(
-                [...formatArgs({ context }), "push", "--platform", platform, ...digestArgs, ref],
+                [
+                  ...formatArgs({ context: pushContext }),
+                  "push",
+                  "--platform",
+                  platform,
+                  ...digestArgs,
+                  ref,
+                ],
                 { DOCKER_CONFIG: dir },
                 outputTap(session),
               ).pipe(
@@ -727,7 +943,7 @@ const makeDocker = (options: DockerOptions) =>
                   (error) => /--platform|unknown flag|containerd/i.test(String(error)),
                   () =>
                     run(
-                      [...formatArgs({ context }), "push", ...digestArgs, ref],
+                      [...formatArgs({ context: pushContext }), "push", ...digestArgs, ref],
                       { DOCKER_CONFIG: dir },
                       outputTap(session),
                     ),
@@ -789,17 +1005,21 @@ const makeDocker = (options: DockerOptions) =>
       },
       image: {
         build: Effect.fn("Docker.image.build")(function* (
-          { context: buildContext, engineContext, args, credentials, ...options },
+          { context: buildContext, engineContext, args, credentials, secrets, ...options },
           session,
           registry,
         ) {
           const tap = outputTap(session);
-          const buildArgs = [buildContext, ...formatArgs(options), ...(args ?? [])];
+          const secret = buildSecrets(secrets);
+          const buildArgs = [buildContext, ...formatArgs(options), ...secret.args, ...(args ?? [])];
           const engine = formatArgs({ context: engineContext });
           if (registry === undefined) {
             return yield* run(
               [...engine, "image", "build", ...buildArgs],
-              credentials ? yield* registryEnvironment(credentials) : undefined,
+              {
+                ...(credentials ? yield* registryEnvironment(credentials) : undefined),
+                ...secret.env,
+              },
               tap,
             );
           }
@@ -810,7 +1030,7 @@ const makeDocker = (options: DockerOptions) =>
             const env = yield* registryEnvironment(registry);
             return yield* run(
               [...engine, "buildx", "build", "--push", ...buildArgs],
-              env,
+              { ...env, ...secret.env },
               tap,
             ).pipe(Effect.mapError(classifyDockerRegistryError));
           }
@@ -826,7 +1046,7 @@ const makeDocker = (options: DockerOptions) =>
               ...(mode === "load" ? ["buildx", "build", "--load"] : ["image", "build"]),
               ...buildArgs,
             ],
-            undefined,
+            secret.env,
             tap,
           );
           const [tag, ...tags] =
@@ -881,22 +1101,58 @@ const makeDocker = (options: DockerOptions) =>
         remove: (name, force) => run(["context", "rm", ...(force ? ["-f"] : []), name]),
       },
       network: {
-        create: ({ name, driver, ipv6, label, context }) =>
+        create: ({ name, driver, internal, attachable, ipv4, ipv6, opt, ipam, label, context }) =>
           run([
             ...formatArgs({ context }),
             "network",
             "create",
+            ...formatArgs({
+              driver,
+              internal,
+              attachable,
+              ipv6,
+              opt,
+              "ipam-driver": ipam?.driver,
+              "ipam-opt": ipam?.options,
+              label,
+            }),
+            // Docker's boolean --ipv4=false needs an equals sign; the generic
+            // CLI formatter intentionally skips false values elsewhere.
+            ...(ipv4 === undefined ? [] : [`--ipv4=` + String(ipv4)]),
+            ...(ipam?.config ?? []).flatMap(({ subnet, gateway, ipRange, auxAddresses }) => [
+              "--subnet",
+              subnet,
+              ...(gateway === undefined ? [] : ["--gateway", gateway]),
+              ...(ipRange === undefined ? [] : ["--ip-range", ipRange]),
+              ...Object.entries(auxAddresses ?? {})
+                .sort(([a], [b]) => a.localeCompare(b))
+                .flatMap(([key, value]) => ["--aux-address", key + "=" + value]),
+            ]),
             name,
-            ...formatArgs({ driver, ipv6, label }),
           ]),
-        connect: ({ network, container, alias, context }) =>
+        connect: ({
+          network,
+          container,
+          alias,
+          ip,
+          ip6,
+          "gw-priority": gatewayPriority,
+          "driver-opt": driverOpts,
+          context,
+        }) =>
           run([
             ...formatArgs({ context }),
             "network",
             "connect",
+            ...formatArgs({
+              alias,
+              ip,
+              ip6,
+              "gw-priority": gatewayPriority,
+              "driver-opt": driverOpts,
+            }),
             network,
             container,
-            ...(alias ? alias.flatMap((a) => ["--alias", a]) : []),
           ]),
         disconnect: ({ network, container, context }) =>
           run([...formatArgs({ context }), "network", "disconnect", network, container]),
@@ -1005,6 +1261,22 @@ const systemError = (input: {
     }),
   );
 
+/**
+ * `--secret id=<id>,env=<var>` per secret, with each value under a generated
+ * variable name: an id is the Dockerfile author's choice and may collide with
+ * the environment Docker itself reads (`PATH`, `DOCKER_HOST`).
+ */
+const buildSecrets = (secrets: Record<string, string | Redacted.Redacted<string>> | undefined) => {
+  const args: Array<string> = [];
+  const env: Record<string, string> = {};
+  Object.entries(secrets ?? {}).forEach(([id, value], index) => {
+    const variable = `ALCHEMY_BUILD_SECRET_${index}`;
+    args.push("--secret", `id=${id},env=${variable}`);
+    env[variable] = Redacted.isRedacted(value) ? Redacted.value(value) : value;
+  });
+  return { args, env };
+};
+
 /** Formats a set of options into a list of command-line arguments. */
 const formatArgs = (
   options: Record<
@@ -1014,7 +1286,9 @@ const formatArgs = (
 ) => {
   const args: Array<string> = [];
   for (const [key, value] of Object.entries(options)) {
-    if (!value) continue;
+    // `0` is meaningful (`--replicas 0`, `--update-parallelism 0`), so only
+    // absent, `false` and empty values are omitted.
+    if (value === undefined || value === false || value === "") continue;
     const prefix = key.length > 1 ? `--${key}` : `-${key}`;
     if (value === true) {
       args.push(prefix);

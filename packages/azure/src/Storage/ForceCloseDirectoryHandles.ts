@@ -6,7 +6,8 @@ import type { FileShare } from "./FileShare.ts";
 import type { FileShareRequest } from "./FileShareTypes.ts";
 
 /** `DirectoryForceCloseHandles` without the `url`, `shareName` and `xMsFileRequestIntent` the bound share supplies. */
-export type ForceCloseDirectoryHandlesRequest = FileShareRequest<files.DirectoryForceCloseHandlesRequest>;
+export type ForceCloseDirectoryHandlesRequest =
+  FileShareRequest<files.DirectoryForceCloseHandlesRequest>;
 
 /**
  * Force-close open SMB handles on a directory (and, recursively, its files) in an Azure Files share, over the File REST API with Microsoft Entra tokens
@@ -45,8 +46,14 @@ export interface ForceCloseDirectoryHandles extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ForceCloseDirectoryHandlesRequest,
-    ) => Effect.Effect<files.DirectoryForceCloseHandlesResponse, files.DirectoryForceCloseHandlesError, RuntimeContext>
+    ) => Effect.Effect<
+      files.DirectoryForceCloseHandlesResponse,
+      files.DirectoryForceCloseHandlesError,
+      RuntimeContext
+    >
   >
 > {}
 
-export const ForceCloseDirectoryHandles = Binding.Service<ForceCloseDirectoryHandles>("Azure.Storage.ForceCloseDirectoryHandles");
+export const ForceCloseDirectoryHandles = Binding.Service<ForceCloseDirectoryHandles>(
+  "Azure.Storage.ForceCloseDirectoryHandles",
+);

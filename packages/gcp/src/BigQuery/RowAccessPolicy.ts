@@ -123,7 +123,7 @@ export const RowAccessPolicy = Resource<RowAccessPolicy>("GCP.BigQuery.RowAccess
 export class RowAccessPolicyNotResolved extends Data.TaggedError(
   "GCP.BigQuery.RowAccessPolicyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -221,7 +221,7 @@ const getByRef = (projectId: string, datasetId: string, tableId: string, policyI
       tableId,
       policyId,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toPolicyBody = (
   projectId: string,
@@ -389,10 +389,10 @@ export const RowAccessPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* bigquery
           .insertRowAccessPolicies({
+            ...toPolicyBody(env.project, datasetId, tableId, policyId, news, filter, true),
             projectId: env.project,
             datasetId,
             tableId,
-            body: toPolicyBody(env.project, datasetId, tableId, policyId, news, filter, true),
           })
           .pipe(
             Effect.catchTag("Conflict", () => getByRef(env.project, datasetId, tableId, policyId)),
@@ -401,27 +401,27 @@ export const RowAccessPolicyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RowAccessPolicyNotResolved({ name });
+        return yield* new RowAccessPolicyNotResolved({ resourceName: name });
       }
 
       const observedFilter = current.filterPredicate ?? "";
       if (!sameFilter(observedFilter, filter)) {
         current = yield* bigquery
           .updateRowAccessPolicies({
+            ...toPolicyBody(env.project, datasetId, tableId, policyId, news, filter, false),
             projectId: env.project,
             datasetId,
             tableId,
             policyId,
-            body: toPolicyBody(env.project, datasetId, tableId, policyId, news, filter, false),
           })
           .pipe(
             Effect.catchTag("NotFound", () =>
               bigquery
                 .insertRowAccessPolicies({
+                  ...toPolicyBody(env.project, datasetId, tableId, policyId, news, filter, true),
                   projectId: env.project,
                   datasetId,
                   tableId,
-                  body: toPolicyBody(env.project, datasetId, tableId, policyId, news, filter, true),
                 })
                 .pipe(
                   Effect.catchTag("Conflict", () =>
@@ -431,7 +431,7 @@ export const RowAccessPolicyProvider = () =>
             ),
           );
         if (current === undefined) {
-          return yield* new RowAccessPolicyNotResolved({ name });
+          return yield* new RowAccessPolicyNotResolved({ resourceName: name });
         }
       }
 

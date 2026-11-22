@@ -84,7 +84,7 @@ export type SslCert = Resource<
  * ```typescript
  * const instance = yield* GCP.SQL.Instance("AppDb", {
  *   tier: "db-f1-micro",
- *   backupEnabled: false,
+ *   backup: { enabled: false },
  * });
  * const cert = yield* GCP.SQL.SslCert("Client", {
  *   instance: instance.instanceName,
@@ -174,18 +174,18 @@ const toAttrs = (
 
 const getByFingerprint = (project: string, instance: string, sha1Fingerprint: string) =>
   sha1Fingerprint.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : sqladmin.getSslCerts({ project, instance, sha1Fingerprint }).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
         recoverIfInstanceMissing(project, instance, () => undefined),
       );
 
 const findByCommonName = (project: string, instance: string, commonName: string) =>
   commonName.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : sqladmin.listSslCerts({ project, instance }).pipe(
         Effect.map((page) => (page.items ?? []).find((cert) => cert.commonName === commonName)),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
         recoverIfInstanceMissing(project, instance, () => undefined),
       );
 
@@ -344,20 +344,14 @@ export const SslCertProvider = () =>
 
       if (current === undefined) {
         const inserted = yield* sqladmin
-          .insertSslCerts({
-            project: env.project,
-            instance,
-            body: { commonName },
-          })
+          .insertSslCerts({ commonName, project: env.project, instance })
           .pipe(
             Effect.tap((response) =>
               response.operation ? waitForOperation(env.project, response.operation) : Effect.void,
             ),
             Effect.catchTag("Conflict", (error) =>
               findByCommonName(env.project, instance, commonName).pipe(
-                Effect.flatMap((existing) =>
-                  existing ? Effect.succeed(undefined) : Effect.fail(error),
-                ),
+                Effect.flatMap((existing) => (existing ? Effect.undefined : Effect.fail(error))),
               ),
             ),
             Effect.retry({

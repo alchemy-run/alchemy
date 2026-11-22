@@ -1,10 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as s3control from "@distilled.cloud/aws/s3-control";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -15,8 +15,8 @@ import S3ControlBindingsFunctionLive, {
 } from "./fixtures/bindings-handler.ts";
 import S3ControlMrapBindingsFunctionLive, {
   S3ControlMrapBindingsFunction,
-  SECOND_REGION,
   secondRegionBucketName,
+  secondRegionFor,
 } from "./fixtures/mrap-bindings-handler.ts";
 
 const testOptions = { providers: AWS.providers() };
@@ -220,9 +220,12 @@ describe.skipIf(!!process.env.FAST).sequential(
     let mrapBaseUrl: string;
 
     const secondBucket = secondRegionBucketName(mrapStack.stage);
-    const inSecondRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    const inSecondRegion = <A, E, R>(effect: (region: string) => Effect.Effect<A, E, R>) =>
       Core.withProviders(
-        effect.pipe(Effect.provideService(Region, Effect.succeed(SECOND_REGION))),
+        Effect.gen(function* () {
+          const region = secondRegionFor(yield* yield* Region);
+          return yield* effect(region).pipe(Effect.provideService(Region, Effect.succeed(region)));
+        }),
         testOptions,
         "S3ControlMrapBindings",
       );
@@ -230,9 +233,18 @@ describe.skipIf(!!process.env.FAST).sequential(
     beforeAll(
       Effect.gen(function* () {
         yield* mrapStack.destroy();
-        yield* inSecondRegion(
+        yield* inSecondRegion((region) =>
           s3
-            .createBucket({ Bucket: secondBucket })
+            .createBucket({
+              Bucket: secondBucket,
+              ...(region === "us-east-1"
+                ? {}
+                : {
+                    CreateBucketConfiguration: {
+                      LocationConstraint: region as s3.BucketLocationConstraint,
+                    },
+                  }),
+            })
             .pipe(Effect.catchTag("BucketAlreadyOwnedByYou", () => Effect.void)),
         );
         const attrs = yield* mrapStack.deploy(
@@ -248,17 +260,21 @@ describe.skipIf(!!process.env.FAST).sequential(
     );
 
     afterAll(
-      mrapStack
-        .destroy()
-        .pipe(
-          Effect.andThen(
-            inSecondRegion(
-              s3
-                .deleteBucket({ Bucket: secondBucket })
-                .pipe(Effect.catchTag("NoSuchBucket", () => Effect.void)),
+      mrapStack.destroy().pipe(
+        Effect.andThen(
+          inSecondRegion(() =>
+            // S3 still reports the deleted MRAP as attached for a while.
+            s3.deleteBucket({ Bucket: secondBucket }).pipe(
+              Effect.retry({
+                while: (error) => error._tag === "BucketHasAccessPointsAttached",
+                schedule: Schedule.spaced("5 seconds"),
+                times: 24,
+              }),
+              Effect.catchTag("NoSuchBucket", () => Effect.void),
             ),
           ),
         ),
+      ),
       { timeout: 1_200_000 },
     );
 

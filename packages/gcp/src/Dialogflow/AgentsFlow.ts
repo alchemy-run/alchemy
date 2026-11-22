@@ -141,7 +141,7 @@ export const AgentsFlow = Resource<AgentsFlow>("GCP.Dialogflow.AgentsFlow");
 export class AgentsFlowNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsFlowNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const nluOf = (
@@ -173,10 +173,10 @@ const toAttrs = (flow: dialogflow.GoogleCloudDialogflowCxV3Flow, project: string
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsFlows({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findOwned = (id: string, agent: string, hinted?: string) =>
   Effect.gen(function* () {
@@ -271,9 +271,9 @@ export const AgentsFlowProvider = () =>
       if (current === undefined) {
         const created = yield* dialogflow
           .createProjectsLocationsAgentsFlows({
+            ...body,
             parent: agent,
             languageCode: news.languageCode,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(id, agent, output?.name)));
         current = created ?? undefined;
@@ -281,7 +281,7 @@ export const AgentsFlowProvider = () =>
 
       if (current === undefined) {
         return yield* new AgentsFlowNotResolved({
-          name: output?.name ?? `${agent}/flows/${news.flowId ?? "unknown"}`,
+          resourceName: output?.name ?? `${agent}/flows/${news.flowId ?? "unknown"}`,
         });
       }
 
@@ -293,6 +293,7 @@ export const AgentsFlowProvider = () =>
 
       if (displayChanged || descriptionChanged || nluChanged || lockedChanged) {
         current = yield* dialogflow.patchProjectsLocationsAgentsFlows({
+          ...body,
           name: currentName,
           languageCode: news.languageCode,
           updateMask: updateMaskOf(
@@ -301,7 +302,6 @@ export const AgentsFlowProvider = () =>
             nluChanged ? "nlu_settings" : undefined,
             lockedChanged ? "locked" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
       }
 

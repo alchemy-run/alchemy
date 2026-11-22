@@ -1,4 +1,5 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
+import * as VolumeActions from "@distilled.cloud/hetzner/volume_actions";
+import * as Volumes from "@distilled.cloud/hetzner/volumes";
 import type { GetVolumeResponseVolume } from "@distilled.cloud/hetzner/volumes";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
@@ -167,9 +168,9 @@ const serverIdOf = (value: unknown): number | undefined => {
 };
 
 const getById = (id: number) =>
-  Hetzner.volumes.getVolume({ id }).pipe(
+  Volumes.getVolume({ id }).pipe(
     Effect.map(({ volume }) => volume),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const toAttrs = (
@@ -190,7 +191,7 @@ const waitUntilServer = (volumeId: number, serverId: number | null) =>
     Effect.flatMap((volume) => {
       if (volume === undefined) {
         return serverId === null
-          ? Effect.succeed(undefined)
+          ? Effect.undefined
           : Effect.fail(
               new AttachmentPending({
                 volumeId,
@@ -223,42 +224,41 @@ const waitUntilServer = (volumeId: number, serverId: number | null) =>
   );
 
 const detach = (volumeId: number) =>
-  Hetzner.volumeActions.detachVolume({ id: volumeId }).pipe(
+  VolumeActions.detachVolume({ id: volumeId }).pipe(
     Effect.tap(({ action }) =>
       waitForAction(action).pipe(
-        // Volume detach can outlive the action poll under load; observe
-        // the Volume's `server` field instead of failing the reconcile.
-        Effect.catchTag("ActionTimeout", () => Effect.void),
+        // Volume detach can outlive the action poll under load, and a
+        // concurrent Server delete can fail the action while it detaches
+        // the Volume itself. Callers observe the Volume's `server` field.
+        Effect.catchTag(["ActionTimeout", "ActionFailed"], () => Effect.void),
       ),
     ),
     Effect.catchTag(["NotFound", "UnprocessableEntity"], () => Effect.void),
   );
 
 const attach = (volumeId: number, serverId: number, automount: boolean) =>
-  Hetzner.volumeActions
-    .attachVolume({
-      id: volumeId,
-      server: serverId,
-      automount,
-    })
-    .pipe(
-      Effect.tap(({ action }) =>
-        waitForAction(action).pipe(Effect.catchTag("ActionTimeout", () => Effect.void)),
-      ),
-      Effect.catchTag("UnprocessableEntity", () => Effect.void),
-      Effect.retry({
-        while: retryable,
-        times: 10,
-        schedule: backoff,
-      }),
-    );
+  VolumeActions.attachVolume({
+    id: volumeId,
+    assignee: { id: serverId, type: "server" },
+    automount,
+  }).pipe(
+    Effect.tap(({ action }) =>
+      waitForAction(action).pipe(Effect.catchTag("ActionTimeout", () => Effect.void)),
+    ),
+    Effect.catchTag("UnprocessableEntity", () => Effect.void),
+    Effect.retry({
+      while: retryable,
+      times: 10,
+      schedule: backoff,
+    }),
+  );
 
 export const VolumeAttachmentProvider = () =>
   Provider.succeed(VolumeAttachment, {
     stables: ["volumeId", "serverId", "linuxDevice"],
     nuke: { dependsOn: ["Hetzner.Volume", "Hetzner.Server"] },
     list: Effect.fn(function* () {
-      const items = yield* Hetzner.volumes.listVolumes
+      const items = yield* Volumes.listVolumes
         .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,

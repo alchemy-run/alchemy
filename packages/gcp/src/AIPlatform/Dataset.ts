@@ -176,11 +176,11 @@ export type Dataset = Resource<
 export const Dataset = Resource<Dataset>("GCP.AIPlatform.Dataset");
 
 export class DatasetNotResolved extends Data.TaggedError("GCP.AIPlatform.DatasetNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class DatasetStillExists extends Data.TaggedError("GCP.AIPlatform.DatasetStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, datasetId: string) =>
@@ -226,10 +226,8 @@ const toAttrs = (dataset: aiplatform.GoogleCloudAiplatformV1Dataset, project: st
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
-    : aiplatform
-        .getDatasets({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    ? Effect.undefined
+    : aiplatform.getDatasets({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listDatasets = (project: string, region: string) =>
   Effect.forEach(listLocations(region), (location) =>
@@ -268,7 +266,9 @@ const findOwned = (id: string, project: string, region: string, hinted?: string)
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((dataset) =>
-      dataset ? Effect.succeed(dataset) : Effect.fail(new DatasetNotResolved({ name })),
+      dataset
+        ? Effect.succeed(dataset)
+        : Effect.fail(new DatasetNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.DatasetNotResolved",
@@ -280,7 +280,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((dataset) =>
-      dataset === undefined ? Effect.void : Effect.fail(new DatasetStillExists({ name })),
+      dataset === undefined
+        ? Effect.void
+        : Effect.fail(new DatasetStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.DatasetStillExists",
@@ -367,19 +369,17 @@ export const DatasetProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsDatasets({
+            displayName,
+            description: news.description,
+            labels: desiredLabels,
+            metadataSchemaUri,
+            metadata: news.metadata ?? {},
+            encryptionSpec: news.encryptionSpec,
+            modelReference: news.modelReference,
+            savedQueries: news.savedQueries,
             parent: parentOf(env.project, location),
-            body: {
-              displayName,
-              description: news.description,
-              labels: desiredLabels,
-              metadataSchemaUri,
-              metadata: news.metadata ?? {},
-              encryptionSpec: news.encryptionSpec,
-              modelReference: news.modelReference,
-              savedQueries: news.savedQueries,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
           const createdName =
@@ -396,7 +396,7 @@ export const DatasetProvider = () =>
 
       if (current === undefined) {
         return yield* new DatasetNotResolved({
-          name: output?.name ?? resourceName(env.project, location, datasetId),
+          resourceName: output?.name ?? resourceName(env.project, location, datasetId),
         });
       }
 
@@ -409,6 +409,9 @@ export const DatasetProvider = () =>
 
       if (labelsChanged || displayNameChanged || descriptionChanged) {
         current = yield* aiplatform.patchProjectsLocationsDatasets({
+          labels: desiredLabels,
+          displayName,
+          description: news.description,
           name,
           updateMask: [
             labelsChanged ? "labels" : undefined,
@@ -417,12 +420,6 @@ export const DatasetProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            displayName,
-            description: news.description,
-          },
         });
       }
 
@@ -434,7 +431,7 @@ export const DatasetProvider = () =>
       if (existing === undefined) return;
       const operation = yield* aiplatform
         .deleteDatasets({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

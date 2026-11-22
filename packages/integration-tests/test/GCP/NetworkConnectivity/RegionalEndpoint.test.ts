@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as networkconnectivity from "@distilled.cloud/gcp/networkconnectivity_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { DEFAULT_NETWORK, defaultNetworkSelfLink } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -76,6 +77,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { subnet, endpoint };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkConnectivity.RegionalEndpoint.lookup({
+          regionalEndpointId: created.endpoint.regionalEndpointId,
+          location: created.endpoint.location,
+        }),
+        created.endpoint,
       );
 
       expect(created.endpoint.name).toContain("/regionalEndpoints/");

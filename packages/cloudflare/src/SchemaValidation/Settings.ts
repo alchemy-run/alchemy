@@ -125,7 +125,7 @@ export const SettingsProvider = () =>
             // initial state (nothing has been managed yet).
             Effect.map((observed) => toAttributes(zoneId, observed, observedState(observed))),
             // A scoped token may lack access to some zones; skip them.
-            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+            Effect.catchTag("Forbidden", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );

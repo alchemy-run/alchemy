@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { managedPolicyArn, partitionOf } from "../Partition.ts";
 import { syncDataZoneTags, toTagRecord, unredact } from "./internal.ts";
 
 /**
@@ -92,8 +93,25 @@ export interface Domain extends Resource<
      * {@link DomainProps.domainExecutionRole} is used.
      */
     roleName: string | undefined;
-  }
+  },
+  never,
+  undefined,
+  DomainLookup
 > {}
+
+/**
+ * Props for {@link Domain.lookup}: find a domain this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type DomainLookup =
+  | {
+      /** The id of the existing domain. */
+      domainId: string;
+    }
+  | {
+      /** The name of the existing domain. */
+      name: string;
+    };
 
 /**
  * An Amazon DataZone domain — the top-level container for data-governance
@@ -133,6 +151,17 @@ export interface Domain extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing domain
+ * `Domain.lookup` references a domain Alchemy doesn't manage (created in the
+ * console or by another stack), found by `domainId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing domain
+ * ```typescript
+ * const catalog = AWS.DataZone.Domain.lookup({ name: "catalog" });
+ * const domainId = catalog.domainId;
+ * ```
+ *
  * @resource
  */
 export const Domain = Resource<Domain>("AWS.DataZone.Domain");
@@ -165,8 +194,7 @@ const retryWhileRoleAssumeFails = <A, E extends { _tag: string }, R>(
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
-const DOMAIN_EXECUTION_MANAGED_POLICY =
-  "arn:aws:iam::aws:policy/service-role/AmazonDataZoneDomainExecutionRolePolicy";
+const DOMAIN_EXECUTION_MANAGED_POLICY = "service-role/AmazonDataZoneDomainExecutionRolePolicy";
 
 export const DomainProvider = () =>
   Provider.effect(
@@ -185,8 +213,8 @@ export const DomainProvider = () =>
       const getDomainOrUndefined = Effect.fn(function* (identifier: string) {
         return yield* datazone.getDomain({ identifier }).pipe(
           Effect.catchTags({
-            ResourceNotFoundException: () => Effect.succeed(undefined),
-            AccessDeniedException: () => Effect.succeed(undefined),
+            ResourceNotFoundException: () => Effect.undefined,
+            AccessDeniedException: () => Effect.undefined,
           }),
         );
       });
@@ -229,7 +257,7 @@ export const DomainProvider = () =>
       });
 
       const domainArnOf = (region: string, accountId: string, domainId: string) =>
-        `arn:aws:datazone:${region}:${accountId}:domain/${domainId}`;
+        `arn:${partitionOf(region)}:datazone:${region}:${accountId}:domain/${domainId}`;
 
       const ensureExecutionRole = Effect.fn(function* ({
         id,
@@ -266,10 +294,11 @@ export const DomainProvider = () =>
             ),
           );
 
+        const { partition } = yield* AWSEnvironment.current;
         yield* iam
           .attachRolePolicy({
             RoleName: roleName,
-            PolicyArn: DOMAIN_EXECUTION_MANAGED_POLICY,
+            PolicyArn: managedPolicyArn(partition, DOMAIN_EXECUTION_MANAGED_POLICY),
           })
           .pipe(
             // attaching an already-attached managed policy is a no-op, but
@@ -302,6 +331,25 @@ export const DomainProvider = () =>
             }));
           }),
 
+        lookup: Effect.fn(function* (props) {
+          const { region, accountId } = yield* AWSEnvironment.current;
+          const domainId = "domainId" in props ? props.domainId : yield* findByName(props.name);
+          if (domainId === undefined) return undefined;
+          const domain = yield* getDomainOrUndefined(domainId);
+          if (domain === undefined || domain.status === "DELETING" || domain.status === "DELETED")
+            return undefined;
+          return {
+            domainId: domain.id,
+            domainArn: domain.arn ?? domainArnOf(region, accountId, domain.id),
+            name: domain.name ?? "",
+            status: domain.status,
+            portalUrl: domain.portalUrl,
+            rootDomainUnitId: domain.rootDomainUnitId,
+            domainExecutionRole: domain.domainExecutionRole,
+            // The execution role names the role a declared domain records.
+            roleName: domain.domainExecutionRole?.split("/").at(-1),
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { region, accountId } = yield* AWSEnvironment.current;
           const domainId =
@@ -457,10 +505,11 @@ export const DomainProvider = () =>
           // partially or fully removed role.
           if (output.roleName !== undefined) {
             const roleName = output.roleName;
+            const { partition } = yield* AWSEnvironment.current;
             yield* iam
               .detachRolePolicy({
                 RoleName: roleName,
-                PolicyArn: DOMAIN_EXECUTION_MANAGED_POLICY,
+                PolicyArn: managedPolicyArn(partition, DOMAIN_EXECUTION_MANAGED_POLICY),
               })
               .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
             yield* iam

@@ -237,7 +237,7 @@ export const NetworkMappingProvider = () =>
           news.name ?? output?.networkMappingName ?? (yield* createSiteRecoveryName(id)),
       };
       const fabricSpecificDetails = {
-        instanceType: "AzureToAzure",
+        instanceType: "AzureToAzure" as const,
         primaryNetworkId: news.primaryNetworkId,
       };
       const get = getMapping(where);

@@ -1,7 +1,7 @@
 import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { expect, it } from "alchemy-test";
-import { Interaction, layerNonInteractive, accessors } from "alchemy/Interaction";
+import { expect, it } from "@alchemy.run/test";
+import { Interaction, layerNonInteractive, select, success } from "alchemy/Interaction";
 import { nodeLoaderArgs } from "alchemy/Util/Node";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";
@@ -23,34 +23,34 @@ class CaptureStream extends PassThrough {
   }
 }
 
-const nonInteractive = (stdout: CaptureStream) =>
-  layerNonInteractive({ stdout: stdout as unknown as NodeJS.WriteStream });
+const nonInteractive = (stderr: CaptureStream) =>
+  layerNonInteractive({ stderr: stderr as unknown as NodeJS.WriteStream });
 
-it(
+it.effect(
   "prints plain status lines and fails prompts typed",
   () => {
-    const stdout = new CaptureStream();
+    const stderr = new CaptureStream();
     return Effect.gen(function* () {
       const interaction = yield* Interaction;
       yield* interaction.output.info({ message: "plain info", detail: "extra" });
-      yield* accessors.output.success("plain success");
+      yield* success("plain success");
       const failure = yield* Effect.flip(interaction.prompt.confirm({ message: "proceed?" }));
       expect(failure._tag).toBe("NonInteractiveTerminal");
-      const select = yield* Effect.flip(accessors.prompt.select({ message: "pick", options: [] }));
-      expect(select._tag).toBe("NonInteractiveTerminal");
-      const lines = stdout.output.split("\n");
+      const selection = yield* Effect.flip(select({ message: "pick", options: [] }));
+      expect(selection._tag).toBe("NonInteractiveTerminal");
+      const lines = stderr.output.split("\n");
       expect(lines[0]).toContain("plain info");
       expect(lines[0]).toContain("· extra");
       expect(lines[1]).toContain("plain success");
-    }).pipe(Effect.provide(nonInteractive(stdout)));
+    }).pipe(Effect.provide(nonInteractive(stderr)));
   },
   { tags: ["unit", "local"] },
 );
 
-it(
+it.effect(
   "task prints a start line and settles with a status line",
   () => {
-    const stdout = new CaptureStream();
+    const stderr = new CaptureStream();
     return Effect.gen(function* () {
       const interaction = yield* Interaction;
       yield* interaction.task({ label: "working", detail: "step" }, Effect.void);
@@ -58,13 +58,13 @@ it(
         interaction.task({ label: "breaking" }, Effect.fail("boom")),
       );
       expect(failed._tag).toBe("Failure");
-      const lines = stdout.output.trimEnd().split("\n");
+      const lines = stderr.output.trimEnd().split("\n");
       expect(lines[0]).toContain("working");
       expect(lines[0]).toContain("· step");
       expect(lines[1]).toContain("working");
       expect(lines[2]).toContain("breaking");
       expect(lines[3]).toContain("breaking");
-    }).pipe(Effect.provide(nonInteractive(stdout)));
+    }).pipe(Effect.provide(nonInteractive(stderr)));
   },
   { tags: ["unit", "local"] },
 );
@@ -72,7 +72,7 @@ it(
 // The regression this pins: spawned dev children carry NO interaction
 // services at all, so the vite child runner's entire module graph must load
 // under node (the same dev-mode loader `ViteChild.ts` spawns it with) and
-// proceed to config resolution — the original bug was an eager CliKit import
+// proceed to config resolution — the original bug was an eager terminal-renderer import
 // killing every `runtime: "node"` dev child at startup.
 it.live.skipIf(!nodeSupportsDevMode)(
   "the vite child runner's module graph loads under node",

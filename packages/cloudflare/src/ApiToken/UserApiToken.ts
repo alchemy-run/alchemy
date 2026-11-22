@@ -148,7 +148,7 @@ export const UserApiTokenProvider = () =>
       const observed = output?.tokenId
         ? yield* user.getToken({ tokenId: output.tokenId }).pipe(
             Effect.map((token) => token),
-            Effect.catchTag("TokenNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("TokenNotFound", () => Effect.undefined),
           )
         : undefined;
 
@@ -192,7 +192,7 @@ export const UserApiTokenProvider = () =>
       if (!output?.tokenId) return undefined;
       return yield* user.getToken({ tokenId: output.tokenId }).pipe(
         Effect.map((token) => buildAttributes(token, output.value)),
-        Effect.catchTag("TokenNotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("TokenNotFound", () => Effect.undefined),
       );
     }),
     // User-scoped: enumerate every token owned by the authenticated user via

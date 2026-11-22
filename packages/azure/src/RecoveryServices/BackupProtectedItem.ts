@@ -242,6 +242,11 @@ export class BackupItemNotDiscovered extends Data.TaggedError(
 
 type Observed = backup.GetProtectedItemResponse;
 
+// `friendlyName` and `lastBackupStatus` live on some item arms only.
+const friendlyNameOf = (item: backup.ProtectedItem | backup.WorkloadProtectableItem | undefined) =>
+  item !== undefined && "friendlyName" in item ? item.friendlyName : undefined;
+const lastBackupStatusOf = (item: backup.ProtectedItem | undefined) =>
+  item !== undefined && "lastBackupStatus" in item ? item.lastBackupStatus : undefined;
 const nameOf = (armId: string) => armId.split("/").filter(Boolean).at(-1) ?? "";
 const isVm = (type: string) => type.toLowerCase() === "microsoft.compute/virtualmachines";
 const isFileShare = (type: string) => type.toLowerCase() === "azurefileshareprotecteditem";
@@ -301,7 +306,7 @@ const discoverFileShareItemName = Effect.fn(function* (
     (item) =>
       inContainer(item) &&
       item.properties?.isScheduledForDeferredDelete !== true &&
-      sameId(item.properties?.friendlyName, friendlyName),
+      sameId(friendlyNameOf(item.properties), friendlyName),
   );
   if (existing?.name !== undefined) return existing.name;
 
@@ -317,7 +322,7 @@ const discoverFileShareItemName = Effect.fn(function* (
   }).pipe(
     Effect.flatMap((page) => {
       const found = (page.value ?? []).find(
-        (item) => inContainer(item) && sameId(item.properties?.friendlyName, friendlyName),
+        (item) => inContainer(item) && sameId(friendlyNameOf(item.properties), friendlyName),
       );
       return found?.name !== undefined
         ? Effect.succeed(found.name)
@@ -354,9 +359,9 @@ const toAttrs = (
   resourceGroup,
   protectedItemId: observed.id ?? "",
   policyId: observed.properties?.policyId ?? "",
-  friendlyName: observed.properties?.friendlyName ?? "",
+  friendlyName: friendlyNameOf(observed.properties) ?? "",
   protectionState: observed.properties?.protectionState ?? "",
-  lastBackupStatus: observed.properties?.lastBackupStatus,
+  lastBackupStatus: lastBackupStatusOf(observed.properties),
 });
 
 const stateMatches = (observed: Observed, desired: string) => {
@@ -428,7 +433,7 @@ export const BackupProtectedItemProvider = () =>
           (item) =>
             sameId(containerOfId(item.id), containerName) &&
             item.properties?.isScheduledForDeferredDelete !== true &&
-            sameId(item.properties?.friendlyName, olds.friendlyName),
+            sameId(friendlyNameOf(item.properties), olds.friendlyName),
         )?.name;
       }
       if (name === undefined) return undefined;

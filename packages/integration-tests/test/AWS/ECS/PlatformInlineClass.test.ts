@@ -1,13 +1,13 @@
 import * as AWS from "@alchemy.run/aws";
 import { createContainerRuntimeContext } from "@alchemy.run/aws/ECS/Task";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { isResolved } from "alchemy/Diff";
 import * as Plan from "alchemy/Plan";
 import * as Provider from "alchemy/Provider";
 import * as Stack from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { inMemoryState, State } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
@@ -103,16 +103,18 @@ test.provider(
       // eager inline branch) but not declared on the inline-form class type.
       expect((InlineService as unknown as { LogicalId: string }).LogicalId).toBe("InlineService");
 
-      const deployed = yield* stack
-        .deploy(
-          Effect.gen(function* () {
-            yield* ProbeCluster;
-            return yield* InlineService;
-          }),
-        )
-        // Pre-fix, plan-time construction recursed inside serve; interrupt
-        // fast instead of exhausting the heap.
-        .pipe(Effect.timeout(30_000));
+      const deployed = yield* (
+        stack
+          .deploy(
+            Effect.gen(function* () {
+              yield* ProbeCluster;
+              return yield* InlineService;
+            }),
+          )
+          // Pre-fix, plan-time construction recursed inside serve; interrupt
+          // fast instead of exhausting the heap.
+          .pipe(Effect.timeout(30_000))
+      );
 
       expect(deployed).toEqual({ ok: true });
 

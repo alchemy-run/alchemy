@@ -209,7 +209,7 @@ export const AgentsWebhook = Resource<AgentsWebhook>("GCP.Dialogflow.AgentsWebho
 export class AgentsWebhookNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsWebhookNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (agent: string, webhookId: string) => `${agent}/webhooks/${webhookId}`;
@@ -287,10 +287,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsWebhooks({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   dialogflow.listProjectsLocationsAgentsWebhooks.pages({ parent, pageSize: 100 }).pipe(
@@ -308,7 +308,7 @@ const findByDisplayName = (parent: string, displayName: string) =>
     Stream.filter((webhook) => webhook.displayName === displayName),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const AgentsWebhookProvider = () =>
@@ -393,16 +393,13 @@ export const AgentsWebhookProvider = () =>
 
       if (current === undefined) {
         const created = yield* dialogflow
-          .createProjectsLocationsAgentsWebhooks({
-            parent: agent,
-            body,
-          })
+          .createProjectsLocationsAgentsWebhooks({ ...body, parent: agent })
           .pipe(Effect.catchTag("Conflict", () => findByDisplayName(agent, displayName)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new AgentsWebhookNotResolved({ name });
+        return yield* new AgentsWebhookNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -422,6 +419,7 @@ export const AgentsWebhookProvider = () =>
         directoryChanged
       ) {
         current = yield* dialogflow.patchProjectsLocationsAgentsWebhooks({
+          ...body,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
@@ -430,7 +428,6 @@ export const AgentsWebhookProvider = () =>
             genericChanged ? "generic_web_service" : undefined,
             directoryChanged ? "service_directory" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
       }
 

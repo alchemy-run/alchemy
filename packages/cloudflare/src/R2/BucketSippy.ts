@@ -260,7 +260,7 @@ export const BucketSippyProvider = () =>
       const observed = yield* r2.getBucketSippy({ accountId: acct, bucketName, jurisdiction }).pipe(
         Effect.map((config): r2.GetBucketSippyResponse | undefined => config),
         // The bucket itself is gone — so is its Sippy configuration.
-        Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+        Effect.catchTag("NoSuchBucket", () => Effect.undefined),
       );
       // A bucket with Sippy never configured (or disabled) reads back as
       // `{ enabled: false }` — that is "absent" for this resource.

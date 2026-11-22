@@ -7,7 +7,6 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
-  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
@@ -280,9 +279,9 @@ export const GeoCatalogProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* collectAll(planetarycomputer.ListGeoCatalogBySubscription, {
-        subscriptionId,
-      });
+      // The SDK no longer marks this list as pageable, so only the first
+      // page is read.
+      const page = yield* planetarycomputer.ListGeoCatalogBySubscription({ subscriptionId });
       return (page.value ?? []).flatMap((catalog) => {
         const group = resourceGroupOf(catalog.id);
         return hasAnyAlchemyTag(catalog.tags) && group !== undefined && catalog.name !== undefined

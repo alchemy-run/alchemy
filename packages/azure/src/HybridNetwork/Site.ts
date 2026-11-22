@@ -150,11 +150,14 @@ const getSite = (subscriptionId: string, resourceGroupName: string, siteName: st
   orUndefinedIfNotFound(hybridnetwork.GetSite({ subscriptionId, resourceGroupName, siteName }));
 
 const fromNfvi = (nfvi: hybridnetwork.NFVIs): SiteNfvi => {
-  const ref = nfvi.customLocationReference as { id?: string } | undefined;
+  const ref = (nfvi.nfviType === "AzureCore" ? undefined : nfvi.customLocationReference) as
+    | { id?: string }
+    | undefined;
+  const location = nfvi.nfviType === "AzureCore" ? nfvi.location : undefined;
   return {
     name: nfvi.name ?? "",
     nfviType: nfvi.nfviType as SiteNfviType,
-    ...(nfvi.location !== undefined ? { location: nfvi.location } : {}),
+    ...(location !== undefined ? { location } : {}),
     ...(ref?.id !== undefined ? { customLocationId: ref.id } : {}),
   };
 };

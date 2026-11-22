@@ -5,12 +5,20 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { applyRedshiftTagDelta, redshiftArn, sameStringSet, toTagRecord } from "./internal.ts";
+
+export class EventSubscriptionUnexpectedResponse extends Data.TaggedError(
+  "EventSubscriptionUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * The kind of Redshift resource an {@link EventSubscription} filters on.
@@ -201,14 +209,16 @@ export const EventSubscriptionProvider = () =>
       const readSubscription = Effect.fn(function* (name: string) {
         const response = yield* redshift
           .describeEventSubscriptions({ SubscriptionName: name })
-          .pipe(Effect.catchTag("SubscriptionNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("SubscriptionNotFoundFault", () => Effect.undefined));
         return response?.EventSubscriptionsList?.[0];
       });
 
       const toAttrs = Effect.fn(function* (subscription: redshift.EventSubscription) {
         const { accountId, region } = yield* AWSEnvironment.current;
         if (!subscription.CustSubscriptionId) {
-          return yield* Effect.fail(new Error("Event subscription is missing its name"));
+          return yield* new EventSubscriptionUnexpectedResponse({
+            message: "Event subscription is missing its name",
+          });
         }
         return {
           subscriptionName: subscription.CustSubscriptionId,
@@ -275,7 +285,9 @@ export const EventSubscriptionProvider = () =>
               .pipe(Effect.catchTag("SubscriptionAlreadyExistFault", () => Effect.void));
             observed = yield* readSubscription(name);
             if (!observed?.CustSubscriptionId) {
-              return yield* Effect.fail(new Error(`Failed to create event subscription '${name}'`));
+              return yield* new EventSubscriptionUnexpectedResponse({
+                message: `Failed to create event subscription '${name}'`,
+              });
             }
           }
 
@@ -304,9 +316,9 @@ export const EventSubscriptionProvider = () =>
             );
             observed = yield* readSubscription(name);
             if (!observed?.CustSubscriptionId) {
-              return yield* Effect.fail(
-                new Error(`Event subscription '${name}' not found after update`),
-              );
+              return yield* new EventSubscriptionUnexpectedResponse({
+                message: `Event subscription '${name}' not found after update`,
+              });
             }
           }
 
@@ -328,7 +340,7 @@ export const EventSubscriptionProvider = () =>
               .deleteEventSubscription({
                 SubscriptionName: output.subscriptionName,
               })
-              .pipe(Effect.catchTag("SubscriptionNotFoundFault", () => Effect.succeed(undefined))),
+              .pipe(Effect.catchTag("SubscriptionNotFoundFault", () => Effect.undefined)),
           );
         }),
 

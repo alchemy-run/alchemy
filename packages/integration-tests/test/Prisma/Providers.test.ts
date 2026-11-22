@@ -1,14 +1,15 @@
 import * as Prisma from "@alchemy.run/prisma";
 import { PrismaLogStreamError } from "@alchemy.run/prisma/PrismaLogs";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "alchemy-test";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
-import { AuthProviders } from "alchemy/Auth/AuthProvider";
-import * as CliKit from "alchemy/Cli/CliKit";
+import { AuthProviders, AuthProvidersLive } from "alchemy/Auth/AuthProvider";
+import * as Interaction from "alchemy/Interaction";
 import * as Provider from "alchemy/Provider";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -36,12 +37,12 @@ const providePrismaDev = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
       Prisma.providers().pipe(
         // The dual registration always carries the (lazy) management-api
         // layer; it registers auth at build without resolving credentials.
-        Layer.provideMerge(Layer.succeed(AuthProviders, {})),
+        Layer.provideMerge(AuthProvidersLive),
         Layer.provide(stackProvidedServices),
       ),
     ),
     Effect.provide(devAlchemyContext),
-    Effect.provide(CliKit.layer({ input: false })),
+    Effect.provide(Interaction.layerNonInteractive()),
   );
 
 const reconcileInput = (id: string, news: unknown, output?: unknown) =>
@@ -239,7 +240,8 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
               ),
             ),
             Effect.provide(NodeServices.layer),
-            Effect.provide(CliKit.layer({ input: false })),
+            Effect.provide(SecureRandom.layerWebCrypto),
+            Effect.provide(Interaction.layerNonInteractive()),
           ),
         ),
       );
@@ -269,7 +271,7 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
       }).pipe(
         Effect.provide(
           Prisma.providers().pipe(
-            Layer.provideMerge(Layer.succeed(AuthProviders, {})),
+            Layer.provideMerge(AuthProvidersLive),
             Layer.provide(stackProvidedServices),
           ),
         ),

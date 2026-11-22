@@ -70,8 +70,18 @@ export interface VectorBucket extends Resource<
     vectorBucketArn: string;
   },
   never,
-  Providers
+  Providers,
+  VectorBucketLookup
 > {}
+
+/**
+ * Props for {@link VectorBucket.lookup}: find a vector bucket this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface VectorBucketLookup {
+  /** The vector bucket name of the existing vector bucket. */
+  vectorBucketName: string;
+}
 
 /**
  * An Amazon S3 Vectors bucket — durable storage for vector embeddings,
@@ -112,6 +122,16 @@ export interface VectorBucket extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing vector bucket
+ * `VectorBucket.lookup` references a vector bucket Alchemy doesn't manage (created in the
+ * console or by another stack), found by `vectorBucketName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing vector bucket
+ * ```typescript
+ * const existing = AWS.S3Vectors.VectorBucket.lookup({ vectorBucketName: "my-vector-bucket" });
+ * ```
+ *
  * @resource
  */
 export const VectorBucket = Resource<VectorBucket>("AWS.S3Vectors.VectorBucket");
@@ -141,7 +161,7 @@ export const VectorBucketProvider = () =>
       const observe = (vectorBucketName: string) =>
         s3vectors.getVectorBucket({ vectorBucketName }).pipe(
           Effect.map((r) => r.vectorBucket),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       const observedTags = (resourceArn: string) =>
@@ -181,6 +201,15 @@ export const VectorBucketProvider = () =>
               vectorBucketArn: b.vectorBucketArn,
             }));
           }),
+        lookup: Effect.fn(function* ({ vectorBucketName: name }) {
+          const found = yield* observe(name);
+          if (!found) return undefined;
+          const attrs = {
+            vectorBucketName: found.vectorBucketName,
+            vectorBucketArn: found.vectorBucketArn,
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.vectorBucketName ?? (yield* createName(id, olds ?? {}));
           const found = yield* observe(name);

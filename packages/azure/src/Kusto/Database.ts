@@ -215,11 +215,13 @@ export const DatabaseProvider = () =>
           .DatabasesCreateOrUpdate({
             ...where,
             callerRole: news.callerRole,
-            location,
-            kind: "ReadWrite",
-            properties: {
-              softDeletePeriod: news.softDeletePeriod,
-              hotCachePeriod: news.hotCachePeriod,
+            body: {
+              location,
+              kind: "ReadWrite",
+              properties: {
+                softDeletePeriod: news.softDeletePeriod,
+                hotCachePeriod: news.hotCachePeriod,
+              },
             },
           })
           .pipe(Effect.retry(whileClusterBusy));
@@ -228,7 +230,7 @@ export const DatabaseProvider = () =>
 
       // Sync retention and cache policies against observed state.
       const props = observed.properties ?? {};
-      const changed: kusto.ReadWriteDatabaseProperties = {};
+      const changed: kusto.ReadWriteDatabasePropertiesInput = {};
       if (news.softDeletePeriod !== undefined && props.softDeletePeriod !== news.softDeletePeriod) {
         changed.softDeletePeriod = news.softDeletePeriod;
       }
@@ -239,8 +241,7 @@ export const DatabaseProvider = () =>
         yield* kusto
           .UpdateDatabase({
             ...where,
-            kind: "ReadWrite",
-            properties: changed,
+            body: { kind: "ReadWrite", properties: changed },
           })
           .pipe(Effect.retry(whileClusterBusy));
         observed = yield* waitForProvisioned(

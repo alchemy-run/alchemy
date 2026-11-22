@@ -135,15 +135,15 @@ export const FolderContact = Resource<FolderContact>("GCP.EssentialContacts.Fold
 export class FolderContactNotResolved extends Data.TaggedError(
   "GCP.EssentialContacts.FolderContactNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : essentialcontacts
         .getFoldersContacts({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string) =>
   parent.length === 0
@@ -244,7 +244,7 @@ export const FolderContactProvider = () =>
 
       if (current === undefined) {
         const created = yield* essentialcontacts
-          .createFoldersContacts({ parent, body })
+          .createFoldersContacts({ ...body, parent })
           .pipe(
             Effect.catchTag("Conflict", () =>
               listAt(parent).pipe(
@@ -260,7 +260,7 @@ export const FolderContactProvider = () =>
 
       if (current === undefined) {
         return yield* new FolderContactNotResolved({
-          name: output?.name ?? `${parent}/contacts`,
+          resourceName: output?.name ?? `${parent}/contacts`,
         });
       }
 
@@ -271,12 +271,10 @@ export const FolderContactProvider = () =>
       );
       if (languageChanged || categoriesChanged) {
         current = yield* essentialcontacts.patchFoldersContacts({
+          languageTag,
+          notificationCategorySubscriptions: categories,
           name: current.name ?? "",
           updateMask: UPDATE_MASK,
-          body: {
-            languageTag,
-            notificationCategorySubscriptions: categories,
-          },
         });
       }
 

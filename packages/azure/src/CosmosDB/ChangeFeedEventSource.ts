@@ -80,7 +80,5 @@ export const consumeChangeFeed = <C extends SqlContainer, Req = never, Container
   handler: (documents: Record<string, unknown>[]) => Effect.Effect<void, never, Req>,
 ): Effect.Effect<void, never, ChangeFeedEventSource | ContainerReq> =>
   (Effect.isEffect(container) ? container : Effect.succeed(container)).pipe(
-    Effect.flatMap((value) =>
-      ChangeFeedEventSource.use((source) => source(value, props, handler)),
-    ),
+    Effect.flatMap((value) => ChangeFeedEventSource.use((source) => source(value, props, handler))),
   );

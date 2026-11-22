@@ -24,7 +24,7 @@ import * as Path from "effect/Path";
 import * as Semaphore from "effect/Semaphore";
 import { makeCapture } from "./Capture.ts";
 import { makeFileLog, type FileLog } from "./FileLog.ts";
-import type { FileSuite, Hook, LogEntry, Suite, TestCase } from "./Model.ts";
+import type { Exclusive, FileSuite, Hook, Limit, LogEntry, Suite, TestCase } from "./Model.ts";
 import { containsOnly, forEachTest, makeFileSuite, titlePath } from "./Model.ts";
 import type { TestPlan } from "./Plan.ts";
 import * as Registry from "./Registry.ts";
@@ -301,12 +301,94 @@ const collectFile = (
  * Whole-process read/write lock. Normal tests hold a read permit; tests
  * registered with `{ exclusive: true }` (they mutate process-global state
  * like `process.env`) take every permit, so they never overlap with any
- * other test in the run.
+ * other test in the run. A label (`{ exclusive: "hetzner" }`) instead takes
+ * a per-label lock plus a normal read permit, so it only serializes with
+ * holders of the same label.
  */
 const EXCLUSIVE_PERMITS = 100_000;
 
-const hookPermits = (hooks: ReadonlyArray<Hook>): number =>
-  hooks.some((hook) => hook.exclusive === true) ? EXCLUSIVE_PERMITS : 1;
+interface LockSpec {
+  readonly global: boolean;
+  /** Sorted by label, so holders of several labels acquire them in one order. */
+  readonly labels: ReadonlyArray<Limit>;
+}
+
+const lockSpec = (values: ReadonlyArray<Exclusive | undefined>): LockSpec => {
+  const flat = values.flatMap((value) => (Array.isArray(value) ? value : [value])) as Array<
+    boolean | string | Limit | undefined
+  >;
+  // A plain label is a one-permit lock; the tightest permit count wins.
+  const labels = new Map<string, number>();
+  for (const value of flat) {
+    const limit =
+      typeof value === "string"
+        ? value === ""
+          ? undefined
+          : { label: value, permits: 1 }
+        : typeof value === "object" && value !== null
+          ? value
+          : undefined;
+    if (limit === undefined) continue;
+    labels.set(limit.label, Math.min(labels.get(limit.label) ?? Infinity, limit.permits));
+  }
+  return {
+    global: flat.some((value) => value === true),
+    labels: [...labels]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([label, permits]) => ({ label, permits })),
+  };
+};
+
+interface RunLock {
+  readonly withLock: (
+    spec: LockSpec,
+  ) => <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
+}
+
+/**
+ * Opportunistic exclusive lock. An exclusive acquirer asks for every permit
+ * and gets them only once nothing else holds one; everyone else keeps taking
+ * single permits meanwhile, because Effect's `Semaphore` grants whoever asks
+ * while enough are free. So an exclusive test never stalls the run: in a busy
+ * run it waits for a quiet moment, at worst the tail of its phase.
+ *
+ * Writer preference (holding a gate while waiting) would bound that wait, but
+ * at the cost of freezing every test started meanwhile behind the slowest one
+ * in flight: a 25-minute ElastiCache update held up the whole AWS suite.
+ */
+const makeRunLock = Effect.gen(function* () {
+  const permits = yield* Semaphore.make(EXCLUSIVE_PERMITS);
+  const labels = new Map<string, Semaphore.Semaphore>();
+  // A label's permit count is fixed by its first holder.
+  const labelLock = ({ label, permits }: Limit): Semaphore.Semaphore => {
+    let lock = labels.get(label);
+    if (lock === undefined) {
+      lock = Semaphore.makeUnsafe(Math.max(1, Math.floor(permits)));
+      labels.set(label, lock);
+    }
+    return lock;
+  };
+  const lock: RunLock = {
+    withLock:
+      (spec) =>
+      <A, E, R>(self: Effect.Effect<A, E, R>) => {
+        if (spec.global) return permits.withPermits(EXCLUSIVE_PERMITS)(self);
+        // Take labels before the read permit: a queued label holder must not
+        // sit on a read permit that a waiting global writer needs.
+        const shared = permits.withPermits(1)(self);
+        return spec.labels.reduceRight(
+          (inner, label) => labelLock(label).withPermits(1)(inner),
+          shared,
+        );
+      },
+  };
+  return lock;
+});
+
+const testLock = (test: TestCase): LockSpec => lockSpec([test.exclusive]);
+
+const hookLock = (hooks: ReadonlyArray<Hook>): LockSpec =>
+  lockSpec(hooks.map((hook) => hook.exclusive));
 
 interface ExecContext {
   readonly options: Omit<RunOptions, "tagsFilter"> & {
@@ -327,7 +409,7 @@ interface ExecContext {
   /** Files whose abandoned work may still own resources; their teardown is skipped. */
   readonly abandoned: Set<string>;
   readonly file: string;
-  readonly lock: Semaphore.Semaphore;
+  readonly lock: RunLock;
   /** Run-global registry of currently-executing test fibers (for kill). */
   readonly running: Map<string, Fiber.Fiber<unknown, unknown>>;
   /** Run-global set of tests that have finished at least once (for retry). */
@@ -600,7 +682,7 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
 
   let durationMs = 0;
   let retries = 0;
-  const withLock = ctx.lock.withPermits(test.exclusive ? EXCLUSIVE_PERMITS : 1);
+  const withLock = ctx.lock.withLock(testLock(test));
 
   // Each attempt runs in its own fiber, registered run-globally so the TUI's
   // kill command can interrupt it.
@@ -614,7 +696,8 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
           // Queue time behind an exclusive test is not execution time. Sum only
           // attempts (including their hooks), retaining time spent on retries.
           const start = Date.now();
-          return attempt().pipe(
+          return ctx.emit({ _tag: "TestLocked", test: meta }).pipe(
+            Effect.andThen(attempt()),
             Effect.ensuring(
               Effect.sync(() => {
                 durationMs += Date.now() - start;
@@ -637,40 +720,19 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
   let exit = yield* runAttempt();
   while (attemptNeedsRetry(exit, test.fails) && retries < (test.retry ?? ctx.options.retry)) {
     retries++;
+    // The retry replaces this attempt's result; keep its error in the run
+    // log, or a test that passes on retry hides what failed (and leaked).
+    ctx.fileLog.appendTestLine(`${meta.file} > ${meta.titlePath.join(" > ")}`, {
+      level: "ERROR",
+      message: `attempt ${retries} failed, retrying: ${attemptOutcome(exit, test).error ?? "unknown"}`,
+      time: new Date(),
+    });
     // Clear IN PLACE — TestStart handed this array's reference out.
     ctx.capture.release(logs);
     exit = yield* runAttempt();
   }
 
-  let status: TestResult["status"];
-  let error: string | undefined;
-  if (wasInterrupted(exit)) {
-    status = "fail";
-    error = "killed (interrupted by user)";
-  } else if (Exit.isFailure(exit)) {
-    status = "fail";
-    error = prettyCause(exit.cause);
-  } else {
-    const failedHook = hookError(exit.value);
-    const bodyExit = exit.value.body;
-    if (failedHook !== undefined) {
-      status = "fail";
-      error = failedHook;
-    } else if (test.fails && bodyExit !== undefined) {
-      if (Exit.isFailure(bodyExit)) {
-        status = "pass";
-      } else {
-        status = "fail";
-        error = "expected test to fail, but it passed";
-      }
-    } else if (bodyExit !== undefined && Exit.isSuccess(bodyExit)) {
-      status = "pass";
-    } else {
-      status = "fail";
-      error = bodyExit === undefined ? "test body did not run" : prettyCause(bodyExit.cause);
-    }
-  }
-
+  const { status, error } = attemptOutcome(exit, test);
   if (ctx.interactive) ctx.completed.add(meta.id);
   const result: TestResult = { status, durationMs, error, logs, retries };
   ctx.results.set(meta.id, {
@@ -680,6 +742,29 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
   yield* ctx.emit({ _tag: "TestEnd", test: meta, result });
   if (!ctx.interactive && status !== "fail") ctx.capture.release(logs);
 });
+
+/** The status and error a finished attempt reports. */
+const attemptOutcome = (
+  exit: Exit.Exit<TestAttempt, unknown>,
+  test: TestCase,
+): { status: TestResult["status"]; error: string | undefined } => {
+  if (wasInterrupted(exit)) return { status: "fail", error: "killed (interrupted by user)" };
+  if (Exit.isFailure(exit)) return { status: "fail", error: prettyCause(exit.cause) };
+  const failedHook = hookError(exit.value);
+  const bodyExit = exit.value.body;
+  if (failedHook !== undefined) return { status: "fail", error: failedHook };
+  if (test.fails && bodyExit !== undefined) {
+    return Exit.isFailure(bodyExit)
+      ? { status: "pass", error: undefined }
+      : { status: "fail", error: "expected test to fail, but it passed" };
+  }
+  if (bodyExit !== undefined && Exit.isSuccess(bodyExit))
+    return { status: "pass", error: undefined };
+  return {
+    status: "fail",
+    error: bodyExit === undefined ? "test body did not run" : prettyCause(bodyExit.cause),
+  };
+};
 
 /** Fail every (non-skipped) test in a subtree without running it. */
 const failSubtree = Effect.fn(function* (suite: Suite, ctx: ExecContext, error: string) {
@@ -750,13 +835,11 @@ const runSuite: (suite: Suite, ctx: ExecContext) => Effect.Effect<void> = Effect
         file: ctx.file,
         hook: "beforeAll",
       });
-      // Honor `{ exclusive: true }` on the hook (Hetzner quota, Railway
-      // plugin DBs). Non-exclusive beforeAll keeps the default 1-permit
-      // slot so unrelated files can still run concurrently.
+      // Honor `exclusive` on the hook (`true` for the whole run, a label
+      // like "hetzner" for a shared quota). Non-exclusive beforeAll keeps
+      // the default 1-permit slot so unrelated files can still run.
       const exit = yield* ctx.lock
-        .withPermits(hookPermits(suite.beforeAll))(
-          runHooks(suite.beforeAll, ctx.options.timeout, ctx),
-        )
+        .withLock(hookLock(suite.beforeAll))(runHooks(suite.beforeAll, ctx.options.timeout, ctx))
         .pipe(withCapture(ctx.fileLogs), Effect.exit);
       yield* ctx.emit({ _tag: "HookEnd", file: ctx.file, hook: "beforeAll" });
       ctx.suiteStates?.set(suite, exit);
@@ -805,7 +888,7 @@ const runAfterAll = Effect.fn(function* (suite: Suite, ctx: ExecContext) {
       : runWithDeadline(hook.body, hook.timeout ?? ctx.options.timeout, "hook", ctx),
   );
   const exits = yield* ctx.lock
-    .withPermits(hookPermits(suite.afterAll))(afterAllRun)
+    .withLock(hookLock(suite.afterAll))(afterAllRun)
     .pipe(withCapture(ctx.fileLogs));
   yield* ctx.emit({ _tag: "HookEnd", file: ctx.file, hook: "afterAll" });
   const failures = exits.filter(Exit.isFailure);
@@ -866,7 +949,7 @@ export const run = Effect.fn(function* (input: RunOptions) {
   const relative = absoluteFiles.map((f) => path.relative(options.root, f));
   yield* emit({ _tag: "CollectStart", files: relative });
   const roots = relative.map(makeFileSuite);
-  const lock = yield* Semaphore.make(EXCLUSIVE_PERMITS);
+  const lock = yield* makeRunLock;
   const abandoned = new Set<string>();
   const disposed = new Set<FileSuite>();
   const cleanupErrors = new Map<string, string>();
@@ -891,7 +974,7 @@ export const run = Effect.fn(function* (input: RunOptions) {
     disposed.add(suite);
     const errors: Array<string> = [];
     for (const hook of suite.cleanups.splice(0)) {
-      const exit = yield* lock.withPermits(hookPermits([hook]))(
+      const exit = yield* lock.withLock(hookLock([hook]))(
         runWithDeadline(hook.body, hook.timeout ?? options.timeout, "hook", {
           file: suite.file,
           abandoned,

@@ -1,11 +1,13 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as appengine from "@distilled.cloud/gcp/appengine_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
+import { isServiceEnabled } from "../ServiceState.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -48,6 +50,10 @@ test.provider(
   "getProjectsLocationsApplicationsDomainMappings on a missing mapping fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      // With the API enabled, this project (no App Engine app / no Firebase
+      // setup) answers an untyped INTERNAL / INVALID_ARGUMENT: the probe only
+      // holds while the API is disabled.
+      if (yield* isServiceEnabled("appengine.googleapis.com")) return;
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
@@ -70,18 +76,20 @@ test.provider.skipIf(runLifecycle)(
   "createProjectsLocationsApplicationsDomainMappings without an App Engine app fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      // With the API enabled, this project (no App Engine app / no Firebase
+      // setup) answers an untyped INTERNAL / INVALID_ARGUMENT: the probe only
+      // holds while the API is disabled.
+      if (yield* isServiceEnabled("appengine.googleapis.com")) return;
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
         appengine.createProjectsLocationsApplicationsDomainMappings({
+          id: "alchemy-missing.example.com",
+          sslSettings: { sslManagementType: "AUTOMATIC" },
           projectsId: project,
           locationsId: location,
           applicationsId: project,
-          body: {
-            id: "alchemy-missing.example.com",
-            sslSettings: { sslManagementType: "AUTOMATIC" },
-          },
         }),
       );
       expect(error._tag).toEqual("ServiceDisabled");
@@ -105,6 +113,14 @@ test.provider.skipIf(!runLifecycle)(
             sslSettings: { sslManagementType: "AUTOMATIC" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.AppEngine.ApplicationsDomainMapping.lookup({
+          domain: created.domain,
+          applicationsId: created.applicationsId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.domain).toEqual(domain);

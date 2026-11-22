@@ -26,20 +26,20 @@ export type GclbObservationSource = {
 };
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.Apim.NotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError("GCP.Apim.StillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceNotReady extends Data.TaggedError("GCP.Apim.NotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class ResourceFailed extends Data.TaggedError("GCP.Apim.Failed")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
@@ -250,7 +250,7 @@ export const waitUntilExists = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is A & {} => value !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceNotResolved,
@@ -263,7 +263,7 @@ export const waitUntilGone = <A, E, R>(get: Effect.Effect<A, E, R>, name: string
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new ResourceStillExists({ name }),
+      () => new ResourceStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceStillExists,
@@ -288,13 +288,13 @@ export const waitUntilReady = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is A & {} => value !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (value) => !FAILED_STATES.has((stateOf(value) ?? "").toUpperCase()),
       (value) =>
         new ResourceFailed({
-          name,
+          resourceName: name,
           state: (stateOf(value) ?? "").toUpperCase(),
         }),
     ),
@@ -302,7 +302,7 @@ export const waitUntilReady = <A, E, R>(
       (value) => ready.has((stateOf(value) ?? "").toUpperCase()),
       (value) =>
         new ResourceNotReady({
-          name,
+          resourceName: name,
           state: (stateOf(value) ?? "").toUpperCase(),
         }),
     ),

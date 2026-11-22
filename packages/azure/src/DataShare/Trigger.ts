@@ -130,7 +130,8 @@ export interface Trigger extends Resource<
  */
 export const Trigger = GroupedResource<Trigger>("Azure.DataShare.Trigger");
 
-type ObservedTrigger = datashare.GetTriggerResponse | datashare.CreateTriggerResponse;
+/** What GET and PUT return. */
+type ObservedTrigger = datashare.ScheduledTrigger;
 
 const getTrigger = (
   subscriptionId: string,
@@ -249,11 +250,13 @@ export const TriggerProvider = () =>
           accountName: account,
           shareSubscriptionName: shareSubscription,
           triggerName: name,
-          kind: "ScheduleBased",
-          properties: {
-            recurrenceInterval: news.recurrenceInterval,
-            synchronizationTime: news.synchronizationTime,
-            synchronizationMode: news.synchronizationMode ?? "Incremental",
+          body: {
+            kind: "ScheduleBased",
+            properties: {
+              recurrenceInterval: news.recurrenceInterval,
+              synchronizationTime: news.synchronizationTime,
+              synchronizationMode: news.synchronizationMode ?? "Incremental",
+            },
           },
         });
       }

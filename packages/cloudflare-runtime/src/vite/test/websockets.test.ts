@@ -68,10 +68,12 @@ const setup = async (): Promise<Harness> => {
 
   const clientServer = NodeHttp.createServer((_req, res) => res.end("OK"));
   const upstreamPort = await listen(upstreamServer);
+  // As in dev with `server.ws` enabled: Vite's HMR server owns `vite*` upgrades.
   const removeListener = handleWebSocket(
     clientServer,
     `http://127.0.0.1:${upstreamPort}`,
     "websocket-secret",
+    true,
   );
   const clientPort = await listen(clientServer);
 
@@ -199,6 +201,87 @@ describe("handleWebSocket", () => {
     expect(writeSpy).not.toHaveBeenCalled();
   });
 
+  test("closes vite HMR upgrades when Vite's WebSocket server is disabled", async () => {
+    const server = NodeHttp.createServer();
+    const remove = handleWebSocket(
+      server,
+      `http://127.0.0.1:${harness.upstreamPort}`,
+      "websocket-secret",
+      false,
+    );
+    const fakeReq = makeFakeRequest({ host: "localhost", protocol: "vite-hmr" });
+    const fakeSocket = new NodeNet.Socket();
+    const destroySpy = vi.spyOn(fakeSocket, "destroy");
+
+    server.emit("upgrade", fakeReq, fakeSocket, Buffer.alloc(0));
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(harness.upstreamCalls).toHaveLength(0);
+    expect(destroySpy).toHaveBeenCalled();
+    remove();
+  });
+
+  test("leaves Vite DevTools upgrades to their own handler", async () => {
+    const fakeReq = makeFakeRequest({
+      host: `127.0.0.1:${harness.clientPort}`,
+      url: "/__devtools/__ws",
+    });
+    const fakeSocket = new NodeNet.Socket();
+    const destroySpy = vi.spyOn(fakeSocket, "destroy");
+    const writeSpy = vi.spyOn(fakeSocket, "write");
+
+    harness.clientServer.emit("upgrade", fakeReq, fakeSocket, Buffer.alloc(0));
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(harness.upstreamCalls).toHaveLength(0);
+    expect(destroySpy).not.toHaveBeenCalled();
+    expect(writeSpy).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["/live?token=a%2Fb&token=+", "/live?token=a%2Fb&token=+"],
+    ["//attacker.example/live", "//attacker.example/live"],
+    ["///attacker.example:8000/live", "///attacker.example:8000/live"],
+    [String.raw`/\attacker.example/live`, "//attacker.example/live"],
+    [
+      "/%2f%5C/live?next=//attacker.example&empty=&flag",
+      "/%2f%5C/live?next=//attacker.example&empty=&flag",
+    ],
+  ])("keeps upgrade target %s on the runtime and the client's origin", async (target, expected) => {
+    harness.upstreamWss.on("connection", (ws) => ws.close());
+    const host = `127.0.0.1:${harness.clientPort}`;
+    // Raw bytes: a WebSocket client would normalize the target first.
+    const socket = NodeNet.connect(harness.clientPort, "127.0.0.1");
+    const response = new Promise<string>((resolve, reject) => {
+      socket.once("data", (chunk) => resolve(chunk.toString()));
+      socket.once("close", () => reject(new Error("closed without an answer")));
+      socket.on("error", reject);
+    });
+    socket.write(
+      [
+        `GET ${target} HTTP/1.1`,
+        `Host: ${host}`,
+        "Upgrade: websocket",
+        "Connection: Upgrade",
+        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==",
+        "Sec-WebSocket-Version: 13",
+        "",
+        "",
+      ].join("\r\n"),
+    );
+    try {
+      expect(await response).toMatch(/^HTTP\/1\.1 101/);
+    } finally {
+      socket.destroy();
+    }
+
+    expect(harness.upstreamCalls).toHaveLength(1);
+    expect(harness.upstreamCalls[0]!.url).toBe(expected);
+    expect(harness.upstreamCalls[0]!.headers["alchemy-runtime-original-url"]).toBe(
+      `http://${host}${expected}`,
+    );
+  });
+
   test("forwards sandbox-preview-URL upgrades even with vite protocol", async () => {
     harness.upstreamWss.on("connection", (ws) => {
       ws.send("ack");
@@ -316,6 +399,149 @@ describe("handleWebSocket", () => {
     expect(received).toContain("HTTP/1.1 403 Forbidden");
     expect(received).toContain("content-type: text/plain");
     expect(received.endsWith("Forbidden")).toBe(true);
+  });
+
+  test("forwards an upgrade an async listener declines", async () => {
+    harness.upstreamWss.on("connection", (ws) => ws.send("ack"));
+    // Like Vite's `server.proxy`, which awaits a `bypass` before it decides.
+    harness.clientServer.on("upgrade", async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    });
+
+    const client = new WebSocket(`ws://127.0.0.1:${harness.clientPort}/ws`);
+    const message = await new Promise<string>((resolve, reject) => {
+      client.on("message", (data) => {
+        resolve(data.toString());
+        client.close();
+      });
+      client.on("error", reject);
+    });
+    expect(message).toBe("ack");
+  });
+
+  test("forwards an upgrade another listener only guards with a no-op error handler", async () => {
+    harness.upstreamWss.on("connection", (ws) => ws.send("ack"));
+    // Vite 8.3.5's HMR listener does this for every upgrade it doesn't handle.
+    harness.clientServer.on("upgrade", (_request, socket) => {
+      socket.on("error", function noop() {});
+      socket.on("error", () => {});
+    });
+
+    const client = new WebSocket(`ws://127.0.0.1:${harness.clientPort}/ws`);
+    const message = await new Promise<string>((resolve, reject) => {
+      client.on("message", (data) => {
+        resolve(data.toString());
+        client.close();
+      });
+      client.on("error", reject);
+    });
+    expect(message).toBe("ack");
+  });
+
+  // https://github.com/alchemy-run/alchemy/issues/2191
+  describe("leaves an upgrade another plugin accepts to that plugin", () => {
+    const refuseUpgrades = () => {
+      // workerd answers an upgrade on a path the Worker doesn't route with
+      // plain HTTP.
+      harness.upstreamServer.removeAllListeners("upgrade");
+      harness.upstreamServer.on("upgrade", (_request, socket) => {
+        socket.end(
+          [
+            "HTTP/1.1 404 Not Found",
+            "content-length: 9",
+            "connection: close",
+            "",
+            "Not Found",
+          ].join("\r\n"),
+        );
+      });
+    };
+
+    // A plugin's own dev WebSocket, like `@foldkit/vite-plugin`'s relay.
+    const echoPlugin = (
+      server: NodeHttp.Server,
+      options: { verifyDelay?: number; listenerDelay?: number } = {},
+    ) => {
+      const wss = new WebSocketServer({
+        noServer: true,
+        ...(options.verifyDelay !== undefined
+          ? {
+              verifyClient: (_info: unknown, done: (result: boolean) => void) =>
+                setTimeout(() => done(true), options.verifyDelay),
+            }
+          : {}),
+      });
+      server.on("upgrade", async (request, socket, head) => {
+        if (request.url !== "/__echo") return;
+        if (options.listenerDelay !== undefined) {
+          await new Promise((resolve) => setTimeout(resolve, options.listenerDelay));
+        }
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          ws.on("message", (data) => ws.send(`echo ${data}`));
+        });
+      });
+      return wss;
+    };
+
+    const echo = (port: number) =>
+      new Promise<Array<string>>((resolve, reject) => {
+        const client = new WebSocket(`ws://127.0.0.1:${port}/__echo`);
+        const events: Array<string> = [];
+        client.on("open", () => {
+          events.push("open");
+          client.send("hi");
+        });
+        client.on("message", (data) => {
+          events.push(data.toString());
+          // Stay open long enough for a late close to show up.
+          setTimeout(() => {
+            resolve([...events]);
+            client.close();
+          }, 200);
+        });
+        client.on("close", (code) => {
+          events.push(`close ${code}`);
+          resolve(events);
+        });
+        client.on("error", reject);
+      });
+
+    test("a plugin registered after the proxy", async () => {
+      refuseUpgrades();
+      const wss = echoPlugin(harness.clientServer);
+      expect(await echo(harness.clientPort)).toEqual(["open", "echo hi"]);
+      wss.close();
+    });
+
+    test("a plugin registered before the proxy", async () => {
+      refuseUpgrades();
+      const server = NodeHttp.createServer();
+      const wss = echoPlugin(server);
+      const remove = handleWebSocket(
+        server,
+        `http://127.0.0.1:${harness.upstreamPort}`,
+        "websocket-secret",
+      );
+      const port = await listen(server);
+      expect(await echo(port)).toEqual(["open", "echo hi"]);
+      remove();
+      wss.close();
+      await close(server);
+    });
+
+    test("a plugin that accepts after the Worker has answered", async () => {
+      refuseUpgrades();
+      const wss = echoPlugin(harness.clientServer, { verifyDelay: 200 });
+      expect(await echo(harness.clientPort)).toEqual(["open", "echo hi"]);
+      wss.close();
+    });
+
+    test("a plugin that awaits before it touches the socket", async () => {
+      refuseUpgrades();
+      const wss = echoPlugin(harness.clientServer, { listenerDelay: 200 });
+      expect(await echo(harness.clientPort)).toEqual(["open", "echo hi"]);
+      wss.close();
+    });
   });
 
   test("returns a cleanup function that removes the upgrade listener", async () => {

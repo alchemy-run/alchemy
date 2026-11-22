@@ -48,9 +48,7 @@ export const identityBlock = (ids: readonly string[] | undefined) =>
  */
 export const withRecordedError =
   <E1, R1>(describe: Effect.Effect<string | undefined, E1, R1>) =>
-  <A, E, R>(
-    self: Effect.Effect<A, E, R>,
-  ): Effect.Effect<A, E | E1 | ProvisioningFailed, R | R1> =>
+  <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E | E1 | ProvisioningFailed, R | R1> =>
     Effect.catchIf(
       self,
       (error): error is E & ProvisioningFailed => error instanceof ProvisioningFailed,

@@ -3,14 +3,22 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { nameTagFilter, single } from "../internal/Lookup.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
-export type EIPArn = `arn:aws:ec2:${RegionID}:${AccountID}:elastic-ip/${AllocationId}`;
+export class EIPUnexpectedResponse extends Data.TaggedError("EIPUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export type EIPArn = `arn:${Partition}:ec2:${RegionID}:${AccountID}:elastic-ip/${AllocationId}`;
 
 export type AllocationId<ID extends string = string> = `eipalloc-${ID}`;
 export const AllocationId = <ID extends string>(id: ID): ID & AllocationId<ID> =>
@@ -60,7 +68,7 @@ export interface EIP extends Resource<
     /**
      * The Amazon Resource Name (ARN) of the Elastic IP.
      */
-    eipArn: `arn:aws:ec2:${RegionID}:${AccountID}:elastic-ip/${string}`;
+    eipArn: `arn:${Partition}:ec2:${RegionID}:${AccountID}:elastic-ip/${string}`;
 
     /**
      * The Elastic IP address.
@@ -98,8 +106,27 @@ export interface EIP extends Resource<
     carrierIp?: string;
   },
   never,
-  Providers
+  Providers,
+  EIPLookup
 > {}
+
+/**
+ * Props for {@link EIP.lookup}: find an Elastic IP this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type EIPLookup =
+  | {
+      /** The address's allocation id. */
+      allocationId: string;
+    }
+  | {
+      /** The public IPv4 address. */
+      publicIp: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several match. */
+      name: string;
+    };
 /**
  * An Elastic IP address — a static, public IPv4 address allocated to your AWS
  * account that you can attach to instances, network interfaces, or NAT
@@ -163,6 +190,22 @@ export interface EIP extends Resource<
  * Downstream resources consume the reserved address through its `allocationId`;
  * here the EIP becomes the fixed public IP of a NAT gateway.
  *
+ * ### Looking up an existing Elastic IP
+ * `EIP.lookup` references an address Alchemy doesn't manage (allocated in the
+ * console or by another stack), found by `allocationId`, `publicIp` or its
+ * `Name` tag. It is read during plan/deploy and never created, updated or
+ * deleted, so the address stays reserved when the stack is destroyed.
+ *
+ * **Example:** Give a NAT gateway an address you already allow-listed
+ * ```typescript
+ * const ip = AWS.EC2.EIP.lookup({ publicIp: "203.0.113.10" });
+ *
+ * const nat = yield* AWS.EC2.NatGateway("Egress", {
+ *   subnetId: publicSubnet.subnetId,
+ *   allocationId: ip.allocationId,
+ * });
+ * ```
+ *
  * @resource
  */
 export const EIP = Resource<EIP>("AWS.EC2.EIP");
@@ -193,7 +236,7 @@ export const EIPProvider = () =>
               .map((address): EIP["Attributes"] => ({
                 allocationId: address.AllocationId as AllocationId,
                 eipArn:
-                  `arn:aws:ec2:${region}:${accountId}:elastic-ip/${address.AllocationId}` as EIPArn,
+                  `arn:${partitionOf(region)}:ec2:${region}:${accountId}:elastic-ip/${address.AllocationId}` as EIPArn,
                 publicIp: address.PublicIp!,
                 publicIpv4Pool: address.PublicIpv4Pool,
                 domain: (address.Domain as "vpc" | "standard") ?? "vpc",
@@ -203,6 +246,46 @@ export const EIPProvider = () =>
                 carrierIp: address.CarrierIp,
               }));
           }),
+
+        lookup: Effect.fn(function* (props) {
+          const { region, accountId } = yield* AWSEnvironment.current;
+          const found = yield* ec2
+            .describeAddresses(
+              "allocationId" in props
+                ? { AllocationIds: [props.allocationId] }
+                : "publicIp" in props
+                  ? { PublicIps: [props.publicIp] }
+                  : { Filters: [nameTagFilter(props.name)] },
+            )
+            .pipe(
+              Effect.catchTag(["InvalidAllocationID.NotFound", "InvalidAddress.NotFound"], () =>
+                Effect.succeed({ Addresses: [] }),
+              ),
+            );
+          const address = yield* single(
+            "AWS.EC2.EIP",
+            "allocationId" in props
+              ? props.allocationId
+              : "publicIp" in props
+                ? props.publicIp
+                : `Name=${props.name}`,
+            found.Addresses ?? [],
+            (x) => x.AllocationId,
+          );
+          if (!address?.AllocationId || !address.PublicIp) return undefined;
+          return {
+            allocationId: address.AllocationId as AllocationId,
+            eipArn:
+              `arn:${partitionOf(region)}:ec2:${region}:${accountId}:elastic-ip/${address.AllocationId}` as EIPArn,
+            publicIp: address.PublicIp,
+            publicIpv4Pool: address.PublicIpv4Pool,
+            domain: (address.Domain as "vpc" | "standard") ?? "vpc",
+            networkBorderGroup: address.NetworkBorderGroup,
+            customerOwnedIp: address.CustomerOwnedIp,
+            customerOwnedIpv4Pool: address.CustomerOwnedIpv4Pool,
+            carrierIp: address.CarrierIp,
+          } satisfies EIP["Attributes"];
+        }),
 
         read: Effect.fn(function* ({ output }) {
           const { region, accountId } = yield* AWSEnvironment.current;
@@ -214,13 +297,15 @@ export const EIPProvider = () =>
 
           const address = result.Addresses?.[0];
           if (!address) {
-            return yield* Effect.fail(new Error(`EIP ${output.allocationId} not found`));
+            return yield* new EIPUnexpectedResponse({
+              message: `EIP ${output.allocationId} not found`,
+            });
           }
 
           return {
             allocationId: address.AllocationId as AllocationId,
             eipArn:
-              `arn:aws:ec2:${region}:${accountId}:elastic-ip/${address.AllocationId}` as EIPArn,
+              `arn:${partitionOf(region)}:ec2:${region}:${accountId}:elastic-ip/${address.AllocationId}` as EIPArn,
             publicIp: address.PublicIp!,
             publicIpv4Pool: address.PublicIpv4Pool,
             domain: (address.Domain as "vpc" | "standard") ?? "vpc",
@@ -286,9 +371,9 @@ export const EIPProvider = () =>
             });
             address = lookup.Addresses?.[0];
             if (!address) {
-              return yield* Effect.fail(
-                new Error(`EIP ${allocationId} disappeared after allocation`),
-              );
+              return yield* new EIPUnexpectedResponse({
+                message: `EIP ${allocationId} disappeared after allocation`,
+              });
             }
           }
 
@@ -316,7 +401,8 @@ export const EIPProvider = () =>
 
           return {
             allocationId,
-            eipArn: `arn:aws:ec2:${region}:${accountId}:elastic-ip/${allocationId}` as EIPArn,
+            eipArn:
+              `arn:${partitionOf(region)}:ec2:${region}:${accountId}:elastic-ip/${allocationId}` as EIPArn,
             publicIp: address.PublicIp!,
             publicIpv4Pool: address.PublicIpv4Pool,
             domain: (address.Domain as "vpc" | "standard") ?? "vpc",

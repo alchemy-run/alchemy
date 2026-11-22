@@ -1,5 +1,6 @@
 import { describe, expect, it, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Logger from "effect/Logger";
 import * as Assets from "../../bindings/assets/Assets.ts";
 import { getFixture } from "../helpers/fixture.ts";
@@ -89,6 +90,51 @@ layer(localRuntimeLayer)("Assets binding", (it) => {
     }),
   );
 
+  // Adapted from Miniflare's `test/plugins/assets/index.spec.ts` (#15998).
+  for (const { name, basePath, path, status } of [
+    {
+      name: "serves an in-prefix asset under a non-root basePath",
+      basePath: "/subpath",
+      path: "/subpath/.well-known/security.txt",
+      status: 200,
+    },
+    {
+      name: "returns 404 for an off-prefix request under a non-root basePath",
+      basePath: "/subpath",
+      path: "/.well-known/security.txt",
+      status: 404,
+    },
+    {
+      name: "normalizes a relative basePath in the Asset Worker",
+      basePath: "relative/path",
+      path: "/relative/path/.well-known/security.txt",
+      status: 200,
+    },
+  ]) {
+    it.effect(name, () =>
+      Effect.gen(function* () {
+        const worker = yield* startTestWorker({
+          name: "assets-base-path",
+          compatibilityDate: "2026-04-29",
+          compatibilityFlags: [],
+          modules: [
+            {
+              name: "main.js",
+              type: "ESModule",
+              content: `export default { fetch() { return new Response("worker", { status: 404 }); } };`,
+            },
+          ],
+          assets: { directory: ASSETS_DIRECTORY, basePath },
+          bindings: [],
+        });
+        const res = yield* worker.fetch(path, { redirect: "manual" });
+        const text = yield* Effect.promise(() => res.text());
+        expect(res.status).toBe(status);
+        if (status === 200) expect(text).toBe("Contact: mailto:security@example.com\n");
+      }),
+    );
+  }
+
   it.effect("Assets.binding fails with ConfigError when no assets are configured", () =>
     Effect.gen(function* () {
       const error = yield* startTestWorker({
@@ -99,6 +145,28 @@ layer(localRuntimeLayer)("Assets binding", (it) => {
         bindings: [Assets.local("ASSETS")],
       }).pipe(Effect.flip);
       expect(error).toMatchObject({ _tag: "ConfigError", subtag: "Assets" });
+    }),
+  );
+
+  // Adapted from Miniflare's `test/plugins/assets/index.spec.ts` (#16521).
+  it.effect("reports an invalid .assetsignore encoding as a ConfigError", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const directory = yield* fs.makeTempDirectoryScoped();
+      yield* fs.writeFile(
+        `${directory}/.assetsignore`,
+        new Uint8Array(Buffer.from("ignored.txt", "utf16le")),
+      );
+      const error = yield* startTestWorker({
+        name: "assets-invalid-ignore",
+        compatibilityDate: "2026-03-10",
+        compatibilityFlags: [],
+        modules: [{ name: "main.js", type: "ESModule", content: ASSETS_SCRIPT }],
+        assets: { directory },
+        bindings: [Assets.local("ASSETS")],
+      }).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "ConfigError", subtag: "Assets" });
+      expect(error.message).toContain("Save the file as UTF-8 and try again.");
     }),
   );
 });

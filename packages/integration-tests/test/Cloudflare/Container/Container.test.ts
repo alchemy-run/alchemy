@@ -1,14 +1,12 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import { assert, describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
-import { assert, describe, expect } from "alchemy-test";
 import { destroy as destroyStack } from "alchemy/Destroy";
 import * as Plan from "alchemy/Plan";
 import { Stage } from "alchemy/Stage";
 import { State, inMemoryState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
@@ -34,14 +32,14 @@ const scheduledApplication = (app: Containers.ContainerApplicationItem) => {
 describe.concurrent.each([
   {
     dev: true,
-    stage: process.env.ALCHEMY_TEST_STAGE
-      ? `${process.env.ALCHEMY_TEST_STAGE}-local`
-      : "test-local",
+    // The user's test stage (`test_$USER` or `--stage`), so concurrent runs by
+    // different users never share containers.
+    stage: `${Test.defaultStage()}-local`,
     // Must cover the full readiness budget (readinessRetries × 3s ≈ 3 min)
     // when a saturated machine keeps the local container answering 500s.
     timeout: 300_000,
   },
-  { dev: false, stage: process.env.ALCHEMY_TEST_STAGE ?? "test-live", timeout: 300_000 },
+  { dev: false, stage: Test.defaultStage(), timeout: 300_000 },
 ])(
   "Container (dev: $dev)",
   ({ dev, stage, timeout }) => {
@@ -143,6 +141,55 @@ describe.concurrent.each([
           expect(body).toContain("hello-fetch");
         }).pipe(logLevel),
         { timeout },
+      );
+
+      // Guest code changes only the bundle, never a prop. The program in
+      // `exports` is an Effect, which `isResolved` never accepts, so the live
+      // diff used to return before its image hash check and plan a noop.
+      // A stale recorded hash stands in for a changed bundle.
+      test.skipIf(dev)(
+        "plans an update when the guest code's image hash changes",
+        Effect.gen(function* () {
+          yield* stack;
+          const effectful = yield* EffectfulStack;
+          const state = yield* yield* State;
+          const scope = { stack: effectful.name, stage };
+          const rows = yield* Effect.forEach(yield* state.list(scope), (fqn) =>
+            state.get({ ...scope, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
+          );
+          const container = rows.find(
+            ({ row }) =>
+              row !== undefined &&
+              "resourceType" in row &&
+              row.resourceType === "Cloudflare.Container",
+          );
+          assert(container?.row && "attr" in container.row);
+          const { fqn, row } = container;
+          const { attr } = row;
+          assert(attr);
+          const planned = Plan.make(effectful).pipe(
+            Effect.map((plan) => plan.resources[fqn]?.action),
+          );
+
+          expect(yield* planned).toBe("noop");
+          yield* state.set({
+            ...scope,
+            fqn,
+            value: { ...row, attr: { ...attr, hash: { ...attr.hash, image: "stale" } } },
+          });
+          const action = yield* planned.pipe(
+            Effect.ensuring(state.set({ ...scope, fqn, value: row }).pipe(Effect.orDie)),
+          );
+          expect(action).toBe("update");
+        }).pipe(
+          Effect.provide(
+            Layer.effectContext(EffectfulStack.pipe(Effect.map((stack) => stack.services))).pipe(
+              Layer.provideMerge(Layer.succeed(Stage, stage)),
+            ),
+          ),
+          logLevel,
+        ),
+        { timeout, retry: 0 },
       );
     });
 
@@ -251,13 +298,14 @@ describe.concurrent.each([
               Effect.retry({ schedule: readinessSchedule, times: 6 }),
             );
 
-          // A fresh application also has no instance while it provisions, so
-          // retry until the first object holds the one instance.
+          // A fresh application also has no instance while it provisions,
+          // which has taken over 90 seconds, so retry until the first object
+          // holds the one instance.
           const first = yield* startCapped("first").pipe(
             Effect.repeat({
               schedule: Schedule.spaced("5 seconds"),
               until: (result) => result.tag === "running",
-              times: 18,
+              times: 48,
             }),
           );
           expect(first).toEqual({ phase: "monitor", tag: "running" });
@@ -267,7 +315,7 @@ describe.concurrent.each([
             tag: "NoContainerInstanceError",
           });
         }).pipe(logLevel),
-        { tags: ["live"], timeout },
+        { tags: ["live"], timeout: 360_000 },
       );
 
       // The proxy pattern from #1334 (`yield* fetch(yield* HttpServerRequest)`):
@@ -389,7 +437,7 @@ describe.sequential(
     ],
   },
   () => {
-    const stage = process.env.ALCHEMY_TEST_STAGE ?? "test-live";
+    const stage = Test.defaultStage();
     const providers = Cloudflare.providers();
     const services = Layer.effectContext(
       AttachmentStack.pipe(Effect.map((stack) => stack.services)),
@@ -603,7 +651,7 @@ describe.sequential(
     );
 
     test(
-      "recovers a missing application only with its recorded exact attachment",
+      "recovers a missing application attached to the namespace its Worker publishes",
       Effect.gen(function* () {
         const first = yield* stack;
         const namespaceId = first.app.durableObjects?.namespaceId;
@@ -631,25 +679,27 @@ describe.sequential(
               },
             });
           });
-        yield* Effect.gen(function* () {
+        // Delete an application out of band and wait until neither the list
+        // nor a read by id still reports it.
+        const deleteOutOfBand = Effect.fn(function* (applicationId: string) {
           yield* Containers.deleteContainerApplication({
             accountId: first.app.accountId,
-            applicationId: first.app.applicationId,
+            applicationId,
           });
           const remaining = yield* Containers.listContainerApplications({
             accountId: first.app.accountId,
           }).pipe(
             Effect.repeat({
               schedule: Schedule.spaced("1 second"),
-              until: (apps) => apps.every((app) => app.id !== first.app.applicationId),
+              until: (apps) => apps.every((app) => app.id !== applicationId),
               times: 8,
             }),
           );
-          expect(remaining.some((app) => app.id === first.app.applicationId)).toBe(false);
+          expect(remaining.some((app) => app.id === applicationId)).toBe(false);
           // Reconcile observes by id first; list deletion can propagate earlier.
           const deleted = yield* Containers.getContainerApplication({
             accountId: first.app.accountId,
-            applicationId: first.app.applicationId,
+            applicationId,
           }).pipe(
             Effect.tap((app) =>
               Effect.logInfo(
@@ -664,35 +714,44 @@ describe.sequential(
             }),
           );
           expect(deleted).toBeUndefined();
-          for (const missing of [undefined, {}]) {
-            yield* corruptProjection(missing);
-            const failed = yield* deploy(AttachmentStack).pipe(Effect.exit);
-            assert(Exit.isFailure(failed));
-            expect(Cause.pretty(failed.cause)).toContain("unresolved Durable Object namespace");
+        });
+        yield* Effect.gen(function* () {
+          // The Worker's projection is stale, so it updates first and publishes
+          // its namespace; the Container waits for it and attaches the new
+          // application to that observed namespace, whatever its own record
+          // says. It never creates the application unattached.
+          let live = first.app.applicationId;
+          let url = first.url;
+          for (const recorded of [undefined, {}, { namespaceId }]) {
+            yield* deleteOutOfBand(live);
+            yield* corruptProjection(recorded);
+            const recovered = yield* deploy(AttachmentStack);
+            expect(recovered.worker.durableObjectNamespaces).toEqual(
+              first.worker.durableObjectNamespaces,
+            );
+            expect(recovered.app.applicationId).not.toBe(live);
+            expect(recovered.app.durableObjects).toEqual({ namespaceId });
+            const observed = yield* readAttachmentApplication(
+              first.app.accountId,
+              recovered.app.applicationId,
+            );
+            expect(observed.durableObjects).toEqual({ namespaceId });
+            expect(observed.maxInstances).toBe(2);
             const applications = yield* Containers.listContainerApplications({
               accountId: first.app.accountId,
             });
-            expect(applications.some((app) => app.name === first.app.applicationName)).toBe(false);
+            expect(
+              applications.filter((app) => app.name === first.app.applicationName),
+            ).toHaveLength(1);
+            live = recovered.app.applicationId;
+            url = recovered.url;
           }
-          yield* corruptProjection({ namespaceId });
-          const recovered = yield* deploy(AttachmentStack);
-          expect(recovered.worker.durableObjectNamespaces).toEqual(
-            first.worker.durableObjectNamespaces,
-          );
-          expect(recovered.app.applicationId).not.toBe(first.app.applicationId);
-          expect(recovered.app.durableObjects).toEqual({ namespaceId });
-          const observed = yield* readAttachmentApplication(
-            first.app.accountId,
-            recovered.app.applicationId,
-          );
-          expect(observed.durableObjects).toEqual({ namespaceId });
-          expect(observed.maxInstances).toBe(2);
           const other = yield* readAttachmentApplication(
             first.otherApp.accountId,
             first.otherApp.applicationId,
           );
           expect(other.durableObjects).toEqual(first.otherApp.durableObjects);
-          const response = yield* fetchReady(new URL("/hello", recovered.url), "method", 8);
+          const response = yield* fetchReady(new URL("/hello", url), "method", 8);
           expect(JSON.parse(response).method).toBe("GET");
         }).pipe(
           Effect.ensuring(
@@ -737,7 +796,7 @@ describe.sequential(
           ),
         );
       }).pipe(Effect.provide(services)),
-      { timeout: 120_000, retry: 0 },
+      { timeout: 180_000, retry: 0 },
     );
 
     // Runs last: detaching recreates the application under a new id.
@@ -790,7 +849,7 @@ describe.sequential(
     ],
   },
   () => {
-    const stage = process.env.ALCHEMY_TEST_STAGE ?? "test-live";
+    const stage = Test.defaultStage();
     const name = `alchemy-named-attachment-${stage}`;
     const NamedStack = attachmentStack(true, name);
     const services = Layer.effectContext(

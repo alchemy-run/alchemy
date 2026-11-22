@@ -1,11 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import type * as retail from "@distilled.cloud/gcp/retail_v2";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import RetailBindingsHost, { retailEnabled, Serving, Shirt } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -19,8 +19,8 @@ let project: string;
 /** Serving configs have no IAM policy: both bindings grant on the project. */
 const expectProjectGrants = Effect.gen(function* () {
   const policy = yield* crm.getIamPolicyProjects({
+    options: { requestedPolicyVersion: 3 },
     resource: `projects/${project}`,
-    body: { options: { requestedPolicyVersion: 3 } },
   });
   const roles = (policy.bindings ?? [])
     .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
@@ -28,7 +28,7 @@ const expectProjectGrants = Effect.gen(function* () {
   expect(roles).toEqual([{ role: "roles/retail.viewer", condition: undefined }]);
 });
 
-describe.skipIf(!dockerAvailable || !retailEnabled)(
+describe.skipIf(!retailEnabled)(
   "Retail Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:retail", "provider:gcp:run", "live"],

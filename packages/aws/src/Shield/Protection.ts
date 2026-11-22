@@ -5,13 +5,22 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { AWSEnvironment } from "../Environment.ts";
+import type { Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
+
+export class ProtectionUnexpectedResponse extends Data.TaggedError("ProtectionUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /** Route 53 health check ARNs look like `arn:aws:route53:::healthcheck/{id}`. */
 const healthCheckIdFromArn = (arn: string) => arn.split("/").pop() ?? arn;
-const healthCheckArnFromId = (id: string) => `arn:aws:route53:::healthcheck/${id}`;
+const healthCheckArnFromId = (partition: Partition, id: string) =>
+  `arn:${partition}:route53:::healthcheck/${id}`;
 
 /**
  * How Shield Advanced responds automatically to application-layer (layer 7)
@@ -120,9 +129,7 @@ export const Protection = Resource<Protection>("AWS.Shield.Protection");
 const observeByResourceArn = (resourceArn: string) =>
   shield.describeProtection({ ResourceArn: resourceArn }).pipe(
     Effect.map((r) => r.Protection),
-    Effect.catchTag(["ResourceNotFoundException", "SubscriptionNotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["ResourceNotFoundException", "SubscriptionNotFound"], () => Effect.undefined),
   );
 
 const toTagRecord = (tags: shield.Tag[] | undefined): Record<string, string> =>
@@ -231,9 +238,10 @@ export const ProtectionProvider = () =>
         }
         for (const observedId of observedIds) {
           if (!desiredIds.includes(observedId)) {
+            const { partition } = yield* AWSEnvironment.current;
             yield* shield.disassociateHealthCheck({
               ProtectionId: protectionId,
-              HealthCheckArn: healthCheckArnFromId(observedId),
+              HealthCheckArn: healthCheckArnFromId(partition, observedId),
             });
           }
         }
@@ -286,9 +294,9 @@ export const ProtectionProvider = () =>
               .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
             protection = yield* observeByResourceArn(news.resourceArn);
             if (!protection?.Id || !protection.ProtectionArn) {
-              return yield* Effect.fail(
-                new Error(`Failed to create or read Shield protection for ${news.resourceArn}`),
-              );
+              return yield* new ProtectionUnexpectedResponse({
+                message: `Failed to create or read Shield protection for ${news.resourceArn}`,
+              });
             }
           }
 

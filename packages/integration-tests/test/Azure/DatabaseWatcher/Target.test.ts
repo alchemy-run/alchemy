@@ -1,8 +1,8 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as databasewatcher from "@distilled.cloud/azure/databasewatcher";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -18,6 +18,9 @@ const getTarget = (resourceGroupName: string, watcherName: string, targetName: s
       targetName,
     });
   });
+
+const sqlDbOf = (properties: databasewatcher.TargetProperties | undefined) =>
+  properties?.targetType === "SqlDb" ? properties : undefined;
 
 const targetGone = (resourceGroupName: string, watcherName: string, targetName: string) =>
   getTarget(resourceGroupName, watcherName, targetName).pipe(
@@ -76,7 +79,9 @@ test.provider(
       expect(observed.properties?.connectionServerName).toEqual(
         "alchemy-dw-test.database.windows.net",
       );
-      expect(observed.properties?.sqlDbResourceId?.toLowerCase()).toContain("/databases/orders");
+      expect(sqlDbOf(observed.properties)?.sqlDbResourceId?.toLowerCase()).toContain(
+        "/databases/orders",
+      );
 
       // In-place update of the connection server name.
       const updated = yield* stack.deploy(
@@ -100,7 +105,7 @@ test.provider(
         }),
       );
       const replacement = yield* getTarget(rg, watcherName, replaced.target!.targetName);
-      expect(replacement.properties?.sqlDbResourceId?.toLowerCase()).toContain(
+      expect(sqlDbOf(replacement.properties)?.sqlDbResourceId?.toLowerCase()).toContain(
         "/databases/invoices",
       );
 

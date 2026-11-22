@@ -287,6 +287,8 @@ export const ConnectionProvider = () =>
           resourceGroupName: resourceGroup,
           workspaceName: workspace,
           connectionName: name,
+          // `authType` is only known at runtime and decides the arm, so the
+          // arm is asserted rather than narrowed.
           properties: {
             authType: news.authType,
             category: news.category,
@@ -296,7 +298,7 @@ export const ConnectionProvider = () =>
             isSharedToAll,
             expiryTime: news.expiryTime,
             useWorkspaceManagedIdentity: news.useWorkspaceManagedIdentity,
-          },
+          } as ml.WorkspaceConnectionPropertiesV2Input,
         });
       }
 

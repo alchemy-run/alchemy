@@ -22,11 +22,11 @@ export const MAX_INSTANCE_ID_LENGTH = 40;
 export const MAX_DISPLAY_NAME_LENGTH = 64;
 
 export class ApihubNotResolved extends Data.TaggedError("GCP.ApiHub.ResourceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ApihubStillExists extends Data.TaggedError("GCP.ApiHub.StillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -288,7 +288,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is Exclude<A, undefined> => value !== undefined,
-      () => new ApihubNotResolved({ name }),
+      () => new ApihubNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ApiHub.ResourceNotResolved",
@@ -304,7 +304,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new ApihubStillExists({ name }),
+      () => new ApihubStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ApiHub.StillExists",
@@ -442,7 +442,7 @@ export const projectNameOf = (value: string | undefined, fallback = "") => {
 };
 
 export class ApihubInstanceFailed extends Data.TaggedError("GCP.ApiHub.InstanceFailed")<{
-  name: string;
+  resourceName: string;
   state?: string;
   message?: string;
 }> {}

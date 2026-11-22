@@ -8,6 +8,7 @@ import { hasAlchemyTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import { readIotTags, sanitizeRuleName, syncIotTags } from "./internal.ts";
 
@@ -103,7 +104,7 @@ export const TopicRuleProvider = () =>
       });
 
       const ruleArnOf = (accountId: string, region: string, ruleName: string) =>
-        `arn:aws:iot:${region}:${accountId}:rule/${ruleName}`;
+        `arn:${partitionOf(region)}:iot:${region}:${accountId}:rule/${ruleName}`;
 
       const buildPayload = (props: TopicRuleProps): iot.TopicRulePayload => ({
         sql: props.sql,
@@ -135,7 +136,7 @@ export const TopicRuleProvider = () =>
           const ruleName = output?.ruleName ?? (yield* createName(id, olds ?? {}));
           const found = yield* iot
             .getTopicRule({ ruleName })
-            .pipe(Effect.catchTag("TopicRuleNotFound", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("TopicRuleNotFound", () => Effect.undefined));
           if (!found) return undefined;
           const ruleArn = found.ruleArn ?? ruleArnOf(accountId, region, ruleName);
           const attrs = { ruleName, ruleArn };
@@ -158,7 +159,7 @@ export const TopicRuleProvider = () =>
           // OBSERVE
           const live = yield* iot
             .getTopicRule({ ruleName })
-            .pipe(Effect.catchTag("TopicRuleNotFound", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("TopicRuleNotFound", () => Effect.undefined));
 
           // ENSURE / SYNC — createTopicRule for a new rule, replaceTopicRule
           // (a full upsert of the payload) for an existing one.

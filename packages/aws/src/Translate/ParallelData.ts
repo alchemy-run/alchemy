@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -17,7 +18,7 @@ import { readTranslateTags, syncTranslateTags } from "./internal.ts";
  * malformed input file or an S3 URI the caller cannot read.
  */
 export class ParallelDataFailed extends Data.TaggedError("ParallelDataFailed")<{
-  readonly name: string;
+  readonly resourceName: string;
   readonly message: string | undefined;
 }> {}
 
@@ -26,7 +27,7 @@ export class ParallelDataFailed extends Data.TaggedError("ParallelDataFailed")<{
  * polling window.
  */
 export class ParallelDataNotConverged extends Data.TaggedError("ParallelDataNotConverged")<{
-  readonly name: string;
+  readonly resourceName: string;
   readonly status: string | undefined;
 }> {}
 
@@ -89,8 +90,18 @@ export interface ParallelData extends Resource<
     failedRecordCount: number | undefined;
   },
   never,
-  Providers
+  Providers,
+  ParallelDataLookup
 > {}
+
+/**
+ * Props for {@link ParallelData.lookup}: find a parallel data this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ParallelDataLookup {
+  /** The parallel data name of the existing parallel data. */
+  parallelDataName: string;
+}
 
 /**
  * Amazon Translate parallel data — segment-aligned translation examples
@@ -119,6 +130,16 @@ export interface ParallelData extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing parallel data
+ * `ParallelData.lookup` references a parallel data Alchemy doesn't manage (created in the
+ * console or by another stack), found by `parallelDataName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing parallel data
+ * ```typescript
+ * const existing = AWS.Translate.ParallelData.lookup({ parallelDataName: "my-parallel-data" });
+ * ```
+ *
  * @resource
  */
 export const ParallelData = Resource<ParallelData>("AWS.Translate.ParallelData");
@@ -144,7 +165,7 @@ export const ParallelDataProvider = () =>
       const getOne = Effect.fn(function* (name: string) {
         return yield* translate
           .getParallelData({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       // The import runs asynchronously (CREATING/UPDATING → ACTIVE|FAILED);
@@ -163,10 +184,10 @@ export const ParallelDataProvider = () =>
         );
         const props = final?.ParallelDataProperties;
         if (props?.Status === "FAILED") {
-          return yield* new ParallelDataFailed({ name, message: props.Message });
+          return yield* new ParallelDataFailed({ resourceName: name, message: props.Message });
         }
         if (props?.Status !== "ACTIVE") {
-          return yield* new ParallelDataNotConverged({ name, status: props?.Status });
+          return yield* new ParallelDataNotConverged({ resourceName: name, status: props?.Status });
         }
         return props;
       });
@@ -179,6 +200,13 @@ export const ParallelDataProvider = () =>
           if ((yield* createName(id, olds)) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ parallelDataName: name }) {
+          const found = yield* getOne(name);
+          if (found?.ParallelDataProperties === undefined) return undefined;
+          const attrs = toAttributes(found.ParallelDataProperties);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -204,7 +232,8 @@ export const ParallelDataProvider = () =>
             // concurrent create of the same name; fall through to observe.
             // The client token only needs to be unique per submission;
             // idempotency across crashed runs comes from observing first.
-            const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+            const random = yield* SecureRandom.SecureRandom;
+            const clientToken = yield* random.uuidV4();
             yield* translate
               .createParallelData({
                 Name: name,
@@ -231,7 +260,8 @@ export const ParallelDataProvider = () =>
             if (drift) {
               // Computed outside the retry so replays of the same submission
               // reuse one idempotency token.
-              const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+              const random = yield* SecureRandom.SecureRandom;
+              const clientToken = yield* random.uuidV4();
               yield* translate
                 .updateParallelData({
                   Name: name,
@@ -275,7 +305,7 @@ export const ParallelDataProvider = () =>
           // Deletion is asynchronous (DELETING) — wait until gone so a
           // replacement can immediately reuse the name.
           yield* translate.getParallelData({ Name: output.parallelDataName }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             Effect.repeat({
               schedule: Schedule.spaced("5 seconds"),
               until: (r): boolean => r === undefined,

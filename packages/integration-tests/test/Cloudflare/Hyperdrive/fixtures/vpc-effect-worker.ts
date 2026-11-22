@@ -1,8 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as SQL from "@alchemy.run/sql/Postgres";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as Redacted from "effect/Redacted";
-import { Client } from "pg";
 import { VpcOriginConnection } from "./vpc-origin.ts";
 
 /**
@@ -16,25 +15,14 @@ export default class HyperdriveVpcEffectWorker extends Cloudflare.Worker<Hyperdr
   Effect.gen(function* () {
     const connection = yield* VpcOriginConnection;
     const hd = yield* Cloudflare.Hyperdrive.Connect(connection);
+    const sql = yield* SQL.Postgres({ url: hd.connectionString });
     return {
-      fetch: Effect.gen(function* () {
-        const connectionString = Redacted.value(yield* hd.connectionString);
-        return yield* Effect.tryPromise(async () => {
-          const client = new Client({ connectionString });
-          await client.connect();
-          try {
-            const result = await client.query("select 'through-vpc' as via");
-            return result.rows[0] as { via: string };
-          } finally {
-            await client.end();
-          }
-        }).pipe(
-          Effect.flatMap((row) => HttpServerResponse.json(row)),
-          Effect.catch((error) =>
-            Effect.succeed(HttpServerResponse.text(String(error), { status: 500 })),
-          ),
-        );
-      }),
+      fetch: sql`select 'through-vpc' as via`.pipe(
+        Effect.flatMap((rows) => HttpServerResponse.json(rows[0])),
+        Effect.catchCause((cause) =>
+          Effect.succeed(HttpServerResponse.text(String(cause), { status: 500 })),
+        ),
+      ),
     };
   }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
 ) {}

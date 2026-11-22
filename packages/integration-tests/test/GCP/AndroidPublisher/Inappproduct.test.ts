@@ -1,9 +1,10 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as androidpublisher from "@distilled.cloud/gcp/androidpublisher_v3";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { logLevel, packageName, probePackageName, missingTag, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -49,16 +50,13 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         androidpublisher.insertInappproducts({
+          sku: "alchemy_probe_iap",
+          defaultLanguage: "en-US",
+          purchaseType: "managedUser",
+          defaultPrice: { currency: "USD", priceMicros: "990000" },
+          listings: { "en-US": { title: "Alchemy Probe" } },
           packageName: probePackageName,
           autoConvertMissingPrices: true,
-          body: {
-            packageName: probePackageName,
-            sku: "alchemy_probe_iap",
-            defaultLanguage: "en-US",
-            purchaseType: "managedUser",
-            defaultPrice: { currency: "USD", priceMicros: "990000" },
-            listings: { "en-US": { title: "Alchemy Probe" } },
-          },
         }),
       );
       expect(error._tag).toEqual("Forbidden");
@@ -84,6 +82,13 @@ test.provider.skipIf(!runLifecycle)(
             listings: { "en-US": { title: "Gem pack" } },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.AndroidPublisher.Inappproduct.lookup({
+          sku: created.sku,
+          packageName: created.packageName,
+        }),
+        created,
       );
 
       expect(created.sku.length).toBeGreaterThan(0);

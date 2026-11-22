@@ -73,12 +73,12 @@ export const WirelessDestinationEventSource = Layer.effect(
             const rule = yield* Rule(`${destination.LogicalId}-UplinkRule`, {
               ruleName: destination.expression,
               sql: "SELECT * FROM 'iotwireless/uplink'",
-              actions: [{ lambda: { functionArn: host.functionArn } }],
+              actions: [{ lambda: { functionArn: Lambda.qualifiedArnOf(host) } }],
             });
 
             yield* Permission(`AWS.IoTWireless.UplinkInvoke(${destination.LogicalId})`, {
               action: "lambda:InvokeFunction",
-              functionName: host.functionName,
+              functionName: Lambda.qualifiedNameOf(host),
               principal: "iot.amazonaws.com",
               sourceArn: rule.ruleArn,
             });

@@ -20,9 +20,9 @@
  */
 import { useMemo, useSyncExternalStore } from "@alchemy.run/sigil/react";
 import type { JSX, ReactNode } from "react";
+import type { ApplyStatus } from "../../../Events.ts";
 import type { Plan as AlchemyPlan } from "../../../Plan.ts";
-import type { ApplyStatus } from "../../../Report.ts";
-import { theme } from "../../CliKit/index.ts";
+import { theme } from "../../../Util/Theme.ts";
 import { formatElapsed } from "../../Format.ts";
 import { formatModeNote } from "../../ModeTag.ts";
 import type { ActionVerb, PlanSummaryCounts } from "../../NamespaceTree.ts";
@@ -108,7 +108,7 @@ export function Plan(props: PlanProps): JSX.Element {
   const keyGlyphs = useKeyGlyphs();
   const borderStyle = useBorderStyle();
   const state = usePlanTree(tree);
-  const { tasks, label, viewport, busy } = state;
+  const { tasks, label, viewport, busy, elapsedMs } = state;
   const {
     progress: { completed, total: workRows },
     collapsed,
@@ -150,6 +150,7 @@ export function Plan(props: PlanProps): JSX.Element {
         ) : null}
         <SectionHeading>{label}</SectionHeading>
         <Text tone="muted">{workRows === 0 ? "" : ` (${completed}/${workRows})`}</Text>
+        {elapsedMs === undefined ? null : <Text tone="muted"> ({formatElapsed(elapsedMs)})</Text>}
       </>
     ) : null;
   const planSummary =
@@ -393,6 +394,7 @@ function PlanRowView(props: {
         iconColor={color}
         label={row.id}
         detail={rowDetail(status, state?.message)}
+        detailOverflow={status === "fail" ? "wrap" : "truncate"}
         depth={row.depth}
       >
         <Text color={color}>{taskLabel(row.action, status)}</Text>
@@ -475,6 +477,7 @@ function PlanRowView(props: {
           </>
         }
         detail={rowDetail(rowState.status, rowState.message)}
+        detailOverflow={rowState.status === "fail" ? "wrap" : "truncate"}
         depth={row.depth}
       >
         {modeNote ? <Text tone="muted">({modeNote})</Text> : null}

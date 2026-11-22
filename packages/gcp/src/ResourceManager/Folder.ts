@@ -58,8 +58,26 @@ export type Folder = Resource<
     managementProject: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FolderLookup
 >;
+
+/**
+ * Props for {@link Folder.lookup}: find a folder this stack doesn't manage
+ * by its identifiers.
+ */
+export interface FolderLookup {
+  /**
+   * User-visible display name. Unique among sibling folders. 1-30
+   * characters, starting and ending with a letter or digit.
+   */
+  displayName: string;
+  /**
+   * Parent `organizations/{org}` or `folders/{folder}`. Changing parent
+   * moves the folder.
+   */
+  parent?: string;
+}
 
 /**
  * A Cloud Resource Manager folder — a node in an organization's resource
@@ -92,22 +110,34 @@ export type Folder = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing folder
+ * `Folder.lookup` references a folder Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared folder.
+ *
+ * **Example:** Reference an existing folder
+ * ```typescript
+ * const folder = GCP.ResourceManager.Folder.lookup({
+ *   displayName: "my-display",
+ * });
+ * ```
+ *
  * @resource
  * @category ResourceManager
  */
 export const Folder = Resource<Folder>("GCP.ResourceManager.Folder");
 
 export class FolderNotResolved extends Data.TaggedError("GCP.ResourceManager.FolderNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FolderStillExists extends Data.TaggedError("GCP.ResourceManager.FolderStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const sanitizeDisplayName = (value: string) => {
   let next = value
-    .replace(/[^a-zA-Z0-9_ \-]/g, "-")
+    .replace(/[^a-zA-Z0-9_ -]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
   if (next.length > FOLDER_DISPLAY_MAX) {
@@ -148,7 +178,7 @@ const toAttrs = (folder: resourcemanager.Folder) => ({
 const getByName = (name: string) =>
   resourcemanager
     .getFolders({ name })
-    .pipe(Effect.catchTag(["NotFound", "FolderNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "FolderNotFound"], () => Effect.undefined));
 
 const listChildren = (parent: string, showDeleted = true) =>
   collectPages(
@@ -185,7 +215,7 @@ const waitUntilExists = (resourceName: string | undefined, parent: string, displ
       (folder): folder is resourcemanager.Folder => folder !== undefined,
       () =>
         new FolderNotResolved({
-          name: resourceName ?? `${parent}/${displayName}`,
+          resourceName: resourceName ?? `${parent}/${displayName}`,
         }),
     ),
     Effect.retry({
@@ -200,7 +230,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((folder) =>
       folder === undefined || isDeleteRequested(folder.state)
         ? Effect.void
-        : Effect.fail(new FolderStillExists({ name })),
+        : Effect.fail(new FolderStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ResourceManager.FolderStillExists",
@@ -228,6 +258,16 @@ export const FolderProvider = () =>
   Provider.succeed(Folder, {
     stables: ["name", "createTime"],
 
+    lookup: Effect.fn(function* ({ displayName, parent: lookupParent }) {
+      const parent = yield* resolveParent(lookupParent, undefined).pipe(
+        Effect.catchTag("GCP.ResourceManager.ParentRequired", () => Effect.succeed("")),
+      );
+      if (parent.length === 0) return undefined;
+      const existing = yield* observe(undefined, parent || "", displayName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const displayName = yield* toDisplayName(id, olds?.displayName, output?.displayName);
       const parent = yield* resolveParent(olds?.parent, output?.parent).pipe(
@@ -251,13 +291,8 @@ export const FolderProvider = () =>
 
       if (current === undefined) {
         const created = yield* resourcemanager
-          .createFolders({
-            body: {
-              parent,
-              displayName,
-            },
-          })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .createFolders({ parent, displayName })
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const settled = yield* waitForCreate(created);
           current = yield* waitUntilExists(
@@ -273,7 +308,7 @@ export const FolderProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new FolderNotResolved({
-          name: output?.name ?? `${parent}/${displayName}`,
+          resourceName: output?.name ?? `${parent}/${displayName}`,
         });
       }
 
@@ -282,13 +317,10 @@ export const FolderProvider = () =>
 
       if ((current.displayName ?? "") !== displayName) {
         const operation = yield* resourcemanager.patchFolders({
+          displayName,
+          etag: current.etag,
           name: current.name ?? name,
           updateMask: "displayName",
-          body: {
-            name: current.name ?? name,
-            displayName,
-            etag: current.etag,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name, parent, displayName);
@@ -296,8 +328,8 @@ export const FolderProvider = () =>
 
       if (current.parent !== undefined && !sameHierarchyParent(current.parent, parent)) {
         const operation = yield* resourcemanager.moveFolders({
+          destinationParent: parent,
           name: current.name ?? name,
-          body: { destinationParent: parent },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name, parent, displayName);
@@ -305,7 +337,7 @@ export const FolderProvider = () =>
 
       if (current === undefined) {
         return yield* new FolderNotResolved({
-          name: output?.name ?? `${parent}/${displayName}`,
+          resourceName: output?.name ?? `${parent}/${displayName}`,
         });
       }
 
@@ -319,7 +351,7 @@ export const FolderProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag(["NotFound", "FolderNotFound"], () => Effect.succeed(undefined)),
+        Effect.catchTag(["NotFound", "FolderNotFound"], () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

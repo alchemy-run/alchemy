@@ -1,5 +1,7 @@
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Cause from "effect/Cause";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -17,11 +19,13 @@ import * as Layer from "effect/Layer";
  *    the provider the row cannot be deleted anyway
  *  - an attr-less row whose `read` recovery fails must not block siblings
  */
+import { onEvent, type ApplyEvent } from "@/Events.ts";
 import { MissingProviderError } from "@/Provider";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { TestLayers, TestResource, TestResourceHooks } from "./test.resources.ts";
+
+class Refused extends Data.TaggedError("Refused")<{ message: string }> {}
 
 const { test } = Test.make({ providers: TestLayers() });
 
@@ -90,6 +94,44 @@ describe("destroy aggregates failures", { tags: ["unit", "local"] }, () => {
       expect(yield* getState("C")).toBeUndefined();
       // The failed row keeps its state for the next attempt.
       expect((yield* getState("A"))?.status).toBe("deleting");
+    }),
+  );
+
+  test.provider("a failed delete's status names its error", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const a = yield* TestResource("A", { string: "a" });
+          yield* TestResource("B", { string: a.string });
+        }),
+      );
+
+      const events: ApplyEvent[] = [];
+      const exit = yield* stack.destroy().pipe(
+        onEvent((event) =>
+          Effect.sync(() => {
+            if (event.type === "apply.resource.status") events.push(event);
+          }),
+        ),
+        Effect.provide(
+          hooks({
+            delete: (id) =>
+              id === "B" ? Effect.fail(new Refused({ message: "B is protected" })) : Effect.void,
+          }),
+        ),
+        Effect.exit,
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      // Without the message the row reads as a bare `fail`, and the reason
+      // only shows in the cause raised once every other delete has settled.
+      expect(
+        events.flatMap((e) =>
+          e.type === "apply.resource.status" && e.status === "fail"
+            ? [{ id: e.id, message: e.message }]
+            : [],
+        ),
+      ).toEqual([{ id: "B", message: "Refused: B is protected" }]);
     }),
   );
 

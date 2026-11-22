@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/aws",
-  "version": "2.0.0-beta.83",
+  "version": "2.0.0-beta.87",
   "description": "AWS resources, Lambda, ECS, EC2 and EKS for Alchemy.",
   "keywords": [
     "alchemy",
@@ -1305,6 +1305,7 @@
         "default": "./lib/XRay/index.js"
       },
       "./EKS/internal/*": null,
+      "./internal/*": null,
       "./*/internal": null,
       "./*": {
         "types": "./lib/*.d.ts",
@@ -1324,6 +1325,7 @@
     "@alchemy.run/kubernetes": "workspace:*",
     "@alchemy.run/sql": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
+    "@distilled.cloud/s3": "workspace:*",
     "@types/aws-lambda": "catalog:",
     "rolldown": "catalog:"
   },

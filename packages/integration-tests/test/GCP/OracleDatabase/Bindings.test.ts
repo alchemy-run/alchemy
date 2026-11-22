@@ -1,13 +1,13 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import OracleBindingsHost, {
   AppDb,
   Assign,
@@ -74,8 +74,8 @@ const expectProjectGrant = (role: string) =>
   Effect.gen(function* () {
     const { project } = yield* GcpEnvironment.current;
     const policy = yield* resourcemanager.getIamPolicyProjects({
+      options: { requestedPolicyVersion: 3 },
       resource: `projects/${project}`,
-      body: { options: { requestedPolicyVersion: 3 } },
     });
     const grants = (policy.bindings ?? []).filter((binding) =>
       (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
@@ -123,7 +123,7 @@ const describeGet = <A extends { name?: string }>(options: {
     );
   });
 
-describe.skipIf(!dockerAvailable || !runLifecycle)(
+describe.skipIf(!runLifecycle)(
   "OracleDatabase Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:oracledatabase", "provider:gcp:run", "live"],

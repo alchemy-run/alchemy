@@ -1,10 +1,9 @@
-import type { AzureOpError } from "@distilled.cloud/azure";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import type { Queue } from "./Queue.ts";
 import type { StorageQueueMessage } from "./QueueReceive.ts";
-import type { SendStorageQueueClient } from "./QueueSend.ts";
+import type { SendStorageQueueClient, StorageQueueError } from "./QueueSend.ts";
 
 /** Options for {@link WriteStorageQueueClient.update}. */
 export interface StorageQueueUpdateOptions {
@@ -28,13 +27,13 @@ export interface WriteStorageQueueClient extends SendStorageQueueClient {
   update(
     message: Pick<StorageQueueMessage, "messageId" | "popReceipt">,
     options: StorageQueueUpdateOptions,
-  ): Effect.Effect<StorageQueueUpdateResult, AzureOpError, RuntimeContext>;
+  ): Effect.Effect<StorageQueueUpdateResult, StorageQueueError, RuntimeContext>;
   /** Delete a received message; succeeds when it is already gone. */
   delete(
     message: Pick<StorageQueueMessage, "messageId" | "popReceipt">,
-  ): Effect.Effect<void, AzureOpError, RuntimeContext>;
+  ): Effect.Effect<void, StorageQueueError, RuntimeContext>;
   /** Delete every message in the queue. */
-  clear(): Effect.Effect<void, AzureOpError, RuntimeContext>;
+  clear(): Effect.Effect<void, StorageQueueError, RuntimeContext>;
 }
 
 /**

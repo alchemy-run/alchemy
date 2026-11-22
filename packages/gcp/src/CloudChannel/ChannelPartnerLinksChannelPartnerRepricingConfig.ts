@@ -132,7 +132,7 @@ export const ChannelPartnerLinksChannelPartnerRepricingConfig =
 export class ChannelPartnerLinksChannelPartnerRepricingConfigNotResolved extends Data.TaggedError(
   "GCP.CloudChannel.ChannelPartnerLinksChannelPartnerRepricingConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resolveParent = (newsParent: string, account?: string) =>
@@ -221,8 +221,8 @@ export const ChannelPartnerLinksChannelPartnerRepricingConfigProvider = () =>
       if (current === undefined) {
         const created = yield* cloudchannel
           .createAccountsChannelPartnerLinksChannelPartnerRepricingConfigs({
+            repricingConfig,
             parent,
-            body: { repricingConfig },
           })
           .pipe(
             Effect.catchTag("Conflict", () => findChannelPartnerRepricing(parent, name, month)),
@@ -232,7 +232,7 @@ export const ChannelPartnerLinksChannelPartnerRepricingConfigProvider = () =>
 
       if (current === undefined) {
         return yield* new ChannelPartnerLinksChannelPartnerRepricingConfigNotResolved({
-          name: name || `${parent}/channelPartnerRepricingConfigs`,
+          resourceName: name || `${parent}/channelPartnerRepricingConfigs`,
         });
       }
 
@@ -251,8 +251,8 @@ export const ChannelPartnerLinksChannelPartnerRepricingConfigProvider = () =>
       if (changed && currentName.length > 0) {
         current =
           yield* cloudchannel.patchAccountsChannelPartnerLinksChannelPartnerRepricingConfigs({
+            repricingConfig,
             name: currentName,
-            body: { name: currentName, repricingConfig },
           });
       }
 

@@ -16,11 +16,11 @@ export const RELATED_ENTRY_LINK_TYPE =
   "projects/dataplex-types/locations/global/entryLinkTypes/related";
 
 export class DataplexNotResolved extends Data.TaggedError("GCP.Dataplex.ResourceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class DataplexStillExists extends Data.TaggedError("GCP.Dataplex.ResourceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -172,7 +172,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
 ) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value ? Effect.succeed(value) : Effect.fail(new DataplexNotResolved({ name })),
+      value ? Effect.succeed(value) : Effect.fail(new DataplexNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.ResourceNotResolved",
@@ -187,7 +187,9 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
 ) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined ? Effect.void : Effect.fail(new DataplexStillExists({ name })),
+      value === undefined
+        ? Effect.void
+        : Effect.fail(new DataplexStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.ResourceStillExists",

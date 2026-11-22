@@ -50,7 +50,12 @@ export const ServerlessResourcesLive = Layer.effect(
     const bucket = yield* AWS.S3.Bucket("SmokeBucket", {
       forceDestroy: true,
     });
-    const jobsQueue = yield* AWS.SQS.Queue("SmokeJobsQueue");
+    // The worker consumes this queue with a 30-second timeout, which Lambda
+    // runs as 31 seconds (`timeoutMargin`); AWS needs the visibility timeout
+    // to cover it, and recommends six times the function timeout.
+    const jobsQueue = yield* AWS.SQS.Queue("SmokeJobsQueue", {
+      visibilityTimeout: "3 minutes",
+    });
     const resultsQueue = yield* AWS.SQS.Queue("SmokeResultsQueue");
     const machine = yield* AWS.StepFunctions.StateMachine("SmokeExpressMachine", {
       type: "EXPRESS",

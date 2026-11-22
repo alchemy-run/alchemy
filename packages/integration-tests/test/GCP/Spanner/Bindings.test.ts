@@ -1,10 +1,10 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as spanner from "@distilled.cloud/gcp/spanner_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import SpannerBindingsHost, { App, Db, ITEMS_DDL, Schema } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -26,21 +26,21 @@ const rolesOf = (policy: Policy) =>
 const databaseRoles = (database: string) =>
   spanner
     .getIamPolicyProjectsInstancesDatabases({
+      options: { requestedPolicyVersion: 3 },
       resource: database,
-      body: { options: { requestedPolicyVersion: 3 } },
     })
     .pipe(Effect.map(rolesOf));
 
 const instanceRoles = Effect.suspend(() =>
   spanner
     .getIamPolicyProjectsInstances({
+      options: { requestedPolicyVersion: 3 },
       resource: names.instance,
-      body: { options: { requestedPolicyVersion: 3 } },
     })
     .pipe(Effect.map(rolesOf)),
 );
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "Spanner Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:spanner", "provider:gcp:run", "live"],

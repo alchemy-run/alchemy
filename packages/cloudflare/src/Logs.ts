@@ -2,6 +2,7 @@ import * as workers from "@distilled.cloud/cloudflare/workers";
 import type { LogLine, LogsInput } from "alchemy/Provider";
 import { profileCommandHint } from "alchemy/Util/interactive";
 import type * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
@@ -106,7 +107,7 @@ export const CloudflareLogs = Effect.gen(function* () {
 
   const queryLogs = (opts: { accountId: string; filters: TelemetryFilter[]; options: LogsInput }) =>
     Effect.gen(function* () {
-      const now = Date.now();
+      const now = yield* Clock.currentTimeMillis;
       const limit = opts.options.limit ?? 100;
 
       if (opts.options.since) {
@@ -234,7 +235,7 @@ export const CloudflareLogs = Effect.gen(function* () {
       Stream.unwrap(
         Effect.gen(function* () {
           yield* Effect.sleep("2 seconds");
-          const now = Date.now();
+          const now = yield* Clock.currentTimeMillis;
 
           const response = yield* explainMissingObservabilityScope(
             queryTelemetry({

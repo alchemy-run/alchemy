@@ -1,4 +1,4 @@
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -178,8 +178,20 @@ export interface LocalCluster extends Resource<
     connection: Connection;
   },
   {},
-  Providers
+  Providers,
+  LocalClusterLookup
 > {}
+
+/**
+ * Props for {@link LocalCluster.lookup}: find a kind cluster this
+ * stack doesn't manage by its name.
+ */
+export interface LocalClusterLookup {
+  /** kind cluster name. */
+  name: string;
+  /** Kubeconfig file the cluster's context is in. */
+  kubeconfig?: string;
+}
 
 /**
  * A Kubernetes cluster on your machine, for trying Alchemy's Kubernetes
@@ -252,6 +264,17 @@ export interface LocalCluster extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing cluster
+ * `LocalCluster.lookup` references a kind cluster Alchemy doesn't manage (applied with
+ * `kubectl`, Helm or another stack). It is read during plan/deploy, never
+ * applied, updated or deleted.
+ *
+ * **Example:** Apply to an existing kind cluster
+ * ```typescript
+ * const cluster = Kubernetes.LocalCluster.lookup({ name: "dev" });
+ * yield* Kubernetes.Manifest("Settings", { cluster, manifest });
+ * ```
+ *
  * @resource
  * @product LocalCluster
  */
@@ -308,7 +331,7 @@ export const LocalClusterProvider = () =>
           detached: false,
           extendEnv: true,
         }).pipe(
-          spawner.spawn,
+          (command) => spawner.spawn(command),
           Effect.flatMap((child) =>
             Effect.all(
               {
@@ -559,7 +582,18 @@ export const LocalClusterProvider = () =>
             return { action: "replace", deleteFirst: true } as const;
           }
         }),
-        read: Effect.fn(function* ({ id, olds, output }) {
+        lookup: Effect.fn(function* ({ name, kubeconfig }) {
+          if (!(yield* clusterExists(name))) return undefined;
+          const registryInfo = yield* inspectRegistry(`${name}-registry`);
+          return toAttributes({
+            name,
+            kubeconfig,
+            registryPort: registryHostPort(registryInfo) ?? DEFAULT_REGISTRY_PORT,
+            architecture: yield* hostArchitecture,
+          });
+        }),
+
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const name = yield* clusterName(id, olds, output);
           if (!(yield* clusterExists(name))) return undefined;
           const registryInfo = yield* inspectRegistry(`${name}-registry`);
@@ -574,7 +608,7 @@ export const LocalClusterProvider = () =>
           // kind clusters carry no ownership marker; the registry container
           // we start next to them does. Anything else is foreign.
           const owned = yield* hasAlchemyTags(id, registryInfo?.Config?.Labels ?? undefined);
-          return owned ? attrs : Unowned(attrs);
+          return owned ? attrs : unownedUnlessPrevious(attrs, previous, "name");
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* clusterName(id, news, output);

@@ -1,10 +1,10 @@
 import * as Azure from "@alchemy.run/azure";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as app from "@distilled.cloud/azure/app";
 import * as authorization from "@distilled.cloud/azure/authorization";
 import * as acr from "@distilled.cloud/azure/containerregistry-data";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

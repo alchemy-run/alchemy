@@ -161,7 +161,7 @@ export const OrganizationsSecurityHealthAnalyticsSettingsCustomModule =
 export class OrganizationsSecurityHealthAnalyticsSettingsCustomModuleNotResolved extends Data.TaggedError(
   "GCP.SecurityCenter.OrganizationsSecurityHealthAnalyticsSettingsCustomModuleNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, moduleId: string) =>
@@ -213,12 +213,12 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : scc
         .getOrganizationsSecurityHealthAnalyticsSettingsCustomModules({
           name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listModules = (organization: string) =>
   collectPages(
@@ -321,14 +321,14 @@ export const OrganizationsSecurityHealthAnalyticsSettingsCustomModuleProvider = 
 
       if (current === undefined) {
         current = yield* scc.createOrganizationsSecurityHealthAnalyticsSettingsCustomModules({
+          ...body,
           parent,
-          body,
         });
       }
 
       if (current === undefined) {
         return yield* new OrganizationsSecurityHealthAnalyticsSettingsCustomModuleNotResolved({
-          name: name || parent,
+          resourceName: name || parent,
         });
       }
 
@@ -342,12 +342,10 @@ export const OrganizationsSecurityHealthAnalyticsSettingsCustomModuleProvider = 
 
       if (updateMask.length > 0) {
         current = yield* scc.patchOrganizationsSecurityHealthAnalyticsSettingsCustomModules({
+          enablementState,
+          customConfig,
           name: currentName,
           updateMask,
-          body: {
-            enablementState,
-            customConfig,
-          },
         });
       }
 

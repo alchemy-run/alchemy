@@ -243,7 +243,8 @@ type ComputeTypeProperties = {
 };
 
 const typeProperties = (compute: ml.GetComputeResponse) => {
-  const props = compute.properties?.properties;
+  const arm = compute.properties;
+  const props = arm !== undefined && "properties" in arm ? arm.properties : undefined;
   return (props !== null && typeof props === "object" ? props : {}) as ComputeTypeProperties;
 };
 
@@ -407,6 +408,8 @@ export const ComputeProvider = () =>
           location,
           tags,
           identity: toArmIdentity(news.identity),
+          // `computeType` and the per-type bag are only known at runtime, so
+          // the arm is asserted rather than narrowed.
           properties: {
             computeType,
             description: news.description,
@@ -422,7 +425,7 @@ export const ComputeProvider = () =>
                   }
                 : {}),
             },
-          },
+          } as ml.ComputeInput,
         });
       }
       observed = yield* waitReady;

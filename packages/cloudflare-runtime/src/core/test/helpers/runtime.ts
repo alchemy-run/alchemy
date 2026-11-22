@@ -1,6 +1,8 @@
+import * as NodeHttp from "node:http";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { Done } from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -48,26 +50,33 @@ export const configProvider = (input: { fileSystemSupportsWatcher?: boolean } = 
  * but **must not** register a remote binding — that would attempt to
  * deploy a preview script and fail without credentials.
  */
-export const localRuntimeLayer = Runtime.RuntimeLive.pipe(
-  Layer.provideMerge(RuntimeServices.layerLocalBindings()),
-  Layer.provideMerge(RuntimeServices.layerProxy()),
-  Layer.provide(Globals.GlobalsLive),
-  Layer.provideMerge(RuntimeServices.layerLoopback()),
-  Layer.provide(
-    Layer.effect(
-      Storage.Storage,
-      Effect.suspend(() => makeTempDirectory()).pipe(Effect.map(Storage.make)),
+export const makeLocalRuntimeLayer = (options: { fileSystemSupportsWatcher?: boolean } = {}) =>
+  Runtime.RuntimeLive.pipe(
+    Layer.provideMerge(RuntimeServices.layerLocalBindings()),
+    Layer.provideMerge(RuntimeServices.layerProxy()),
+    Layer.provide(Globals.GlobalsLive),
+    Layer.provideMerge(RuntimeServices.layerLoopback()),
+    // Merged (not just provided) so suites can locate the storage directory,
+    // e.g. to write files the runtime serves.
+    Layer.provideMerge(
+      Layer.effect(
+        Storage.Storage,
+        Effect.suspend(() => makeTempDirectory()).pipe(Effect.map(Storage.make)),
+      ),
     ),
-  ),
-  Layer.provide(Internet.InternetLive),
-  Layer.provideMerge(RegistryProxy.RegistryProxyLive),
-  Layer.provideMerge(Registry.RegistryLive),
-  Layer.provideMerge(Paths.PathsLive),
-  Layer.provideMerge(Docker.DockerLive),
-  Layer.provideMerge(Workerd.WorkerdLive),
-  Layer.provide(configProvider()),
-  Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
-);
+    Layer.provide(Internet.InternetLive),
+    Layer.provideMerge(RegistryProxy.RegistryProxyLive),
+    Layer.provideMerge(Registry.RegistryLive),
+    Layer.provideMerge(Paths.PathsLive),
+    Layer.provideMerge(Docker.DockerLive),
+    Layer.provideMerge(Workerd.WorkerdLive),
+    Layer.provide(configProvider(options)),
+    Layer.provideMerge(
+      Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer, SecureRandom.layerWebCrypto),
+    ),
+  );
+
+export const localRuntimeLayer = makeLocalRuntimeLayer();
 
 export interface TestWorker {
   baseUrl: URL;
@@ -87,6 +96,7 @@ export const startTestWorker = <B extends BindingHooks>(worker: RuntimeWorker<B>
     const runtime = yield* Runtime.Runtime;
     const baseUrl = yield* runtime.start(worker);
     const fetch = (path: string, init?: RequestInit) =>
+      // oxlint-disable-next-line effecttsgo/global-fetch-in-effect -- test helper exposes the native Response/RequestInit API to many suites
       Effect.promise(() => globalThis.fetch(new URL(path, baseUrl), init));
     const fetchText = (path: string, init?: RequestInit) =>
       fetch(path, init).pipe(Effect.flatMap((res) => Effect.promise(() => res.text())));
@@ -141,6 +151,7 @@ export const poll = <T>(
  */
 const realDelay = (millis: number) =>
   Effect.callback<void>((resume) => {
+    // oxlint-disable-next-line effecttsgo/global-timers-in-effect -- must bypass the Effect Clock so it advances under TestClock
     const timer = setTimeout(() => resume(Effect.void), millis);
     return Effect.sync(() => clearTimeout(timer));
   });
@@ -166,3 +177,20 @@ export const makeTempDirectory = Effect.fn(function* (prefix?: string) {
   yield* Effect.addFinalizer(() => remove(0));
   return dir;
 });
+
+/** GETs `path` from a server listening on the Unix socket at `socketPath`. */
+export const fetchOverSocket = (socketPath: string, path: string) =>
+  Effect.callback<string, Error>((resume) => {
+    const request = NodeHttp.get(
+      { socketPath, path, headers: { host: "localhost" }, signal: AbortSignal.timeout(10_000) },
+      (response) => {
+        let body = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk: string) => (body += chunk));
+        response.on("end", () => resume(Effect.succeed(body)));
+        response.on("error", (error) => resume(Effect.fail(error)));
+      },
+    );
+    request.on("error", (error) => resume(Effect.fail(error)));
+    return Effect.sync(() => request.destroy());
+  });

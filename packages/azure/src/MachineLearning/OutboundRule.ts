@@ -261,7 +261,9 @@ export const OutboundRuleProvider = () =>
           resourceGroupName: resourceGroup,
           workspaceName: workspace,
           ruleName: name,
-          properties: { type: news.type, category, destination },
+          // `type` is only known at runtime and decides the arm, so the arm
+          // is asserted rather than narrowed.
+          properties: { type: news.type, category, destination } as ml.OutboundRuleInput,
         });
       }
 

@@ -1,4 +1,5 @@
 import type { AzureOpError } from "@distilled.cloud/azure";
+import type * as blob from "@distilled.cloud/azure/storage-blob";
 
 /**
  * Errors a blob container client operation can fail with: the typed
@@ -6,7 +7,19 @@ import type { AzureOpError } from "@distilled.cloud/azure";
  * `SchemaRegistryStorageAccessDenied` (`AuthorizationPermissionMismatch`)
  * while a new role assignment propagates.
  */
-export type BlobContainerError = AzureOpError;
+export type BlobContainerError =
+  | blob.BlobAlreadyExists
+  | blob.BlobNotFound
+  | blob.ContainerAlreadyExists
+  | blob.StorageAuthenticationFailed
+  | blob.StorageAuthorizationFailure
+  | blob.StorageBeingDeleted
+  | blob.StorageHierarchicalNamespaceNotEnabled
+  | blob.StorageImmutabilityNotEnabled
+  | blob.StorageLeaseConflict
+  | blob.StorageNoPendingCopyOperation
+  | blob.StorageResourceAlreadyExists
+  | AzureOpError;
 
 /** Properties of a blob, from `HEAD` or a list result. */
 export interface BlobProperties {

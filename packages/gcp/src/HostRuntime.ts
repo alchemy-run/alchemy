@@ -1,5 +1,5 @@
 import type { ResourceBinding } from "alchemy/Resource";
-import { packEnvValue } from "alchemy/RuntimeContext";
+import { envString } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import {
@@ -8,6 +8,7 @@ import {
   ensureHostServiceAccount,
   hostServiceAccountEmail,
   hostServiceAccountId,
+  serviceAccountUniqueId,
   syncHostIam,
   type AppliedIamGrant,
   type GcpHostBinding,
@@ -25,6 +26,12 @@ import {
 export interface HostIdentityAttrs {
   /** Runtime service account email. */
   serviceAccount: string | undefined;
+  /**
+   * Numeric unique ID of the runtime service account, the `sub` of the
+   * Google ID tokens the host fetches. AWS bindings trust it to let the
+   * host assume an IAM role without a key.
+   */
+  serviceAccountUniqueId: string | undefined;
   /** True when Alchemy minted the per-host runtime service account. */
   managedServiceAccount: boolean;
   /**
@@ -114,8 +121,19 @@ export const resolveHostIdentity = Effect.fn(function* (options: {
     ),
   );
 
+  const uniqueId = yield* serviceAccountUniqueId(serviceAccount).pipe(
+    Effect.tapError(() =>
+      created
+        ? deleteHostServiceAccount({ project: options.project, email: serviceAccount }).pipe(
+            Effect.ignore,
+          )
+        : Effect.void,
+    ),
+  );
+
   return {
     serviceAccount,
+    uniqueId,
     managed,
     env: synced.env,
     grants: synced.grants,
@@ -178,8 +196,9 @@ export const mergeContainerEnv = <V extends ContainerEnvVar>(
   const byName = new Map<string, V>();
   for (const source of injected) {
     for (const [name, value] of Object.entries(source ?? {})) {
-      if (value === undefined) continue;
-      byName.set(name, { name, value: packEnvValue(value) } as V);
+      const text = envString(value);
+      if (text === undefined) continue;
+      byName.set(name, { name, value: text } as V);
     }
   }
   for (const entry of explicit ?? []) {

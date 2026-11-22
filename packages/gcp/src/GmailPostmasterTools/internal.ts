@@ -146,7 +146,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
   effect.pipe(
     Effect.catchIf(
       (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
 
@@ -162,12 +162,12 @@ export const ignoreMissing = <E extends { readonly _tag: string }, R>(
 
 export const getDomain = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(gmailpostmastertools.getDomains({ name: toDomainName(name) }));
 
 export const getUser = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(gmailpostmastertools.getDomainsUsers({ name }));
 
 export const listDomains = () =>

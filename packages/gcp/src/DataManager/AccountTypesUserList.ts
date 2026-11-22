@@ -194,7 +194,7 @@ export class AccountTypesUserListNotResolved extends Data.TaggedError(
   "GCP.DataManager.AccountTypesUserListNotResolved",
 )<{
   parent: string;
-  name: string;
+  resourceName: string;
 }> {}
 
 export class AccountTypesUserListParentRequired extends Data.TaggedError(
@@ -329,17 +329,15 @@ export const AccountTypesUserListProvider = () =>
       if (current === undefined) {
         current = yield* datamanager
           .createAccountTypesAccountsUserLists({
+            displayName,
+            description,
+            membershipStatus,
+            membershipDuration,
+            integrationCode,
+            accountAccessStatus,
+            targetNetworkInfo,
+            ingestedUserListInfo: ingested,
             parent,
-            body: {
-              displayName,
-              description,
-              membershipStatus,
-              membershipDuration,
-              integrationCode,
-              accountAccessStatus,
-              targetNetworkInfo,
-              ingestedUserListInfo: ingested,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -349,7 +347,7 @@ export const AccountTypesUserListProvider = () =>
                     ? Effect.succeed(row)
                     : new AccountTypesUserListNotResolved({
                         parent,
-                        name: displayName,
+                        resourceName: displayName,
                       }),
                 ),
               ),
@@ -360,7 +358,7 @@ export const AccountTypesUserListProvider = () =>
       if (current === undefined) {
         return yield* new AccountTypesUserListNotResolved({
           parent,
-          name: name || displayName,
+          resourceName: name || displayName,
         });
       }
 
@@ -386,17 +384,15 @@ export const AccountTypesUserListProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* datamanager.patchAccountTypesAccountsUserLists({
+          displayName,
+          description,
+          membershipStatus,
+          membershipDuration,
+          integrationCode,
+          accountAccessStatus,
+          targetNetworkInfo,
           name: currentName,
           updateMask,
-          body: {
-            displayName,
-            description,
-            membershipStatus,
-            membershipDuration,
-            integrationCode,
-            accountAccessStatus,
-            targetNetworkInfo,
-          },
         });
       }
 

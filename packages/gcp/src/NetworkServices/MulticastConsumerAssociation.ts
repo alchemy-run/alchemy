@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -105,8 +106,34 @@ export type MulticastConsumerAssociation = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MulticastConsumerAssociationLookup
 >;
+
+/**
+ * Props for {@link MulticastConsumerAssociation.lookup}: find a multicast
+ * consumer association this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface MulticastConsumerAssociationLookup {
+  /**
+   * Association id (the `{multicastConsumerAssociation}` segment of
+   * `project
+   * s/{project}/locations/{location}/multicastConsumerAssociations/{multicas
+   * tConsumerAssociation}`). Must be at most 48 characters.
+   */
+  multicastConsumerAssociationId: string;
+  /**
+   * Zone of the association (`us-central1-a`, …). `US-CENTRAL1-A` is
+   * accepted and normalized to `us-central1-a`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A multicast consumer association attaches a consumer VPC to Cloud
@@ -127,6 +154,19 @@ export type MulticastConsumerAssociation = Resource<
  *     labels: { env: "prod" },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing multicast consumer association
+ * `MulticastConsumerAssociation.lookup` references a multicast consumer
+ * association Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared multicast consumer association.
+ *
+ * **Example:** Reference an existing multicast consumer association
+ * ```typescript
+ * const multicastConsumerAssociation = GCP.NetworkServices.MulticastConsumerAssociation.lookup({
+ *   multicastConsumerAssociationId: "my-multicast-consumer-association",
+ * });
  * ```
  *
  * @resource
@@ -165,7 +205,7 @@ const toAttrs = (association: networkservices.MulticastConsumerAssociation, proj
 const getByName = (name: string) =>
   networkservices
     .getProjectsLocationsMulticastConsumerAssociations({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const MulticastConsumerAssociationProvider = () =>
   Provider.succeed(MulticastConsumerAssociation, {
@@ -210,6 +250,15 @@ export const MulticastConsumerAssociationProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ multicastConsumerAssociationId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_ZONE);
+      const name = resourceName(env.project, location, COLLECTION, multicastConsumerAssociationId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -272,14 +321,12 @@ export const MulticastConsumerAssociationProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsMulticastConsumerAssociations({
+            description: news.description,
+            labels: desiredLabels,
+            network,
+            multicastDomainActivation,
             parent: parentOf(env.project, location),
             multicastConsumerAssociationId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              network,
-              multicastDomainActivation,
-            },
           })
           .pipe(
             Effect.retry({
@@ -287,7 +334,7 @@ export const MulticastConsumerAssociationProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -306,13 +353,10 @@ export const MulticastConsumerAssociationProvider = () =>
       if (updateMask.length > 0) {
         const operation =
           yield* networkservices.patchProjectsLocationsMulticastConsumerAssociations({
+            labels: desiredLabels,
+            description: news.description,
             name: current.name ?? name,
             updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-            },
           });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
@@ -332,7 +376,7 @@ export const MulticastConsumerAssociationProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

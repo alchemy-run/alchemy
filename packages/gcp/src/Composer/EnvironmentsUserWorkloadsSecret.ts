@@ -133,13 +133,13 @@ export const EnvironmentsUserWorkloadsSecret = Resource<EnvironmentsUserWorkload
 export class EnvironmentsUserWorkloadsSecretNotResolved extends Data.TaggedError(
   "GCP.Composer.EnvironmentsUserWorkloadsSecretNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class EnvironmentsUserWorkloadsSecretStillExists extends Data.TaggedError(
   "GCP.Composer.EnvironmentsUserWorkloadsSecretStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (environmentName: string, secretId: string) =>
@@ -163,14 +163,14 @@ const toAttrs = (secret: composer.UserWorkloadsSecret, environmentName: string) 
 const getByName = (name: string) =>
   composer
     .getProjectsLocationsEnvironmentsUserWorkloadsSecrets({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((current) =>
       current === undefined
         ? Effect.void
-        : Effect.fail(new EnvironmentsUserWorkloadsSecretStillExists({ name })),
+        : Effect.fail(new EnvironmentsUserWorkloadsSecretStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Composer.EnvironmentsUserWorkloadsSecretStillExists",
@@ -226,18 +226,16 @@ export const EnvironmentsUserWorkloadsSecretProvider = () =>
       if (current === undefined) {
         const created = yield* composer
           .createProjectsLocationsEnvironmentsUserWorkloadsSecrets({
+            name,
+            data: desiredData,
             parent,
-            body: {
-              name,
-              data: desiredData,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentsUserWorkloadsSecretNotResolved({ name });
+        return yield* new EnvironmentsUserWorkloadsSecretNotResolved({ resourceName: name });
       }
 
       const observed = mapOf(current.data);
@@ -250,11 +248,8 @@ export const EnvironmentsUserWorkloadsSecretProvider = () =>
 
       if (shouldSync) {
         current = yield* composer.updateProjectsLocationsEnvironmentsUserWorkloadsSecrets({
+          data: desiredData,
           name: current.name ?? name,
-          body: {
-            name: current.name ?? name,
-            data: desiredData,
-          },
         });
       }
 

@@ -201,7 +201,7 @@ export type App = Resource<
 export const App = Resource<App>("GCP.CES.App");
 
 export class AppNotResolved extends Data.TaggedError("GCP.CES.AppNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, appId: string) =>
@@ -245,10 +245,10 @@ const toAttrs = (app: ces.App, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ces
         .getProjectsLocationsApps({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isOwnedApp = (app: ces.App) =>
   hasAlchemyLabelMap(app.metadata) ||
@@ -319,25 +319,23 @@ export const AppProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           ces.createProjectsLocationsApps({
+            displayName,
+            description,
+            metadata,
+            globalInstruction: news.globalInstruction,
+            toolExecutionMode: news.toolExecutionMode,
+            timeZoneSettings,
+            modelSettings,
+            rootAgent: news.rootAgent,
+            guardrails: news.guardrails,
+            locked: news.locked,
+            pinned: news.pinned,
+            defaultChannelProfile: news.defaultChannelProfile,
+            languageSettings: news.languageSettings,
             parent,
             appId,
-            body: {
-              displayName,
-              description,
-              metadata,
-              globalInstruction: news.globalInstruction,
-              toolExecutionMode: news.toolExecutionMode,
-              timeZoneSettings,
-              modelSettings,
-              rootAgent: news.rootAgent,
-              guardrails: news.guardrails,
-              locked: news.locked,
-              pinned: news.pinned,
-              defaultChannelProfile: news.defaultChannelProfile,
-              languageSettings: news.languageSettings,
-            },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -345,7 +343,7 @@ export const AppProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppNotResolved({ name });
+        return yield* new AppNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -380,6 +378,19 @@ export const AppProvider = () =>
       ) {
         current = yield* retryTransient(
           ces.patchProjectsLocationsApps({
+            displayName,
+            description,
+            metadata,
+            globalInstruction: news.globalInstruction,
+            toolExecutionMode: news.toolExecutionMode,
+            timeZoneSettings,
+            modelSettings,
+            rootAgent: news.rootAgent,
+            guardrails: news.guardrails,
+            locked: news.locked,
+            pinned: news.pinned,
+            defaultChannelProfile: news.defaultChannelProfile,
+            languageSettings: news.languageSettings,
             name: currentName,
             updateMask: updateMaskOf(
               displayChanged ? "display_name" : undefined,
@@ -396,21 +407,6 @@ export const AppProvider = () =>
               channelChanged ? "default_channel_profile" : undefined,
               languageChanged ? "language_settings" : undefined,
             ),
-            body: {
-              displayName,
-              description,
-              metadata,
-              globalInstruction: news.globalInstruction,
-              toolExecutionMode: news.toolExecutionMode,
-              timeZoneSettings,
-              modelSettings,
-              rootAgent: news.rootAgent,
-              guardrails: news.guardrails,
-              locked: news.locked,
-              pinned: news.pinned,
-              defaultChannelProfile: news.defaultChannelProfile,
-              languageSettings: news.languageSettings,
-            },
           }),
         );
       }
@@ -422,7 +418,7 @@ export const AppProvider = () =>
       if (!output.name) return;
       const deleted = yield* retryTransient(
         ces.deleteProjectsLocationsApps({ name: output.name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (deleted !== undefined) {
         yield* waitForDeleteOperation(deleted);
       }

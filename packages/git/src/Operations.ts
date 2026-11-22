@@ -1,3 +1,4 @@
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { Base64 } from "effect/encoding";
@@ -219,7 +220,7 @@ export const makeOperations = Effect.gen(function* () {
   const resolveCached = (owner: string, repo: string) =>
     Effect.gen(function* () {
       const key = cacheKey(owner, repo);
-      const now = yield* Effect.sync(() => Date.now());
+      const now = yield* Clock.currentTimeMillis;
       const hit = resolveCache.get(key);
       if (hit !== undefined && hit.expires > now) return hit.entry;
       const entry = yield* registryStub().resolve(owner, repo);
@@ -447,6 +448,10 @@ export const makeOperations = Effect.gen(function* () {
         // soft-deleted. A second DELETE mid-drain is an idempotent 204,
         // and re-arming is what recovers a purge whose alarm was lost
         // (crash between markDeleted and the first alarm run).
+        const removeRegistryRow = () =>
+          registryStub()
+            .removeRow(entry.repoId)
+            .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
         yield* repos
           .getByName(entry.repoId)
           .startPurge()
@@ -457,10 +462,7 @@ export const makeOperations = Effect.gen(function* () {
               // orphan, or a purge that already wiped storage. There is
               // nothing to purge, so free the name directly (never 404:
               // the caller can see this repo, so DELETE must remove it).
-              RepoNotFound: () =>
-                registryStub()
-                  .removeRow(entry.repoId)
-                  .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error))),
+              RepoNotFound: removeRegistryRow,
             }),
           );
         yield* registryStub()

@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -156,8 +157,36 @@ export type RepositoriesBranchRule = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RepositoriesBranchRuleLookup
 >;
+
+/**
+ * Props for {@link RepositoriesBranchRule.lookup}: find a repositories
+ * branch rule this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface RepositoriesBranchRuleLookup {
+  /**
+   * Branch rule id (the `{branchRule}` segment).
+   */
+  branchRuleId: string;
+  /**
+   * Region used when `repository` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent repository. Full name
+   * `projects/{project}/locations/{location}/repositories/{repository}` or
+   * the repository id (combined with `location`).
+   */
+  repository: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Secure Source Manager branch protection rule.
@@ -200,6 +229,20 @@ export type RepositoriesBranchRule = Resource<
  *   requirePullRequest: true,
  *   minimumApprovalsCount: 2,
  *   annotations: { env: "prod", team: "platform" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing repositories branch rule
+ * `RepositoriesBranchRule.lookup` references a repositories branch rule
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared repositories branch rule.
+ *
+ * **Example:** Reference an existing repositories branch rule
+ * ```typescript
+ * const repositoriesBranchRule = GCP.SecureSourceManager.RepositoriesBranchRule.lookup({
+ *   branchRuleId: "my-branch-rule",
+ *   repository: "my-repository",
  * });
  * ```
  *
@@ -249,7 +292,7 @@ const toAttrs = (item: ssm.BranchRule, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(ssm.getProjectsLocationsRepositoriesBranchRules({ name }));
 
 const listOnRepository = (repository: string) =>
@@ -290,6 +333,20 @@ export const RepositoriesBranchRuleProvider = () =>
         nextParent: expandName(news.repository, env.project, location, "repositories"),
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      branchRuleId,
+      location: lookupLocation,
+      repository: lookupRepository,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const repository = expandName(lookupRepository ?? "", env.project, location, "repositories");
+      const name = repository.length > 0 ? resourceName(repository, branchRuleId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -344,24 +401,22 @@ export const RepositoriesBranchRuleProvider = () =>
       if (current === undefined) {
         const created = yield* ssm
           .createProjectsLocationsRepositoriesBranchRules({
+            includePattern,
+            disabled: news.disabled === true ? true : undefined,
+            requirePullRequest: news.requirePullRequest === true ? true : undefined,
+            minimumApprovalsCount: news.minimumApprovalsCount,
+            minimumReviewsCount: news.minimumReviewsCount,
+            allowStaleReviews: news.allowStaleReviews === true ? true : undefined,
+            requireLinearHistory: news.requireLinearHistory === true ? true : undefined,
+            requireCommentsResolved: news.requireCommentsResolved === true ? true : undefined,
+            requireCodeOwnerApproval: news.requireCodeOwnerApproval === true ? true : undefined,
+            requiredStatusChecks:
+              requiredStatusChecks.length > 0 ? requiredStatusChecks : undefined,
+            annotations,
             parent: repository,
             branchRuleId,
-            body: {
-              includePattern,
-              disabled: news.disabled === true ? true : undefined,
-              requirePullRequest: news.requirePullRequest === true ? true : undefined,
-              minimumApprovalsCount: news.minimumApprovalsCount,
-              minimumReviewsCount: news.minimumReviewsCount,
-              allowStaleReviews: news.allowStaleReviews === true ? true : undefined,
-              requireLinearHistory: news.requireLinearHistory === true ? true : undefined,
-              requireCommentsResolved: news.requireCommentsResolved === true ? true : undefined,
-              requireCodeOwnerApproval: news.requireCodeOwnerApproval === true ? true : undefined,
-              requiredStatusChecks:
-                requiredStatusChecks.length > 0 ? requiredStatusChecks : undefined,
-              annotations,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -369,7 +424,7 @@ export const RepositoriesBranchRuleProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observed = tagRecord(current.annotations);
@@ -396,22 +451,20 @@ export const RepositoriesBranchRuleProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* ssm.patchProjectsLocationsRepositoriesBranchRules({
+          etag: current.etag,
+          includePattern,
+          disabled: news.disabled === true,
+          requirePullRequest: news.requirePullRequest === true,
+          minimumApprovalsCount: news.minimumApprovalsCount,
+          minimumReviewsCount: news.minimumReviewsCount,
+          allowStaleReviews: news.allowStaleReviews === true,
+          requireLinearHistory: news.requireLinearHistory === true,
+          requireCommentsResolved: news.requireCommentsResolved === true,
+          requireCodeOwnerApproval: news.requireCodeOwnerApproval === true,
+          requiredStatusChecks,
+          annotations,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            etag: current.etag,
-            includePattern,
-            disabled: news.disabled === true,
-            requirePullRequest: news.requirePullRequest === true,
-            minimumApprovalsCount: news.minimumApprovalsCount,
-            minimumReviewsCount: news.minimumReviewsCount,
-            allowStaleReviews: news.allowStaleReviews === true,
-            requireLinearHistory: news.requireLinearHistory === true,
-            requireCommentsResolved: news.requireCommentsResolved === true,
-            requireCodeOwnerApproval: news.requireCodeOwnerApproval === true,
-            requiredStatusChecks,
-            annotations,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
@@ -427,7 +480,7 @@ export const RepositoriesBranchRuleProvider = () =>
             name: output.name,
             allowMissing: true,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined))),
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined)),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

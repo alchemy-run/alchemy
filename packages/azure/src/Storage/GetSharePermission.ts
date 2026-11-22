@@ -43,8 +43,14 @@ export interface GetSharePermission extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetSharePermissionRequest,
-    ) => Effect.Effect<files.GetSharePermissionResponse, files.GetSharePermissionError, RuntimeContext>
+    ) => Effect.Effect<
+      files.GetSharePermissionResponse,
+      files.GetSharePermissionError,
+      RuntimeContext
+    >
   >
 > {}
 
-export const GetSharePermission = Binding.Service<GetSharePermission>("Azure.Storage.GetSharePermission");
+export const GetSharePermission = Binding.Service<GetSharePermission>(
+  "Azure.Storage.GetSharePermission",
+);

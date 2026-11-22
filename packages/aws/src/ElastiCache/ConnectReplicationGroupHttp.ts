@@ -24,10 +24,10 @@ export const ConnectReplicationGroupHttp = Layer.effect(
       const configurationPort = group.configurationEndpointPort;
       const primaryPort = group.primaryEndpointPort;
       const endpointHost = Output.flatMap(configurationHost, (host) =>
-        host === undefined ? primaryHost : Output.asOutput(host),
+        host === undefined ? primaryHost : Output.literal(host),
       );
       const endpointPort = Output.flatMap(configurationPort, (port) =>
-        port === undefined ? primaryPort : Output.asOutput(port),
+        port === undefined ? primaryPort : Output.literal(port),
       );
       const readerHost = Output.map(group.readerEndpointAddress, (host) => host ?? "");
       const readerPort = Output.map(group.readerEndpointPort, (port) =>
@@ -51,12 +51,14 @@ export const ConnectReplicationGroupHttp = Layer.effect(
         }
       }
       return Effect.gen(function* () {
+        // oxlint-disable effecttsgo/process-env-in-effect -- unpackEnvValue needs the raw env; Config would unwrap packed values
         const host = unpackEnvValue<string>(process.env[`${prefix}_HOST`]);
         if (host !== undefined) {
           const port = unpackEnvValue<number>(process.env[`${prefix}_PORT`]);
           const tls = unpackEnvValue<boolean>(process.env[`${prefix}_TLS`]);
           const readerHost = unpackEnvValue<string>(process.env[`${prefix}_READER_HOST`]);
           const readerPort = unpackEnvValue<number>(process.env[`${prefix}_READER_PORT`]);
+          // oxlint-enable effecttsgo/process-env-in-effect
           if (!host || port === undefined) {
             return yield* Effect.die(
               `ElastiCache endpoint for '${group.LogicalId}' is not available`,

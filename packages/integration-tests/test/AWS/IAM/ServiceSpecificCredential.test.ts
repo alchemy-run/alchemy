@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { ServiceSpecificCredential, User } from "@alchemy.run/aws/IAM";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as IAM from "@distilled.cloud/aws/iam";
-import { describe, expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -26,7 +26,8 @@ describe(
             const user = yield* User("SsCredListOwner", {});
             const credential = yield* ServiceSpecificCredential("SsCredListCred", {
               userName: user.userName,
-              serviceName: "codecommit.amazonaws.com",
+              // CredentialAgeDays is only valid for Bedrock API keys.
+              serviceName: "bedrock.amazonaws.com",
               // Duration.Input prop — converted to whole wire days.
               credentialAge: "30 days",
             });
@@ -37,7 +38,7 @@ describe(
         // The Duration prop round-trips as an expiration ~30 days out, and
         // the creation-only secret is captured as a Redacted output.
         expect(deployed.credential.expirationDate).toBeDefined();
-        expect(deployed.credential.servicePassword).toBeDefined();
+        expect(deployed.credential.serviceCredentialSecret).toBeDefined();
 
         const provider = yield* Provider.findProvider(ServiceSpecificCredential);
         const all = yield* provider.list();
@@ -48,7 +49,7 @@ describe(
         );
         expect(found).toBeDefined();
         expect(found?.userName).toBe(deployed.user.userName);
-        expect(found?.serviceName).toBe("codecommit.amazonaws.com");
+        expect(found?.serviceName).toBe("bedrock.amazonaws.com");
         expect(found?.servicePassword).toBeUndefined();
         expect(found?.serviceCredentialSecret).toBeUndefined();
 

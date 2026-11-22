@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -78,6 +79,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { store, engine, assistant };
         }),
+      );
+      yield* expectFound(
+        GCP.DiscoveryEngine.CollectionsEnginesAssistant.lookup({
+          assistantId: created.assistant.assistantId,
+          engine: created.assistant.engine,
+        }),
+        created.assistant,
       );
 
       expect(created.assistant.name).toContain("/assistants/");

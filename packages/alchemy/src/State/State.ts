@@ -17,6 +17,24 @@ export const isActionState = (s: PersistedState | undefined): s is ActionState =
 export const isResourceState = (s: PersistedState | undefined): s is ResourceState =>
   !!s && (s as any).kind !== "task";
 
+const storedInOldForm = new WeakSet<object>();
+
+/**
+ * Marks a row a store read in a form it no longer writes: a secret in
+ * plaintext while encrypting, or sealed while turning encryption off. A store
+ * that holds no stage lock can't safely write it back from a read, since
+ * other stacks and plans read it too; the stage's own deploy commits it
+ * again even when nothing else about it changed.
+ */
+export const markStoredInOldForm = <T>(row: T): T => {
+  if (typeof row === "object" && row !== null) storedInOldForm.add(row);
+  return row;
+};
+
+/** Whether a store marked `row` with {@link markStoredInOldForm}. */
+export const isStoredInOldForm = (row: unknown): boolean =>
+  typeof row === "object" && row !== null && storedInOldForm.has(row);
+
 export class StateStoreError extends Data.TaggedError("StateStoreError")<{
   message: string;
   cause?: Error;
@@ -131,4 +149,34 @@ export interface StateService {
     stage: string;
     value: unknown;
   }): Effect.Effect<unknown, StateStoreError, never>;
+  /**
+   * Move stages into this store from the one it replaces, or back with
+   * `rollback`, for stores that replace another. Idempotent: run it again
+   * to finish what a failure or a blocked stage left.
+   */
+  migrate?(
+    request: StateMigrationRequest,
+  ): Effect.Effect<ReadonlyArray<StateMigration>, StateStoreError, never>;
+}
+
+/** Which stages {@link StateService.migrate} moves. */
+export interface StateMigrationRequest {
+  /** Only this stack's stages. */
+  readonly stack?: string;
+  /** Only stages of this name. */
+  readonly stage?: string;
+  /** Move stages back to the store this one replaces. */
+  readonly rollback?: boolean;
+}
+
+/** What {@link StateService.migrate} did with one stage. */
+export interface StateMigration {
+  readonly stack: string;
+  readonly stage: string;
+  /** e.g. `migrated`, `already-migrated`, `rolled-back`, `blocked` or `failed`. */
+  readonly status: string;
+  /** Records moved. */
+  readonly records?: number;
+  /** Why a stage was not moved. */
+  readonly reason?: string;
 }

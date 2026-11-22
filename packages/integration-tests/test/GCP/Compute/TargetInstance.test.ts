@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -82,25 +83,23 @@ const ensureVm = () =>
     if (existing !== undefined) return existing;
     const operation = yield* compute
       .insertInstances({
+        name: vmName,
+        machineType: `zones/${zone}/machineTypes/e2-micro`,
+        canIpForward: true,
+        disks: [
+          {
+            boot: true,
+            autoDelete: true,
+            type: "PERSISTENT",
+            initializeParams: {
+              sourceImage: "projects/debian-cloud/global/images/family/debian-12",
+              diskSizeGb: "10",
+            },
+          },
+        ],
+        networkInterfaces: [{ network: "global/networks/default" }],
         project,
         zone,
-        body: {
-          name: vmName,
-          machineType: `zones/${zone}/machineTypes/e2-micro`,
-          canIpForward: true,
-          disks: [
-            {
-              boot: true,
-              autoDelete: true,
-              type: "PERSISTENT",
-              initializeParams: {
-                sourceImage: "projects/debian-cloud/global/images/family/debian-12",
-                diskSizeGb: "10",
-              },
-            },
-          ],
-          networkInterfaces: [{ network: "global/networks/default" }],
-        },
       })
       .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
     if (operation !== undefined) {
@@ -145,6 +144,14 @@ test.provider.skipIf(!!process.env.FAST)(
             zone,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.TargetInstance.lookup({
+          targetInstanceName: created.targetInstanceName,
+          zone: created.zone,
+          instance: created.instance,
+        }),
+        created,
       );
 
       expect(created.targetInstanceName).toEqual(expect.any(String));

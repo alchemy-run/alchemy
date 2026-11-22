@@ -1,3 +1,4 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { Unowned } from "alchemy/AdoptPolicy";
@@ -6,7 +7,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps, type PlatformServices } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource, type ResourceBinding } from "alchemy/Resource";
+import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import {
   createContainerRuntimeContext,
   type HostRuntimeContext,
@@ -21,7 +22,12 @@ import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { destroyHostImageRepository, makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { retryActAs, type AppliedIamGrant, type GcpHostBinding } from "../Host.ts";
+import {
+  retryActAs,
+  serviceAccountUniqueId,
+  type AppliedIamGrant,
+  type GcpHostBinding,
+} from "../Host.ts";
 import {
   alchemyRuntimeEnv,
   isManagedServiceAccount,
@@ -30,6 +36,7 @@ import {
   releaseHostIdentity,
   resolveHostIdentity,
 } from "../HostRuntime.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -185,9 +192,9 @@ export type JobProps = PlatformProps & {
    */
   env?: Record<string, any>;
   /**
-   * Bundler configuration for `main`.
+   * Bundler configuration for `main`, and the image build's layer `cache`.
    */
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig & BuildCacheOptions;
   /**
    * Max time a task attempt may run (e.g. `"600s"`).
    * @default "600s"
@@ -263,6 +270,12 @@ export type Job = Resource<
     parallelism: number | undefined;
     /** Task service account email. */
     serviceAccount: string | undefined;
+    /**
+     * Numeric unique ID of the runtime service account: the `sub` of the
+     * Google ID tokens the host fetches. An AWS binding's IAM role trusts
+     * it, so the host reaches AWS without an access key.
+     */
+    serviceAccountUniqueId: string | undefined;
     /** True when Alchemy minted the per-host runtime service account. */
     managedServiceAccount: boolean;
     /** IAM roles bindings granted to the runtime service account. */
@@ -271,8 +284,31 @@ export type Job = Resource<
     codeHash: string | undefined;
   },
   GcpHostBinding,
-  Providers
+  Providers,
+  JobLookup
 >;
+
+/**
+ * Props for {@link Job.lookup}: find a job this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface JobLookup {
+  /**
+   * Job id (the `{job}` segment of
+   * `projects/{project}/locations/{location}/jobs/{job}`).
+   */
+  jobId: string;
+  /**
+   * Region (`us-central1`, `europe-west1`, …). `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 export type JobRuntimeContext = HostRuntimeContext;
 export type JobServices = Credentials | GcpEnvironment | ServerHost;
@@ -333,6 +369,35 @@ export type JobShape =
  * ) {}
  * ```
  *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
+ *
+ * **Example:** Cache layers in Artifact Registry
+ * ```typescript
+ * const migrate = yield* GCP.Run.Job("Migrate", {
+ *   main: import.meta.url,
+ *   build: { cache: true },
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const migrate = yield* GCP.Run.Job("Migrate", {
+ *   main: import.meta.url,
+ *   build: {
+ *     cache: {
+ *       from: ["type=gha,scope=migrate"],
+ *       to: ["type=gha,scope=migrate,mode=max"],
+ *     },
+ *   },
+ * });
+ * ```
+ *
  * ### Running a Job
  * **Example:** Trigger an execution
  * ```typescript
@@ -340,35 +405,43 @@ export type JobShape =
  * yield* runJob();
  * ```
  *
+ * ### Looking up an existing job
+ * `Job.lookup` references a job Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared job.
+ *
+ * **Example:** Reference an existing job
+ * ```typescript
+ * const job = GCP.Run.Job.lookup({ jobId: "my-job" });
+ * ```
+ *
  * @resource
  * @category Run
  */
-export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> = Platform(
-  "GCP.Run.Job",
-  {
+export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> & LookupMethod<Job> =
+  Platform("GCP.Run.Job", {
     createRuntimeContext: createContainerRuntimeContext("GCP.Run.Job") as (
       id: string,
     ) => JobRuntimeContext,
-  },
-);
+  });
 
 export class JobNotResolved extends Data.TaggedError("GCP.Run.JobNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class JobNotReady extends Data.TaggedError("GCP.Run.JobNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
   message: string;
 }> {}
 
 export class JobReconciling extends Data.TaggedError("GCP.Run.JobReconciling")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class JobStillExists extends Data.TaggedError("GCP.Run.JobStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -436,7 +509,11 @@ const toAttrs = (
   job: cloudrun.GoogleCloudRunV2Job,
   project: string,
   region: string,
-  extras: { iamGrants?: AppliedIamGrant[]; codeHash?: string } = {},
+  extras: {
+    iamGrants?: AppliedIamGrant[];
+    codeHash?: string;
+    serviceAccountUniqueId?: string;
+  } = {},
 ): Job["Attributes"] => {
   const name = job.name ?? "";
   const parsed = parseName(name, region);
@@ -469,6 +546,7 @@ const toAttrs = (
       resourceName: name,
       serviceAccount: task?.serviceAccount,
     }),
+    serviceAccountUniqueId: extras.serviceAccountUniqueId,
     iamGrants: extras.iamGrants ?? [],
     codeHash: extras.codeHash,
   };
@@ -477,7 +555,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   cloudrun
     .getProjectsLocationsJobs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toApiContainers = (
   containers: JobContainer[] | undefined,
@@ -645,13 +723,13 @@ const waitUntilReady = (name: string) =>
     Effect.filterOrFail(
       (job): job is cloudrun.GoogleCloudRunV2Job =>
         job !== undefined && job.deleteTime === undefined,
-      () => new JobNotResolved({ name }),
+      () => new JobNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (job) => (job.terminalCondition?.state ?? "") !== "CONDITION_FAILED",
       (job) =>
         new JobNotReady({
-          name,
+          resourceName: name,
           state: job.terminalCondition?.state ?? "",
           message: job.terminalCondition?.message ?? "job failed",
         }),
@@ -660,7 +738,7 @@ const waitUntilReady = (name: string) =>
       (job) => !isPendingJob(job),
       (job) =>
         new JobReconciling({
-          name,
+          resourceName: name,
           state: job.terminalCondition?.state || "reconciling",
         }),
     ),
@@ -675,7 +753,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((job) =>
-      job === undefined ? Effect.void : Effect.fail(new JobStillExists({ name })),
+      job === undefined ? Effect.void : Effect.fail(new JobStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Run.JobStillExists",
@@ -718,6 +796,23 @@ export const JobProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ jobId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, jobId);
+      const existing = yield* getByName(name);
+      if (existing === undefined || existing.deleteTime !== undefined) {
+        return undefined;
+      }
+      const attrs = toAttrs(existing, env.project, env.region);
+      // The id AWS roles trust the runtime's Google ID tokens by.
+      const uniqueId =
+        attrs.serviceAccount === undefined
+          ? undefined
+          : yield* serviceAccountUniqueId(attrs.serviceAccount);
+      return { ...attrs, serviceAccountUniqueId: uniqueId };
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const jobId = yield* toId(id, olds?.jobId, output?.jobId);
@@ -730,6 +825,7 @@ export const JobProvider = () =>
       const attrs = toAttrs(existing, env.project, env.region, {
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
+        serviceAccountUniqueId: output?.serviceAccountUniqueId,
       });
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
@@ -832,20 +928,18 @@ export const JobProvider = () =>
       if (current === undefined) {
         const created = yield* cloudrun
           .createProjectsLocationsJobs({
+            labels: desiredLabels,
+            annotations:
+              Object.keys(desiredAnnotations).length > 0 ? desiredAnnotations : undefined,
+            launchStage: news.launchStage,
+            binaryAuthorization: news.binaryAuthorization,
+            template: desiredTemplate(effectiveNews, undefined),
             parent: `projects/${env.project}/locations/${location}`,
             jobId,
-            body: {
-              labels: desiredLabels,
-              annotations:
-                Object.keys(desiredAnnotations).length > 0 ? desiredAnnotations : undefined,
-              launchStage: news.launchStage,
-              binaryAuthorization: news.binaryAuthorization,
-              template: desiredTemplate(effectiveNews, undefined),
-            },
           })
           .pipe(
             retryActAs,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.onError(() => identity.cleanup),
           );
         if (created !== undefined) {
@@ -855,7 +949,7 @@ export const JobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new JobNotResolved({ name });
+        return yield* new JobNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -924,34 +1018,32 @@ export const JobProvider = () =>
         executionAnnotationsChanged
       ) {
         const operation = yield* cloudrun.patchProjectsLocationsJobs({
+          labels: desiredLabels,
+          annotations: news.annotations !== undefined ? desiredAnnotations : current.annotations,
+          launchStage: news.launchStage ?? current.launchStage,
+          binaryAuthorization: news.binaryAuthorization ?? current.binaryAuthorization,
+          template: desiredTemplate(effectiveNews, current),
           name,
-          body: {
-            name,
-            labels: desiredLabels,
-            annotations: news.annotations !== undefined ? desiredAnnotations : current.annotations,
-            launchStage: news.launchStage ?? current.launchStage,
-            binaryAuthorization: news.binaryAuthorization ?? current.binaryAuthorization,
-            template: desiredTemplate(effectiveNews, current),
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(name);
       }
 
       if (current === undefined) {
-        return yield* new JobNotResolved({ name });
+        return yield* new JobNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region, {
         iamGrants: identity.grants,
         codeHash,
+        serviceAccountUniqueId: identity.uniqueId,
       });
     }),
 
     delete: Effect.fn(function* ({ id, output }) {
       const operation = yield* cloudrun
         .deleteProjectsLocationsJobs({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

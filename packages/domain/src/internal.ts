@@ -1,21 +1,321 @@
-import * as Context from "effect/Context";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import { Scope } from "effect/Scope";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
+import { DefinitionError, UndeclaredDecision } from "./DefinitionError.ts";
+
+export { DefinitionError } from "./DefinitionError.ts";
+
+/** The defects {@link internalError} made: already logged, sent as they are. */
+const internalErrors = new WeakSet<object>();
 
 /**
- * Capture the services `R` for later use, minus the `Scope`: a captured
- * construction-time scope must never replace the scope of a later request or
- * event (finalizers would attach to the wrong lifetime, and on workerd the
- * work would be pinned to another request's I/O context).
+ * The one defect a client receives in place of any other: a defect's text
+ * can hold stacks, file paths and nested errors (an adapter's SQL error).
  *
  * @internal
  */
-export const captureContext = <R = never>(): Effect.Effect<
-  Context.Context<Exclude<R, Scope>>,
-  never,
-  R
-> =>
-  Effect.map(
-    Effect.context<R>(),
-    (context) => Context.omit(Scope)(context) as Context.Context<Exclude<R, Scope>>,
-  );
+export const internalError = (): Error => {
+  const error = new Error("Internal server error");
+  internalErrors.add(error);
+  return error;
+};
+
+/**
+ * Keep what of a cause a client may see: interrupts, and the failures
+ * `declared` keeps. Anything else (a defect, an undeclared failure) is
+ * logged here with its whole cause, and becomes {@link internalError}.
+ *
+ * @internal
+ */
+export const redactCause =
+  (declared: (error: unknown) => boolean, rpc: string) =>
+  <E>(cause: Cause.Cause<E>): Effect.Effect<never, E> =>
+    cause.reasons.every(
+      (reason) =>
+        Cause.isInterruptReason(reason) ||
+        (Cause.isFailReason(reason) && declared(reason.error)) ||
+        (Cause.isDieReason(reason) &&
+          typeof reason.defect === "object" &&
+          reason.defect !== null &&
+          internalErrors.has(reason.defect)),
+    )
+      ? Effect.failCause(cause)
+      : Effect.logError("Domain: a request failed with an undeclared error", cause).pipe(
+          Effect.annotateLogs({ "domain.rpc": rpc }),
+          Effect.andThen(Effect.die(internalError())),
+        );
+
+/**
+ * The schema of a command's or a query's `input`. With no fields it is an
+ * empty record, not `Schema.Struct({})`: an empty Struct accepts any value
+ * but `null`, and its JSON Schema has no `type`, so an agent calling the tool
+ * may send the string `"{}"`. The empty record is a JSON object with no
+ * properties. The declared type stays `Schema.Struct<F>`.
+ *
+ * @internal
+ */
+export const inputSchema = <F extends Schema.Struct.Fields>(fields: F | undefined) =>
+  (fields === undefined || Object.keys(fields).length === 0
+    ? Schema.Record(Schema.String, Schema.Never)
+    : Schema.Struct(fields)) as unknown as Schema.Struct<F>;
+
+const tags = new WeakMap<object, string>();
+
+/**
+ * The `_tag` a rejection class declares: the literal its schema gives
+ * `_tag`, so any tagged error class can be a rejection.
+ *
+ * @internal
+ */
+export const rejectionTag = (rejection: Schema.Top): string => {
+  const cached = tags.get(rejection);
+  if (cached !== undefined) return cached;
+  const encoded = SchemaAST.toEncoded(rejection.ast);
+  const tag = SchemaAST.isObjects(encoded)
+    ? encoded.propertySignatures.find((property) => property.name === "_tag")?.type
+    : undefined;
+  const value = tag && SchemaAST.isLiteral(tag) ? String(tag.literal) : "";
+  tags.set(rejection, value);
+  return value;
+};
+
+/** `name` as it reads in a path. */
+const member = (path: string, name: PropertyKey) =>
+  typeof name === "string" && /^[A-Za-z_$][\w$]*$/.test(name)
+    ? `${path}.${name}`
+    : `${path}[${JSON.stringify(String(name))}]`;
+
+/**
+ * Where a schema has no JSON form: the paths under `path` of each declaration
+ * (such as `Schema.instanceOf`) with no `toCodecJson` annotation. Its values
+ * can't be stored or sent: they fail when they are encoded, in production.
+ * `Schema.Unknown` and `Schema.Any` pass, because a value decides those.
+ *
+ * @internal
+ */
+export const pathsWithoutJson = (
+  ast: SchemaAST.AST,
+  path: string,
+  seen: Set<SchemaAST.AST> = new Set(),
+): ReadonlyArray<string> => {
+  const encoding = ast.encoding?.at(-1)?.to;
+  if (encoding) return pathsWithoutJson(encoding, path, seen);
+  const within = (child: SchemaAST.AST, at = path) => pathsWithoutJson(child, at, seen);
+  switch (ast._tag) {
+    case "Declaration": {
+      const { toCodecJson, toCodec } = ast.annotations ?? {};
+      return toCodecJson || toCodec ? ast.typeParameters.flatMap((tp) => within(tp)) : [path];
+    }
+    case "Objects":
+      return [
+        ...ast.propertySignatures.flatMap((p) => within(p.type, member(path, p.name))),
+        ...ast.indexSignatures.flatMap((signature) => within(signature.type, `${path}[key]`)),
+      ];
+    case "Arrays":
+      return [
+        ...ast.elements.flatMap((element, index) => within(element, `${path}[${index}]`)),
+        ...ast.rest.flatMap((element) => within(element, `${path}[]`)),
+      ];
+    case "Union":
+      return ast.types.flatMap((type) => within(type));
+    case "Suspend": {
+      // A recursive schema: one pass over it finds what is there.
+      if (seen.has(ast)) return [];
+      seen.add(ast);
+      return within(ast.thunk());
+    }
+    default:
+      return [];
+  }
+};
+
+/** What `decide` returned, once its Effect (if any) ran. @internal */
+export type Settled =
+  | { readonly _tag: "Decided"; readonly decision: unknown }
+  | { readonly _tag: "Failed"; readonly cause: Cause.Cause<unknown> };
+
+/**
+ * Settle an effectful decision. A rejection is a `YieldableError`, so it is
+ * an Effect too: running it fails with the rejection itself, which is the
+ * decision. Any other failure, such as a defect, stays a failure.
+ *
+ * @internal
+ */
+export const settle = (exit: Exit.Exit<unknown, unknown>): Settled => {
+  if (Exit.isSuccess(exit)) return { _tag: "Decided", decision: exit.value };
+  const rejection = Cause.findErrorOption(exit.cause);
+  return Option.isSome(rejection)
+    ? { _tag: "Decided", decision: rejection.value }
+    : { _tag: "Failed", cause: exit.cause };
+};
+
+/** A decision, judged against the command's declaration. @internal */
+export type Judged =
+  | { readonly _tag: "Accepted"; readonly events: ReadonlyArray<{ readonly _tag: string }> }
+  | { readonly _tag: "Rejected"; readonly rejection: { readonly _tag: string } }
+  | { readonly _tag: "Undeclared"; readonly error: DefinitionError };
+
+/**
+ * Judge a settled decision: the events to commit, the rejection, or the
+ * {@link DefinitionError} for an event or rejection the command does not
+ * declare.
+ *
+ * @internal
+ */
+export const judge = (
+  aggregateName: string,
+  command: {
+    readonly tag: string;
+    readonly events: ReadonlyArray<{ readonly tag: string }>;
+    readonly rejects: ReadonlyArray<Schema.Top>;
+  },
+  decision: unknown,
+): Judged => {
+  if (!Array.isArray(decision)) {
+    const rejection = decision as { readonly _tag: string };
+    if (!command.rejects.some((r) => rejectionTag(r) === rejection?._tag)) {
+      return {
+        _tag: "Undeclared",
+        error: new DefinitionError({
+          reason: new UndeclaredDecision({
+            aggregate: aggregateName,
+            command: command.tag,
+            returned: String(rejection?._tag),
+            list: "rejects",
+          }),
+        }),
+      };
+    }
+    return { _tag: "Rejected", rejection };
+  }
+  for (const event of decision as ReadonlyArray<{ readonly _tag: string }>) {
+    if (!command.events.some((e) => e.tag === event._tag)) {
+      return {
+        _tag: "Undeclared",
+        error: new DefinitionError({
+          reason: new UndeclaredDecision({
+            aggregate: aggregateName,
+            command: command.tag,
+            returned: event._tag,
+            list: "events",
+          }),
+        }),
+      };
+    }
+  }
+  return { _tag: "Accepted", events: decision };
+};
+
+type AnyHandler = (...args: ReadonlyArray<unknown>) => unknown;
+type HandlerMap = { readonly [key: string]: AnyHandler | Record<string, AnyHandler | undefined> };
+
+/** The id a ref or a Schema key value addresses. @internal */
+export const targetId = (target: unknown): string =>
+  typeof target === "object" && target !== null && "id" in target
+    ? String((target as { readonly id: unknown }).id)
+    : String(target);
+
+/** One input for a view's evolve. @internal */
+export interface LocalViewInput {
+  readonly name: string;
+  readonly event: { readonly _tag: string };
+  /** A ref for an aggregate source, the key value for a Schema-keyed view. */
+  readonly source: unknown;
+  readonly state?: unknown;
+  readonly envelope: { readonly at: unknown };
+  readonly key?: unknown;
+}
+
+/**
+ * Apply one input to one key of a view, with the view's own `keyOf` and
+ * `evolve`, as the kernel applies a delivery: each route whose `keyOf`
+ * reaches the key runs its handler. An input that reaches no route of the
+ * key leaves the state as it is.
+ *
+ * @internal
+ */
+export const evolveView = (
+  view: {
+    readonly definition: {
+      readonly state?: unknown;
+      readonly initial?: unknown;
+      readonly keyOf?: unknown;
+      readonly evolve?: unknown;
+    };
+  },
+  state: unknown,
+  input: LocalViewInput,
+): unknown => {
+  const def = view.definition;
+  if (def.state === undefined) return null;
+  const tag = input.event._tag;
+  const keyOf = def.keyOf as HandlerMap | undefined;
+  const evolve = def.evolve as HandlerMap | undefined;
+  const routing = {
+    event: input.event,
+    source: input.source,
+    state: input.state,
+    envelope: input.envelope,
+  };
+  const custom = keyOf?.[tag] ?? keyOf?.[input.name];
+  let key: unknown;
+  let routes: ReadonlyArray<string | undefined>;
+  // A route returns a ref for an aggregate key, or the value of a Schema key.
+  const reaches = (reached: unknown) =>
+    reached !== undefined && key !== undefined && targetId(reached) === targetId(key);
+  if (typeof custom === "function") {
+    const reached = custom(routing);
+    key = input.key ?? reached;
+    routes = reaches(reached) ? [undefined] : [];
+  } else if (custom) {
+    key = input.key;
+    routes = Object.entries(custom).flatMap(([route, fn]) =>
+      reaches(fn?.(routing)) ? [route] : [],
+    );
+  } else {
+    key = input.key ?? input.source;
+    routes = reaches(input.source) ? [undefined] : [];
+  }
+  let current = state;
+  for (const route of routes) {
+    const handler = evolve?.[tag] ?? evolve?.[input.name];
+    const fn =
+      typeof handler === "function" ? handler : route !== undefined ? handler?.[route] : undefined;
+    if (!fn) continue;
+    current =
+      fn(current ?? def.initial, input.event, {
+        key,
+        source: input.source,
+        state: input.state,
+        envelope: input.envelope,
+        at: input.envelope.at,
+      }) ?? null;
+  }
+  return current;
+};
+
+/**
+ * Call a command's client with a decoded wire payload.
+ *
+ * @internal
+ */
+export const sendPayload = (
+  send: unknown,
+  payload: unknown,
+  options: object,
+): Effect.Effect<unknown, unknown> => {
+  const { input, commandId, consistency } = payload as {
+    readonly input: unknown;
+    readonly commandId?: string;
+    readonly consistency?: string;
+  };
+  const call = send as (input: unknown, options: object) => Effect.Effect<unknown, unknown>;
+  return call(input, {
+    ...options,
+    ...(commandId === undefined ? {} : { commandId }),
+    ...(consistency === undefined ? {} : { consistency }),
+  });
+};

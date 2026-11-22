@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -121,8 +122,36 @@ export type BackupVaultsBackup = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BackupVaultsBackupLookup
 >;
+
+/**
+ * Props for {@link BackupVaultsBackup.lookup}: find a backup vaults backup
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface BackupVaultsBackupLookup {
+  /**
+   * Backup id (the `{backup}` segment).
+   */
+  backupId: string;
+  /**
+   * Region used when `backupVault` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent backup vault. Full name
+   * `projects/{project}/locations/{location}/backupVaults/{backupVault}` or
+   * the vault id (combined with `location`).
+   */
+  backupVault: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud NetApp Volumes backup stored in a backup vault.
@@ -159,6 +188,20 @@ export type BackupVaultsBackup = Resource<
  *   sourceVolume: volume.name,
  *   description: "pre-release v2",
  *   labels: { env: "prod", team: "storage" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing backup vaults backup
+ * `BackupVaultsBackup.lookup` references a backup vaults backup Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared backup vaults backup.
+ *
+ * **Example:** Reference an existing backup vaults backup
+ * ```typescript
+ * const backupVaultsBackup = GCP.NetApp.BackupVaultsBackup.lookup({
+ *   backupId: "my-backup",
+ *   backupVault: "my-backup-vault",
  * });
  * ```
  *
@@ -206,7 +249,7 @@ const toAttrs = (item: netapp.Backup, project: string, region: string) => {
 const getByName = (name: string) =>
   netapp
     .getProjectsLocationsBackupVaultsBackups({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   listAtNested(project, "backupVaults/-", (parent) =>
@@ -254,6 +297,18 @@ export const BackupVaultsBackupProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ backupId, location: lookupLocation, backupVault }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      // A row whose backupVault never resolved (failed create) has nothing to read.
+      if (!backupVault) return undefined;
+      const vault = expandParent(backupVault ?? "", env.project, location, "backupVaults");
+      const name = resourceName(vault, backupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const backupId = yield* toPhysicalId(id, olds?.backupId, output?.backupId, "backup");
@@ -296,17 +351,15 @@ export const BackupVaultsBackupProvider = () =>
       if (current === undefined) {
         const created = yield* netapp
           .createProjectsLocationsBackupVaultsBackups({
+            sourceVolume,
+            sourceSnapshot: news.sourceSnapshot,
+            ontapSource: news.ontapSource,
+            description: news.description,
+            labels: desiredLabels,
             parent: vault,
             backupId,
-            body: {
-              sourceVolume,
-              sourceSnapshot: news.sourceSnapshot,
-              ontapSource: news.ontapSource,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -314,7 +367,7 @@ export const BackupVaultsBackupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -332,13 +385,10 @@ export const BackupVaultsBackupProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* netapp.patchProjectsLocationsBackupVaultsBackups({
+          labels: desiredLabels,
+          description: news.description,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
@@ -360,7 +410,7 @@ export const BackupVaultsBackupProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

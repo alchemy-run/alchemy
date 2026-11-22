@@ -6,6 +6,8 @@ import * as RpcProvider from "alchemy/Local/RpcProvider";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { Stack } from "alchemy/Stack";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as MutableHashMap from "effect/MutableHashMap";
@@ -22,6 +24,15 @@ import {
 } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
+/** The consumer exists but is not (yet) attached to the expected Worker script. */
+export class ConsumerScriptUnbound extends Data.TaggedError("ConsumerScriptUnbound")<{
+  readonly scriptName: string | undefined;
+}> {
+  override get message() {
+    return `Queue consumer is not bound to Worker script '${this.scriptName}'`;
+  }
+}
+
 export type ConsumerProps = {
   /**
    * The queue ID to attach the consumer to.
@@ -32,7 +43,12 @@ export type ConsumerProps = {
    */
   scriptName: string;
   /**
-   * Optional dead letter queue name for failed messages.
+   * Name of the queue that receives messages after `maxRetries` failed
+   * deliveries.
+   *
+   * Cloudflare does not drain or alert on a dead-letter queue. A message
+   * left there expires after the queue's retention period, so give the
+   * dead-letter queue its own consumer.
    */
   deadLetterQueue?: string;
   /**
@@ -131,6 +147,48 @@ export type Consumer = Resource<
  * });
  * ```
  *
+ * ### Dead-Lettering Failed Messages
+ * **Example:** Consume the dead-letter queue
+ * ```typescript
+ * const dlq = yield* Cloudflare.Queues.Queue("MyDeadLetterQueue");
+ *
+ * yield* Cloudflare.Queues.Consumer("MyConsumer", {
+ *   queueId: queue.queueId,
+ *   scriptName: worker.workerName,
+ *   deadLetterQueue: dlq.queueName,
+ *   settings: { maxRetries: 3 },
+ * });
+ *
+ * // Without a consumer, dead-lettered messages expire unseen.
+ * yield* Cloudflare.Queues.Consumer("MyDeadLetterConsumer", {
+ *   queueId: dlq.queueId,
+ *   scriptName: worker.workerName,
+ * });
+ * ```
+ *
+ * **Example:** Dead-letter to a queue in another stack
+ * ```typescript
+ * const dlq = yield* Cloudflare.Queues.Queue.ref("DeadLetters", {
+ *   stack: "shared",
+ *   stage: "production",
+ * });
+ *
+ * yield* Cloudflare.Queues.Consumer("MyConsumer", {
+ *   queueId: queue.queueId,
+ *   scriptName: worker.workerName,
+ *   deadLetterQueue: dlq.queueName,
+ * });
+ * ```
+ *
+ * **Example:** Dead-letter to a queue by name
+ * ```typescript
+ * yield* Cloudflare.Queues.Consumer("MyConsumer", {
+ *   queueId: queue.queueId,
+ *   scriptName: worker.workerName,
+ *   deadLetterQueue: "orders-dead-letters",
+ * });
+ * ```
+ *
  * @resource
  * @product Queues
  * @category Storage & Databases
@@ -208,7 +266,7 @@ const findWorkerConsumer = (acct: string, queueId: string) =>
     // the fresh queue is visible to the consumers API. Treat that as "no
     // consumer yet" — the caller falls through to createConsumer, which
     // retries QueueNotFound until the queue propagates.
-    Effect.catchTag("QueueNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("QueueNotFound", () => Effect.undefined),
   );
 
 export const ConsumerProviderLive = () =>
@@ -344,7 +402,7 @@ export const ConsumerProviderLive = () =>
       if (isLiveId(output?.consumerId)) {
         const fetched = yield* queues
           .getConsumer({ accountId: acct, queueId, consumerId: output.consumerId })
-          .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.undefined));
         if (fetched) {
           observed = toObserved(fetched);
           owned = observed !== undefined;
@@ -391,9 +449,7 @@ export const ConsumerProviderLive = () =>
           const settings = yield* workers
             .getScriptScriptAndVersionSetting({ accountId: acct, scriptName })
             .pipe(
-              Effect.catchTag(["WorkerNotFound", "WorkerHasNoVersions"], () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag(["WorkerNotFound", "WorkerHasNoVersions"], () => Effect.undefined),
             );
           return settings === undefined ? undefined : new Set(settings.tags ?? []);
         });
@@ -522,11 +578,13 @@ export const ConsumerProviderLive = () =>
         Effect.flatMap((fetched) =>
           toObserved(fetched)?.scriptName === news.scriptName
             ? Effect.void
-            : Effect.fail("ScriptUnbound" as const),
+            : Effect.fail(new ConsumerScriptUnbound({ scriptName: news.scriptName })),
         ),
-        Effect.catchTag("ConsumerNotFound", () => Effect.fail("ScriptUnbound" as const)),
+        Effect.catchTag("ConsumerNotFound", () =>
+          Effect.fail(new ConsumerScriptUnbound({ scriptName: news.scriptName })),
+        ),
         Effect.retry({
-          while: (e) => e === "ScriptUnbound",
+          while: (e) => e._tag === "ConsumerScriptUnbound",
           schedule: queueHandlerReadinessSchedule,
         }),
       );
@@ -581,7 +639,7 @@ export const ConsumerProviderLive = () =>
             queueId: output.queueId,
             consumerId: output.consumerId,
           })
-          .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.undefined));
         if (fetched) {
           return {
             consumerId: fetched.consumerId!,
@@ -729,7 +787,7 @@ export const ConsumerProviderLocal = () =>
             consumerId:
               output?.consumerId && !isLiveId(output.consumerId)
                 ? output.consumerId
-                : `dev:${crypto.randomUUID()}`,
+                : `dev:${yield* SecureRandom.SecureRandom.pipe(Effect.flatMap((random) => random.uuidV4()))}`,
             queueId: news.queueId,
             scriptName: news.scriptName,
             deadLetterQueue: news.deadLetterQueue,

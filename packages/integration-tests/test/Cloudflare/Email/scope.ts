@@ -16,3 +16,10 @@
  * them skip-clean under a credential without it (e.g. Cloudflare OAuth).
  */
 export const emailRoutingScoped = process.env.CLOUDFLARE_TEST_EMAIL_ROUTING !== "0";
+
+/**
+ * Exclusive label for every test that touches zone Email Routing. The suites
+ * share Email Routing on the standing test zone, and `Email.Routing`'s destroy
+ * turns routing off for the whole zone, so they must not overlap.
+ */
+export const EMAIL_ROUTING_ZONE = "cloudflare:email-routing-zone";

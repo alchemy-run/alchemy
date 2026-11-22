@@ -2,9 +2,17 @@ import * as organizations from "@distilled.cloud/aws/organizations";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import { collectPages, retryOrganizations } from "./common.ts";
+
+export class TrustedServiceAccessUnexpectedResponse extends Data.TaggedError(
+  "TrustedServiceAccessUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface TrustedServiceAccessProps {
   /**
@@ -142,11 +150,9 @@ export const TrustedServiceAccessProvider = () =>
             );
             state = yield* readTrustedServiceAccess(news.servicePrincipal);
             if (!state) {
-              return yield* Effect.fail(
-                new Error(
-                  `trusted service access '${news.servicePrincipal}' not found after create`,
-                ),
-              );
+              return yield* new TrustedServiceAccessUnexpectedResponse({
+                message: `trusted service access '${news.servicePrincipal}' not found after create`,
+              });
             }
           }
 

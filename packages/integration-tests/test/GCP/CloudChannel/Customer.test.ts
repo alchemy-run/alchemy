@@ -1,8 +1,9 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudchannel from "@distilled.cloud/gcp/cloudchannel_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import {
   logLevel,
   probeAccountName,
@@ -41,10 +42,7 @@ test.provider.skipIf(runLifecycle)(
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
-        cloudchannel.createAccountsCustomers({
-          parent: probeAccountName,
-          body: probeCustomerBody,
-        }),
+        cloudchannel.createAccountsCustomers({ ...probeCustomerBody, parent: probeAccountName }),
       );
       expect(error._tag).toEqual("Forbidden");
 
@@ -69,6 +67,14 @@ test.provider.skipIf(!runLifecycle)(
             orgDisplayName: "Acme Corp",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.CloudChannel.Customer.lookup({
+          domain: created.domain as string,
+          parent: created.parent,
+          customerId: created.customerId,
+        }),
+        created,
       );
 
       expect(created.name.startsWith(`${probeAccountName}/customers/`)).toEqual(true);

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as HttpApiError from "effect/http-api/HttpApiError";
@@ -15,6 +15,8 @@ import {
   describeStateStoreFailure,
   makeHttpStateStore,
 } from "@/State/HttpStateStore.ts";
+import { passphraseEncryption } from "@/State/PassphraseEncryption.ts";
+import { stateCodec } from "@/State/StateEncryption.ts";
 
 /**
  * Hermetic tests driven by the production failure modes observed in
@@ -262,6 +264,86 @@ describe("makeHttpStateStore", { tags: ["unit", "local"] }, () => {
       }).pipe(Effect.provide(stubHttpClient(stub)));
     },
   );
+});
+
+/**
+ * The state API in memory, keyed by request path. A function in `between`
+ * runs once, right after the API answers a read of its path and before the
+ * client sees the answer: another writer's turn.
+ */
+const memoryStateApi = () => {
+  const records = new Map<string, unknown>();
+  const between = new Map<string, () => void>();
+  const stub: FetchStub = async (input, init) => {
+    const request = new Request(input, init);
+    const path = new URL(request.url).pathname;
+    if (request.method === "PUT") {
+      const value: unknown = await request.json();
+      records.set(path, value);
+      return json(value);
+    }
+    const value = records.get(path) ?? null;
+    const write = between.get(path);
+    between.delete(path);
+    write?.();
+    return json(value);
+  };
+  return { records, between, stub };
+};
+
+describe("makeHttpStateStore with StateEncryption", { tags: ["unit", "local"] }, () => {
+  const scope = { stack: "app", stage: "prod" };
+  const path = "/state/stacks/app/stages/prod/resources/Database";
+  const passphrase = Redacted.make("correct horse battery staple");
+  const atVersion = (version: number) => ({
+    status: "created",
+    attr: { version, password: Redacted.make("hunter2") },
+  });
+  /** The stored JSON of a record, as a store with `options` writes it. */
+  const storedWith = (options: Parameters<typeof passphraseEncryption>[0]) => (value: unknown) =>
+    stateCodec.pipe(
+      Effect.flatMap((codec) => codec.encodeJson(scope, value)),
+      Effect.provide(passphraseEncryption(options)),
+    );
+  const versionOf = (json: unknown) =>
+    stateCodec.pipe(
+      Effect.flatMap((codec) =>
+        codec.decodeJson<ReturnType<typeof atVersion>>(scope, json, "record"),
+      ),
+      Effect.map((value) => value.attr.version),
+      Effect.provide(passphraseEncryption({ passphrase })),
+    );
+
+  for (const { converting, stored, reader } of [
+    {
+      converting: "seals a plaintext secret",
+      stored: storedWith({ passphrase, disable: true }),
+      reader: { passphrase },
+    },
+    {
+      converting: "opens a sealed secret with disable",
+      stored: storedWith({ passphrase }),
+      reader: { passphrase, disable: true },
+    },
+  ]) {
+    // HttpStateStore.ts get: a stale record is written back with an
+    // unconditional set, after the read it decoded.
+    it.effect(`a converting read does not overwrite a newer write (it ${converting})`, () => {
+      const api = memoryStateApi();
+      return Effect.gen(function* () {
+        api.records.set(path, yield* stored(atVersion(1)));
+        const v2 = yield* stored(atVersion(2));
+        // A deploy of the stage writes v2 just after the API answers the
+        // reader with v1.
+        api.between.set(path, () => api.records.set(path, v2));
+
+        const store = yield* makeStore.pipe(Effect.provide(passphraseEncryption(reader)));
+        yield* store.get({ ...scope, fqn: "Database" });
+
+        expect(yield* versionOf(api.records.get(path))).toBe(2);
+      }).pipe(Effect.provide(stubHttpClient(api.stub)));
+    });
+  }
 });
 
 describe("checkHttpStateStoreAuth", { tags: ["unit", "local"] }, () => {

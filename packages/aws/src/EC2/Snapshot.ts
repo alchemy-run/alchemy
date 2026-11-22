@@ -10,15 +10,27 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { nameTagFilter, single } from "../internal/Lookup.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { VolumeId } from "./Volume.ts";
+
+export class SnapshotUnexpectedResponse extends Data.TaggedError("SnapshotUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class SnapshotOperationFailed extends Data.TaggedError("SnapshotOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type SnapshotId<ID extends string = string> = `snap-${ID}`;
 export const SnapshotId = <ID extends string>(id: ID): ID & SnapshotId<ID> =>
   `snap-${id}` as ID & SnapshotId<ID>;
 
-export type SnapshotArn = `arn:aws:ec2:${RegionID}:${AccountID}:snapshot/${SnapshotId}`;
+export type SnapshotArn = `arn:${Partition}:ec2:${RegionID}:${AccountID}:snapshot/${SnapshotId}`;
 
 export interface SnapshotProps {
   /**
@@ -89,8 +101,23 @@ export interface Snapshot extends Resource<
     ownerId?: string;
   },
   never,
-  Providers
+  Providers,
+  SnapshotLookup
 > {}
+
+/**
+ * Props for {@link Snapshot.lookup}: find an EBS snapshot this stack
+ * doesn't manage, owned by the ambient account, in its region.
+ */
+export type SnapshotLookup =
+  | {
+      /** The snapshot's id. */
+      snapshotId: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several match. */
+      name: string;
+    };
 /**
  * A point-in-time backup of an EBS {@link Volume}, stored in S3. Snapshots are
  * incremental and immutable — you create new {@link Volume}s from them via
@@ -126,6 +153,22 @@ export interface Snapshot extends Resource<
  * pre-populated with the snapshot's data — the standard backup/restore and
  * clone-across-AZ pattern.
  *
+ * ### Looking up an existing snapshot
+ * `Snapshot.lookup` references a snapshot Alchemy doesn't manage (created in the
+ * console or by another stack), found by `snapshotId` or its `Name` tag. It is read during plan/deploy
+ * and never created, updated or deleted. A lookup by `name` fails with
+ * `AmbiguousLookupError` when several match.
+ *
+ * **Example:** Restore a volume from an existing snapshot
+ * ```typescript
+ * const nightly = AWS.EC2.Snapshot.lookup({ name: "nightly" });
+ *
+ * yield* AWS.EC2.Volume("Restored", {
+ *   availabilityZone,
+ *   snapshotId: nightly.snapshotId,
+ * });
+ * ```
+ *
  * @resource
  */
 export const Snapshot = Resource<Snapshot>("AWS.EC2.Snapshot");
@@ -152,6 +195,29 @@ export const SnapshotProvider = () =>
           if (olds.volumeId !== news.volumeId) {
             return { action: "replace" };
           }
+        }),
+
+        lookup: Effect.fn(function* (props) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const found = yield* ec2
+            .describeSnapshots(
+              "snapshotId" in props
+                ? { SnapshotIds: [props.snapshotId] }
+                : {
+                    Filters: [nameTagFilter(props.name), { Name: "owner-id", Values: [accountId] }],
+                  },
+            )
+            .pipe(
+              Effect.catchTag("InvalidSnapshot.NotFound", () => Effect.succeed({ Snapshots: [] })),
+            );
+          const match = yield* single(
+            "AWS.EC2.Snapshot",
+            "snapshotId" in props ? props.snapshotId : `Name=${props.name}`,
+            found.Snapshots ?? [],
+            (x) => x.SnapshotId,
+          );
+          if (!match?.SnapshotId) return undefined;
+          return toSnapshotAttributes(match, region, accountId);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -250,7 +316,8 @@ const toSnapshotAttributes = (
   const snapshotId = snapshot.SnapshotId! as SnapshotId;
   return {
     snapshotId,
-    snapshotArn: `arn:aws:ec2:${region}:${accountId}:snapshot/${snapshotId}` as SnapshotArn,
+    snapshotArn:
+      `arn:${partitionOf(region)}:ec2:${region}:${accountId}:snapshot/${snapshotId}` as SnapshotArn,
     volumeId: snapshot.VolumeId! as VolumeId,
     volumeSize: snapshot.VolumeSize ?? 0,
     state: snapshot.State ?? "pending",
@@ -278,15 +345,15 @@ const waitForSnapshotCompleted = (snapshotId: string, session?: ScopedPlanStatus
     });
     const snapshot = result.Snapshots?.[0];
     if (!snapshot) {
-      return yield* Effect.fail(new Error(`Snapshot ${snapshotId} not found`));
+      return yield* new SnapshotUnexpectedResponse({ message: `Snapshot ${snapshotId} not found` });
     }
     if (snapshot.State === "completed") {
       return snapshot;
     }
     if (snapshot.State === "error") {
-      return yield* Effect.fail(
-        new Error(`Snapshot ${snapshotId} entered error state: ${snapshot.StateMessage}`),
-      );
+      return yield* new SnapshotOperationFailed({
+        message: `Snapshot ${snapshotId} entered error state: ${snapshot.StateMessage}`,
+      });
     }
     return yield* new SnapshotPending({
       snapshotId,

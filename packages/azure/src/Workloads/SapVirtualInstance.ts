@@ -362,7 +362,9 @@ export const SapVirtualInstanceProvider = () =>
               news.managedResourceGroupName !== undefined
                 ? { name: news.managedResourceGroupName }
                 : undefined,
-            configuration: news.configuration,
+            // The nested infrastructure and software configurations stay
+            // free-form in the props, so the arm is asserted.
+            configuration: news.configuration as workloads.SAPConfigurationInput,
           },
         });
       }

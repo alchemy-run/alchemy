@@ -110,7 +110,7 @@ export default function StateStoreBootstrap({
       }
     };
 
-    run();
+    void run();
     return () => {
       cancelRef.current = true;
     };

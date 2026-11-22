@@ -151,7 +151,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   networkconnectivity
     .getProjectsLocationsServiceConnectionTokens({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ServiceConnectionTokenProvider = () =>
   Provider.succeed(ServiceConnectionToken, {
@@ -233,13 +233,11 @@ export const ServiceConnectionTokenProvider = () =>
       if (current === undefined) {
         const created = yield* networkconnectivity
           .createProjectsLocationsServiceConnectionTokens({
+            network,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             serviceConnectionTokenId,
-            body: {
-              network,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -247,7 +245,7 @@ export const ServiceConnectionTokenProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -256,7 +254,7 @@ export const ServiceConnectionTokenProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NetworkConnectivityNotResolved({ name });
+        return yield* new NetworkConnectivityNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);
@@ -274,7 +272,7 @@ export const ServiceConnectionTokenProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

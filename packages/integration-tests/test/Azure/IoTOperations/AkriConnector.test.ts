@@ -1,8 +1,8 @@
 import * as Azure from "@alchemy.run/azure";
 import { ensureRegistered } from "@alchemy.run/azure/Arm";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as iot from "@distilled.cloud/azure/iotoperations";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runPaidOnly } from "../gates.ts";
 import {
@@ -35,7 +35,7 @@ const getAkriConnector = (
   });
 
 // The REST connector image from Microsoft Container Registry.
-const RUNTIME = {
+const RUNTIME: iot.AkriConnectorTemplateManagedConfiguration = {
   runtimeConfigurationType: "ManagedConfiguration",
   managedConfigurationSettings: {
     managedConfigurationType: "ImageConfiguration",

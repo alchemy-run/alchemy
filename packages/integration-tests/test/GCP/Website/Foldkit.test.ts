@@ -1,6 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
@@ -10,7 +10,6 @@ import {
   verifyFoldkitBrowser,
   verifyFoldkitRendering,
 } from "../../Website/Foldkit.ts";
-import { dockerAvailable } from "../bindingHost.ts";
 import {
   assertSiteGone,
   cloudRunUrl,
@@ -27,7 +26,7 @@ const { test } = Test.make({ providers: GCP.providers() });
 const fixtureDir = cloudflareFixture("foldkit-fixture");
 const fixtureEntries = ["index.html", "package.json", "vite.config.ts", "src"];
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "Foldkit: deploy, GET / and a deep link, destroy, gone",
   (stack) =>
     Effect.gen(function* () {
@@ -73,7 +72,7 @@ test.provider.skipIf(!dockerAvailable)(
 
 // One Cloud Run service walked through every server-rendered mode: each
 // redeploy replaces the build, and every route must answer for the new mode.
-test.provider.skipIf(!dockerAvailable || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "Foldkit: ssg, ssr and hybrid render every route across redeploys",
   (stack) =>
     Effect.gen(function* () {

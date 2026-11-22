@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { DEFAULT_NETWORK, defaultNetworkSelfLink } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -75,14 +76,12 @@ const ensureProducer = () =>
       existingCheck ??
       (yield* compute
         .insertHealthChecks({
+          name: healthCheckName,
+          type: "TCP",
+          tcpHealthCheck: { port: 80 },
+          checkIntervalSec: 5,
+          timeoutSec: 5,
           project,
-          body: {
-            name: healthCheckName,
-            type: "TCP",
-            tcpHealthCheck: { port: 80 },
-            checkIntervalSec: 5,
-            timeoutSec: 5,
-          },
         })
         .pipe(
           Effect.flatMap(waitGlobalOp),
@@ -103,14 +102,12 @@ const ensureProducer = () =>
       existingBackend ??
       (yield* compute
         .insertRegionBackendServices({
+          name: backendName,
+          protocol: "TCP",
+          loadBalancingScheme: "INTERNAL",
+          healthChecks: healthCheck.selfLink ? [healthCheck.selfLink] : [],
           project,
           region,
-          body: {
-            name: backendName,
-            protocol: "TCP",
-            loadBalancingScheme: "INTERNAL",
-            healthChecks: healthCheck.selfLink ? [healthCheck.selfLink] : [],
-          },
         })
         .pipe(
           Effect.flatMap(waitRegionOp),
@@ -197,6 +194,13 @@ test.provider(
           });
           return { subnet, nat, rule, attachment };
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.ServiceAttachment.lookup({
+          serviceAttachmentName: created.attachment.serviceAttachmentName,
+          region: created.attachment.region,
+        }),
+        created.attachment,
       );
 
       expect(created.attachment.serviceAttachmentName).toEqual(expect.any(String));

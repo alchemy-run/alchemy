@@ -1,12 +1,14 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../../expectDeleteRefused.ts";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -77,6 +79,13 @@ test.provider.skipIf(!runLifecycle)(
           return { instance, table, view };
         }),
       );
+      yield* expectFound(
+        GCP.Bigtable.InstancesMaterializedView.lookup({
+          materializedViewId: created.view.materializedViewId,
+          instance: created.view.instance,
+        }),
+        created.view,
+      );
 
       expect(created.view.name).toContain("/materializedViews/");
       expect(created.view.materializedViewId).toEqual(expect.any(String));
@@ -126,6 +135,40 @@ test.provider.skipIf(!runLifecycle)(
       });
       expect(refetched.deletionProtection).toEqual(true);
 
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "Counts",
+        tag: "GCP.Bigtable.MaterializedViewDeletionProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const instance = yield* GCP.Bigtable.Instance("Data", {
+            instanceId: created.instance.instanceId,
+            displayName: "alchemy-test-bt-mview",
+            type: "PRODUCTION",
+            clusters: {
+              cluster: {
+                location: "us-central1-b",
+                serveNodes: 1,
+                defaultStorageType: "HDD",
+              },
+            },
+          });
+          const table = yield* GCP.Bigtable.Table("Events", {
+            instance: instance.name,
+            tableId: "events",
+            columnFamilies: { cf: { gcRule: { maxNumVersions: 1 } } },
+          });
+          const view = yield* GCP.Bigtable.InstancesMaterializedView("Counts", {
+            instance: instance.name,
+            materializedViewId: created.view.materializedViewId,
+            query: Output.interpolate`SELECT '*' AS _key, COUNT(*) AS row_count FROM \`${table.tableId}\` GROUP BY _key`,
+            deletionProtection: false,
+          });
+          return { instance, table, view };
+        }),
+      );
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.view.name);

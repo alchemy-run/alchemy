@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as nc from "@distilled.cloud/azure/networkcloud";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runPaidOnly } from "../gates.ts";
 import {
@@ -76,9 +76,7 @@ test.provider.skipIf(!runPaidOnly || !hasWorkloadNetworks || !nexus.kubernetesVe
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { group, naks, res } = yield* stack.deploy(
-        program({ count: 1, label: "a", env: "a" }),
-      );
+      const { group, naks, res } = yield* stack.deploy(program({ count: 1, label: "a", env: "a" }));
       const rg = group.resourceGroupName;
       const cluster = naks.kubernetesClusterName;
       const observed = yield* get(rg, cluster, res.agentPoolName);

@@ -1,5 +1,7 @@
+import { Retry as TursoRetry } from "@distilled.cloud/turso/Retry";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
+import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -58,6 +60,7 @@ export const providers = () =>
         OrganizationSettingsProvider(),
       ),
     ),
+    Layer.provideMerge(Layer.succeed(TursoRetry, DeployRetry.policy)),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.provideMerge(TursoAuth),

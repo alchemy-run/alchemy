@@ -253,7 +253,7 @@ export const OccurrenceProvider = () =>
       });
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, output }) {
       const env = yield* GcpEnvironment.current;
       const name = output?.name;
       if (name !== undefined && name.length > 0) {
@@ -317,16 +317,16 @@ export const OccurrenceProvider = () =>
           create: (request) =>
             retryTransient(
               containeranalysis.createProjectsOccurrences({
+                ...request.body,
                 parent: request.parent,
-                body: request.body,
               }),
             ),
           patch: (request) =>
             retryTransient(
               containeranalysis.patchProjectsOccurrences({
+                ...request.body,
                 name: request.name,
                 updateMask: request.updateMask,
-                body: request.body,
               }),
             ),
         },

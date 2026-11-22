@@ -187,7 +187,7 @@ const getByName = (
       instanceGroupManager,
       resizeRequest,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (
   project: string,
@@ -349,18 +349,16 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
           env.project,
           region,
           compute.insertRegionInstanceGroupManagerResizeRequests({
+            name: requestName,
+            description: desiredDescription,
+            resizeBy: news.resizeBy,
+            requestedRunDuration: news.requestedRunDuration,
             project: env.project,
             region,
             instanceGroupManager,
-            body: {
-              name: requestName,
-              description: desiredDescription,
-              resizeBy: news.resizeBy,
-              requestedRunDuration: news.requestedRunDuration,
-            },
           }),
           { ignoreAlreadyExists: true },
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = yield* awaitResource(env.project, region, instanceGroupManager, requestName);
       }
 
@@ -396,7 +394,7 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
             resizeRequest: output.requestName,
           }),
           { ignoreNotFound: true },
-        ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       }
       yield* runRegionOp(
         env.project,
@@ -414,7 +412,7 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
     }),
   });

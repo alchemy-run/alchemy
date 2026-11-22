@@ -1,12 +1,13 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { waitForOperation } from "@alchemy.run/gcp/Operation";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as apigateway from "@distilled.cloud/gcp/apigateway_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -82,11 +83,7 @@ const ensureParentApi = Effect.gen(function* () {
     return parentApiName;
   }
   const created = yield* apigateway
-    .createProjectsLocationsApis({
-      parent,
-      apiId: parentApiId,
-      body: { displayName: parentApiId },
-    })
+    .createProjectsLocationsApis({ displayName: parentApiId, parent, apiId: parentApiId })
     .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
   if (created !== undefined) {
     yield* waitOperation(created);
@@ -158,6 +155,10 @@ test.provider.skipIf(!runLifecycle)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.ApiGateway.ApisConfig.lookup({ apiConfigId: created.apiConfigId, api: created.api }),
+        created,
       );
 
       expect(created.apiConfigId).toEqual(expect.any(String));

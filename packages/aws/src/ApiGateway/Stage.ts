@@ -92,8 +92,20 @@ export interface ApiGatewayStage extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ApiGatewayStageLookup
 > {}
+
+/**
+ * Props for {@link ApiGatewayStage.lookup}: find an API gateway stage this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ApiGatewayStageLookup {
+  /** The id of the rest api it belongs to. */
+  restApiId: string;
+  /** The name of the existing API gateway stage. */
+  stageName: string;
+}
 
 /**
  * A stage for a REST API deployment.
@@ -145,6 +157,16 @@ export interface ApiGatewayStage extends Resource<
  *     deploymentId: canaryDeployment.deploymentId,
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing API gateway stage
+ * `ApiGatewayStage.lookup` references an API gateway stage Alchemy doesn't manage (created in the
+ * console or by another stack), found by `restApiId` and `stageName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing API gateway stage
+ * ```typescript
+ * const existing = AWS.ApiGateway.ApiGatewayStage.lookup({ restApiId: "...", stageName: "..." });
  * ```
  *
  * @resource
@@ -562,6 +584,16 @@ export const StageProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ restApiId, stageName }) {
+          const s = yield* ag
+            .getStage({
+              restApiId: restApiId,
+              stageName: stageName,
+            })
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
+          if (!s?.stageName) return undefined;
+          return snapshotStage(s, restApiId, s.stageName);
+        }),
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;
           const s = yield* ag
@@ -569,7 +601,7 @@ export const StageProvider = () =>
               restApiId: output.restApiId,
               stageName: output.stageName,
             })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           if (!s?.stageName) return undefined;
           return snapshotStage(s, output.restApiId, s.stageName);
         }),
@@ -621,7 +653,7 @@ export const StageProvider = () =>
           // mutable settings come from the cloud read on every reconcile.
           let observed = yield* ag
             .getStage({ restApiId, stageName })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
           // Ensure — create the stage if missing. `createStage` only sets
           // a subset of the configurable surface; the rest is applied via

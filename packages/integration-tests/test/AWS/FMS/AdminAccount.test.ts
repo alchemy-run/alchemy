@@ -1,14 +1,16 @@
 import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { AdminAccount, pinFms } from "@alchemy.run/aws/FMS/AdminAccount";
+import { expect } from "@alchemy.run/test";
 import * as fms from "@distilled.cloud/aws/fms";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as OrganizationLease from "../Organizations/OrganizationLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+// FMS administration belongs to the organization: share its lease with the other suites that read
+// it (on Floci the lease also ensures the organization exists, with this account its management account).
+const { test } = OrganizationLease.make({ providers: AWS.providers() }, "shared");
 
 // FMS admin-account APIs are only served from us-east-1 — all direct distilled
 // calls below are pinned there via `pinFms` (same as the provider).

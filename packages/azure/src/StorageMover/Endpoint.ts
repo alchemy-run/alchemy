@@ -448,6 +448,8 @@ export const EndpointProvider = () =>
 
       if (observed === undefined) {
         // Ensure: the PUT carries the variant-specific location fields.
+        // Unset fields of other variants are left out of the request, so the
+        // arm is asserted rather than narrowed.
         yield* storagemover.EndpointsCreateOrUpdate({
           ...where,
           properties: {
@@ -469,7 +471,7 @@ export const EndpointProvider = () =>
             credentials,
             enableCrossTenantTransfer: news.enableCrossTenantTransfer,
             allowedStorageAccounts: news.allowedStorageAccounts,
-          },
+          } as storagemover.EndpointBasePropertiesInput,
           identity,
         });
       } else {
@@ -477,12 +479,20 @@ export const EndpointProvider = () =>
         const props = observed.properties;
         const descriptionChanged = props.description !== description;
         const credentialsChanged =
-          news.credentials !== undefined && credentialsDiffer(props.credentials, news.credentials);
+          news.credentials !== undefined &&
+          credentialsDiffer(
+            "credentials" in props ? props.credentials : undefined,
+            news.credentials,
+          );
         const crossTenantChanged =
           (news.enableCrossTenantTransfer !== undefined &&
-            props.enableCrossTenantTransfer !== news.enableCrossTenantTransfer) ||
+            ("enableCrossTenantTransfer" in props ? props.enableCrossTenantTransfer : undefined) !==
+              news.enableCrossTenantTransfer) ||
           (news.allowedStorageAccounts !== undefined &&
-            !sameIds(props.allowedStorageAccounts, news.allowedStorageAccounts));
+            !sameIds(
+              "allowedStorageAccounts" in props ? props.allowedStorageAccounts : undefined,
+              news.allowedStorageAccounts,
+            ));
         const identityChanged =
           news.identity !== undefined &&
           identityKey(observed.identity ?? undefined) !== identityKey(identity);

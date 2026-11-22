@@ -12,34 +12,42 @@
 // that stamp is missing or older than any tracked or untracked-but-not-ignored
 // file of the package or its workspace dependencies, test files excepted.
 //
-// Distilled SDKs are consumed the same way by bundlers: their `module` and
-// `default` export conditions point at `lib/services.full/*.js`, which only
-// distilled's `scripts/bundle-lib.ts` writes (`tsc -b` emits the rest of
-// `lib/`). After the builds above, every distilled package that has a `lib/`
-// but no bundle stamp newer than its source and its `lib/` is bundled. Stamps live in `node_modules/.cache/distilled-bundle/<package>`
-// (bundle-lib prunes unknown files from `lib/`).
+// Distilled SDKs are consumed the same way by bundlers: their `default`
+// export condition points at `lib/`, which distilled's `scripts/bundle-lib.ts`
+// turns from `tsc -b` output into the chunked layout npm ships, with the
+// `distilled-lazy` stubs in `lib/services.lazy/` (only bundle-lib writes
+// those). After the builds above, every distilled package that has a `lib/`
+// but no bundle stamp newer than its source and its `lib/` is bundled (again,
+// only SDKs the workspace uses). Stamps live in
+// `node_modules/.cache/distilled-bundle/<package>` (bundle-lib prunes unknown
+// files from `lib/`).
+//
+// Before any of that, distilled packages without a `lib/` (a fresh checkout)
+// are emitted with their own `tsrs -b`. Only the SDKs the workspace depends on
+// (and their distilled dependencies) are emitted; the rest of distilled's
+// ~100 SDKs are never imported here. TypeScript 7.1's build mode caches a
+// failed module lookup across projects, so in one workspace-wide `tsrs -b` a
+// project that resolves `@distilled.cloud/*` before it is emitted, without a
+// reference to it, fails every later project that imports it too.
 //
 // Usage: pnpm -w ensure:built [package...]
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Argument, Command } from "effect/cli";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { ChildProcess } from "effect/process";
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
-import { stampFile } from "./package-build.ts";
+import { command as platformCommand, stampFile } from "./package-build.ts";
 
 /** Packages consumed from their build output, by directory name under packages/. */
 const packages = {
   "cloudflare-runtime": { outDir: "dist" },
   "frontend-frameworks": { outDir: "dist" },
 } as const;
-
-// pnpm may be a `.cmd` shim on Windows, which only a shell can run.
-const shell = process.platform === "win32";
-const pathDelimiter = process.platform === "win32" ? ";" : ":";
 
 type PackageName = keyof typeof packages;
 const packageNames = Object.keys(packages) as Array<PackageName>;
@@ -57,7 +65,7 @@ const workspaceRoot = Effect.gen(function* () {
 const dependencyDirectories = Effect.fn(function* (root: string, name: PackageName) {
   const spawner = yield* ChildProcessSpawner;
   const output = yield* spawner.string(
-    ChildProcess.make(
+    yield* platformCommand(
       "pnpm",
       [
         "ls",
@@ -70,7 +78,7 @@ const dependencyDirectories = Effect.fn(function* (root: string, name: PackageNa
         "--loglevel",
         "error",
       ],
-      { cwd: root, shell },
+      { cwd: root },
     ),
   );
   return (JSON.parse(output) as Array<{ path: string }>).map((project) => project.path);
@@ -84,10 +92,10 @@ const newestSourceTime = Effect.fn(function* (directory: string) {
 
   // `git -C` also works inside submodules, which the parent repo can't list.
   const files = yield* spawner.lines(
-    ChildProcess.make(
+    yield* platformCommand(
       "git",
       ["-C", directory, "ls-files", "--cached", "--others", "--exclude-standard", "."],
-      { cwd: directory, shell },
+      { cwd: directory },
     ),
   );
   const times = yield* Effect.forEach(
@@ -120,19 +128,109 @@ const isStale = Effect.fn(function* (root: string, name: PackageName) {
   return Math.max(...newest) > stamp.value;
 });
 
+/**
+ * Names (directory names under distilled's `packages/`) of the distilled SDKs
+ * non-distilled workspace projects depend on, plus their distilled dependencies.
+ */
+const usedDistilled = Effect.fn(function* (root: string) {
+  const spawner = yield* ChildProcessSpawner;
+  const output = yield* spawner.string(
+    yield* platformCommand("pnpm", ["ls", "-r", "--depth", "0", "--json", "--loglevel", "error"], {
+      cwd: root,
+    }),
+  );
+  type Project = {
+    path: string;
+    dependencies?: Record<string, { path?: string }>;
+    devDependencies?: Record<string, { path?: string }>;
+    optionalDependencies?: Record<string, { path?: string }>;
+  };
+  const projects = JSON.parse(output) as Array<Project>;
+  const marker = "/submodules/distilled/packages/";
+  const isDistilled = (path: string) => path.replaceAll("\\", "/").includes(marker);
+  const nameOf = (path: string) => path.replaceAll("\\", "/").split(marker)[1]!.split("/")[0]!;
+  const distilledDeps = (project: Project) =>
+    [project.dependencies, project.devDependencies, project.optionalDependencies]
+      .flatMap((deps) => Object.values(deps ?? {}))
+      .flatMap((dep) => (dep.path && isDistilled(dep.path) ? [nameOf(dep.path)] : []));
+  const byName = new Map(
+    projects.filter((p) => isDistilled(p.path)).map((p) => [nameOf(p.path), p] as const),
+  );
+  const used = new Set<string>();
+  const queue = projects.filter((p) => !isDistilled(p.path)).flatMap(distilledDeps);
+  while (queue.length > 0) {
+    const name = queue.pop()!;
+    if (used.has(name)) continue;
+    used.add(name);
+    const project = byName.get(name);
+    if (project) queue.push(...distilledDeps(project));
+  }
+  return used;
+});
+
+/**
+ * Emit used distilled packages that have no `lib/` yet. Only packages whose exports
+ * point into `lib/` are emitted; `tsrs -b` builds their references (core) too.
+ */
+const emitDistilled = Effect.fn(function* (root: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const spawner = yield* ChildProcessSpawner;
+  const packagesDir = path.join(root, "submodules", "distilled", "packages");
+  if (!(yield* fs.exists(packagesDir))) return;
+  const used = yield* usedDistilled(root);
+  const names = yield* fs.readDirectory(packagesDir);
+  const missing = yield* Effect.filter(
+    names.filter((name) => used.has(name)),
+    Effect.fnUntraced(function* (name) {
+      const directory = path.join(packagesDir, name);
+      if (!(yield* fs.exists(path.join(directory, "tsconfig.json")))) return false;
+      if (yield* fs.exists(path.join(directory, "lib"))) return false;
+      const manifest = yield* fs
+        .readFileString(path.join(directory, "package.json"))
+        .pipe(Effect.orElseSucceed(() => ""));
+      return manifest.includes('"./lib/');
+    }),
+    { concurrency: 16 },
+  );
+  if (missing.length === 0) return;
+  yield* Effect.logInfo(`Emitting distilled packages: ${missing.join(", ")}`);
+  // Windows caps a command line at 8191 characters, so emit in batches of
+  // root-relative paths instead of one command naming every package.
+  const tsconfigs = missing.map((name) =>
+    path.join("submodules", "distilled", "packages", name, "tsconfig.json"),
+  );
+  for (let start = 0; start < tsconfigs.length; start += EMIT_BATCH_SIZE) {
+    const exitCode = yield* spawner.exitCode(
+      yield* platformCommand(
+        "pnpm",
+        ["exec", "tsrs", "-b", ...tsconfigs.slice(start, start + EMIT_BATCH_SIZE)],
+        { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" },
+      ),
+    );
+    if (exitCode !== 0) {
+      return yield* Effect.fail(new Error(`Distilled emit failed with exit code ${exitCode}`));
+    }
+  }
+});
+
+/** Packages per `tsrs -b` call: ~60 chars each keeps a batch far under Windows' limit. */
+const EMIT_BATCH_SIZE = 40;
+
 /** Where the last successful bundle of a distilled package is recorded. */
 const distilledStamp = (root: string, path: Path.Path, name: string) =>
   path.join(root, "node_modules", ".cache", "distilled-bundle", name);
 
-/** Distilled packages whose `lib/services.full` is missing or older than their source. */
+/** Distilled packages whose bundled `lib/` is missing or older than their source. */
 const staleDistilled = Effect.fn(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const distilled = path.join(root, "submodules", "distilled");
   if (!(yield* fs.exists(path.join(distilled, "scripts", "bundle-lib.ts")))) return [];
+  const used = yield* usedDistilled(root);
   const names = yield* fs.readDirectory(path.join(distilled, "packages"));
   return yield* Effect.filter(
-    names.filter((name) => name !== "core"),
+    names.filter((name) => name !== "core" && used.has(name)),
     Effect.fnUntraced(function* (name) {
       const directory = path.join(distilled, "packages", name);
       if (!(yield* fs.exists(path.join(directory, "lib")))) return false;
@@ -160,7 +258,7 @@ const bundleDistilled = Effect.fn(function* (root: string) {
   const stale = yield* staleDistilled(root);
   if (stale.length === 0) return;
   yield* Effect.logInfo(`Bundling stale distilled packages: ${stale.join(", ")}`);
-  const pathEnv = yield* Effect.sync(() => process.env.PATH ?? "");
+  const pathEnv = yield* Config.String("PATH").pipe(Config.withDefault(""));
   const exitCode = yield* spawner.exitCode(
     ChildProcess.make(
       "node",
@@ -200,6 +298,7 @@ const command = Command.make(
   Effect.fn(function* ({ packages: selected }) {
     const root = yield* workspaceRoot;
     const spawner = yield* ChildProcessSpawner;
+    yield* emitDistilled(root);
 
     const candidates = selected.length > 0 ? selected : packageNames;
     const stale = yield* Effect.filter(candidates, (name) => isStale(root, name), {
@@ -209,7 +308,7 @@ const command = Command.make(
 
     yield* Effect.logInfo(`Rebuilding stale packages: ${stale.join(", ")}`);
     const exitCode = yield* spawner.exitCode(
-      ChildProcess.make(
+      yield* platformCommand(
         "pnpm",
         [
           "-r",
@@ -217,7 +316,7 @@ const command = Command.make(
           "run",
           "build:package",
         ],
-        { cwd: root, shell, stdin: "inherit", stdout: "inherit", stderr: "inherit" },
+        { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" },
       ),
     );
     if (exitCode !== 0) {

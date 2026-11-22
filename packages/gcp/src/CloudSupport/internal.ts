@@ -113,14 +113,14 @@ const parentOfResource = (name: string) =>
   name.startsWith("projects/")
     ? resourcemanager.getProjects({ name }).pipe(
         Effect.map((resource) => resource.parent),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       )
     : name.startsWith("folders/")
       ? resourcemanager.getFolders({ name }).pipe(
           Effect.map((folder) => folder.parent),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         )
-      : Effect.succeed(undefined);
+      : Effect.undefined;
 
 export const tryResolveOrganization = () =>
   Effect.gen(function* () {
@@ -158,25 +158,25 @@ export const listOrganizationParents = () =>
 
 export const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cloudsupport.getOrganizationsSupportEventSubscriptions({ name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
         Effect.map((subscription) => (isDeleted(subscription) ? undefined : subscription)),
       );
 
 export const getDeletedByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cloudsupport
         .getOrganizationsSupportEventSubscriptions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const getTopic = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : pubsub
         .getProjectsTopics({ topic: name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const grantCloudSupportPublisher = (topic: string) =>
   Effect.gen(function* () {
@@ -198,10 +198,7 @@ export const grantCloudSupportPublisher = (topic: string) =>
         members: [CLOUD_SUPPORT_EVENTS_MEMBER],
       });
     }
-    yield* pubsub.setIamPolicyProjectsTopics({
-      resource: topic,
-      body: { policy: { ...policy, bindings } },
-    });
+    yield* pubsub.setIamPolicyProjectsTopics({ policy: { ...policy, bindings }, resource: topic });
   }).pipe(
     Effect.retry({
       while: (error) => error._tag === "Conflict",
@@ -215,10 +212,7 @@ export const ensureTopic = (name: string, labels: Record<string, string>) =>
     let current = yield* getTopic(name);
     if (current === undefined) {
       const created = yield* pubsub
-        .createProjectsTopics({
-          name,
-          body: { labels },
-        })
+        .createProjectsTopics({ labels, name })
         .pipe(Effect.catchTag("Conflict", () => getTopic(name)));
       current = created ?? undefined;
     }
@@ -228,13 +222,7 @@ export const ensureTopic = (name: string, labels: Record<string, string>) =>
     const changed = Object.entries(desired).some(([key, value]) => observed[key] !== value);
     if (changed) {
       current = yield* pubsub
-        .patchProjectsTopics({
-          name,
-          body: {
-            topic: { name, labels: desired },
-            updateMask: "labels",
-          },
-        })
+        .patchProjectsTopics({ topic: { name, labels: desired }, updateMask: "labels", name })
         .pipe(Effect.catchTag("Conflict", () => Effect.succeed(current)));
     }
     yield* grantCloudSupportPublisher(name);

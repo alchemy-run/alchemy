@@ -19,6 +19,7 @@
  * (latest stable version per group). `--write` writes one `<service>.md` per
  * distilled service, `data-plane.md`, `audit.json`, and `INDEX.md`.
  */
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -1183,12 +1184,11 @@ function deliverableRows(): Row[] {
 }
 
 function renderIndex(): string {
-  const skill = Bun.spawnSync(
-    ["git", "log", "-1", "--format=%H", "--", ".agents/skills/alchemy-provider"],
-    { cwd: repo },
-  )
-    .stdout.toString()
-    .trim();
+  const skill = execFileSync(
+    "git",
+    ["log", "-1", "--format=%H", "--", ".agents/skills/alchemy-provider"],
+    { cwd: repo, encoding: "utf8" },
+  ).trim();
   const rows: Row[] = [];
   const implemented = new Set<string>();
   for (const r of report) {

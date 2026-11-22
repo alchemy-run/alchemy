@@ -110,7 +110,7 @@ export const ArchiveRuleProvider = () =>
       const observe = Effect.fn(function* (analyzerName: string, ruleName: string) {
         return yield* aa.getArchiveRule({ analyzerName, ruleName }).pipe(
           Effect.map((r) => r.archiveRule),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

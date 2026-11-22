@@ -130,7 +130,7 @@ export const AdminRuleProvider = () =>
           }),
         ),
       body: (news) => ({
-        kind: "Custom",
+        kind: "Custom" as const,
         properties: {
           description: news.description,
           protocol: news.protocol,
@@ -151,7 +151,7 @@ export const AdminRuleProvider = () =>
           configurationName: path.securityAdminConfiguration!,
           ruleCollectionName: path.ruleCollection!,
           ruleName: path.name,
-          ...body,
+          body,
         }),
       del: (subscriptionId, path) =>
         network.DeleteAdminRule({

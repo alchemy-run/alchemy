@@ -1,5 +1,4 @@
 import { unwrapRedactedDeep } from "@distilled.cloud/core/protocol-rest";
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteWebhookEndpoint,
   GetWebhookEndpoints,
@@ -114,8 +113,18 @@ export type WebhookEndpoint = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  WebhookEndpointLookup
 >;
+
+/**
+ * Props for {@link WebhookEndpoint.lookup}: find a webhook endpoint this stack
+ * doesn't manage by its id.
+ */
+export interface WebhookEndpointLookup {
+  /** Stripe webhook endpoint id, e.g. `"we_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe webhook endpoint — the HTTPS destination Stripe POSTs
@@ -167,6 +176,18 @@ export type WebhookEndpoint = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing webhook endpoint
+ * `WebhookEndpoint.lookup` references a webhook endpoint Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ * Stripe returns an endpoint's signing secret only when it creates it, so a
+ * looked-up endpoint has no `secret`.
+ *
+ * **Example:** Reference an existing webhook endpoint
+ * ```typescript
+ * const ref = Stripe.WebhookEndpoint.lookup({ id: "we_1A2b3C4d5E6f7G8h" });
+ * ```
+ *
  * @resource
  * @product Webhook
  */
@@ -212,7 +233,7 @@ const isMissingWebhookEndpoint = isMissingStripeResource;
 const getById = (webhookEndpoint: string) =>
   GetWebhookEndpoint({
     webhook_endpoint: webhookEndpoint,
-  }).pipe(Effect.catchIf(isMissingWebhookEndpoint, () => Effect.succeed(undefined)));
+  }).pipe(Effect.catchIf(isMissingWebhookEndpoint, () => Effect.undefined));
 
 const listAllWebhookEndpoints = Effect.fn(function* () {
   const endpoints: StripeWebhookEndpoint[] = [];
@@ -290,6 +311,11 @@ export const WebhookEndpointProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing, undefined);
+    }),
+
     read: Effect.fn(function* ({ id, output }) {
       const existing = yield* observe({
         id: output?.id,
@@ -331,11 +357,8 @@ export const WebhookEndpointProvider = () =>
           ...(news.apiVersion !== undefined ? { api_version: news.apiVersion } : {}),
           ...(news.connect !== undefined ? { connect: news.connect } : {}),
           metadata,
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-webhook-endpoint-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-webhook-endpoint-${instanceId}`,
+        });
       }
 
       const observedMetadata = tagRecord(current.metadata);

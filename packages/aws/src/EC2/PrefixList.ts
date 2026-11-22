@@ -8,6 +8,8 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { single } from "../internal/Lookup.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -16,7 +18,7 @@ export const PrefixListId = <ID extends string>(id: ID): ID & PrefixListId<ID> =
   `pl-${id}` as ID & PrefixListId<ID>;
 
 export type PrefixListArn<ID extends PrefixListId = PrefixListId> =
-  `arn:aws:ec2:${RegionID}:${AccountID}:prefix-list/${ID}`;
+  `arn:${Partition}:ec2:${RegionID}:${AccountID}:prefix-list/${ID}`;
 
 /**
  * A single CIDR entry in a managed prefix list.
@@ -107,8 +109,24 @@ export interface PrefixList extends Resource<
     ownerId: string;
   },
   never,
-  Providers
+  Providers,
+  PrefixListLookup
 > {}
+
+/**
+ * Props for {@link PrefixList.lookup}: find a managed prefix list this stack
+ * doesn't manage, in the ambient account and region, including AWS managed
+ * lists such as `com.amazonaws.us-west-2.s3`.
+ */
+export type PrefixListLookup =
+  | {
+      /** The prefix list's id. */
+      prefixListId: string;
+    }
+  | {
+      /** The prefix list's name; fails when several match. */
+      prefixListName: string;
+    };
 
 /**
  * A managed prefix list is a named, reusable set of CIDR blocks that you
@@ -166,6 +184,28 @@ export interface PrefixList extends Resource<
  * The rule allows HTTPS from every CIDR in the list. Editing the list's
  * `entries` updates what the rule permits without touching the rule itself.
  *
+ * ### Looking up an existing prefix list
+ * `PrefixList.lookup` references a prefix list Alchemy doesn't manage (an AWS
+ * managed list, or one created in the console or by another stack), found by
+ * `prefixListId` or `prefixListName`. It is read during plan/deploy and never
+ * created, updated or deleted.
+ *
+ * **Example:** Allow egress to S3 through its AWS managed prefix list
+ * ```typescript
+ * const s3 = AWS.EC2.PrefixList.lookup({
+ *   prefixListName: "com.amazonaws.us-west-2.s3",
+ * });
+ *
+ * yield* AWS.EC2.SecurityGroupRule("ToS3", {
+ *   groupId: app.groupId,
+ *   type: "egress",
+ *   ipProtocol: "tcp",
+ *   fromPort: 443,
+ *   toPort: 443,
+ *   prefixListId: s3.prefixListId,
+ * });
+ * ```
+ *
  * @resource
  */
 export const PrefixList = Resource<PrefixList>("AWS.EC2.PrefixList");
@@ -190,7 +230,7 @@ export const PrefixListProvider = () =>
       const describePrefixList = (prefixListId: string) =>
         ec2.describeManagedPrefixLists({ PrefixListIds: [prefixListId] }).pipe(
           Effect.map((r) => r.PrefixLists?.[0]),
-          Effect.catchTag("InvalidPrefixListID.NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("InvalidPrefixListID.NotFound", () => Effect.undefined),
         );
 
       // Poll until the list leaves any "-in-progress" state.
@@ -217,7 +257,7 @@ export const PrefixListProvider = () =>
             prefixListId: pl.PrefixListId as PrefixListId,
             prefixListArn:
               (pl.PrefixListArn as PrefixListArn) ??
-              (`arn:aws:ec2:${env.region}:${env.accountId}:prefix-list/${pl.PrefixListId}` as PrefixListArn),
+              (`arn:${partitionOf(env.region)}:ec2:${env.region}:${env.accountId}:prefix-list/${pl.PrefixListId}` as PrefixListArn),
             prefixListName: pl.PrefixListName!,
             addressFamily: pl.AddressFamily as "IPv4" | "IPv6",
             maxEntries: pl.MaxEntries!,
@@ -250,7 +290,7 @@ export const PrefixListProvider = () =>
                       prefixListId: pl.PrefixListId as PrefixListId,
                       prefixListArn:
                         (pl.PrefixListArn as PrefixListArn) ??
-                        (`arn:aws:ec2:${env.region}:${env.accountId}:prefix-list/${pl.PrefixListId}` as PrefixListArn),
+                        (`arn:${partitionOf(env.region)}:ec2:${env.region}:${env.accountId}:prefix-list/${pl.PrefixListId}` as PrefixListArn),
                       prefixListName: pl.PrefixListName!,
                       addressFamily: pl.AddressFamily as "IPv4" | "IPv6",
                       maxEntries: pl.MaxEntries!,
@@ -262,6 +302,28 @@ export const PrefixListProvider = () =>
             );
             return items satisfies PrefixList["Attributes"][];
           }),
+
+        lookup: Effect.fn(function* (props) {
+          const found = yield* ec2
+            .describeManagedPrefixLists(
+              "prefixListId" in props
+                ? { PrefixListIds: [props.prefixListId] }
+                : { Filters: [{ Name: "prefix-list-name", Values: [props.prefixListName] }] },
+            )
+            .pipe(
+              Effect.catchTag("InvalidPrefixListID.NotFound", () =>
+                Effect.succeed({ PrefixLists: [] }),
+              ),
+            );
+          const match = yield* single(
+            "AWS.EC2.PrefixList",
+            "prefixListId" in props ? props.prefixListId : props.prefixListName,
+            found.PrefixLists ?? [],
+            (x) => x.PrefixListId,
+          );
+          if (!match?.PrefixListId) return undefined;
+          return yield* toAttrs(match);
+        }),
 
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;

@@ -121,7 +121,7 @@ const toAttrs = (acl: storage.ObjectAccessControl, bucketName: string) => ({
 const getByEntity = (bucketName: string, entity: string) =>
   storage
     .getDefaultObjectAccessControls({ bucket: bucketName, entity })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOnBucket = (bucketName: string) =>
   storage.listDefaultObjectAccessControls({ bucket: bucketName }).pipe(
@@ -219,10 +219,7 @@ export const DefaultObjectAccessControlProvider = () =>
 
       if (current === undefined) {
         const created = yield* storage
-          .insertDefaultObjectAccessControls({
-            bucket: bucketName,
-            body: { entity, role },
-          })
+          .insertDefaultObjectAccessControls({ entity, role, bucket: bucketName })
           .pipe(Effect.catchTag("Conflict", () => getByEntity(bucketName, entity)));
         current = created ?? undefined;
       }
@@ -236,9 +233,9 @@ export const DefaultObjectAccessControlProvider = () =>
 
       if (normalizeRole(current.role ?? "") !== role) {
         current = yield* storage.patchDefaultObjectAccessControls({
+          role,
           bucket: bucketName,
           entity,
-          body: { entity, role },
         });
       }
 

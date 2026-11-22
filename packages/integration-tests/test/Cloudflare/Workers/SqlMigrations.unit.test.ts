@@ -20,8 +20,8 @@ import {
   type MigrationHistoryConflictError,
 } from "@alchemy.run/sql/Migrations/Format";
 import { readMigrationRecords } from "@alchemy.run/sql/Migrations/Records";
+import { expect, layer } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, layer } from "alchemy-test";
 import { purePlugin } from "alchemy/Bundle/PurePlugin";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { sha256 } from "alchemy/Util/sha256";

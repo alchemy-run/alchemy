@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
+import { expect } from "@alchemy.run/test";
 import * as organizations from "@distilled.cloud/aws/organizations";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as OrganizationLease from "./OrganizationLease.ts";
@@ -158,5 +158,5 @@ test.provider.skipIf(process.env.ALCHEMY_TEST_DEV !== "1")(
       );
       expect(removed).toBe(true);
     }),
-  { timeout: 120_000 },
+  { timeout: 120_000, tags: ["provider:aws", "provider:aws:organizations", "local"] },
 );

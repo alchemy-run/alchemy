@@ -3,24 +3,15 @@
 import { Box } from "@alchemy.run/sigil";
 import { runMain } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";
-import { makeRuntime } from "../../../src/Cli/components/view/Runtime";
+import { Status } from "../../../src/Cli/components/ui/Feedback";
+import { makeNonInteractive } from "../../../src/Interaction";
 
 Effect.gen(function* () {
-  const { service } = makeRuntime(
-    { input: false, captureConsole: false },
-    {
-      input: false,
-      columns: 80,
-      rows: 24,
-      colors: false,
-      unicode: false,
-      alternateScreen: false,
-    },
-  );
-  const progress = yield* service.live.progress({
-    label: "Starting deployment",
-  });
-  yield* progress.succeed("Deployment complete");
+  const service = makeNonInteractive({ colors: false, unicode: false });
+  // Printing a view renders through Sigil, so the JSX runtime check below
+  // covers the components the CLI actually draws with.
+  yield* service.output.print(<Status variant="info">Starting deployment</Status>);
+  yield* service.output.success("Deployment complete");
   yield* Effect.sync(() => {
     const element = <Box />;
     if (process.env.NODE_ENV !== "production" || "_store" in element) {
@@ -28,4 +19,4 @@ Effect.gen(function* () {
     }
     console.log(JSON.stringify({ cwd: process.cwd(), args: process.argv.slice(2) }));
   });
-}).pipe(Effect.scoped, runMain);
+}).pipe(runMain);

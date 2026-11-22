@@ -1,5 +1,5 @@
 import { makeRequestEffect } from "@alchemy.run/cloudflare/Workers/HttpServer";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as HttpMiddleware from "effect/http/HttpMiddleware";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

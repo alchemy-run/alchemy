@@ -1,5 +1,5 @@
 import * as vault from "@distilled.cloud/gcp/vault_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -222,7 +222,7 @@ export const MattersHoldProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const matterId = olds?.matterId ?? output?.matterId ?? "";
       const holdId = olds?.holdId ?? output?.holdId ?? "";
@@ -249,7 +249,7 @@ export const MattersHoldProvider = () =>
       const resolvedMatter = parentId.length > 0 ? parentId : attrs.matterId;
       return (yield* ownedByAlchemy(id, existing.name))
         ? { ...attrs, matterId: resolvedMatter }
-        : Unowned({ ...attrs, matterId: resolvedMatter });
+        : unownedUnlessPrevious({ ...attrs, matterId: resolvedMatter }, previous, "holdId");
     }),
 
     list: () =>
@@ -297,10 +297,7 @@ export const MattersHoldProvider = () =>
 
       if (current === undefined) {
         const created = yield* vault
-          .createMattersHolds({
-            matterId,
-            body: desired,
-          })
+          .createMattersHolds({ ...desired, matterId })
           .pipe(Effect.catchTag("Conflict", () => findHoldByName(matterId, name)));
         current = created ?? undefined;
       }
@@ -321,13 +318,11 @@ export const MattersHoldProvider = () =>
 
       if (queryChanged || accountsChanged || orgUnitChanged) {
         current = yield* vault.updateMattersHolds({
+          query: news.query ?? current.query,
+          accounts: accounts ?? current.accounts,
+          orgUnit: news.orgUnit ?? current.orgUnit,
           matterId,
           holdId,
-          body: {
-            query: news.query ?? current.query,
-            accounts: accounts ?? current.accounts,
-            orgUnit: news.orgUnit ?? current.orgUnit,
-          },
         });
       }
 

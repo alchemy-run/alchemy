@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 
 /** SAS-signed Azurite endpoints, for distilled `storage-*` calls (`{ url }`). */
 export interface AzuriteUrls {
@@ -28,7 +29,7 @@ export const onAzurite = <A, E>(
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        fromStaticToken({ bearerToken: "azurite", subscriptionId: "" }),
+        fromStaticToken({ bearerToken: Redacted.make("azurite"), subscriptionId: "" }),
         FetchHttpClient.layer,
       ),
     ),

@@ -5,6 +5,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface AttributeGroupAssociationProps {
@@ -72,12 +73,12 @@ export const AttributeGroupAssociationProvider = () =>
       const observeApplication = Effect.fn(function* (specifier: string) {
         return yield* appregistry
           .getApplication({ application: specifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
       const observeAttributeGroup = Effect.fn(function* (specifier: string) {
         return yield* appregistry
           .getAttributeGroup({ attributeGroup: specifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const isAssociated = Effect.fn(function* (applicationId: string, attributeGroupId: string) {
@@ -192,7 +193,7 @@ export const AttributeGroupAssociationProvider = () =>
                   applicationId: application.id,
                   applicationArn: application.arn!,
                   attributeGroupId,
-                  attributeGroupArn: `arn:aws:servicecatalog:${region}:${accountId}:/attribute-groups/${attributeGroupId}`,
+                  attributeGroupArn: `arn:${partitionOf(region)}:servicecatalog:${region}:${accountId}:/attribute-groups/${attributeGroupId}`,
                 });
               }
             }

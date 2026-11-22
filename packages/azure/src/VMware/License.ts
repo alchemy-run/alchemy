@@ -208,13 +208,15 @@ export const LicenseProvider = () =>
           resourceGroupName: resourceGroup,
           privateCloudName: privateCloud,
           licenseName: name,
+          // The spec now marks `cores` required; this resource has never
+          // sent it, so the body is asserted to keep the request unchanged.
           properties: {
             kind: name,
             licenseKey: unredact(news.licenseKey),
             endDate: news.endDate,
             broadcomSiteId: news.broadcomSiteId,
             broadcomContractNumber: news.broadcomContractNumber,
-          },
+          } as vmware.VmwareFirewallLicensePropertiesInput,
         });
       }
       const fresh = yield* waitForProvisioned(

@@ -36,6 +36,8 @@ import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { readBuildOutput } from "./BuildOutput.ts";
 import type { BuildOutput } from "./BuildOutput.ts";
+import { logChildOutput } from "./ChildOutput.ts";
+import { childCommand, type ChildRuntime } from "./ChildRuntime.ts";
 import { FrameworkError } from "./Framework.ts";
 
 /**
@@ -62,22 +64,9 @@ export interface BuildChildPayload {
   readonly errorPath: string;
 }
 
-/**
- * Node CLI flags that transparently strip TypeScript types, so a `.ts`
- * source module works as a child entry when running from `src/` under plain
- * Node (Bun handles `.ts` natively). Mirrors alchemy's
- * `Util/Node.transformTypesFlags`.
- */
-const transformTypesFlags = (): Array<string> => {
-  const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
-  return (major === 22 && minor >= 7) || (major >= 23 && major < 26)
-    ? ["--experimental-transform-types", "--no-warnings=ExperimentalWarning"]
-    : [];
-};
-
 export interface BuildChildOptions {
-  /** Use Node from PATH for toolchains that cannot build under Bun. Requires native TypeScript support when running source modules. */
-  readonly runtime?: "node" | undefined;
+  /** The runtime the child runs under. @default this process's runtime */
+  readonly runtime?: ChildRuntime | undefined;
   /**
    * File URL of the module exporting `buildInChild` — pass
    * `import.meta.url`. The shared runner entry (resolved as a sibling of
@@ -127,9 +116,9 @@ export const resolveBuildEnv = (
  * Run a framework production build in a disposable child process with
  * `cwd = rootDir` and return its {@link BuildOutput}.
  *
- * Build logs are re-emitted through the parent's own `process.stdout` /
- * `process.stderr` JS streams — NOT `stdio: "inherit"` — so in-process
- * capture (a test runner's log file) sees them.
+ * Build output becomes log records — NOT `stdio: "inherit"` — so the
+ * process that renders logs shows it and in-process capture (a test
+ * runner's log file) sees it.
  */
 export const runBuildChild = (
   options: BuildChildOptions,
@@ -161,24 +150,14 @@ export const runBuildChild = (
           options.module,
         ),
       );
-      const isBun =
-        options.runtime !== "node" && typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
-      const executable = options.runtime === "node" ? "node" : process.execPath;
+      const { executable, args: runnerArgs } = childCommand(options.runtime, entry);
       const payload: BuildChildPayload = {
         module: options.module,
         config: options.config,
         outputPath,
         errorPath,
       };
-      const args = [
-        ...(isBun
-          ? ["run"]
-          : entry.endsWith(".ts") && options.runtime !== "node"
-            ? transformTypesFlags()
-            : []),
-        entry,
-        JSON.stringify(payload),
-      ];
+      const args = [...runnerArgs, JSON.stringify(payload)];
 
       const spawnerLayer = NodeChildProcessSpawner.layer.pipe(
         Layer.provide(
@@ -202,13 +181,18 @@ export const runBuildChild = (
         );
         const forward = (
           stream: Stream.Stream<Uint8Array, PlatformError>,
-          dest: NodeJS.WriteStream,
-        ) => Stream.runForEach(stream, (chunk) => Effect.sync(() => dest.write(chunk)));
+          name: "stdout" | "stderr",
+        ) =>
+          stream.pipe(
+            Stream.decodeText,
+            Stream.splitLines,
+            Stream.runForEach((line) => logChildOutput(line, name)),
+          );
         const { code } = yield* Effect.all(
           {
             code: child.exitCode,
-            stdout: forward(child.stdout, process.stdout),
-            stderr: forward(child.stderr, process.stderr),
+            stdout: forward(child.stdout, "stdout"),
+            stderr: forward(child.stderr, "stderr"),
           },
           { concurrency: "unbounded" },
         ).pipe(

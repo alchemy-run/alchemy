@@ -12,6 +12,11 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readTags, syncTags, toWireTags } from "./internal.ts";
 
+export class WorkgroupUnexpectedResponse extends Data.TaggedError("WorkgroupUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface WorkgroupProps {
   /**
    * Name of the workgroup. Must be 3-64 characters, lowercase letters,
@@ -108,8 +113,18 @@ export interface Workgroup extends Resource<
     publiclyAccessible: boolean | undefined;
   },
   never,
-  Providers
+  Providers,
+  WorkgroupLookup
 > {}
+
+/**
+ * Props for {@link Workgroup.lookup}: find a workgroup this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface WorkgroupLookup {
+  /** The workgroup name of the existing workgroup. */
+  workgroupName: string;
+}
 
 /**
  * An Amazon Redshift Serverless workgroup — the compute half of a serverless
@@ -146,6 +161,16 @@ export interface Workgroup extends Resource<
  *   securityGroupIds: [securityGroup.groupId],
  *   enhancedVpcRouting: false,
  * });
+ * ```
+ *
+ * ### Looking up an existing workgroup
+ * `Workgroup.lookup` references a workgroup Alchemy doesn't manage (created in the
+ * console or by another stack), found by `workgroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing workgroup
+ * ```typescript
+ * const existing = AWS.RedshiftServerless.Workgroup.lookup({ workgroupName: "my-workgroup" });
  * ```
  *
  * @resource
@@ -188,7 +213,7 @@ export const WorkgroupProvider = () =>
       const readWorkgroup = Effect.fn(function* (name: string) {
         const response = yield* redshiftserverless
           .getWorkgroup({ workgroupName: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.workgroup;
       });
 
@@ -271,6 +296,13 @@ export const WorkgroupProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ workgroupName: name }) {
+          const wg = yield* readWorkgroup(name);
+          if (wg === undefined) return undefined;
+          const attrs = toAttrs(wg);
+          return attrs;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.workgroupName ?? (yield* toName(id, olds ?? {}));
           const wg = yield* readWorkgroup(name);
@@ -319,9 +351,9 @@ export const WorkgroupProvider = () =>
           const settled = yield* waitForAvailable(name);
           if (settled !== undefined) observed = settled;
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`Redshift workgroup '${name}' disappeared while reconciling`),
-            );
+            return yield* new WorkgroupUnexpectedResponse({
+              message: `Redshift workgroup '${name}' disappeared while reconciling`,
+            });
           }
 
           // 3. Sync — one updateWorkgroup per drifted field (multi-field

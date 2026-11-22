@@ -1,11 +1,11 @@
+import { describe, expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as ts from "tsrs/unstable/ast";
-import { API } from "tsrs/unstable/async";
-import { createFileSystemLayer } from "tsrs/unstable/fs";
+import * as ts from "tsrs/ast";
+import { API } from "tsrs/async";
+import { createFileSystemLayer } from "tsrs/fs";
 
 const forbiddenPatterns = [
   {

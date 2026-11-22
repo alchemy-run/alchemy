@@ -1,16 +1,17 @@
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Turso from "@alchemy.run/turso";
 import { organization } from "@alchemy.run/turso/Credentials";
 import * as Hrana from "@alchemy.run/turso/Hrana";
 import * as turso from "@distilled.cloud/turso/turso";
-import { expect } from "alchemy-test";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import { Stage } from "alchemy/Stage";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Turso.providers() });
 
@@ -67,6 +68,10 @@ test.provider(
         });
 
       const { group, db } = yield* stack.deploy(app({}));
+      yield* expectFound(Turso.Database.lookup({ name: db.name }), db, {
+        // Migrations are this stack's record.
+        ignore: ["migrationsDir", "migrationsTable", "migrationsHashes", "importHashes"],
+      });
       expect(db.group).toBe(group.name);
       expect(db.url).toBe(`libsql://${db.hostname}`);
       expect(db.hostname).toContain(`-${org}.`);

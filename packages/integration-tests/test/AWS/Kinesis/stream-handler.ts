@@ -47,8 +47,8 @@ export default KinesisStreamFunction.make(
         startingPosition: "LATEST",
         batchSize: 10,
       },
-      (records) =>
-        records.pipe(
+      Effect.fn(function* (event) {
+        yield* Stream.fromIterable(event.Records).pipe(
           Stream.map((record) => ({
             MessageBody: JSON.stringify({
               partitionKey: record.kinesis.partitionKey,
@@ -57,8 +57,8 @@ export default KinesisStreamFunction.make(
             }),
           })),
           Stream.run(sink),
-          Effect.orDie,
-        ),
+        );
+      }),
     );
 
     const streamName = yield* stream.streamName;

@@ -102,7 +102,7 @@ export default Cloudflare.Worker(
 );
 ```
 
-`event` is Octokit's `EmitterWebhookEvent`, narrowed to the events
+`event` is a typed webhook delivery, narrowed to the events
 you selected — a `switch` on `event.name` narrows `event.payload`
 exhaustively. The stack provides both clouds' providers:
 `Layer.mergeAll(Cloudflare.providers(), GitHub.providers())`.

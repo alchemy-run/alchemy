@@ -1,0 +1,847 @@
+import * as Docker from "@alchemy.run/docker";
+import * as Rivet from "@alchemy.run/rivet";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as Socket from "effect/socket/Socket";
+import { conformanceTests, waitForReady } from "../Cloudflare/Workers/conformance/spec.ts";
+import { ensureDockerSwarm } from "../Docker/Runtime.ts";
+import { FRONT_PORT } from "./fixtures/cluster.ts";
+import Front from "./fixtures/front.ts";
+import { ReentrantLive } from "./fixtures/reentrant.ts";
+
+const testOptions = { providers: Layer.mergeAll(Docker.providers(), Rivet.providers()) };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
+// File-backed scratch state: the leading `destroy()` drains whatever a
+// previous (interrupted or NO_DESTROY) run left behind.
+const sharedStack = Core.scratchStack(testOptions, "RivetConformance", import.meta.url);
+
+const baseUrl = `http://localhost:${FRONT_PORT}`;
+
+// The engine conformance spec, run against Rivet Durable Objects on a local
+// Docker control plane, called from a Docker service through the gateway.
+describe.skipIf(!!process.env.FAST)(
+  "Rivet engine conformance",
+  { tags: ["provider:rivet", "provider:rivet:durable-object", "local"] },
+  () => {
+    beforeAll(
+      Effect.gen(function* () {
+        yield* ensureDockerSwarm;
+        // NO_DESTROY keeps the stack between runs, so iterate on it.
+        if (!process.env.NO_DESTROY) yield* sharedStack.destroy();
+        const outputs = yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            const front = yield* Front;
+            return { front: front.name };
+          }).pipe(Effect.provide(ReentrantLive)),
+        );
+        expect(outputs.front).toBeTruthy();
+        yield* waitForReady(baseUrl, { attempts: 40, base: "3 seconds" });
+      }),
+      { timeout: 400_000 },
+    );
+
+    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), { timeout: 300_000 });
+
+    conformanceTests(test, { baseUrl: () => baseUrl, kind: "local" });
+
+    // GET a tally route on a fresh instance; a retried attempt starts over.
+    const tally = <T>(path: string, query: string) =>
+      Effect.gen(function* () {
+        const client = yield* HttpClient.HttpClient;
+        return (yield* Effect.suspend(() =>
+          client.get(`${baseUrl}/${path}/${crypto.randomUUID()}?${query}`),
+        ).pipe(
+          Effect.flatMap((res) => res.json),
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+        )) as T;
+      });
+
+    describe("in parallel, without an input gate", () => {
+      test(
+        "a call's storage overlaps another call's",
+        Effect.gen(function* () {
+          const { seen, n } = yield* tally<{ seen: number; n: number }>("overlap", "n=500");
+          expect(seen).toBeGreaterThan(0);
+          expect(seen).toBeLessThan(n);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "concurrent transactional increments lose no updates",
+        Effect.gen(function* () {
+          const { count } = yield* tally<{ count: number }>("race", "n=50&tx=1");
+          expect(count).toBe(50);
+        }),
+        { timeout: 120_000 },
+      );
+    });
+
+    describe("behind Workers.InputGate", () => {
+      test(
+        "a call's storage waits for another call's run of storage",
+        Effect.gen(function* () {
+          const { seen, n } = yield* tally<{ seen: number; n: number }>("overlap", "n=500&gated=1");
+          expect(seen).toBe(n);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "concurrent get-then-put calls on one instance lose no updates",
+        Effect.gen(function* () {
+          const { count } = yield* tally<{ count: number }>("race", "n=50&gated=1");
+          expect(count).toBe(50);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a background loop the constructor starts loses no updates to concurrent calls",
+        Effect.gen(function* () {
+          const { count } = yield* tally<{ count: number }>("background", "n=50&gated=1");
+          expect(count).toBe(100);
+        }),
+        { timeout: 120_000 },
+      );
+    });
+
+    // In parallel, the increments racing the transaction are transactions
+    // too: plain ones would lose updates to each other.
+    for (const [mode, query] of [
+      ["in parallel", "gated=0&tx=1"],
+      ["behind Workers.InputGate", "gated=1"],
+    ] as const) {
+      describe(mode, () => {
+        test(
+          "a transaction keeps other calls out and rolls back on failure",
+          Effect.gen(function* () {
+            const result = yield* tally<{ count: number; aborted: boolean }>(
+              "transaction",
+              `n=10&${query}`,
+            );
+            expect(result).toEqual({ count: 110, aborted: true });
+          }),
+          { timeout: 120_000 },
+        );
+
+        test(
+          "an alarm replaced while it fires leaves the new alarm set and doesn't run",
+          Effect.gen(function* () {
+            const result = yield* tally<{ fired: number; alarm: number | null }>(
+              "alarm-replaced",
+              query,
+            );
+            expect(result.fired).toBe(0);
+            expect(result.alarm).not.toBeNull();
+          }),
+          { timeout: 120_000 },
+        );
+      });
+    }
+
+    describe("calls that could deadlock on a transaction", () => {
+      interface Outcome {
+        ok: boolean;
+        error?: string;
+        ms: number;
+      }
+      // A fresh instance per case; never retried, so a hang shows as one.
+      const run = <T>(which: string, prefix = "") =>
+        Effect.gen(function* () {
+          const client = yield* HttpClient.HttpClient;
+          const res = yield* client.get(
+            `${baseUrl}/reentrant/${prefix}${crypto.randomUUID()}/${which}`,
+          );
+          expect(res.status).toBe(200);
+          return (yield* res.json) as T;
+        });
+      // Fails fast, rather than waiting on a timeout.
+      const fast = 5_000;
+
+      test(
+        "a constructor calling its own instance fails fast and the instance still serves",
+        Effect.gen(function* () {
+          const result = yield* run<{ constructed: Outcome; touched: number; tx: number }>(
+            "constructor",
+            "ctor-",
+          );
+          expect(result.constructed).toMatchObject({ ok: false, error: "RpcCallError 508" });
+          expect(result.constructed.ms).toBeLessThan(fast);
+          expect(result.touched).toBe(1);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a transaction calling its own instance fails fast and rolls back",
+        Effect.gen(function* () {
+          const result = yield* run<{ result: Outcome; touched: number; tx: number }>("self");
+          expect(result.result).toMatchObject({ ok: false, error: "RpcCallError 508" });
+          expect(result.result.ms).toBeLessThan(fast);
+          expect(result).toMatchObject({ touched: 1, tx: 0 });
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a transaction calling back into its instance through another fails fast",
+        Effect.gen(function* () {
+          const result = yield* run<{ result: Outcome; touched: number; tx: number }>("peer");
+          expect(result.result.ok).toBe(false);
+          expect(result.result.ms).toBeLessThan(fast);
+          expect(result).toMatchObject({ touched: 1, tx: 0 });
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a transaction calling its own instance without storage succeeds",
+        Effect.gen(function* () {
+          const result = yield* run<{ result: Outcome; touched: number; tx: number }>("ping");
+          expect(result.result.ok).toBe(true);
+          expect(result).toMatchObject({ touched: 1, tx: 1 });
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a call back into its own instance outside a transaction succeeds",
+        Effect.gen(function* () {
+          const result = yield* run<{ result: Outcome; touched: number; tx: number }>("outside");
+          expect(result.result.ok).toBe(true);
+          expect(result).toMatchObject({ touched: 2, tx: 0 });
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a transaction waiting on a call that needs storage times out, rolls back and lets it run",
+        Effect.gen(function* () {
+          const result = yield* run<{
+            result: Outcome;
+            release: Outcome;
+            released: number;
+            touched: number;
+            tx: number;
+          }>("await");
+          expect(result.result).toMatchObject({ ok: false, error: "Rivet.TransactionTimedOut" });
+          expect(result.result.ms).toBeGreaterThanOrEqual(29_000);
+          expect(result.result.ms).toBeLessThan(40_000);
+          expect(result.release.ok).toBe(true);
+          expect(result).toMatchObject({ released: 1, touched: 1, tx: 0 });
+        }),
+        { timeout: 180_000 },
+      );
+
+      test(
+        "a transaction past its timeout stops before its next write",
+        Effect.gen(function* () {
+          const result = yield* run<{ result: Outcome; late: number; touched: number }>("late");
+          expect(result.result).toMatchObject({ ok: false, error: "Rivet.TransactionTimedOut" });
+          expect(result.result.ms).toBeLessThan(2_500);
+          expect(result).toMatchObject({ late: 0, touched: 1 });
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "work a transaction starts that outlives it writes once it has committed",
+        Effect.gen(function* () {
+          const result = yield* run<{
+            result: Outcome;
+            waited: number;
+            forked: number;
+            tx: number;
+          }>("outlive");
+          expect(result.result.ok).toBe(true);
+          expect(result).toMatchObject({ waited: 1, forked: 1, tx: 1 });
+        }),
+        { timeout: 120_000 },
+      );
+
+      interface AlarmState {
+        runs: number;
+        done: number;
+        alarm: number | null;
+      }
+
+      test(
+        "a failing alarm is retried until it succeeds",
+        Effect.gen(function* () {
+          const result = yield* run<{ before: AlarmState; alarm: AlarmState }>("flaky-alarm");
+          expect(result.before).toMatchObject({ runs: 3, done: 1 });
+          expect(result.alarm).toEqual({ runs: 3, done: 1, alarm: null });
+        }),
+        { timeout: 180_000 },
+      );
+
+      test(
+        "an alarm running longer than an action may finishes once",
+        Effect.gen(function* () {
+          const result = yield* run<{ before: AlarmState; alarm: AlarmState }>("slow-alarm");
+          expect(result.alarm).toEqual({ runs: 1, done: 1, alarm: null });
+        }),
+        { timeout: 200_000 },
+      );
+    });
+
+    test(
+      "getByKey reaches the instance with that whole key, and getByName is its one-part key",
+      Effect.gen(function* () {
+        const name = crypto.randomUUID();
+        const client = yield* HttpClient.HttpClient;
+        const body = (yield* client.get(`${baseUrl}/keyed/${name}`).pipe(
+          Effect.flatMap((res) => res.json),
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+        )) as {
+          multi: { name: string; key: ReadonlyArray<string> };
+          single: { name: string; key: ReadonlyArray<string> };
+          count: number;
+        };
+        expect(body.multi).toEqual({ name, key: [name, "a,b", "", "c\\d"] });
+        expect(body.single).toEqual({ name, key: [name] });
+        expect(body.count).toBe(1);
+      }),
+      { timeout: 120_000 },
+    );
+
+    test(
+      "a second class on the same pool calls the first through the gateway",
+      Effect.gen(function* () {
+        const client = yield* HttpClient.HttpClient;
+        const greet = client.get(`${baseUrl}/greet/sam`).pipe(
+          Effect.flatMap((res) => res.json),
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+        );
+        const first = (yield* greet) as { greeting: string };
+        const second = (yield* greet) as { greeting: string };
+        expect(first.greeting).toMatch(/^hello sam #\d+$/);
+        const n = (s: string) => Number(s.split("#")[1]);
+        expect(n(second.greeting)).toBe(n(first.greeting) + 1);
+      }),
+      { timeout: 120_000 },
+    );
+
+    describe("lifecycle hooks", () => {
+      // GET `/lifecycle/<name>/<step>`, retried while the stack settles.
+      const step = <T>(name: string, path: string) =>
+        Effect.gen(function* () {
+          const client = yield* HttpClient.HttpClient;
+          return (yield* Effect.suspend(() =>
+            client.get(`${baseUrl}/lifecycle/${name}/${path}`),
+          ).pipe(
+            Effect.flatMap((res) => res.json),
+            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+          )) as T;
+        });
+      type Hooks = { slept: number; destroyed: number };
+      // Polls the hook counts, which never wake the instance, until `done`.
+      const hooksUntil = (name: string, done: (hooks: Hooks) => boolean) =>
+        step<Hooks>(name, "hooks").pipe(
+          Effect.repeat({ schedule: Schedule.spaced("2 seconds"), until: done, times: 45 }),
+        );
+
+      test(
+        "destroy runs onDestroy and the next call starts with empty storage",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "put?value=7");
+          expect(yield* step<{ value: number | null }>(name, "value")).toEqual({ value: 7 });
+          yield* step(name, "destroy");
+          const hooks = yield* hooksUntil(name, (hooks) => hooks.destroyed > 0);
+          expect(hooks.destroyed).toBe(1);
+          expect(yield* step<{ value: number | null }>(name, "value")).toEqual({ value: null });
+        }),
+        { timeout: 180_000 },
+      );
+
+      test(
+        "sleep runs onSleep and the next call finds its storage",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "put?value=5");
+          yield* step(name, "sleep");
+          const hooks = yield* hooksUntil(name, (hooks) => hooks.slept > 0);
+          expect(hooks).toEqual({ slept: 1, destroyed: 0 });
+          expect(yield* step<{ value: number | null }>(name, "value")).toEqual({ value: 5 });
+        }),
+        { timeout: 180_000 },
+      );
+
+      test(
+        "a call still running past the sleep grace period fails as one that never arrived",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          // RivetKit closes storage 15 seconds into the sleep; the call writes at 20.
+          expect(yield* step<{ late: string }>(name, "late?ms=20000")).toEqual({
+            late: "RpcCallError 503",
+          });
+          expect(yield* step<Hooks>(name, "hooks")).toMatchObject({ slept: 1 });
+        }),
+        { timeout: 180_000 },
+      );
+
+      test(
+        "a call whose storage closes as the instance stops fails as one that never arrived",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          // It writes until RivetKit closes storage 15 seconds into the sleep,
+          // and would report "Database is closed" as data.
+          expect(yield* step<{ busy: string }>(name, "busy")).toEqual({
+            busy: "RpcCallError 503",
+          });
+        }),
+        { timeout: 180_000 },
+      );
+
+      test(
+        "an idle instance runs onSleep and keeps its storage",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "put?value=3");
+          // RivetKit sleeps an actor 30 seconds after its last call.
+          const hooks = yield* hooksUntil(name, (hooks) => hooks.slept > 0);
+          expect(hooks).toEqual({ slept: 1, destroyed: 0 });
+          expect(yield* step<{ value: number | null }>(name, "value")).toEqual({ value: 3 });
+        }),
+        { timeout: 180_000 },
+      );
+
+      test(
+        "a class's sleepTimeout puts an idle instance to sleep that soon",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "put?value=3&class=quick");
+          // QuickLifecycle sleeps 2 seconds after its last call, not RivetKit's 30.
+          const hooks = yield* step<Hooks>(name, "hooks").pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (hooks) => hooks.slept > 0,
+              times: 6,
+            }),
+          );
+          expect(hooks).toEqual({ slept: 1, destroyed: 0 });
+          expect(yield* step<{ value: number | null }>(name, "value?class=quick")).toEqual({
+            value: 3,
+          });
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a call still running past a class's sleepGracePeriod fails as one that never arrived",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          // QuickLifecycle closes storage 3 seconds into the sleep, not 15; the
+          // call writes at 6.
+          expect(yield* step<{ late: string }>(name, "late?ms=6000&class=quick")).toEqual({
+            late: "RpcCallError 503",
+          });
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "onSleep and onDestroy can't be called as methods",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          expect(yield* step(name, "call-hooks")).toEqual({
+            onSleep: "RpcCallError 404",
+            onDestroy: "RpcCallError 404",
+          });
+          expect(yield* step<Hooks>(name, "hooks")).toEqual({ slept: 0, destroyed: 0 });
+        }),
+        { timeout: 120_000 },
+      );
+    });
+
+    // Each case kills or stops the one node of the pool the fixture runs on.
+    describe.sequential("on a node that dies", () => {
+      test(
+        "an alarm whose node dies in its handler runs again on the next activation",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+          const docker = yield* Docker.Docker;
+          interface AlarmState {
+            runs: number;
+            done: number;
+            node: string | null;
+            alarm: number | null;
+          }
+          const get = <T>(path: string) =>
+            Effect.suspend(() => client.get(`${baseUrl}/abandoned-alarm/${name}/${path}`)).pipe(
+              Effect.flatMap((res) => res.json),
+              // While the pool's nodes restart, calls fail.
+              Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+              Effect.map((body) => body as T),
+            );
+          const stateUntil = (done: (state: AlarmState) => boolean) =>
+            get<AlarmState>("state").pipe(
+              Effect.repeat({ schedule: Schedule.spaced("1 second"), until: done, times: 90 }),
+            );
+
+          yield* get("arm");
+          // The handler's first run has started, and hangs.
+          const running = yield* stateUntil((state) => state.runs > 0);
+          expect(running).toMatchObject({ runs: 1, done: 0, alarm: null });
+          expect(running.node).not.toBeNull();
+          // SIGKILL the node running it; Swarm starts another.
+          yield* docker.run(["kill", running.node!]);
+          // The next activation runs the handler again, and it finishes once.
+          yield* stateUntil((state) => state.done > 0);
+          // Long enough for a duplicate run to show.
+          yield* Effect.sleep("5 seconds");
+          const final = yield* get<AlarmState>("state");
+          expect(final).toMatchObject({ runs: 2, done: 1, alarm: null });
+          expect(final.node).not.toBe(running.node);
+        }).pipe(Effect.provide(Docker.DockerLive)),
+        { timeout: 240_000 },
+      );
+
+      test(
+        "an alarm whose node dies after RivetKit fired it, before it was claimed, runs on the next activation",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          const client = yield* HttpClient.HttpClient;
+          const docker = yield* Docker.Docker;
+          const ok = HttpClient.filterStatusOk(client);
+          const get = <T>(path: string) =>
+            Effect.suspend(() => ok.get(`${baseUrl}/abandoned-alarm/${name}/${path}`)).pipe(
+              Effect.flatMap((res) => res.json),
+              // While the pool's node restarts, calls fail.
+              Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+              Effect.map((body) => body as T),
+            );
+          const { node } = yield* get<{ node: string }>("node");
+          // Sent once: it sets the alarm, then holds storage while RivetKit fires it.
+          yield* Effect.forkChild(
+            Effect.ignore(client.get(`${baseUrl}/abandoned-alarm/${name}/arm-held`)),
+          );
+          yield* Effect.sleep("5 seconds");
+          // SIGKILL the node; Swarm starts another.
+          yield* docker.run(["kill", node]);
+          const final = yield* get<{ runs: number; done: number; node: string; alarm: null }>(
+            "state",
+          ).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (state) => state.done > 0,
+              times: 90,
+            }),
+          );
+          expect(final).toMatchObject({ runs: 1, done: 1, alarm: null });
+          expect(final.node).not.toBe(node);
+        }).pipe(Effect.provide(Docker.DockerLive)),
+        { timeout: 240_000 },
+      );
+
+      test(
+        "a call whose node shuts down while it writes fails as one that never arrived",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          const client = yield* HttpClient.HttpClient;
+          const docker = yield* Docker.Docker;
+          const { node } = (yield* client.get(`${baseUrl}/abandoned-alarm/${name}/node`).pipe(
+            Effect.flatMap((res) => res.json),
+            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+          )) as { node: string };
+          // Sent once: it writes until the node's shutdown closes its storage.
+          const busy = yield* Effect.forkChild(
+            client
+              .get(`${baseUrl}/abandoned-alarm/${name}/busy`)
+              .pipe(Effect.flatMap((res) => res.json)),
+          );
+          yield* Effect.sleep("2 seconds");
+          // SIGTERM, as when its pod is deleted: RivetKit stops the actor gracefully.
+          yield* docker.run(["kill", "--signal", "TERM", node]);
+          expect(yield* Fiber.join(busy)).toEqual({ busy: "RpcCallError 503" });
+        }).pipe(Effect.provide(Docker.DockerLive)),
+        { timeout: 180_000 },
+      );
+    });
+
+    describe("durable callbacks", () => {
+      type Counts = Record<
+        "every" | "cron" | "once" | "flaky" | "alarm" | "rolled-back" | "slept",
+        number
+      >;
+      // GET `/callbacks/<name>/<step>`, retried while the stack settles.
+      const step = <T>(name: string, path: string) =>
+        Effect.gen(function* () {
+          const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+          return (yield* Effect.suspend(() =>
+            client.get(`${baseUrl}/callbacks/${name}/${path}`),
+          ).pipe(
+            Effect.flatMap((res) => res.json),
+            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+          )) as T;
+        });
+      // Polls the counts, which never wake the instance, until `done`.
+      const countsUntil = (name: string, done: (counts: Counts) => boolean) =>
+        step<Counts>(name, "counts").pipe(
+          Effect.repeat({ schedule: Schedule.spaced("1 second"), until: done, times: 90 }),
+        );
+      const scheduledAt = (name: string, id: string) =>
+        step<{ scheduledAt: number | null }>(name, `status?id=${id}`).pipe(
+          Effect.map((body) => body.scheduledAt),
+        );
+
+      test(
+        "interval and cron jobs keep running until they are cancelled",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "every");
+          yield* step(name, "cron");
+          yield* countsUntil(name, (counts) => counts.every >= 3 && counts.cron >= 3);
+          expect(yield* scheduledAt(name, "every")).not.toBeNull();
+          yield* step(name, "cancel?id=every");
+          yield* step(name, "cancel?id=cron");
+          const cancelled = yield* step<Counts>(name, "counts");
+          expect(yield* scheduledAt(name, "every")).toBeNull();
+          // A run already under way when it was cancelled may still finish.
+          yield* Effect.sleep("3 seconds");
+          const settled = yield* step<Counts>(name, "counts");
+          expect(settled.every - cancelled.every).toBeLessThanOrEqual(1);
+          expect(settled.cron - cancelled.cron).toBeLessThanOrEqual(1);
+          yield* Effect.sleep("3 seconds");
+          expect(yield* step<Counts>(name, "counts")).toEqual(settled);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a one-off job runs once and is gone",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "once?after=1000");
+          expect(yield* scheduledAt(name, "once")).not.toBeNull();
+          yield* countsUntil(name, (counts) => counts.once >= 1);
+          yield* Effect.sleep("3 seconds");
+          expect((yield* step<Counts>(name, "counts")).once).toBe(1);
+          expect(yield* scheduledAt(name, "once")).toBeNull();
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a job scheduled in a transaction that rolls back never runs",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "rolled-back");
+          expect(yield* scheduledAt(name, "rolled-back")).toBeNull();
+          yield* Effect.sleep("4 seconds");
+          expect((yield* step<Counts>(name, "counts"))["rolled-back"]).toBe(0);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a run that dies is delivered again, and the job keeps running",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "flaky");
+          // The first run dies; its retry and the runs after it count.
+          yield* countsUntil(name, (counts) => counts.flaky >= 2);
+          yield* step(name, "cancel?id=flaky");
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "the instance's own alarm re-arms itself beside its callbacks",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "every");
+          yield* step(name, "alarm?times=3");
+          yield* countsUntil(name, (counts) => counts.alarm >= 3 && counts.every >= 3);
+          yield* step(name, "cancel?id=every");
+          yield* Effect.sleep("3 seconds");
+          expect((yield* step<Counts>(name, "counts")).alarm).toBe(3);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a due job wakes an instance that has gone to sleep",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          // RivetKit sleeps an actor 30 seconds after its last call.
+          yield* step(name, "once?after=45000");
+          const counts = yield* countsUntil(name, (counts) => counts.once >= 1);
+          expect(counts.slept).toBeGreaterThanOrEqual(1);
+          expect(counts.once).toBe(1);
+        }),
+        { timeout: 180_000 },
+      );
+    });
+
+    describe("WebSockets", () => {
+      /** A WebSocket to `path` on the front, read one JSON frame at a time. */
+      const connect = (path: string) =>
+        Effect.gen(function* () {
+          const socket = yield* Socket.makeWebSocket(`ws://localhost:${FRONT_PORT}${path}`);
+          const { pull } = yield* socket.reader;
+          const writer = yield* socket.writer;
+          const frames: Array<unknown> = [];
+          const next = Effect.gen(function* () {
+            while (frames.length === 0) {
+              for (const frame of yield* pull) {
+                frames.push(
+                  JSON.parse(typeof frame === "string" ? frame : new TextDecoder().decode(frame)),
+                );
+              }
+            }
+            return frames.shift();
+          }).pipe(Effect.timeout("20 seconds"));
+          return { next, send: (text: string) => writer.write(text) };
+        }).pipe(Effect.provide(Socket.layerWebSocketConstructorGlobal));
+      const count = (room: string) =>
+        Effect.gen(function* () {
+          const client = yield* HttpClient.HttpClient;
+          const res = yield* client.get(`${baseUrl}/socket-count/${room}`);
+          return ((yield* res.json) as { sockets: number }).sockets;
+        });
+
+      test(
+        "a Durable Object accepts WebSockets through the gateway and pushes to them",
+        Effect.gen(function* () {
+          const room = crypto.randomUUID();
+          const a = yield* connect(`/socket/${room}?user=a`).pipe(
+            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+          );
+          // The instance sees the caller's path, query and headers.
+          expect(yield* a.next).toEqual({ welcome: "a", path: `/socket/${room}`, header: room });
+          const b = yield* Effect.scoped(
+            Effect.gen(function* () {
+              const b = yield* connect(`/socket/${room}?user=b`);
+              expect(yield* b.next).toEqual({
+                welcome: "b",
+                path: `/socket/${room}`,
+                header: room,
+              });
+              expect(yield* count(room)).toBe(2);
+              // A message reaches `webSocketMessage`, which pushes to every socket.
+              yield* a.send("hello");
+              expect(yield* a.next).toEqual({ from: "a", text: "hello" });
+              expect(yield* b.next).toEqual({ from: "a", text: "hello" });
+              return b;
+            }),
+          );
+          expect(b).toBeDefined();
+          // b's socket closed with its scope; the room lets it go.
+          yield* count(room).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("500 millis"),
+              until: (n) => n === 1,
+              times: 20,
+            }),
+          );
+          yield* a.send("still here");
+          expect(yield* a.next).toEqual({ from: "a", text: "still here" });
+        }).pipe(Effect.scoped),
+        { timeout: 120_000 },
+      );
+    });
+
+    describe("Durable Streams", { tags: ["provider:rivet:durable-stream"] }, () => {
+      // GET a stream case on a fresh stream; a retried attempt starts over.
+      const stream = <T>(which: string) =>
+        Effect.gen(function* () {
+          const client = yield* HttpClient.HttpClient;
+          return (yield* Effect.suspend(() =>
+            client.get(`${baseUrl}/durable-stream/${crypto.randomUUID()}/${which}`),
+          ).pipe(
+            Effect.flatMap((res) => res.json),
+            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+          )) as T;
+        });
+      const m = (user: string, text: string) => ({ user, text });
+      type Read = { messages: unknown[]; next: string; upToDate: boolean; closed: boolean };
+
+      test(
+        "appends create the stream, and a read from its next offset returns only what came after",
+        Effect.gen(function* () {
+          const { first, second } = yield* stream<{ first: Read; second: Read }>("roundtrip");
+          expect(first.messages).toEqual([m("a", "one"), m("b", "two"), m("a", "three")]);
+          expect(first.upToDate).toBe(true);
+          expect(first.closed).toBe(false);
+          expect(second.messages).toEqual([m("b", "four")]);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a tail replays history, then follows new appends live",
+        Effect.gen(function* () {
+          const { messages } = yield* stream<{ messages: unknown[] }>("tail");
+          expect(messages).toEqual([m("a", "1"), m("a", "2"), m("a", "3"), m("a", "4")]);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a closed stream refuses appends, and its tail ends",
+        Effect.gen(function* () {
+          const { after, read, tailed } = yield* stream<{
+            after: string;
+            read: Read;
+            tailed: unknown[];
+          }>("closed");
+          expect(after).toBe("Rivet.DurableStreamConflict");
+          expect(read.closed).toBe(true);
+          expect(read.messages).toEqual([m("a", "last")]);
+          expect(tailed).toEqual([m("a", "last")]);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a stream with its own format writes and reads SchemaBinary on a byte stream",
+        Effect.gen(function* () {
+          const { read, live } = yield* stream<{ read: Read; live: unknown[] }>("binary");
+          expect(read.messages).toEqual([m("a", "één"), m("b", "two")]);
+          expect(live).toEqual([m("a", "één"), m("b", "two"), m("a", "three")]);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "an idempotent writer's repeated append is written once, and an older epoch is refused",
+        Effect.gen(function* () {
+          const { read, stale } = yield* stream<{ read: Read; stale: string }>("producer");
+          expect(read.messages).toEqual([m("a", "once")]);
+          expect(stale).toBe("Rivet.DurableStreamStaleProducer");
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a stream nobody appended to is not found, and a deleted one is gone",
+        Effect.gen(function* () {
+          const missing = yield* stream<{ read: string }>("missing");
+          expect(missing.read).toBe("Rivet.DurableStreamNotFound");
+          const deleted = yield* stream<{ read: string }>("deleted");
+          expect(deleted.read).toBe("Rivet.DurableStreamNotFound");
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a Durable Object appends to a stream that another runtime reads",
+        Effect.gen(function* () {
+          const read = yield* stream<Read>("room");
+          expect(read.messages).toEqual([m("a", "from a room"), m("b", "and again")]);
+        }),
+        { timeout: 120_000 },
+      );
+    });
+  },
+);

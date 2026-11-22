@@ -185,13 +185,13 @@ const toAttrs = (message: healthcare.Message, project: string, data: string, reg
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : healthcare
         .getProjectsLocationsDatasetsHl7V2StoresMessages({
           name,
           view: "FULL",
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findOwned = (parent: string, id: string) =>
   Effect.gen(function* () {
@@ -295,13 +295,11 @@ export const DatasetsHl7V2StoresMessageProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           healthcare.createProjectsLocationsDatasetsHl7V2StoresMessages({
-            parent,
-            body: {
-              message: {
-                data: encoded,
-                labels: desiredLabels,
-              },
+            message: {
+              data: encoded,
+              labels: desiredLabels,
             },
+            parent,
           }),
         ).pipe(Effect.catchTag("Conflict", () => findOwned(parent, id)));
         current = created ?? undefined;
@@ -322,11 +320,9 @@ export const DatasetsHl7V2StoresMessageProvider = () =>
       if (labelsChanged) {
         current = yield* retryTransient(
           healthcare.patchProjectsLocationsDatasetsHl7V2StoresMessages({
+            labels: desiredLabels,
             name: currentName,
             updateMask: "labels",
-            body: {
-              labels: desiredLabels,
-            },
           }),
         );
       }

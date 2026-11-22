@@ -16,7 +16,7 @@ export const DEFAULT_VOLUME_REGION = "iad";
 export const MIN_SIZE_GB = 1;
 
 export class VolumeNotCreated extends Data.TaggedError("Fly.VolumeNotCreated")<{
-  name: string;
+  resourceName: string;
   appName: string;
 }> {}
 
@@ -39,7 +39,7 @@ const transientState = (state: string | undefined) =>
 export const getVolumeById = (appName: string, volumeId: string) =>
   machines.getVolumeById({ app_name: appName, volume_id: volumeId }).pipe(
     Effect.map((volume) => (destroying(volume.state) ? undefined : volume)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const listVolumesByApp = (appName: string) =>
@@ -66,7 +66,7 @@ export const listVolumeGroup = (appName: string, name: string, region: string) =
 export const waitUntilVolumeReady = (appName: string, volumeId: string) =>
   getVolumeById(appName, volumeId).pipe(
     Effect.flatMap((volume) => {
-      if (volume === undefined) return Effect.succeed(undefined);
+      if (volume === undefined) return Effect.undefined;
       if (transientState(volume.state)) {
         return Effect.fail(
           new VolumePending({
@@ -116,6 +116,11 @@ export const createVolume = Effect.fn(function* (input: {
   disk: DiskSpec;
 }) {
   const sizeGb = Math.max(input.disk.sizeGb, MIN_SIZE_GB);
+  // The volumes this group held before the create: a storage host that fails
+  // with an unknown outcome may still have made one.
+  const before = new Set(
+    (yield* listVolumeGroup(input.appName, input.name, input.region)).map((volume) => volume.id),
+  );
   const created = yield* machines
     .createVolume({
       app_name: input.appName,
@@ -130,7 +135,26 @@ export const createVolume = Effect.fn(function* (input: {
       source_volume_id: input.disk.sourceVolumeId,
       require_unique_zone: input.disk.requireUniqueZone,
     })
-    .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTags({
+        Conflict: () => Effect.undefined,
+        StorageHostCapacity: (error) =>
+          Effect.gen(function* () {
+            // Its outcome is unknown: a single new volume in the group is the
+            // one this call made. Otherwise create again after a pause.
+            yield* Effect.sleep(Duration.seconds(5));
+            const fresh = (yield* listVolumeGroup(input.appName, input.name, input.region)).filter(
+              (volume) => volume.id !== undefined && !before.has(volume.id),
+            );
+            return fresh.length === 1 ? fresh[0] : yield* error;
+          }),
+      }),
+      Effect.retry({
+        while: (error) => error._tag === "StorageHostCapacity",
+        schedule: Schedule.spaced(Duration.seconds(5)),
+        times: 6,
+      }),
+    );
   if (created?.id !== undefined && created.id.length > 0) {
     return (yield* waitUntilVolumeReady(input.appName, created.id)) ?? created;
   }
@@ -138,7 +162,7 @@ export const createVolume = Effect.fn(function* (input: {
   const hit = group.at(-1);
   if (hit === undefined || hit.id === undefined) {
     return yield* new VolumeNotCreated({
-      name: input.name,
+      resourceName: input.name,
       appName: input.appName,
     });
   }
@@ -211,7 +235,7 @@ export const ensureVolumeGroup = Effect.fn(function* (input: {
   }
   if (group.length < input.count) {
     return yield* new VolumeNotCreated({
-      name: input.name,
+      resourceName: input.name,
       appName: input.appName,
     });
   }

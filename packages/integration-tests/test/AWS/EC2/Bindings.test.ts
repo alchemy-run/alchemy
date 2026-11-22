@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
+import { describe, expect } from "@alchemy.run/test";
+import * as Core from "@alchemy.run/test/Core";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
-import { describe, expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
-import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

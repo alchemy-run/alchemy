@@ -8,9 +8,9 @@ import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import * as Region from "@distilled.cloud/aws/Region";
 import { layer as nodeServicesLayer } from "@effect/platform-node/NodeServices";
-import { reifyBoundConfigProvider } from "alchemy/Runtime";
+import { RuntimeConfigProviderLive } from "alchemy/Runtime";
 import { entrypointLayer, entrypointTag, stackFromEnv } from "alchemy/Runtime/Bootstrap";
-import * as ConfigProvider from "effect/ConfigProvider";
+import { layerWebCrypto as secureRandomLayer } from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { layer as fetchHttpClientLayer } from "effect/http/FetchHttpClient";
@@ -40,6 +40,7 @@ export const bootstrap = async (entrypoint: unknown): Promise<unknown> => {
   const platform = Layer.mergeAll(
     nodeServicesLayer,
     fetchHttpClientLayer,
+    secureRandomLayer,
     // TODO(sam): wire this up to telemetry more directly
     Logger.layer([Logger.consolePretty()]),
   );
@@ -54,15 +55,7 @@ export const bootstrap = async (entrypoint: unknown): Promise<unknown> => {
     // Resolves undefined when unset, so live deploys are unaffected.
     Layer.provideMerge(Endpoint.fromEnv()),
     Layer.provideMerge(platform),
-    Layer.provideMerge(
-      Layer.succeed(
-        ConfigProvider.ConfigProvider,
-        // Auto-bound `Config` values arrive in the env as
-        // `{"_tag":"Redacted","value":...}` markers; reify them so a `Config`
-        // re-read inside a handler decodes the raw source value.
-        reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env),
-      ),
-    ),
+    Layer.provideMerge(RuntimeConfigProviderLive),
     Layer.provideMerge(Layer.succeed(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info")),
   );
 

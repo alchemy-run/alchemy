@@ -1,7 +1,7 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ml from "@distilled.cloud/azure/machinelearningservices";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { baseProject, logLevel, subscription, tags, waitGone } from "./util.ts";
 
@@ -16,6 +16,9 @@ const getDatastore = (resourceGroupName: string, workspaceName: string, name: st
       name,
     });
   });
+
+const blobOf = (properties: ml.DatastoreProperties) =>
+  properties.datastoreType === "AzureBlob" ? properties : undefined;
 
 const program = (props: {
   container: "Raw" | "Curated";
@@ -65,7 +68,7 @@ test.provider(
       expect(datastore.datastoreType).toEqual("AzureBlob");
       expect(datastore.isDefault).toEqual(false);
       const observed = yield* get(datastore.datastoreName);
-      expect(observed.properties.containerName).toEqual(container.containerName);
+      expect(blobOf(observed.properties)?.containerName).toEqual(container.containerName);
       expect(observed.properties.credentials.credentialsType).toEqual("None");
       expect(observed.properties.description).toEqual("raw");
       expect(observed.properties.tags?.env).toEqual("test");
@@ -96,7 +99,9 @@ test.provider(
       );
       expect(replaced.datastore.datastoreName).not.toEqual(redescribed.datastore.datastoreName);
       const replacedObserved = yield* get(replaced.datastore.datastoreName);
-      expect(replacedObserved.properties.containerName).toEqual(replaced.container.containerName);
+      expect(blobOf(replacedObserved.properties)?.containerName).toEqual(
+        replaced.container.containerName,
+      );
       expect(yield* waitGone(get(redescribed.datastore.datastoreName))).toEqual("gone");
 
       yield* stack.destroy();

@@ -1,12 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { decodeFields, encodeFields } from "@alchemy.run/gcp/Firestore/Values";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import FirestoreBindingsHost, {
   DocsDatabase,
   PATCHED,
@@ -34,8 +34,8 @@ let databases: {
 /** Write a document out of band, as the deployer. */
 const seed = (database: string, path: string, fields: Record<string, unknown>) =>
   firestore.patchProjectsDatabasesDocuments({
+    fields: encodeFields(fields),
     name: `${database}/documents/${path}`,
-    body: { fields: encodeFields(fields) },
   });
 
 /** Read a document's fields out of band, `undefined` when it is missing. */
@@ -53,8 +53,8 @@ const readOutOfBand = (database: string, path: string) =>
 const scopedRoles = (database: string) =>
   Effect.gen(function* () {
     const policy = yield* crm.getIamPolicyProjects({
+      options: { requestedPolicyVersion: 3 },
       resource: `projects/${project}`,
-      body: { options: { requestedPolicyVersion: 3 } },
     });
     const hostBindings = (policy.bindings ?? []).filter((binding) =>
       (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
@@ -67,7 +67,7 @@ const scopedRoles = (database: string) =>
       .sort();
   });
 
-describe.skipIf(!dockerAvailable || !!process.env.FAST)(
+describe.skipIf(!!process.env.FAST)(
   "Firestore Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:firestore", "provider:gcp:run", "live"],

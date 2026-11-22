@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -121,8 +122,36 @@ export type SourcesMigratingVm = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SourcesMigratingVmLookup
 >;
+
+/**
+ * Props for {@link SourcesMigratingVm.lookup}: find a sources migrating vm
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface SourcesMigratingVmLookup {
+  /**
+   * Migrating VM id.
+   */
+  migratingVmId: string;
+  /**
+   * Region used when `source` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent source. Full name
+   * `projects/{project}/locations/{location}/sources/{source}` or the
+   * source id (combined with `location`).
+   */
+  source: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A VM Migration migrating VM: a source VM plus the replication and
@@ -145,6 +174,20 @@ export type SourcesMigratingVm = Resource<
  *     zone: "us-central1-a",
  *     targetProject: target.name,
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing sources migrating vm
+ * `SourcesMigratingVm.lookup` references a sources migrating vm Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared sources migrating vm.
+ *
+ * **Example:** Reference an existing sources migrating vm
+ * ```typescript
+ * const sourcesMigratingVm = GCP.VMMigration.SourcesMigratingVm.lookup({
+ *   migratingVmId: "my-migrating-vm",
+ *   source: "my-source",
  * });
  * ```
  *
@@ -199,10 +242,10 @@ const toAttrs = (migrating: vm.MigratingVm, project: string, region: string) => 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : vm
         .getProjectsLocationsSourcesMigratingVms({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listChildren = (parent: string) =>
   collectPages(
@@ -237,6 +280,21 @@ export const SourcesMigratingVmProvider = () =>
         extra: previousVm !== nextVm,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      migratingVmId,
+      location: lookupLocation,
+      source: lookupSource,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const source =
+        lookupSource !== undefined ? sourceOf(lookupSource, env.project, location) : "";
+      const name = source.length > 0 ? resourceName(source, migratingVmId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -289,19 +347,17 @@ export const SourcesMigratingVmProvider = () =>
       if (current === undefined) {
         const created = yield* vm
           .createProjectsLocationsSourcesMigratingVms({
+            sourceVmId: news.sourceVmId,
+            displayName,
+            description: news.description,
+            labels: desiredLabels,
+            policy: news.policy,
+            computeEngineTargetDefaults: news.computeEngineTargetDefaults,
+            computeEngineDisksTargetDefaults: news.computeEngineDisksTargetDefaults,
             parent: source,
             migratingVmId,
-            body: {
-              sourceVmId: news.sourceVmId,
-              displayName,
-              description: news.description,
-              labels: desiredLabels,
-              policy: news.policy,
-              computeEngineTargetDefaults: news.computeEngineTargetDefaults,
-              computeEngineDisksTargetDefaults: news.computeEngineDisksTargetDefaults,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -314,7 +370,7 @@ export const SourcesMigratingVmProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -340,17 +396,14 @@ export const SourcesMigratingVmProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* vm.patchProjectsLocationsSourcesMigratingVms({
+          displayName,
+          description: news.description,
+          labels: desiredLabels,
+          policy: news.policy,
+          computeEngineTargetDefaults: news.computeEngineTargetDefaults,
+          computeEngineDisksTargetDefaults: news.computeEngineDisksTargetDefaults,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            displayName,
-            description: news.description,
-            labels: desiredLabels,
-            policy: news.policy,
-            computeEngineTargetDefaults: news.computeEngineTargetDefaults,
-            computeEngineDisksTargetDefaults: news.computeEngineDisksTargetDefaults,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
@@ -368,7 +421,7 @@ export const SourcesMigratingVmProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.

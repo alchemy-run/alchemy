@@ -408,7 +408,10 @@ export const ProtectedItemProvider = () =>
           properties: compact({
             policyId: news.policyId,
             protectableItemId: news.protectableItemId,
-            providerSpecificDetails: news.providerSpecificDetails,
+            // `instanceType` is only known at runtime and decides the arm, so
+            // the arm is asserted rather than narrowed.
+            providerSpecificDetails:
+              news.providerSpecificDetails as asr.EnableProtectionProviderSpecificInput,
           }),
         });
       }
@@ -428,7 +431,7 @@ export const ProtectedItemProvider = () =>
             ...desired,
             providerSpecificDetails: {
               instanceType: news.providerSpecificDetails.instanceType,
-            },
+            } as asr.UpdateReplicationProtectedItemProviderInput,
           },
         });
         observed = yield* waitForProvisioned(

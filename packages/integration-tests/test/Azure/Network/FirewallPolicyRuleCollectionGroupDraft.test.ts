@@ -1,11 +1,14 @@
 import * as Azure from "@alchemy.run/azure";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as network from "@distilled.cloud/azure/network";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { logLevel, subscriptionId, tags, untilGone } from "./helpers.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
+
+const networkRuleOf = (rule: network.FirewallPolicyRule | undefined) =>
+  rule?.ruleType === "NetworkRule" ? rule : undefined;
 
 const getGroup = (
   resourceGroupName: string,
@@ -97,9 +100,9 @@ test.provider(
         policy.firewallPolicyName,
         rules.ruleCollectionGroupName,
       );
-      expect(observed.properties?.ruleCollections?.[0]?.rules?.[0]?.destinationPorts).toEqual([
-        "5353",
-      ]);
+      expect(
+        networkRuleOf(observed.properties?.ruleCollections?.[0]?.rules?.[0])?.destinationPorts,
+      ).toEqual(["5353"]);
       // The draft does not change the live group.
       const live = yield* getGroup(
         group.resourceGroupName,
@@ -107,7 +110,9 @@ test.provider(
         rules.ruleCollectionGroupName,
       );
       expect(live.properties?.priority).toEqual(200);
-      expect(live.properties?.ruleCollections?.[0]?.rules?.[0]?.destinationPorts).toEqual(["53"]);
+      expect(
+        networkRuleOf(live.properties?.ruleCollections?.[0]?.rules?.[0])?.destinationPorts,
+      ).toEqual(["53"]);
 
       const updated = yield* stack.deploy(program("8053"));
       expect(updated.draft.draftId).toEqual(draft.draftId);
@@ -116,9 +121,9 @@ test.provider(
         policy.firewallPolicyName,
         rules.ruleCollectionGroupName,
       );
-      expect(reobserved.properties?.ruleCollections?.[0]?.rules?.[0]?.destinationPorts).toEqual([
-        "8053",
-      ]);
+      expect(
+        networkRuleOf(reobserved.properties?.ruleCollections?.[0]?.rules?.[0])?.destinationPorts,
+      ).toEqual(["8053"]);
 
       yield* stack.destroy();
       expect(

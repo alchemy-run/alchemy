@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitGlobalOperation } from "./operations.ts";
@@ -92,8 +93,26 @@ export type TargetSslProxy = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TargetSslProxyLookup
 >;
+
+/**
+ * Props for {@link TargetSslProxy.lookup}: find a target ssl proxy this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface TargetSslProxyLookup {
+  /**
+   * TargetSslProxy name (RFC1035, 1-63 characters).
+   */
+  targetSslProxyName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine target SSL proxy.
@@ -148,6 +167,19 @@ export type TargetSslProxy = Resource<
  *   service: nextBackend.name,
  *   sslCertificates: [nextCert.sslCertificateName],
  *   proxyHeader: "PROXY_V1",
+ * });
+ * ```
+ *
+ * ### Looking up an existing target ssl proxy
+ * `TargetSslProxy.lookup` references a target ssl proxy Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * target ssl proxy.
+ *
+ * **Example:** Reference an existing target ssl proxy
+ * ```typescript
+ * const targetSslProxy = GCP.Compute.TargetSslProxy.lookup({
+ *   targetSslProxyName: "my-target-ssl-proxy",
  * });
  * ```
  *
@@ -250,7 +282,7 @@ const toAttrs = (proxy: compute.TargetSslProxy, project: string) => {
 const getByName = (project: string, targetSslProxy: string) =>
   compute
     .getTargetSslProxies({ project, targetSslProxy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const TargetSslProxyProvider = () =>
   Provider.succeed(TargetSslProxy, {
@@ -273,7 +305,14 @@ export const TargetSslProxyProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ targetSslProxyName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, targetSslProxyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const targetSslProxyName = yield* toName(
         id,
@@ -284,7 +323,9 @@ export const TargetSslProxyProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "targetSslProxyName");
     }),
 
     list: () =>
@@ -338,15 +379,10 @@ export const TargetSslProxyProvider = () =>
         if (news.proxyHeader !== undefined) {
           body.proxyHeader = news.proxyHeader;
         }
-        yield* compute
-          .insertTargetSslProxies({
-            project: env.project,
-            body,
-          })
-          .pipe(
-            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-          );
+        yield* compute.insertTargetSslProxies({ ...body, project: env.project }).pipe(
+          Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
+          Effect.catchTag("Conflict", () => Effect.undefined),
+        );
         current = yield* getByName(env.project, targetSslProxyName);
       }
 
@@ -359,9 +395,9 @@ export const TargetSslProxyProvider = () =>
       if (resourceTail(current.service) !== resourceTail(desiredService)) {
         yield* compute
           .setBackendServiceTargetSslProxies({
+            service: desiredService,
             project: env.project,
             targetSslProxy: targetSslProxyName,
-            body: { service: desiredService },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetSslProxyName);
@@ -378,9 +414,9 @@ export const TargetSslProxyProvider = () =>
       ) {
         yield* compute
           .setSslCertificatesTargetSslProxies({
+            sslCertificates: desiredCerts,
             project: env.project,
             targetSslProxy: targetSslProxyName,
-            body: { sslCertificates: desiredCerts },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetSslProxyName);
@@ -397,9 +433,9 @@ export const TargetSslProxyProvider = () =>
       ) {
         yield* compute
           .setCertificateMapTargetSslProxies({
+            certificateMap: news.certificateMap,
             project: env.project,
             targetSslProxy: targetSslProxyName,
-            body: { certificateMap: news.certificateMap },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetSslProxyName);
@@ -413,9 +449,9 @@ export const TargetSslProxyProvider = () =>
       if ((current.proxyHeader ?? DEFAULT_PROXY_HEADER) !== desiredProxyHeader) {
         yield* compute
           .setProxyHeaderTargetSslProxies({
+            proxyHeader: desiredProxyHeader,
             project: env.project,
             targetSslProxy: targetSslProxyName,
-            body: { proxyHeader: desiredProxyHeader },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetSslProxyName);
@@ -429,9 +465,9 @@ export const TargetSslProxyProvider = () =>
       if (news.sslPolicy !== undefined && (current.sslPolicy ?? "") !== news.sslPolicy) {
         yield* compute
           .setSslPolicyTargetSslProxies({
+            sslPolicy: news.sslPolicy,
             project: env.project,
             targetSslProxy: targetSslProxyName,
-            body: { sslPolicy: news.sslPolicy },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetSslProxyName);
@@ -452,7 +488,7 @@ export const TargetSslProxyProvider = () =>
           project: env.project,
           targetSslProxy: output.targetSslProxyName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitGlobalOperation(env.project, operation).pipe(
           Effect.catchTag("NotFound", () => Effect.void),

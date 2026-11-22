@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -73,6 +74,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { store, entity, feature };
         }),
+      );
+      yield* expectFound(
+        GCP.AIPlatform.FeaturestoresEntityTypesFeature.lookup({
+          featureId: created.feature.featureId,
+          entityType: created.feature.entityType,
+        }),
+        created.feature,
       );
 
       expect(created.feature.name).toContain("/features/");

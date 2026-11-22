@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -106,8 +107,34 @@ export type Federation = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FederationLookup
 >;
+
+/**
+ * Props for {@link Federation.lookup}: find a federation this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface FederationLookup {
+  /**
+   * Federation id (the `{federation}` segment of
+   * `projects/{project}/locations/{location}/federations/{federation}`).
+   * Must be 2-63 characters, start with a letter, and end with a letter or
+   * number.
+   */
+  federationId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataproc Metastore federation that serves metadata from ranked
@@ -151,6 +178,19 @@ export type Federation = Resource<
  *     },
  *   },
  *   labels: { env: "prod", team: "data" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing federation
+ * `Federation.lookup` references a federation Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * federation.
+ *
+ * **Example:** Reference an existing federation
+ * ```typescript
+ * const federation = GCP.Metastore.Federation.lookup({
+ *   federationId: "my-federation",
  * });
  * ```
  *
@@ -211,12 +251,12 @@ const toAttrs = (item: metastore.Federation, project: string, region: string) =>
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : metastore
         .getProjectsLocationsFederations({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
-const listOwned = (project: string, region: string) =>
+const listOwned = (project: string) =>
   listAtLocation(project, (parent) =>
     listLabeledPages(
       metastore.listProjectsLocationsFederations.pages({
@@ -249,6 +289,15 @@ export const FederationProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ federationId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, federationId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const federationId = yield* toPhysicalId(
@@ -268,7 +317,7 @@ export const FederationProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project, env.region);
+        const items = yield* listOwned(env.project);
         return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
@@ -294,15 +343,13 @@ export const FederationProvider = () =>
       if (current === undefined) {
         const created = yield* metastore
           .createProjectsLocationsFederations({
+            version,
+            backendMetastores: backends,
+            labels: desiredLabels,
             parent: locationParent(env.project, location),
             federationId,
-            body: {
-              version,
-              backendMetastores: backends,
-              labels: desiredLabels,
-            },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -321,7 +368,7 @@ export const FederationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -333,12 +380,10 @@ export const FederationProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* metastore.patchProjectsLocationsFederations({
+          labels: desiredLabels,
+          backendMetastores: backends,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            labels: desiredLabels,
-            backendMetastores: backends,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
@@ -350,7 +395,7 @@ export const FederationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);
@@ -365,7 +410,7 @@ export const FederationProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.

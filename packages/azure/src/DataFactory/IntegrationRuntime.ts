@@ -337,7 +337,9 @@ export const IntegrationRuntimeProvider = () =>
         }
         observed = yield* datafactory.IntegrationRuntimesCreateOrUpdate({
           ...where,
-          properties: desired,
+          // `type` picks the SDK union arm, and the props carry `typeProperties` as one loose bag
+          // for every type.
+          properties: desired as datafactory.IntegrationRuntimeInput,
         });
         if (wasStarted) {
           yield* datafactory.StartIntegrationRuntime(where);

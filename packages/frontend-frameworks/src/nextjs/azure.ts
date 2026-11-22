@@ -255,9 +255,9 @@ const dependencyNames = Effect.fn(function* (packageDir: string) {
   const raw = yield* fs
     .readFileString(`${packageDir}/package.json`)
     .pipe(Effect.orElseSucceed(() => "{}"));
-  const manifest = yield* Effect.try(
-    () => JSON.parse(raw) as DependencyManifest,
-  ).pipe(Effect.orElseSucceed((): DependencyManifest => ({})));
+  const manifest = yield* Effect.try(() => JSON.parse(raw) as DependencyManifest).pipe(
+    Effect.orElseSucceed((): DependencyManifest => ({})),
+  );
   return [
     ...new Set([
       ...Object.keys(manifest.dependencies ?? {}),

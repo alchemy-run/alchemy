@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/stripe",
-  "version": "2.0.0-beta.83",
+  "version": "2.0.0-beta.87",
   "description": "Stripe products, prices and webhooks for Alchemy.",
   "keywords": [
     "alchemy",
@@ -28,6 +28,7 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./AWS": "./src/AWS/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -39,6 +40,13 @@
         "worker": "./src/index.ts",
         "default": "./lib/index.js"
       },
+      "./AWS": {
+        "types": "./lib/AWS/index.d.ts",
+        "bun": "./src/AWS/index.ts",
+        "worker": "./src/AWS/index.ts",
+        "default": "./lib/AWS/index.js"
+      },
+      "./internal/*": null,
       "./*": {
         "types": "./lib/*.d.ts",
         "bun": "./src/*.ts",
@@ -58,14 +66,21 @@
     "@distilled.cloud/stripe": "workspace:*"
   },
   "devDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "@types/bun": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "typescript": "catalog:"
   },
   "peerDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@alchemy.run/aws": {
+      "optional": true
+    }
   },
   "alchemy": {
     "contributes": [

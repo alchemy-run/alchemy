@@ -120,7 +120,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsEnvgroupsAttachments({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const listAttachments = (parent: string) =>
   collectPages(
@@ -205,11 +205,7 @@ export const EnvgroupsAttachmentProvider = () =>
           );
           const org = yield* apigee
             .getOrganizations({ name: organization })
-            .pipe(
-              Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
           const ownedEnvs = new Set<string>();
           for (const environmentId of org?.environments ?? []) {
             const environment = yield* apigee
@@ -217,9 +213,7 @@ export const EnvgroupsAttachmentProvider = () =>
                 name: `${organization}/environments/${environmentId}`,
               })
               .pipe(
-                Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined),
               );
             if (hasOwnershipMarker(environment?.description)) {
               ownedEnvs.add(environmentId);
@@ -258,11 +252,8 @@ export const EnvgroupsAttachmentProvider = () =>
 
       if (current === undefined) {
         const operation = yield* apigee
-          .createOrganizationsEnvgroupsAttachments({
-            parent,
-            body: { environment },
-          })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .createOrganizationsEnvgroupsAttachments({ environment, parent })
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {
           const done = yield* waitForOperation(operation);
           const createdName = stringField(done.response, "name");
@@ -291,9 +282,7 @@ export const EnvgroupsAttachmentProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* apigee
         .deleteOrganizationsEnvgroupsAttachments({ name: output.name })
-        .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

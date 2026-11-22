@@ -1,7 +1,7 @@
 /** Git's native Effect HTTP contracts, group registration, and server assembly. */
 import * as Git from "@alchemy.run/git";
 import { HASH_ROUTE } from "@alchemy.run/git/Hasher/Protocol";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Http from "alchemy/Http";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";

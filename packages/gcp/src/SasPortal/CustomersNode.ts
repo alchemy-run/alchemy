@@ -120,7 +120,7 @@ export class CustomersNodeNotResolved extends Data.TaggedError(
   "GCP.SasPortal.CustomersNodeNotResolved",
 )<{
   parent: string;
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (node: sasportal.SasPortalNode, parent: string, project: string) => {
@@ -210,10 +210,7 @@ export const CustomersNodeProvider = () =>
 
       if (current === undefined) {
         const created = yield* sasportal
-          .createCustomersNodes({
-            parent,
-            body: desired,
-          })
+          .createCustomersNodes({ ...desired, parent })
           .pipe(
             Effect.catchTag("Conflict", () =>
               findOwnedCustomerNode(id, parent).pipe(Effect.map((found) => found?.row)),
@@ -225,7 +222,7 @@ export const CustomersNodeProvider = () =>
       if (current === undefined) {
         return yield* new CustomersNodeNotResolved({
           parent,
-          name: news.name ?? output?.name ?? displayName,
+          resourceName: news.name ?? output?.name ?? displayName,
         });
       }
 
@@ -235,12 +232,12 @@ export const CustomersNodeProvider = () =>
         news.sasUserIds !== undefined && !sameStringList(current.sasUserIds, news.sasUserIds);
       if (nameChanged || usersChanged) {
         current = yield* sasportal.patchCustomersNodes({
+          ...desired,
           name,
           updateMask: updateMaskOf(
             "displayName",
             news.sasUserIds !== undefined ? "sasUserIds" : undefined,
           ),
-          body: desired,
         });
       }
 

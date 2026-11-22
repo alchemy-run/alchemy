@@ -1,12 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as bigqueryconnection from "@distilled.cloud/gcp/bigqueryconnection_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import BigQueryConnectionBindingsHost, { Cloud } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -22,8 +22,8 @@ const projectGrantsOf = (account: string) =>
   Effect.gen(function* () {
     const { project } = yield* GcpEnvironment.current;
     const policy = yield* resourcemanager.getIamPolicyProjects({
+      options: { requestedPolicyVersion: 3 },
       resource: `projects/${project}`,
-      body: { options: { requestedPolicyVersion: 3 } },
     });
     return (policy.bindings ?? [])
       .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${account}`))
@@ -33,7 +33,7 @@ const projectGrantsOf = (account: string) =>
       }));
   });
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "BigQueryConnection Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:bigqueryconnection", "provider:gcp:run", "live"],
@@ -80,8 +80,8 @@ describe.skipIf(!dockerAvailable)(
             );
 
             const policy = yield* bigqueryconnection.getIamPolicyProjectsLocationsConnections({
+              options: { requestedPolicyVersion: 3 },
               resource: connectionName,
-              body: { options: { requestedPolicyVersion: 3 } },
             });
             const roles = (policy.bindings ?? [])
               .filter((binding) =>
