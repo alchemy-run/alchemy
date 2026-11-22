@@ -103,6 +103,14 @@ export type V =
       readonly env: Env;
       /** Wrapped by `Effect.fn`: calling it gives an effect. */
       readonly effectful: boolean;
+      /**
+       * The function as its file exports it. Where the prover cannot read the
+       * body, a call is a value it does not look inside, and this gives it.
+       */
+      readonly real?: {
+        readonly name: string;
+        readonly call: (...args: ReadonlyArray<unknown>) => unknown;
+      };
     }
   | {
       readonly _tag: "Native";
@@ -110,12 +118,35 @@ export type V =
       readonly call: (args: ReadonlyArray<V>, site: Site) => Eval<V>;
     }
   | { readonly _tag: "Optic"; readonly path: ReadonlyArray<OpticStep> }
-  | { readonly _tag: "Lib"; readonly module: string; readonly path: ReadonlyArray<string> }
+  | {
+      readonly _tag: "Lib";
+      readonly module: string;
+      readonly path: ReadonlyArray<string>;
+      /** What the package gives here as the runtime loads it, where the prover looked. */
+      readonly host?: unknown;
+    }
   | { readonly _tag: "Namespace"; readonly module: Module }
   | { readonly _tag: "Host"; readonly value: unknown; readonly name: string }
   | { readonly _tag: "Effect"; readonly run: Eval<V> }
   | { readonly _tag: "Time"; readonly millis: Term }
-  | { readonly _tag: "Opaque"; readonly what: string };
+  | { readonly _tag: "Opaque"; readonly what: string }
+  /**
+   * What a function the prover does not read returned. The prover does not
+   * look inside it: it is passed along, kept and recorded, and it is the same
+   * value as another call of the function on the same arguments.
+   */
+  | {
+      readonly _tag: "Applied";
+      /** The function's name. */
+      readonly name: string;
+      /** The real function: it gives the value where the real code is run. */
+      readonly call: (...args: ReadonlyArray<unknown>) => unknown;
+      readonly args: ReadonlyArray<V>;
+      /** Why the prover does not read the function, as what follows its name in a message. */
+      readonly why: string;
+      /** Text two calls share only when they are the same function on the same arguments. */
+      readonly key: string;
+    };
 
 export const num = (value: number): V => ({ _tag: "Num", value });
 export const str = (value: string): V => ({ _tag: "Str", value });
@@ -144,6 +175,68 @@ export const optionOf = (
     : { _tag: "None" };
 };
 
+const identities = new WeakMap<object, number>();
+let identityCount = 0;
+
+/** A number an object keeps for as long as it lives: two objects never share one. */
+const identityOf = (object: object): number => {
+  const known = identities.get(object);
+  if (known !== undefined) return known;
+  const made = ++identityCount;
+  identities.set(object, made);
+  return made;
+};
+
+/** A value as text two values share only when they are known to be the same. */
+export const keyOf = (v: V): string => {
+  switch (v._tag) {
+    case "Num":
+      return `n${v.value}`;
+    case "Big":
+      return `${v.value}n`;
+    case "Str":
+      return JSON.stringify(v.value);
+    case "Bool":
+      return String(v.value);
+    case "Null":
+      return "null";
+    case "Undef":
+      return "undefined";
+    case "Term":
+      return `(${v.big ? "big " : ""}${v.term.text})`;
+    case "Time":
+      return `(time ${v.millis.text})`;
+    case "List":
+      return `(list ${JSON.stringify(v.name)})`;
+    case "Arr":
+      return `[${v.items.map(keyOf).join(",")}]`;
+    case "Obj":
+      return `{${Object.keys(v.fields)
+        .sort()
+        .map((key) => `${JSON.stringify(key)}:${keyOf(v.fields[key]!)}`)
+        .join(",")}}`;
+    case "Applied":
+      return v.key;
+    default:
+      return `#${identityOf(v)}`;
+  }
+};
+
+/** A call of an opaque function on these arguments. */
+export const applied = (
+  name: string,
+  call: (...args: ReadonlyArray<unknown>) => unknown,
+  args: ReadonlyArray<V>,
+  why: string,
+): V => ({
+  _tag: "Applied",
+  name,
+  call,
+  args,
+  why,
+  key: `(call #${identityOf(call)} ${args.map(keyOf).join(" ")})`,
+});
+
 /** Whether a value is a `bigint`. */
 export const isBig = (v: V): boolean => v._tag === "Big" || (v._tag === "Term" && v.big === true);
 
@@ -161,6 +254,13 @@ export class NotTranslated extends Data.TaggedError("NotTranslated")<{
   readonly file: string;
   readonly line: number;
   readonly reason: string;
+  /**
+   * Whether the code reaches outside what the prover reads: a global, a
+   * function it has no model for, a value it was given and changes. Nothing
+   * then says the function it is in gives the same result for the same
+   * arguments.
+   */
+  readonly reaches: boolean;
 }> {}
 
 /** The inputs this path assumes cannot occur. */
@@ -180,11 +280,12 @@ export const lineOf = (module: Module, offset: number): number => {
   return low + 1;
 };
 
-export const notTranslated = (site: Site, reason: string): NotTranslated =>
+export const notTranslated = (site: Site, reason: string, reaches = false): NotTranslated =>
   new NotTranslated({
     file: site.module.path,
     line: lineOf(site.module, site.node.start),
     reason,
+    reaches,
   });
 
 /** A function the prover does not look inside: its real implementation checks each answer. */
@@ -223,6 +324,11 @@ export class Run {
   /** The constants that are a `bigint`: they have no largest value. */
   readonly bigs = new Set<string>();
   /**
+   * Each result of an opaque function the code tested, by the call's key:
+   * whether it is truthy is an input, which the real function decides.
+   */
+  readonly tests = new Map<string, { readonly term: Term; readonly applied: V }>();
+  /**
    * The command being run, when a run has several: a prefix on the name of
    * each request context it reads, so every command reads its own.
    */
@@ -250,6 +356,7 @@ export class Run {
     for (const [name, list] of this.lists) next.lists.set(name, list);
     for (const [name, bound] of this.bounds) next.bounds.set(name, bound);
     for (const name of this.bigs) next.bigs.add(name);
+    for (const [key, test] of this.tests) next.tests.set(key, test);
     for (const [condition, taken] of this.decided) next.decided.set(condition, taken);
     next.label = this.label;
     return next;
@@ -288,6 +395,15 @@ export class Run {
     this.decided.set(condition, taken);
     this.conditions.push(taken ? condition : Smt.not(condition));
     return taken;
+  }
+
+  /** Whether what an opaque function returned is truthy: an input, the same for the same call. */
+  truthy(applied: V & { readonly _tag: "Applied" }): Term {
+    const known = this.tests.get(applied.key);
+    if (known) return known.term;
+    const term = this.constant(`${applied.name} call ${this.tests.size + 1} is truthy`, "Bool");
+    this.tests.set(applied.key, { term, applied });
+    return term;
   }
 
   /** `name(argument)`, for a function known only by its real implementation. */

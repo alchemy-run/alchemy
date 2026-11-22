@@ -1048,6 +1048,7 @@ export const find = (
 export const load = (
   aggregate: Aggregate.Any,
   source: URL | string,
+  reading?: Source.Reading,
 ): Effect.Effect<
   { readonly loader: Source.Loader; readonly definition: Definition },
   Source.LoadError,
@@ -1065,7 +1066,7 @@ export const load = (
                 (error) => new Source.LoadError({ file: String(source), message: error.message }),
               ),
             );
-    const loader = yield* Source.loader;
+    const loader = yield* Source.loader(reading);
     loader.adopt(aggregate);
     const module = yield* loader.load(file);
     const node = find(module.program, aggregate.aggregateName, "evolve");

@@ -1014,6 +1014,16 @@ export const make = (host: Host) => {
   return {
     opticMember,
     valueOf: (lib: V & { readonly _tag: "Lib" }): V | undefined => values[keyOf(lib)],
+    /**
+     * Whether a package is one the prover knows by its models, and never
+     * reads the code of: Effect, and Alchemy's own.
+     */
+    known: (specifier: string): boolean =>
+      /^(effect|alchemy|@effect\/[^/]+|@alchemy\.run\/[^/]+)(\/|$)/.test(specifier) ||
+      [...host.extra.keys(), ...Object.keys(models)].some((key) => key.startsWith(`${specifier}:`)),
+    /** Whether the prover has a model for a library function. */
+    models: (lib: V & { readonly _tag: "Lib" }): boolean =>
+      host.extra.has(keyOf(lib)) || Object.hasOwn(models, keyOf(lib)),
     call: (lib: V & { readonly _tag: "Lib" }, args: ReadonlyArray<V>, site: Site): Eval<V> => {
       const model = host.extra.get(keyOf(lib)) ?? models[keyOf(lib)];
       if (model) return model(args, site);
@@ -1024,6 +1034,7 @@ export const make = (host: Host) => {
         Value.notTranslated(
           site,
           `calls ${lib.module.replace(/^effect\//, "")}.${lib.path.join(".")}, which the prover has no model for`,
+          true,
         ),
       );
     },
