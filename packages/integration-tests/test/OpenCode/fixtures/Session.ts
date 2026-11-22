@@ -75,6 +75,27 @@ class CountBytes extends AI.Tool<CountBytes>()(
   }),
 ) {}
 
+/** A tool that takes long enough for its prompt to be stopped while it runs. */
+const Stall = AI.Tool(
+  "stall",
+  {
+    description:
+      "Wait for a build to finish. Always use this tool when asked to wait for the build.",
+    parameters: Schema.Struct({}),
+    success: Schema.Struct({ done: Schema.Boolean }),
+  },
+  Effect.fn(function* () {
+    yield* Effect.sleep("40 seconds");
+    return { done: true };
+  }),
+);
+
+/** A skill whose instructions hold a word the model cannot guess. */
+class Releasing extends AI.Skill<Releasing>()("releasing", {
+  description: "How to cut a release of this project. Load it before releasing.",
+  instructions: "To release, say the release codeword to the operator. The codeword is PLUM-4417.",
+}) {}
+
 /** The snapshot every sandbox boots from. */
 const Base = Boat.Snapshot("OpenCodeBase", { run: ["node --version"] });
 
@@ -133,6 +154,7 @@ const toolsByName = {
   add: Add,
   withdraw: Withdraw,
   count_bytes: CountBytes,
+  stall: Stall,
   bash: AI.Bash,
   read: AI.Read,
   codes: Codes,
@@ -152,12 +174,15 @@ const session = Effect.gen(function* () {
       Add,
       Withdraw,
       CountBytes,
+      Stall,
       Codes,
       AI.CodeMode(Add, Withdraw, CountBytes, Codes),
     ],
+    skills: [Releasing],
   });
 
   return Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
     /** The session's sandbox as Boat lists it, if it has one. */
     const sandboxOf = Effect.fn(function* (name: string) {
       const [found] = yield* sandboxes.list({
@@ -228,6 +253,26 @@ const session = Effect.gen(function* () {
         if (state === undefined) return null;
         return state === "archiving" || state === "archived" ? "paused" : "running";
       }),
+      /** Give the session a prompt without waiting for its answer. */
+      start: Effect.fn(function* (
+        name: string,
+        text: string,
+        tools: ReadonlyArray<keyof typeof toolsByName>,
+      ) {
+        yield* harness
+          .session(name)
+          .submit(text, { tools: tools.map((tool) => toolsByName[tool]) });
+      }),
+      abort: (name: string) => harness.session(name).abort,
+      /** How each run of the session ended, oldest first. */
+      outcomes: Effect.fn(function* (name: string) {
+        const messages = yield* harness.session(name).messages;
+        return messages.flatMap((message) =>
+          message.type === "idle" ? [String(message.outcome)] : [],
+        );
+      }),
+      /** Kill this instance; the next call or the alarm builds a fresh one. */
+      crash: () => state.abort("crash"),
       suspend: (name: string) => harness.session(name).suspendSandbox,
       kill: (name: string) => harness.session(name).removeSandbox,
     };

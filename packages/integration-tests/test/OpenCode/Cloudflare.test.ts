@@ -3,12 +3,15 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import OpenCodeApi from "./fixtures/Api.ts";
+import OpenCodeWrongHarnessApi from "./fixtures/WrongHarness.ts";
 
 const providers = Layer.mergeAll(Cloudflare.providers(), Boat.providers());
 
@@ -120,43 +123,69 @@ const call = (path: string, body?: unknown) =>
 
 type ToolUse = { readonly tool: string; readonly status: string; readonly output: string };
 
+/** The session's completed calls of `tool`. */
+const usedBy = (name: string, tool: string) =>
+  Effect.map(call(`/${name}/tools`), (tools: ReadonlyArray<ToolUse>) =>
+    tools.filter((use) => use.tool === tool && use.status === "completed"),
+  );
+
+/** Boat's listing trails a state change by a moment. */
+const sandboxBecomes = (name: string, wanted: string | null) =>
+  call(`/${name}/state`).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (result: { state: string | null }) => result.state === wanted,
+      times: 15,
+    }),
+  );
+
 test(
-  "OpenCode in a Boat sandbox answers with the harness's model, runs its tools, and survives a suspend",
+  "OpenCode runs in the Durable Object: the harness's model answers and its tools run, with no sandbox",
   Effect.gen(function* () {
     const name = `oc-${Date.now()}`;
-    /** Boat's listing trails a state change by a moment. */
-    const stateBecomes = (wanted: string | null) =>
-      call(`/${name}/state`).pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
-          until: (result: { state: string | null }) => result.state === wanted,
-          times: 15,
-        }),
-      );
-    const used = (tool: string) =>
-      Effect.map(call(`/${name}/tools`), (tools: ReadonlyArray<ToolUse>) =>
-        tools.filter((use) => use.tool === tool && use.status === "completed"),
-      );
+    // The model is the harness's Layer, and the tool a Layer in the Durable Object.
+    const sum = yield* call(`/${name}/prompt`, {
+      text: "What is 19 + 23? Use the alchemy_add tool, then tell me the number it returned.",
+      tools: ["add"],
+      requestId: "add",
+    });
+    // The model may fumble a call's arguments first; one that completed is the tool's answer.
+    expect((yield* usedBy(name, "alchemy_add")).at(-1)?.output).toContain("1042");
+    // The model answered after the tool: its wording is its own.
+    expect(sum.text.length).toBeGreaterThan(0);
 
+    // A declared failure reaches the model as the tool's error, with its tag and fields.
+    yield* call(`/${name}/prompt`, {
+      text: 'Use the alchemy_withdraw tool to withdraw 500 from the account "checking". Then use it again to withdraw 5 from the account "frozen".',
+      tools: ["withdraw"],
+      requestId: "withdraw",
+    });
+    const withdrawals = ((yield* call(`/${name}/tools`)) as ReadonlyArray<ToolUse>).filter(
+      (use) => use.tool === "alchemy_withdraw",
+    );
+    const reported = withdrawals.map((use) => `${use.status}: ${use.output}`).join("\n");
+    expect(reported).toContain('{"_tag":"InsufficientFunds","balance":137}');
+    expect(reported).toContain('{"_tag":"AccountFrozen","account":"frozen"}');
+    // Neither call counts as completed.
+    expect(yield* usedBy(name, "alchemy_withdraw")).toEqual([]);
+
+    // Nothing asked for files or a shell, so no sandbox was ever opened.
+    expect((yield* call(`/${name}/state`)).state).toBeNull();
+  }),
+  { tags, timeout: 240_000 },
+);
+
+test(
+  "a tool that needs files or a shell works in the session's sandbox, which suspends, resumes and is removed",
+  Effect.gen(function* () {
+    const name = `oc-sbx-${Date.now()}`;
     yield* Effect.gen(function* () {
-      // The model is the harness's Layer, and the tool a Layer in the Durable Object.
-      const sum = yield* call(`/${name}/prompt`, {
-        text: "What is 19 + 23? Use the alchemy_add tool, then tell me the number it returned.",
-        tools: ["add"],
-        requestId: "add",
-      });
-      // The model may fumble a call's arguments first; one that completed is the tool's answer.
-      expect((yield* used("alchemy_add")).at(-1)?.output).toContain("1042");
-      // The model answered after the tool: its wording is its own.
-      expect(sum.text.length).toBeGreaterThan(0);
-
-      // The shell tool runs in the session's sandbox.
       yield* call(`/${name}/prompt`, {
         text: "Use the alchemy_bash tool to run exactly this command: printf 'opencode was here' > /home/user/hello.txt",
         tools: ["bash"],
         requestId: "write",
       });
-      const wrote = (yield* used("alchemy_bash")).length;
+      const wrote = (yield* usedBy(name, "alchemy_bash")).length;
       expect(wrote).toBeGreaterThan(0);
       expect((yield* call(`/${name}/file`, { path: "/home/user/hello.txt" })).text).toBe(
         "opencode was here",
@@ -168,49 +197,129 @@ test(
         tools: ["count_bytes"],
         requestId: "count",
       });
-      expect((yield* used("alchemy_count_bytes")).at(-1)?.output).toContain("17");
-
-      // A declared failure reaches the model as the tool's error, with its tag and fields.
-      yield* call(`/${name}/prompt`, {
-        text: 'Use the alchemy_withdraw tool to withdraw 500 from the account "checking". Then use it again to withdraw 5 from the account "frozen".',
-        tools: ["withdraw"],
-        requestId: "withdraw",
-      });
-      const withdrawals = ((yield* call(`/${name}/tools`)) as ReadonlyArray<ToolUse>).filter(
-        (use) => use.tool === "alchemy_withdraw",
-      );
-      const reported = withdrawals.map((use) => `${use.status}: ${use.output}`).join("\n");
-      expect(reported).toContain('{"_tag":"InsufficientFunds","balance":137}');
-      expect(reported).toContain('{"_tag":"AccountFrozen","account":"frozen"}');
-      // Neither call counts as completed.
-      expect(yield* used("alchemy_withdraw")).toEqual([]);
+      expect((yield* usedBy(name, "alchemy_count_bytes")).at(-1)?.output).toContain("17");
 
       // Suspending stops the sandbox, and suspending it again changes nothing.
       yield* call(`/${name}/suspend`, {});
       yield* call(`/${name}/suspend`, {});
-      expect((yield* stateBecomes("paused")).state).toBe("paused");
+      expect((yield* sandboxBecomes(name, "paused")).state).toBe("paused");
 
-      // The next prompt resumes it: the same session, with its transcript and files.
+      // The next tool call resumes it, with its files.
       yield* call(`/${name}/prompt`, {
         text: "Use the alchemy_bash tool to run exactly this command: cat /home/user/hello.txt",
         tools: ["bash"],
         requestId: "read",
       });
-      expect((yield* stateBecomes("running")).state).toBe("running");
-      // The transcript from before the suspend is still there, and the shell ran again.
-      expect((yield* used("alchemy_add")).length).toBeGreaterThan(0);
-      const shell = yield* used("alchemy_bash");
+      expect((yield* sandboxBecomes(name, "running")).state).toBe("running");
+      const shell = yield* usedBy(name, "alchemy_bash");
       expect(shell.length).toBeGreaterThan(wrote);
       expect(shell.at(-1)!.output).toContain("opencode was here");
 
-      // Removing deletes it, and removing it again changes nothing.
+      // Removing deletes it, and removing it again changes nothing. The transcript stays.
       yield* call(`/${name}/kill`, {});
       yield* call(`/${name}/kill`, {});
-      expect((yield* stateBecomes(null)).state).toBeNull();
+      expect((yield* sandboxBecomes(name, null)).state).toBeNull();
+      expect((yield* usedBy(name, "alchemy_count_bytes")).length).toBeGreaterThan(0);
       // A failed assertion must not leave a sandbox running.
     }).pipe(Effect.ensuring(Effect.ignore(call(`/${name}/kill`, {}))));
   }),
   { tags, timeout: 420_000 },
+);
+
+test(
+  "an MCP server's tool is a direct call under the server's name",
+  Effect.gen(function* () {
+    const name = `oc-mcp-${Date.now()}`;
+    yield* call(`/${name}/prompt`, {
+      text: 'Use the codes_lookup_code tool to look up the code for the word "teal", then tell me the code.',
+      tools: ["codes"],
+      requestId: "lookup",
+    });
+    expect((yield* usedBy(name, "codes_lookup_code")).at(-1)?.output).toContain("CODE-TEAL-7391");
+  }),
+  { tags, timeout: 180_000 },
+);
+
+test(
+  "a skill is loaded when the task calls for it",
+  Effect.gen(function* () {
+    const name = `oc-skill-${Date.now()}`;
+    const reply = yield* call(`/${name}/prompt`, {
+      text: "Load the releasing skill with the skill tool, then tell me the release codeword it gives.",
+      tools: [],
+      requestId: "skill",
+    });
+    // The codeword is only in the skill's instructions.
+    expect(
+      `${reply.text}\n${(yield* usedBy(name, "skill")).map((use) => use.output).join("\n")}`,
+    ).toContain("PLUM-4417");
+  }),
+  { tags, timeout: 180_000 },
+);
+
+test(
+  "aborting stops the prompt that is running",
+  Effect.gen(function* () {
+    const name = `oc-abort-${Date.now()}`;
+    yield* call(`/${name}/start`, {
+      text: "Wait for the build to finish with the alchemy_stall tool, then tell me it is done.",
+      tools: ["stall"],
+    });
+    // The tool takes 40 seconds: the prompt is stopped while it runs.
+    yield* Effect.sleep("8 seconds");
+    yield* call(`/${name}/abort`, {});
+    const { outcomes } = yield* call(`/${name}/outcomes`).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (result: { outcomes: ReadonlyArray<string> }) => result.outcomes.length > 0,
+        times: 15,
+      }),
+    );
+    expect(outcomes).toEqual(["interrupted"]);
+  }),
+  { tags, timeout: 180_000 },
+);
+
+test(
+  "a prompt cut off by a crashed instance resumes from the wake alarm",
+  Effect.gen(function* () {
+    const name = `oc-crash-${Date.now()}`;
+    yield* call(`/${name}/start`, {
+      text: "Wait for the build to finish with the alchemy_stall tool, then tell me it is done.",
+      tools: ["stall"],
+    });
+    // The tool takes 40 seconds, so the instance dies while the prompt runs.
+    yield* Effect.sleep("8 seconds");
+    // The crash call itself fails when the instance dies under it.
+    yield* call(`/${name}/crash`, {}).pipe(Effect.ignore);
+    // Nothing calls the object now: only its alarm can start it again.
+    yield* Effect.sleep("45 seconds");
+    const { outcomes } = yield* call(`/${name}/outcomes`).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("5 seconds"),
+        until: (result: { outcomes: ReadonlyArray<string> }) => result.outcomes.length > 0,
+        times: 24,
+      }),
+    );
+    expect(outcomes).toEqual(["succeeded"]);
+    expect((yield* usedBy(name, "alchemy_stall")).length).toBeGreaterThan(0);
+  }),
+  { tags, timeout: 240_000 },
+);
+
+test.provider(
+  "a harness given another harness's tool fails its deploy and says which Layer to provide",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const exit = yield* stack.deploy(OpenCodeWrongHarnessApi).pipe(Effect.exit);
+      expect(Exit.isFailure(exit)).toBe(true);
+      expect(Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "").toContain(
+        "AI.Tool/bash was given pi's tool, which only runs on that harness. Provide an OpenCode Layer for it (OpenCode.CodingTools) or your own.",
+      );
+      yield* stack.destroy();
+    }),
+  { tags, timeout: 180_000 },
 );
 
 /** The programs the session ran with `tool`, and what each returned. */

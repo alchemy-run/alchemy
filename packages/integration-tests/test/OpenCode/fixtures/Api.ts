@@ -49,6 +49,17 @@ export default class OpenCodeApi extends Cloudflare.Worker<OpenCodeApi>()(
             });
           case "state":
             return yield* HttpServerResponse.json({ state: yield* session.sandboxState(name!) });
+          case "start":
+            yield* session.start(name!, body.text, body.tools);
+            return yield* HttpServerResponse.json({ ok: true });
+          case "abort":
+            yield* session.abort(name!);
+            return yield* HttpServerResponse.json({ ok: true });
+          case "outcomes":
+            return yield* HttpServerResponse.json({ outcomes: yield* session.outcomes(name!) });
+          case "crash":
+            yield* session.crash().pipe(Effect.ignore);
+            return yield* HttpServerResponse.json({ ok: true });
           case "suspend":
             yield* session.suspend(name!);
             return yield* HttpServerResponse.json({ ok: true });

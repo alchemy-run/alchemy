@@ -166,6 +166,17 @@ export interface Session {
     text: string,
     options?: PromptOptions,
   ) => Effect.Effect<Reply, OpenCodeError | NotOnHarness, RuntimeContext>;
+  /**
+   * Give the session a prompt and return once it is stored, without
+   * waiting for the answer. The prompt runs on, and resumes if the instance
+   * is evicted; `wait` returns when the session has nothing left to run.
+   */
+  readonly submit: (
+    text: string,
+    options?: PromptOptions,
+  ) => Effect.Effect<void, OpenCodeError | NotOnHarness, RuntimeContext>;
+  /** Return once the session has nothing left to run. */
+  readonly wait: Effect.Effect<void, OpenCodeError, RuntimeContext>;
   /** Stop the prompt that is running. */
   readonly abort: Effect.Effect<void, OpenCodeError, RuntimeContext>;
   /** The session's transcript, oldest first. */
@@ -279,8 +290,12 @@ interface Built {
 
 /** How long OpenCode stays open after its last call with nothing running. */
 const IDLE_CLOSE = Duration.seconds(30);
-/** How long one alarm waits on a running prompt before the next takes over. */
-const WAKE_SLICE = Duration.minutes(5);
+/**
+ * How long one alarm waits on a running prompt before the next takes over.
+ * An instance evicted during the wait starts again at the next alarm, so
+ * this is also about how long a cut-off prompt takes to resume.
+ */
+const WAKE_SLICE = Duration.seconds(30);
 
 /** The harness's own tool that runs a program, under a shared convention. */
 const CODEMODE_TOOL = "codemode";
@@ -1001,7 +1016,7 @@ export const Harness = <
                 // the wait leaves it to start this instance again.
                 yield* wake!.schedule(sessionID, {
                   payload: sessionID,
-                  after: Duration.sum(WAKE_SLICE, Duration.seconds(30)),
+                  after: Duration.sum(WAKE_SLICE, Duration.seconds(10)),
                 });
                 if ((yield* active).has(sessionID)) {
                   yield* use((client) => client.experimental.session.wait({ sessionID })).pipe(
@@ -1219,7 +1234,8 @@ export const Harness = <
           );
 
     const session = (sessionName: string, defaults: PromptOptions = {}): Session => {
-      const run = (text: string, chosen: PromptOptions) =>
+      /** Give the session a prompt; `waits` says whether to stay for its answer. */
+      const run = (text: string, chosen: PromptOptions, waits: boolean) =>
         Effect.gen(function* () {
           if (
             chosen.model !== undefined &&
@@ -1255,6 +1271,7 @@ export const Harness = <
           const before = (yield* transcript(sessionID)).length;
           yield* use((client) => client.session.prompt({ sessionID, text }), "prompt");
           yield* armWake(sessionID);
+          if (!waits) return { text: "", messages: [] } satisfies Reply;
           yield* use((client) => client.experimental.session.wait({ sessionID }), "wait");
           const messages = (yield* transcript(sessionID)).slice(before);
           const idle = messages.findLast((message) => message.type === "idle") as
@@ -1275,16 +1292,21 @@ export const Harness = <
         prompt: (text, promptOptions = {}) =>
           Effect.gen(function* () {
             const chosen = { ...defaults, ...promptOptions };
-            if (chosen.requestId === undefined) return yield* run(text, chosen);
+            if (chosen.requestId === undefined) return yield* run(text, chosen, true);
             // The first call runs the prompt; a retry waits for that run.
             yield* build;
             let running = prompts.get(chosen.requestId);
             if (running === undefined) {
-              running = Effect.runPromiseExitWith(base!)(run(text, chosen));
+              running = Effect.runPromiseExitWith(base!)(run(text, chosen, true));
               prompts.set(chosen.requestId, running);
             }
             return yield* yield* Effect.promise(() => running!);
           }),
+        submit: (text, promptOptions = {}) =>
+          Effect.asVoid(run(text, { ...defaults, ...promptOptions }, false)),
+        wait: Effect.flatMap(sessionIdOf(sessionName), (sessionID) =>
+          use((client) => client.experimental.session.wait({ sessionID }), "wait"),
+        ).pipe(Effect.ensuring(closeSoon)),
         abort: Effect.flatMap(sessionIdOf(sessionName), (sessionID) =>
           Effect.asVoid(use((client) => client.session.interrupt({ sessionID }))),
         ),
