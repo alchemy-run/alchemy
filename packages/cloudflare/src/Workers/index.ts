@@ -9,6 +9,7 @@ export * from "./BrowserBinding.ts";
 export * from "./BrowserLocal.ts";
 export * from "./Cache.ts";
 export * from "./ConfigProvider.ts";
+export * from "./Connect.ts";
 export * from "./CronEventSource.ts";
 export * from "./DurableObject.ts";
 export * from "./DurableObjectBridge.ts";

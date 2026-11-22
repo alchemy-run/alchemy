@@ -1,0 +1,189 @@
+---
+title: "Part 2: A sandbox with the repository"
+description: Give each issue's conversation a Boat sandbox that starts with the repository cloned, and Pi's coding tools to read it with.
+sidebar:
+  order: 2
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+The agent needs to read the repository to answer a question about it. A Durable Object can't hold a checkout or run `grep`, so each issue gets a sandbox, and Pi's coding tools to work in it. Every sandbox starts from a snapshot that already has the repository cloned.
+
+## Install
+
+<PackageManagers add="@alchemy.run/boat @alchemy.run/github" />
+
+## Say where sandboxes run
+
+An `AI.Sandboxes` Layer says where sandboxes run. `@alchemy.run/ai` has one for Boat, which takes the snapshot sandboxes start from:
+
+```typescript title="src/Sandbox.ts"
+import * as AIBoat from "@alchemy.run/ai/Boat";
+import * as Boat from "@alchemy.run/boat";
+
+export const Sandbox = AIBoat.Sandboxes(Boat.Snapshot("Base", { run: ["git --version"] }));
+```
+
+The harness asks the Layer for a sandbox by a key, one for each conversation. The Layer finds the sandbox labelled with that key, or creates one from `Base`. Boat stops a sandbox ten minutes after its last use and keeps its disk, and the Layer resumes it when the conversation comes back.
+
+## Or another platform
+
+Boat is one of five platforms with a Layer in `@alchemy.run/ai`. E2B, Daytona, Modal and Archil each swap in the same way: two imports and the image.
+
+```diff lang="typescript"
+-import * as AIBoat from "@alchemy.run/ai/Boat";
+-import * as Boat from "@alchemy.run/boat";
++import * as AIE2B from "@alchemy.run/ai/E2B";
++import * as E2B from "@alchemy.run/e2b";
+
+-export const Sandbox = AIBoat.Sandboxes(Boat.Snapshot("Base", { run: ["git --version"] }));
++export const Sandbox = AIE2B.Sandboxes(E2B.Template("Base", { image: "node:22-bookworm" }));
+```
+
+The rest of this tutorial uses Boat. See [Sandbox platforms](/ai/sandbox-platforms) for each one, or [Build your own](/ai/custom-sandboxes).
+
+## Give the harness the coding tools
+
+List the coding tools on the harness, and provide Pi's implementation of them with the sandbox Layer:
+
+```diff lang="typescript"
++import * as AI from "@alchemy.run/ai";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Fast, FastLive } from "./models.ts";
++import { Sandbox } from "./Sandbox.ts";
+
+-const HarnessLive = Layer.mergeAll(FastLive, PiCloudflare.DurableObjectStorage);
++const HarnessLive = Layer.mergeAll(
++  FastLive,
++  PiCloudflare.DurableObjectStorage,
++  Pi.CodingTools.pipe(Layer.provideMerge(Sandbox)),
++);
+
+export default class Issue extends Cloudflare.DurableObject<Issue>()(
+  "Issue",
+  Effect.gen(function* () {
+-    const harness = yield* Pi.Harness({ models: [Fast] });
++    const harness = yield* Pi.Harness({ models: [Fast], tools: [AI.CodingTools] });
+```
+
+`AI.CodingTools` names `bash`, `read`, `edit`, `write`, `grep` and `glob`. `Pi.CodingTools` is Pi's implementation of each, and it needs the sandboxes, which `Layer.provideMerge` gives it.
+
+## Declare the repository
+
+Declare the repository the bot works on. Use your own account as `owner`:
+
+```typescript title="src/Repo.ts"
+import * as GitHub from "@alchemy.run/github";
+
+export const owner = "acme";
+export const repository = "issue-bot-demo";
+
+export const Repo = GitHub.Repository("Repo", {
+  owner,
+  name: repository,
+  visibility: "public",
+  autoInit: true,
+});
+```
+
+The deploy creates the repository with a README. It is public, so a sandbox can clone it without a token.
+
+## Clone it into the snapshot
+
+Replace the `Base` snapshot with one that clones the repository to `~/repo`:
+
+```diff lang="typescript"
+import * as AIBoat from "@alchemy.run/ai/Boat";
+import * as Boat from "@alchemy.run/boat";
++import * as Output from "alchemy/Output";
++import * as Effect from "effect/Effect";
++import { Repo } from "./Repo.ts";
+
+-export const Sandbox = AIBoat.Sandboxes(Boat.Snapshot("Base", { run: ["git --version"] }));
++export const Sandbox = AIBoat.Sandboxes(
++  Effect.gen(function* () {
++    const repo = yield* Repo;
++    return yield* Boat.Snapshot("Checkout", {
++      run: [Output.interpolate`git clone ${repo.cloneUrl} ~/repo`],
++    });
++  }),
++);
+```
+
+The Layer takes the snapshot as a declaration or as an Effect that returns one. This one yields the repository first, so the deploy creates the repository and builds the snapshot after.
+
+## Let the conversation read, not write
+
+The bot answers questions, so its conversation gets the tools that read. Tell the model where the repository is:
+
+```diff lang="typescript"
+-const instructions = "You answer issues on a GitHub repository.";
++const instructions = [
++  "You answer issues on a GitHub repository.",
++  "The repository is cloned at /home/user/repo. Read the files that matter with your tools before you answer.",
++].join("\n");
+```
+
+```diff lang="typescript"
+opened: Effect.fn(function* (
+  issue: { readonly number: number; readonly title: string; readonly body: string },
+  deliveryId: string,
+) {
+-  const conversation = yield* harness.createConversation({ name: "issue", instructions });
++  const conversation = yield* harness.createConversation({
++    name: "issue",
++    tools: [AI.Bash, AI.Read, AI.Grep],
++    instructions,
++  });
+```
+
+## Add the providers
+
+The Stack now deploys to Boat and GitHub too, and declares the repository:
+
+```diff lang="typescript"
++import * as Boat from "@alchemy.run/boat";
+import * as Cloudflare from "@alchemy.run/cloudflare";
++import * as GitHub from "@alchemy.run/github";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
+import Bot from "./src/Bot.ts";
++import { Repo } from "./src/Repo.ts";
+
+export default Alchemy.Stack(
+  "IssueBot",
+-  { providers: Cloudflare.providers(), state: Cloudflare.state() },
++  {
++    providers: Layer.mergeAll(Cloudflare.providers(), Boat.providers(), GitHub.providers()),
++    state: Cloudflare.state(),
++  },
+  Effect.gen(function* () {
++    const repo = yield* Repo;
+    const bot = yield* Bot;
+-    return { url: bot.url };
++    return { url: bot.url, repository: repo.htmlUrl };
+  }),
+);
+```
+
+## Deploy and try it
+
+<PackageManagers run="alchemy deploy" />
+
+The first deploy builds the snapshot, which takes a couple of minutes. Then ask about a file:
+
+```sh
+curl -X POST "$URL/issues/8" -d '{"title":"README","body":"What does README.md say?"}'
+curl "$URL/issues/8"
+```
+
+The first answer on a new issue waits for its sandbox to start and for Pi's daemon to install there. The transcript then shows a `read` call on `/home/user/repo/README.md`, its result, and an answer taken from the file.
+
+## Next
+
+[Part 3](/pi/tutorial/part-3) connects the bot to the repository's issues.

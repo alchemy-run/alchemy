@@ -483,7 +483,11 @@ systemctl enable --now docker
 
 # AWS CLI — preinstalled on Amazon Linux 2023; install v2 otherwise.
 command -v aws >/dev/null 2>&1 || {
-  command -v unzip >/dev/null 2>&1 || (apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y unzip) || true
+  command -v unzip >/dev/null 2>&1 || {
+    (command -v dnf >/dev/null 2>&1 && dnf install -y unzip) \
+      || (command -v yum >/dev/null 2>&1 && yum install -y unzip) \
+      || (command -v apt-get >/dev/null 2>&1 && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y unzip) || true
+  }
   curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip \
     && (cd /tmp && unzip -q -o awscliv2.zip && ./aws/install) || true
 }
@@ -567,7 +571,7 @@ systemctl enable --now ${unitName}.service
     roleName: string;
     managedPolicyArns: string[];
   }) {
-    const { accountId } = yield* AWSEnvironment.current;
+    const { accountId, partition } = yield* AWSEnvironment.current;
     const tags = yield* createInternalTags(id);
     const role = yield* iam
       .createRole({
@@ -605,7 +609,7 @@ systemctl enable --now ${unitName}.service
       managedPolicyArns,
     });
 
-    return role.Role?.Arn ?? `arn:aws:iam::${accountId}:role/${roleName}`;
+    return role.Role?.Arn ?? `arn:${partition}:iam::${accountId}:role/${roleName}`;
   });
 
   const ensureManagedInstanceProfile = Effect.fn(function* ({
@@ -683,11 +687,12 @@ systemctl enable --now ${unitName}.service
         })) ?? [],
     );
 
+    const { partition } = yield* AWSEnvironment.current;
     policyStatements.push({
       Sid: undefined,
       Effect: "Allow",
       Action: ["s3:GetObject"],
-      Resource: [`arn:aws:s3:::${yield* Assets.BucketName}/${assetPrefix}/*`],
+      Resource: [`arn:${partition}:s3:::${yield* Assets.BucketName}/${assetPrefix}/*`],
     });
 
     yield* iam.putRolePolicy({

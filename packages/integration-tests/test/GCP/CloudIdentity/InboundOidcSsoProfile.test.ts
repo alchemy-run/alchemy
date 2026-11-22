@@ -48,11 +48,9 @@ test.provider.skipIf(!!process.env.GCP_TEST_CLOUDIDENTITY)(
 
       const error = yield* Effect.flip(
         cloudidentity.createInboundOidcSsoProfiles({
-          body: {
-            customer,
-            displayName: "Alchemy OIDC Probe",
-            idpConfig: { issuerUri: "https://example.com" },
-          },
+          customer,
+          displayName: "Alchemy OIDC Probe",
+          idpConfig: { issuerUri: "https://example.com" },
         }),
       );
       expect(error._tag).toEqual("ServiceDisabled");

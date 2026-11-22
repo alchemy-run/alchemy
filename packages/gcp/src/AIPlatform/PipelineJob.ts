@@ -369,20 +369,18 @@ export const PipelineJobProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsPipelineJobs({
+            displayName: news.displayName ?? jobId,
+            labels: desiredLabels,
+            pipelineSpec: news.pipelineSpec,
+            templateUri: news.templateUri,
+            runtimeConfig: news.runtimeConfig,
+            serviceAccount: news.serviceAccount,
+            network: news.network,
+            reservedIpRanges: news.reservedIpRanges,
+            encryptionSpec: news.encryptionSpec,
+            preflightValidations: news.preflightValidations,
             parent: locationParent(env.project, location),
             pipelineJobId: jobId,
-            body: {
-              displayName: news.displayName ?? jobId,
-              labels: desiredLabels,
-              pipelineSpec: news.pipelineSpec,
-              templateUri: news.templateUri,
-              runtimeConfig: news.runtimeConfig,
-              serviceAccount: news.serviceAccount,
-              network: news.network,
-              reservedIpRanges: news.reservedIpRanges,
-              encryptionSpec: news.encryptionSpec,
-              preflightValidations: news.preflightValidations,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;

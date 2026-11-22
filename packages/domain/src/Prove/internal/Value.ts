@@ -14,6 +14,8 @@ export interface Node {
 /** One parsed source file, and the same module loaded for its runtime values. */
 export interface Module {
   readonly path: string;
+  /** The file's text: a node's `start` and `end` are places in it. */
+  readonly source: string;
   readonly lineStarts: ReadonlyArray<number>;
   readonly program: Node;
   readonly declarations: ReadonlyMap<string, Declaration>;

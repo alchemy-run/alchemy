@@ -1,0 +1,194 @@
+---
+title: Azure OpenAI
+description: Deploy gpt-4.1-mini and an embeddings model on an Azure AI services account, and call them from a Function with its managed identity, with no API key.
+---
+
+Create an Azure AI services account, deploy models on it, and bind the
+account to your Function. The Function calls Azure OpenAI as its own
+managed identity, so there is no API key to store or rotate.
+
+## Create an account and a model
+
+```typescript
+// src/resources.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export const CHAT_DEPLOYMENT = "chat";
+
+export const OpenAI = Azure.CognitiveServices.Account("OpenAI");
+
+export const Chat = Effect.gen(function* () {
+  const account = yield* OpenAI;
+  return yield* Azure.CognitiveServices.Deployment("Chat", {
+    account: account.accountName,
+    name: CHAT_DEPLOYMENT,
+    model: { format: "OpenAI", name: "gpt-4.1-mini", version: "2025-04-14" },
+    sku: { name: "GlobalStandard", capacity: 10 },
+  });
+});
+```
+
+You get an `AIServices` account on the `S0` tier, billed per call and $0
+while idle. Its custom subdomain lets a Function call it with a Microsoft
+Entra token. `capacity: 10` is 10K tokens per minute. Clients address the
+deployment by its `name`.
+
+:::caution[Changing the deployment's `name` or `model.name` replaces it]
+Clients that send the old name fail until they switch.
+:::
+
+## Add an embeddings model
+
+An account runs one deployment operation at a time, so the second
+deployment waits for the first:
+
+```diff lang="typescript"
+// src/resources.ts
+export const CHAT_DEPLOYMENT = "chat";
++export const EMBEDDING_DEPLOYMENT = "embeddings";
++
++export const Embeddings = Effect.gen(function* () {
++  const account = yield* OpenAI;
++  yield* Chat;
++  return yield* Azure.CognitiveServices.Deployment("Embeddings", {
++    account: account.accountName,
++    name: EMBEDDING_DEPLOYMENT,
++    model: { format: "OpenAI", name: "text-embedding-3-small", version: "1" },
++    sku: { name: "GlobalStandard", capacity: 10 },
++  });
++});
+```
+
+## Bind it to a Function
+
+`OpenAICreateChatCompletion` returns a callable that takes the deployment
+name and the messages:
+
+```typescript
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { CHAT_DEPLOYMENT, Chat, OpenAI } from "./resources.ts";
+
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const account = yield* OpenAI;
+    yield* Chat;
+    const chat = yield* Azure.CognitiveServices.OpenAICreateChatCompletion(account);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const { prompt } = (yield* request.json) as { prompt: string };
+
+        const reply = yield* chat({
+          deploymentId: CHAT_DEPLOYMENT,
+          messages: [{ role: "user", content: prompt }],
+        });
+        if (reply.object !== "chat.completion") {
+          return yield* HttpServerResponse.json({ error: reply.object }, { status: 502 });
+        }
+        return yield* HttpServerResponse.json({ text: reply.choices[0]?.message.content ?? "" });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Azure.CognitiveServices.OpenAICreateChatCompletionHttp)),
+) {}
+```
+
+The binding assigns the Function's identity a custom role with one data
+action, `OpenAI/deployments/chat/completions/action`, on this account
+only. `yield* Chat` makes the Function wait for the deployment.
+
+## Tune a request
+
+System messages and generation settings go on each call:
+
+```typescript
+const reply = yield* chat({
+  deploymentId: CHAT_DEPLOYMENT,
+  messages: [
+    { role: "system", content: "Answer in one sentence." },
+    { role: "user", content: prompt },
+  ],
+  max_tokens: 200,
+  temperature: 0,
+});
+```
+
+## Embed text
+
+```typescript
+// init
+const embed = yield* Azure.CognitiveServices.OpenAICreateEmbedding(account);
+
+// runtime
+const result = yield* embed({ deploymentId: EMBEDDING_DEPLOYMENT, input: ["hello", "world"] });
+const vectors = result.data.map((item) => item.embedding);
+```
+
+Provide `Azure.CognitiveServices.OpenAICreateEmbeddingHttp`. It assigns a
+role with only `OpenAI/deployments/embeddings/action`.
+`text-embedding-3-small` returns 1536 dimensions.
+
+## Handle rejected prompts
+
+A bad parameter or a content-filtered prompt fails with `BadRequest`. A
+throttled call fails with `TooManyRequests`:
+
+```typescript
+.pipe(
+  Effect.catchTag("BadRequest", (error) =>
+    HttpServerResponse.json({ error: error.message }, { status: 400 }),
+  ),
+  Effect.catchTag("TooManyRequests", (error) =>
+    HttpServerResponse.json({ error: error.message }, { status: 429 }),
+  ),
+)
+```
+
+## The first requests after a deploy
+
+Azure OpenAI answers `401` until the role assignments reach it, a few
+minutes after the first deploy. Retry the first call in tests.
+
+## Quota and regions
+
+Deployments use your subscription's model quota, in tokens per minute,
+in the account's region. Azure free trial subscriptions have no Azure
+OpenAI quota. Pick the region with `location`:
+
+```typescript
+export const OpenAI = Azure.CognitiveServices.Account("OpenAI", { location: "eastus2" });
+```
+
+## More operations
+
+Each Azure OpenAI operation has its own binding, with a role for just
+that call: `OpenAICreateCompletion`, `OpenAICreateImageGeneration`,
+`OpenAICreateTranscription`, `OpenAICreateTranslation`,
+`OpenAICreateBatch`, `OpenAIUploadFile`, `OpenAICreateFineTuning`, and
+more. Provide the matching `*Http` layer for each.
+
+## Destroying an account
+
+Azure soft-deletes an account and keeps its name for 48 hours. Alchemy
+purges it on destroy, so you can reuse the name at once.
+
+## Example
+
+[`examples/azure-openai`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-openai)
+is a chat and embeddings API with a live test.
+
+## Where next
+
+- [Azure Functions](/azure/compute/functions) — the runtime the account
+  is bound to.
+- [Identity & bindings](/azure/security/identity) — how the custom roles
+  work.
+- [CognitiveServices reference](/providers/azure/cognitiveservices#account)
+  — every account, deployment, and binding.

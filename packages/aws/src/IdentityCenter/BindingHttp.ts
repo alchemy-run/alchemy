@@ -2,6 +2,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import type { Partition } from "../Partition.ts";
 import type { Instance } from "./Instance.ts";
 
 /**
@@ -52,8 +53,9 @@ export const makeIdentityStoreHttpBinding = <
     return Effect.fn(function* (instance: Instance) {
       const IdentityStoreId = yield* instance.identityStoreId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const { accountId } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+        const { accountId, partition } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
           accountId: string;
+          partition: Partition;
         }>;
         yield* bind`${options.tag}(${instance})`({
           policyStatements: [
@@ -61,13 +63,13 @@ export const makeIdentityStoreHttpBinding = <
               Effect: "Allow",
               Action: [...options.actions],
               Resource: [
-                Output.interpolate`arn:aws:identitystore::${accountId}:identitystore/${instance.identityStoreId}`,
+                Output.interpolate`arn:${partition}:identitystore::${accountId}:identitystore/${instance.identityStoreId}`,
                 // Identity Store sub-resources are region-less and
                 // account-less; the concrete user/group/membership ids
                 // are chosen per request at runtime.
-                "arn:aws:identitystore:::user/*",
-                "arn:aws:identitystore:::group/*",
-                "arn:aws:identitystore:::membership/*",
+                `arn:${partition}:identitystore:::user/*`,
+                `arn:${partition}:identitystore:::group/*`,
+                `arn:${partition}:identitystore:::membership/*`,
               ],
             },
           ],
@@ -120,8 +122,8 @@ export const makeIdentityCenterInstanceHttpBinding = <
                 // Permission sets and target accounts are chosen per
                 // request at runtime; their ARNs are region-less and
                 // account-less.
-                "arn:aws:sso:::permissionSet/*",
-                "arn:aws:sso:::account/*",
+                AWSBindings.partitionArn("sso:::permissionSet/*"),
+                AWSBindings.partitionArn("sso:::account/*"),
               ],
             },
           ],

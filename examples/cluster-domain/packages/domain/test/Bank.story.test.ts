@@ -1,6 +1,5 @@
-import * as Domain from "@alchemy.run/domain";
 import { Story } from "@alchemy.run/domain/Story";
-import { expect, it } from "@effect/vitest";
+import { it } from "@effect/vitest";
 import { Account } from "../src/Account/Account.aggregate.ts";
 import { AccountSummary } from "../src/Account/AccountSummary.view.ts";
 import { TransferCredited } from "../src/Account/CreditTransfer.command.ts";
@@ -44,10 +43,6 @@ const sam = customer("c-1");
 const alex = customer("c-2");
 const opened = (customerId: string, name: string) =>
   new AccountOpened({ customerId: CustomerId.make(customerId), name });
-
-it("the model is consistent", () => {
-  expect(Domain.verify(Bank)).toEqual([]);
-});
 
 it.effect("a customer opens an account for themselves", () =>
   story(

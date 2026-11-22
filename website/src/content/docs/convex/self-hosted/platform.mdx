@@ -3,9 +3,29 @@ title: Platform
 description: Share one network, load balancer, database server and buckets between stages.
 ---
 
+import PackageManagers from "../../../../components/PackageManagers.astro";
+import Tree from "../../../../components/diagrams/Tree.astro";
+
 Give each stage its own backend without paying for its own network. `Convex.Platform` owns the VPC, ECS cluster, load balancer with a wildcard certificate, database server and five buckets. Each `Convex.Backend` adds its own service, hosts, instance secret, admin key, database, user and bucket prefix.
 
 [`examples/aws-convex-self-hosted`](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-convex-self-hosted) is a working copy of this page.
+
+<Tree
+  nodes={[
+    { id: "platform", label: "Convex", type: "Platform · previews.example.com", icon: "layers", areas: ["alb alice db", "alb pr db"], phoneAreas: ["alb alb", "alice pr", "db db"], colGap: 2.5 },
+    { id: "alb", label: "LoadBalancer", type: "*.cloud, *.site", parent: "platform", icon: "split" },
+    { id: "alice", label: "alice", type: "Backend · stage", parent: "platform", tone: "accent", icon: "server" },
+    { id: "pr", label: "pr-11", type: "Backend · stage", parent: "platform", icon: "server" },
+    { id: "db", label: "Database", type: "RDS Postgres", parent: "platform", icon: "brand:postgresql", specs: [["alice", "own database"], ["pr_11", "own database"]] },
+  ]}
+  links={[
+    { from: "alb", to: "alice", label: "routes" },
+    { from: "alb", to: "pr", label: "routes" },
+    { from: "alice", to: "db", label: "stores" },
+    { from: "pr", to: "db", label: "stores" },
+  ]}
+  caption="Every stage's backend shares the platform's load balancer, whose wildcard certificate covers each stage's hosts, and its database server, where each backend has its own database and user."
+/>
 
 ## Deploy the platform
 
@@ -36,9 +56,7 @@ export default Platform.make(
 );
 ```
 
-```sh
-CONVEX_DOMAIN=previews.example.com alchemy deploy stacks/platform.ts --stage dev
-```
+<PackageManagers script={`CONVEX_DOMAIN=previews.example.com {run} alchemy deploy stacks/platform.ts --stage dev`} />
 
 ## Add a stage
 
@@ -70,9 +88,7 @@ export default Alchemy.Stack(
 );
 ```
 
-```sh
-alchemy deploy --stage alice
-```
+<PackageManagers run="alchemy deploy --stage alice" />
 
 ## Find a stage's hosts
 

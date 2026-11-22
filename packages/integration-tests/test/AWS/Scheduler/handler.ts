@@ -225,9 +225,15 @@ export default SchedulerTestFunction.make(
             // run can't count as this one's retry.
             const now = yield* Effect.clockWith((clock) => clock.currentTimeMillis);
             const marker = callback === flaky ? `${id}#${now}` : id;
+            const every = url.searchParams.get("every");
             return yield* respond(
               callback
-                .schedule(id, { after, payload: { marker } })
+                .schedule(
+                  id,
+                  every === null
+                    ? { after, payload: { marker } }
+                    : { every: `${Number(every)} seconds`, payload: { marker } },
+                )
                 .pipe(Effect.andThen(callback.getStatus(id))),
             );
           }

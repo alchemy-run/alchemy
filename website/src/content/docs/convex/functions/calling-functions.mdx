@@ -1,59 +1,95 @@
 ---
 title: Calling functions
-description: Run queries, mutations and actions from a Worker or Lambda, and read usage, audit logs and data.
+description: Call Convex queries, mutations and actions from a Worker or Lambda, typed by their declarations, and read usage, audit logs and data.
 ---
 
-These bindings call Convex from any host. Each one takes the deployment, and returns a client you call at runtime.
+import Boundaries from "../../../../components/diagrams/Boundaries.astro";
 
-## Run a query
+A server calls a Convex function over HTTP, at the deployment's URL. Anyone with the URL can call a **public** function, and no key is needed. An **internal** function only answers other functions in the same deployment. Your functions decide what each caller may do, from the identity it sent.
 
-```typescript
-Effect.gen(function* () {
-  const list = yield* Convex.Query(Backend);
-  return {
-    fetch: Effect.gen(function* () {
-      return yield* HttpServerResponse.json(yield* list("messages:list"));
-    }),
-  };
-}).pipe(Effect.provide(Convex.QueryHttp));
+<Boundaries
+  nodes={[
+    { id: "api", label: "Api", type: "your Worker", col: 0, row: 0 },
+    { id: "list", label: "messages:list", type: "public query", col: 0, row: 1, tone: "accent" },
+    { id: "notify", label: "messages:notify", type: "internal action", col: 1, row: 1 },
+  ]}
+  zones={[{ id: "deployment", label: "prod", type: "deployment", nodes: ["list", "notify"], labelAt: "right" }]}
+  links={[
+    { from: "api", to: "list", label: "RunQuery" },
+    { from: "api", to: "deployment", kind: "blocked", label: "internal" },
+  ]}
+  caption="The Worker reaches the public query with the deployment's URL alone. An internal function only answers the deployment's own functions, like a mutation that schedules it."
+/>
+
+## Call a declared function
+
+Bind the deployment, then pass the function's [declaration](/convex/functions/queries-mutations-actions). Arguments, result and failure are typed by it:
+
+```typescript title="src/api.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Convex from "@alchemy.run/convex";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Backend } from "./backend.ts";
+import { ListMessages } from "./messages.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const list = yield* Convex.RunQuery(Backend);
+    return {
+      fetch: Effect.gen(function* () {
+        const messages = yield* list(ListMessages, { channel: "general" });
+        return yield* HttpServerResponse.json(messages);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Convex.RunQueryHttp)),
+) {}
 ```
 
-`Query`, `Mutation`, `Action` and `QueryBatch` grant nothing: public functions need no credentials.
+The arguments are encoded with the declaration's schema and the result decoded, so a `Date` field arrives as a `Date`. `RunQuery` grants nothing: the Worker gets the deployment's URL.
 
-## Run a mutation
+## Run a mutation or an action
+
+`RunMutation` and `RunAction` work the same way, and a declared failure arrives as its own tagged error:
 
 ```typescript
-const add = yield* Convex.Mutation(Backend);
-yield* add("messages:add", { body: "hello" });
+const add = yield* Convex.RunMutation(Backend);
+yield* add(AddMessage, { channel: "", body: "hi" }).pipe(
+  Effect.catchTag("EmptyChannel", () => Effect.log("pick a channel")),
+);
 ```
 
-## Run an action
+Provide `Convex.RunMutationHttp` and `Convex.RunActionHttp` beside `RunQueryHttp`. A mutation or action isn't retried, because a lost response could run it twice.
+
+## Call a function by path
+
+A function written without Alchemy, like one in another app, is called by its path. Arguments and results use Convex's JSON format, so `Int64` and `Bytes` arrive as tagged objects:
 
 ```typescript
-const ping = yield* Convex.Action(Backend);
-const reply = yield* ping("messages:ping", { n: 41 });
+const list = yield* Convex.RunQuery(Backend);
+const rows = yield* list("messages:list", { channel: "general" });
 ```
 
 ## Run several queries together
 
 ```typescript
-const batch = yield* Convex.QueryBatch(Backend);
+const batch = yield* Convex.RunQueryBatch(Backend);
 const [messages, user] = yield* batch([{ path: "messages:list" }, { path: "users:me" }]);
 ```
 
-Every query sees the same snapshot.
+Every query sees the same snapshot of the database.
 
 ## Handle a failure
 
-A function that throws fails with `ConvexFunctionError`:
+A function that throws, or doesn't exist, fails with `ConvexFunctionError`:
 
 ```typescript
 yield* list("messages:list").pipe(
   Effect.catchTag("ConvexFunctionError", (error) => Effect.log(error.path, error.message)),
 );
 ```
-
-Values use Convex's JSON format, so `Int64` and `Bytes` arrive as tagged objects.
 
 ## Read usage
 
@@ -81,3 +117,7 @@ const page = yield* data.sync({});
 ```
 
 The host gets a deploy key limited to `deployment:data:view` on this deployment, which reads every table. This needs the Professional plan. Below it, calls fail with `StreamingExportNotEnabled`.
+
+## Use Convex's own client
+
+To use the `convex` package's client in a Worker, give it the deployment's URLs with [Connect](/convex/functions/connect).

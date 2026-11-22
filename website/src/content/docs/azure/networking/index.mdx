@@ -1,0 +1,298 @@
+---
+title: Networking
+description: Create a virtual network and subnets, filter traffic, put VMs and Container Apps in it, reach Storage and Key Vault over private endpoints, and give outbound traffic a fixed IP.
+---
+
+Most Azure services your app uses, like Storage, Key Vault, Service Bus,
+and Cosmos DB, have public endpoints that check Microsoft Entra tokens.
+A Function needs no network setup to reach them. Create a virtual network
+when you need private IPs: a VM, a Container Apps environment in your own
+address space, or a service you close to the internet and reach over a
+private endpoint.
+
+## Create a virtual network
+
+```typescript
+// src/network.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export const Vnet = Azure.Network.VirtualNetwork("Vnet", {
+  addressPrefixes: ["10.0.0.0/16"],
+});
+
+export const AppSubnet = Effect.gen(function* () {
+  const vnet = yield* Vnet;
+  return yield* Azure.Network.Subnet("App", {
+    virtualNetwork: vnet.virtualNetworkName,
+    addressPrefix: "10.0.1.0/24",
+  });
+});
+```
+
+A new network uses Azure-provided DNS and has no public entry point.
+Azure reserves 5 addresses in every subnet, so a `/24` holds 251 hosts.
+Declare sibling subnets side by side. Alchemy retries while Azure writes
+them one at a time.
+
+:::caution[Changing `name` or `location` replaces the virtual network]
+The new network is empty. The old one can't be deleted while its subnets
+hold network interfaces or private endpoints, so those get replaced too,
+with new private IPs.
+:::
+
+## Filter traffic
+
+A network security group filters traffic to and from every resource in a
+subnet:
+
+```diff lang="typescript"
+// src/network.ts
++export const Nsg = Azure.Network.NetworkSecurityGroup("Nsg");
++
++export const AllowHttps = Effect.gen(function* () {
++  const nsg = yield* Nsg;
++  return yield* Azure.Network.SecurityRule("AllowHttps", {
++    networkSecurityGroup: nsg.networkSecurityGroupName,
++    priority: 100,
++    direction: "Inbound",
++    access: "Allow",
++    protocol: "Tcp",
++    sourceAddressPrefix: "Internet",
++    destinationPortRange: "443",
++  });
++});
++
+export const AppSubnet = Effect.gen(function* () {
+  const vnet = yield* Vnet;
++  const nsg = yield* Nsg;
+  return yield* Azure.Network.Subnet("App", {
+    virtualNetwork: vnet.virtualNetworkName,
+    addressPrefix: "10.0.1.0/24",
++    networkSecurityGroupId: nsg.networkSecurityGroupId,
+  });
+});
+```
+
+Rules with a lower `priority` number win.
+
+## Put a VM in it
+
+A VM joins the network through a network interface in a subnet:
+
+```typescript
+const nic = yield* Azure.Network.NetworkInterface("Nic", {
+  ipConfigurations: [{ subnetId: subnet.subnetId, publicIpAddressId: ip.publicIpAddressId }],
+  networkSecurityGroupId: nsg.networkSecurityGroupId,
+});
+```
+
+Leave out `publicIpAddressId` for a VM that only other resources in the
+network can reach. See [Virtual machines](/azure/compute/vms) for the
+whole server.
+
+## Run Container Apps in it
+
+Give the environment a subnet delegated to `Microsoft.App/environments`:
+
+```typescript
+const subnet = yield* Azure.Network.Subnet("Apps", {
+  virtualNetwork: vnet.virtualNetworkName,
+  addressPrefix: "10.0.2.0/23",
+  delegations: [{ serviceName: "Microsoft.App/environments" }],
+});
+const env = yield* Azure.ContainerApps.ManagedEnvironment("Environment", {
+  workloadProfiles: [{ name: "Consumption", workloadProfileType: "Consumption" }],
+  vnetConfiguration: { infrastructureSubnetId: subnet.subnetId },
+});
+```
+
+A workload profiles environment needs a subnet of at least `/27`. Apps in
+it reach private endpoints and VMs in the network.
+
+:::caution[Changing `vnetConfiguration` replaces the environment]
+Every app in the environment is replaced with it.
+:::
+
+## Keep apps off the internet
+
+Set `internal: true`. The apps answer only inside the network, at
+`env.staticIp`:
+
+```typescript
+const env = yield* Azure.ContainerApps.ManagedEnvironment("Environment", {
+  workloadProfiles: [{ name: "Consumption", workloadProfileType: "Consumption" }],
+  vnetConfiguration: { infrastructureSubnetId: subnet.subnetId, internal: true },
+});
+```
+
+## Reach a service privately
+
+A private endpoint gives a service a private IP in your subnet. A
+`privatelink.*` DNS zone makes the service's usual name resolve to it:
+
+```typescript
+// src/private-storage.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import { AppSubnet, Vnet } from "./network.ts";
+
+export const Files = Azure.Storage.StorageAccount("Files", {
+  publicNetworkAccess: "Disabled",
+});
+
+export const BlobZone = Azure.PrivateDns.Zone("BlobZone", {
+  name: "privatelink.blob.core.windows.net",
+});
+
+export const FilesEndpoint = Effect.gen(function* () {
+  const vnet = yield* Vnet;
+  const subnet = yield* AppSubnet;
+  const account = yield* Files;
+  const zone = yield* BlobZone;
+
+  yield* Azure.PrivateDns.VirtualNetworkLink("BlobZoneLink", {
+    privateZoneName: zone.privateZoneName,
+    virtualNetworkId: vnet.virtualNetworkId,
+  });
+  const endpoint = yield* Azure.Network.PrivateEndpoint("FilesBlob", {
+    subnetId: subnet.subnetId,
+    privateLinkServiceConnections: [
+      { privateLinkServiceId: account.storageAccountId, groupIds: ["blob"] },
+    ],
+  });
+  yield* Azure.Network.PrivateDnsZoneGroup("FilesBlobDns", {
+    privateEndpoint: endpoint.privateEndpointName,
+    privateDnsZoneConfigs: [{ privateDnsZoneId: zone.privateZoneId }],
+  });
+  return endpoint;
+});
+```
+
+`<account>.blob.core.windows.net` now resolves to the endpoint's private
+IP inside `Vnet`. With `publicNetworkAccess: "Disabled"` the endpoint is
+the only way in. Use one endpoint per storage service (`blob`, `queue`,
+`table`, `file`).
+
+## Reach Key Vault privately
+
+Key Vault uses the `vault` group ID and the
+`privatelink.vaultcore.azure.net` zone:
+
+```typescript
+const vault = yield* Azure.KeyVault.Vault("Vault", { publicNetworkAccess: "Disabled" });
+const endpoint = yield* Azure.Network.PrivateEndpoint("VaultEndpoint", {
+  subnetId: subnet.subnetId,
+  privateLinkServiceConnections: [{ privateLinkServiceId: vault.vaultId, groupIds: ["vault"] }],
+});
+```
+
+Add a zone, a link, and a zone group as above.
+
+## Route a Web App through the network
+
+`Azure.Functions.Function` takes no subnet. Host code that must reach a
+private endpoint on a Web App, a Container App, or a VM. A Web App sends
+its outbound traffic through a subnet delegated to
+`Microsoft.Web/serverFarms`:
+
+```typescript
+const outbound = yield* Azure.Network.Subnet("WebOut", {
+  virtualNetwork: vnet.virtualNetworkName,
+  addressPrefix: "10.0.4.0/26",
+  delegations: [{ serviceName: "Microsoft.Web/serverFarms" }],
+});
+const api = yield* Azure.Web.WebApp("Api", {
+  main: "./src/api.ts",
+  virtualNetworkSubnetId: outbound.subnetId,
+});
+```
+
+## Give outbound traffic a fixed IP
+
+A NAT gateway sends every outbound connection from its subnets through
+static public IPs, so partners can allowlist you:
+
+```typescript
+const ip = yield* Azure.Network.PublicIpAddress("Egress");
+const nat = yield* Azure.Network.NatGateway("Egress", {
+  publicIpAddressIds: [ip.publicIpAddressId],
+});
+const subnet = yield* Azure.Network.Subnet("App", {
+  virtualNetwork: vnet.virtualNetworkName,
+  addressPrefix: "10.0.1.0/24",
+  natGatewayId: nat.natGatewayId,
+});
+```
+
+`ip.ipAddress` is the subnet's outbound address. A NAT gateway bills
+hourly (about $0.045/h) plus processed data.
+
+## Connect two networks
+
+A peering is one-way. Create one on each side:
+
+```typescript
+const hub = yield* Azure.Network.VirtualNetwork("Hub", { addressPrefixes: ["10.0.0.0/16"] });
+const spoke = yield* Azure.Network.VirtualNetwork("Spoke", { addressPrefixes: ["10.1.0.0/16"] });
+yield* Azure.Network.VirtualNetworkPeering("HubToSpoke", {
+  virtualNetwork: hub.virtualNetworkName,
+  remoteVirtualNetworkId: spoke.virtualNetworkId,
+});
+yield* Azure.Network.VirtualNetworkPeering("SpokeToHub", {
+  virtualNetwork: spoke.virtualNetworkName,
+  remoteVirtualNetworkId: hub.virtualNetworkId,
+});
+```
+
+The address spaces must not overlap.
+
+## Name your own hosts
+
+A private DNS zone answers only inside the networks linked to it. With
+`registrationEnabled`, VMs add their own records:
+
+```typescript
+const zone = yield* Azure.PrivateDns.Zone("Internal", { name: "internal.contoso.com" });
+yield* Azure.PrivateDns.VirtualNetworkLink("VnetInternal", {
+  privateZoneName: zone.privateZoneName,
+  virtualNetworkId: vnet.virtualNetworkId,
+  registrationEnabled: true,
+});
+```
+
+## Host a public domain
+
+An `Azure.Dns.Zone` serves a domain from Azure's name servers:
+
+```typescript
+const zone = yield* Azure.Dns.Zone("Contoso", { name: "contoso.com" });
+yield* Azure.Dns.RecordSet("Www", {
+  zoneName: zone.zoneName,
+  recordType: "A",
+  name: "www",
+  aRecords: ["203.0.113.10"],
+});
+```
+
+Return `zone.nameServers` from your Stack and enter them at your
+registrar. The zone answers public queries only after that.
+
+## The full toolkit
+
+The `Azure.Network` namespace also has load balancers, application
+gateways, Azure Firewall, Bastion, VPN and ExpressRoute gateways, and
+Virtual WAN. See the [Network reference](/providers/azure/network).
+
+## Example
+
+[`examples/azure-vm`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-vm)
+puts a VM behind a network security group in its own virtual network.
+
+## Where next
+
+- [Virtual machines](/azure/compute/vms) — a server in your network.
+- [Container Apps](/azure/compute/container-apps) — apps and jobs in an
+  environment.
+- [Key Vault](/azure/security/key-vault) — a vault you can close to the
+  internet.

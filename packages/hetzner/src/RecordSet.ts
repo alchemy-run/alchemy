@@ -1,9 +1,11 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
+import * as ZoneRrsetActions from "@distilled.cloud/hetzner/zone_rrset_actions";
+import * as ZoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
 import type {
   CreateZoneRrsetRequestRecordsItem,
   GetZoneRrsetResponseRrset,
   ListZoneRrsetsResponseRrsetsItem,
 } from "@distilled.cloud/hetzner/zone_rrsets";
+import * as Zones from "@distilled.cloud/hetzner/zones";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -333,18 +335,16 @@ const retryLocked = <A, E extends { readonly _tag: string }, R>(effect: Effect.E
   effect.pipe(Effect.retry({ while: (e) => e._tag === "Locked", times: 8, schedule: backoff }));
 
 const getRrset = (zoneId: number, name: string, type: string) =>
-  Hetzner.zoneRrsets
-    .getZoneRrset({ id_or_name: String(zoneId), rr_name: name, rr_type: type })
-    .pipe(
-      Effect.map(({ rrset }) => rrset),
-      Effect.catchTag("NotFound", () => Effect.undefined),
-    );
+  ZoneRrsets.getZoneRrset({ id_or_name: String(zoneId), rr_name: name, rr_type: type }).pipe(
+    Effect.map(({ rrset }) => rrset),
+    Effect.catchTag("NotFound", () => Effect.undefined),
+  );
 
 const findByLabels = (zoneId: number, id: string) =>
   Effect.gen(function* () {
     const selector = labelSelector(yield* createInternalLabels(id));
     if (selector.length === 0) return undefined;
-    return yield* Hetzner.zoneRrsets.listZoneRrsets
+    return yield* ZoneRrsets.listZoneRrsets
       .items({ id_or_name: String(zoneId), label_selector: selector, per_page: 100 })
       .pipe(
         Stream.take(1),
@@ -358,11 +358,11 @@ export const RecordSetProvider = () =>
     stables: ["id", "zoneId", "name", "type"],
     nuke: { dependsOn: ["Hetzner.Zone"] },
     list: Effect.fn(function* () {
-      const zones = yield* Hetzner.zones.listZones.items({ per_page: 50 }).pipe(Stream.runCollect);
+      const zones = yield* Zones.listZones.items({ per_page: 50 }).pipe(Stream.runCollect);
       const rows = yield* Effect.forEach(
         [...zones],
         (zone) =>
-          Hetzner.zoneRrsets.listZoneRrsets
+          ZoneRrsets.listZoneRrsets
             .items({
               id_or_name: String(zone.id),
               label_selector: alchemyStackSelector,
@@ -395,16 +395,14 @@ export const RecordSetProvider = () =>
       return undefined;
     }),
     lookup: Effect.fn(function* ({ zone, name, type }) {
-      const found = yield* Hetzner.zoneRrsets
-        .getZoneRrset({
-          id_or_name: zone,
-          rr_name: normalizeName(name),
-          rr_type: normalizeType(type),
-        })
-        .pipe(
-          Effect.map(({ rrset }) => rrset),
-          Effect.catchTag("NotFound", () => Effect.undefined),
-        );
+      const found = yield* ZoneRrsets.getZoneRrset({
+        id_or_name: zone,
+        rr_name: normalizeName(name),
+        rr_type: normalizeType(type),
+      }).pipe(
+        Effect.map(({ rrset }) => rrset),
+        Effect.catchTag("NotFound", () => Effect.undefined),
+      );
       return found === undefined ? undefined : toAttrs(found);
     }),
 
@@ -464,24 +462,22 @@ export const RecordSetProvider = () =>
       // 2. Ensure
       if (current === undefined) {
         const created = yield* retryLocked(
-          Hetzner.zoneRrsets
-            .createZoneRrset({
-              id_or_name: String(zoneId),
-              name,
-              type,
-              records: toWireRecords(desiredRecords),
-              labels,
-              ...(news.ttl !== undefined ? { ttl: news.ttl } : {}),
-            })
-            .pipe(
-              Effect.catchTag("Conflict", () =>
-                getRrset(zoneId, name, type).pipe(
-                  Effect.map((rrset) =>
-                    rrset !== undefined ? { rrset, action: undefined } : undefined,
-                  ),
+          ZoneRrsets.createZoneRrset({
+            id_or_name: String(zoneId),
+            name,
+            type,
+            records: toWireRecords(desiredRecords),
+            labels,
+            ...(news.ttl !== undefined ? { ttl: news.ttl } : {}),
+          }).pipe(
+            Effect.catchTag("Conflict", () =>
+              getRrset(zoneId, name, type).pipe(
+                Effect.map((rrset) =>
+                  rrset !== undefined ? { rrset, action: undefined } : undefined,
                 ),
               ),
             ),
+          ),
         );
         if (created === undefined) {
           current = yield* getRrset(zoneId, name, type);
@@ -503,7 +499,7 @@ export const RecordSetProvider = () =>
       const observedLabels = tagRecord(current.labels);
       if (!labelsEqual(observedLabels, labels)) {
         const updated = yield* retryLocked(
-          Hetzner.zoneRrsets.updateZoneRrset({
+          ZoneRrsets.updateZoneRrset({
             id_or_name: zoneRef,
             rr_name: name,
             rr_type: type,
@@ -516,7 +512,7 @@ export const RecordSetProvider = () =>
       // Sync — TTL
       if (news.ttl !== undefined && news.ttl !== (current.ttl ?? undefined)) {
         const { action } = yield* retryLocked(
-          Hetzner.zoneRrsetActions.changeZoneRrsetTtl({
+          ZoneRrsetActions.changeZoneRrsetTtl({
             id_or_name: zoneRef,
             rr_name: name,
             rr_type: type,
@@ -530,7 +526,7 @@ export const RecordSetProvider = () =>
       // Sync — records (order-insensitive; value identifies a record)
       if (!recordsEqual(current.records.map(compactRecord), desiredRecords)) {
         const { action } = yield* retryLocked(
-          Hetzner.zoneRrsetActions.setZoneRrsetRecords({
+          ZoneRrsetActions.setZoneRrsetRecords({
             id_or_name: zoneRef,
             rr_name: name,
             rr_type: type,
@@ -544,7 +540,7 @@ export const RecordSetProvider = () =>
       // Sync — change protection
       if (current.protection.change !== desiredProtection) {
         const { action } = yield* retryLocked(
-          Hetzner.zoneRrsetActions.changeZoneRrsetProtection({
+          ZoneRrsetActions.changeZoneRrsetProtection({
             id_or_name: zoneRef,
             rr_name: name,
             rr_type: type,
@@ -566,7 +562,7 @@ export const RecordSetProvider = () =>
 
       if (current.protection.change) {
         const { action } = yield* retryLocked(
-          Hetzner.zoneRrsetActions.changeZoneRrsetProtection({
+          ZoneRrsetActions.changeZoneRrsetProtection({
             id_or_name: String(zoneId),
             rr_name: name,
             rr_type: type,
@@ -577,9 +573,11 @@ export const RecordSetProvider = () =>
       }
 
       const deleted = yield* retryLocked(
-        Hetzner.zoneRrsets
-          .deleteZoneRrset({ id_or_name: String(zoneId), rr_name: name, rr_type: type })
-          .pipe(Effect.catchTag("NotFound", () => Effect.undefined)),
+        ZoneRrsets.deleteZoneRrset({
+          id_or_name: String(zoneId),
+          rr_name: name,
+          rr_type: type,
+        }).pipe(Effect.catchTag("NotFound", () => Effect.undefined)),
       );
       if (deleted !== undefined) {
         yield* waitForZoneAction(deleted.action.id);

@@ -6,9 +6,10 @@ import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { ensureDockerSwarm } from "../Docker/Runtime.ts";
-import { conformance, waitForReady } from "../Domain/conformance/conformance.ts";
+import { conformance, rebuild, waitForReady } from "../Domain/conformance/conformance.ts";
 import { latency } from "../Domain/conformance/latency.ts";
 import { DOMAIN_FRONT_PORT } from "./fixtures/domain-cluster.ts";
+import DomainFrontV1 from "./fixtures/domain-front-v1.ts";
 import DomainFront from "./fixtures/domain-front.ts";
 
 const testOptions = { providers: Layer.mergeAll(Docker.providers(), Rivet.providers()) };
@@ -18,6 +19,20 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const stack = Core.scratchStack(testOptions, "RivetDomain", import.meta.url);
 
 const url = `http://localhost:${DOMAIN_FRONT_PORT}`;
+
+/** Deploy the front over the model at `version`, and wait until it serves. */
+const deploy = (version: 0 | 1) =>
+  stack
+    .deploy(
+      Effect.gen(function* () {
+        const front = yield* version === 0 ? DomainFront : DomainFrontV1;
+        return { front: front.name };
+      }),
+    )
+    .pipe(
+      Effect.tap(() => waitForReady(url)),
+      Effect.map(({ front }) => front),
+    );
 
 // The Domain conformance suite, with the model on Rivet Durable Objects on a
 // local Docker control plane, called from a Docker service through the gateway.
@@ -29,14 +44,7 @@ describe.skipIf(!!process.env.FAST)(
       Effect.gen(function* () {
         yield* ensureDockerSwarm;
         if (!process.env.NO_DESTROY) yield* stack.destroy();
-        const outputs = yield* stack.deploy(
-          Effect.gen(function* () {
-            const front = yield* DomainFront;
-            return { front: front.name };
-          }),
-        );
-        expect(outputs.front).toBeTruthy();
-        yield* waitForReady(url);
+        expect(yield* deploy(0)).toBeTruthy();
       }),
       { timeout: 400_000 },
     );
@@ -49,6 +57,14 @@ describe.skipIf(!!process.env.FAST)(
       test,
       label: "Rivet (local Docker)",
       url: Effect.succeed(url),
+    });
+
+    // After the cases that read the model as deployed: it redeploys the front.
+    rebuild({
+      test,
+      url: Effect.succeed(url),
+      kind: "local",
+      deploy: (v) => Effect.asVoid(deploy(v)),
     });
   },
 );

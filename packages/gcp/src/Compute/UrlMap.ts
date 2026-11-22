@@ -387,15 +387,10 @@ export const UrlMapProvider = () =>
       let current = yield* getByName(env.project, urlMapName);
 
       if (current === undefined) {
-        yield* compute
-          .insertUrlMaps({
-            project: env.project,
-            body: desired,
-          })
-          .pipe(
-            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.undefined),
-          );
+        yield* compute.insertUrlMaps({ ...desired, project: env.project }).pipe(
+          Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
+          Effect.catchTag("Conflict", () => Effect.undefined),
+        );
         current = yield* getByName(env.project, urlMapName);
       }
 
@@ -406,9 +401,9 @@ export const UrlMapProvider = () =>
       if (needsUpdate(current, desired)) {
         yield* compute
           .updateUrlMaps({
+            ...toBody(urlMapName, news, ownership, current.fingerprint),
             project: env.project,
             urlMap: urlMapName,
-            body: toBody(urlMapName, news, ownership, current.fingerprint),
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, urlMapName);

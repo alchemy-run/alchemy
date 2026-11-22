@@ -296,19 +296,17 @@ export const OrganizationsLocationsDiscoveryConfigProvider = () =>
       if (current === undefined) {
         const created = yield* dlp
           .createOrganizationsLocationsDiscoveryConfigs({
-            parent,
-            body: {
-              configId,
-              discoveryConfig: {
-                displayName,
-                status,
-                orgConfig,
-                targets,
-                inspectTemplates,
-                processingLocation,
-                otherCloudStartingLocation,
-              },
+            configId,
+            discoveryConfig: {
+              displayName,
+              status,
+              orgConfig,
+              targets,
+              inspectTemplates,
+              processingLocation,
+              otherCloudStartingLocation,
             },
+            parent,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -341,19 +339,17 @@ export const OrganizationsLocationsDiscoveryConfigProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* dlp.patchOrganizationsLocationsDiscoveryConfigs({
-          name: currentName,
-          body: {
-            updateMask,
-            discoveryConfig: {
-              displayName,
-              status,
-              orgConfig,
-              targets,
-              inspectTemplates,
-              processingLocation,
-              otherCloudStartingLocation,
-            },
+          updateMask,
+          discoveryConfig: {
+            displayName,
+            status,
+            orgConfig,
+            targets,
+            inspectTemplates,
+            processingLocation,
+            otherCloudStartingLocation,
           },
+          name: currentName,
         });
       }
 

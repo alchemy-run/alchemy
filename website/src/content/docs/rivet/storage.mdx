@@ -120,6 +120,8 @@ alarm: () =>
 
 If `alarm` fails, Rivet runs it again: up to six more times, two seconds after the first failure and twice as long after each one since, unless the handler set a new alarm before failing. That's how Cloudflare retries alarms too.
 
+An alarm runs at least once. While `alarm` runs, `getAlarm` returns `null`, and if the node running it dies before it finishes, Rivet runs it again from the start on the next node, about 30 seconds later, counted as one of those six retries. Write `alarm` so a second run of the same alarm is harmless.
+
 ## Change state safely while calls overlap
 
 A room runs calls in parallel, so two calls' reads and writes can interleave. A read followed by a write that depends on it belongs in a transaction. See [Concurrency](/rivet/concurrency).

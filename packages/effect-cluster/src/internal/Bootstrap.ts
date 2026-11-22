@@ -42,6 +42,7 @@ import * as Ref from "effect/Ref";
 import type { Rpc, RpcGroup } from "effect/rpc";
 import type { Workflow as EffectWorkflow } from "effect/workflow";
 import type { HostedCron } from "../Cron.ts";
+import { databaseMaxConnections } from "../Database.ts";
 import { PlatformDeclaration, type HostedEntity } from "../Entity.ts";
 import { RunnerHost } from "../Host.ts";
 import type { HostedSingleton } from "../Singleton.ts";
@@ -50,6 +51,16 @@ import { GATEWAY_PORT, RUNNER_PORT, gatewayLayer } from "./Gateway.ts";
 import { HasNoPool, type HostedRuntimeContext } from "./HostedRuntime.ts";
 
 const env = (name: string) => process.env[name];
+
+/**
+ * The runner's client to the cluster's database: `CLUSTER_DATABASE_URL`,
+ * holding at most the pool's `databaseConnections`.
+ */
+const clusterDatabase = Layer.unwrap(
+  Effect.map(databaseMaxConnections, (maxConnections) =>
+    PgClient.layer({ url: Redacted.make(env("CLUSTER_DATABASE_URL")!), maxConnections }),
+  ),
+);
 
 /** Whether an IPv4 address is in a CIDR range (`10.46.0.0/16`). */
 const inIpv4Range = (address: string, range: string) => {
@@ -166,7 +177,7 @@ export const runExternal = (
         storage: "sql",
         clientOnly: true,
         shardingConfig: shardGroupsConfig(),
-      }).pipe(Layer.provide(PgClient.layer({ url: Redacted.make(env("CLUSTER_DATABASE_URL")!) })));
+      }).pipe(Layer.provide(clusterDatabase));
       const gateway = gatewayLayer(entities, env("CLUSTER_GATEWAY_TOKEN") ?? "").pipe(
         Layer.provide(NodeHttpServer.layer(createServer, { port: GATEWAY_PORT })),
       );
@@ -300,7 +311,7 @@ export const bootstrap = (
         ),
         ...shardGroupsConfig(),
       },
-    }).pipe(Layer.provide(PgClient.layer({ url: Redacted.make(env("CLUSTER_DATABASE_URL")!) })));
+    }).pipe(Layer.provide(clusterDatabase));
     // Singletons and crons run in this pool's shard group too, each with
     // the services its Construction phase had.
     const scheduled = hosted.flatMap((entry) =>

@@ -38,8 +38,8 @@ const instanceCondition = () => {
 const projectRoles = () =>
   resourcemanager
     .getIamPolicyProjects({
+      options: { requestedPolicyVersion: 3 },
       resource: `projects/${project}`,
-      body: { options: { requestedPolicyVersion: 3 } },
     })
     .pipe(
       Effect.map((policy) =>
@@ -101,8 +101,8 @@ describe.skipIf(!runLifecycle)(
         );
         yield* Core.withProviders(
           secretmanager.addVersionProjectsLocationsSecrets({
+            payload: { data: payload },
             parent: secretName,
-            body: { payload: { data: payload } },
           }),
           testOptions,
           "SqlBindings",

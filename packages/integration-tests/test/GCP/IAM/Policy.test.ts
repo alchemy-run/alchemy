@@ -58,19 +58,17 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         iam.createPolicyPolicies({
+          displayName: "alchemy-probe",
+          rules: [
+            {
+              denyRule: {
+                deniedPermissions: ["iam.googleapis.com/roles.list"],
+                deniedPrincipals: ["principal://goog/subject/alchemy-deny-probe@example.invalid"],
+              },
+            },
+          ],
           parent: `policies/${attachment}/denypolicies`,
           policyId: "alchemy-probe",
-          body: {
-            displayName: "alchemy-probe",
-            rules: [
-              {
-                denyRule: {
-                  deniedPermissions: ["iam.googleapis.com/roles.list"],
-                  deniedPrincipals: ["principal://goog/subject/alchemy-deny-probe@example.invalid"],
-                },
-              },
-            ],
-          },
         }),
       );
       expect(error._tag).toEqual("Forbidden");

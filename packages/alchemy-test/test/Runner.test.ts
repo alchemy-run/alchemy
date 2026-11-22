@@ -756,3 +756,41 @@ it(
   },
   { tags: ["unit", "local"], timeout: 90_000 },
 );
+
+it(
+  "fails a plain test whose body returns an Effect, which it would never run",
+  async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "alchemy-test-returned-effect-"));
+    try {
+      await writeFile(
+        resolve(root, "returned.test.ts"),
+        `
+        import { it, expect } from ${JSON.stringify(apiUrl)};
+        import * as Effect from ${JSON.stringify(effectUrl)};
+        it("returns an effect", () => Effect.sync(() => expect(1).toBe(2)));
+        it.effect("runs an effect", () => Effect.sync(() => expect(1).toBe(1)));
+        it("returns a promise", async () => expect(1).toBe(1));
+        `,
+      );
+      const child = Bun.spawn([process.execPath, cli, root, "--retry", "0"], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, NO_COLOR: "1" },
+      });
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      const output = `${stdout}\n${stderr}`;
+      expect(exitCode).not.toBe(0);
+      expect(output).toContain("Tests: 1 failed | 2 passed");
+      expect(output).toMatch(/✗ .*returns an effect/);
+      expect(output).toContain("Use `it.effect`");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+  { tags: ["unit", "local"] },
+);

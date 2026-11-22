@@ -21,10 +21,10 @@ export default class ConvexBindingWorker extends Cloudflare.Worker<ConvexBinding
   { main: import.meta.url },
   Effect.gen(function* () {
     const connect = yield* Convex.Connect(BindingDeployment);
-    const query = yield* Convex.Query(BindingDeployment);
-    const queryBatch = yield* Convex.QueryBatch(BindingDeployment);
-    const mutation = yield* Convex.Mutation(BindingDeployment);
-    const action = yield* Convex.Action(BindingDeployment);
+    const query = yield* Convex.RunQuery(BindingDeployment);
+    const queryBatch = yield* Convex.RunQueryBatch(BindingDeployment);
+    const mutation = yield* Convex.RunMutation(BindingDeployment);
+    const action = yield* Convex.RunAction(BindingDeployment);
     const usage = yield* Convex.GetCurrentUsage(BindingDeployment);
     const audit = yield* Convex.ListAuditLogEvents(BindingDeployment);
     const sync = yield* Convex.DataSync(BindingDeployment);
@@ -63,10 +63,10 @@ export default class ConvexBindingWorker extends Cloudflare.Worker<ConvexBinding
     Effect.provide(
       Layer.mergeAll(
         Convex.ConnectHttp,
-        Convex.QueryHttp,
-        Convex.QueryBatchHttp,
-        Convex.MutationHttp,
-        Convex.ActionHttp,
+        Convex.RunQueryHttp,
+        Convex.RunQueryBatchHttp,
+        Convex.RunMutationHttp,
+        Convex.RunActionHttp,
         Convex.GetCurrentUsageHttp,
         Convex.ListAuditLogEventsHttp,
         Convex.DataSyncHttp,

@@ -1,0 +1,105 @@
+---
+title: Next.js
+description: "Deploy a Next.js app to Azure with Azure.Website.Nextjs — Next's standalone server on a Flex Consumption Function, hashed assets and public/ files on Blob Storage, both behind Azure Front Door."
+sidebar:
+  order: 12
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Azure.Website.Nextjs` deploys a [Next.js](https://nextjs.org) project to
+Azure. Next's standalone server runs on a Flex Consumption Function, which
+scales to zero. `/_next/static/*` and the `public/` files go to the static
+website endpoint of an Azure Storage account. Azure Front Door sends those
+paths to Blob Storage and every other path (pages, route handlers, server
+actions, `/_next/image`) to the Function. No Docker image, no App Service
+plan, and no OpenNext are involved.
+
+## Install
+
+The build integration ships separately. It only runs at deploy time, so a
+dev dependency is enough:
+
+<PackageManagers dev={devDeps} />
+
+## Configure Next.js
+
+Your `next.config.*` needs no change. The build runs `next build` with
+Next's standalone output switched on. A config that sets
+`output: "export"` fails the build: deploy the exported `out/` directory
+with [`Azure.Website.StaticSite`](/azure/frontend/static-site) instead.
+
+## Deploy the site
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MySite",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Azure.Website.Nextjs("Website", { location: "eastus" });
+    return { url: site.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. `site.url` is the Front Door endpoint,
+`https://{endpoint}.z01.azurefd.net`. A new endpoint takes 10-20 minutes to
+serve everywhere. Pick a `location` that offers Flex Consumption.
+
+The Function package holds the standalone server and a copy of its traced
+`node_modules` with real directories, so a pnpm install deploys too. Next
+starts in production mode on the first request after a cold start.
+
+## Pass environment variables
+
+```diff lang="typescript"
+-const site = yield* Azure.Website.Nextjs("Website", { location: "eastus" });
++const site = yield* Azure.Website.Nextjs("Website", {
++  location: "eastus",
++  env: { GREETING: "Hello from Azure!" },
++});
+```
+
+The values are set on `process.env` for `next build` and become app
+settings of the Function. A dynamic page or a route handler reads them from
+`process.env.GREETING` at request time.
+
+## Size the Function
+
+```typescript
+const site = yield* Azure.Website.Nextjs("Website", {
+  instanceMemoryMB: 4096,
+  maximumInstanceCount: 40,
+});
+```
+
+## Share a Front Door profile
+
+```typescript
+const profile = yield* Azure.Cdn.Profile("Edge");
+const web = yield* Azure.Website.Nextjs("Website", { frontDoor: { profile } });
+```
+
+Each profile bills a monthly base fee, so share one across sites. See
+[Websites](/azure/frontend/websites) for caching, purges, and the other
+shared settings.
+
+## Local development
+
+`alchemy dev` runs `next dev` with hot reload and creates nothing in Azure.
+Wrap the site in `Alchemy.remote()` to deploy it for real during dev.
+
+See the [`azure-website-nextjs`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-website-nextjs)
+example.
+
+## Where next
+
+- [Websites](/azure/frontend/websites) — the settings every site shares.
+- [Website reference](/providers/azure/website#nextjs) — every prop.

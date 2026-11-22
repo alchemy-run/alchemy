@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { makeNeonServeEntrySource } from "../../core/NeonServe.ts";
 import { makeNodeServeEntrySource } from "../../core/NodeServe.ts";
 import { makeAwsTarget } from "../aws.ts";
+import { makeAzureTarget } from "../azure.ts";
 import { make, metadataReader, readFoldkitOutput, type BuildMetadata } from "../Foldkit.ts";
 import { target as makeNeonTarget } from "../neon.ts";
 import { makeNodeTarget } from "../node.ts";
@@ -286,6 +287,36 @@ describe("Foldkit deployment targets", () => {
       expect((await fetchAt(script.slice(mount.length - 1))).status).toBe(404);
     },
   );
+
+  it("runs Foldkit's handler for every path in the Azure Functions Fetch entry", async () => {
+    const metadata = await fixture();
+    const { output, entry } = await run(
+      readFoldkitOutput(metadata.root, metadata.clientDirectory, metadata),
+    );
+    const finished = await run(
+      makeAzureTarget().finish!(output, {
+        root: metadata.root,
+        framework: "foldkit",
+        entry,
+      }),
+    );
+    expect(finished.serverModules![0]!.name).toBe("server/serve-azure.mjs");
+    const module = await import(
+      pathToFileURL(path.join(finished.distDirectory!, finished.serverModules![0]!.name)).href
+    );
+    const fetchAt = (pathname: string, init?: RequestInit) =>
+      module.default.fetch(
+        new Request("http://func.azurewebsites.net" + pathname, init),
+      ) as Promise<Response>;
+    // Front Door serves the client directory, so even a prerendered path reaches the handler.
+    expect(await (await fetchAt("/about?count=7")).text()).toBe("GET:/about?count=7:");
+    expect(await (await fetchAt("/dynamic", { method: "POST", body: "payload" })).text()).toBe(
+      "POST:/dynamic:payload",
+    );
+    const head = await fetchAt("/dynamic", { method: "HEAD" });
+    expect(head.status).toBe(200);
+    expect(await head.text()).toBe("");
+  });
 
   it("adapts Foldkit's nested fetch entry to a buffered Lambda handler", async () => {
     const metadata = await fixture();

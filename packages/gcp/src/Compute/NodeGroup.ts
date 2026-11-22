@@ -434,19 +434,17 @@ export const NodeGroupProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertNodeGroups({
+            name: nodeGroupName,
+            description: desiredDescription,
+            nodeTemplate,
+            maintenancePolicy,
+            maintenanceWindow: news.maintenanceWindow,
+            maintenanceInterval: news.maintenanceInterval,
+            autoscalingPolicy: news.autoscalingPolicy,
+            shareSettings: news.shareSettings,
             project: env.project,
             zone,
             initialNodeCount,
-            body: {
-              name: nodeGroupName,
-              description: desiredDescription,
-              nodeTemplate,
-              maintenancePolicy,
-              maintenanceWindow: news.maintenanceWindow,
-              maintenanceInterval: news.maintenanceInterval,
-              autoscalingPolicy: news.autoscalingPolicy,
-              shareSettings: news.shareSettings,
-            },
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -465,10 +463,10 @@ export const NodeGroupProvider = () =>
           zone,
           nodeGroupName,
           compute.setNodeTemplateNodeGroups({
+            nodeTemplate,
             project: env.project,
             zone,
             nodeGroup: nodeGroupName,
-            body: { nodeTemplate },
           }),
         );
         current = (yield* getByName(env.project, zone, nodeGroupName)) ?? current;
@@ -492,18 +490,16 @@ export const NodeGroupProvider = () =>
           zone,
           nodeGroupName,
           compute.patchNodeGroups({
+            fingerprint: latest.fingerprint,
+            description: desiredDescription,
+            maintenancePolicy,
+            maintenanceWindow: news.maintenanceWindow ?? current.maintenanceWindow,
+            maintenanceInterval: news.maintenanceInterval ?? current.maintenanceInterval,
+            autoscalingPolicy: news.autoscalingPolicy ?? current.autoscalingPolicy,
+            shareSettings: news.shareSettings ?? current.shareSettings,
             project: env.project,
             zone,
             nodeGroup: nodeGroupName,
-            body: {
-              fingerprint: latest.fingerprint,
-              description: desiredDescription,
-              maintenancePolicy,
-              maintenanceWindow: news.maintenanceWindow ?? current.maintenanceWindow,
-              maintenanceInterval: news.maintenanceInterval ?? current.maintenanceInterval,
-              autoscalingPolicy: news.autoscalingPolicy ?? current.autoscalingPolicy,
-              shareSettings: news.shareSettings ?? current.shareSettings,
-            },
           }),
         );
         current = (yield* getByName(env.project, zone, nodeGroupName)) ?? current;

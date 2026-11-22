@@ -1,0 +1,110 @@
+---
+title: Tools
+description: Give a Pi harness your own tools, inline tools that close over a Durable Object's bindings, and Pi's coding tools, and choose which ones each conversation may use.
+---
+
+A Pi harness runs every tool call in its Durable Object. A tool is an [`AI.Tool`](/ai/tools), declared once and listed on the harness. Pi adds its own coding tools, and lets each conversation choose which tools it uses.
+
+## List tools on the harness
+
+The harness lists every tool a conversation may be given. Each tool's Layer is then required:
+
+```typescript title="src/Session.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Fast, FastLive } from "./models.ts";
+import { Add, AddLive } from "./tools.ts";
+
+const HarnessLive = Layer.mergeAll(FastLive, AddLive, PiCloudflare.DurableObjectStorage);
+
+export default class Session extends Cloudflare.DurableObject<Session>()(
+  "Session",
+  Effect.gen(function* () {
+    const harness = yield* Pi.Harness({ models: [Fast], tools: [Add] });
+
+    return Effect.gen(function* () {
+      return {
+        create: Effect.fn(function* (name: string) {
+          yield* harness.createConversation({ name, tools: [Add] });
+        }),
+      };
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+## Choose tools for a conversation
+
+A conversation uses the tools it was created with, or every tool on the harness when it names none:
+
+```typescript
+yield* harness.createConversation({ name: "review", tools: [AI.Read, AI.Grep] });
+```
+
+Change them while the conversation lives. The next model request sees the change:
+
+```typescript
+yield* harness.configure("review", { tools: { add: [AI.Bash] } });
+yield* harness.configure("review", { tools: { remove: [AI.Bash] } });
+```
+
+A tool that is not on the harness fails with `NotOnHarness`.
+
+## Close over the object's bindings
+
+An inline tool is declared in the Durable Object's outer Effect, where its bindings are in scope, and has no Layer:
+
+```typescript
+const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
+
+const SaveNote = AI.Tool(
+  "save_note",
+  {
+    description: "Save a note the user can read later.",
+    parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
+    success: Schema.Void,
+  },
+  Effect.fn(function* ({ key, text }) {
+    yield* notes.put(key, text).pipe(Effect.orDie);
+  }),
+);
+
+const harness = yield* Pi.Harness({ models: [Fast], tools: [SaveNote] });
+```
+
+## Pi's coding tools
+
+`Pi.CodingTools` provides the six [coding tools](/ai/coding-tools). They work on files and a shell, so the Layer requires your [sandboxes](/pi/sandboxes):
+
+```typescript
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  PiCloudflare.DurableObjectStorage,
+  Pi.CodingTools.pipe(Layer.provideMerge(Sandbox)),
+);
+
+const harness = yield* Pi.Harness({ models: [Fast], tools: [AI.CodingTools] });
+```
+
+`bash`, `read`, `edit` and `write` are Pi's own tools, with Pi's descriptions and parameters. `read` returns text with line numbers, or an image. `edit` replaces exact text and takes several replacements in one call. `bash` keeps the end of long output and saves the rest to a file in the sandbox.
+
+Pi has no search tools, so `Pi.Grep` and `Pi.Glob` are tools that run `grep` and a `bash` glob in the sandbox.
+
+Each has a Layer of its own (`Pi.Bash`, `Pi.Read`, `Pi.Edit`, `Pi.Write`, `Pi.Grep`, `Pi.Glob`), for a harness that lists only some:
+
+```typescript
+const ReadOnlyLive = Layer.mergeAll(Pi.Read, Pi.Grep, Pi.Glob).pipe(Layer.provideMerge(Sandbox));
+
+const harness = yield* Pi.Harness({ models: [Fast], tools: [AI.Read, AI.Grep, AI.Glob] });
+```
+
+## Tools that fail
+
+A tool's declared [`failure`](/ai/tools#fail-with-a-declared-error) reaches the model as an error result it can read. Arguments that don't match `parameters` never reach the handler: Pi tells the model which field was wrong, and the model calls again.
+
+## Tools after a crash
+
+A call that was cut off by an eviction runs again only if its tool is `replay: "safe"`. See [Surviving a crash](/pi/durability).

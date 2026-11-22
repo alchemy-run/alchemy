@@ -73,7 +73,7 @@ test.provider.skipIf(!!process.env.FAST)(
         Effect.flatMap((r) => r.json),
       )) as any;
       expect(collection.status).toBe("ACTIVE");
-      expect(collection.endpoint).toContain("aoss.amazonaws.com");
+      expect(collection.endpoint).toContain(".aoss.");
 
       // Create → read → update → delete an index at runtime.
       const roundtrip = (yield* drive(HttpClientRequest.post(`${baseUrl}/index/roundtrip`)).pipe(

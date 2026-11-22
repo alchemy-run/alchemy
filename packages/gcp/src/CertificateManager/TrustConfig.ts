@@ -509,9 +509,9 @@ export const TrustConfigProvider = () =>
       if (current === undefined) {
         const created = yield* certificatemanager
           .createProjectsLocationsTrustConfigs({
+            ...toCreateBody(news, desiredLabels),
             parent: `projects/${env.project}/locations/${location}`,
             trustConfigId,
-            body: toCreateBody(news, desiredLabels),
           })
           .pipe(
             Effect.retry({
@@ -561,16 +561,13 @@ export const TrustConfigProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* certificatemanager.patchProjectsLocationsTrustConfigs({
+          labels: desiredLabels,
+          description: news.description,
+          trustStores: desiredStores,
+          allowlistedCertificates: desiredAllowlisted,
+          spiffeTrustStores: desiredSpiffe,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            description: news.description,
-            trustStores: desiredStores,
-            allowlistedCertificates: desiredAllowlisted,
-            spiffeTrustStores: desiredSpiffe,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(name);
