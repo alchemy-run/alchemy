@@ -9,7 +9,7 @@ import * as Schema from "effect/Schema";
 import { Guard, Greeting } from "./extensions.ts";
 import { Gateway, Notes } from "./infra.ts";
 import { Fast } from "./models.ts";
-import { Add, AddLive, GlobLive, Withdraw, WithdrawLive } from "./tools.ts";
+import { Add, AddLive, codemodeSection, GlobLive, Withdraw, WithdrawLive } from "./tools.ts";
 
 const ModelsLive = AICloudflare.Model(Fast, {
   gateway: Gateway,
@@ -22,10 +22,13 @@ const HarnessLive = Layer.mergeAll(
   AddLive,
   WithdrawLive,
   GlobLive,
-  Pi.CodeModeAsync.pipe(Layer.provide(PiCloudflare.EvalInline())),
+  AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalInline())),
   PiCloudflare.DurableObjectStorage,
   Cloudflare.KV.ReadWriteNamespaceBinding,
 );
+
+/** The tools a program may call. */
+const Programs = AI.CodeMode(Add, Withdraw);
 
 export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
   "PiSession",
@@ -48,8 +51,9 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
 
     const harness = yield* Pi.Harness({
       models: [Fast],
-      tools: [Add, SaveNote, Withdraw, AI.Glob],
-      extensions: [Guard, Greeting, Pi.CodeMode],
+      // `add` and `withdraw` are offered both ways: as direct calls, and from programs.
+      tools: [Add, SaveNote, Withdraw, AI.Glob, Programs],
+      extensions: [Guard, Greeting],
     });
 
     return Effect.gen(function* () {
@@ -116,7 +120,17 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
         }),
         addCodeMode: Effect.fn(function* (name: string) {
           const conversation = yield* harness.conversationByName(name);
-          yield* conversation.configure({ extensions: { add: [Pi.CodeMode] } });
+          yield* conversation.configure({ tools: { add: [Programs] } });
+        }),
+        /** The tools the model is offered, by name. */
+        offered: Effect.fn(function* (name: string) {
+          const conversation = yield* harness.conversationByName(name);
+          return (yield* conversation.agent).tools.map((tool) => tool.name).sort();
+        }),
+        /** The code mode section of the system prompt the conversation was last sent. */
+        section: Effect.fn(function* (name: string) {
+          const conversation = yield* harness.conversationByName(name);
+          return codemodeSection((yield* conversation.context).messages) ?? null;
         }),
         addSkill: Effect.fn(function* (name: string) {
           const conversation = yield* harness.conversationByName(name);

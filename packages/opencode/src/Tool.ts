@@ -1,3 +1,4 @@
+import type { CodeModeConvention, CodeModeGroup } from "@alchemy.run/ai/CodeMode";
 import type { AnyMcpServer, McpServerClass } from "@alchemy.run/ai/McpServer";
 import {
   isToolGroup,
@@ -37,13 +38,21 @@ type OwnRequirements<T> =
         ? SandboxesFor<Uses>
         : never;
 
+/** What a harness lists as a tool: a tool, an MCP server, or a code mode group of them. */
+export type Listed = AnyTool | AnyMcpServer | CodeModeGroup<ReadonlyArray<AnyTool | AnyMcpServer>>;
+
+/** What a prompt enables: a tool, an MCP server, or a code mode group of them. */
+export type Enabled = ToolRef | AnyMcpServer | CodeModeGroup<ReadonlyArray<AnyTool | AnyMcpServer>>;
+
 /** What listing `T` in a harness's `tools` requires to be provided. */
 export type ToolRequirements<T> =
-  T extends McpServerClass<infer Self, any>
-    ? Self
-    : T extends ToolGroup<infer Tools>
-      ? OwnRequirements<Tools[number]>
-      : OwnRequirements<T>;
+  T extends CodeModeGroup<infer Inner>
+    ? CodeModeConvention | ToolRequirements<Inner[number]>
+    : T extends McpServerClass<infer Self, any>
+      ? Self
+      : T extends ToolGroup<infer Tools>
+        ? OwnRequirements<Tools[number]>
+        : OwnRequirements<T>;
 
 export const isBuiltin = (tool: AnyTool | AnyMcpServer): tool is BuiltinTool =>
   OpenCodeToolTypeId in tool && tool[OpenCodeToolTypeId] === "builtin";

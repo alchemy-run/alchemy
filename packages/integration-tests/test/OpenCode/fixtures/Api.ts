@@ -3,20 +3,29 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import OpenCodeSession from "./Session.ts";
+import OpenCodeSession, { OpenCodeEffectSession, OpenCodeNativeSession } from "./Session.ts";
 
 export default class OpenCodeApi extends Cloudflare.Worker<OpenCodeApi>()(
   "OpenCodeApi",
   { main: import.meta.url },
   Effect.gen(function* () {
     const sessions = yield* OpenCodeSession;
+    const effectSessions = yield* OpenCodeEffectSession;
+    const nativeSessions = yield* OpenCodeNativeSession;
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://api");
         const [, name, action] = url.pathname.split("/");
-        const session = sessions.getByName("main");
+        // A session's name says which harness it is on.
+        const session = (
+          name?.startsWith("oc-effect-")
+            ? effectSessions
+            : name?.startsWith("oc-native-")
+              ? nativeSessions
+              : sessions
+        ).getByName("main");
         const body =
           request.method === "POST" ? ((yield* request.json) as Record<string, any>) : {};
         switch (action) {
@@ -27,9 +36,11 @@ export default class OpenCodeApi extends Cloudflare.Worker<OpenCodeApi>()(
                 body.text,
                 body.tools,
                 body.requestId,
-                body.codeMode === true,
+                body.programs ?? [],
               ),
             });
+          case "section":
+            return yield* HttpServerResponse.json({ section: yield* session.section(name!) });
           case "tools":
             return yield* HttpServerResponse.json(yield* session.toolsUsed(name!));
           case "file":

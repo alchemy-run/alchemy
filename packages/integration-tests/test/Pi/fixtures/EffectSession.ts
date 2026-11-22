@@ -1,3 +1,4 @@
+import * as AI from "@alchemy.run/ai";
 import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Pi from "@alchemy.run/pi";
@@ -6,7 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Gateway } from "./infra.ts";
 import { Fast } from "./models.ts";
-import { Add, AddLive, Withdraw, WithdrawLive } from "./tools.ts";
+import { Add, AddLive, codemodeSection, Withdraw, WithdrawLive } from "./tools.ts";
 
 const ModelsLive = AICloudflare.Model(Fast, {
   gateway: Gateway,
@@ -19,7 +20,7 @@ const HarnessLive = Layer.mergeAll(
   ModelsLive,
   AddLive,
   WithdrawLive,
-  Pi.CodeModeEffect.pipe(Layer.provide(PiCloudflare.EvalWorkerLoader())),
+  AI.CodeModeEffect.pipe(Layer.provide(AICloudflare.EvalWorkerLoader())),
   PiCloudflare.DurableObjectStorage,
 );
 
@@ -28,8 +29,8 @@ export default class PiEffectSession extends Cloudflare.DurableObject<PiEffectSe
   Effect.gen(function* () {
     const harness = yield* Pi.Harness({
       models: [Fast],
-      tools: [Add, Withdraw],
-      extensions: [Pi.CodeMode],
+      // Reached only from programs: the model is offered one tool, `codemode`.
+      tools: [AI.CodeMode(Add, Withdraw)],
     });
 
     return Effect.gen(function* () {
@@ -37,10 +38,8 @@ export default class PiEffectSession extends Cloudflare.DurableObject<PiEffectSe
         create: Effect.fn(function* (name: string) {
           const conversation = yield* harness.createConversation({
             name,
-            tools: [Add, Withdraw],
             instructions: "You are terse. Use your tools whenever they apply.",
           });
-          yield* conversation.configure({ extensions: { add: [Pi.CodeMode] } });
           return conversation.id;
         }),
         prompt: Effect.fn(function* (name: string, text: string, requestId: string) {
@@ -52,6 +51,16 @@ export default class PiEffectSession extends Cloudflare.DurableObject<PiEffectSe
           });
           const settled = yield* submission.wait;
           return { status: settled.status };
+        }),
+        /** The tools the model is offered, by name. */
+        offered: Effect.fn(function* (name: string) {
+          const conversation = yield* harness.conversationByName(name);
+          return (yield* conversation.agent).tools.map((tool) => tool.name).sort();
+        }),
+        /** The code mode section of the system prompt the conversation was last sent. */
+        section: Effect.fn(function* (name: string) {
+          const conversation = yield* harness.conversationByName(name);
+          return codemodeSection((yield* conversation.context).messages) ?? null;
         }),
         toolResults: Effect.fn(function* (name: string) {
           const conversation = yield* harness.conversationByName(name);

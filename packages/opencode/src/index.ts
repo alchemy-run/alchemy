@@ -9,6 +9,7 @@ export {
   type Reply,
   type Session,
 } from "./Harness.ts";
+export { CodeModeNative } from "./CodeMode.ts";
 export { Instance, NamedInstance } from "./Instance.ts";
 export { Bash, CodingTools, Edit, Glob, Grep, Read, Write } from "./CodingTools.ts";
 export {
@@ -17,5 +18,7 @@ export {
   WebSearch,
   type AnyTool,
   type BuiltinTool,
+  type Enabled,
+  type Listed,
   type ToolRef,
 } from "./Tool.ts";

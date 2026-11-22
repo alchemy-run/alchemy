@@ -1,3 +1,10 @@
+import {
+  CodeModeConvention,
+  isCodeMode,
+  type CodeModeGroup,
+  type Convention,
+} from "@alchemy.run/ai/CodeMode";
+import type { DeclaredNamespace, DeclaredTool, JsonSchema } from "@alchemy.run/ai/Declarations";
 import { isMcpServer, type AnyMcpServer, type McpServerService } from "@alchemy.run/ai/McpServer";
 import type { AnyModel, ModelService } from "@alchemy.run/ai/Model";
 import { Sandbox, Sandboxes, sandboxOf, type SandboxHandle } from "@alchemy.run/ai/Sandbox";
@@ -31,6 +38,8 @@ import {
   flattenTools,
   isBuiltin,
   type AnyTool,
+  type Enabled,
+  type Listed,
   type ToolRef,
   type ToolRequirements,
 } from "./Tool.ts";
@@ -38,7 +47,7 @@ import {
 /** Options of {@link Harness}. */
 export interface HarnessOptions<
   Models extends ReadonlyArray<AnyModel>,
-  Tools extends ReadonlyArray<AnyTool | AnyMcpServer>,
+  Tools extends ReadonlyArray<Listed>,
   Skills extends ReadonlyArray<AnySkill> = readonly [],
 > {
   /**
@@ -55,6 +64,9 @@ export interface HarnessOptions<
    * (`OpenCode.WebFetch`), and MCP servers. OpenCode
    * names a tool it did not ship after its server: yours are
    * `<name>_<tool>`, an MCP server's are `<server>_<tool>`.
+   *
+   * Tools inside `AI.CodeMode(...)` are reached from programs the model
+   * writes; the others are direct calls.
    */
   readonly tools?: Tools;
   /** Skills every session can load when a task calls for one. */
@@ -66,26 +78,21 @@ export interface HarnessOptions<
   readonly cwd?: string;
   /** OpenCode's own configuration (`opencode.json`), merged under what the harness sets. */
   readonly config?: Readonly<Record<string, unknown>>;
-  /**
-   * Code mode: the model calls the harness's tools from a JavaScript
-   * program it writes (OpenCode's `execute` tool), and only the program's
-   * result reaches it. Off, it calls each tool directly.
-   * @default true
-   */
-  readonly codeMode?: boolean;
 }
 
 /** What a prompt runs with. Unset fields keep the session's, then the harness's. */
 export interface PromptOptions {
   readonly model?: AnyModel;
-  /** The tools the model may use for this prompt: exactly these. An MCP server stands for all of its tools. */
-  readonly tools?: ReadonlyArray<ToolRef | AnyMcpServer>;
+  /**
+   * The tools the model may use for this prompt: exactly these. An MCP
+   * server stands for all of its tools. Those inside `AI.CodeMode(...)` are
+   * reached from programs; a list without a group has no code mode.
+   */
+  readonly tools?: ReadonlyArray<Enabled>;
   /** Added to OpenCode's system prompt. */
   readonly instructions?: string;
   /** One of OpenCode's agents (`build`, `plan`, or one from `config`). */
   readonly agent?: string;
-  /** Call the tools from a program (`true`) or one at a time (`false`). See {@link HarnessOptions.codeMode}. */
-  readonly codeMode?: boolean;
   /**
    * Makes the prompt exactly-once while its sandbox runs: a retry with the
    * same id waits for the original.
@@ -270,9 +277,89 @@ interface Built {
     never,
     RuntimeContext
   >;
+  /** Every tool a program may call, by the name it has where scripts run. */
+  readonly programmed: ReadonlyMap<string, Programmed>;
+  /** How programs are written, when the harness runs them itself. */
+  readonly convention?: Convention;
   readonly files: ReadonlyArray<readonly [path: string, content: string]>;
   readonly epoch: string;
 }
+
+/** The harness's own tool that runs a program, under a shared convention. */
+const CODEMODE_TOOL = "codemode";
+
+/** A tool a program may call: where its call goes, and how it is declared. */
+interface Programmed {
+  readonly server: string;
+  /** An MCP server's name: its tools are declared under it. */
+  readonly namespace?: string;
+  readonly tool: DeclaredTool;
+}
+
+/** The declarations of `tools`: the harness's own tools first, then each server's. */
+const namespaceOf = (programmed: ReadonlyArray<Programmed>): Omit<DeclaredNamespace, "name"> => {
+  const namespaces = new Map<string, DeclaredTool[]>();
+  for (const { tool, namespace } of programmed) {
+    if (namespace === undefined) continue;
+    namespaces.set(namespace, [...(namespaces.get(namespace) ?? []), tool]);
+  }
+  return {
+    tools: programmed.flatMap(({ tool, namespace }) => (namespace === undefined ? [tool] : [])),
+    namespaces: [...namespaces].map(([name, tools]) => ({ name, tools })),
+  };
+};
+
+/**
+ * Run one program in a sandbox of its own, with every tool a program may
+ * call. A call's declared failure rejects with its fields as JSON, which
+ * the convention's wrapper turns into the failure's class.
+ */
+const runProgram = (
+  program: {
+    readonly convention: Convention;
+    readonly sandbox: Extract<CodeModeConvention["Service"], { kind: "shared" }>["sandbox"];
+  },
+  programmed: ReadonlyMap<string, Programmed>,
+  call: Built["call"],
+  code: string,
+  services: Context.Context<Sandbox | ToolCall>,
+): Effect.Effect<{ readonly text: string; readonly isError: boolean }, never, RuntimeContext> =>
+  Effect.gen(function* () {
+    const sandbox = yield* program.sandbox;
+    const context = yield* Effect.context<RuntimeContext>();
+    for (const [callAs, { server, tool }] of programmed) {
+      sandbox.registerTool({
+        name: callAs,
+        execute: async (args) => {
+          const result = await Effect.runPromiseWith(context)(
+            call(server, tool.name, args ?? {}, services),
+          );
+          // oxlint-disable-next-line effecttsgo/no-throw -- a rejection is how the script's call fails
+          if (result.isError) throw new Error(result.text);
+          return result.structured ?? result.text;
+        },
+      });
+    }
+    const { wrap } = program.convention.program(namespaceOf([...programmed.values()]));
+    const result = yield* Effect.promise(() => sandbox.execute(wrap(code))).pipe(
+      Effect.ensuring(Effect.promise(() => sandbox.close().catch(() => undefined))),
+    );
+    const printed = result.output.flatMap((item) => (item.type === "text" ? [item.text] : []));
+    if (!result.ok) {
+      return { text: [...printed, result.error.message].join("\n"), isError: true };
+    }
+    return {
+      text: [
+        ...printed,
+        ...(result.value === undefined ? [] : [JSON.stringify(result.value)]),
+      ].join("\n"),
+      isError: false,
+    };
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed({ text: messageOf(cause.pipe(Cause.squash)), isError: true }),
+    ),
+  );
 
 /** A tool of ours, with the handler its Layer or declaration gave. */
 interface Resolved {
@@ -336,7 +423,7 @@ interface Connection {
  */
 export const Harness = <
   const Models extends ReadonlyArray<AnyModel>,
-  const Tools extends ReadonlyArray<AnyTool | AnyMcpServer> = readonly [],
+  const Tools extends ReadonlyArray<Listed> = readonly [],
   const Skills extends ReadonlyArray<AnySkill> = readonly [],
 >(
   options: HarnessOptions<Models, Tools, Skills>,
@@ -358,8 +445,39 @@ export const Harness = <
         service,
       })),
     );
-    const listed: ReadonlyArray<AnyTool | AnyMcpServer> = options.tools ?? [];
-    const refs = flattenTools(listed.filter((tool): tool is AnyTool => !isMcpServer(tool)));
+    // A tool is reached directly or from a program, by where it is listed.
+    const every: ReadonlyArray<Listed> = options.tools ?? [];
+    /** A list's direct tools, and the ones inside its code mode groups. */
+    const routed = (list: ReadonlyArray<Listed | Enabled>) => {
+      const flat = (tools: ReadonlyArray<AnyTool | AnyMcpServer>) =>
+        tools.flatMap((tool): ReadonlyArray<ToolRef | AnyMcpServer> =>
+          isMcpServer(tool) ? [tool] : flattenTools([tool]),
+        );
+      return {
+        direct: flat(list.filter((tool): tool is AnyTool | AnyMcpServer => !isCodeMode(tool))),
+        programs: flat(
+          list
+            .filter((tool): tool is CodeModeGroup<ReadonlyArray<AnyTool | AnyMcpServer>> =>
+              isCodeMode(tool),
+            )
+            .flatMap((group) => group.tools),
+        ),
+        grouped: list.some(isCodeMode),
+      };
+    };
+    const harnessTools = routed(every);
+    const codemode = harnessTools.grouped ? yield* CodeModeConvention : undefined;
+    const unique = <T>(list: ReadonlyArray<T>, key: (item: T) => string) => [
+      ...new Map(list.map((item) => [key(item), item] as const)).values(),
+    ];
+    const listed: ReadonlyArray<ToolRef | AnyMcpServer> = [
+      ...harnessTools.direct,
+      ...harnessTools.programs,
+    ];
+    const refs = unique(
+      listed.filter((tool): tool is ToolRef => !isMcpServer(tool)),
+      (tool) => ("key" in tool ? String(tool.key) : tool.toolName),
+    );
     // A tool tag is whatever its Layer provided: OpenCode's own tool of
     // that name, or a tool of yours that the bridge serves.
     const tags = yield* Effect.forEach(refs.filter(isToolTag), (tool) =>
@@ -399,7 +517,10 @@ export const Harness = <
     );
     const tools = [...declared, ...tags.flatMap((tag) => (tag.own ? [tag.own] : []))];
     const servers = yield* Effect.forEach(
-      listed.filter((tool): tool is AnyMcpServer => isMcpServer(tool)),
+      unique(
+        listed.filter((tool): tool is AnyMcpServer => isMcpServer(tool)),
+        (server) => server.serverName,
+      ),
       (server) =>
         Effect.map(
           Effect.service(server as Context.Key<unknown, McpServerService>),
@@ -456,20 +577,42 @@ export const Harness = <
             );
             clients.set(server.serverName, made);
           }
+          // A shared convention runs programs here, behind a tool of the harness's own.
+          const program =
+            codemode?.kind === "shared"
+              ? yield* codemode.convention.pipe(
+                  Effect.map((convention) => ({ convention, sandbox: codemode.sandbox })),
+                  Effect.mapError((cause) => fail(`Code mode: ${cause.message}`, cause)),
+                )
+              : undefined;
+          const ownTools: ReadonlyArray<BridgeTool> = [
+            ...tools.map(({ tool }) => {
+              const outputSchema = outputSchemaOf(tool.spec);
+              return {
+                name: tool.toolName,
+                description: tool.spec.description,
+                inputSchema: parametersJsonSchema(tool.spec),
+                ...(outputSchema !== undefined ? { outputSchema } : {}),
+              };
+            }),
+            ...(program === undefined
+              ? []
+              : [
+                  {
+                    name: CODEMODE_TOOL,
+                    description: program.convention.intro,
+                    inputSchema: {
+                      type: "object",
+                      properties: {
+                        code: { type: "string", description: "The program, as raw JavaScript." },
+                      },
+                      required: ["code"],
+                    },
+                  },
+                ]),
+          ];
           const bridgeServers: Record<string, ReadonlyArray<BridgeTool>> = {
-            ...(tools.length > 0
-              ? {
-                  [name]: tools.map(({ tool }) => {
-                    const outputSchema = outputSchemaOf(tool.spec);
-                    return {
-                      name: tool.toolName,
-                      description: tool.spec.description,
-                      inputSchema: parametersJsonSchema(tool.spec),
-                      ...(outputSchema !== undefined ? { outputSchema } : {}),
-                    };
-                  }),
-                }
-              : {}),
+            ...(ownTools.length > 0 ? { [name]: ownTools } : {}),
             ...Object.fromEntries(
               [...clients].map(([server, { tools }]) => [
                 server,
@@ -563,10 +706,60 @@ export const Harness = <
               ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
             }),
           ]);
+          // Every tool a program may call, by the name it has where scripts run.
+          const programmed = new Map<string, Programmed>([
+            ...tools.map(
+              ({ tool }) =>
+                [
+                  nameOf(name, tool.toolName),
+                  {
+                    server: name,
+                    tool: {
+                      name: tool.toolName,
+                      callAs: nameOf(name, tool.toolName),
+                      description: tool.spec.description,
+                      parameters: tool.spec.parameters,
+                      success: tool.spec.success,
+                      ...(tool.spec.failure === undefined ? {} : { failure: tool.spec.failure }),
+                    },
+                  },
+                ] as const,
+            ),
+            ...[...clients].flatMap(([server, { tools }]) =>
+              tools.map(
+                (tool) =>
+                  [
+                    nameOf(server, tool.name),
+                    {
+                      server,
+                      namespace: server,
+                      tool: {
+                        name: tool.name,
+                        callAs: nameOf(server, tool.name),
+                        description: tool.description ?? tool.title ?? tool.name,
+                        parameters: tool.inputSchema as JsonSchema,
+                        ...(tool.outputSchema === undefined
+                          ? {}
+                          : { success: tool.outputSchema as JsonSchema }),
+                      },
+                    },
+                  ] as const,
+              ),
+            ),
+          ]);
           const handlers = new Map(
             tools.map(({ tool, handler }) => [tool.toolName, { tool, handler }]),
           );
           const call: Built["call"] = (server, toolName, args, services) => {
+            if (server === name && toolName === CODEMODE_TOOL && program !== undefined) {
+              return runProgram(
+                program,
+                programmed,
+                call,
+                String((args as { code?: unknown }).code ?? ""),
+                services,
+              );
+            }
             if (server === name) {
               const found = handlers.get(toolName);
               if (found === undefined) {
@@ -591,6 +784,9 @@ export const Harness = <
                 text: result.content
                   .map((block) => (block.type === "text" ? block.text : JSON.stringify(block)))
                   .join("\n"),
+                ...(result.isError !== true && result.structuredContent !== undefined
+                  ? { structured: result.structuredContent }
+                  : {}),
                 isError: result.isError === true,
               })),
               Effect.catchCause((cause) =>
@@ -605,6 +801,8 @@ export const Harness = <
             models: languageModels,
             servers: bridgeServers,
             call,
+            programmed,
+            ...(program === undefined ? {} : { convention: program.convention }),
             files,
             epoch,
           } satisfies Built;
@@ -874,47 +1072,90 @@ export const Harness = <
     /**
      * The session's permissions: every tool denied, then the chosen ones
      * allowed. A sandbox image can bring OpenCode tools of its own; a prompt
-     * only gets what its harness lists. Code mode is OpenCode's `execute`
-     * tool, which reaches the allowed tools of ours from a program.
+     * only gets what its harness lists.
+     *
+     * Tools in a code mode group are reached from programs. Under a shared
+     * convention the harness's `codemode` tool runs them and those tools
+     * are not offered directly. Under OpenCode's own code mode, its
+     * `execute` tool reaches every allowed tool of ours.
      */
-    const permissions = (
-      selected: ReadonlyArray<ToolRef | AnyMcpServer> | undefined,
-      codeMode: boolean,
-    ) =>
+    const permissions = (selected: ReadonlyArray<Enabled> | undefined) =>
       Effect.gen(function* () {
         const state = yield* build;
         const ours = Object.entries(state.servers).flatMap(([server, tools]) =>
           tools.map((tool) => ({ server, tool: tool.name, name: nameOf(server, tool.name) })),
         );
-        const on = new Set<string>();
-        if (selected === undefined) {
-          for (const tool of builtins) on.add(tool);
-          for (const entry of ours) on.add(entry.name);
-        }
-        for (const tool of selected ?? []) {
-          if (isMcpServer(tool)) {
-            if (!(tool.serverName in state.servers)) {
-              return yield* new NotOnHarness({ kind: "tool", missing: tool.serverName });
+        const chosen = selected === undefined ? harnessTools : routed(selected);
+        /** The names OpenCode knows a listed tool by; ours go through the bridge. */
+        const namesOf = (tool: ToolRef | AnyMcpServer) =>
+          Effect.gen(function* () {
+            if (isMcpServer(tool)) {
+              if (!(tool.serverName in state.servers)) {
+                return yield* new NotOnHarness({ kind: "tool", missing: tool.serverName });
+              }
+              return {
+                own: true,
+                names: ours
+                  .filter((entry) => entry.server === tool.serverName)
+                  .map((entry) => entry.name),
+              };
             }
-            for (const entry of ours) if (entry.server === tool.serverName) on.add(entry.name);
-          } else if (isBuiltin(tool)) {
-            on.add(tool.toolName);
-          } else if (isToolTag(tool) && nativeOf.has(tool.key)) {
-            on.add(nativeOf.get(tool.key)!);
-          } else {
+            if (isBuiltin(tool)) return { own: false, names: [tool.toolName] };
+            if (isToolTag(tool) && nativeOf.has(tool.key)) {
+              return { own: false, names: [nativeOf.get(tool.key)!] };
+            }
             if (!ours.some((entry) => entry.server === name && entry.tool === tool.toolName)) {
               return yield* new NotOnHarness({ kind: "tool", missing: tool.toolName });
             }
-            on.add(nameOf(name, tool.toolName));
+            return { own: true, names: [nameOf(name, tool.toolName)] };
+          });
+        const direct = yield* Effect.forEach(chosen.direct, namesOf);
+        const programs = yield* Effect.forEach(chosen.programs, namesOf);
+        if (chosen.grouped && codemode === undefined) {
+          return yield* new NotOnHarness({ kind: "tool", missing: "AI.CodeMode" });
+        }
+        if (programs.some((entry) => !entry.own)) {
+          return yield* fail(
+            "OpenCode's own tools (shell, read, edit, …) run inside OpenCode and cannot be called from a program: list them outside AI.CodeMode(...).",
+          );
+        }
+        const on = new Set<string>(direct.flatMap((entry) => entry.names));
+        let programmed: ReadonlyArray<string> = [];
+        if (chosen.grouped && codemode?.kind === "native") {
+          if (direct.some((entry) => entry.own)) {
+            return yield* fail(
+              "OpenCode's own code mode reaches every tool of yours from programs. List them all inside AI.CodeMode(...), or provide AI.CodeModeAsync or AI.CodeModeEffect to offer some directly.",
+            );
           }
+          for (const entry of programs) for (const tool of entry.names) on.add(tool);
+          on.add("execute");
+        } else if (chosen.grouped) {
+          programmed = [...new Set(programs.flatMap((entry) => entry.names))];
+          on.add(nameOf(name, CODEMODE_TOOL));
         }
         if (skills.length > 0) on.add("skill");
-        if (codeMode) on.add("execute");
-        // The wildcard comes first: a later rule wins.
-        return [
-          { action: "*", resource: "*", effect: "deny" },
-          ...[...on].map((tool) => ({ action: tool, resource: "*", effect: "allow" })),
-        ];
+        // What the model is told about programs: the tools one may call.
+        const section =
+          programmed.length === 0 || state.convention === undefined
+            ? undefined
+            : [
+                "# Code mode",
+                `The tools declared below are called only from programs, which the \`${nameOf(name, CODEMODE_TOOL)}\` tool runs.`,
+                state.convention.heading,
+                `\`\`\`ts\n${
+                  state.convention.program(
+                    namespaceOf(programmed.flatMap((tool) => state.programmed.get(tool) ?? [])),
+                  ).declarations
+                }\n\`\`\``,
+              ].join("\n\n");
+        return {
+          // The wildcard comes first: a later rule wins.
+          rules: [
+            { action: "*", resource: "*", effect: "deny" },
+            ...[...on].map((tool) => ({ action: tool, resource: "*", effect: "allow" })),
+          ],
+          section,
+        };
       });
 
     /** Apply one session setting, unless it is what the session already has. */
@@ -959,10 +1200,7 @@ export const Harness = <
           ) {
             return yield* new NotOnHarness({ kind: "model", missing: chosen.model.modelName });
           }
-          const rules = yield* permissions(
-            chosen.tools,
-            chosen.codeMode ?? options.codeMode ?? true,
-          );
+          const { rules, section } = yield* permissions(chosen.tools);
           const open = yield* connection(sessionName);
           const path = `/api/session/${open.sessionId}`;
           // A prompt runs with what the session has: set what this one asks for.
@@ -994,6 +1232,15 @@ export const Harness = <
             chosen.instructions === undefined
               ? open.call("opencode", "DELETE", entry)
               : open.call("opencode", "PUT", entry, { value: chosen.instructions }),
+          );
+          const catalog = `/api/experimental/session/${open.sessionId}/instructions/entries/alchemy-codemode`;
+          yield* apply(
+            open,
+            "codemode",
+            section ?? null,
+            section === undefined
+              ? open.call("opencode", "DELETE", catalog)
+              : open.call("opencode", "PUT", catalog, { value: section }),
           );
           // oxlint-disable-next-line effecttsgo/crypto-random-uuid-in-effect -- only a unique id for a prompt that gave none
           const requestId = chosen.requestId ?? crypto.randomUUID();

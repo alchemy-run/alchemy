@@ -29,6 +29,12 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 const tags = ["provider:cloudflare", "provider:opencode", "provider:boat", "live"];
 
+/** What the async convention adds to a session's system prompt. */
+const ASYNC_SECTION = `TODO`;
+
+/** The same, as the Effect convention declares it. */
+const EFFECT_SECTION = `TODO`;
+
 /** Call the fixture's API; retries ride through a fresh workers.dev URL's first seconds. */
 const call = (path: string, body?: unknown) =>
   Effect.gen(function* () {
@@ -80,7 +86,6 @@ test(
         text: "What is 19 + 23? Use the alchemy_add tool, then tell me the number it returned.",
         tools: ["add"],
         requestId: "add",
-        codeMode: false,
       });
       // The model may fumble a call's arguments first; one that completed is the tool's answer.
       expect((yield* used("alchemy_add")).at(-1)?.output).toContain("1042");
@@ -92,7 +97,6 @@ test(
         text: "Use the shell tool to run exactly this command: printf 'opencode was here' > /home/user/hello.txt",
         tools: ["bash"],
         requestId: "write",
-        codeMode: false,
       });
       const wrote = (yield* used("shell")).length;
       expect(wrote).toBeGreaterThan(0);
@@ -105,7 +109,6 @@ test(
         text: "Use the alchemy_count_bytes tool on /home/user/hello.txt and tell me the number.",
         tools: ["count_bytes"],
         requestId: "count",
-        codeMode: false,
       });
       expect((yield* used("alchemy_count_bytes")).at(-1)?.output).toContain("17");
 
@@ -114,7 +117,6 @@ test(
         text: 'Use the alchemy_withdraw tool to withdraw 500 from the account "checking". Then use it again to withdraw 5 from the account "frozen".',
         tools: ["withdraw"],
         requestId: "withdraw",
-        codeMode: false,
       });
       const withdrawals = ((yield* call(`/${name}/tools`)) as ReadonlyArray<ToolUse>).filter(
         (use) => use.tool === "alchemy_withdraw",
@@ -135,7 +137,6 @@ test(
         text: "Use the shell tool to run exactly this command: cat /home/user/hello.txt",
         tools: ["bash"],
         requestId: "read",
-        codeMode: false,
       });
       expect((yield* stateBecomes("running")).state).toBe("running");
       // The transcript from before the suspend is still there, and the shell ran again.
@@ -154,25 +155,75 @@ test(
   { tags, timeout: 420_000 },
 );
 
+/** The programs the session ran with `tool`, and what each returned. */
+const programsOf = (name: string, tool: string) =>
+  Effect.map(call(`/${name}/tools`), (tools: ReadonlyArray<ToolUse>) =>
+    tools
+      .filter((use) => use.tool === tool)
+      .map((use) => use.output)
+      .join("\n"),
+  );
+
 test(
-  "in code mode the model calls the harness's tools from a program, and a declared failure rejects it",
+  "async code mode declares each tool with the failures it throws, and runs the program in the Durable Object",
   Effect.gen(function* () {
-    const name = `oc-code-${Date.now()}`;
+    const name = `oc-async-${Date.now()}`;
     yield* Effect.gen(function* () {
       yield* call(`/${name}/prompt`, {
         // The program is given whole: left to write it, the model sometimes calls nothing.
-        text: 'Run exactly this JavaScript with the execute tool, unchanged:\n\nconst added = await tools.alchemy.add({ a: 19, b: 23 });\nconst failure = await tools.alchemy.withdraw({ account: "checking", amount: 500 }).then(() => "resolved", (error) => error.message);\nreturn "PROGRAM " + added.sum + " " + failure;',
-        tools: ["add", "withdraw"],
+        text: 'Run exactly this JavaScript with the alchemy_codemode tool, unchanged:\n\nconst added = await tools.add({ a: 19, b: 23 });\nconst failure = await tools.withdraw({ account: "checking", amount: 500 }).then(() => "resolved", (error) => (error instanceof tools.InsufficientFunds) + ":" + error._tag + ":" + error.balance);\nconst found = await tools.codes.lookup_code({ word: "teal" });\nreturn "PROGRAM " + added.sum + " " + failure + " " + found.code;',
+        tools: [],
+        programs: ["add", "withdraw", "codes"],
         requestId: "program",
-        codeMode: true,
       });
-      const programs = ((yield* call(`/${name}/tools`)) as ReadonlyArray<ToolUse>).filter(
-        (use) => use.tool === "execute" && use.status === "completed",
+      expect(yield* programsOf(name, "alchemy_codemode")).toContain(
+        "PROGRAM 1042 true:InsufficientFunds:137 CODE-TEAL-7391",
       );
-      const output = programs.map((use) => use.output).join("\n");
+      expect(((yield* call(`/${name}/section`)) as { section: unknown }).section).toBe(
+        ASYNC_SECTION,
+      );
+    }).pipe(Effect.ensuring(Effect.ignore(call(`/${name}/kill`, {}))));
+  }),
+  { tags, timeout: 300_000 },
+);
+
+test(
+  "Effect code mode declares failures in each tool's Effect, and runs the program in a loaded isolate",
+  Effect.gen(function* () {
+    const name = `oc-effect-${Date.now()}`;
+    yield* Effect.gen(function* () {
+      yield* call(`/${name}/prompt`, {
+        text: 'Run exactly this JavaScript with the alchemy_codemode tool, unchanged:\n\nconst added = yield* tools.add({ a: 19, b: 23 });\nconst balance = yield* tools.withdraw({ account: "checking", amount: 500 }).pipe(Effect.map(() => -1), Effect.catchTag("InsufficientFunds", (error) => Effect.succeed(error.balance)));\nconst frozen = yield* tools.withdraw({ account: "frozen", amount: 5 }).pipe(Effect.flip, Effect.map((error) => error instanceof tools.AccountFrozen));\nreturn "PROGRAM " + added.sum + " " + balance + " " + frozen;',
+        tools: [],
+        programs: ["add", "withdraw"],
+        requestId: "program",
+      });
+      expect(yield* programsOf(name, "alchemy_codemode")).toContain("PROGRAM 1042 137 true");
+      expect(((yield* call(`/${name}/section`)) as { section: unknown }).section).toBe(
+        EFFECT_SECTION,
+      );
+    }).pipe(Effect.ensuring(Effect.ignore(call(`/${name}/kill`, {}))));
+  }),
+  { tags, timeout: 300_000 },
+);
+
+test(
+  "OpenCode's own code mode runs the program with its execute tool, and a declared failure rejects it",
+  Effect.gen(function* () {
+    const name = `oc-native-${Date.now()}`;
+    yield* Effect.gen(function* () {
+      yield* call(`/${name}/prompt`, {
+        text: 'Run exactly this JavaScript with the execute tool, unchanged:\n\nconst added = await tools.alchemy.add({ a: 19, b: 23 });\nconst failure = await tools.alchemy.withdraw({ account: "checking", amount: 500 }).then(() => "resolved", (error) => error.message);\nreturn "PROGRAM " + added.sum + " " + failure;',
+        tools: [],
+        programs: ["add", "withdraw"],
+        requestId: "program",
+      });
+      const output = yield* programsOf(name, "execute");
       // The tool's typed result, and its declared failure with its tag and fields.
       expect(output).toContain("PROGRAM 1042");
       expect(output).toMatch(/_tag\W+InsufficientFunds\W+balance\W+137/);
+      // OpenCode writes its own catalog: the harness adds nothing.
+      expect(((yield* call(`/${name}/section`)) as { section: unknown }).section).toBeNull();
     }).pipe(Effect.ensuring(Effect.ignore(call(`/${name}/kill`, {}))));
   }),
   { tags, timeout: 300_000 },

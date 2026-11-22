@@ -1,5 +1,21 @@
 export {
+  CodeMode,
+  CodeModeAsync,
+  CodeModeConvention,
+  CodeModeEffect,
+  CodeModeError,
+  Eval,
+  EvalQuickJS,
+  isCodeMode,
+  type CodeModeGroup,
+  type Convention,
+  type Program,
+} from "./CodeMode.ts";
+export {
   DuplicateDeclaration,
+  manifestOf,
+  type JsonSchema,
+  type Manifest,
   renderDeclarations,
   type DeclarationForm,
   type DeclaredNamespace,

@@ -9155,6 +9155,10 @@ importers:
         version: 7.1.0-beta
 
   packages/ai:
+    dependencies:
+      '@earendil-works/pi-codemode':
+        specifier: 1.5.0
+        version: 1.5.0
     devDependencies:
       '@alchemy.run/archil':
         specifier: workspace:*

@@ -95,6 +95,9 @@
     "build": "pnpm -r --filter \"{.}...\" run build:package",
     "build:package": "node scripts/build.ts"
   },
+  "dependencies": {
+    "@earendil-works/pi-codemode": "1.5.0"
+  },
   "devDependencies": {
     "@alchemy.run/archil": "workspace:*",
     "@alchemy.run/boat": "workspace:*",

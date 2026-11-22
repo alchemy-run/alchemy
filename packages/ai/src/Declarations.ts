@@ -5,12 +5,24 @@ import * as SchemaAST from "effect/SchemaAST";
 /** How a program calls a tool: `await tools.add(args)`, or `yield* tools.add(args)`. */
 export type DeclarationForm = "async" | "effect";
 
+/** A JSON Schema, as an MCP server or a harness's own tool describes itself. */
+export type JsonSchema = { readonly [key: string]: unknown } | boolean;
+
+const isSchema = (u: Schema.Top | JsonSchema | undefined): u is Schema.Top =>
+  (typeof u === "object" || typeof u === "function") &&
+  u !== null &&
+  "ast" in u &&
+  SchemaAST.isAST(u.ast);
+
 /** One call a program can make. */
 export interface DeclaredTool {
   readonly name: string;
+  /** The tool's name where scripts run, when it differs (`mcp__github__get_issue`). */
+  readonly callAs?: string;
   readonly description: string;
-  readonly parameters: Schema.Top;
-  readonly success: Schema.Top;
+  readonly parameters: Schema.Top | JsonSchema;
+  /** What a call returns. Without one, its text. */
+  readonly success?: Schema.Top | JsonSchema;
   /** A `Schema.TaggedError` class, or a union of several. */
   readonly failure?: Schema.Top;
 }
@@ -69,6 +81,24 @@ const key = (name: PropertyKey): string =>
   typeof name === "string" && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)
     ? name
     : JSON.stringify(String(name));
+
+/** An object type from its member lines: on one line when it is unnamed, short and has no comments. */
+const shape = (lines: ReadonlyArray<string>, indent: string, compact: boolean): string => {
+  if (lines.length === 0) return "{}";
+  const flat = `{ ${lines
+    .map((line) =>
+      line
+        .trim()
+        .replace(/^readonly /, "")
+        .replace(/;$/, ""),
+    )
+    .join("; ")} }`;
+  return compact &&
+    flat.length <= 60 &&
+    !lines.some((line) => /^\s*(\/\*\*|\*)/.test(line) || line.includes("\n"))
+    ? flat
+    : `{\n${lines.join("\n")}\n${indent}}`;
+};
 
 /** Renders one namespace's types, collecting the named schemas it meets. */
 const makeScope = (namespace: string) => {
@@ -166,21 +196,7 @@ const makeScope = (namespace: string) => {
             (signature) => `${inner}readonly [key: string]: ${type(signature.type, inner)};`,
           ),
         ];
-        if (lines.length === 0) return "{}";
-        // An unnamed shape without comments reads best on one line, when it fits.
-        const flat = `{ ${lines
-          .map((line) =>
-            line
-              .trim()
-              .replace(/^readonly /, "")
-              .replace(/;$/, ""),
-          )
-          .join("; ")} }`;
-        return compact &&
-          flat.length <= 60 &&
-          !lines.some((line) => /^\s*(\/\*\*|\*)/.test(line) || line.includes("\n"))
-          ? flat
-          : `{\n${lines.join("\n")}\n${indent}}`;
+        return shape(lines, indent, compact);
       }
       default:
         return "unknown";
@@ -203,7 +219,73 @@ const makeScope = (namespace: string) => {
     return [reference(ast, "error") ?? body(ast, "  ")];
   };
 
-  return { named, type, body, failures };
+  /** A JSON Schema as a type. It has no names to declare. */
+  const json = (schema: JsonSchema | undefined, indent: string): string => {
+    if (schema === undefined || schema === true) return "unknown";
+    if (schema === false) return "never";
+    const node = schema as {
+      readonly type?: string | ReadonlyArray<string>;
+      readonly enum?: ReadonlyArray<unknown>;
+      readonly const?: unknown;
+      readonly anyOf?: ReadonlyArray<JsonSchema>;
+      readonly oneOf?: ReadonlyArray<JsonSchema>;
+      readonly items?: JsonSchema;
+      readonly properties?: Readonly<Record<string, JsonSchema>>;
+      readonly required?: ReadonlyArray<string>;
+      readonly additionalProperties?: JsonSchema;
+    };
+    if (node.const !== undefined) return JSON.stringify(node.const);
+    if (node.enum !== undefined) return node.enum.map((value) => JSON.stringify(value)).join(" | ");
+    const alternatives = node.anyOf ?? node.oneOf;
+    if (alternatives !== undefined) {
+      return [...new Set(alternatives.map((member) => json(member, indent)))].join(" | ");
+    }
+    if (Array.isArray(node.type)) {
+      return node.type.map((type) => json({ ...node, type }, indent)).join(" | ");
+    }
+    switch (node.type) {
+      case "string":
+        return "string";
+      case "number":
+      case "integer":
+        return "number";
+      case "boolean":
+        return "boolean";
+      case "null":
+        return "null";
+      case "array": {
+        const item = json(node.items, indent);
+        return `ReadonlyArray<${item}>`;
+      }
+      case "object":
+      case undefined: {
+        if (node.type === undefined && node.properties === undefined) return "unknown";
+        const inner = `${indent}  `;
+        const required = new Set(node.required ?? []);
+        const lines = Object.entries(node.properties ?? {}).flatMap(([name, property]) => [
+          ...comment(
+            typeof property === "object"
+              ? (property as { readonly description?: string }).description
+              : undefined,
+            inner,
+          ),
+          `${inner}readonly ${key(name)}${required.has(name) ? "" : "?"}: ${json(property, inner)};`,
+        ]);
+        if (typeof node.additionalProperties === "object") {
+          lines.push(`${inner}readonly [key: string]: ${json(node.additionalProperties, inner)};`);
+        }
+        return shape(lines, indent, true);
+      }
+      default:
+        return "unknown";
+    }
+  };
+
+  /** A tool's arguments or result, from either kind of schema. */
+  const of = (schema: Schema.Top | JsonSchema | undefined, indent: string): string =>
+    isSchema(schema) ? type(schema.ast, indent) : json(schema, indent);
+
+  return { named, type, body, failures, of };
 };
 
 /** The fields of an error, without the `_tag` its class already states. */
@@ -238,9 +320,9 @@ const renderNamespace = (
   const inner = `${indent}  `;
 
   const functions = (namespace.tools ?? []).map((tool) => {
-    const args = scope.type(tool.parameters.ast, inner);
+    const args = scope.of(tool.parameters, inner);
     const parameters = args === "{}" ? "" : `args: ${args}`;
-    const success = scope.type(tool.success.ast, inner);
+    const success = tool.success === undefined ? "string" : scope.of(tool.success, inner);
     const failed = scope.failures(tool.failure?.ast);
     const signature = `${inner}function ${toIdentifier(tool.name)}(${parameters})`;
     if (form === "effect") {
@@ -331,3 +413,62 @@ export const renderDeclarations = (
     ...renderNamespace(form, { ...tools, name: "tools" }, "tools", ""),
     "}",
   ].join("\n");
+
+/** A failure class as a program finds it: `tools.bank.InsufficientFunds`. */
+export interface ManifestClass {
+  /** The namespaces the class is in, under `tools`. */
+  readonly path: ReadonlyArray<string>;
+  readonly name: string;
+  readonly tag: string;
+}
+
+/** A tool as a program calls it. */
+export interface ManifestTool {
+  /** Its namespaces under `tools`, then its own name. */
+  readonly path: ReadonlyArray<string>;
+  /** Its name where scripts run. */
+  readonly callAs: string;
+  /** The class of each failure it declares, by `_tag`. */
+  readonly failures: Readonly<Record<string, string>>;
+}
+
+/** What `tools` holds at run time: the same names {@link renderDeclarations} declares. */
+export interface Manifest {
+  readonly tools: ReadonlyArray<ManifestTool>;
+  readonly classes: ReadonlyArray<ManifestClass>;
+}
+
+/** The tools and failure classes of `tools`, by where a program finds them. */
+export const manifestOf = (tools: Omit<DeclaredNamespace, "name">): Manifest => {
+  const out: { tools: ManifestTool[]; classes: ManifestClass[] } = { tools: [], classes: [] };
+  const visit = (namespace: Omit<DeclaredNamespace, "name">, path: ReadonlyArray<string>) => {
+    const scope = makeScope(["tools", ...path].join("."));
+    const declared = new Set<string>();
+    for (const tool of namespace.tools ?? []) {
+      const failures: Record<string, string> = {};
+      scope.failures(tool.failure?.ast);
+      for (const entry of scope.named.values()) {
+        if (entry.kind !== "error") continue;
+        const tag = fieldsOf(entry.ast).tag ?? entry.name;
+        if (!declared.has(entry.name)) {
+          declared.add(entry.name);
+          out.classes.push({ path, name: entry.name, tag });
+        }
+      }
+      for (const name of scope.failures(tool.failure?.ast)) {
+        const entry = scope.named.get(name);
+        if (entry !== undefined) failures[fieldsOf(entry.ast).tag ?? entry.name] = entry.name;
+      }
+      out.tools.push({
+        path: [...path, toIdentifier(tool.name)],
+        callAs: tool.callAs ?? tool.name,
+        failures,
+      });
+    }
+    for (const child of namespace.namespaces ?? []) {
+      visit(child, [...path, toIdentifier(child.name)]);
+    }
+  };
+  visit(tools, []);
+  return out;
+};

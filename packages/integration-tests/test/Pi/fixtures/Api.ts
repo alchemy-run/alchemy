@@ -34,8 +34,10 @@ export default class PiApi extends Cloudflare.Worker<PiApi>()(
           switch (action) {
             case "create":
               return yield* HttpServerResponse.json({
-                id: yield* session.create(name!, body.withServer),
+                id: yield* session.create(name!, body.withServer, body.programs === true),
               });
+            case "section":
+              return yield* HttpServerResponse.json({ section: yield* session.section(name!) });
             case "tools":
               return yield* HttpServerResponse.json(yield* session.tools(name!));
             case "add-server":
@@ -63,6 +65,10 @@ export default class PiApi extends Cloudflare.Worker<PiApi>()(
               );
             case "results":
               return yield* HttpServerResponse.json(yield* session.toolResults(name!));
+            case "offered":
+              return yield* HttpServerResponse.json(yield* session.offered(name!));
+            case "section":
+              return yield* HttpServerResponse.json({ section: yield* session.section(name!) });
           }
         }
         if (user === "sandbox") {
@@ -109,6 +115,10 @@ export default class PiApi extends Cloudflare.Worker<PiApi>()(
           case "codemode":
             yield* session.addCodeMode(name!);
             return yield* HttpServerResponse.json({ ok: true });
+          case "offered":
+            return yield* HttpServerResponse.json(yield* session.offered(name!));
+          case "section":
+            return yield* HttpServerResponse.json({ section: yield* session.section(name!) });
           case "skill":
             yield* session.addSkill(name!);
             return yield* HttpServerResponse.json({ ok: true });
