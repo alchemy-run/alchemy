@@ -1,0 +1,188 @@
+import * as iot from "@distilled.cloud/azure/iotoperations";
+import * as Provider from "alchemy/Provider";
+import type { Resource } from "alchemy/Resource";
+import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
+import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
+
+export interface AkriConnectorTemplateProps {
+  /**
+   * Resource group of the IoT Operations instance. Changing it replaces the template.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
+  resourceGroup: string;
+  /** IoT Operations instance that holds the template. Changing it replaces the template. */
+  instanceName: string;
+  /**
+   * Template name (lowercase letters, digits, and hyphens). If omitted, a
+   * unique name is generated from the app, stage, and logical ID. Changing
+   * it replaces the template.
+   * @default a unique name generated from the app, stage, and logical ID
+   */
+  name?: string;
+  /**
+   * How connector pods run: `{ runtimeConfigurationType:
+   * "ManagedConfiguration", managedConfigurationSettings: {
+   * managedConfigurationType: "ImageConfiguration", imageConfigurationSettings:
+   * { imageName, registrySettings, tagDigestSettings, replicas? }, allocation?,
+   * persistentVolumeClaims?, additionalConfiguration?, secrets? } }`.
+   */
+  runtimeConfiguration: iot.AkriConnectorTemplatePropertiesInput["runtimeConfiguration"];
+  /** Device inbound endpoint types the connector handles (e.g. `Microsoft.Rest`). */
+  deviceInboundEndpointTypes: iot.AkriConnectorTemplateDeviceInboundEndpointType[];
+  /**
+   * Minimum and maximum IoT Operations versions the connector supports.
+   * @default unset
+   */
+  aioMetadata?: iot.AkriConnectorTemplateAioMetadata;
+  /**
+   * Log level of the connector.
+   * @default Azure's defaults
+   */
+  diagnostics?: iot.AkriConnectorTemplateDiagnostics;
+  /**
+   * How connector pods connect to the MQTT broker.
+   * @default Azure's defaults
+   */
+  mqttConnectionConfiguration?: iot.AkriConnectorsMqttConnectionConfiguration;
+  /**
+   * Reference to a connector metadata document in a container registry.
+   * @default unset
+   */
+  connectorMetadataRef?: string;
+}
+
+export interface AkriConnectorTemplate extends Resource<
+  "Azure.IoTOperations.AkriConnectorTemplate",
+  AkriConnectorTemplateProps,
+  {
+    /** Name of the template. */
+    akriConnectorTemplateName: string;
+    /** IoT Operations instance that holds the template. */
+    instanceName: string;
+    /** Resource group of the instance. */
+    resourceGroup: string;
+    /** ARM resource ID of the template. */
+    akriConnectorTemplateId: string;
+    /** Provisioning state of the template. */
+    provisioningState: string | undefined;
+    /** Health of the template as reported by the edge cluster. */
+    healthState: string | undefined;
+  },
+  never,
+  Providers
+> {}
+
+/**
+ * An Akri connector template of an Azure IoT Operations instance
+ * (`Microsoft.IoTOperations/instances/akriConnectorTemplates`): the
+ * container image and runtime settings of a connector that discovers and
+ * talks to devices (REST, ONVIF, media, SSE).
+ *
+ * @see https://learn.microsoft.com/azure/iot-operations/discover-manage-assets/overview-akri
+ *
+ * ### Registering a Connector
+ * **Example:** REST connector from Microsoft Container Registry
+ * ```typescript
+ * const instance = yield* Azure.IoTOperations.Instance("aio", {
+ *   customLocationId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.ExtendedLocation/customLocations/aio-location",
+ *   schemaRegistryId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.DeviceRegistry/schemaRegistries/aio-schemas",
+ * });
+ * const template = yield* Azure.IoTOperations.AkriConnectorTemplate("rest", {
+ *   instanceName: instance.instanceName,
+ *   deviceInboundEndpointTypes: [{ endpointType: "Microsoft.Rest" }],
+ *   runtimeConfiguration: {
+ *     runtimeConfigurationType: "ManagedConfiguration",
+ *     managedConfigurationSettings: {
+ *       managedConfigurationType: "ImageConfiguration",
+ *       imageConfigurationSettings: {
+ *         imageName: "azureiotoperations/akri-connectors/rest",
+ *         registrySettings: {
+ *           registrySettingsType: "ContainerRegistry",
+ *           containerRegistrySettings: { registry: "mcr.microsoft.com" },
+ *         },
+ *         tagDigestSettings: { tagDigestType: "Tag", tag: "1.0.0" },
+ *       },
+ *     },
+ *   },
+ * });
+ * ```
+ *
+ * :::caution
+ * Changing `resourceGroup`, `instanceName`, or `name` replaces the
+ * template.
+ * :::
+ *
+ * @resource
+ */
+export const AkriConnectorTemplate = GroupedResource<AkriConnectorTemplate>(
+  "Azure.IoTOperations.AkriConnectorTemplate",
+);
+
+export const AkriConnectorTemplateProvider = () =>
+  Provider.succeed(AkriConnectorTemplate, {
+    stables: [
+      "akriConnectorTemplateName",
+      "instanceName",
+      "resourceGroup",
+      "akriConnectorTemplateId",
+    ],
+    ...childLifecycle<
+      AkriConnectorTemplateProps,
+      AkriConnectorTemplate["Attributes"],
+      InstanceScope,
+      iot.GetAkriConnectorTemplateResponse,
+      iot.AkriConnectorTemplatePropertiesInput
+    >({
+      kind: "Akri connector template",
+      scopeOf: (props) => ({
+        resourceGroup: props.resourceGroup,
+        instanceName: props.instanceName,
+      }),
+      keyOfAttrs: (attrs) => ({
+        resourceGroup: attrs.resourceGroup,
+        instanceName: attrs.instanceName,
+        name: attrs.akriConnectorTemplateName,
+      }),
+      get: (subscriptionId, key) =>
+        iot.GetAkriConnectorTemplate({
+          subscriptionId,
+          resourceGroupName: key.resourceGroup,
+          instanceName: key.instanceName,
+          akriConnectorTemplateName: key.name,
+        }),
+      put: (subscriptionId, key, properties, extendedLocation) =>
+        iot.AkriConnectorTemplateCreateOrUpdate({
+          subscriptionId,
+          resourceGroupName: key.resourceGroup,
+          instanceName: key.instanceName,
+          akriConnectorTemplateName: key.name,
+          properties,
+          ...(extendedLocation !== undefined ? { extendedLocation } : {}),
+        }),
+      remove: (subscriptionId, key) =>
+        iot.DeleteAkriConnectorTemplate({
+          subscriptionId,
+          resourceGroupName: key.resourceGroup,
+          instanceName: key.instanceName,
+          akriConnectorTemplateName: key.name,
+        }),
+      bodyOf: (props) => ({
+        runtimeConfiguration: props.runtimeConfiguration,
+        deviceInboundEndpointTypes: props.deviceInboundEndpointTypes,
+        aioMetadata: props.aioMetadata,
+        diagnostics: props.diagnostics,
+        mqttConnectionConfiguration: props.mqttConnectionConfiguration,
+        connectorMetadataRef: props.connectorMetadataRef,
+      }),
+      toAttrs: (key, observed) => ({
+        akriConnectorTemplateName: key.name,
+        instanceName: key.instanceName,
+        resourceGroup: key.resourceGroup,
+        akriConnectorTemplateId: observed.id ?? "",
+        ...childStatus(observed),
+      }),
+    }),
+  });

@@ -1,0 +1,257 @@
+---
+title: Azure Managed Redis
+description: Create an Azure Managed Redis cluster, grant an Azure Function access with an access policy, and run Redis commands with a Microsoft Entra token.
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const pkgs = "@alchemy.run/redis";
+
+Azure Managed Redis is the successor of Azure Cache for Redis. A cluster
+holds one database. Your Function signs in with a Microsoft Entra token
+for its managed identity, so no access key reaches it.
+
+<PackageManagers add={pkgs} />
+
+## Create a cluster and its database
+
+```typescript
+// src/resources.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export const Cache = Azure.Redis.ManagedRedis("Cache", {
+  sku: "Balanced_B0",
+  highAvailability: "Disabled",
+});
+
+export const Counters = Effect.gen(function* () {
+  const cache = yield* Cache;
+  return yield* Azure.Redis.ManagedRedisDatabase("Counters", {
+    cluster: cache.clusterName,
+    clusteringPolicy: "EnterpriseCluster",
+  });
+});
+```
+
+`Balanced_B0` without high availability is one node and no replica, at
+about $0.02 per hour. Creating the cluster takes 5 to 10 minutes, and
+deleting it takes about as long.
+
+`EnterpriseCluster` puts one endpoint in front of every shard, so a
+client that doesn't follow `MOVED` redirects works. The database listens
+on port 10000, TLS only, with access keys off.
+
+## Sign in with the Function's identity
+
+Redis takes `AUTH <object ID> <token>`. Copy this helper: it gets a token
+for `https://redis.azure.com/.default` from the Function's identity and
+caches it until 5 minutes before it expires.
+
+```typescript
+// src/EntraRedis.ts
+import * as Redis from "@alchemy.run/redis";
+import { makeTokenCache, requestManagedIdentityToken } from "@distilled.cloud/azure";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+
+export const REDIS_SCOPE = "https://redis.azure.com/.default";
+
+export class TokenObjectIdMissing extends Data.TaggedError("TokenObjectIdMissing")<{
+  readonly message: string;
+}> {}
+
+const objectIdOf = (token: string) =>
+  Effect.try({
+    try: () => {
+      const payload = token.split(".")[1] ?? "";
+      const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
+        oid?: unknown;
+      };
+      if (typeof claims.oid !== "string") throw new Error("the token has no oid claim");
+      return claims.oid;
+    },
+    catch: (cause) => new TokenObjectIdMissing({ message: String(cause) }),
+  });
+
+export const makeEntraRedis = <E, R>(
+  endpoint: Effect.Effect<{ readonly host: string; readonly port: number }, E, R>,
+) => {
+  const tokenFor = makeTokenCache((scope: string) => requestManagedIdentityToken({}, scope));
+
+  const url = Effect.gen(function* () {
+    const { host, port } = yield* endpoint;
+    const redacted = yield* tokenFor(REDIS_SCOPE);
+    const token = Redacted.value(redacted);
+    const objectId = yield* objectIdOf(token);
+    return Redis.connectionUrl({ host, port, username: objectId, password: token, tls: true });
+  });
+
+  return {
+    send: (name: string, args: readonly Redis.Arg[] = []) =>
+      Effect.flatMap(url, (resolved) => Redis.run(resolved, name, args)),
+    pipeline: (commands: ReadonlyArray<readonly [string, ...Redis.Arg[]]>) =>
+      Effect.flatMap(url, (resolved) => Redis.pipeline(resolved, commands)),
+  };
+};
+```
+
+The object ID is the token's `oid` claim, which is the identity's
+`principalId`. Each call opens one TLS connection, runs its commands,
+and closes it.
+
+## Use it in a Function
+
+Yield the database's `hostName` and `port` inside the Function. Alchemy
+stores them as app settings and hands you Effects that read them at
+runtime:
+
+```typescript
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { makeEntraRedis } from "./EntraRedis.ts";
+import { Counters } from "./resources.ts";
+
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const counters = yield* Counters;
+    const hostName = yield* counters.hostName;
+    const port = yield* counters.port;
+
+    const redis = makeEntraRedis(
+      Effect.gen(function* () {
+        const host = yield* hostName;
+        const tcpPort = yield* port;
+        return { host, port: tcpPort };
+      }),
+    );
+
+    return {
+      fetch: Effect.gen(function* () {
+        const visits = yield* redis.send("INCR", ["visits"]);
+        return yield* HttpServerResponse.json({ visits });
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+## Grant the Function access
+
+An access policy assignment lets an identity sign in to the database.
+Give it the Function's `principalId`:
+
+```typescript
+// alchemy.run.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import Api from "./src/Api.ts";
+import { Counters } from "./src/resources.ts";
+
+export default Alchemy.Stack(
+  "AzureRedisExample",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const counters = yield* Counters;
+    const api = yield* Api;
+
+    yield* Azure.Redis.AccessPolicyAssignment("ApiAccess", {
+      cluster: counters.cluster,
+      database: counters.databaseName,
+      objectId: api.principalId.as<string>(),
+    });
+
+    return { url: api.url };
+  }),
+);
+```
+
+The assignment gives the database's `default` access policy to this one
+identity. It can take a minute to apply after the first deploy. Until
+then, `AUTH` fails.
+
+## Run several commands in one round trip
+
+`pipeline` sends a list of commands on one connection:
+
+```typescript
+const [, count, ttl] = yield* redis.pipeline([
+  ["SET", "ratelimit:user-42", "0", "EX", 60, "NX"],
+  ["INCR", "ratelimit:user-42"],
+  ["TTL", "ratelimit:user-42"],
+]);
+```
+
+## Use access keys
+
+For a client that can't use Entra tokens, turn keys on:
+
+```typescript
+const db = yield* Azure.Redis.ManagedRedisDatabase("Sessions", {
+  cluster: cache.clusterName,
+  evictionPolicy: "AllKeysLRU",
+  accessKeysAuthentication: "Enabled",
+});
+```
+
+`db.primaryKey` is `Redacted`. Clients `AUTH` with it on `db.hostName`
+and `db.port`.
+
+## Add modules and persistence
+
+```typescript
+const db = yield* Azure.Redis.ManagedRedisDatabase("Catalog", {
+  cluster: cache.clusterName,
+  clusteringPolicy: "EnterpriseCluster",
+  evictionPolicy: "NoEviction",
+  modules: [{ name: "RedisJSON" }, { name: "RediSearch" }],
+  persistence: { rdbEnabled: true, rdbFrequency: "6h" },
+});
+```
+
+RediSearch needs `NoEviction`.
+
+## Scale the cluster
+
+Change `sku` to another Azure Managed Redis size, for example
+`Balanced_B1`, and deploy again. Azure scales in place and keeps the
+data.
+
+:::caution
+Changing the cluster's `name`, `location`, or `zones` replaces it.
+Alchemy creates a new, empty cluster and deletes the old one with its
+data.
+:::
+
+## Keep the cluster off the internet
+
+```typescript
+const cache = yield* Azure.Redis.ManagedRedis("Cache", {
+  publicNetworkAccess: "Disabled",
+});
+yield* Azure.Network.PrivateEndpoint("CacheEndpoint", {
+  subnetId: subnet.subnetId,
+  privateLinkServiceConnections: [
+    { privateLinkServiceId: cache.clusterId, groupIds: ["redisEnterprise"] },
+  ],
+});
+```
+
+## Example
+
+[`azure-redis`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-redis)
+is a fixed-window rate limiter over Azure Managed Redis, with a live
+test.
+
+## Where next
+
+- [Identity and bindings](/azure/security/identity) — how managed
+  identities work.
+- [Redis reference](/providers/azure/redis#managedredis) — every prop and
+  attribute.

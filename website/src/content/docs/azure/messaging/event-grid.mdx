@@ -1,0 +1,309 @@
+---
+title: Event Grid
+description: Publish events to an Event Grid topic from an Azure Function, handle events from topics and Azure resources in a Function, route them to queues, and pull them from namespace topics.
+---
+
+Event Grid routes events from a source to every subscriber whose filter
+matches. The source is a custom topic you publish to, or an Azure
+resource, such as a storage account, that publishes its own events.
+
+## Create a topic
+
+```typescript
+// src/resources.ts
+import * as Azure from "@alchemy.run/azure";
+
+export const Orders = Azure.EventGrid.Topic("Orders", {});
+```
+
+The topic takes events in the Event Grid schema. `orders.endpoint` is
+its HTTPS endpoint.
+
+## Publish events
+
+`PublishEventGridEvents` returns a function that posts a batch:
+
+```typescript
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Orders } from "./resources.ts";
+
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const topic = yield* Orders;
+    const publish = yield* Azure.EventGrid.PublishEventGridEvents(topic);
+
+    return {
+      fetch: Effect.gen(function* () {
+        yield* publish({
+          body: [
+            {
+              id: "order-42",
+              subject: "orders/42",
+              eventType: "Order.Created",
+              eventTime: new Date().toISOString(),
+              dataVersion: "1.0",
+              data: { orderId: "42" },
+            },
+          ],
+        });
+        return HttpServerResponse.text("published", { status: 202 });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Azure.EventGrid.PublishEventGridEventsHttp)),
+) {}
+```
+
+The binding grants EventGrid Data Sender to the Function's managed
+identity, on this topic only. Your code never handles a topic key.
+
+## Handle events in a Function
+
+`consumeEvents` adds an Event Grid trigger to the Function and an event
+subscription on `scope` that pushes to it:
+
+```typescript
+// src/Worker.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Orders } from "./resources.ts";
+
+export default class Worker extends Azure.Functions.Function<Worker>()(
+  "Worker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const topic = yield* Orders;
+    yield* Azure.EventGrid.consumeEvents(
+      "OrderCreated",
+      { scope: topic.topicId, includedEventTypes: ["Order.Created"] },
+      (event) => Effect.log(`${event.subject}: ${JSON.stringify(event.data)}`),
+    );
+
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("ok")),
+    };
+  }).pipe(Effect.provide(Azure.Functions.EventGridEventSource)),
+) {}
+```
+
+The handler runs once per event. Event Grid retries a failed delivery
+with backoff for up to 24 hours. The first argument names the
+subscription and the trigger, so keep it unique in the Function.
+
+## React to Azure resource events
+
+Set `scope` to any resource that publishes events. Filter by type and
+subject:
+
+```typescript
+const account = yield* Data;
+yield* Azure.EventGrid.consumeEvents(
+  "NewImages",
+  {
+    scope: account.storageAccountId,
+    includedEventTypes: ["Microsoft.Storage.BlobCreated"],
+    subjectBeginsWith: "/blobServices/default/containers/uploads/",
+    subjectEndsWith: ".png",
+  },
+  (event) => Effect.log(`new image: ${event.subject}`),
+);
+```
+
+A resource group (`group.resourceGroupId`) sends
+`Microsoft.Resources.ResourceWriteSuccess` events. A Key Vault sends
+secret and certificate events.
+
+## React to new blobs
+
+`consumeBlobCreated` is the short form for one container. It hands you
+the blob's name, URL, size, and content type:
+
+```typescript
+yield* Azure.Storage.consumeBlobCreated(uploads, { prefix: "uploads/", suffix: ".png" }, (event) =>
+  Effect.log(`${event.blobName}: ${event.contentLength} bytes`),
+);
+// …provided with Effect.provide(Azure.Functions.BlobCreatedEventSource)
+```
+
+## Publish CloudEvents
+
+Create the topic with the CloudEvents v1.0 schema:
+
+```typescript
+// src/resources.ts
+import * as Azure from "@alchemy.run/azure";
+
+export const Orders = Azure.EventGrid.Topic("Orders", {
+  inputSchema: "CloudEventSchemaV1_0",
+});
+```
+
+Publish with `PublishCloudEventEvents`:
+
+```typescript
+// init
+const topic = yield* Orders;
+const publish = yield* Azure.EventGrid.PublishCloudEventEvents(topic);
+
+// runtime
+yield* publish({
+  body: [
+    {
+      id: "order-42",
+      source: "/orders",
+      type: "Order.Created",
+      specversion: "1.0",
+      datacontenttype: "application/json",
+      data: { orderId: "42" },
+    },
+  ],
+});
+// …provided with Effect.provide(Azure.EventGrid.PublishCloudEventEventsHttp)
+```
+
+For your own JSON, use `inputSchema: "CustomEventSchema"` with an
+`inputSchemaMapping`, and publish with `PublishCustomEventEvents`.
+
+:::caution
+Changing a topic's `name`, `location`, `inputSchema`, or
+`inputSchemaMapping` replaces it. The new topic has a new endpoint and
+keys, and the old one's event subscriptions are deleted.
+:::
+
+## Route events to a queue
+
+An `EventSubscription` delivers events without code. Send `Order.Created`
+events to a Storage queue:
+
+```typescript
+const account = yield* Azure.Storage.StorageAccount("sink");
+const inbox = yield* Azure.Storage.Queue("inbox", {
+  storageAccount: account.storageAccountName,
+});
+yield* Azure.EventGrid.EventSubscription("orders-to-inbox", {
+  scope: orders.topicId,
+  destination: {
+    endpointType: "StorageQueue",
+    resourceId: account.storageAccountId,
+    queueName: inbox.queueName,
+  },
+  filter: { includedEventTypes: ["Order.Created"] },
+});
+```
+
+Other destinations are `ServiceBusQueue`, `EventHub`, `WebHook`, and
+`AzureFunction`.
+
+## Filter on event data
+
+```typescript
+yield* Azure.EventGrid.EventSubscription("big-eu-orders", {
+  scope: orders.topicId,
+  destination: { endpointType: "ServiceBusQueue", resourceId: queue.queueId },
+  filter: {
+    includedEventTypes: ["Order.Created"],
+    advancedFilters: [
+      { operatorType: "NumberGreaterThan", key: "data.total", value: 100 },
+      { operatorType: "StringIn", key: "data.region", values: ["eu-west", "eu-north"] },
+    ],
+  },
+});
+```
+
+## Dead-letter undelivered events
+
+After `maxDeliveryAttempts` or `eventTimeToLiveInMinutes`, Event Grid
+writes the event to the dead-letter container:
+
+```typescript
+const deadLetters = yield* Azure.Storage.BlobContainer("dead-letters", {
+  storageAccount: account.storageAccountName,
+});
+yield* Azure.EventGrid.EventSubscription("orders-to-hook", {
+  scope: orders.topicId,
+  destination: { endpointType: "WebHook", endpointUrl: "https://example.com/api/events" },
+  retryPolicy: { maxDeliveryAttempts: 10, eventTimeToLiveInMinutes: 60 },
+  deadLetterDestination: {
+    resourceId: account.storageAccountId,
+    blobContainerName: deadLetters.containerName,
+  },
+});
+```
+
+Without a dead-letter container, Event Grid drops the event.
+
+## Pull events from a namespace topic
+
+An Event Grid namespace holds topics whose queue subscriptions keep
+events until a receiver takes them:
+
+```typescript
+const events = yield* Azure.EventGrid.Namespace("events");
+const orders = yield* Azure.EventGrid.NamespaceTopic("orders", {
+  namespace: events.namespaceName,
+  eventRetentionInDays: 1,
+});
+const workers = yield* Azure.EventGrid.NamespaceTopicEventSubscription("workers", {
+  namespace: events.namespaceName,
+  topic: orders.namespaceTopicName,
+  queue: { receiveLockDurationInSeconds: 120, maxDeliveryCount: 10 },
+  includedEventTypes: ["Order.Created"],
+});
+```
+
+## Receive and acknowledge
+
+Publish with `PublishCloudEvent`, then receive, handle, and acknowledge:
+
+```typescript
+// init
+const publish = yield* Azure.EventGrid.PublishCloudEvent(orders);
+const receive = yield* Azure.EventGrid.ReceiveCloudEvents(workers);
+const acknowledge = yield* Azure.EventGrid.AcknowledgeCloudEvents(workers);
+
+// runtime
+yield* publish({
+  id: "order-42",
+  source: "/orders",
+  type: "Order.Created",
+  specversion: "1.0",
+  data: { orderId: "42" },
+});
+const received = yield* receive({ maxEvents: 10, maxWaitTime: 10 });
+const lockTokens = received.value.map((r) => r.brokerProperties.lockToken);
+if (lockTokens.length > 0) yield* acknowledge({ lockTokens });
+// …provided with Effect.provide(Layer.mergeAll(
+//   Azure.EventGrid.PublishCloudEventHttp,
+//   Azure.EventGrid.ReceiveCloudEventsHttp,
+//   Azure.EventGrid.AcknowledgeCloudEventsHttp,
+// ))
+```
+
+`PublishCloudEvent` grants EventGrid Data Sender on the namespace topic.
+The receive bindings grant a custom role on the subscription only.
+`ReleaseCloudEvents` delivers an event again, `RejectCloudEvents`
+dead-letters it, and `RenewCloudEventLocks` keeps the lock during long
+work.
+
+## Before the first subscription
+
+Alchemy registers the `Microsoft.EventGrid` resource provider on the
+subscription before it creates the first event subscription. The
+deploying identity needs permission to register resource providers.
+
+## Example
+
+[`azure-storage-uploads`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-storage-uploads)
+indexes each upload from its Blob Storage `BlobCreated` event.
+
+## Where next
+
+- [Blob and Table storage](/azure/data/storage) — the account behind
+  blob events.
+- [EventGrid reference](/providers/azure/eventgrid#topic) — every prop
+  and attribute.
