@@ -12,7 +12,12 @@ const TOKEN = "a".repeat(64);
 const PRIVATE_URL = "http://greeter.railway.internal:3000";
 const PUBLIC_URL = "https://greeter.up.railway.app";
 
-const shape = { greet: (name: string) => Effect.succeed(`hello ${name}`) };
+const shape = {
+  greet: (name: string) => Effect.succeed(`hello ${name}`),
+  // JSON has no `undefined`, so the result names which arguments arrived undefined.
+  undefinedArgs: (...args: ReadonlyArray<unknown>) =>
+    Effect.succeed(args.map((arg) => (arg === undefined ? "undefined" : arg))),
+};
 
 const fallback = Effect.succeed(HttpServerResponse.text("ok"));
 
@@ -140,8 +145,14 @@ describe.sequential(
             Effect.gen(function* () {
               const stub = yield* bindFunction<{
                 greet: (name: string) => Effect.Effect<string>;
+                undefinedArgs: (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown>;
               }>({ Type: "Railway.Function", LogicalId: "Greeter" } as never);
               expect(yield* stub.greet("sam")).toBe("hello sam");
+              // An undefined argument arrives undefined, in any position. A trailing
+              // one is left off, which the callee reads as undefined too.
+              expect(yield* stub.undefinedArgs(undefined, "a", undefined, null, undefined)).toEqual(
+                ["undefined", "a", "undefined", null],
+              );
             }),
           ),
         ),
