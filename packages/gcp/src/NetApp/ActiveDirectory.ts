@@ -411,9 +411,9 @@ export const ActiveDirectoryProvider = () =>
       if (current === undefined) {
         const created = yield* netapp
           .createProjectsLocationsActiveDirectories({
+            ...body,
             parent: parentOf(env.project, location),
             activeDirectoryId,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -460,12 +460,9 @@ export const ActiveDirectoryProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* netapp.patchProjectsLocationsActiveDirectories({
+          ...body,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            ...body,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

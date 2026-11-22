@@ -272,13 +272,11 @@ export const GroupProvider = () =>
       if (current === undefined) {
         const created = yield* vm
           .createProjectsLocationsGroups({
+            displayName,
+            description,
+            migrationTargetType,
             parent: locationParent(env.project, location),
             groupId,
-            body: {
-              displayName,
-              description,
-              migrationTargetType,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -305,13 +303,10 @@ export const GroupProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* vm.patchProjectsLocationsGroups({
+          displayName,
+          description,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            displayName,
-            description,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

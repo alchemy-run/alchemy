@@ -982,9 +982,7 @@ export default { async fetch() { return new Response("v4"); } };
       (scratch) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const physicalName = `alchemy-test-do-exports-${scratch.stage
-            .toLowerCase()
-            .replace(/[^a-z0-9-]/g, "-")}`;
+          const physicalName = testName("alchemy-test-do-exports");
           const script = `${hostWorkerScript}\nexport class Unbound extends DurableObject {}\n`;
 
           yield* workers

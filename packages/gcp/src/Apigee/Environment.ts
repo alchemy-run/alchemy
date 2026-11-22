@@ -350,20 +350,17 @@ export const EnvironmentProvider = () =>
       if (current === undefined) {
         const operation = yield* apigee
           .createOrganizationsEnvironments({
+            displayName: news.displayName,
+            description: desiredDescription,
+            type: news.type,
+            apiProxyType: news.apiProxyType,
+            deploymentType: news.deploymentType,
+            forwardProxyUri: news.forwardProxyUri,
+            clientIpResolutionConfig: news.clientIpResolutionConfig,
+            properties: recordToProperties(properties),
+            nodeConfig: news.nodeConfig,
             parent: organization,
             name: environmentId,
-            body: {
-              name: environmentId,
-              displayName: news.displayName,
-              description: desiredDescription,
-              type: news.type,
-              apiProxyType: news.apiProxyType,
-              deploymentType: news.deploymentType,
-              forwardProxyUri: news.forwardProxyUri,
-              clientIpResolutionConfig: news.clientIpResolutionConfig,
-              properties: recordToProperties(properties),
-              nodeConfig: news.nodeConfig,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {
@@ -393,19 +390,16 @@ export const EnvironmentProvider = () =>
         nodeChanged
       ) {
         current = yield* apigee.updateOrganizationsEnvironments({
+          displayName: news.displayName,
+          description: desiredDescription,
+          type: current.type,
+          apiProxyType: current.apiProxyType,
+          deploymentType: current.deploymentType,
+          forwardProxyUri: news.forwardProxyUri,
+          clientIpResolutionConfig: news.clientIpResolutionConfig,
+          properties: recordToProperties(properties),
+          nodeConfig: news.nodeConfig ?? current.nodeConfig,
           name,
-          body: {
-            name: environmentId,
-            displayName: news.displayName,
-            description: desiredDescription,
-            type: current.type,
-            apiProxyType: current.apiProxyType,
-            deploymentType: current.deploymentType,
-            forwardProxyUri: news.forwardProxyUri,
-            clientIpResolutionConfig: news.clientIpResolutionConfig,
-            properties: recordToProperties(properties),
-            nodeConfig: news.nodeConfig ?? current.nodeConfig,
-          },
         });
       }
 

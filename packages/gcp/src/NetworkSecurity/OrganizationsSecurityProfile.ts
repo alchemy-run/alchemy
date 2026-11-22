@@ -428,17 +428,15 @@ export const OrganizationsSecurityProfileProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createOrganizationsLocationsSecurityProfiles({
+            type,
+            description: news.description,
+            labels: desiredLabels,
+            threatPreventionProfile,
+            customMirroringProfile: news.customMirroringProfile,
+            urlFilteringProfile: news.urlFilteringProfile,
+            customInterceptProfile: news.customInterceptProfile,
             parent: organizationParent(organization, location),
             securityProfileId,
-            body: {
-              type,
-              description: news.description,
-              labels: desiredLabels,
-              threatPreventionProfile,
-              customMirroringProfile: news.customMirroringProfile,
-              urlFilteringProfile: news.urlFilteringProfile,
-              customInterceptProfile: news.customInterceptProfile,
-            },
           })
           .pipe(
             Effect.retry({
@@ -481,15 +479,12 @@ export const OrganizationsSecurityProfileProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* networksecurity.patchOrganizationsLocationsSecurityProfiles({
+          labels: desiredLabels,
+          description: news.description,
+          threatPreventionProfile,
+          urlFilteringProfile: news.urlFilteringProfile,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            threatPreventionProfile,
-            urlFilteringProfile: news.urlFilteringProfile,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

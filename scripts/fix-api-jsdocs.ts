@@ -42,6 +42,7 @@ const packages = [
   "stripe",
   "cloudflare",
   "gcp",
+  "azure",
   "aws",
   "domain",
   "kubernetes",

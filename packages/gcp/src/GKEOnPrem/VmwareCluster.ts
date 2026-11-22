@@ -471,9 +471,9 @@ export const VmwareClusterProvider = () =>
       if (current === undefined) {
         const created = yield* gkeonprem
           .createProjectsLocationsVmwareClusters({
+            ...body,
             parent: parentOf(env.project, location),
             vmwareClusterId,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -517,12 +517,10 @@ export const VmwareClusterProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* gkeonprem.patchProjectsLocationsVmwareClusters({
+          ...body,
+          etag: current.etag,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            ...body,
-            etag: current.etag,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

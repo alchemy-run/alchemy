@@ -8,13 +8,13 @@ import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
-import { readFraudDetectorTags, syncFraudDetectorTags } from "./internal.ts";
+import { readFraudDetectorTags, snakeName, syncFraudDetectorTags } from "./internal.ts";
 
 export interface VariableProps {
   /**
-   * Name of the variable. If omitted, a unique lowercase name is generated
-   * from the app, stage, and logical ID. Changing the name replaces the
-   * variable.
+   * Name of the variable: lowercase letters, digits and underscores. If
+   * omitted, a unique name is generated from the app, stage, and logical ID.
+   * Changing the name replaces the variable.
    */
   name?: string;
   /**
@@ -109,7 +109,12 @@ export const VariableProvider = () =>
     Variable,
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: Partial<VariableProps>) {
-        return props.name ?? (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }));
+        return (
+          props.name ??
+          snakeName(
+            yield* createPhysicalName({ id, maxLength: 64, lowercase: true, delimiter: "_" }),
+          )
+        );
       });
 
       /** Look a variable up by name; typed not-found → undefined. */

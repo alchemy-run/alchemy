@@ -6,6 +6,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
+import { redactTokenValue } from "../ApiToken/internal.ts";
 import {
   selectableScopes,
   tokenPolicies,
@@ -170,7 +171,7 @@ export const create = Effect.fn("Alchemist.cloudflare.token.create")(
     const verificationStatus = yield* user.verifyToken({}).pipe(
       Effect.provideService(
         CloudflareCredentials.Credentials,
-        Effect.succeed(apiTokenCredentials({ apiToken: Redacted.make(result.value) })),
+        Effect.succeed(apiTokenCredentials({ apiToken: redactTokenValue(result.value) })),
       ),
       Effect.map(({ status }) => status),
       Effect.orElseSucceed(() => undefined),
@@ -178,7 +179,7 @@ export const create = Effect.fn("Alchemist.cloudflare.token.create")(
     return {
       id: result.id ?? "unknown",
       name: result.name ?? input.plan.name,
-      value: Redacted.make(result.value),
+      value: redactTokenValue(result.value),
       grantedPermissionGroups: granted,
       policies: result.policies ?? input.plan.policies,
       verificationStatus,

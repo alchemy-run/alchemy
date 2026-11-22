@@ -1,11 +1,26 @@
 ---
 title: Environment variables
-description: Set a deployment's variables, and defaults for new deployments.
+description: Set a deployment's variables from your Stack, take over ones set by hand, set project defaults, and read secrets from a secrets manager.
 ---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+Each Convex deployment has its own **environment variables**. Functions read them with `process.env`, or with `Config` in a function written with Effect, and `auth.config.ts` reads them to find its identity providers. A project also has **defaults**: values a new deployment of a given type starts with, which it then keeps as its own.
+
+<Tree
+  nodes={[
+    { id: "project", label: "my-app", type: "project", icon: "folder", areas: ["default preview", "default prod"], colGap: 4 },
+    { id: "default", label: "API_URL", type: "preview default", parent: "project", icon: "settings" },
+    { id: "preview", label: "pr-42", type: "preview deployment", parent: "project", icon: "server", specs: [["API_URL", "staging.example.com"]] },
+    { id: "prod", label: "prod", type: "deployment", parent: "project", icon: "server", specs: [["RESEND_API_KEY", "set by Functions"]] },
+  ]}
+  links={[{ from: "default", to: "preview", label: "copies", dashed: true }]}
+  caption="A deployment's variables are its own. The project's preview default gave pr-42 its API_URL when the preview was created; prod's key was set by Convex.Functions."
+/>
 
 ## Set variables on a deployment
 
-```typescript
+```typescript title="alchemy.run.ts"
 const secret = yield* Config.Redacted("RESEND_API_KEY");
 yield* Convex.Functions("Functions", {
   deployment,
@@ -16,6 +31,41 @@ yield* Convex.Functions("Functions", {
 
 Alchemy sets `env` before the push, because `auth.config.ts` may read it. Values go through Convex's API, so they stay out of `argv`.
 
+## Values from a secrets manager
+
+`.env` is only the default source for `Config`. A Stack can read its secrets from a secrets manager instead, chosen per stage:
+
+```typescript title="alchemy.run.ts"
+import * as Convex from "@alchemy.run/convex";
+import * as Doppler from "@alchemy.run/doppler";
+import * as Alchemy from "alchemy";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Convex.providers(),
+    state: Alchemy.localState(),
+    secrets: ({ stage }) =>
+      stage === "prod"
+        ? Doppler.Secrets({ project: "my-app", config: "prd" })
+        : Alchemy.Secrets.DotEnv(),
+  },
+  Effect.gen(function* () {
+    const project = yield* Convex.Project("App");
+    const deployment = yield* Convex.Deployment("Backend", { project, type: "prod" });
+    yield* Convex.Functions("Functions", {
+      deployment,
+      rootDir: ".",
+      env: { RESEND_API_KEY: yield* Config.Redacted("RESEND_API_KEY") },
+    });
+  }),
+);
+```
+
+The `Config.Redacted(...)` code doesn't change. See [Secret providers](/environments/secret-providers).
+
 ## Remove a variable
 
 Remove its name from `env`. Alchemy deletes it after the push succeeds, so one deploy can stop reading a variable in `auth.config.ts` and drop it. A variable set by hand and never listed is left alone.
@@ -24,7 +74,7 @@ If the pushed code still reads it, Convex refuses and the deploy fails with `Aut
 
 ## Take over a variable set by hand
 
-A name in `env` that already holds a different value, set in the dashboard or by another tool, fails the deploy with `VariablesOwnedBySomeoneElse`. A value the deployment took from the project defaults below doesn't count. Adopt it to overwrite it:
+A name in `env` that already holds a different value, set in the dashboard or by another tool, fails the deploy with `VariablesOwnedBySomeoneElse`. A value the deployment took from the project defaults doesn't count. Adopt it to overwrite it:
 
 ```typescript
 yield* Convex.Functions("Functions", {
@@ -34,11 +84,11 @@ yield* Convex.Functions("Functions", {
 }).pipe(adopt(true));
 ```
 
-`alchemy deploy --adopt` does the same for the whole stack.
+`alchemy deploy --adopt` does the same for the whole Stack.
 
 ## Set project defaults
 
-New deployments start with these, including previews that something else creates:
+New deployments of the listed types start with these, including previews that something else creates:
 
 ```typescript
 yield* Convex.DefaultEnvironmentVariables("Defaults", {

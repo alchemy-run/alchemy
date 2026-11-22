@@ -79,4 +79,4 @@ More: [Domain Model: The aggregate decides, and everything commits at once](http
 3. Update the views, policies and projections that care about the new events.
 4. Expose it through an Api, if a client sends or reads it, with the middleware it needs, and give it a `{ description }` as its last argument.
 5. Write stories for the happy path, every rejection, every policy reaction, and every query's authorization.
-6. Run the domain package's tests, with one that expects `Domain.verify(Model)` to be empty. Then type-check the monorepo (`tsc -b`) and run the server and web tests.
+6. Run the domain package's tests: building the model's Layer, which every story does, fails on any definition problem. Then type-check the monorepo (`tsc -b`) and run the server and web tests.

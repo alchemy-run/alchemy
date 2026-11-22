@@ -812,9 +812,7 @@ export const InstanceProvider = () =>
       if (current === undefined) {
         const created = yield* redis
           .createProjectsLocationsInstances({
-            parent: `projects/${env.project}/locations/${location}`,
-            instanceId,
-            body: toCreateBody(
+            ...toCreateBody(
               news,
               desiredLabels,
               tier,
@@ -823,6 +821,8 @@ export const InstanceProvider = () =>
               memorySizeGb,
               authEnabled,
             ),
+            parent: `projects/${env.project}/locations/${location}`,
+            instanceId,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -848,8 +848,8 @@ export const InstanceProvider = () =>
         !versionDecreasing(currentVersion, desiredVersion)
       ) {
         const upgraded = yield* redis.upgradeProjectsLocationsInstances({
+          redisVersion: desiredVersion,
           name,
-          body: { redisVersion: desiredVersion },
         });
         yield* waitForOperation(upgraded);
         current = yield* waitUntilReady(name);
@@ -905,21 +905,18 @@ export const InstanceProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const patched = yield* redis.patchProjectsLocationsInstances({
+          labels: desiredLabels,
+          displayName: news.displayName,
+          memorySizeGb,
+          authEnabled,
+          redisConfigs: news.redisConfigs,
+          persistenceConfig: news.persistenceConfig,
+          maintenancePolicy: news.maintenancePolicy,
+          replicaCount: news.replicaCount,
+          secondaryIpRange: news.secondaryIpRange,
+          maintenanceVersion: news.maintenanceVersion,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            displayName: news.displayName,
-            memorySizeGb,
-            authEnabled,
-            redisConfigs: news.redisConfigs,
-            persistenceConfig: news.persistenceConfig,
-            maintenancePolicy: news.maintenancePolicy,
-            replicaCount: news.replicaCount,
-            secondaryIpRange: news.secondaryIpRange,
-            maintenanceVersion: news.maintenanceVersion,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilReady(name);

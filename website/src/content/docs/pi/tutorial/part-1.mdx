@@ -1,0 +1,215 @@
+---
+title: "Part 1: A harness in a Durable Object"
+description: Start an issue bot. Declare a model, yield a Pi harness in a Durable Object for each issue, and submit an input to it from a Worker.
+sidebar:
+  order: 1
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+Build a bot that answers issues on a GitHub repository. When someone opens an issue, a Pi agent reads the repository in a sandbox and replies with a comment. When they reply, it continues the same conversation.
+
+Each issue gets its own Durable Object, with its own conversation and sandbox. This part builds that object and talks to it over HTTP. The later parts give it the repository, connect it to GitHub and clean up after it.
+
+The finished code is in [`examples/cloudflare-pi-github`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-pi-github).
+
+## Prerequisites
+
+Finish [Cloudflare setup](/cloudflare/setup). Parts 2 and 3 also need [Boat setup](/boat/setup) and [GitHub setup](/github/setup).
+
+## Install
+
+<PackageManagers add="@alchemy.run/pi @alchemy.run/ai @alchemy.run/cloudflare" />
+
+## Declare the model
+
+A model is a name. `FastLive` says which LLM answers under it: Llama 3.3 on Workers AI, through the Worker's own AI binding.
+
+```typescript title="src/models.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+
+export const FastLive = AICloudflare.Model(Fast, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  parameters: { temperature: 0, maxTokens: 1024 },
+});
+```
+
+## Yield a harness in a Durable Object
+
+The harness is yielded in the Durable Object's outer Effect, and its Layers are provided once, at the end.
+
+```typescript title="src/Issue.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Fast, FastLive } from "./models.ts";
+
+const HarnessLive = Layer.mergeAll(FastLive, PiCloudflare.DurableObjectStorage);
+
+export default class Issue extends Cloudflare.DurableObject<Issue>()(
+  "Issue",
+  Effect.gen(function* () {
+    const harness = yield* Pi.Harness({ models: [Fast] });
+
+    return Effect.gen(function* () {
+      return {};
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+`PiCloudflare.DurableObjectStorage` keeps the harness's conversations in this object's SQLite. There will be one object for each issue, so each issue's conversation is in a database of its own.
+
+## Start a conversation
+
+Add a method that starts answering an issue. It creates the conversation and submits the issue as its first input.
+
+```diff lang="typescript"
+const HarnessLive = Layer.mergeAll(FastLive, PiCloudflare.DurableObjectStorage);
+
++const instructions = "You answer issues on a GitHub repository.";
+
+export default class Issue extends Cloudflare.DurableObject<Issue>()(
+  "Issue",
+  Effect.gen(function* () {
+    const harness = yield* Pi.Harness({ models: [Fast] });
+
+    return Effect.gen(function* () {
+-      return {};
++      return {
++        opened: Effect.fn(function* (
++          issue: { readonly number: number; readonly title: string; readonly body: string },
++          deliveryId: string,
++        ) {
++          const conversation = yield* harness.createConversation({ name: "issue", instructions });
++          yield* conversation.submit({
++            type: "input",
++            content: `Issue #${issue.number}: ${issue.title}\n\n${issue.body}`,
++            requestId: deliveryId,
++          });
++        }),
++      };
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+`submit` stores the input and returns. The run that answers it continues in the object, so `opened` returns in milliseconds however long the agent takes. `requestId` makes the submission exactly-once: the same `deliveryId` twice starts one run.
+
+## Read the transcript
+
+Add a method that returns what the conversation has done, as plain text for each message.
+
+```diff lang="typescript"
+  opened: Effect.fn(function* (
+    issue: { readonly number: number; readonly title: string; readonly body: string },
+    deliveryId: string,
+  ) {
+    const conversation = yield* harness.createConversation({ name: "issue", instructions });
+    yield* conversation.submit({
+      type: "input",
+      content: `Issue #${issue.number}: ${issue.title}\n\n${issue.body}`,
+      requestId: deliveryId,
+    });
+  }),
++  transcript: Effect.fn(function* () {
++    const conversation = yield* harness.conversationByName("issue");
++    const { messages } = yield* conversation.context;
++    return messages.map((message) => ({
++      role: message.role,
++      text:
++        typeof message.content === "string"
++          ? message.content
++          : message.content
++              .map((part) =>
++                part.type === "text"
++                  ? part.text
++                  : part.type === "toolCall"
++                    ? `${part.name}(${JSON.stringify(part.arguments)})`
++                    : "",
++              )
++              .join(""),
++    }));
++  }),
+};
+```
+
+## Reach it from a Worker
+
+A Worker yields `Issue` to bind it, and reaches the object for an issue by the issue's number.
+
+```typescript title="src/Bot.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import Issue from "./Issue.ts";
+
+export default class Bot extends Cloudflare.Worker<Bot>()(
+  "Bot",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const issues = yield* Issue;
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const [, area, number] = new URL(request.url, "http://bot").pathname.split("/");
+        if (area !== "issues" || number === undefined) {
+          return HttpServerResponse.text("not found", { status: 404 });
+        }
+        const issue = issues.getByName(number);
+        if (request.method === "POST") {
+          const { title, body } = (yield* request.json) as { title: string; body: string };
+          yield* issue.opened({ number: Number(number), title, body }, crypto.randomUUID());
+          return HttpServerResponse.text("started", { status: 202 });
+        }
+        return yield* HttpServerResponse.json(yield* issue.transcript());
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+`POST /issues/7` stands in for GitHub until Part 3. `GET /issues/7` shows what the agent did.
+
+## Add the Stack
+
+```typescript title="alchemy.run.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import Bot from "./src/Bot.ts";
+
+export default Alchemy.Stack(
+  "IssueBot",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const bot = yield* Bot;
+    return { url: bot.url };
+  }),
+);
+```
+
+## Deploy and try it
+
+<PackageManagers run="alchemy deploy" />
+
+Start a conversation on a made-up issue, then read it a few seconds later:
+
+```sh
+curl -X POST "$URL/issues/7" -d '{"title":"Hello","body":"What can you do?"}'
+curl "$URL/issues/7"
+```
+
+The transcript has the issue and the model's answer. The model can only talk so far: it has no tools and has never seen your repository.
+
+## Next
+
+[Part 2](/pi/tutorial/part-2) gives each issue a sandbox with the repository in it.

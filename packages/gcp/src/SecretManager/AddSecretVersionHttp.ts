@@ -25,7 +25,7 @@ export const AddSecretVersionHttp = Layer.effect(
     operation: secretmanager.addVersionProjectsSecrets,
     toInput: (secretName, request) => ({
       parent: secretName,
-      body: { payload: request?.payload },
+      payload: request?.payload,
     }),
   }),
 );

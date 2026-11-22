@@ -68,6 +68,10 @@ export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallback
             return yield* HttpServerResponse.json(yield* object.registerLate());
           case "bookkeeping":
             return yield* HttpServerResponse.json(yield* object.bookkeeping());
+          case "recurring":
+            return yield* HttpServerResponse.json(yield* object.recurring());
+          case "cancel-recurring":
+            return yield* HttpServerResponse.json(yield* object.cancelRecurring());
           case "cancel-bookkeeping":
             return yield* HttpServerResponse.json(yield* object.cancelBookkeeping());
           case "bookkeeping-rollback":

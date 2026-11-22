@@ -158,9 +158,7 @@ export default class AIPlatformBindingsHost extends GCP.Function<AIPlatformBindi
           };
         }),
         getReasoningEngine: getEngine(),
-        queryReasoningEngine: queryEngine({
-          body: { input: { input: "hello" } },
-        }),
+        queryReasoningEngine: queryEngine({ input: { input: "hello" } }),
         getTrainingPipeline: getPipeline(),
         cancelTrainingPipeline: cancelPipeline({ body: {} }),
         ...sandboxes,

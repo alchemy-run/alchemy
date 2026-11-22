@@ -133,12 +133,10 @@ export const getWebResourceToken = (request: {
 }) => {
   const siteType = request.siteType ?? DEFAULT_SITE_TYPE;
   return siteVerification.getTokenWebResource({
-    body: {
-      site: {
-        identifier: request.identifier,
-        type: siteType,
-      },
-      verificationMethod: request.verificationMethod ?? defaultVerificationMethod(siteType),
+    site: {
+      identifier: request.identifier,
+      type: siteType,
     },
+    verificationMethod: request.verificationMethod ?? defaultVerificationMethod(siteType),
   });
 };

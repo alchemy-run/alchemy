@@ -1,0 +1,16 @@
+/**
+ * RSA-2048 private key (JSON web key, base64url members) the key-binding
+ * tests import into Key Vault, so they can check encrypt/decrypt/sign/verify/
+ * wrap/unwrap results locally. Generated once; test-only material.
+ */
+export const RSA_JWK = {
+  kty: "RSA",
+  n: "rXecLkbMKuB3MP3JtdddxsOrJalHI5xMFn6W8ob7CoNSVg3lBtRhdCtYCMqPYRDfW0i2ZytGjXtOIt80CFjtfFiOhV5vHSN61kn_m8ZBkYseCi03Ep-fDx3MmAQWGtW7t0Z3nREf9zybJnyTCNQTtnxj_7rQiwzWy_DjtfGKPpWTYjyOYILWNlMZvD1EI384BVup1fltd6BEh7WTwV3j8VIAIWn3fslcUsb1yoeVx9ka_JdS09Lce0YSvrrkEgYgxwg0j9RFH6TeCN4cZTmX-9DBd-lqOzE_RiKKteJllVAr2JCiVYawWWVXj4-5wWzMCwI-ybeW3ajTcjrKWR-AjQ",
+  e: "AQAB",
+  d: "LIXXs1T-kD6-uPdar26QpjSQmAEDvlMegGOLcMJOattb5bR5RTB7tuptFQyQknRXL8HQ91f3KtcsLe0mGMJiahj8s6SSVmNF4vxpO9099RJE6o3CZehMVf_rBFWAKvES1i6jAtBjaPzIQa-VuZ1dVehFblzPq_DmrL-uYoOVXQxwHt8Pw7_UvyAOnTqbrjZlYQ-adqOhTaUQPRX_u4IfG4MpNlFLwUAX7xSaPs3hTYSCxJW27t-Rnfmtgr51tmERxl6anuZYuy5CLziJFJyLKsYyCXMVMg-pej4L40j8qYvVku5GHDZWuEp4gIu7uKCI686mx6LdOXTX29-wG-D_LQ",
+  p: "7oZwXsNZ7vvCSxtPOLWqa8i5fsE4PP0p7teFvIaK70Ly42yhS3YmSJnRBVbTKrwmpe-VfYF6HYqHHZOKtuIS_W9n7rok5NhAzpDN9MUTqqb4HYxFI95uqExBA2th12mR7YRxZMRiuBXLa4lf3jr88gEUWDXO9rkZRA2SfRhrKfc",
+  q: "ui0A-KU_TFRpHqlP63ynSKVTYuqJF75B89PLv2d6oVEPL44qVOlVbTFZwZYVLet7LV4WR6NtHeJIh9vhzntBzZdjYaXCvYiHVSpAk8kIRLrO-qTm0Wqz9L4EMg8mUoEF9DM4gOdpHG4iurbQ3wkHIttZqHL64_wL7PL6VTQlqJs",
+  dp: "iPtSK0nbKyEQWtvLKlFCFvZGeSHz7yqg21aQqk1GGtQC81LeapzmrYkQfhV33jIBrAgkfNhPzglRQU4LOq4oo71IHdRu_bGnvjlw3iIUAkwzb5yv1EKYoDRynckcfn5VXOdTy7_wxbFWimJxWQndXAn8qg_01MJGXUvCFe9hE88",
+  dq: "n-7HNdJnBQBCaXeTUz17SznS31eRO5dSes6H6j5Pp0LGI9kh3l2v6CSL8XQnb5Ip97gqtZHby9825ZbrbQCPb7jMQ_csyrr9Xxjz7sC03K4J3mFIc8ARJX8ShZpkFl4GKljSAlJJBoZKSVGBLwhHXBdI9x8HDlDYQc4dZJJug18",
+  qi: "6j4JH7tnQ_zrEDcEho-OLDDwsCj0gBBeVCg_PROsEL9FVmrVT6zq3PDQkqZhIXf3yDN-1X9cEDAy3kkzZFhJe0lLCnlO1GBmTlnH-lL5zl6M2qo5-fwsPhOx4RX-ENQTUFTB20qXlw8oa2ychsQ-K61dzAs_Qc2mKs3ApbDkVvs",
+} as const;

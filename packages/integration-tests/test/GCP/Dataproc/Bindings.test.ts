@@ -30,8 +30,8 @@ const rolesOf = (bindings: ReadonlyArray<{ role?: string; members?: ReadonlyArra
 
 const projectRoles = Effect.gen(function* () {
   const policy = yield* crm.getIamPolicyProjects({
+    options: { requestedPolicyVersion: 3 },
     resource: `projects/${project}`,
-    body: { options: { requestedPolicyVersion: 3 } },
   });
   return rolesOf(policy.bindings ?? []);
 });

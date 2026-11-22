@@ -9,6 +9,9 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { driftActions, driftOf, repairDrift, waitForDrift } from "../drift.ts";
+import EventSourceMappingFifoBatchFunctionLive, {
+  EventSourceMappingFifoBatchFunction,
+} from "./fixtures/event-source-mapping-fifo-batch-handler.ts";
 import EventSourceMappingFunctionLive, {
   EventSourceMappingFunction,
 } from "./fixtures/event-source-mapping-handler.ts";
@@ -105,6 +108,52 @@ test.provider(
       expect(error.message).toContain("visibilityTimeout");
 
       yield* stack.destroy();
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:sqs", "live"],
+    timeout: 240_000,
+  },
+);
+
+// Lambda accepts FIFO batches of up to 10,000 messages when the mapping runs
+// in provisioned mode, which `consumeQueueMessages` sets through
+// `provisionedPollerConfig`.
+test.provider(
+  "consumes a FIFO queue in batches of 10,000 in provisioned mode",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fn = yield* stack.deploy(
+        EventSourceMappingFifoBatchFunction.pipe(
+          Effect.provide(EventSourceMappingFifoBatchFunctionLive),
+        ),
+      );
+      const { EventSourceMappings = [] } = yield* Lambda.listEventSourceMappings({
+        FunctionName: fn.functionName,
+      });
+
+      expect(EventSourceMappings.length).toBe(1);
+      const [mapping] = EventSourceMappings;
+      expect(mapping!.EventSourceArn?.endsWith(".fifo")).toBe(true);
+      expect(mapping!.BatchSize).toBe(10_000);
+      expect(mapping!.MaximumBatchingWindowInSeconds).toBe(5);
+      expect(mapping!.ProvisionedPollerConfig).toMatchObject({
+        MinimumPollers: 2,
+        MaximumPollers: 2,
+      });
+
+      yield* stack.destroy();
+
+      yield* Lambda.getEventSourceMapping({ UUID: mapping!.UUID! }).pipe(
+        Effect.flatMap(() =>
+          Effect.fail(new Error(`Event source mapping ${mapping!.UUID} still exists`)),
+        ),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        Effect.retry({
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
+        }),
+      );
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
   {
     tags: ["provider:aws", "provider:aws:lambda", "provider:aws:sqs", "live"],

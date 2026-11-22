@@ -1,0 +1,428 @@
+import * as asr from "@distilled.cloud/azure/recoveryservicessiterecovery";
+import { isResolved } from "alchemy/Diff";
+import * as Provider from "alchemy/Provider";
+import type { Resource } from "alchemy/Resource";
+import * as Effect from "effect/Effect";
+import {
+  ensureRegistered,
+  ignoreNotFound,
+  orUndefinedIfNotFound,
+  waitForProvisioned,
+  waitUntilGone,
+} from "../Arm.ts";
+import { AzureEnvironment } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
+import {
+  createSiteRecoveryName,
+  ownedOrUnowned,
+  sameName,
+  SITE_RECOVERY_NAMESPACE,
+} from "./Shared.ts";
+
+/** A script, runbook, or manual step run before or after a group. */
+export interface RecoveryPlanGroupAction {
+  /** Action name. */
+  actionName: string;
+  /** Failover types the action runs for, e.g. `["PlannedFailover", "TestFailover"]`. */
+  failoverTypes: string[];
+  /** Failover directions the action runs for, e.g. `["PrimaryToRecovery"]`. */
+  failoverDirections: ("PrimaryToRecovery" | "RecoveryToPrimary")[];
+  /**
+   * Action details, polymorphic on `instanceType`: `ManualActionDetails`
+   * (`description`), `ScriptActionDetails` (`path`, `fabricLocation`),
+   * `AutomationRunbookActionDetails` (`runbookId`, `fabricLocation`).
+   */
+  customDetails: { instanceType: string; [key: string]: unknown };
+}
+
+/** An ordered failover group of the plan. */
+export interface RecoveryPlanGroup {
+  /** Group kind: `Shutdown`, `Failover`, or `Boot` (boot groups run in order). */
+  groupType: "Shutdown" | "Boot" | "Failover";
+  /**
+   * Protected items in the group (ARM IDs of replication protected items).
+   * @default []
+   */
+  replicationProtectedItems?: {
+    /**
+     * ARM ID of the replication protected item.
+     * @default not set
+     */
+    id?: string;
+    /**
+     * ARM ID of the protected virtual machine.
+     * @default not set
+     */
+    virtualMachineId?: string;
+  }[];
+  /**
+   * Actions run before the group.
+   * @default []
+   */
+  startGroupActions?: RecoveryPlanGroupAction[];
+  /**
+   * Actions run after the group.
+   * @default []
+   */
+  endGroupActions?: RecoveryPlanGroupAction[];
+}
+
+export interface RecoveryPlanProps {
+  /**
+   * Resource group of the Recovery Services vault. Changing it replaces the plan.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
+  resourceGroup: string;
+  /** Name of the Recovery Services vault. Changing it replaces the plan. */
+  vault: string;
+  /**
+   * Plan name, unique within the vault. If omitted, a unique name is
+   * generated from the app, stage, and logical ID. Changing it replaces the
+   * plan.
+   * @default a unique name generated from the app, stage, and logical ID
+   */
+  name?: string;
+  /** ARM ID of the primary fabric. Changing it replaces the plan. */
+  primaryFabricId: string;
+  /** ARM ID of the recovery fabric. Changing it replaces the plan. */
+  recoveryFabricId: string;
+  /**
+   * Failover deployment model. Changing it replaces the plan.
+   * @default "ResourceManager"
+   */
+  failoverDeploymentModel?: "NotApplicable" | "Classic" | "ResourceManager";
+  /**
+   * Ordered failover groups. A plan has the `Shutdown` and `Failover`
+   * groups plus at least one `Boot` group, and the boot groups must hold at
+   * least one protected item: ASR's create job fails for an empty plan and
+   * the plan never appears. Updated in place.
+   */
+  groups: RecoveryPlanGroup[];
+  /**
+   * Provider-specific inputs, e.g. `[{ instanceType: "A2A",
+   * primaryZone, recoveryZone }]`. Changing them replaces the plan.
+   * @default []
+   */
+  providerSpecificInput?: { instanceType: string; [key: string]: unknown }[];
+}
+
+export interface RecoveryPlan extends Resource<
+  "Azure.SiteRecovery.RecoveryPlan",
+  RecoveryPlanProps,
+  {
+    /** Name of the plan. */
+    recoveryPlanName: string;
+    /** Name of the Recovery Services vault. */
+    vault: string;
+    /** Resource group of the vault. */
+    resourceGroup: string;
+    /** ARM resource ID of the plan. */
+    recoveryPlanId: string;
+    /** ARM ID of the primary fabric. */
+    primaryFabricId: string;
+    /** ARM ID of the recovery fabric. */
+    recoveryFabricId: string;
+    /** Failover deployment model. */
+    failoverDeploymentModel: string | undefined;
+    /** Replication providers of the items in the plan. */
+    replicationProviders: string[];
+    /** Groups as observed in Azure, including the implicit `Shutdown` and `Failover` groups. */
+    groups: asr.RecoveryPlanGroup[];
+  },
+  never,
+  Providers
+> {}
+
+/**
+ * An Azure Site Recovery recovery plan
+ * (`Microsoft.RecoveryServices/vaults/replicationRecoveryPlans`): ordered
+ * failover groups of replication protected items, with optional scripts,
+ * runbooks, or manual steps before and after each group. See the
+ * [Azure docs](https://learn.microsoft.com/rest/api/site-recovery/replication-recovery-plans/create).
+ *
+ * Plans have no tags. Alchemy treats a plan as owned when its vault carries this stack's ownership tags.
+ *
+ * :::caution
+ * A plan needs at least one `Boot` group that holds at least one protected
+ * item. ASR's create job fails for an empty plan and the plan never appears,
+ * so create the plan after its `Azure.SiteRecovery.ProtectedItem`s.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `vault`, `name`, `primaryFabricId`,
+ * `recoveryFabricId`, `failoverDeploymentModel`, or `providerSpecificInput`
+ * replaces the plan. Alchemy updates `groups` in place.
+ * :::
+ *
+ * ### Azure-to-Azure Disaster Recovery
+ * **Example:** One boot group with a protected VM
+ * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("dr-vault", {
+ *   location: "westus2",
+ * });
+ * const primary = yield* Azure.SiteRecovery.Fabric("primary", {
+ *   vault: vault.vaultName,
+ *   location: "eastus",
+ * });
+ * const recovery = yield* Azure.SiteRecovery.Fabric("recovery", {
+ *   vault: vault.vaultName,
+ *   location: "westus2",
+ * });
+ * const primaryContainer = yield* Azure.SiteRecovery.ProtectionContainer("primary", {
+ *   vault: vault.vaultName,
+ *   fabric: primary.fabricName,
+ * });
+ * const recoveryContainer = yield* Azure.SiteRecovery.ProtectionContainer("recovery", {
+ *   vault: vault.vaultName,
+ *   fabric: recovery.fabricName,
+ * });
+ * const policy = yield* Azure.SiteRecovery.ReplicationPolicy("a2a-policy", {
+ *   vault: vault.vaultName,
+ *   providerSpecificInput: {
+ *     instanceType: "A2A",
+ *     recoveryPointHistory: 1440,
+ *     appConsistentFrequencyInMinutes: 240,
+ *     multiVmSyncStatus: "Enable",
+ *   },
+ * });
+ * const mapping = yield* Azure.SiteRecovery.ProtectionContainerMapping(
+ *   "primary-to-recovery",
+ *   {
+ *     vault: vault.vaultName,
+ *     fabric: primary.fabricName,
+ *     protectionContainer: primaryContainer.protectionContainerName,
+ *     targetProtectionContainerId: recoveryContainer.protectionContainerId,
+ *     policyId: policy.policyId,
+ *     providerSpecificInput: {
+ *       instanceType: "A2A",
+ *       agentAutoUpdateStatus: "Disabled",
+ *     },
+ *   },
+ * );
+ * const recoveryGroup = yield* Azure.Resources.ResourceGroup("dr-recovery", {
+ *   location: "westus2",
+ * });
+ * const cache = yield* Azure.Storage.StorageAccount("asrcache", {
+ *   location: "eastus",
+ * });
+ * const vm = yield* Azure.Compute.VirtualMachine("web", {
+ *   location: "eastus",
+ *   vmSize: "Standard_B1s",
+ *   networkInterfaceIds: [nic.networkInterfaceId],
+ *   adminUsername: "azureuser",
+ *   sshPublicKeys: ["ssh-ed25519 AAAAC3Nza... me@example.com"],
+ * });
+ * const item = yield* Azure.SiteRecovery.ProtectedItem("web-vm", {
+ *   vault: vault.vaultName,
+ *   fabric: primary.fabricName,
+ *   protectionContainer: primaryContainer.protectionContainerName,
+ *   policyId: policy.policyId,
+ *   providerSpecificDetails: {
+ *     instanceType: "A2A",
+ *     fabricObjectId: vm.virtualMachineId,
+ *     recoveryContainerId: recoveryContainer.protectionContainerId,
+ *     recoveryResourceGroupId: recoveryGroup.resourceGroupId,
+ *     vmManagedDisks: [
+ *       {
+ *         diskId: vm.osDiskId,
+ *         primaryStagingAzureStorageAccountId: cache.storageAccountId,
+ *         recoveryResourceGroupId: recoveryGroup.resourceGroupId,
+ *       },
+ *     ],
+ *   },
+ *   recoveryAzureVMSize: "Standard_B1s",
+ * });
+ * yield* Azure.SiteRecovery.RecoveryPlan("dr-plan", {
+ *   vault: vault.vaultName,
+ *   primaryFabricId: primary.fabricId,
+ *   recoveryFabricId: recovery.fabricId,
+ *   groups: [
+ *     { groupType: "Boot", replicationProtectedItems: [{ id: item.protectedItemId }] },
+ *   ],
+ * });
+ * ```
+ *
+ * @resource
+ */
+export const RecoveryPlan = GroupedResource<RecoveryPlan>("Azure.SiteRecovery.RecoveryPlan");
+
+type Observed = asr.GetReplicationRecoveryPlanResponse;
+
+interface Where {
+  subscriptionId: string;
+  resourceGroupName: string;
+  resourceName: string;
+  recoveryPlanName: string;
+}
+
+const getPlan = (where: Where) => orUndefinedIfNotFound(asr.GetReplicationRecoveryPlan(where));
+
+/** Comparable fingerprint of groups: types, item IDs, and action names. */
+const groupsKey = (
+  groups: readonly {
+    groupType?: string;
+    replicationProtectedItems?: readonly { id?: string }[];
+    startGroupActions?: readonly { actionName?: string }[];
+    endGroupActions?: readonly { actionName?: string }[];
+  }[],
+) =>
+  JSON.stringify(
+    groups.map((g) => [
+      (g.groupType ?? "").toLowerCase(),
+      (g.replicationProtectedItems ?? []).map((i) => (i.id ?? "").toLowerCase()).sort(),
+      (g.startGroupActions ?? []).map((a) => a.actionName),
+      (g.endGroupActions ?? []).map((a) => a.actionName),
+    ]),
+  );
+
+/**
+ * ASR always keeps the Shutdown and Failover groups; compare user-visible ones.
+ * Each action's `customDetails.instanceType` is only known at runtime and
+ * decides its arm, so the groups are asserted rather than narrowed.
+ */
+const withImplicitGroups = (groups: readonly RecoveryPlanGroup[]): asr.RecoveryPlanGroup[] => {
+  const hasShutdown = groups.some((g) => g.groupType === "Shutdown");
+  const hasFailover = groups.some((g) => g.groupType === "Failover");
+  return [
+    ...(hasShutdown ? [] : [{ groupType: "Shutdown" as const }]),
+    ...(hasFailover ? [] : [{ groupType: "Failover" as const }]),
+    ...(groups as readonly asr.RecoveryPlanGroup[]),
+  ];
+};
+
+const observedGroups = (observed: Observed): asr.RecoveryPlanGroup[] => [
+  ...(observed.properties?.groups ?? []),
+];
+
+const toAttrs = (where: Where, observed: Observed): RecoveryPlan["Attributes"] => ({
+  recoveryPlanName: where.recoveryPlanName,
+  vault: where.resourceName,
+  resourceGroup: where.resourceGroupName,
+  recoveryPlanId: observed.id ?? "",
+  primaryFabricId: observed.properties?.primaryFabricId ?? "",
+  recoveryFabricId: observed.properties?.recoveryFabricId ?? "",
+  failoverDeploymentModel: observed.properties?.failoverDeploymentModel,
+  replicationProviders: [...(observed.properties?.replicationProviders ?? [])],
+  groups: observedGroups(observed),
+});
+
+export const RecoveryPlanProvider = () =>
+  Provider.succeed(RecoveryPlan, {
+    stables: ["recoveryPlanName", "vault", "resourceGroup", "recoveryPlanId"],
+
+    // Plans live inside a vault; nuke removes them with it.
+    list: Effect.fn(function* () {
+      return [];
+    }),
+
+    diff: Effect.fn(function* ({ news, olds, output }) {
+      if (!isResolved(news) || output === undefined) return undefined;
+      if (
+        !sameName(news.resourceGroup, output.resourceGroup) ||
+        !sameName(news.vault, output.vault) ||
+        (news.name !== undefined && !sameName(news.name, output.recoveryPlanName)) ||
+        !sameName(news.primaryFabricId, output.primaryFabricId) ||
+        !sameName(news.recoveryFabricId, output.recoveryFabricId) ||
+        (olds !== undefined &&
+          ((news.failoverDeploymentModel ?? "ResourceManager") !==
+            (olds.failoverDeploymentModel ?? "ResourceManager") ||
+            JSON.stringify(news.providerSpecificInput ?? null) !==
+              JSON.stringify(olds.providerSpecificInput ?? null)))
+      ) {
+        return { action: "replace" } as const;
+      }
+      return undefined;
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output }) {
+      const { subscriptionId } = yield* AzureEnvironment.current;
+      const resourceGroup = output?.resourceGroup ?? olds?.resourceGroup;
+      const vault = output?.vault ?? olds?.vault;
+      if (resourceGroup === undefined || vault === undefined) return undefined;
+      const where: Where = {
+        subscriptionId,
+        resourceGroupName: resourceGroup,
+        resourceName: vault,
+        recoveryPlanName:
+          output?.recoveryPlanName ?? olds?.name ?? (yield* createSiteRecoveryName(id)),
+      };
+      const observed = yield* getPlan(where);
+      if (observed === undefined) return undefined;
+      return yield* ownedOrUnowned(
+        toAttrs(where, observed),
+        output !== undefined,
+        subscriptionId,
+        resourceGroup,
+        vault,
+      );
+    }),
+
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const { subscriptionId } = yield* AzureEnvironment.current;
+      yield* ensureRegistered(subscriptionId, SITE_RECOVERY_NAMESPACE);
+      const where: Where = {
+        subscriptionId,
+        resourceGroupName: news.resourceGroup,
+        resourceName: news.vault,
+        recoveryPlanName:
+          news.name ?? output?.recoveryPlanName ?? (yield* createSiteRecoveryName(id)),
+      };
+      const groups = withImplicitGroups(news.groups);
+      const desiredKey = groupsKey(groups);
+      const get = getPlan(where);
+      const converged = (plan: Observed) =>
+        groupsKey(observedGroups(plan)) === desiredKey ? undefined : "Updating";
+
+      // Observe.
+      const observed = yield* get;
+
+      // Ensure / sync: create when missing, PATCH the groups on a delta.
+      if (observed === undefined) {
+        yield* asr.CreateReplicationRecoveryPlan({
+          ...where,
+          properties: {
+            primaryFabricId: news.primaryFabricId,
+            recoveryFabricId: news.recoveryFabricId,
+            failoverDeploymentModel: news.failoverDeploymentModel ?? "ResourceManager",
+            groups,
+            ...(news.providerSpecificInput
+              ? { providerSpecificInput: news.providerSpecificInput }
+              : {}),
+          },
+        });
+      } else if (converged(observed) !== undefined) {
+        yield* asr.UpdateReplicationRecoveryPlan({
+          ...where,
+          properties: { groups },
+        });
+      }
+      const fresh = yield* waitForProvisioned(
+        `site recovery recovery plan ${where.recoveryPlanName}`,
+        get,
+        converged,
+        { interval: "5 seconds", times: 60 },
+      );
+      return toAttrs(where, fresh);
+    }),
+
+    delete: Effect.fn(function* ({ output }) {
+      const { subscriptionId } = yield* AzureEnvironment.current;
+      const where: Where = {
+        subscriptionId,
+        resourceGroupName: output.resourceGroup,
+        resourceName: output.vault,
+        recoveryPlanName: output.recoveryPlanName,
+      };
+      yield* ignoreNotFound(asr.DeleteReplicationRecoveryPlan(where));
+      yield* waitUntilGone(
+        `site recovery recovery plan ${output.recoveryPlanName}`,
+        getPlan(where),
+        { interval: "5 seconds", times: 60 },
+      );
+    }),
+
+    nuke: {
+      dependsOn: ["Azure.Resources.ResourceGroup"],
+    },
+  });

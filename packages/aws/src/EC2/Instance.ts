@@ -23,6 +23,7 @@ import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { nameTagFilter, single } from "../internal/Lookup.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import {
@@ -45,7 +46,7 @@ export const InstanceId = <ID extends string>(id: ID): ID & InstanceId<ID> =>
   `i-${id}` as ID & InstanceId<ID>;
 
 export type InstanceArn<ID extends InstanceId = InstanceId> =
-  `arn:aws:ec2:${RegionID}:${AccountID}:instance/${ID}`;
+  `arn:${Partition}:ec2:${RegionID}:${AccountID}:instance/${ID}`;
 
 export const isInstance = (value: any): value is Instance =>
   typeof value === "object" &&
@@ -473,7 +474,7 @@ export const InstanceProvider = () =>
         AWSEnvironment.current.pipe(
           Effect.map(
             (env) =>
-              `arn:aws:ec2:${env.region}:${env.accountId}:instance/${instanceId}` as InstanceArn,
+              `arn:${partitionOf(env.region)}:ec2:${env.region}:${env.accountId}:instance/${instanceId}` as InstanceArn,
           ),
         );
 
@@ -988,6 +989,9 @@ export const InstanceProvider = () =>
           // last instance it launched, so a launch retried after a lost reply
           // returns the first instance, and a relaunch after the instance was
           // terminated sends a new token.
+          // A fresh launch already boots the current bundle and env, so the
+          // hosted-runtime reboot below is only for an instance that existed.
+          const launchedNow = instance === undefined;
           if (instance === undefined) {
             const launch = (previous: string) =>
               ec2
@@ -1035,7 +1039,7 @@ export const InstanceProvider = () =>
           }
 
           const instanceId = instance.InstanceId as InstanceId;
-          let restarted = false;
+          let restarted = launchedNow;
 
           // Sync security groups — observed primary-ENI groups vs desired.
           const observedSecurityGroups = (instance.SecurityGroups ?? [])

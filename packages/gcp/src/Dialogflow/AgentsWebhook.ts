@@ -393,10 +393,7 @@ export const AgentsWebhookProvider = () =>
 
       if (current === undefined) {
         const created = yield* dialogflow
-          .createProjectsLocationsAgentsWebhooks({
-            parent: agent,
-            body,
-          })
+          .createProjectsLocationsAgentsWebhooks({ ...body, parent: agent })
           .pipe(Effect.catchTag("Conflict", () => findByDisplayName(agent, displayName)));
         current = created ?? undefined;
       }
@@ -422,6 +419,7 @@ export const AgentsWebhookProvider = () =>
         directoryChanged
       ) {
         current = yield* dialogflow.patchProjectsLocationsAgentsWebhooks({
+          ...body,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
@@ -430,7 +428,6 @@ export const AgentsWebhookProvider = () =>
             genericChanged ? "generic_web_service" : undefined,
             directoryChanged ? "service_directory" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
       }
 

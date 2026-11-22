@@ -18,6 +18,22 @@ const bareImports = (result: Bundle.BundleOutput) =>
 
 /** Each provider package's generated-entry bootstrap, and the package that ships it. */
 const BOOTSTRAPS = [
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/ContainerApp"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/ContainerAppAsync"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/ContainerAppsJob"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/ContainerAppsJobAsync"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/ContainerGroup"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/ContainerGroupAsync"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/Functions"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/FunctionsAsync"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/FunctionsLocal"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/FunctionsLocalAsync"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/KubernetesDeployment"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/KubernetesJob"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/VirtualMachine"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/VirtualMachineAsync"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/WebApp"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/WebAppAsync"],
   ["@alchemy.run/e2b", "@alchemy.run/e2b/Bootstrap"],
   ["@alchemy.run/archil", "@alchemy.run/archil/Bootstrap"],
   ["@alchemy.run/boat", "@alchemy.run/boat/Bootstrap"],

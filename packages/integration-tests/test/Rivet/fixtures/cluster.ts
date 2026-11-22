@@ -9,3 +9,5 @@ export const Cluster = RivetDocker.SwarmControlPlane("Rivet", { port: CONTROL_PL
 export const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(Cluster));
 // Rivet Services: Durable Streams, on the same control plane.
 export const Services = RivetDocker.ServicesPool("Services").pipe(Layer.provide(Cluster));
+// A pool of its own for the alarm test that kills its nodes.
+export const Abandoned = RivetDocker.SwarmPool("Abandoned").pipe(Layer.provide(Cluster));

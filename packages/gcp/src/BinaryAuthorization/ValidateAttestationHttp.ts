@@ -42,12 +42,10 @@ export const ValidateAttestationHttp = Layer.effect(
           const id = yield* attestorId;
           const occurrenceNote = request.occurrenceNote ?? (yield* noteReference);
           return yield* validate({
+            occurrenceResourceUri: request.occurrenceResourceUri,
+            occurrenceNote,
+            attestation: request.attestation,
             attestor: `projects/${projectId}/attestors/${id}`,
-            body: {
-              occurrenceResourceUri: request.occurrenceResourceUri,
-              occurrenceNote,
-              attestation: request.attestation,
-            },
           });
         },
       );

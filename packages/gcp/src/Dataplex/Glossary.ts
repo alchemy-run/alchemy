@@ -271,13 +271,11 @@ export const GlossaryProvider = () =>
       if (current === undefined) {
         const created = yield* dataplex
           .createProjectsLocationsGlossaries({
+            description: news.description,
+            displayName: news.displayName,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             glossaryId,
-            body: {
-              description: news.description,
-              displayName: news.displayName,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             retryQuota,
@@ -302,6 +300,10 @@ export const GlossaryProvider = () =>
       if (labelsChanged || descriptionChanged || displayNameChanged) {
         const operation = yield* retryQuota(
           dataplex.patchProjectsLocationsGlossaries({
+            etag: current.etag,
+            labels: desiredLabels,
+            description: news.description,
+            displayName: news.displayName,
             name: current.name ?? name,
             updateMask: [
               labelsChanged ? "labels" : undefined,
@@ -310,13 +312,6 @@ export const GlossaryProvider = () =>
             ]
               .filter((field): field is string => field !== undefined)
               .join(","),
-            body: {
-              name: current.name ?? name,
-              etag: current.etag,
-              labels: desiredLabels,
-              description: news.description,
-              displayName: news.displayName,
-            },
           }),
         );
         yield* waitForOperation(operation);
