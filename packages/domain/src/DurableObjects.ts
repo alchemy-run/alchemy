@@ -363,8 +363,18 @@ const acquireLease = (state: ObjectStateShape, lease: string) =>
  * right after the commit (`kick`), and again by a durable callback if the
  * instance dies first. One drain runs at a time (a storage lease), rows are
  * processed in order, and a row is deleted only after its work succeeds.
+ *
+ * A `detached` queue never drains inside the call that staged its rows: its
+ * callback runs them at once, as an event of its own. A drain's calls nest
+ * inside the call it runs in, so an aggregate → policy → aggregate chain that
+ * drained each hop inline would nest one level deeper per hop until the host
+ * refuses the call (Cloudflare limits how deep a chain of calls may go).
  */
-const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
+const queue = <Row>(
+  name: string,
+  process: (row: Row) => Effect.Effect<void>,
+  options: { readonly detached?: boolean } = {},
+) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
     const prefix = `${name}:`;
@@ -407,11 +417,26 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
           yield* state.storage.put(`${name}-seq`, last);
           // The backstop: delivered even if this instance dies before `kick` runs.
           // Its rows are progress, so a callback staging them doesn't hand it
-          // its retry budget.
-          yield* callback.schedule("drain", { after: "10 seconds", payload: {}, progress: last });
+          // its retry budget. A detached queue's only drain.
+          yield* callback.schedule("drain", {
+            after: options.detached ? 0 : "10 seconds",
+            payload: {},
+            progress: last,
+          });
         }),
-      /** Process staged rows now, in the background, keeping the instance alive until done. */
-      kick: state.waitUntil(drain.pipe(Effect.ignoreCause)),
+      /**
+       * Process staged rows now, in the background, keeping the instance alive
+       * until done. A detached queue leaves them to its callback.
+       */
+      kick: options.detached
+        ? Effect.void
+        : state.waitUntil(
+            drain.pipe(
+              Effect.catchCause((cause) =>
+                Effect.logError(`domain ${name} drain failed; its callback retries`, cause),
+              ),
+            ),
+          ),
       /** Process staged rows now, and wait (unless another drain holds the lease). */
       flush: drain,
     };
@@ -1824,7 +1849,9 @@ const viewObject = (
 const policyObject = (kit: PolicyKit) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
-    const inbox = yield* queue<Delivery>("inbox", kit.run);
+    // Detached: a delivery arrives inside the sender's drain, so draining it
+    // here would run the policy's commands one call deeper than the sender.
+    const inbox = yield* queue<Delivery>("inbox", kit.run, { detached: true });
     return {
       receive: (delivery: Delivery) =>
         reportDefects(
