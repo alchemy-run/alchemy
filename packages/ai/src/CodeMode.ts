@@ -1,4 +1,5 @@
 import type { CodemodeSandboxBase } from "@earendil-works/pi-codemode";
+import { parse, type Program as SyntaxTree } from "acorn";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -215,45 +216,160 @@ function __alchemyTools(raw, manifest, lift, makeClass) {
 
 /** A fence a model put around its program, which the input should not have. */
 const FENCE = /^\s*```[a-zA-Z]*\n([\s\S]*?)\n```\s*$/;
-const IMPORT = /^[ \t]*import\s+(?:([^;'"]*?)\s+from\s*)?(["'])([^"'\n]+)\2[ \t]*;?/gm;
-const EXPORT_DEFAULT = /^([ \t]*)export\s+default\s+/m;
-const EXPORT = /^([ \t]*)export\s+(?=(?:const|let|var|function|async|class)\b)/gm;
 
-/** `import` as the lookup a script can run: `a as b` becomes `a: b`. */
-const importOf = (clause: string | undefined, specifier: string): string => {
-  const from = `__alchemyImport(${JSON.stringify(specifier)})`;
-  if (clause === undefined) return `${from};`;
-  const named = /\{([^}]*)\}/.exec(clause);
-  const namespace = /\*\s*as\s+([A-Za-z_$][\w$]*)/.exec(clause);
-  const whole = /^\s*([A-Za-z_$][\w$]*)\s*(?:,|$)/.exec(clause);
-  return [
-    ...(whole ? [`const ${whole[1]} = ${from};`] : []),
-    ...(namespace ? [`const ${namespace[1]} = ${from};`] : []),
-    ...(named
-      ? [`const {${named[1]!.replace(/\s+as\s+/g, ": ").replace(/\s+/g, " ")}} = ${from};`]
-      : []),
-  ].join(" ");
+/** Where a parse stopped, and why, with the line and column taken off the message. */
+interface ParseFailure {
+  readonly message: string;
+  readonly pos: number;
+  readonly line: number;
+  readonly column: number;
+}
+
+const parseFailure = (cause: unknown): ParseFailure => {
+  const error = cause as {
+    readonly message?: unknown;
+    readonly pos?: unknown;
+    readonly loc?: { readonly line?: unknown; readonly column?: unknown };
+  };
+  return {
+    message: String(error?.message ?? cause).replace(/ \(\d+:\d+\)$/, ""),
+    pos: typeof error?.pos === "number" ? error.pos : 0,
+    line: typeof error?.loc?.line === "number" ? error.loc.line : 1,
+    column: typeof error?.loc?.column === "number" ? error.loc.column : 0,
+  };
 };
+
+const parseProgram = (
+  code: string,
+  sourceType: "module" | "script",
+): { readonly program: SyntaxTree } | { readonly failure: ParseFailure } => {
+  try {
+    return {
+      program: parse(code, {
+        ecmaVersion: "latest",
+        sourceType,
+        allowReturnOutsideFunction: true,
+        allowAwaitOutsideFunction: true,
+      }),
+    };
+  } catch (cause) {
+    return { failure: parseFailure(cause) };
+  }
+};
+
+/** What wraps a body to parse it as one: `yield*` and `return` are legal inside. */
+const BODY_PREFIX = "async function* __alchemyBody() {\n";
+
+const nameOf = (node: {
+  readonly type: string;
+  readonly name?: string;
+  readonly value?: unknown;
+}) => (node.type === "Identifier" ? node.name! : String(node.value));
+
+/** An exported or imported name as a property key. */
+const keyOf = (node: { readonly type: string; readonly name?: string; readonly value?: unknown }) =>
+  node.type === "Identifier" ? node.name! : JSON.stringify(node.value);
 
 /**
  * A program as the body of a function. A program written as a module
  * returns its default export, its imports become lookups, and its other
  * exports plain declarations; any other program is already a body.
  *
- * This matches text, not syntax: a line of a template literal that starts
- * with `import` or `export` is rewritten too.
+ * The program is parsed, so only its own `import` and `export` statements
+ * change. One that is neither a module nor a body becomes a body that
+ * throws the `SyntaxError`, with the line and column in the program.
  */
 export const programBody = (
   source: string,
 ): { readonly body: string; readonly module: boolean } => {
-  const code = source
-    .replace(FENCE, "$1")
-    .replace(IMPORT, (_line, clause, _quote, specifier) => importOf(clause, specifier));
-  if (!EXPORT_DEFAULT.test(code)) return { body: code, module: false };
-  return {
-    body: `${code.replace(EXPORT_DEFAULT, "$1const __alchemyDefault = ").replace(EXPORT, "$1")}\nreturn __alchemyDefault;`,
-    module: true,
-  };
+  const code = source.replace(FENCE, "$1");
+  const parsed = parseProgram(code, "module");
+  if ("failure" in parsed) {
+    // `yield*` is not legal in a module: the body of a generator parses inside one.
+    const body = parseProgram(`${BODY_PREFIX}${code}\n}`, "script");
+    if ("program" in body) return { body: code, module: false };
+    // Whichever reading got further is the one the program meant.
+    const failure =
+      body.failure.pos - BODY_PREFIX.length > parsed.failure.pos
+        ? { ...body.failure, line: body.failure.line - 1 }
+        : parsed.failure;
+    const message = `${failure.message} (${failure.line}:${failure.column})`;
+    return { body: `throw new SyntaxError(${JSON.stringify(message)});`, module: false };
+  }
+  const edits: Array<{ readonly start: number; readonly end: number; readonly text: string }> = [];
+  let module = false;
+  for (const node of parsed.program.body) {
+    if (node.type === "ImportDeclaration") {
+      const from = `__alchemyImport(${JSON.stringify(node.source.value)})`;
+      const named = node.specifiers.flatMap((specifier) =>
+        specifier.type === "ImportSpecifier"
+          ? [
+              nameOf(specifier.imported) === specifier.local.name
+                ? specifier.local.name
+                : `${keyOf(specifier.imported)}: ${specifier.local.name}`,
+            ]
+          : [],
+      );
+      const text = [
+        ...node.specifiers.flatMap((specifier) =>
+          specifier.type === "ImportSpecifier" ? [] : [`const ${specifier.local.name} = ${from};`],
+        ),
+        ...(named.length > 0 ? [`const { ${named.join(", ")} } = ${from};`] : []),
+        ...(node.specifiers.length === 0 ? [`${from};`] : []),
+      ].join(" ");
+      edits.push({ start: node.start, end: node.end, text });
+    } else if (node.type === "ExportDefaultDeclaration") {
+      module = true;
+      const declared = node.declaration;
+      if (
+        (declared.type === "FunctionDeclaration" || declared.type === "ClassDeclaration") &&
+        declared.id != null
+      ) {
+        // A named declaration keeps its name, which the rest of the program may use.
+        edits.push({ start: node.start, end: declared.start, text: "" });
+        edits.push({
+          start: node.end,
+          end: node.end,
+          text: `\nconst __alchemyDefault = ${declared.id.name};`,
+        });
+      } else {
+        edits.push({ start: node.start, end: declared.start, text: "const __alchemyDefault = " });
+        // A function or class expression ends without one.
+        if (code[node.end - 1] !== ";") edits.push({ start: node.end, end: node.end, text: ";" });
+      }
+    } else if (node.type === "ExportNamedDeclaration") {
+      if (node.declaration != null) {
+        edits.push({ start: node.start, end: node.declaration.start, text: "" });
+      } else if (node.source != null) {
+        edits.push({
+          start: node.start,
+          end: node.end,
+          text: `__alchemyImport(${JSON.stringify(node.source.value)});`,
+        });
+      } else {
+        const exported = node.specifiers.find(
+          (specifier) => nameOf(specifier.exported) === "default",
+        );
+        if (exported !== undefined) module = true;
+        edits.push({
+          start: node.start,
+          end: node.end,
+          text: exported === undefined ? "" : `const __alchemyDefault = ${nameOf(exported.local)};`,
+        });
+      }
+    } else if (node.type === "ExportAllDeclaration") {
+      edits.push({
+        start: node.start,
+        end: node.end,
+        text: `__alchemyImport(${JSON.stringify(node.source.value)});`,
+      });
+    }
+  }
+  const body = edits.reduceRight(
+    (text, edit) => `${text.slice(0, edit.start)}${edit.text}${text.slice(edit.end)}`,
+    code,
+  );
+  return module ? { body: `${body}\nreturn __alchemyDefault;`, module } : { body, module };
 };
 
 const TOOLS_RULE =

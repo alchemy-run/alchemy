@@ -9159,6 +9159,9 @@ importers:
       '@earendil-works/pi-codemode':
         specifier: 1.5.0
         version: 1.5.0
+      acorn:
+        specifier: 8.18.0
+        version: 8.18.0
     devDependencies:
       '@alchemy.run/archil':
         specifier: workspace:*

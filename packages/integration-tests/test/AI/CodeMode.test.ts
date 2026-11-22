@@ -78,6 +78,52 @@ describe("AI.programBody", { tags: ["unit"] }, () => {
     });
   });
 
+  it("text that reads like an import or an export is not one", () => {
+    const source = [
+      "const prompt = `",
+      'import fs from "node:fs";',
+      "export default is how a program answers",
+      "`;",
+      "// export default 1;",
+      "export default prompt;",
+    ].join("\n");
+    expect(AI.programBody(source)).toEqual({
+      module: true,
+      body: [
+        "const prompt = `",
+        'import fs from "node:fs";',
+        "export default is how a program answers",
+        "`;",
+        "// export default 1;",
+        "const __alchemyDefault = prompt;",
+        "return __alchemyDefault;",
+      ].join("\n"),
+    });
+  });
+
+  it("a default export by name, or of a named function, is the result", () => {
+    expect(AI.programBody("const answer = 1;\nexport { answer as default };")).toEqual({
+      module: true,
+      body: "const answer = 1;\nconst __alchemyDefault = answer;\nreturn __alchemyDefault;",
+    });
+    expect(AI.programBody("export default function main() {}\n[1].map(main);")).toEqual({
+      module: true,
+      body: "function main() {}\nconst __alchemyDefault = main;\n[1].map(main);\nreturn __alchemyDefault;",
+    });
+  });
+
+  it("the body of a generator is left as it is", () => {
+    const body = "const { sum } = yield* tools.add({ a: 2, b: 3 });\nreturn sum;";
+    expect(AI.programBody(body)).toEqual({ module: false, body });
+  });
+
+  it("a program that does not parse throws where it stops", () => {
+    expect(AI.programBody("const a = 1;\nexport default a +;")).toEqual({
+      module: false,
+      body: 'throw new SyntaxError("Unexpected token (2:18)");',
+    });
+  });
+
   it("a function body is left as it is, without the fence a model put around it", () => {
     expect(AI.programBody("```js\nreturn 1;\n```")).toEqual({ module: false, body: "return 1;" });
   });
@@ -130,6 +176,16 @@ describe("AI.CodeModeAsync", { tags: ["unit"] }, () => {
       const result = yield* run(AI.CodeModeAsync, 'import fs from "node:fs";\nexport default 1;');
       expect(result.ok).toBe(false);
       expect(result.ok ? "" : result.message).toContain('Programs cannot import "node:fs"');
+    }),
+  );
+});
+
+describe("AI.CodeModeAsync syntax", { tags: ["unit"] }, () => {
+  it.effect("a program that does not parse fails with the line it stops on", () =>
+    Effect.gen(function* () {
+      const result = yield* run(AI.CodeModeAsync, "const a = 1;\nexport default a +;");
+      expect(result.ok).toBe(false);
+      expect(result.ok ? "" : result.message).toContain("Unexpected token (2:18)");
     }),
   );
 });

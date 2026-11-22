@@ -151,6 +151,8 @@ Any other rejection is a defect of the tool.
 
 A default export that is a function is called. A model that sends the body of an async function, ending in `return`, is understood too.
 
+The program is parsed before it runs. One with a syntax error fails with the line and column of the error, which the model reads and corrects.
+
 ## Effect programs
 
 Under `AI.CodeModeEffect` the same tools are declared as Effects. A tool's failures are its error type, as `Data.TaggedError` classes, and it requires nothing:
