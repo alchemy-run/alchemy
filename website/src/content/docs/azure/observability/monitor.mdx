@@ -1,0 +1,303 @@
+---
+title: Azure Monitor
+description: Declare a Log Analytics workspace, custom tables, and log search alerts in the same Stack as your app, then query logs, send rows, and read metrics from a Function.
+---
+
+Azure Monitor keeps logs in a Log Analytics workspace and alerts on them
+with KQL (Kusto Query Language) queries. Declare the workspace, its
+tables, and its alerts next to the app they watch, and bind the
+workspace to query it from your code.
+
+## Create a workspace
+
+```typescript
+// src/logs.ts
+import * as Azure from "@alchemy.run/azure";
+
+export const Logs = Azure.LogAnalytics.Workspace("Logs");
+```
+
+You get a pay-as-you-go (`PerGB2018`) workspace with 30 days of
+retention in the stack's resource group. It has no fixed charge: you pay
+per GB ingested. `Logs.customerId` is the workspace GUID that agents and
+the query API use.
+
+:::caution[Changing `name` or `location` replaces the workspace]
+The new workspace is empty. The old one is deleted with all its logs.
+:::
+
+## Cap retention and cost
+
+```diff lang="typescript"
+// src/logs.ts
+import * as Azure from "@alchemy.run/azure";
+
+-export const Logs = Azure.LogAnalytics.Workspace("Logs");
++export const Logs = Azure.LogAnalytics.Workspace("Logs", {
++  retentionInDays: 90,
++  dailyQuotaGb: 5,
++});
+```
+
+Ingestion stops for the day when the workspace reaches `dailyQuotaGb`.
+
+## Send Container Apps logs to it
+
+A Container Apps environment streams its apps' console logs to the
+workspace:
+
+```typescript
+const logs = yield* Logs;
+const env = yield* Azure.ContainerApps.ManagedEnvironment("Environment", {
+  appLogsConfiguration: {
+    destination: "log-analytics",
+    logAnalyticsConfiguration: {
+      customerId: logs.customerId,
+      sharedKey: logs.primarySharedKey.as<Redacted.Redacted<string>>(),
+    },
+  },
+});
+```
+
+## Add a custom table
+
+```diff lang="typescript"
+// src/logs.ts
+import * as Azure from "@alchemy.run/azure";
++import * as Effect from "effect/Effect";
+
+export const Logs = Azure.LogAnalytics.Workspace("Logs", {
+  retentionInDays: 90,
+  dailyQuotaGb: 5,
+});
++
++export const Events = Effect.gen(function* () {
++  const workspace = yield* Logs;
++  return yield* Azure.LogAnalytics.Table("AppEvents", {
++    workspace: workspace.workspaceName,
++    name: "AppEvents_CL",
++    columns: [
++      { name: "TimeGenerated", type: "dateTime" },
++      { name: "Level", type: "string" },
++      { name: "Message", type: "string" },
++    ],
++  });
++});
+```
+
+Custom table names end in `_CL`. A table can keep its rows longer than
+the workspace with `totalRetentionInDays`.
+
+## Alert on a query
+
+A scheduled query rule runs KQL on a schedule and fires when the result
+crosses a threshold:
+
+```typescript
+const logs = yield* Logs;
+yield* Azure.Monitor.ScheduledQueryRule("TooManyErrors", {
+  scopes: [logs.workspaceId],
+  severity: 2,
+  evaluationFrequency: "PT5M",
+  windowSize: "PT15M",
+  criteria: [
+    {
+      query: "AppEvents_CL | where Level == 'error'",
+      timeAggregation: "Count",
+      operator: "GreaterThan",
+      threshold: 10,
+    },
+  ],
+});
+```
+
+Set `skipQueryValidation: true` when the rule queries a table that has no
+rows yet.
+
+## Notify someone
+
+Pass the ARM ID of an action group in `actions`. Alchemy has no action
+group resource yet, so create the group outside Alchemy:
+
+```typescript
+const oncallId =
+  "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/ops/providers/Microsoft.Insights/actionGroups/oncall";
+yield* Azure.Monitor.ScheduledQueryRule("Errors", {
+  scopes: [logs.workspaceId],
+  severity: 1,
+  evaluationFrequency: "PT5M",
+  windowSize: "PT5M",
+  criteria: [
+    {
+      query: "AppEvents_CL | where Level == 'error'",
+      timeAggregation: "Count",
+      operator: "GreaterThan",
+      threshold: 10,
+    },
+  ],
+  actions: { actionGroups: [oncallId] },
+});
+```
+
+## Mute alerts on a schedule
+
+An alert processing rule removes notifications from matching alerts, for
+example low-severity alerts on weekends:
+
+```typescript
+const group = yield* Azure.Resources.ResourceGroup("App");
+yield* Azure.Monitor.AlertProcessingRule("WeekendQuiet", {
+  scopes: [group.resourceGroupId],
+  actions: [{ actionType: "RemoveAllActionGroups" }],
+  conditions: [{ field: "Severity", operator: "Equals", values: ["Sev3", "Sev4"] }],
+  schedule: {
+    timeZone: "UTC",
+    recurrences: [{ recurrenceType: "Weekly", daysOfWeek: ["Saturday", "Sunday"] }],
+  },
+});
+```
+
+Alert processing rules cost nothing.
+
+## Query logs from a Function
+
+```typescript
+// src/Reports.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Logs } from "./logs.ts";
+
+export default class Reports extends Azure.Functions.Function<Reports>()(
+  "Reports",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const workspace = yield* Logs;
+    const executeQuery = yield* Azure.LogAnalytics.ExecuteQuery(workspace);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const result = yield* executeQuery({
+          query: "AppEvents_CL | where Level == 'error' | take 10",
+          timespan: "PT1H",
+        });
+        return yield* HttpServerResponse.json({ rows: result.tables[0]?.rows ?? [] });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Azure.LogAnalytics.ExecuteQueryHttp)),
+) {}
+```
+
+`ExecuteQuery` assigns **Log Analytics Data Reader** to the Function's
+managed identity, on this workspace only.
+
+## Run several queries at once
+
+```typescript
+// init
+const queryBatch = yield* Azure.LogAnalytics.QueryBatch(workspace);
+
+// runtime
+const batch = yield* queryBatch({
+  requests: [
+    { id: "errors", body: { query: "AppEvents_CL | where Level == 'error' | count" } },
+    { id: "total", body: { query: "AppEvents_CL | count" } },
+  ],
+});
+```
+
+Provide `Azure.LogAnalytics.QueryBatchHttp`. Each answer is in
+`batch.responses`, matched by `id`.
+
+## Query one resource's logs
+
+A resource-context query sees only the rows one resource sent, in every
+workspace it sends to:
+
+```typescript
+// init
+const account = yield* Data;
+const query = yield* Azure.LogAnalytics.ExecuteQueryWithResourceId({
+  resource: account,
+  resourceId: account.storageAccountId,
+  location: account.location,
+});
+
+// runtime
+const result = yield* query({ query: "StorageBlobLogs | take 10", timespan: "PT1H" });
+```
+
+Provide `Azure.LogAnalytics.ExecuteQueryWithResourceIdHttp`.
+
+## Send your own rows
+
+`Monitor.UploadLogs` sends rows through a data collection rule (the Logs
+Ingestion API). Declare the rule in an ARM template with
+`Azure.Resources.DeploymentStack`, then bind its outputs:
+
+```typescript
+// init
+const rules = yield* Rules;
+const upload = yield* Azure.Monitor.UploadLogs({
+  resource: rules,
+  dataCollectionRuleId: rules.outputs.dcrId.as<string>(),
+  immutableId: rules.outputs.immutableId.as<string>(),
+  logsIngestionEndpoint: rules.outputs.logsIngestion.as<string>(),
+});
+
+// runtime
+yield* upload({
+  stream: "Custom-AppEvents",
+  body: [{ TimeGenerated: new Date().toISOString(), Level: "info", Message: "hello" }],
+});
+```
+
+Provide `Azure.Monitor.UploadLogsHttp`. It assigns a custom role with
+exactly `Microsoft.Insights/Telemetry/Write`, on the rule only. Rows reach
+the table within a few minutes.
+
+## Read metrics
+
+`GetMetricsBatch` reads platform metrics for up to 50 resources of one
+type in one region:
+
+```typescript
+// init
+const account = yield* Data;
+const getMetrics = yield* Azure.Monitor.GetMetricsBatch({
+  resource: account,
+  resourceId: account.storageAccountId,
+  location: account.location,
+});
+
+// runtime
+const metrics = yield* getMetrics({
+  metricnamespace: "Microsoft.Storage/storageAccounts",
+  metricnames: ["Transactions", "Ingress"],
+  aggregation: "total",
+  interval: "PT1H",
+});
+```
+
+Provide `Azure.Monitor.GetMetricsBatchHttp`.
+
+:::caution[`GetMetricsBatch` assigns Monitoring Reader on the subscription]
+The batch API rejects narrower grants. Monitoring Reader reads the
+control plane of every resource in the subscription.
+:::
+
+## Destroying a workspace
+
+`alchemy destroy` deletes the workspace permanently. Set
+`forceDelete: false` to keep it soft-deleted for 14 days. A new workspace
+with the same name in the same resource group then restores it with its
+old settings and tables.
+
+## Where next
+
+- [Observability](/testing/observability) — tracing Effect programs.
+- [Identity & bindings](/azure/security/identity) — the roles the query
+  bindings assign.
+- [LogAnalytics reference](/providers/azure/loganalytics#workspace) and
+  [Monitor reference](/providers/azure/monitor#scheduledqueryrule) — every
+  prop.

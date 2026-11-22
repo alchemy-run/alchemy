@@ -24,6 +24,7 @@ import { CurrentNamespace } from "./Namespace.ts";
 import * as Output from "./Output.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
+import { omitRenamePolicy } from "./Rename.ts";
 import { Resource, type ResourceLike } from "./Resource.ts";
 import type { Rpc } from "./Rpc.ts";
 import { ServerHost, type ProcessContext } from "./Runtime/Process.ts";
@@ -439,7 +440,9 @@ export const Platform = <
                     // the plain props object — the second call site (in
                     // `cls.make`) already does this.
                     Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
-                    (resolved) => hooks.onCreate!(resource as R, resolved),
+                    // Resources the hook declares are not the renamed
+                    // resource (#2219).
+                    (resolved) => omitRenamePolicy(hooks.onCreate!(resource as R, resolved)),
                   )
                 : Effect.void,
             ),
@@ -522,14 +525,17 @@ export const Platform = <
                 yield* resource(id, props as any).pipe(
                   Effect.flatMap(
                     (resource) =>
-                      hooks.onCreate?.(resource, props).pipe(Effect.map(() => resource)) ??
-                      Effect.succeed(resource),
+                      hooks.onCreate?.(resource, props).pipe(
+                        omitRenamePolicy,
+                        Effect.map(() => resource),
+                      ) ?? Effect.succeed(resource),
                   ),
                 ),
                 runtimeContext,
               );
 
-              yield* impl.pipe(
+              // Resources init declares are not the renamed resource (#2219).
+              yield* omitRenamePolicy(impl).pipe(
                 Effect.flatMap((impl) => {
                   // An `alwaysServe` runtime serves routes of its own, so it
                   // boots even when the program returns nothing.

@@ -372,7 +372,7 @@ export const TransferJobProvider = () =>
       if (current === undefined) {
         const created = yield* retryApiDisabled(
           storagetransfer.createTransferJobs({
-            body: toCreateBody(name, env.project, news, desiredDescription),
+            ...toCreateBody(name, env.project, news, desiredDescription),
           }),
         ).pipe(Effect.catchTag("Conflict", () => getTransferJob(name, env.project)));
         current = created ?? undefined;
@@ -384,24 +384,22 @@ export const TransferJobProvider = () =>
 
       if (isDeletedJob(current)) {
         current = yield* storagetransfer.patchTransferJobs({
-          jobName: current.name ?? name,
-          body: {
-            projectId: env.project,
-            updateTransferJobFieldMask: fieldMask([
-              "description",
-              news.transferSpec !== undefined ? "transfer_spec" : undefined,
-              news.notificationConfig !== undefined ? "notification_config" : undefined,
-              news.loggingConfig !== undefined ? "logging_config" : undefined,
-              "status",
-            ]),
-            transferJob: {
-              description: desiredDescription,
-              transferSpec: news.transferSpec,
-              notificationConfig: news.notificationConfig,
-              loggingConfig: news.loggingConfig,
-              status: desiredStatus,
-            },
+          projectId: env.project,
+          updateTransferJobFieldMask: fieldMask([
+            "description",
+            news.transferSpec !== undefined ? "transfer_spec" : undefined,
+            news.notificationConfig !== undefined ? "notification_config" : undefined,
+            news.loggingConfig !== undefined ? "logging_config" : undefined,
+            "status",
+          ]),
+          transferJob: {
+            description: desiredDescription,
+            transferSpec: news.transferSpec,
+            notificationConfig: news.notificationConfig,
+            loggingConfig: news.loggingConfig,
+            status: desiredStatus,
           },
+          jobName: current.name ?? name,
         });
       }
 
@@ -420,18 +418,16 @@ export const TransferJobProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* storagetransfer.patchTransferJobs({
-          jobName: current.name ?? name,
-          body: {
-            projectId: env.project,
-            updateTransferJobFieldMask: updateMask,
-            transferJob: {
-              description: desiredDescription,
-              transferSpec: news.transferSpec,
-              notificationConfig: news.notificationConfig,
-              loggingConfig: news.loggingConfig,
-              status: desiredStatus,
-            },
+          projectId: env.project,
+          updateTransferJobFieldMask: updateMask,
+          transferJob: {
+            description: desiredDescription,
+            transferSpec: news.transferSpec,
+            notificationConfig: news.notificationConfig,
+            loggingConfig: news.loggingConfig,
+            status: desiredStatus,
           },
+          jobName: current.name ?? name,
         });
       }
 

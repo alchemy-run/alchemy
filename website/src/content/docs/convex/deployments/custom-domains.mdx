@@ -3,6 +3,28 @@ title: Custom domains
 description: Serve a Convex deployment from your own domain.
 ---
 
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+A deployment answers on two Convex addresses: its `.convex.cloud` URL serves the client API your functions are called through, and its `.convex.site` URL serves HTTP actions. A **custom domain** serves one of the two from a hostname you own.
+
+<Tree
+  nodes={[
+    { id: "api", label: "api.example.com", type: "custom domain", icon: "link" },
+    { id: "site", label: "site.example.com", type: "custom domain", icon: "link" },
+    { id: "prod", label: "prod", type: "deployment", icon: "brand:convex", areas: ["cloud", "httpactions"], phoneAreas: ["cloud httpactions"] },
+    { id: "cloud", label: "client API", type: "convexCloud", parent: "prod", icon: "square-function" },
+    { id: "httpactions", label: "HTTP actions", type: "convexSite", parent: "prod", icon: "globe" },
+  ]}
+  areas={["api prod", "site prod"]}
+  phoneAreas={["api site", "prod prod"]}
+  colGap={4}
+  links={[
+    { from: "api", to: "cloud", label: "serves" },
+    { from: "site", to: "httpactions", label: "serves" },
+  ]}
+  caption="Each custom domain serves one of the deployment's two addresses: requestDestination convexCloud for the client API, convexSite for HTTP actions."
+/>
+
 Custom domains need the Convex Professional plan. Below it, a deploy fails with `VanityDomainsDisabled`.
 
 ## Add a domain

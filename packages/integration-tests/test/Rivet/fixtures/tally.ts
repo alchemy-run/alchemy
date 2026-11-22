@@ -76,6 +76,7 @@ export const TallyImpl = Effect.gen(function* () {
           return burstDone;
         }),
       read: (key: string) => read(key),
+      addressed: () => Effect.succeed({ name: state.id.name, key: state.key }),
       backgroundDone: () => Effect.sync(() => backgroundDone),
       // Sets an alarm that comes due at once, then holds storage in a
       // transaction while RivetKit fires it, and replaces it from there.

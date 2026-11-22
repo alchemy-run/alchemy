@@ -436,6 +436,15 @@ const sameHeaders = (
   );
 };
 
+/**
+ * `destinationConf` as `Redacted`. Distilled marks it sensitive, so newer
+ * versions already return it `Redacted`; older ones return a string.
+ */
+const toRedacted = (
+  conf: string | Redacted.Redacted<string> | null | undefined,
+): Redacted.Redacted<string> | undefined =>
+  conf == null ? undefined : Redacted.isRedacted(conf) ? conf : Redacted.make(conf);
+
 const toAttributes = (
   observed: ObservedDestination,
   accountId: string,
@@ -447,9 +456,6 @@ const toAttributes = (
   url: observed.configuration.url,
   // Distilled widens generated string enums to open unions (`string & {}`).
   logpushDataset: observed.configuration.logpushDataset as ObservabilityDataset,
-  destinationConf:
-    observed.configuration.destinationConf == null
-      ? undefined
-      : Redacted.make(observed.configuration.destinationConf),
+  destinationConf: toRedacted(observed.configuration.destinationConf),
   scripts: [...observed.scripts],
 });

@@ -554,9 +554,9 @@ export const EndpointProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsEndpoints({
+            ...toCreateBody(news, endpointId, desiredLabels),
             parent: `projects/${env.project}/locations/${location}`,
             endpointId,
-            body: toCreateBody(news, endpointId, desiredLabels),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -629,20 +629,17 @@ export const EndpointProvider = () =>
 
         current = yield* aiplatform
           .patchProjectsLocationsEndpoints({
+            labels: desiredLabels,
+            displayName,
+            description: news.description,
+            dedicatedEndpointEnabled: news.dedicatedEndpointEnabled === true,
+            trafficSplit: news.trafficSplit,
+            clientConnectionConfig: news.clientConnectionConfig,
+            predictRequestResponseLoggingConfig: news.predictRequestResponseLoggingConfig,
+            privateServiceConnectConfig: news.privateServiceConnectConfig,
+            genAiAdvancedFeaturesConfig: news.genAiAdvancedFeaturesConfig,
             name,
             updateMask: updateMask.join(","),
-            body: {
-              name,
-              labels: desiredLabels,
-              displayName,
-              description: news.description,
-              dedicatedEndpointEnabled: news.dedicatedEndpointEnabled === true,
-              trafficSplit: news.trafficSplit,
-              clientConnectionConfig: news.clientConnectionConfig,
-              predictRequestResponseLoggingConfig: news.predictRequestResponseLoggingConfig,
-              privateServiceConnectConfig: news.privateServiceConnectConfig,
-              genAiAdvancedFeaturesConfig: news.genAiAdvancedFeaturesConfig,
-            },
           })
           .pipe(
             Effect.retry({

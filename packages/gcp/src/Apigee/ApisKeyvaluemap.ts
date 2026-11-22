@@ -180,17 +180,14 @@ const ensureOwnershipEntry = (mapName: string, value: string) =>
     const existing = yield* getOwnershipEntry(mapName);
     if (existing === undefined) {
       yield* apigee
-        .createOrganizationsApisKeyvaluemapsEntries({
-          parent: mapName,
-          body: { name: OWNERSHIP_KEY, value },
-        })
+        .createOrganizationsApisKeyvaluemapsEntries({ name: OWNERSHIP_KEY, value, parent: mapName })
         .pipe(Effect.catchTag("Conflict", () => Effect.void));
       return;
     }
     if ((existing.value ?? "") !== value) {
       yield* apigee.updateOrganizationsApisKeyvaluemapsEntries({
+        value,
         name: `${mapName}/entries/${OWNERSHIP_KEY}`,
-        body: { name: OWNERSHIP_KEY, value },
       });
     }
   });
@@ -290,12 +287,10 @@ export const ApisKeyvaluemapProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsApisKeyvaluemaps({
+            name: mapId,
+            encrypted: true,
+            maskedValues: news.maskedValues === true ? true : undefined,
             parent: `${orgParent(organizationId)}/apis/${apiId}`,
-            body: {
-              name: mapId,
-              encrypted: true,
-              maskedValues: news.maskedValues === true ? true : undefined,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -307,12 +302,9 @@ export const ApisKeyvaluemapProvider = () =>
 
       if ((current.maskedValues === true) !== (news.maskedValues === true)) {
         current = yield* apigee.updateOrganizationsApisKeyvaluemaps({
+          encrypted: true,
+          maskedValues: news.maskedValues === true ? true : undefined,
           name,
-          body: {
-            name: mapId,
-            encrypted: true,
-            maskedValues: news.maskedValues === true ? true : undefined,
-          },
         });
       }
 

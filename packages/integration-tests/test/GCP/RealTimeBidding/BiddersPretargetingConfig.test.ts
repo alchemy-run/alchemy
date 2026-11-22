@@ -23,10 +23,7 @@ const waitUntilGone = (name: string) =>
   );
 
 const probeCreate = (parent: string) =>
-  rtb.createBiddersPretargetingConfigs({
-    parent,
-    body: { displayName: "alchemy-rtb-probe" },
-  });
+  rtb.createBiddersPretargetingConfigs({ displayName: "alchemy-rtb-probe", parent });
 
 // Real-time Bidding needs a bidder account and the realtime-bidding OAuth
 // scope; the service account profile gets InsufficientScopes. Set

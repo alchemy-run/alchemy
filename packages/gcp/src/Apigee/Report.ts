@@ -371,8 +371,8 @@ export const ReportProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsReports({
+            ...toBody(news, reportId, desiredComments),
             parent: orgParent(organization),
-            body: toBody(news, reportId, desiredComments),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -398,8 +398,8 @@ export const ReportProvider = () =>
 
       if (changed) {
         current = yield* apigee.updateOrganizationsReports({
+          ...desired,
           name: current.name?.includes("/") ? current.name : name,
-          body: desired,
         });
       }
 

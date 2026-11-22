@@ -14,6 +14,7 @@
     { "path": "../packages/cloudflare/tsconfig.json" },
     { "path": "../packages/fly/tsconfig.json" },
     { "path": "../packages/gcp/tsconfig.json" },
+    { "path": "../packages/azure/tsconfig.json" },
     { "path": "../packages/github/tsconfig.json" },
     { "path": "../packages/hetzner/tsconfig.json" },
     { "path": "../packages/neon/tsconfig.json" },

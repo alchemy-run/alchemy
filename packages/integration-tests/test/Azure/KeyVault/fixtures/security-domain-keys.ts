@@ -1,0 +1,50 @@
+import type { SecurityDomainJsonWebKey } from "@distilled.cloud/azure/keyvault-security-domain";
+
+/**
+ * Three self-signed RSA-2048 certificates (public parts only), generated once
+ * with `openssl req -x509 -newkey rsa:2048`. The test activates its HSM by
+ * downloading the security domain encrypted to them. The private keys were
+ * discarded, so that security domain can never be restored: use these keys
+ * only for HSMs the test purges.
+ */
+export const SECURITY_DOMAIN_KEYS: SecurityDomainJsonWebKey[] = [
+  {
+    kid: "alchemy-test-security-domain-1",
+    kty: "RSA",
+    key_ops: ["verify", "encrypt", "wrapKey"],
+    n: "irKA4-leb0O1V7DsvozNFRRxHfLalwzNqTyCBE24NZ8eEiXRIBcn4XCtFX8w0eAx7gmkq4YMGyBRcbxnoxg0Sv33o712-FenYQhMXi-7-I2RBbudNLf5BOgylOgwYHgjmZCvUVTgTNy9bANqYANIt0OQ6sJu5JtdifH4lDttH53f9g5U7F_Qx5cFKjZkazjy_DHVZUwUktqypQG8QPGfZDrgpMrZ9JB7PRZfhiyRemWjKDVQopgJKxGHfuhJzhqOCdX0XxiB1aYqYRCGAYgbMODwgf8FAr2CprKWP03TEwRXOihtX7uHS4hkPddXY0_8pcseaGc3gFlELU-fkWIamw",
+    e: "AQAB",
+    x5c: [
+      "MIIDNTCCAh2gAwIBAgIUTIzCUvn2uVX8TmDGc+LsEEUuL4EwDQYJKoZIhvcNAQELBQAwKTEnMCUGA1UEAwweYWxjaGVteS10ZXN0LXNlY3VyaXR5LWRvbWFpbi0xMCAXDTI2MTAyNTAzMjI0N1oYDzIxMjYxMDAxMDMyMjQ3WjApMScwJQYDVQQDDB5hbGNoZW15LXRlc3Qtc2VjdXJpdHktZG9tYWluLTEwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCKsoDj6V5vQ7VXsOy+jM0VFHEd8tqXDM2pPIIETbg1nx4SJdEgFyfhcK0VfzDR4DHuCaSrhgwbIFFxvGejGDRK/fejvXb4V6dhCExeL7v4jZEFu500t/kE6DKU6DBgeCOZkK9RVOBM3L1sA2pgA0i3Q5Dqwm7km12J8fiUO20fnd/2DlTsX9DHlwUqNmRrOPL8MdVlTBSS2rKlAbxA8Z9kOuCkytn0kHs9Fl+GLJF6ZaMoNVCimAkrEYd+6EnOGo4J1fRfGIHVpiphEIYBiBsw4PCB/wUCvYKmspY/TdMTBFc6KG1fu4dLiGQ911djT/ylyx5oZzeAWUQtT5+RYhqbAgMBAAGjUzBRMB0GA1UdDgQWBBQ5jiSgqogJ2s2AdL6Oh6lw3GP22DAfBgNVHSMEGDAWgBQ5jiSgqogJ2s2AdL6Oh6lw3GP22DAPBgNVHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQAv9o6kh7aeAnrAK1z/DCo/7W+i1nX4dAkaI/+P/NZZ3leyewNfLNJylxBmQWIhJLCp9F9wGirwtmlQPKC1X8bLA+dnmWbZ8TL72PJNEsiHYNDL/nRE75yIi2w0r6ElDo2tntdqNMSO4i29+yla6QlW1sZKIC++yG+1ax9bVcFp018C+gzjQpOX7jhe50uqtcol9LvPJgX9n0EJ3OZVkVPmCCcJiX22ZAOolilEY3V5DHwIX32ZoVdhvvarUPhI8BrA3s0DXhns5emj++sZ9syGeyXUKvV5uAedi3Te7gKLWluwL71O9f60VwWRfVevCs55YdoNJffGG7Dy0hvdTsbC",
+    ],
+    use: "enc",
+    x5t_S256: "jUMqz8yuDyuYixHiTfHRVcQwC2pnX2WPGGSgqZTFdRw",
+    alg: "RSA-OAEP-256",
+  },
+  {
+    kid: "alchemy-test-security-domain-2",
+    kty: "RSA",
+    key_ops: ["verify", "encrypt", "wrapKey"],
+    n: "z_0c6L0hLYz2MR6V-9FR6G8z2tEeUWsRInnMD2udUIs_cI8PZUzLJeRrDSpu9J9GPv21jM4WZFlNtbPivbFnDDhtWYUNm0uFUbcNT9CvhDo_0XyTCk8Co7NkShUXeWVW-EWhu4iKL_2hSDELZZxdYxsktYz3RYh7t9ubr2iidqhlgPYy4f4ne9unkirSM3SHG2qL59VztibGcLFQjlK4165gT7qjY7BN73jxsET304UhwX-7YCnR3knx0omYMwUnbKzNHVJ1AU3xIX-85tlVeCfSWjFTtUeE9jXLCGNyaNc-nbC9BWzQQDTIG46Qwrd0MeaQVXjoN6wXaOkYYnveYw",
+    e: "AQAB",
+    x5c: [
+      "MIIDNTCCAh2gAwIBAgIUUZToXFx7t8NyaTcrFUtp3hCi7gAwDQYJKoZIhvcNAQELBQAwKTEnMCUGA1UEAwweYWxjaGVteS10ZXN0LXNlY3VyaXR5LWRvbWFpbi0yMCAXDTI2MTAyNTAzMjI0N1oYDzIxMjYxMDAxMDMyMjQ3WjApMScwJQYDVQQDDB5hbGNoZW15LXRlc3Qtc2VjdXJpdHktZG9tYWluLTIwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDP/RzovSEtjPYxHpX70VHobzPa0R5RaxEiecwPa51Qiz9wjw9lTMsl5GsNKm70n0Y+/bWMzhZkWU21s+K9sWcMOG1ZhQ2bS4VRtw1P0K+EOj/RfJMKTwKjs2RKFRd5ZVb4RaG7iIov/aFIMQtlnF1jGyS1jPdFiHu325uvaKJ2qGWA9jLh/id726eSKtIzdIcbaovn1XO2JsZwsVCOUrjXrmBPuqNjsE3vePGwRPfThSHBf7tgKdHeSfHSiZgzBSdsrM0dUnUBTfEhf7zm2VV4J9JaMVO1R4T2NcsIY3Jo1z6dsL0FbNBANMgbjpDCt3Qx5pBVeOg3rBdo6Rhie95jAgMBAAGjUzBRMB0GA1UdDgQWBBSMiHshw0cy9gn42fBQw8ahCM4HLzAfBgNVHSMEGDAWgBSMiHshw0cy9gn42fBQw8ahCM4HLzAPBgNVHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQC57HaSrH0OV/fBAWpkZKbDltCwqssPI8OmXoRV9mCasjVsiZZ8zZzmXngOy3TLO+uqr5QeG9ixNbL2i7Hbg+ReKQlhA59uPcL0Bsi0clguezME1HMhD7fx6ld2GjHDePZ6/AmdIoANAajbG9Zqm4VMS0g6uejvoK83itYlOsQdI9MSBhHCh4UZrufj1J76Dje3RlvoiKzov8ZVinJ7/Uwzb6AWD2DAvE319zQ10HGvGEwe4Jp53KW1Hp+sUA3AOWrpkCnuyMgzlgRcm4zNY/VjECllYtxp+mX7CsDfqgkiobbAU0RkpA1mKDIEjlGVbIGF276plKT7AC8nJrkXh1rA",
+    ],
+    use: "enc",
+    x5t_S256: "2dPc040d_zUVk3BvkhtRRjqtPpdWh3xFNt9VWHdGFeM",
+    alg: "RSA-OAEP-256",
+  },
+  {
+    kid: "alchemy-test-security-domain-3",
+    kty: "RSA",
+    key_ops: ["verify", "encrypt", "wrapKey"],
+    n: "r39YMSrBG7gn93e_fDFvkwSAWg6z22N6yhJEeTFWt3ZHZ21fcncL2ossDMdpeHGnS64J2QenjCYtMgp2o3I5hYc8SCqtKeytAUA1gacOLfNC3BXnDEwnxKviKjPT4eUoPFj4dJv1cCS2tYhL_HQE7cFS1sJQGvYgrhf7thXSWLZbQbsTYDdEGJYs2BOT_YcvO18JDGmNqSRRtfuc2cgWJZAyDfLvuECgpSKETRKlldbBB1LPgrVEob3xechvfqRlRkR-XZ9KzqKnCC_6kK3NTlTO88RwJTTFuqt1G2UlcJY1h_TDNPNvWDEF1iFWG5cK3Vw6fSJGb8TAwnGnGf5RaQ",
+    e: "AQAB",
+    x5c: [
+      "MIIDNTCCAh2gAwIBAgIURpB+yWkJlgx2vl6FfMHQgSDWF2cwDQYJKoZIhvcNAQELBQAwKTEnMCUGA1UEAwweYWxjaGVteS10ZXN0LXNlY3VyaXR5LWRvbWFpbi0zMCAXDTI2MTAyNTAzMjI0N1oYDzIxMjYxMDAxMDMyMjQ3WjApMScwJQYDVQQDDB5hbGNoZW15LXRlc3Qtc2VjdXJpdHktZG9tYWluLTMwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCvf1gxKsEbuCf3d798MW+TBIBaDrPbY3rKEkR5MVa3dkdnbV9ydwvaiywMx2l4cadLrgnZB6eMJi0yCnajcjmFhzxIKq0p7K0BQDWBpw4t80LcFecMTCfEq+IqM9Ph5Sg8WPh0m/VwJLa1iEv8dATtwVLWwlAa9iCuF/u2FdJYtltBuxNgN0QYlizYE5P9hy87XwkMaY2pJFG1+5zZyBYlkDIN8u+4QKClIoRNEqWV1sEHUs+CtUShvfF5yG9+pGVGRH5dn0rOoqcIL/qQrc1OVM7zxHAlNMW6q3UbZSVwljWH9MM0829YMQXWIVYblwrdXDp9IkZvxMDCcacZ/lFpAgMBAAGjUzBRMB0GA1UdDgQWBBTAr5BD7/a36KzOP6CVt70I6i2vrjAfBgNVHSMEGDAWgBTAr5BD7/a36KzOP6CVt70I6i2vrjAPBgNVHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQAOTqM0pb0QBv8e+umXpXhzet5Kd3cj8eYboMt5dfTG2ajXCgLv/50dm7cuuyXaNgXrAX8gAGkhS0f+LuORMsJWqT/AsRkm/NifymtzpM5156BH2CvU5o5vs4zznCVsjykU8rbfw4XTkyhsNuS+LirotmWpcQmgTez9b1fHSImJ/xNG4iR3LGLwB8LIdo08Ayzqs4BkbIHFn/iBgX8vzNNuAX3+l+f+NpqcWCJaDkZZ0s7S4jyQ0zT/RoxCFULum/8osydmGh8KRYl5RZtkQnFjBwhx5UdZxmoGk1NpP79Cz/DSDkazYRxK6EXZNelwv0qy6BF7TvEy+sJ67r2fIkvN",
+    ],
+    use: "enc",
+    x5t_S256: "dtvrWXtZNflHOtbpkL9il9B3s0onHExU_B3LarwNV6U",
+    alg: "RSA-OAEP-256",
+  },
+];

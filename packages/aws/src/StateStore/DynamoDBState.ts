@@ -1674,24 +1674,26 @@ const ensureStateTable = Effect.fn(function* (table: string, keyArn: string) {
   const observed = yield* describeStateTable(table);
   if (observed === undefined) {
     yield* Effect.logInfo(`DynamoDB state store: creating table ${table}`);
-    yield* dynamodb
-      .createTable({
-        TableName: table,
-        AttributeDefinitions: [
-          { AttributeName: "PK", AttributeType: "S" },
-          { AttributeName: "SK", AttributeType: "S" },
-        ],
-        KeySchema: [
-          { AttributeName: "PK", KeyType: "HASH" },
-          { AttributeName: "SK", KeyType: "RANGE" },
-        ],
-        BillingMode: "PAY_PER_REQUEST",
-        // The table holds the state of every stack on the account.
-        DeletionProtectionEnabled: true,
-        SSESpecification: { Enabled: true, SSEType: "KMS", KMSMasterKeyId: keyArn },
-      })
-      // Another first caller is creating it.
-      .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
+    yield* (
+      dynamodb
+        .createTable({
+          TableName: table,
+          AttributeDefinitions: [
+            { AttributeName: "PK", AttributeType: "S" },
+            { AttributeName: "SK", AttributeType: "S" },
+          ],
+          KeySchema: [
+            { AttributeName: "PK", KeyType: "HASH" },
+            { AttributeName: "SK", KeyType: "RANGE" },
+          ],
+          BillingMode: "PAY_PER_REQUEST",
+          // The table holds the state of every stack on the account.
+          DeletionProtectionEnabled: true,
+          SSESpecification: { Enabled: true, SSEType: "KMS", KMSMasterKeyId: keyArn },
+        })
+        // Another first caller is creating it.
+        .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void))
+    );
   } else {
     yield* validateKeySchema(observed);
   }

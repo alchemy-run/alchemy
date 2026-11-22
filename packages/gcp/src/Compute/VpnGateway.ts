@@ -463,11 +463,7 @@ export const VpnGatewayProvider = () =>
           }));
         }
         const created = yield* compute
-          .insertVpnGateways({
-            project: env.project,
-            region,
-            body,
-          })
+          .insertVpnGateways({ ...body, project: env.project, region })
           .pipe(
             Effect.flatMap((operation) =>
               waitRegionOperation(env.project, region, operation, {
@@ -491,13 +487,11 @@ export const VpnGatewayProvider = () =>
           const latest = (yield* getByName(env.project, region, vpnGatewayName)) ?? resolved;
           yield* compute
             .setLabelsVpnGateways({
+              labels: desiredLabels,
+              labelFingerprint: latest.labelFingerprint,
               project: env.project,
               region,
               resource: vpnGatewayName,
-              body: {
-                labels: desiredLabels,
-                labelFingerprint: latest.labelFingerprint,
-              },
             })
             .pipe(
               Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),

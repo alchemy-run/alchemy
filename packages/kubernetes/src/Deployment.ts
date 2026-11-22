@@ -3,6 +3,7 @@ import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
+import * as Output from "alchemy/Output";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
@@ -12,6 +13,7 @@ import {
   type HostRuntimeContext,
   type ServerHost as ServerHostService,
 } from "alchemy/Runtime/Process";
+import { packEnvValueKeepRedacted } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags } from "alchemy/Tags";
 import * as Data from "effect/Data";
@@ -38,7 +40,8 @@ import { toConnection, type ClusterLike, type Connection } from "./Connection.ts
 import { makeConnectionRegistry } from "./internal/registry.ts";
 import {
   collectBindingEnv,
-  containerEnvValue,
+  ENV_SECRET_DIGEST,
+  workloadEnv,
   connectionIdentity,
   connectionOfOutput,
   deepMerge,
@@ -126,7 +129,12 @@ export interface DeploymentPropsBase extends PlatformProps {
     limits?: { cpu?: string; memory?: string };
   };
   /**
-   * Additional environment variables for the container.
+   * Additional environment variables for the container. A `Redacted` value
+   * (or one holding a `Redacted`) is kept in the Deployment's own Secret,
+   * `<name>-env`, and read through `secretKeyRef`, so the pod template never
+   * holds it; a changed secret rolls the pods. `{ valueFrom: { ... } }`
+   * passes through as a Kubernetes `EnvVarSource`, to read a Secret,
+   * ConfigMap or field of your own.
    */
   env?: Record<string, any>;
   /**
@@ -291,7 +299,12 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * generated pod-identity role. On `GCP.Container.Cluster` targets it
  * accepts the `{ env, iam }` contract of `GCP.Run.Service`: IAM roles are
  * granted to the Kubernetes ServiceAccount's Workload Identity Federation
- * principal.
+ * principal. On `Azure.ContainerService.ManagedCluster` targets it accepts
+ * the `{ env, roleAssignments }` contract of `Azure.ContainerApps.ContainerApp`:
+ * roles are assigned to a managed identity federated with the
+ * ServiceAccount (Microsoft Entra Workload ID), and `main` images go to an
+ * Azure Container Registry built without Docker.
+ *
  * ### Creating a Deployment
  * **Example:** Run an image on a local cluster
  * ```typescript
@@ -398,6 +411,28 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  *       }),
  *     };
  *   }).pipe(Effect.provide(AWS.DynamoDB.PutItemHttp)),
+ * );
+ * ```
+ *
+ * **Example:** Blob binding on AKS (Microsoft Entra Workload ID)
+ * ```typescript
+ * const cluster = yield* Azure.ContainerService.ManagedCluster("Cluster", {
+ *   oidcIssuerEnabled: true,
+ *   workloadIdentityEnabled: true,
+ * });
+ *
+ * const api = yield* Kubernetes.Deployment(
+ *   "Api",
+ *   { cluster, main: import.meta.url, port: 3000 },
+ *   Effect.gen(function* () {
+ *     const notes = yield* Azure.Storage.BlobContainerReadWrite(container);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* notes.put("notes/hello", "hi").pipe(Effect.orDie);
+ *         return HttpServerResponse.text("ok");
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Azure.Storage.BlobContainerReadWriteHttp)),
  * );
  * ```
  *
@@ -526,9 +561,19 @@ export const Deployment: Platform<
         : props.cluster;
       return { ...props, cluster };
     }),
-  createRuntimeContext: createHostRuntimeContext("Kubernetes.Deployment") as (
-    id: string,
-  ) => DeploymentRuntimeContext,
+  createRuntimeContext: (id: string): DeploymentRuntimeContext => {
+    const base = createHostRuntimeContext("Kubernetes.Deployment")(id);
+    return {
+      ...base,
+      // A Redacted stays Redacted, so the Deployment keeps it in its Secret.
+      set: (bindingId: string, output: Output.Output) =>
+        Effect.sync(() => {
+          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+          base.env[key] = output.pipe(Output.map(packEnvValueKeepRedacted));
+          return key;
+        }),
+    } as DeploymentRuntimeContext;
+  },
 });
 
 /**
@@ -770,6 +815,9 @@ export const DeploymentProvider = () =>
             ...news.env,
           };
 
+          // Secrets move into the workload's own Secret, read by reference.
+          const env = yield* workloadEnv({ name: baseName, namespace, labels, env: containerEnv });
+
           const serviceAccountObject: KubernetesObjectDefinition = {
             apiVersion: "v1",
             kind: "ServiceAccount",
@@ -784,7 +832,12 @@ export const DeploymentProvider = () =>
           };
           const podTemplate = deepMerge(
             {
-              metadata: { labels },
+              metadata: {
+                labels: { ...identity?.podLabels, ...labels },
+                ...(env.digest === undefined
+                  ? {}
+                  : { annotations: { [ENV_SECRET_DIGEST]: env.digest } }),
+              },
               spec: {
                 serviceAccountName,
                 ...(news.runtimeClassName ? { runtimeClassName: news.runtimeClassName } : {}),
@@ -795,10 +848,7 @@ export const DeploymentProvider = () =>
                     command: news.command,
                     args: news.args,
                     ports: [{ containerPort: port }],
-                    env: Object.entries(containerEnv).map(([name, value]) => ({
-                      name,
-                      value: containerEnvValue(value),
-                    })),
+                    env: env.entries,
                     resources: news.resources,
                   },
                 ],
@@ -841,7 +891,12 @@ export const DeploymentProvider = () =>
             },
           };
 
-          const desiredObjects = [serviceAccountObject, deploymentObject, serviceObject];
+          const desiredObjects = [
+            serviceAccountObject,
+            ...(env.secret === undefined ? [] : [env.secret as KubernetesObjectDefinition]),
+            deploymentObject,
+            serviceObject,
+          ];
 
           const kubernetesObjects = yield* reconcileObjects({
             transport,

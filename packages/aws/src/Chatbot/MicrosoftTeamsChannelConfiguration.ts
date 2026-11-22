@@ -170,9 +170,9 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
       });
 
       const configurationArn = Effect.fn(function* (configurationName: string) {
-        const { accountId } = yield* AWSEnvironment.current;
+        const { accountId, partition } = yield* AWSEnvironment.current;
         // Chatbot chat-configuration ARNs are global (no region component).
-        return `arn:aws:chatbot::${accountId}:chat-configuration/microsoft-teams-channel/${configurationName}`;
+        return `arn:${partition}:chatbot::${accountId}:chat-configuration/microsoft-teams-channel/${configurationName}`;
       });
 
       const observeConfiguration = (arn: string) =>

@@ -17,11 +17,13 @@
  * It uses `z3-solver` and `oxc-parser`, which are loaded only when it runs, and runs under
  * Node.
  */
+import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
 import type * as Api from "./Api.ts";
 import * as Explore from "./Explore.ts";
@@ -29,6 +31,7 @@ import type * as ModelSearch from "./Explore/internal/ModelSearch.ts";
 import * as Script from "./Explore/internal/Script.ts";
 import type * as Model from "./Model.ts";
 import * as Prove from "./Prove.ts";
+import * as Lock from "./Prove/internal/Lock.ts";
 import * as Symbolic from "./Prove/internal/Symbolic.ts";
 import { Story } from "./Story.ts";
 
@@ -78,6 +81,12 @@ export interface Options {
    * `proved` that is only checked fails the verification.
    */
   readonly require?: Require;
+  /**
+   * A file that keeps each rule as it is written, so that none is taken out
+   * or made to say less without it showing: a path from the test file that
+   * calls, or a URL. See `AggregateOptions.lock`.
+   */
+  readonly lock?: URL | string;
 }
 
 /** The rules a pass has to do more than check. */
@@ -102,6 +111,143 @@ const required = (
           ];
   });
 
+/** What a lock file holds: each rule of each model or aggregate, as it was written. */
+const LockFile = Schema.fromJsonString(
+  Schema.Struct({
+    version: Schema.Literal(1),
+    rules: Schema.Record(
+      Schema.String,
+      Schema.Record(Schema.String, Schema.Struct({ kind: Schema.String, source: Schema.String })),
+    ),
+  }),
+);
+
+/**
+ * Hold the rules as they are written against the ones a lock file keeps, and
+ * say each way they fall short: a rule taken out, or one that changed and is
+ * not known to say as much as it did. A new rule is added to the file, and a
+ * rule that says as much as the one kept replaces it. Under `CI` nothing is
+ * written: a rule the file does not have fails instead.
+ */
+const locking = Effect.fn(function* (options: {
+  readonly lock: URL | string;
+  /** The files that called, nearest first: a path is taken from the first. */
+  readonly from: ReadonlyArray<string>;
+  /** The name the rules are kept under: the model's, or the aggregate's. */
+  readonly key: string;
+  readonly source: URL | string;
+  readonly target: unknown;
+  readonly aggregates: ReadonlyArray<Aggregate.Any>;
+  readonly decisions?: ReadonlyArray<{ readonly decisionName: string; readonly command: unknown }>;
+  readonly model?: string;
+}) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const failed = (error: { readonly message: string }) =>
+    new VerifyError({ message: error.message });
+  const fileOf = (given: URL | string, base: string | undefined) =>
+    typeof given === "string"
+      ? Effect.succeed(path.resolve(base === undefined ? "." : path.dirname(base), given))
+      : path.fromFileUrl(given).pipe(Effect.mapError(failed));
+  const file = yield* fileOf(options.lock, options.from[0]);
+  const source = yield* fileOf(options.source, undefined);
+  const exists = yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false));
+  const kept = exists
+    ? yield* fs.readFileString(file).pipe(
+        Effect.flatMap(Schema.decodeEffect(LockFile)),
+        Effect.mapError(
+          (error) => new VerifyError({ message: `${file} is not a lock file: ${error.message}` }),
+        ),
+      )
+    : { version: 1 as const, rules: {} };
+  const entries = kept.rules[options.key] ?? {};
+  const inspected = yield* Lock.inspect({
+    file: source,
+    target: options.target,
+    aggregates: options.aggregates,
+    ...(options.decisions === undefined ? {} : { decisions: options.decisions }),
+    ...(options.model === undefined ? {} : { model: options.model }),
+    qualified: options.model !== undefined,
+    locked: new Map(Object.entries(entries).map(([name, entry]) => [name, entry.source])),
+  }).pipe(Effect.scoped, Effect.mapError(failed));
+  const ci = yield* Config.Boolean("CI").pipe(
+    Config.withDefault(false),
+    Effect.orElseSucceed(() => false),
+  );
+  // Asked for by whoever runs the test, as a snapshot is rewritten: never under CI.
+  const update =
+    !ci &&
+    (yield* Config.Boolean("UPDATE_VERIFY_LOCK").pipe(
+      Config.withDefault(false),
+      Effect.orElseSucceed(() => false),
+    ));
+  const short = path.basename(file);
+  /** What falls short of the lock: why the check fails, or with `update`, what was relocked. */
+  const fallen: Array<string> = [];
+  const reasons: Array<string> = [];
+  const next: Record<string, { readonly kind: string; readonly source: string }> = {};
+  for (const [name, entry] of Object.entries(entries)) {
+    const now = inspected.sources.get(name);
+    if (!now) {
+      if (!update) next[name] = entry;
+      fallen.push(`${name} is locked in ${short}, and is no longer a rule of ${options.key}`);
+      continue;
+    }
+    next[name] = entry;
+    if (Lock.normal(now.source) === Lock.normal(entry.source)) continue;
+    const compared = inspected.compared.get(name);
+    if (compared?._tag === "Kept" || update) next[name] = now;
+    if (compared?._tag !== "Kept")
+      fallen.push(
+        compared?._tag === "Weaker"
+          ? `${name} says less than the rule locked in ${short}: ${Symbolic.show(compared.state)} passes it now, and the locked rule refuses it`
+          : compared?._tag === "Unknown"
+            ? `${name} changed, and is not known to say as much as the rule locked in ${short}: ${compared.reason}`
+            : `${name} changed from the rule locked in ${short}: only an invariant of an aggregate is compared with the one it was`,
+      );
+  }
+  if (!update) reasons.push(...fallen);
+  const added = [...inspected.sources].filter(([name]) => !(name in entries));
+  if (ci)
+    reasons.push(
+      ...added.map(
+        ([name]) =>
+          `${name} is not in ${short}: run the test outside CI, and commit the file it writes`,
+      ),
+    );
+  else for (const [name, now] of added) next[name] = now;
+  if (reasons.length > 0 && !ci)
+    reasons.push(
+      `to change a rule on purpose, run the test once with UPDATE_VERIFY_LOCK=1: it locks each rule as it is written, and says which`,
+    );
+  const relocked = update ? fallen : [];
+  // A run that passes prints no report: what was let go is said where it will be seen.
+  for (const line of relocked) yield* Effect.logWarning(`${short} relocked: ${line}`);
+  const changed =
+    added.length > 0 || Object.keys(entries).some((name) => next[name] !== entries[name]);
+  if (!ci && (changed || !exists)) {
+    const text = yield* Schema.encodeEffect(LockFile)({
+      version: 1,
+      rules: { ...kept.rules, [options.key]: next },
+    }).pipe(Effect.mapError(failed));
+    // Written as a formatter would leave it, so the file changes only where a rule did.
+    yield* Effect.try({
+      try: () => `${JSON.stringify(JSON.parse(text), null, 2)}\n`,
+      catch: (cause) => new VerifyError({ message: `${file}: ${String(cause)}` }),
+    }).pipe(
+      Effect.flatMap((pretty) => fs.writeFileString(file, pretty)),
+      Effect.mapError(failed),
+    );
+  }
+  return { reasons, relocked };
+});
+
+/** Nothing was held against a lock. */
+const UNLOCKED: {
+  readonly reasons: ReadonlyArray<string>;
+  readonly relocked: ReadonlyArray<string>;
+} = { reasons: [], relocked: [] };
+
 /** The verification could not start: a file did not load, or the solver is missing. */
 export class VerifyError extends Data.TaggedError("VerifyError")<{ readonly message: string }> {}
 
@@ -115,21 +261,34 @@ export class NotVerified extends Data.TaggedError("NotVerified")<{
 export interface Rule {
   /** `Account.NeverOverdrawn`, or `Bank.NoTransferLeftPending`. */
   readonly name: string;
-  readonly kind: "invariant" | "transition" | "model invariant" | "relation" | "eventually";
+  readonly kind:
+    | "invariant"
+    | "transition"
+    | "model invariant"
+    | "relation"
+    | "eventually"
+    | "sometimes";
   /**
    * `proved`: no state and no input break it. `checked`: no sequence run
    * breaks it. `broken`: `story` breaks it. `unseen`: no sequence reached it.
+   * What the model says can happen is `reached`, with the `story` that gets
+   * there, or `unreached`.
    */
-  readonly standing: "proved" | "checked" | "broken" | "unseen";
+  readonly standing: "proved" | "checked" | "broken" | "unseen" | "reached" | "unreached";
   /** How many states, steps or sequences it was looked at in. */
   readonly seen: number;
   readonly story: ModelSearch.Story | undefined;
   /**
-   * For a relation that is checked and not proved: what the proof fails on.
-   * A proof starts from any states the rules allow, so it can fail on states
+   * For a rule that is checked and not proved: what the proof fails on. A
+   * proof starts from any states the rules allow, so it can fail on states
    * no sequence of commands reaches.
    */
   readonly unproved?: { readonly by: string; readonly verdict: Prove.Verdict } | undefined;
+  /**
+   * For an aggregate's rule whose proof fails from a state the rules allow:
+   * an invariant every command keeps, that makes it proved once written down.
+   */
+  readonly suggested?: Prove.Suggestion | undefined;
 }
 
 /** A sequence the explorer found, run on the real model. */
@@ -153,6 +312,11 @@ export interface Report {
   readonly unrun: number;
   /** Each part of the check that was not done. */
   readonly undone: ReadonlyArray<string>;
+  /**
+   * With `UPDATE_VERIFY_LOCK=1`: each rule the lock no longer holds the code
+   * to, because it was taken out or changed, and was locked again as written.
+   */
+  readonly relocked: ReadonlyArray<string>;
   /** What the verification takes for granted. */
   readonly assumptions: ReadonlyArray<string>;
 }
@@ -242,6 +406,8 @@ const rulesOf = (explored: Explore.ModelReport): ReadonlyArray<Rule> => [
           : "unseen",
     seen: rule.states,
     story: rule.broken,
+    unproved: rule.unproved,
+    suggested: rule.suggested,
   })),
   ...explored.rules.map((rule): Rule => ({
     name: `${explored.model}.${rule.name}`,
@@ -264,6 +430,13 @@ const rulesOf = (explored: Explore.ModelReport): ReadonlyArray<Rule> => [
     seen: rule.states,
     story: rule.broken,
   })),
+  ...explored.sometimes.map((rule): Rule => ({
+    name: `${explored.model}.${rule.name}`,
+    kind: "sometimes",
+    standing: rule.reached ? "reached" : "unreached",
+    seen: rule.states,
+    story: rule.reached,
+  })),
 ];
 
 /** Every sequence a report shows, each once, with what it shows. */
@@ -276,6 +449,8 @@ const storiesOf = (explored: Explore.ModelReport) => {
   for (const rule of explored.rules) add(`breaks ${explored.model}.${rule.name}`, rule.broken);
   for (const rule of explored.eventually)
     add(`ends without ${explored.model}.${rule.name}`, rule.broken);
+  for (const rule of explored.sometimes)
+    add(`reaches ${explored.model}.${rule.name}`, rule.reached);
   for (const outcome of explored.outcomes)
     add(
       `${outcome.aggregate === undefined ? "" : `${outcome.aggregate}.`}${outcome.command} ${outcome.kind === "records" ? "→" : "✗"} ${outcome.tag}`,
@@ -392,6 +567,19 @@ export const report = (
       }
     }
     const rules = rulesOf(explored);
+    const unlocked =
+      options.lock === undefined
+        ? UNLOCKED
+        : yield* locking({
+            lock: options.lock,
+            from,
+            key: model.modelName,
+            source,
+            target: model,
+            aggregates: model.aggregates as ReadonlyArray<Aggregate.Any>,
+            decisions: model.decisions,
+            model: model.modelName,
+          });
     const made: Report = {
       model: model.modelName,
       rules,
@@ -402,7 +590,9 @@ export const report = (
       undone: [
         ...Explore.undone(explored, options.allow ?? {}),
         ...required(rules, options.require),
+        ...unlocked.reasons,
       ],
+      relocked: unlocked.relocked,
       // Only a model with a decision takes its commit for granted.
       assumptions: explored.decisions.length > 0 ? [...ASSUMPTIONS, Prove.ATOMIC] : ASSUMPTIONS,
     };
@@ -476,6 +666,18 @@ export interface AggregateOptions {
    * `proved` that is only checked fails the verification.
    */
   readonly require?: Require;
+  /**
+   * A file that keeps each rule as it is written: a path from the test file
+   * that calls, or a URL. The first run writes it, and it is committed with
+   * the code. From then on a rule that is in the file and no longer in the
+   * code fails the verification, and so does one that changed, unless it is
+   * an invariant of an aggregate that still refuses every state it refused.
+   * A new rule is added to the file, and one made to say more replaces the
+   * one kept. To change a rule on purpose, run the test once with
+   * `UPDATE_VERIFY_LOCK=1`: every rule is locked as it is written, and the
+   * report's `relocked` says which ones no longer say what they did.
+   */
+  readonly lock?: URL | string;
 }
 
 /** Why a rule no sequence breaks is not proved. */
@@ -495,12 +697,19 @@ export interface AggregateReport {
        * fail on a state no sequence of commands reaches.
        */
       readonly unproved: Unproved | undefined;
+      /**
+       * Where the proof fails from a state the rules allow: an invariant
+       * every command keeps, that makes the rule proved once written down.
+       */
+      readonly suggested: Prove.Suggestion | undefined;
     }
   >;
   readonly proof: Prove.Report;
   readonly explored: Explore.Report;
   /** Each part of the check that was not done. */
   readonly undone: ReadonlyArray<string>;
+  /** With `UPDATE_VERIFY_LOCK=1`: each rule that was locked again as written, as for a model. */
+  readonly relocked: ReadonlyArray<string>;
 }
 
 /** An aggregate's rule is broken, or part of the check was not done. */
@@ -508,6 +717,11 @@ export class AggregateNotVerified extends Data.TaggedError("NotVerified")<{
   readonly message: string;
   readonly report: AggregateReport;
 }> {}
+
+const relockedLines = (relocked: ReadonlyArray<string>): ReadonlyArray<string> =>
+  relocked.length === 0
+    ? []
+    : ["Relocked with UPDATE_VERIFY_LOCK=1", ...relocked.map((line) => `  ! ${line}`), ""];
 
 const renderAggregate = (report: AggregateReport): string => {
   const out: Array<string> = [
@@ -534,7 +748,14 @@ const renderAggregate = (report: AggregateReport): string => {
           ...(verdict._tag === "Violated"
             ? [
                 `      not proved: ${Symbolic.show(verdict.counterexample.command)} breaks it from ${Symbolic.show(verdict.counterexample.state)}, a state the rules allow`,
-                "      No sequence that was run reaches that state. If none can, say so in an invariant, and this one is proved.",
+                ...(rule.suggested
+                  ? [
+                      "      No sequence that was run reaches that state, and none can.",
+                      ...Prove.suggestion(rule.suggested, "      "),
+                    ]
+                  : [
+                      "      No sequence that was run reaches that state. If none can, say so in an invariant, and this one is proved.",
+                    ]),
               ]
             : [
                 `      not proved for ${why.command}: ${verdict._tag === "Proved" ? "" : "reason" in verdict ? verdict.reason : ""}`,
@@ -545,8 +766,10 @@ const renderAggregate = (report: AggregateReport): string => {
     );
   const broken = report.rules.filter((rule) => rule.standing === "broken");
   if (broken.length > 0) out.push(...broken.map((rule) => `✗ ${rule.name} breaks`), "");
+  out.push(Prove.agreed(report.proof.agreement), "");
   if (report.undone.length > 0)
     out.push("Not done", ...report.undone.map((reason) => `  ✗ ${reason}`), "");
+  out.push(...relockedLines(report.relocked));
   if (report.proof.unkept.length > 0)
     out.push(
       "Schema checks not proved kept",
@@ -582,15 +805,27 @@ export const aggregate = (
     const failed = (error: { readonly message: string }) =>
       new VerifyError({ message: error.message });
     const proof = yield* Prove.report(target, { source }).pipe(Effect.mapError(failed));
+    const unlocked =
+      options.lock === undefined
+        ? UNLOCKED
+        : yield* locking({
+            lock: options.lock,
+            from,
+            key: target.aggregateName,
+            source,
+            target,
+            aggregates: [target],
+          });
     const explored = yield* Explore.report(target, {
       source,
       ...(options.depth === undefined ? {} : { depth: options.depth }),
       ...(options.budget === undefined ? {} : { budget: options.budget }),
     }).pipe(Effect.mapError(failed));
     const rules: AggregateReport["rules"] = explored.invariants.map((rule) => {
-      const verdicts = [...proof.invariants, ...proof.transitions].find(
+      const proved = [...proof.invariants, ...proof.transitions].find(
         (proved) => proved.name === rule.name,
-      )?.commands;
+      );
+      const verdicts = proved?.commands;
       const failing = verdicts?.find((command) => command.verdict._tag !== "Proved");
       return {
         name: rule.name,
@@ -607,6 +842,7 @@ export const aggregate = (
           rule.broken || rule.proved || !failing
             ? undefined
             : { command: failing.command, verdict: failing.verdict },
+        suggested: rule.broken || rule.proved ? undefined : proved?.suggested,
       };
     });
     const made: AggregateReport = {
@@ -617,7 +853,10 @@ export const aggregate = (
       undone: [
         ...Explore.undone(explored, options.allow ?? {}),
         ...required(rules, options.require),
+        ...proof.agreement.differs,
+        ...unlocked.reasons,
       ],
+      relocked: unlocked.relocked,
     };
     return made.rules.some((rule) => rule.standing === "broken") || made.undone.length > 0
       ? yield* new AggregateNotVerified({ message: `\n${renderAggregate(made)}`, report: made })
@@ -679,18 +918,40 @@ export const render = (report: Report | AggregateReport): string => {
         const why = rule.unproved;
         if (!why) return [`  ✓ ${rule.name}`];
         const verdict = why.verdict;
+        const own = rule.kind === "invariant" || rule.kind === "transition";
         return [
           `  ✓ ${rule.name}`,
           ...(verdict._tag === "Violated"
             ? [
                 verdict.counterexample.command === undefined
                   ? `      not proved: it does not hold of ${Symbolic.show(verdict.counterexample.state)}, in a model with nothing in it`
-                  : `      not proved: ${Symbolic.show(verdict.counterexample.command)} breaks it from ${Symbolic.show(verdict.counterexample.state)}, states the rules allow`,
-                "      No sequence that was run reaches those states. If none can, say so in another relation or an invariant, and this one is proved.",
+                  : `      not proved: ${Symbolic.show(verdict.counterexample.command)} breaks it from ${Symbolic.show(verdict.counterexample.state)}, ${own ? "a state" : "states"} the rules allow`,
+                ...(rule.suggested
+                  ? [
+                      "      No sequence that was run reaches that state, and none can.",
+                      ...Prove.suggestion(rule.suggested, "      "),
+                    ]
+                  : [
+                      own
+                        ? "      No sequence that was run reaches that state. If none can, say so in an invariant, and this one is proved."
+                        : "      No sequence that was run reaches those states. If none can, say so in another relation or an invariant, and this one is proved.",
+                    ]),
               ]
             : [`      not proved for ${why.by}: ${"reason" in verdict ? verdict.reason : ""}`]),
         ];
       }),
+      "",
+    );
+
+  const reached = report.rules.filter((rule) => rule.standing === "reached");
+  if (reached.length > 0)
+    out.push(
+      "Reached: a sequence of commands gets there",
+      ...reached.flatMap((rule) =>
+        !rule.story || rule.story.length === 0
+          ? [`  ✓ ${rule.name}  in a model with nothing in it`]
+          : [`  ✓ ${rule.name}`, Explore.describe(rule.story, "      ")],
+      ),
       "",
     );
 
@@ -761,6 +1022,16 @@ export const render = (report: Report | AggregateReport): string => {
 
   if (report.undone.length > 0)
     out.push("Not done", ...report.undone.map((reason) => `  ✗ ${reason}`), "");
+  out.push(...relockedLines(report.relocked));
+
+  if (explored.disagreements.length > 0)
+    out.push(
+      "The real code does something else than was read",
+      ...explored.disagreements.map((reason) => `  ✗ ${reason}`),
+      "",
+    );
+  else if (explored.agreement.compared > 0)
+    out.push(Prove.agreed({ ...explored.agreement, differs: [] }), "");
 
   if (explored.repeated.length > 0)
     out.push(

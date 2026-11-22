@@ -270,9 +270,9 @@ export const ProjectsLocationsGlobalPolicyOrchestratorProvider = () =>
       if (current === undefined) {
         const created = yield* osconfig
           .createProjectsLocationsGlobalPolicyOrchestrators({
+            ...desired,
             parent,
             policyOrchestratorId,
-            body: desired,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -309,13 +309,10 @@ export const ProjectsLocationsGlobalPolicyOrchestratorProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* osconfig.patchProjectsLocationsGlobalPolicyOrchestrators({
+          ...desired,
+          etag: current.etag,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            ...desired,
-            name: current.name ?? name,
-            etag: current.etag,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

@@ -1,11 +1,13 @@
 import * as Domain from "@alchemy.run/domain";
+import { sagaEngine } from "@alchemy.run/domain/EffectCluster";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { Story } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@alchemy.run/test";
+import { ClusterWorkflowEngine, TestRunner } from "effect/cluster";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import { Activity, DurableClock, DurableDeferred } from "effect/workflow";
+import { Activity, DurableClock, DurableDeferred, WorkflowEngine } from "effect/workflow";
 
 // Wallets that a transfer saga debits and credits.
 class Opened extends Domain.Event("Opened", { balance: Schema.Number }) {}
@@ -304,6 +306,49 @@ const checks = Story.make(Checks, {
   stub: [Sanctions],
 });
 
+// A saga whose compensation dies after the saga rejected: the run has no
+// result to store unless the engine stores the defect.
+// https://github.com/alchemy-run/alchemy/issues/3595
+class Refused extends Domain.Rejection("Refused") {}
+
+class Unwind extends Domain.Saga("Unwind", {
+  key: Schema.String,
+  input: {},
+  rejects: [Refused],
+}) {}
+
+const UnwindLive = Unwind.toLayer(
+  Effect.succeed(
+    Effect.fn(function* () {
+      yield* Activity.make({ name: "step", execute: Effect.void }).pipe(
+        Unwind.withCompensation(() => Effect.die(new Error("compensation failed"))),
+      );
+      return yield* new Refused();
+    }),
+  ),
+);
+
+class StartUnwind extends Domain.Policy("StartUnwind", {
+  from: Transfer,
+  on: [Requested],
+}) {}
+const StartUnwindLive = StartUnwind.toLayer(
+  Effect.gen(function* () {
+    const unwinds = yield* Unwind;
+    return Effect.fn(function* ({ source }) {
+      yield* unwinds.start(source, {});
+    });
+  }),
+);
+
+class Unwinding extends Domain.Model("Unwinding", {
+  aggregates: [Transfer],
+  policies: [StartUnwind],
+  sagas: [Unwind],
+}) {}
+
+const unwinding = Story.make(Unwinding, { layer: Layer.mergeAll(StartUnwindLive, UnwindLive) });
+
 describe("Domain.Saga", { tags: ["unit", "local"] }, () => {
   it.effect("a policy starts a saga that debits and credits", () =>
     story(
@@ -395,6 +440,23 @@ describe("Domain.Saga", { tags: ["unit", "local"] }, () => {
     ),
   );
 
+  it.effect("a saga whose compensation dies reads as Died", () =>
+    unwinding(
+      Story.when(request(40)),
+      Story.then(transfer, requested(40)),
+      Story.saga(Unwind, "t-1", { _tag: "Died" }),
+    ),
+  );
+
+  it.effect("a saga whose compensation dies is reported as a death", () =>
+    unwinding(Story.when(request(40))).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(failure.message).toMatch(/saga Unwind run t-1 died with Error: compensation failed/),
+      ),
+    ),
+  );
+
   it.effect("waits for a signal before it runs", () =>
     story(
       Story.given(alice, new Opened({ balance: 100 })),
@@ -425,16 +487,36 @@ describe("Domain.Saga", { tags: ["unit", "local"] }, () => {
     ),
   );
 
+  const debitTwice = Effect.gen(function* () {
+    const wallets = yield* Wallet;
+    const debits = yield* DebitTwice;
+    yield* wallets.send(new Open({ id: alice.id, balance: 100 }));
+    const run = yield* debits.start("t-1", { from: "alice", amount: 40 });
+    yield* run.result;
+    // Debited once: the retry's send had the same command id.
+    expect((yield* wallets.get(alice)).balance).toBe(60);
+  });
+
   it.live("a step that runs again sends the same commands", () =>
-    Effect.gen(function* () {
-      const wallets = yield* Wallet;
-      const debits = yield* DebitTwice;
-      yield* wallets.send(new Open({ id: alice.id, balance: 100 }));
-      const run = yield* debits.start("t-1", { from: "alice", amount: 40 });
-      yield* run.result;
-      // Debited once: the retry's send had the same command id.
-      expect((yield* wallets.get(alice)).balance).toBe(60);
-    }).pipe(Effect.provide(Retries.layer(DebitTwiceLive).pipe(Layer.provide(InMemory)))),
+    debitTwice.pipe(Effect.provide(Retries.layer(DebitTwiceLive).pipe(Layer.provide(InMemory)))),
+  );
+
+  // Effect Cluster's own engine, on an in-memory cluster, as its host gives
+  // it to a model's sagas; the aggregates stay in memory.
+  it.live("a step that runs again on Effect Cluster sends the same commands", () =>
+    debitTwice.pipe(
+      Effect.provide(
+        Retries.layer(DebitTwiceLive).pipe(
+          Layer.provide(
+            Layer.effect(
+              WorkflowEngine.WorkflowEngine,
+              Effect.map(WorkflowEngine.WorkflowEngine, sagaEngine),
+            ).pipe(Layer.provide(ClusterWorkflowEngine.layer), Layer.provide(TestRunner.layer)),
+          ),
+          Layer.provide(InMemory),
+        ),
+      ),
+    ),
   );
 
   // In real time: the client polls while it waits for the result.

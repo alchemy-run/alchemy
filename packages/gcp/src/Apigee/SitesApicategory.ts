@@ -210,11 +210,9 @@ export const SitesApicategoryProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsSitesApicategories({
+            name: desiredName,
+            siteId,
             parent: siteParent(org, siteId),
-            body: {
-              name: desiredName,
-              siteId,
-            },
           })
           .pipe(
             Effect.map((response) => unwrap(response)),
@@ -232,12 +230,9 @@ export const SitesApicategoryProvider = () =>
       const resource = resourceName(org, siteId, current.id ?? "");
       if ((current.name ?? "") !== desiredName) {
         const patched = yield* apigee.patchOrganizationsSitesApicategories({
+          siteId,
+          id: current.id,
           name: resource,
-          body: {
-            name: desiredName,
-            siteId,
-            id: current.id,
-          },
         });
         current = unwrap(patched) ?? current;
       }

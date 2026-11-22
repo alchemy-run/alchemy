@@ -1,0 +1,65 @@
+---
+title: Surviving a crash
+description: A Pi harness stores each step before acting on it and keeps its Durable Object's alarm set while it has work, so an evicted or crashed object resumes every run.
+---
+
+import Timeline from "../../../components/diagrams/Timeline.astro";
+
+Cloudflare can evict a Durable Object at any moment: after a deploy, on a hardware fault, or when it has been idle. An agent run takes minutes, so it will sometimes be cut off. A Pi harness is built for that. It writes each step to the object's SQLite before acting on it, and it keeps the object's alarm set for as long as there is work.
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "a", label: "instance 1" },
+    { id: "b", label: "instance 2" },
+  ]}
+  bars={[
+    { lane: "a", start: 0, end: 1.4, label: "ask model" },
+    { lane: "a", start: 1.4, end: 3.2, label: "run_tests" },
+    { lane: "b", start: 4.6, end: 6.4, label: "run_tests", tone: "warn" },
+    { lane: "b", start: 6.4, end: 7.8, label: "ask model" },
+    { lane: "b", start: 7.8, end: 9.4, label: "comment" },
+  ]}
+  marks={[{ at: 3.2, label: "evicted" }, { at: 4.6, label: "alarm" }]}
+  legend={[{ tone: "accent", label: "a step" }, { tone: "warn", label: "run again" }]}
+  caption="The first instance is evicted while run_tests is running. The alarm starts a second instance, which reads the stored steps, runs the unfinished call again and carries on with the same conversation."
+/>
+
+## What resumes
+
+When a new instance wakes, the harness reads its storage and continues every unfinished run from its last stored step. A model request that was in flight is sent again, after Pi's backoff. A tool call that had finished is not run again: its result is already stored.
+
+## Tool calls that were cut off
+
+A tool call that had started but not finished is the one case the harness can't decide alone. Running it again is right for reading a file and wrong for charging a card. Say which with `replay`:
+
+```typescript
+export class RunTests extends AI.Tool<RunTests>()("run_tests", {
+  description: "Run the test suite and report failures.",
+  parameters: Schema.Struct({}),
+  success: Schema.Struct({ exitCode: Schema.Number }),
+  replay: "safe",
+}) {}
+```
+
+A `replay: "safe"` tool runs again. Any other tool does not, and the model is told the call was interrupted, so it can check what happened and decide.
+
+## The alarm
+
+`PiCloudflare.DurableObjectStorage` gives the harness the object's durable callbacks. While Pi has work, the harness keeps one scheduled. Each time it fires, the harness works until Pi has nothing to run now, then schedules the next. You write no alarm handler.
+
+A conversation that is waiting on a timer, such as Pi's backoff before a retry, costs nothing while it waits: the alarm is set for that time, and the object can be evicted until then.
+
+## Exactly-once inputs
+
+A caller that retries after a timeout must not start a second run. Give each input a `requestId`:
+
+```typescript
+yield* conversation.submit({ type: "input", content: text, requestId: deliveryId });
+```
+
+The same `requestId` returns the original submission, whether its run is going, finished, or was resumed by a later instance.
+
+## The sandbox
+
+A conversation's sandbox lives on its platform, found by a key the harness derives from the object and the conversation. A new instance finds the same sandbox, with its files as the last call left them.

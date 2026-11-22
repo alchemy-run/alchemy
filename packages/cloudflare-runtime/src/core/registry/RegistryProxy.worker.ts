@@ -281,6 +281,30 @@ export class ExternalService extends WorkerEntrypoint<Env, Subscriber.Worker> {
     return fetcher.fetch(request);
   }
 
+  /**
+   * Forwards an inbound TCP connection to the remote worker's `connect()`
+   * handler: opens a socket to the same address over the debug port and
+   * pipes bytes both ways until either side closes.
+   */
+  async connect(socket: Socket): Promise<void> {
+    const fetcher = this.rpcTarget.resolve();
+    if (!fetcher) {
+      await socket.close();
+      throw new Error(this.notFoundMessage());
+    }
+    const { localAddress } = await socket.opened;
+    const upstream = fetcher.connect(localAddress ?? "localhost:0", { allowHalfOpen: true });
+    try {
+      await upstream.opened;
+      await Promise.all([
+        socket.readable.pipeTo(upstream.writable),
+        upstream.readable.pipeTo(socket.writable),
+      ]);
+    } finally {
+      await Promise.allSettled([socket.close(), upstream.close()]);
+    }
+  }
+
   // Separate connection for scheduled: the debug port's EventDispatcher
   // doesn't support runScheduled/runAlarm/queue, so we forward via HTTP.
   async scheduled(controller: ScheduledController) {

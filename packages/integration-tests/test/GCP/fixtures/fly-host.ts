@@ -42,9 +42,7 @@ export default class FlyFederatedService extends Fly.Service<FlyFederatedService
             hasKey: (yield* read("ALCHEMY_GCP_SERVICE_ACCOUNT_KEY")) !== undefined,
           });
         }
-        return yield* publish({
-          body: { messages: [{ data: btoa("hello from fly") }] },
-        }).pipe(
+        return yield* publish({ messages: [{ data: btoa("hello from fly") }] }).pipe(
           Effect.flatMap((response) => HttpServerResponse.json(response)),
           Effect.catchCause((cause) =>
             HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),

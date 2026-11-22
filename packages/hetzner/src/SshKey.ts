@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import * as Hetzner from "@distilled.cloud/hetzner";
+import * as SshKeys from "@distilled.cloud/hetzner/ssh_keys";
 import type { GetSshKeyResponseSshKey } from "@distilled.cloud/hetzner/ssh_keys";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
@@ -138,20 +138,20 @@ const fingerprintOf = (publicKey: string) =>
   });
 
 const getById = (id: number) =>
-  Hetzner.sshKeys.getSshKey({ id }).pipe(
+  SshKeys.getSshKey({ id }).pipe(
     Effect.map(({ ssh_key }) => ssh_key),
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const findByName = (name: string) =>
-  Hetzner.sshKeys
-    .listSshKeys({ name, per_page: 50 })
-    .pipe(Effect.map(({ ssh_keys }) => ssh_keys.find((key) => key.name === name)));
+  SshKeys.listSshKeys({ name, per_page: 50 }).pipe(
+    Effect.map(({ ssh_keys }) => ssh_keys.find((key) => key.name === name)),
+  );
 
 const findByFingerprint = (fingerprint: string) =>
-  Hetzner.sshKeys
-    .listSshKeys({ fingerprint, per_page: 50 })
-    .pipe(Effect.map(({ ssh_keys }) => ssh_keys[0]));
+  SshKeys.listSshKeys({ fingerprint, per_page: 50 }).pipe(
+    Effect.map(({ ssh_keys }) => ssh_keys[0]),
+  );
 
 const observe = Effect.fn(function* (input: { id?: number; name: string; publicKey: string }) {
   if (input.id !== undefined) {
@@ -212,12 +212,10 @@ export const SshKeyProvider = () =>
     }),
 
     list: () =>
-      Hetzner.sshKeys.listSshKeys
-        .items({ label_selector: alchemyStackSelector, per_page: 50 })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk, toAttrs)),
-        ),
+      SshKeys.listSshKeys.items({ label_selector: alchemyStackSelector, per_page: 50 }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk, toAttrs)),
+      ),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const name = yield* toName(id, news.name, output?.name);
@@ -233,13 +231,11 @@ export const SshKeyProvider = () =>
       });
 
       if (current === undefined) {
-        const created = yield* Hetzner.sshKeys
-          .createSshKey({
-            name,
-            public_key: news.publicKey,
-            labels: desiredLabels,
-          })
-          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
+        const created = yield* SshKeys.createSshKey({
+          name,
+          public_key: news.publicKey,
+          labels: desiredLabels,
+        }).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current =
           created?.ssh_key ??
           (yield* observe({
@@ -258,7 +254,7 @@ export const SshKeyProvider = () =>
       const nameChanged = current.name !== name;
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       if (nameChanged || labelsChanged) {
-        const updated = yield* Hetzner.sshKeys.updateSshKey({
+        const updated = yield* SshKeys.updateSshKey({
           id: current.id,
           name: nameChanged ? name : undefined,
           labels: labelsChanged ? desiredLabels : undefined,
@@ -270,8 +266,8 @@ export const SshKeyProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* Hetzner.sshKeys
-        .deleteSshKey({ id: output.id })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* SshKeys.deleteSshKey({ id: output.id }).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
     }),
   });

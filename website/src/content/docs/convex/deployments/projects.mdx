@@ -3,7 +3,9 @@ title: Projects
 description: Create a Convex project, name it, tag it, and decide what happens on destroy.
 ---
 
-A project holds your deployments.
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+A **project** is one app in your team. It holds the app's deployments, the default environment variables new deployments start with, and the tags you give it. Deleting a project deletes every deployment in it, and their data.
 
 ## Create a project
 
@@ -33,6 +35,4 @@ A project with a prod deployment refuses to delete until that deployment is gone
 
 A project with the same name and no Alchemy tag fails with `OwnedBySomeoneElse`. Deploy with `--adopt` to take it over:
 
-```sh
-alchemy deploy --adopt
-```
+<PackageManagers run="alchemy deploy --adopt" />

@@ -25,6 +25,8 @@ it.effect(
       const report = yield* Verify.model(Bank, {
         apis: [CustomerApi, SupportApi],
         story,
+        // Each rule as it is written is kept in this file: one taken out, or made to say less, fails.
+        lock: "./Bank.lock.json",
         // An account's own rules have to stay proved: one that slips to checked fails this.
         require: {
           proved: [
@@ -63,7 +65,12 @@ it.effect(
         "Bank.AClaimedNameBelongsToItsCustomer": "proved",
         "Bank.ARegisteredCustomerHoldsTheirName": "proved",
         "Bank.EveryTransferEnds": "checked",
+        // What the bank must be able to do: a sequence of commands gets there.
+        "Bank.AnAccountHoldsMoney": "reached",
       });
+      // The proofs are of what the prover read: the real code did the same on every path compared.
+      expect(report.explored.agreement.compared).toBeGreaterThan(50);
+      expect(report.explored.disagreements).toEqual([]);
       // Every sequence found ran on the real bank, with its policies, saga, views and
       // projections, and so did the walks of commands picked at random.
       expect(report.runs.length - report.walked).toBeGreaterThan(20);
@@ -84,6 +91,9 @@ it.effect(
 
 it.effect(
   "an account keeps its rules",
-  () => Verify.aggregate(Account).pipe(Effect.provide(NodeServices.layer)),
+  () =>
+    Verify.aggregate(Account, { lock: "./Bank.lock.json" }).pipe(
+      Effect.provide(NodeServices.layer),
+    ),
   120_000,
 );

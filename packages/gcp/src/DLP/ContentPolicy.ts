@@ -327,11 +327,9 @@ export const ContentPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* dlp
           .createProjectsLocationsContentPolicies({
+            contentPolicyId,
+            contentPolicy: body,
             parent: locationParent(env.project, location),
-            body: {
-              contentPolicyId,
-              contentPolicy: body,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -364,20 +362,18 @@ export const ContentPolicyProvider = () =>
         loggingChanged
       ) {
         current = yield* dlp.patchProjectsLocationsContentPolicies({
+          contentPolicy: body,
+          updateMask: updateMaskOf(
+            displayChanged ? "displayName" : undefined,
+            inspectChanged ? "inspectConfig" : undefined,
+            rulesChanged ? "rules" : undefined,
+            defaultChanged ? "defaultAction" : undefined,
+            unsupportedChanged ? "unsupportedFileType" : undefined,
+            tooLargeChanged ? "inputTooLarge" : undefined,
+            failedChanged ? "failedToScanSupportedFileType" : undefined,
+            loggingChanged ? "loggingConfigs" : undefined,
+          ),
           name: current.name ?? name,
-          body: {
-            contentPolicy: body,
-            updateMask: updateMaskOf(
-              displayChanged ? "displayName" : undefined,
-              inspectChanged ? "inspectConfig" : undefined,
-              rulesChanged ? "rules" : undefined,
-              defaultChanged ? "defaultAction" : undefined,
-              unsupportedChanged ? "unsupportedFileType" : undefined,
-              tooLargeChanged ? "inputTooLarge" : undefined,
-              failedChanged ? "failedToScanSupportedFileType" : undefined,
-              loggingChanged ? "loggingConfigs" : undefined,
-            ),
-          },
         });
       }
 

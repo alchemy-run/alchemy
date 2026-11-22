@@ -1,22 +1,32 @@
 ---
 title: Setup
-description: Give Alchemy a Convex team access token.
+description: Install @alchemy.run/convex, create a Convex team access token, and connect it with a profile or CI environment variables.
 ---
 
 import PackageManagers from "../../../components/PackageManagers.astro";
 
-Sign up at [convex.dev](https://www.convex.dev), then create a team access token in your team's settings. A token belongs to the person who created it, so use a service account for anything shared.
+export const pkgs = `alchemy@latest @alchemy.run/convex@latest convex effect @effect/platform-bun @effect/platform-node`;
+
+## Prerequisites
+
+- [Node.js](https://nodejs.org) 24.11.1+ or [Bun](https://bun.sh)
+- A Convex team. Sign up at [convex.dev](https://www.convex.dev); the free plan is enough to start.
+
+## Create a project
+
+<PackageManagers init dir="my-app" />
+
+## Install
+
+<PackageManagers add={pkgs} />
+
+`convex` is Convex's own package. `Convex.Functions` pushes with its CLI, and your functions import it.
 
 ## Add the provider
 
-Install `@alchemy.run/convex`:
+Add `Convex.providers()` to your Stack:
 
-<PackageManagers add="@alchemy.run/convex" />
-
-Then add `Convex.providers()` to your Stack:
-
-```typescript
-// alchemy.run.ts
+```typescript title="alchemy.run.ts"
 import * as Convex from "@alchemy.run/convex";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
@@ -30,25 +40,23 @@ export default Alchemy.Stack(
 );
 ```
 
-## Store the token in a profile
+## Connect a profile
 
-```sh
-alchemy profile edit --add Convex
-```
+Create a team access token in your team's settings. A token belongs to the person who created it, so use a service account for anything shared. Then store it in your `default` [profile](/environments/profiles):
 
-Paste the token when asked. Leave the team ID blank: Alchemy reads it from the token.
+<PackageManagers run="alchemy profile edit --add Convex" />
 
-See [Profiles](/environments/profiles) to learn how profiles work.
+Paste the token when asked, and leave the team ID blank: Alchemy reads it from the token.
+
+See [Teams and tokens](/convex/teams-and-tokens).
 
 ## Use environment variables in CI
 
-Set `CONVEX_ACCESS_TOKEN` and Alchemy uses it instead of your profile:
+Set `CONVEX_ACCESS_TOKEN`, and Alchemy uses it instead of your profile:
 
-```sh
-CONVEX_ACCESS_TOKEN=... alchemy deploy
-```
+<PackageManagers script={`CONVEX_ACCESS_TOKEN=... {run} alchemy deploy`} />
 
-`CONVEX_TEAM_ID` is optional. A team token belongs to one team, so setting it only checks that the token is for the team you expect.
+`CONVEX_TEAM_ID` is optional, and only checks that the token is for the team you expect. See [CI](/environments/ci).
 
 ## Mix with another cloud
 
@@ -60,7 +68,7 @@ providers: Layer.mergeAll(Cloudflare.providers(), Convex.providers()),
 
 ## Local development
 
-Convex has no emulator in Alchemy, so `alchemy dev` creates and uses real Convex resources. Each stage gets its own.
+Convex has no emulator in Alchemy, so `alchemy dev` creates and uses real Convex deployments. Each stage gets its own.
 
 ## Plans
 

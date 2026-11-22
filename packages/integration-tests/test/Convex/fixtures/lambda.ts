@@ -11,8 +11,8 @@ export default class ConvexBindingLambda extends Lambda.Function<ConvexBindingLa
   { main: import.meta.url, functionUrl: true },
   Effect.gen(function* () {
     const connect = yield* Convex.Connect(BindingDeployment);
-    const list = yield* Convex.Query(BindingDeployment);
-    const add = yield* Convex.Mutation(BindingDeployment);
+    const list = yield* Convex.RunQuery(BindingDeployment);
+    const add = yield* Convex.RunMutation(BindingDeployment);
     const usage = yield* Convex.GetCurrentUsage(BindingDeployment);
 
     return {
@@ -34,8 +34,8 @@ export default class ConvexBindingLambda extends Lambda.Function<ConvexBindingLa
     Effect.provide(
       Layer.mergeAll(
         Convex.ConnectHttp,
-        Convex.QueryHttp,
-        Convex.MutationHttp,
+        Convex.RunQueryHttp,
+        Convex.RunMutationHttp,
         Convex.GetCurrentUsageHttp,
       ),
     ),

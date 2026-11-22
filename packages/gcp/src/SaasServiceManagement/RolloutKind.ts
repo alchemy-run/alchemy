@@ -354,18 +354,16 @@ export const RolloutKindProvider = () =>
       if (current === undefined) {
         const created = yield* saasservicemgmt
           .createProjectsLocationsRolloutKinds({
+            unitKind,
+            rolloutOrchestrationStrategy: news.rolloutOrchestrationStrategy,
+            updateUnitKindStrategy: news.updateUnitKindStrategy,
+            errorBudget: news.errorBudget,
+            unitFilter: news.unitFilter,
+            unitUpdatePacing: news.unitUpdatePacing,
+            labels: desiredLabels,
+            annotations,
             parent: parentOf(env.project, location),
             rolloutKindId,
-            body: {
-              unitKind,
-              rolloutOrchestrationStrategy: news.rolloutOrchestrationStrategy,
-              updateUnitKindStrategy: news.updateUnitKindStrategy,
-              errorBudget: news.errorBudget,
-              unitFilter: news.unitFilter,
-              unitUpdatePacing: news.unitUpdatePacing,
-              labels: desiredLabels,
-              annotations,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -407,19 +405,16 @@ export const RolloutKindProvider = () =>
 
       if (mask.length > 0) {
         current = yield* saasservicemgmt.patchProjectsLocationsRolloutKinds({
+          etag: current.etag,
+          rolloutOrchestrationStrategy: news.rolloutOrchestrationStrategy,
+          updateUnitKindStrategy: news.updateUnitKindStrategy,
+          errorBudget: news.errorBudget,
+          unitFilter: news.unitFilter,
+          unitUpdatePacing: news.unitUpdatePacing,
+          labels: desiredLabels,
+          annotations,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            etag: current.etag,
-            rolloutOrchestrationStrategy: news.rolloutOrchestrationStrategy,
-            updateUnitKindStrategy: news.updateUnitKindStrategy,
-            errorBudget: news.errorBudget,
-            unitFilter: news.unitFilter,
-            unitUpdatePacing: news.unitUpdatePacing,
-            labels: desiredLabels,
-            annotations,
-          },
         });
       }
 

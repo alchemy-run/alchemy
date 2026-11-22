@@ -230,9 +230,10 @@ const waitUntilGone = (name: string) =>
 const unprotect = (name: string, etag: string | undefined) =>
   Effect.gen(function* () {
     const patched = yield* bigtable.patchProjectsInstancesMaterializedViews({
+      deletionProtection: false,
+      etag,
       name,
       updateMask: "deletion_protection",
-      body: { deletionProtection: false, etag },
     });
     yield* waitForOperation(patched);
   });
@@ -332,12 +333,10 @@ export const InstancesMaterializedViewProvider = () =>
       if (current === undefined) {
         const created = yield* bigtable
           .createProjectsInstancesMaterializedViews({
+            query: news.query,
+            deletionProtection: desiredProtection,
             parent,
             materializedViewId,
-            body: {
-              query: news.query,
-              deletionProtection: desiredProtection,
-            },
           })
           .pipe(
             // A just-created source table rejects views for a short while.
@@ -357,12 +356,10 @@ export const InstancesMaterializedViewProvider = () =>
       if ((current.deletionProtection === true) !== desiredProtection) {
         const patched = yield* bigtable
           .patchProjectsInstancesMaterializedViews({
+            deletionProtection: desiredProtection,
+            etag: current.etag,
             name,
             updateMask: "deletion_protection",
-            body: {
-              deletionProtection: desiredProtection,
-              etag: current.etag,
-            },
           })
           .pipe(
             Effect.retry({

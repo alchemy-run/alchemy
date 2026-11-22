@@ -1,0 +1,226 @@
+---
+title: Storage queues
+description: Create an Azure Storage queue, send messages from one Azure Function, and consume them in another with a queue trigger or your own receive loop.
+---
+
+A Storage queue is a simple, durable queue inside a Storage account.
+Messages are text up to 64 KiB and live for 7 days by default. One
+Function sends jobs; another runs a handler for each one.
+
+## Create a queue
+
+```typescript
+// src/resources.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export const Data = Azure.Storage.StorageAccount("Data", { sku: "Standard_LRS" });
+
+export const Jobs = Effect.gen(function* () {
+  const account = yield* Data;
+  return yield* Azure.Storage.Queue("Jobs", { storageAccount: account.storageAccountName });
+});
+```
+
+## Send messages
+
+`QueueSend` returns a client with `send`:
+
+```typescript
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Jobs } from "./resources.ts";
+
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const jobsQueue = yield* Jobs;
+    const jobs = yield* Azure.Storage.QueueSend(jobsQueue);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const payload = yield* request.text;
+        const id = yield* Effect.sync(() => crypto.randomUUID());
+        yield* jobs.send(JSON.stringify({ id, payload }));
+        return yield* HttpServerResponse.json({ id, status: "pending" }, { status: 202 });
+      }).pipe(
+        Effect.catch((error) => HttpServerResponse.json({ error: String(error) }, { status: 503 })),
+      ),
+    };
+  }).pipe(Effect.provide(Azure.Storage.QueueSendHttp)),
+) {}
+```
+
+The binding grants Storage Queue Data Message Sender to the Function's
+managed identity, on this queue only.
+
+## Consume messages
+
+`consumeQueueMessages` adds a queue trigger to the Function. The host
+polls the queue and runs your handler once per message:
+
+```typescript
+// src/Worker.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import { Jobs } from "./resources.ts";
+
+export default class Worker extends Azure.Functions.Function<Worker>()(
+  "Worker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    yield* Azure.Storage.consumeQueueMessages(Jobs, (message) =>
+      Effect.log(`job ${message.id}: ${JSON.stringify(message.body)}`),
+    );
+  }).pipe(Effect.provide(Azure.Functions.StorageQueueEventSource)),
+) {}
+```
+
+`message.body` is the text, parsed when it is JSON. `message.dequeueCount`
+is 1 on the first delivery. The event source grants Storage Queue Data
+Reader and Storage Queue Data Message Processor on this queue only.
+
+## Retry and the poison queue
+
+A handler that fails makes the host deliver the message again. After
+five dequeues, the message moves to `<queue name>-poison`. Fail with
+`Effect.orDie` to retry, and return normally to drop a message you can
+never handle:
+
+```typescript
+yield* Azure.Storage.consumeQueueMessages(Jobs, (message) =>
+  Effect.gen(function* () {
+    if (typeof message.body !== "object" || message.body === null) {
+      yield* Effect.logWarning(`dropping malformed message ${message.id}`);
+      return;
+    }
+    yield* handle(message.body);
+  }).pipe(Effect.orDie),
+);
+```
+
+Storage queues deliver at least once. Make the handler safe to run
+twice, for example by writing a result to a fixed blob name.
+
+## Delay or expire a message
+
+```typescript
+const { messageId } = yield* jobs.send(JSON.stringify({ id }), {
+  visibilityTimeoutSeconds: 30,
+  timeToLiveSeconds: 3600,
+});
+```
+
+The message stays hidden for 30 seconds and expires after an hour.
+`timeToLiveSeconds: -1` never expires.
+
+## Choose a binding
+
+Each binding grants the smallest role on this queue only:
+
+| Binding | Methods | Role |
+| --- | --- | --- |
+| `QueueSend` | `send` | Storage Queue Data Message Sender |
+| `QueueReceive` | `receive`, `delete`, `peek` | Storage Queue Data Message Processor |
+| `QueueRead` | `peek`, `getProperties` | Storage Queue Data Reader |
+| `QueueWrite` | `send`, `update`, `delete`, `clear` | custom: write, delete, and process messages |
+| `QueueReadWrite` | every method above | custom: read the queue, and read, write, delete, and process messages |
+
+## Receive in batches yourself
+
+Run your own loop with `QueueReceive`. Delete each message after you
+handle it, or it comes back when its visibility timeout ends:
+
+```typescript
+// init
+const jobs = yield* Azure.Storage.QueueReceive(queue);
+
+// runtime
+const messages = yield* jobs.receive({ maxMessages: 16, visibilityTimeoutSeconds: 60 });
+for (const message of messages) {
+  yield* Effect.log(JSON.parse(message.text));
+  yield* jobs.delete(message);
+}
+// …provided with Effect.provide(Azure.Storage.QueueReceiveHttp)
+```
+
+`receive` takes up to 32 messages and returns an empty list when the
+queue is empty.
+
+## Read the backlog
+
+```typescript
+// init
+const monitor = yield* Azure.Storage.QueueRead(queue);
+
+// runtime
+const { approximateMessageCount } = yield* monitor.getProperties();
+const [next] = yield* monitor.peek();
+// …provided with Effect.provide(Azure.Storage.QueueReadHttp)
+```
+
+`peek` leaves the messages visible to other receivers.
+
+## Retry a message later
+
+```typescript
+// init
+const jobs = yield* Azure.Storage.QueueReadWrite(queue);
+
+// runtime
+const [message] = yield* jobs.receive();
+if (message) yield* jobs.update(message, { text: message.text, visibilityTimeoutSeconds: 300 });
+yield* jobs.clear();
+// …provided with Effect.provide(Azure.Storage.QueueReadWriteHttp)
+```
+
+`update` hides the message for another 5 minutes. `clear` deletes every
+message in the queue.
+
+## Consume in a Container App
+
+The same `consumeQueueMessages` call works in a Container App, which
+scales on queue length, or in a Container Apps job that starts while
+the queue has messages. Provide
+`Azure.ContainerApps.AppStorageQueueEventSource` or
+`Azure.ContainerApps.JobStorageQueueEventSource`. See
+[Container Apps](/azure/compute/container-apps).
+
+## Send from outside Azure
+
+`QueueSend` works in a Cloudflare Worker or an AWS Lambda. Alchemy
+creates an Entra service principal for that host and grants it the
+Sender role. See [Identity and bindings](/azure/security/identity).
+
+## The first requests after a deploy
+
+A new role assignment takes a minute or two to reach Storage. Until
+then, `send` fails. Retry the first call in tests.
+
+## Run it locally
+
+`alchemy dev` runs the queue on Azurite in Docker. See
+[Local development](/azure/local-development).
+
+## When to use Service Bus
+
+Storage queues have no topics, sessions, dead-letter queue, or messages
+over 64 KiB. Use [Service Bus](/azure/messaging/service-bus) for those.
+
+## Example
+
+[`azure-storage-queue`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-storage-queue)
+is a job queue: an API enqueues jobs and a worker writes each result to
+a blob container.
+
+## Where next
+
+- [Blob and Table storage](/azure/data/storage) — the rest of the
+  Storage account.
+- [Storage reference](/providers/azure/storage#queue) — every prop and
+  attribute.
