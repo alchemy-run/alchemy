@@ -124,6 +124,7 @@ export * as Peering from "./Peering/index.ts";
 export * as PlanetaryComputer from "./PlanetaryComputer/index.ts";
 export * as Policy from "./Policy/index.ts";
 export * as PolicyInsights from "./PolicyInsights/index.ts";
+export * as Portal from "./Portal/index.ts";
 export * as PostgreSQL from "./PostgreSQL/index.ts";
 export * as PowerBI from "./PowerBI/index.ts";
 export * as PrivateDns from "./PrivateDns/index.ts";
