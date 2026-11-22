@@ -41,7 +41,8 @@ export interface DeclaredNamespace {
 /** Two different schemas in one namespace share a name, so one declaration cannot stand for both. */
 export class DuplicateDeclaration extends Data.TaggedError("DuplicateDeclaration")<{
   readonly namespace: string;
-  readonly name: string;
+  /** The name both schemas have. */
+  readonly declaration: string;
   readonly message: string;
 }> {}
 
@@ -119,7 +120,7 @@ const makeScope = (namespace: string) => {
     } else if (existing.ast !== ast && body(existing.ast, "") !== body(ast, "")) {
       throw new DuplicateDeclaration({
         namespace,
-        name: identifier,
+        declaration: identifier,
         message: `Two different schemas in \`${namespace}\` are named \`${identifier}\`. Rename one, or move it to its own namespace.`,
       });
     } else if (kind === "error" && existing.kind !== "error") {
@@ -345,7 +346,7 @@ const renderNamespace = (
   const declared = new Map<string, ReadonlyArray<string>>();
   for (let size = -1; size !== scope.named.size;) {
     size = scope.named.size;
-    for (const entry of [...scope.named.values()]) {
+    for (const entry of scope.named.values()) {
       declared.set(entry.name, declare(form, scope, entry, inner));
     }
   }

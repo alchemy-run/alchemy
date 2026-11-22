@@ -334,7 +334,7 @@ const runProgram = (
           const result = await Effect.runPromiseWith(context)(
             call(server, tool.name, args ?? {}, services),
           );
-          // oxlint-disable-next-line effecttsgo/no-throw -- a rejection is how the script's call fails
+          // A rejection is how the script's call fails.
           if (result.isError) throw new Error(result.text);
           return result.structured ?? result.text;
         },
@@ -501,7 +501,6 @@ export const Harness = <
       ),
     );
     const nativeOf = new Map(tags.flatMap((tag) => (tag.native ? [[tag.key, tag.native]] : [])));
-    const builtins = [...refs.filter(isBuiltin).map((tool) => tool.toolName), ...nativeOf.values()];
     const declared: ReadonlyArray<Resolved> = yield* Effect.forEach(
       refs.filter((tool): tool is AiTool => !isBuiltin(tool) && !isToolTag(tool)),
       (tool): Effect.Effect<Resolved> => {
@@ -756,7 +755,9 @@ export const Harness = <
                 program,
                 programmed,
                 call,
-                String((args as { code?: unknown }).code ?? ""),
+                typeof (args as { code?: unknown }).code === "string"
+                  ? (args as { code: string }).code
+                  : "",
                 services,
               );
             }
