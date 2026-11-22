@@ -1,0 +1,399 @@
+---
+title: Container Apps
+description: Run an Effect program as an Azure Container App or Container Apps job — no Docker, scale to zero, KEDA event sources, schedules, and bindings that grant roles to its managed identity.
+---
+
+`Azure.ContainerApps.ContainerApp` runs your Effect program in a
+container. Alchemy bundles the program, builds an image in an Azure
+Container Registry it creates, and runs it with a system-assigned managed
+identity. You don't need Docker. The app gets an HTTPS URL, revisions,
+and KEDA scaling, and it scales to zero by default.
+
+`Azure.ContainerApps.Job` runs a program to completion instead: on
+demand, on a cron schedule, or when a queue has messages.
+
+:::caution[The app scales to zero]
+With no replica running, the first request waits for a cold start (image
+pull and program init), and background loops stop. Set
+`template.scale.minReplicas: 1` to keep one replica warm. A warm replica
+is billed while idle.
+:::
+
+## Create an environment
+
+Apps and jobs run in a Container Apps environment. Use a Consumption
+workload profile:
+
+```typescript
+// src/resources.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export const LOCATION = "westus2";
+
+export const Environment = Azure.ContainerApps.ManagedEnvironment("Environment", {
+  location: LOCATION,
+  workloadProfiles: [{ name: "Consumption", workloadProfileType: "Consumption" }],
+});
+
+export const Data = Azure.Storage.StorageAccount("Data", { location: LOCATION });
+
+export const Notes = Effect.gen(function* () {
+  const account = yield* Data;
+  return yield* Azure.Storage.BlobContainer("Notes", {
+    storageAccount: account.storageAccountName,
+  });
+});
+```
+
+`Notes` is the blob container the app binds later. The Consumption profile has no reserved cores, so it costs nothing while
+no app runs. An environment takes 3–9 minutes to create. Share one across
+your apps and jobs.
+
+:::caution
+Use a Workload Profiles environment, as above. An `Express` environment
+has no system-assigned identity and no KEDA scalers, so bindings and
+event sources fail on it.
+:::
+
+## Declare an app
+
+```typescript
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Environment, LOCATION } from "./resources.ts";
+
+export default class Api extends Azure.ContainerApps.ContainerApp<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const environment = yield* Environment;
+    return {
+      main: import.meta.url,
+      location: LOCATION,
+      environmentId: environment.environmentId,
+    };
+  }),
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello from Container Apps")),
+    };
+  }),
+) {}
+```
+
+The props are an Effect, so they can read the environment's ID. The
+second Effect is the program: init runs once per replica, and `fetch`
+serves every request.
+
+## Add it to the Stack
+
+```typescript
+// alchemy.run.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import Api from "./src/Api.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. `api.url` is the app's public `https://` URL. The
+deploy returns when the new revision is ready.
+
+## Bind a blob container
+
+Bind resources in the program's init and call them in `fetch`:
+
+```typescript
+Effect.gen(function* () {
+  const notes = yield* Azure.Storage.BlobContainerReadWrite(Notes);
+
+  return {
+    fetch: Effect.gen(function* () {
+      yield* notes.put("notes/hello", "hi there", { contentType: "text/plain" });
+      const note = yield* notes.get("notes/hello");
+      return HttpServerResponse.text(note?.text() ?? "not found");
+    }).pipe(Effect.orDie),
+  };
+}).pipe(Effect.provide(Azure.Storage.BlobContainerReadWriteHttp)),
+```
+
+`BlobContainerReadWrite` grants the app's managed identity **Storage Blob
+Data Contributor** on the `Notes` container only. The other bindings work
+the same way as on [Azure Functions](/azure/compute/functions#bind-other-services).
+
+## Size the container
+
+Set CPU, memory, and the port your program listens on:
+
+```typescript
+{
+  main: import.meta.url,
+  environmentId: environment.environmentId,
+  cpu: 0.25,
+  memory: "0.5Gi",
+  port: 3000,
+}
+```
+
+`cpu` goes in 0.25 steps and defaults to `0.5`. `memory` defaults to
+`"1Gi"`. On Consumption, 0.25 vCPU pairs with 0.5 GiB. `port` defaults to
+`8080`.
+
+## Set the replica range
+
+HTTP traffic scales the app from zero. Keep one replica warm, and cap the
+maximum:
+
+```typescript
+{
+  main: import.meta.url,
+  environmentId: environment.environmentId,
+  template: { scale: { minReplicas: 1, maxReplicas: 10 } },
+}
+```
+
+Every template change creates a new revision.
+
+## Scale on a cron window
+
+Add KEDA rules to `template.scale.rules`:
+
+```typescript
+template: {
+  scale: {
+    minReplicas: 0,
+    maxReplicas: 3,
+    rules: [
+      {
+        name: "business-hours",
+        custom: {
+          type: "cron",
+          metadata: {
+            timezone: "Europe/Berlin",
+            start: "0 8 * * 1-5",
+            end: "0 18 * * 1-5",
+            desiredReplicas: "2",
+          },
+        },
+      },
+    ],
+  },
+},
+```
+
+## Keep it internal
+
+Turn off external ingress to serve only inside the environment:
+
+```typescript
+{
+  main: import.meta.url,
+  environmentId: environment.environmentId,
+  configuration: { ingress: { external: false, targetPort: 8080 } },
+}
+```
+
+To let another runtime call a public app with its managed identity, put
+Easy Auth in front of it. See
+[`examples/azure-service-to-service`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-service-to-service).
+
+## Allow one IP range
+
+```typescript
+configuration: {
+  ingress: {
+    external: true,
+    targetPort: 8080,
+    ipSecurityRestrictions: [
+      { name: "office", ipAddressRange: "203.0.113.0/24", action: "Allow" },
+    ],
+  },
+},
+```
+
+## Pass environment variables
+
+`env` sets the container's environment variables:
+
+```typescript
+{
+  main: import.meta.url,
+  environmentId: environment.environmentId,
+  env: {
+    GREETING: "hello",
+    API_KEY: Config.redacted("API_KEY"),
+  },
+}
+```
+
+`Redacted` values become app secrets. Read the variables with
+`effect/Config` in the program.
+
+## Run on a schedule
+
+`Azure.ContainerApps.appSchedule` runs a handler on a cron schedule (five
+fields, UTC) inside the app:
+
+```typescript
+yield* Azure.ContainerApps.appSchedule("report", "30 9 * * 1-5", (run) =>
+  Effect.log(`report due at ${run.scheduledTime}`),
+);
+```
+
+The app then keeps one replica running so the schedule fires. Every
+replica runs the handler, so keep `maxReplicas: 1` or make it idempotent.
+For a fresh container per run, use a [scheduled job](#run-a-job-on-a-schedule).
+
+## Receive events
+
+An event source adds a KEDA scale rule to the app and runs a consumer loop
+in every replica:
+
+```typescript
+yield* Azure.Storage.consumeQueueMessages(jobs, (message) =>
+  Effect.log(message.body),
+);
+// …provided with Effect.provide(Azure.ContainerApps.AppStorageQueueEventSource)
+```
+
+The queue's backlog wakes the app from zero. For Service Bus, provide
+`Azure.ContainerApps.AppServiceBusQueueEventSource` or
+`AppServiceBusSubscriptionEventSource`. See
+[Storage queues](/azure/messaging/storage-queues) and
+[Service Bus](/azure/messaging/service-bus).
+
+## Run a job
+
+A job's program returns `run`, or registers a schedule or a queue
+handler. Each execution runs it once, then the container exits:
+
+```typescript
+// src/Report.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import { Environment, LOCATION, Notes } from "./resources.ts";
+
+export default class Report extends Azure.ContainerApps.Job<Report>()(
+  "Report",
+  Effect.gen(function* () {
+    const environment = yield* Environment;
+    return {
+      main: import.meta.url,
+      location: LOCATION,
+      environmentId: environment.environmentId,
+    };
+  }),
+  Effect.gen(function* () {
+    const notes = yield* Azure.Storage.BlobContainerReadWrite(Notes);
+    return {
+      run: notes.put("reports/latest.txt", "done").pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Azure.Storage.BlobContainerReadWriteHttp)),
+) {}
+```
+
+The job gets its own registry, a system-assigned identity with **AcrPull**
+on it, and the roles its bindings grant.
+
+:::caution[An execution stops after 30 minutes and is not retried]
+Alchemy sets `configuration.replicaTimeout` to `1800` seconds and
+`replicaRetryLimit` to `0`. Raise them for long or flaky work.
+:::
+
+## Run a job on a schedule
+
+`Azure.ContainerApps.schedule` makes the job a `Schedule` job (five
+fields, UTC):
+
+```typescript
+yield* Azure.ContainerApps.schedule("0 2 * * *", Effect.log("nightly run"));
+```
+
+A job has one trigger. A schedule together with an event source fails the
+deploy with `JobTriggerConflict`.
+
+## Start a job from another runtime
+
+`StartJob` grants a custom role with only `Microsoft.App/jobs/start/action`
+on that job:
+
+```typescript
+// init
+const startJob = yield* Azure.ContainerApps.StartJob(nightly);
+
+// runtime
+const execution = yield* startJob();
+// …provided with Effect.provide(Azure.ContainerApps.StartJobHttp)
+```
+
+## Process a queue in a job
+
+With a queue event source, the job starts executions while the queue has
+messages:
+
+```typescript
+yield* Azure.Storage.consumeQueueMessages(jobs, (message) =>
+  Effect.log(message.body),
+);
+// …provided with Effect.provide(Azure.ContainerApps.JobStorageQueueEventSource)
+```
+
+Each execution receives up to 320 messages. A handler that fails fails the
+execution, and its message reappears after five minutes.
+
+## Run your own image
+
+Leave out `main` and describe the containers yourself:
+
+```typescript
+const api = yield* Azure.ContainerApps.ContainerApp("api", {
+  environmentId: env.environmentId,
+  configuration: { ingress: { external: true, targetPort: 80 } },
+  template: {
+    containers: [
+      {
+        name: "api",
+        image: "mcr.microsoft.com/k8se/quickstart:latest",
+        resources: { cpu: 0.25, memory: "0.5Gi" },
+      },
+    ],
+    scale: { minReplicas: 0, maxReplicas: 1 },
+  },
+});
+```
+
+:::caution
+Changing `name`, `resourceGroup`, `location`, or `environmentId` replaces
+the app or job. Alchemy creates a new one and deletes the old one.
+:::
+
+## Destroy
+
+`alchemy destroy` deletes the apps, jobs, their registries, and the role
+assignments their bindings created. Deleting an environment can take up
+to about 26 minutes.
+
+## Example
+
+[`examples/azure-container-app`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-container-app)
+is a notes API on one Container App.
+[`examples/azure-container-app-job`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-container-app-job)
+pairs a Function with a scheduled report job.
+
+## Where next
+
+- [Choosing a runtime](/azure/compute/choosing-a-runtime) — when a
+  Function is enough.
+- [Networking](/azure/networking) — environments in your virtual network.
+- [Container Apps reference](/providers/azure/containerapps#containerapp)
+  — every prop and attribute.

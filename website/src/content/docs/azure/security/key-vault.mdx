@@ -1,0 +1,345 @@
+---
+title: Key Vault
+description: Keep secrets and keys in Azure Key Vault, read a secret on every request, rotate it from code, and encrypt and sign without ever holding key material.
+---
+
+Plain config goes in `env`. Credentials go in a Key Vault secret, which
+your runtime reads while it runs. Data you encrypt or sign goes through a
+Key Vault key, so your code never holds the key material.
+
+## Plain config
+
+Values that aren't secret go on the Function as app settings:
+
+```typescript
+{ main: import.meta.url, env: { LOG_LEVEL: "info" } }
+```
+
+The Function reads `process.env.LOG_LEVEL`.
+
+## Create a vault
+
+```typescript
+// src/resources.ts
+import * as Azure from "@alchemy.run/azure";
+
+export const Vault = Azure.KeyVault.Vault("Vault", { softDeleteRetentionInDays: 7 });
+```
+
+You get a `standard` vault in the stack's resource group. It authorizes
+data access with Azure RBAC (role-based access control), so each binding
+assigns a role on one secret or key only.
+
+:::caution[Changing `name`, `location`, or `softDeleteRetentionInDays` replaces the vault]
+The new vault is empty. The old one is deleted and purged with every
+secret, key, and certificate in it.
+:::
+
+## Store a secret
+
+Pass the value from config. It reads `API_KEY` from your `.env`:
+
+```diff lang="typescript"
+// src/resources.ts
+import * as Azure from "@alchemy.run/azure";
++import * as Config from "effect/Config";
++import * as Effect from "effect/Effect";
+
+export const Vault = Azure.KeyVault.Vault("Vault", { softDeleteRetentionInDays: 7 });
++
++export const ApiKey = Effect.gen(function* () {
++  const vault = yield* Vault;
++  return yield* Azure.KeyVault.Secret("ApiKey", {
++    vault: vault.vaultName,
++    value: Config.redacted("API_KEY"),
++    contentType: "text/plain",
++  });
++});
+```
+
+State keeps only a SHA-256 hash of the value. A new value writes a new
+version on the next deploy.
+
+## Generate the value instead
+
+`Alchemy.Random` creates 32 random bytes once and keeps them in state:
+
+```diff lang="typescript"
+// src/resources.ts
+import * as Azure from "@alchemy.run/azure";
+-import * as Config from "effect/Config";
++import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export const Vault = Azure.KeyVault.Vault("Vault", { softDeleteRetentionInDays: 7 });
++
++export const InitialApiKey = Alchemy.Random("InitialApiKey");
+
+export const ApiKey = Effect.gen(function* () {
+  const vault = yield* Vault;
++  const initial = yield* InitialApiKey;
+  return yield* Azure.KeyVault.Secret("ApiKey", {
+    vault: vault.vaultName,
+-    value: Config.redacted("API_KEY"),
++    value: initial.text,
+    contentType: "text/plain",
+  });
+});
+```
+
+Add `Alchemy.RandomProvider()` to the Stack's providers:
+
+```typescript
+// alchemy.run.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Api from "./src/Api.ts";
+import { InitialApiKey } from "./src/resources.ts";
+
+export default Alchemy.Stack(
+  "AzureKeyVaultExample",
+  {
+    providers: Layer.mergeAll(Azure.providers(), Alchemy.RandomProvider()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const initialApiKey = yield* InitialApiKey;
+    const api = yield* Api;
+    return { url: api.url, apiKey: initialApiKey.text };
+  }),
+);
+```
+
+`apiKey` is the first version. Send it in the `x-api-key` header.
+
+## Read it per request
+
+`SecretRead` returns `get()`, which reads the latest version as a
+`Redacted<string>`:
+
+```typescript
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Redacted from "effect/Redacted";
+import { ApiKey } from "./resources.ts";
+
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const secret = yield* ApiKey;
+    const apiKey = yield* Azure.KeyVault.SecretRead(secret);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const expected = yield* apiKey.get();
+        const ok = request.headers["x-api-key"] === Redacted.value(expected);
+        return HttpServerResponse.text(ok ? "welcome" : "denied", { status: ok ? 200 : 401 });
+      }).pipe(
+        Effect.catch((error) => HttpServerResponse.text(error._tag, { status: 503 })),
+      ),
+    };
+  }).pipe(Effect.provide(Azure.KeyVault.SecretReadHttp)),
+) {}
+```
+
+`SecretRead` assigns **Key Vault Secrets User** to the Function's managed
+identity, on this secret only. Reading per request means a new version
+takes effect without a redeploy.
+
+## Read an older version
+
+Pass a version ID to `get`. `versions()` lists metadata without values:
+
+```typescript
+const pinned = yield* apiKey.get("4f1c7c0e2b8a4d5f9e3a1b2c3d4e5f60");
+const versions = yield* apiKey.versions();
+```
+
+## Rotate it from code
+
+Bind `SecretReadWrite` instead, and write a new version with `set`:
+
+```typescript
+// init
+const apiKey = yield* Azure.KeyVault.SecretReadWrite(secret);
+
+// runtime
+const next = yield* Effect.sync(() => randomBytes(32).toString("hex"));
+const written = yield* apiKey.set(Redacted.make(next), { contentType: "text/plain" });
+yield* apiKey.update(previousVersion, { enabled: false });
+```
+
+Provide `Azure.KeyVault.SecretReadWriteHttp`. It adds a custom role with
+only `setSecret` and `update` on this secret. `SecretWrite` grants that
+role alone. A version written here isn't tracked by the `Secret`
+resource: the next deploy writes the declared value again only if that
+value changed.
+
+## Create keys
+
+An RSA key encrypts and an elliptic-curve key signs:
+
+```diff lang="typescript"
+// src/resources.ts
++export const DataKey = Effect.gen(function* () {
++  const vault = yield* Vault;
++  return yield* Azure.KeyVault.Key("DataKey", {
++    vault: vault.vaultName,
++    kty: "RSA",
++    keySize: 2048,
++    keyOps: ["encrypt", "decrypt"],
++  });
++});
++
++export const SigningKey = Effect.gen(function* () {
++  const vault = yield* Vault;
++  return yield* Azure.KeyVault.Key("SigningKey", {
++    vault: vault.vaultName,
++    kty: "EC",
++    curveName: "P-256",
++    keyOps: ["sign", "verify"],
++  });
++});
+```
+
+:::caution[Changing any key property replaces the key]
+Azure Resource Manager can't change or delete a key. The old key stays in
+the vault until the vault goes away, and data encrypted with it does not
+decrypt with the new key.
+:::
+
+## Encrypt and decrypt
+
+Bind one operation per call. The key material stays in Key Vault:
+
+```typescript
+// init
+const encrypt = yield* Azure.KeyVault.Encrypt(dataKey);
+const decrypt = yield* Azure.KeyVault.Decrypt(dataKey);
+
+// runtime
+const sealed = yield* encrypt({ alg: "RSA-OAEP-256", value: plaintext.toString("base64url") });
+const keyVersion = sealed.kid?.split("/").pop() ?? "";
+const opened = yield* decrypt({ alg: "RSA-OAEP-256", keyVersion, value: sealed.value! });
+```
+
+Provide `Azure.KeyVault.EncryptHttp` and `DecryptHttp`. Each assigns a
+custom role with exactly one data action (`keys/encrypt/action`,
+`keys/decrypt/action`) on this key only. Keep the key version with the
+ciphertext: decrypt needs the version that encrypted it.
+
+RSA-OAEP encrypts at most 190 bytes with a 2048-bit key. For larger data,
+encrypt locally with a random data key and wrap that key with
+`Azure.KeyVault.WrapKey` and `UnwrapKey`.
+
+## Sign and verify
+
+Hash the message, then sign the digest:
+
+```typescript
+// init
+const sign = yield* Azure.KeyVault.Sign(signingKey);
+const verify = yield* Azure.KeyVault.Verify(signingKey);
+
+// runtime
+const digest = createHash("sha256").update(message).digest("base64url");
+const signed = yield* sign({ alg: "ES256", value: digest });
+const checked = yield* verify({ alg: "ES256", keyVersion, digest, value: signed.value! });
+```
+
+Provide `Azure.KeyVault.SignHttp` and `VerifyHttp`. `KeyRead` returns the
+public key, for example to publish a JSON Web Key Set.
+
+## Read certificates
+
+Certificate bindings bind to the vault:
+
+```typescript
+// init
+const certs = yield* Azure.KeyVault.CertificateRead(vault);
+
+// runtime
+const cert = yield* certs.get("api-tls");
+```
+
+Provide `Azure.KeyVault.CertificateReadHttp`.
+
+## Which role each binding assigns
+
+| Binding | Role, on the bound secret, key, or vault |
+| --- | --- |
+| `SecretRead` | Key Vault Secrets User |
+| `SecretWrite` | custom role: `setSecret`, `update` |
+| `SecretReadWrite` | both of the above |
+| `Encrypt`, `Decrypt`, `WrapKey`, `UnwrapKey`, `Sign`, `Verify` | custom role with that one data action |
+| `KeyRead` | custom roles: `keys/read`, `keyrotationpolicies/read` |
+| `CertificateRead`, `CertificateWrite`, `CertificateReadWrite` | custom roles on the vault's certificates |
+
+The custom roles are `Azure.Authorization.RoleDefinition` resources, one
+per data action, created once per stack. Your deploying service principal
+needs **Owner**, or **User Access Administrator** plus **Contributor**.
+
+## React to expiring secrets
+
+Key Vault publishes events to Event Grid:
+
+```typescript
+yield* Azure.EventGrid.consumeEvents(
+  "SecretExpiry",
+  { scope: vault.vaultId, includedEventTypes: ["Microsoft.KeyVault.SecretNearExpiry"] },
+  (event) => Effect.log(`${event.subject} expires soon`),
+);
+```
+
+Provide `Azure.Functions.EventGridEventSource`. See
+[Event Grid](/azure/messaging/event-grid).
+
+## The first requests after a deploy
+
+A new role assignment takes a few minutes to reach Key Vault. Until then
+each call fails with a typed Key Vault error, and the Function above
+answers `503` with its tag. Retry the first call in tests.
+
+## Make the vault private
+
+Turn off the public endpoint and reach the vault through a private
+endpoint:
+
+```typescript
+const vault = yield* Azure.KeyVault.Vault("Vault", { publicNetworkAccess: "Disabled" });
+```
+
+See [Networking](/azure/networking#reach-a-service-privately).
+
+## Destroying a vault
+
+`alchemy destroy` deletes the vault and purges it, so the name is free at
+once. Set `purgeOnDelete: false` to keep the soft-deleted vault
+recoverable until its retention period ends.
+
+:::caution[Purge protection is permanent]
+`enablePurgeProtection: true` can't be turned off. A destroyed vault with
+purge protection keeps its name until the retention period ends.
+:::
+
+Destroying a `Secret` disables it. The secret goes away with its vault.
+
+## Example
+
+[`examples/azure-key-vault`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-key-vault)
+is an encryption and signing API gated by a rotating API key.
+
+## Where next
+
+- [Identity & bindings](/azure/security/identity) — how a binding
+  reaches the Function's identity, or a host outside Azure.
+- [Secrets](/environments/secrets) — `.env` values and Config.
+- [KeyVault reference](/providers/azure/keyvault#vault) — every prop and
+  binding.

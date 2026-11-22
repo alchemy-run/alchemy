@@ -1,0 +1,102 @@
+---
+title: Vocs
+description: "Deploy a Vocs documentation site to Azure with Azure.Website.Vocs — pages on a Flex Consumption Function, assets on Blob Storage, both behind Azure Front Door."
+sidebar:
+  order: 22
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Azure.Website.Vocs` deploys a [Vocs](https://vocs.dev) documentation site
+to Azure. The Vocs server (React Server Components on Waku) runs on a Flex
+Consumption Function, which scales to zero. The client directory
+(`/assets/*`, `public/` files, `llms.txt`) goes to the static website
+endpoint of an Azure Storage account. Azure Front Door sends the client
+directory's paths to Blob Storage and the pages to the Function. No Docker
+image and no App Service plan are involved.
+
+## Install
+
+The build integration ships separately. It only runs at deploy time, so a
+dev dependency is enough:
+
+<PackageManagers dev={devDeps} />
+
+## Deploy the site
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyDocs",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const docs = yield* Azure.Website.Vocs("Docs", { location: "eastus" });
+    return { url: docs.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. `docs.url` is the Front Door endpoint,
+`https://{endpoint}.z01.azurefd.net`. A new endpoint takes 10-20 minutes to
+serve everywhere. Pick a `location` that offers Flex Consumption.
+
+Your `vocs.config.*` is bundled into the Function: the server reads the
+config you deployed, with no Vite at run time. The Function also redirects
+`/guide/` to `/guide`.
+
+## Build into another directory
+
+```typescript
+const docs = yield* Azure.Website.Vocs("Docs", {
+  rootDir: "./docs",
+  outDir: "build",
+});
+```
+
+Set `outDir` when `vocs.config.*` changes `outDir`, so the build output
+stays out of the rebuild hash.
+
+## Size the Function
+
+```typescript
+const docs = yield* Azure.Website.Vocs("Docs", {
+  instanceMemoryMB: 512,
+  maximumInstanceCount: 40,
+});
+```
+
+## Share a Front Door profile
+
+```typescript
+const profile = yield* Azure.Cdn.Profile("Edge");
+const docs = yield* Azure.Website.Vocs("Docs", {
+  rootDir: "./docs",
+  frontDoor: { profile },
+});
+const web = yield* Azure.Website.Waku("Website", { frontDoor: { profile } });
+```
+
+Each profile bills a monthly base fee, so share one across sites. A Vocs
+site needs Front Door: `frontDoor: false` fails the deploy. See
+[Websites](/azure/frontend/websites) for caching, purges, and the other
+shared settings.
+
+## Local development
+
+`alchemy dev` runs Vocs' own dev server with hot reload and creates nothing
+in Azure. Wrap the site in `Alchemy.remote()` to deploy it for real during
+dev.
+
+See the [`azure-website-vocs`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-website-vocs)
+example.
+
+## Where next
+
+- [Websites](/azure/frontend/websites) — the settings every site shares.
+- [Website reference](/providers/azure/website#vocs) — every prop.
