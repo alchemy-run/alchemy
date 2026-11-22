@@ -73,9 +73,6 @@
     // Foldkit mode overlays are copied over a clone of the SSR fixture;
     // their imports resolve only inside that clone.
     "test/Website/fixtures/foldkit-modes",
-    // Read by vocs's own toolchain (the fixture's tsconfig types it); the
-    // inferred `defineConfig` type is not portable from this composite project.
-    "test/Azure/Website/fixtures/vocs-app/vocs.config.ts",
     // Written against a released alchemy, which the roll-forward test
     // installs into its own project; this workspace no longer has its API.
     "test/Cloudflare/Domain/fixtures/scheduled-upgrade/released"
@@ -104,7 +101,6 @@
     { "path": "../domain/tsconfig.json" },
     { "path": "../aws/tsconfig.json" },
     { "path": "../gcp/tsconfig.json" },
-    { "path": "../azure/tsconfig.json" },
     { "path": "../alchemy-test/tsconfig.json" },
     { "path": "../git/tsconfig.json" },
     { "path": "../acme/tsconfig.json" },

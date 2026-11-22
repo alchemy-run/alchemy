@@ -41,30 +41,9 @@ export const resolveVinextCli = (root: string) =>
     ),
   );
 
-/**
- * vinext's App Router fetch handler (`dist/server/index.js`), called with a
- * Node host context. Deploy targets that wrap the handler import it from
- * a module beside the RSC entry.
- */
-export const VINEXT_APP_FETCH_HANDLER_SOURCE = `import rsc from "./index.js";
-
-const fetchHandler = (request) => {
-  const ctx = {
-    hostRuntime: "node",
-    waitUntil(promise) {
-      Promise.resolve(promise).catch(() => {});
-    },
-    passThroughOnException() {},
-  };
-  if (typeof rsc === "function") return rsc(request, ctx);
-  return rsc.fetch(request, process.env, ctx);
-};`;
-
 export const runVinextBuild = (options: {
   readonly root: string;
   readonly cache: VinextCacheKind;
-  /** Vite plugins the deploy target adds after the project's own and the cache plugin. */
-  readonly plugins?: ReadonlyArray<PluginOption> | undefined;
 }) =>
   Effect.gen(function* () {
     const { root } = options;
@@ -146,11 +125,7 @@ export const runVinextBuild = (options: {
                 ...buildConfig?.config,
                 root,
                 configFile: false,
-                plugins: [
-                  buildConfig?.config.plugins ?? [vinext()],
-                  cache,
-                  ...(options.plugins ?? []),
-                ],
+                plugins: [buildConfig?.config.plugins ?? [vinext()], cache],
                 logLevel: "warn",
               });
               await builder.buildApp();
@@ -220,7 +195,6 @@ export const runVinextBuild = (options: {
                     __pagesClientAssetsModule: pagesClientAssetsModule,
                   }),
                   cache,
-                  ...(options.plugins ?? []),
                 ],
                 environments: { ssr: { ...pagesEnvironment, consumer: "server" } },
                 resolve: {

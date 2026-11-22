@@ -585,6 +585,15 @@ type ServiceInspect = {
       }>;
     };
   };
+  /** What Swarm applied, including the published ports it assigned. */
+  Endpoint?: {
+    Ports?: Array<{
+      PublishedPort?: number;
+      TargetPort?: number;
+      Protocol?: "tcp" | "udp";
+      PublishMode?: "ingress" | "host";
+    }>;
+  };
 };
 
 export const ServiceProvider = () =>
@@ -1146,7 +1155,11 @@ const toServiceAttributes = (
   networks: (service.Spec.TaskTemplate?.Networks ?? []).flatMap((n) =>
     n.Target ? [n.Target] : [],
   ),
-  ports: (service.Spec.EndpointSpec?.Ports ?? []).flatMap((port) => {
+  // The spec omits a port Swarm assigns; `Endpoint` has it once applied.
+  ports: (service.Endpoint?.Ports?.length
+    ? service.Endpoint.Ports
+    : (service.Spec.EndpointSpec?.Ports ?? [])
+  ).flatMap((port) => {
     if (port.PublishedPort === undefined || port.TargetPort === undefined) {
       return [];
     }
