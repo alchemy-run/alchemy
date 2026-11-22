@@ -1,3 +1,0 @@
-# waku-azure-robots-marker
-User-agent: *
-Allow: /
