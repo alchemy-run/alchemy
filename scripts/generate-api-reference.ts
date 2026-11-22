@@ -160,11 +160,6 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/cloudflare/src",
   },
   { srcRoot: "packages/gcp/src", providerPrefix: "GCP", sourceDisplayPrefix: "packages/gcp/src" },
-  {
-    srcRoot: "packages/azure/src",
-    providerPrefix: "Azure",
-    sourceDisplayPrefix: "packages/azure/src",
-  },
   { srcRoot: "packages/aws/src", providerPrefix: "AWS", sourceDisplayPrefix: "packages/aws/src" },
   {
     srcRoot: "packages/domain/src",

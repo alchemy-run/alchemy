@@ -479,81 +479,6 @@ Google Cloud as Stack resources — Cloud Run services and jobs, Firestore, Pub/
 - [Private services](https://alchemy.run/gcp/networking/private-services) — Keep a Cloud Run service private and call it from another service with GCP.Run.InvokeService and Google-signed identity tokens.
 - [VPC & private networking](https://alchemy.run/gcp/networking/vpc) — Give Cloud Run services Direct VPC egress to reach private IPs like Memorystore, and create your own VPC networks and subnets.
 
-## Azure
-
-Azure as Stack resources — Azure Functions, Container Apps, AKS, Storage, Cosmos DB, Service Bus, Key Vault, Front Door websites. Bindings assign least-privilege RBAC roles to the host's managed identity.
-
-- [Azure](https://alchemy.run/azure) — Build Azure applications with Alchemy — a runtime (usually an Azure Function) plus typed resources, wired together by bindings that assign least-privilege roles.
-- [Setup](https://alchemy.run/azure/setup) — Connect Alchemy to Azure — a subscription, a service principal, a profile, and the default location and resource group.
-- [Local development](https://alchemy.run/azure/local-development) — Run Azure Functions and Azure Storage on your machine with alchemy dev — a local Node.js process, Azurite in Docker, restarts on save, and no Azure credentials.
-
-## Azure — Tutorial
-
-- [Part 1: Your First Stack](https://alchemy.run/azure/tutorial/part-1) — Install Alchemy, create a Stack with an Azure storage account and a blob container, and deploy it to your subscription.
-- [Part 2: Add an Azure Function](https://alchemy.run/azure/tutorial/part-2) — Put an HTTP API on Azure Functions, bind the blob container, and implement GET/PUT routes.
-- [Part 3: Testing](https://alchemy.run/azure/tutorial/part-3) — Write integration tests that deploy your stack and make HTTP requests against the live Azure Function.
-- [Part 4: Stages](https://alchemy.run/azure/tutorial/part-4) — Deploy isolated dev, staging, and prod copies of your stack with --stage, each in its own resource group, and tune the Function per stage.
-- [Part 5: CI/CD](https://alchemy.run/azure/tutorial/part-5) — Deploy from GitHub Actions — production on main, a preview stage per pull request — with a deployer service principal and its secret created as code.
-
-## Azure — Compute
-
-- [AKS](https://alchemy.run/azure/compute/aks) — Run Effect programs as Kubernetes Deployments on an Azure Kubernetes Service cluster, with images built without Docker and bindings granted through Microsoft Entra Workload ID.
-- [Azure Functions](https://alchemy.run/azure/compute/functions) — Run an Effect HTTP handler on Azure Functions (Flex Consumption) with Azure.Functions.Function — bindings that grant roles to its managed identity, timers, event triggers, and scaling.
-- [Choosing a runtime](https://alchemy.run/azure/compute/choosing-a-runtime) — Pick between Azure Functions, Container Apps, Container Apps jobs, AKS, and virtual machines for your Effect program, by trigger, cost, and deploy time.
-- [Container Apps](https://alchemy.run/azure/compute/container-apps) — Run an Effect program as an Azure Container App or Container Apps job — no Docker, scale to zero, KEDA event sources, schedules, and bindings that grant roles to its managed identity.
-- [Effect workflows](https://alchemy.run/azure/compute/effect-workflows) — Host Effect workflows in an Azure.Functions.WorkflowFunction, start and read runs from another runtime, and let them sleep and wait for signals durably.
-- [Virtual machines](https://alchemy.run/azure/compute/vms) — Run an Effect program on an Azure Linux virtual machine as a systemd service, with its network, SSH key, background loops, and bindings that grant roles to the VM's managed identity.
-
-## Azure — Frontend
-
-- [Websites](https://alchemy.run/azure/frontend/websites) — Deploy Vite, Astro, Next.js, Nuxt, SvelteKit, TanStack Start, React Router, SolidStart, Waku, vinext, Octane, Foldkit, Vocs, or any static build to Azure with Azure.Website — assets on Blob Storage, server rendering on Azure Functions, both behind Azure Front Door.
-- [Vite](https://alchemy.run/azure/frontend/vite) — Deploy a Vite SPA to Blob Storage behind Azure Front Door with Azure.Website.Vite — no Docker, no server, and Vite's own dev server under alchemy dev.
-- [Static sites](https://alchemy.run/azure/frontend/static-site) — Deploy any build command's output to Blob Storage behind Azure Front Door with Azure.Website.StaticSite — no server, no Docker, and a purge of changed paths on every deploy.
-- [Astro](https://alchemy.run/azure/frontend/astro) — Deploy an Astro app to Azure with Azure.Website.Astro — on-demand pages on a Flex Consumption Function, assets and prerendered pages on Blob Storage, both behind Azure Front Door.
-- [Foldkit](https://alchemy.run/azure/frontend/foldkit) — Deploy a Foldkit app to Azure with Azure.Website.Foldkit — a browser-only SPA or prerendered pages on Blob Storage, SSR on a Flex Consumption Function, all behind Azure Front Door.
-- [Next.js](https://alchemy.run/azure/frontend/nextjs) — Deploy a Next.js app to Azure with Azure.Website.Nextjs — Next's standalone server on a Flex Consumption Function, hashed assets and public/ files on Blob Storage, both behind Azure Front Door.
-- [Vinext](https://alchemy.run/azure/frontend/vinext) — Deploy a vinext App Router app to Azure with Azure.Website.Vinext — rendering and route handlers on a Flex Consumption Function, assets on Blob Storage, both behind Azure Front Door.
-- [Nuxt](https://alchemy.run/azure/frontend/nuxt) — Deploy a Nuxt app to Azure with Azure.Website.Nuxt — nitro's server on a Flex Consumption Function, assets and prerendered routes on Blob Storage, both behind Azure Front Door.
-- [React Router](https://alchemy.run/azure/frontend/react-router) — Deploy a React Router v7 app in framework mode to Azure with Azure.Website.ReactRouter — loaders on a Flex Consumption Function, assets on Blob Storage, both behind Azure Front Door.
-- [SolidStart](https://alchemy.run/azure/frontend/solidstart) — Deploy a SolidStart app to Azure with Azure.Website.SolidStart — the nitro server on a Flex Consumption Function, .output/public on Blob Storage, both behind Azure Front Door.
-- [SvelteKit](https://alchemy.run/azure/frontend/sveltekit) — Deploy a SvelteKit app to Azure with Azure.Website.SvelteKit — kit's server on a Flex Consumption Function, client assets and prerendered pages on Blob Storage, both behind Azure Front Door.
-- [TanStack Start](https://alchemy.run/azure/frontend/tanstack-start) — Deploy a TanStack Start app to Azure with Azure.Website.TanStackStart — server rendering and server functions on a Flex Consumption Function, assets on Blob Storage, both behind Azure Front Door.
-- [Octane](https://alchemy.run/azure/frontend/octane) — Deploy an OctaneJS app to Azure with Azure.Website.Octane — SSR on a Flex Consumption Function, assets on Blob Storage, both behind Azure Front Door.
-- [Vocs](https://alchemy.run/azure/frontend/vocs) — Deploy a Vocs documentation site to Azure with Azure.Website.Vocs — pages on a Flex Consumption Function, assets on Blob Storage, both behind Azure Front Door.
-- [Waku](https://alchemy.run/azure/frontend/waku) — Deploy a Waku app to Azure with Azure.Website.Waku — React Server Components on a Flex Consumption Function, assets and prerendered pages on Blob Storage, both behind Azure Front Door.
-
-## Azure — Data
-
-- [Azure Managed Redis](https://alchemy.run/azure/data/redis) — Create an Azure Managed Redis cluster, grant an Azure Function access with an access policy, and run Redis commands with a Microsoft Entra token.
-- [Azure SQL](https://alchemy.run/azure/data/sql) — Create an Azure SQL server and database, query it from an Azure Function with @effect/sql-mssql, and apply migrations on the first request.
-- [Blob and Table storage](https://alchemy.run/azure/data/storage) — Create an Azure Storage account, read and write blobs from an Azure Function with Read, Write, and ReadWrite bindings, and keep key/value entities in Table storage.
-- [Cosmos DB](https://alchemy.run/azure/data/cosmos-db) — Create a serverless Cosmos DB for NoSQL account, read and write documents from an Azure Function with Read, Write, and ReadWrite container bindings, and react to the change feed.
-- [PostgreSQL](https://alchemy.run/azure/data/postgres) — Run Azure Database for PostgreSQL flexible server, apply Drizzle migrations at deploy time, and query it from an Azure Function.
-
-## Azure — AI
-
-- [Azure OpenAI](https://alchemy.run/azure/ai/openai) — Deploy gpt-4.1-mini and an embeddings model on an Azure AI services account, and call them from a Function with its managed identity, with no API key.
-
-## Azure — Messaging & events
-
-- [Event Grid](https://alchemy.run/azure/messaging/event-grid) — Publish events to an Event Grid topic from an Azure Function, handle events from topics and Azure resources in a Function, route them to queues, and pull them from namespace topics.
-- [Event Hubs](https://alchemy.run/azure/messaging/event-hubs) — Send events to an Azure event hub from an Azure Function, route them with partition keys, and consume them in batches with a native Event Hubs trigger.
-- [Service Bus](https://alchemy.run/azure/messaging/service-bus) — Send to Service Bus queues and topics from an Azure Function, consume them with native triggers or peek-lock receives, filter subscriptions, and dead-letter failures.
-- [Storage queues](https://alchemy.run/azure/messaging/storage-queues) — Create an Azure Storage queue, send messages from one Azure Function, and consume them in another with a queue trigger or your own receive loop.
-
-## Azure — Security & identity
-
-- [Identity & bindings](https://alchemy.run/azure/security/identity) — See which identity an Azure binding assigns its role to, which role it assigns on which resource, how hosts outside Azure sign in, and how removing a binding revokes the role.
-- [Key Vault](https://alchemy.run/azure/security/key-vault) — Keep secrets and keys in Azure Key Vault, read a secret on every request, rotate it from code, and encrypt and sign without ever holding key material.
-
-## Azure — Observability
-
-- [Azure Monitor](https://alchemy.run/azure/observability/monitor) — Declare a Log Analytics workspace, custom tables, and log search alerts in the same Stack as your app, then query logs, send rows, and read metrics from a Function.
-
-## Azure — Networking
-
-- [Networking](https://alchemy.run/azure/networking) — Create a virtual network and subnets, filter traffic, put VMs and Container Apps in it, reach Storage and Key Vault over private endpoints, and give outbound traffic a fixed IP.
-
 ## Fly — start here
 
 The Fly hub: overview, What is Fly? (organizations, Apps, Machines, regions, the proxy, private networking, Volumes, managed data and how Alchemy models each), setup (org, API token, profile), and networking.
@@ -1454,4 +1379,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~321 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~194 KB) — only fetch it when you need to locate a specific resource's reference page.
