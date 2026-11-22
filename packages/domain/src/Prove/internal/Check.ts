@@ -1,6 +1,7 @@
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -387,6 +388,7 @@ const canon = (value: unknown): string => {
   if (typeof value === "string") return JSON.stringify(value);
   if (value === null || typeof value !== "object") return String(value);
   if (DateTime.isDateTime(value)) return `@${DateTime.toEpochMillis(value)}`;
+  if (Duration.isDuration(value)) return `~${Duration.toMillis(value)}`;
   if (Option.isOption(value)) return Option.isSome(value) ? `some(${canon(value.value)})` : "none";
   if (Array.isArray(value)) return `[${value.map(canon).join(",")}]`;
   return `{${Object.entries(value)

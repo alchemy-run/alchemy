@@ -228,7 +228,7 @@ if (used + cmd.amount > DAILY_LIMIT)
   return yield* new DailyLimitExceeded({ remaining: DAILY_LIMIT - used });
 ```
 
-`now` is the time the command is stamped with, and its events record the same time as `at` in their envelopes, which is what `evolve` uses to track the day's total. A [story](/domain/story) can move the clock, so rules like this are testable.
+`now` is the time the command is stamped with, and its events record the same time as `at` in their envelopes, which is what `evolve` uses to track the day's total. Inside `decide` the clock stands at that time too: `yield* DateTime.now` gives the same `now`. A [story](/domain/story) can move the clock, so rules like this are testable.
 
 ## One command at a time
 

@@ -169,6 +169,11 @@ export interface Hooks {
   host: ((value: unknown, args: ReadonlyArray<V>, site: Site) => Eval<V> | undefined) | undefined;
   /** The request contexts provided around the code being run, by tag. */
   readonly provided: Map<unknown, V>;
+  /**
+   * The time the command being decided is handled at. It is what the clock
+   * reads inside `decide`, and there is none anywhere else.
+   */
+  now: V | undefined;
   /** Models of library functions the caller adds, by `module:path`. */
   readonly models: Map<string, Library.Model>;
 }
@@ -247,6 +252,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     service: undefined,
     host: undefined,
     provided: new Map(),
+    now: undefined,
     models: new Map(),
   };
   const tops = new Map<string, V>();
@@ -458,6 +464,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
   const library = Library.make({
     current,
     provided: hooks.provided,
+    now: () => hooks.now,
     extra: hooks.models,
     call: (fn, args, site) => call(fn, args, site),
     settle: (value, site) => settle(value, site),
@@ -622,10 +629,15 @@ export const make = (loader: Loader, run: Run): Interpreter => {
   ) {
     switch (value._tag) {
       case "Obj":
+        // A duration is read through `effect/Duration`, never by what it is made of.
+        if (value.brand?.kind === "Duration" && key !== "pipe")
+          return yield* fail(site, `reads .${key} of a Duration`);
         // `option.pipe(Option.map(f))`: each function applied to what the one before gave.
         if (
           key === "pipe" &&
-          (value.brand?.kind === "Option" || value.brand?.kind === "Matcher") &&
+          (value.brand?.kind === "Option" ||
+            value.brand?.kind === "Matcher" ||
+            value.brand?.kind === "Duration") &&
           !value.fields.pipe
         )
           return {
@@ -689,7 +701,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           path: [...value.path, key],
           ...(held === undefined ? {} : { host: held }),
         };
-        return library.valueOf(next) ?? next;
+        return library.valueOf(next, site) ?? next;
       }
       case "Namespace": {
         const found = yield* top(value.module, key, site);
@@ -716,6 +728,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           };
         }
         return fromHost((value.value as Record<string, unknown>)[key], `${value.name}.${key}`);
+      case "Time":
       case "Effect":
         // `effect.pipe(f, g)`: each function applied to what the one before gave.
         if (key === "pipe")
@@ -728,7 +741,10 @@ export const make = (loader: Loader, run: Run): Interpreter => {
               return piped;
             }),
           };
-        return yield* fail(site, `reads .${key} of an effect`);
+        return yield* fail(
+          site,
+          `reads .${key} of ${value._tag === "Time" ? "a time" : "an effect"}`,
+        );
       case "Opaque":
         return yield* fail(site, `reads .${key} of ${value.what}, which the prover does not model`);
       case "Applied":

@@ -1,4 +1,5 @@
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as SchemaAST from "effect/SchemaAST";
@@ -555,6 +556,10 @@ export const concretize = (
           const held = build(option.value);
           return isUnbuildable(held) ? held : Option.some(held);
         }
+        if (v.brand?.kind === "Duration") {
+          const millis = build(v.fields.millis ?? Value.num(0));
+          return isUnbuildable(millis) ? millis : Duration.millis(Number(millis));
+        }
         const out: Record<string, unknown> = {};
         for (const [key, field] of Object.entries(v.fields)) {
           const built = build(field);
@@ -596,6 +601,7 @@ export const show = (value: unknown): string => {
   if (typeof value === "bigint") return `${value}n`;
   if (value === null || typeof value !== "object") return String(value);
   if (DateTime.isDateTime(value)) return DateTime.formatIso(value);
+  if (Duration.isDuration(value)) return `Duration.millis(${Duration.toMillis(value)})`;
   if (Option.isOption(value))
     return Option.isSome(value) ? `Option.some(${show(value.value)})` : "Option.none()";
   if (Array.isArray(value)) return `[${value.map(show).join(", ")}]`;
