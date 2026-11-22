@@ -488,7 +488,7 @@ const syncRules = (
             project,
             region,
             firewallPolicy: firewallPolicyName,
-            priority,
+            rulePriority: priority,
           }),
         );
       }

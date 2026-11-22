@@ -24,6 +24,7 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { Cluster, type ClusterShape } from "../Cluster.ts";
 import {
+  actorOptionsOf,
   DurableObjectTypeId,
   type DurableObject,
   type DurableObjectRuntimeContext,
@@ -98,6 +99,14 @@ const durableObjectsPlugin = (objects: ReadonlyArray<PoolDurableObject>) => {
         )};`,
     ),
     `export default [${objects.map((_, i) => `d${i}`).join(", ")}];`,
+    // The actor options the pool recorded for its classes, by name.
+    `export const options = ${JSON.stringify(
+      Object.fromEntries(
+        objects.flatMap((object) =>
+          object.options === undefined ? [] : [[object.name, object.options]],
+        ),
+      ),
+    )};`,
   ].join("\n");
   return [
     {
@@ -318,12 +327,15 @@ const makeHost = <Network, Req>(options: {
         );
       }
       const object = self as unknown as DurableObject & DurableObjectRuntimeContext;
+      const actorOptions = yield* actorOptionsOf(object.LogicalId, object.Props);
       yield* object.registerPool((env) =>
         deploy(
           {
             name: object.LogicalId,
             module: object.Props.main,
             handler: object.Props.handler ?? "default",
+            // Absent unless set, so a pool whose classes set none plans as before.
+            ...(actorOptions === undefined ? {} : { options: actorOptions }),
           },
           env,
           // What callers need to reach the class through the gateway.

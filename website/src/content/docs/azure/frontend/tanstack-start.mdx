@@ -1,0 +1,110 @@
+---
+title: TanStack Start
+description: "Deploy a TanStack Start app to Azure with Azure.Website.TanStackStart — server rendering and server functions on a Flex Consumption Function, assets on Blob Storage, both behind Azure Front Door."
+sidebar:
+  order: 19
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Azure.Website.TanStackStart` deploys a [TanStack Start](https://tanstack.com/start)
+app to Azure. Alchemy runs your own `vite build`. Server-side rendering,
+server functions, and server routes run on a Flex Consumption Function,
+which scales to zero. The client assets go to the static website endpoint
+of an Azure Storage account. Azure Front Door sends `/assets/*` and the
+public files to Blob Storage and every other path to the Function. No
+Docker image and no App Service plan are involved.
+
+## Install
+
+The build integration ships separately. It only runs at deploy time, so a
+dev dependency is enough:
+
+<PackageManagers dev={devDeps} />
+
+Your project also needs `@tanstack/react-start` (or `@tanstack/solid-start`)
+and `vite`.
+
+## Deploy the site
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MySite",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Azure.Website.TanStackStart("Website", { location: "eastus" });
+    return { url: site.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. `site.url` is the Front Door endpoint,
+`https://{endpoint}.z01.azurefd.net`. A new endpoint takes 10-20 minutes to
+serve everywhere. Pick a `location` that offers Flex Consumption.
+
+Your `vite.config.ts` needs no adapter. TanStack Start is pure Vite: the
+integration forces the SSR bundle to be self-contained, and the
+`@alchemy.run/frontend-frameworks/tanstack-start/azure` target wraps its
+fetch handler as an Azure Functions handler. Keep Vite's default `dist`
+output directory.
+
+## Pass environment variables
+
+```diff lang="typescript"
+-const site = yield* Azure.Website.TanStackStart("Website", { location: "eastus" });
++const site = yield* Azure.Website.TanStackStart("Website", {
++  location: "eastus",
++  env: { GREETING: "Hello from Azure!" },
++});
+```
+
+The values become app settings of the Function. A server function reads
+them:
+
+```typescript
+// src/routes/index.tsx
+const getGreeting = createServerFn({ method: "GET" }).handler(
+  () => process.env.GREETING ?? "Hello!",
+);
+```
+
+## Size the Function
+
+```typescript
+const site = yield* Azure.Website.TanStackStart("Website", {
+  instanceMemoryMB: 512,
+  maximumInstanceCount: 40,
+});
+```
+
+## Share a Front Door profile
+
+```typescript
+const profile = yield* Azure.Cdn.Profile("Edge");
+const site = yield* Azure.Website.TanStackStart("Website", { frontDoor: { profile } });
+```
+
+Each profile bills a monthly base fee, so share one across sites. See
+[Websites](/azure/frontend/websites) for caching, purges, and the other
+shared settings.
+
+## Local development
+
+`alchemy dev` runs TanStack Start's Vite dev server with hot reload and
+creates nothing in Azure. `env` reaches the dev server's `process.env`.
+Wrap the site in `Alchemy.remote()` to deploy it for real during dev.
+
+See the [`azure-website-tanstack-start`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-website-tanstack-start)
+example.
+
+## Where next
+
+- [Websites](/azure/frontend/websites) — the settings every site shares.
+- [Website reference](/providers/azure/website#tanstackstart) — every prop.

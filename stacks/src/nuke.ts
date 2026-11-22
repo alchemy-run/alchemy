@@ -1,5 +1,6 @@
 import * as Archil from "@alchemy.run/archil";
 import * as AWS from "@alchemy.run/aws";
+import * as Azure from "@alchemy.run/azure";
 import * as Boat from "@alchemy.run/boat";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Convex from "@alchemy.run/convex";
@@ -24,6 +25,7 @@ export default Alchemy.Stack(
   {
     providers: Layer.mergeAll(
       AWS.providers(),
+      Azure.providers(),
       Cloudflare.providers(),
       Convex.providers(),
       Daytona.providers(),

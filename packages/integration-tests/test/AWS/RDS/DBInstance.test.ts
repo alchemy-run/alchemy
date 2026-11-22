@@ -2841,7 +2841,12 @@ lifecycle(4, process.env.AWS_TEST_RDS_DBINSTANCE)(
   },
 );
 
-// A private MySQL instance only the in-VPC runner can reach.
+// A private MySQL instance only the in-VPC runner can reach. It listens on a
+// port of its own: MySQL connections carry no host name before the server
+// answers, so an emulator serving every instance on one host (floci) can't
+// tell two MySQL instances on 3306 apart, and the Aurora MySQL lane runs
+// beside this one.
+const RUNNER_MYSQL_PORT = 3307;
 lifecycle(5, process.env.AWS_TEST_RDS_DBINSTANCE)(
   "private MySQL applies migrations through an in-VPC MigrationRunner",
   (stack) =>
@@ -2864,8 +2869,8 @@ lifecycle(5, process.env.AWS_TEST_RDS_DBINSTANCE)(
             ingress: [
               {
                 ipProtocol: "tcp",
-                fromPort: 3306,
-                toPort: 3306,
+                fromPort: RUNNER_MYSQL_PORT,
+                toPort: RUNNER_MYSQL_PORT,
                 referencedGroupId: runnerSecurityGroup.groupId,
               },
             ],
@@ -2876,6 +2881,7 @@ lifecycle(5, process.env.AWS_TEST_RDS_DBINSTANCE)(
           });
           const db = yield* DBInstance("RunnerMigrationsDb", {
             engine: "mysql",
+            port: RUNNER_MYSQL_PORT,
             dbInstanceClass: "db.t4g.micro",
             allocatedStorage: 20,
             dbName: "app",

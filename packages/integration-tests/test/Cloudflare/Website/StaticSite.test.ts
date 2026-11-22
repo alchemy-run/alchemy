@@ -742,6 +742,59 @@ describe.concurrent(
       { timeout: 360_000 },
     );
 
+    test.provider(
+      "StaticSite: R2 S3Credentials on env is a binding, not a build env var (#2219)",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+
+          yield* stack.destroy();
+
+          const cwd = yield* fs.makeTempDirectory({ prefix: "alchemy-staticsite-s3-" });
+          yield* fs.writeFileString(
+            path.join(cwd, "build.sh"),
+            [
+              "#!/bin/bash",
+              "set -euo pipefail",
+              "mkdir -p dist",
+              'echo "STORAGE_S3=${STORAGE_S3:-missing}" > dist/env.txt',
+            ].join("\n"),
+          );
+
+          // `S3Credentials` is Effect-shaped; before #2219 the build env
+          // serialization yielded it and the deploy died with
+          // "Service not found: Cloudflare.Workers.WorkerEnvironment".
+          const site = yield* stack.deploy(
+            Effect.gen(function* () {
+              const bucket = yield* Cloudflare.R2.Bucket("StaticSiteS3Bucket", {
+                forceDestroy: true,
+              });
+              return yield* Cloudflare.Website.StaticSite("S3Site", {
+                command: "bash build.sh",
+                shell: true,
+                cwd,
+                outdir: "dist",
+                workersDev: false,
+                env: {
+                  STORAGE_S3: Cloudflare.R2.S3Credentials(bucket, { access: "read-write" }),
+                },
+              });
+            }),
+          );
+
+          yield* expectWorkerExists(site.workerName, accountId);
+          // The credentials are a Worker secret, never handed to the build.
+          const envFile = yield* fs.readFileString(path.join(cwd, "dist", "env.txt"));
+          expect(envFile).toContain("STORAGE_S3=missing");
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:r2"], timeout: 360_000 },
+    );
+
     // ─────────────────────────────────────────────────────────────────────
     // SPA fallback: `assets.notFoundHandling: "single-page-application"`
     //

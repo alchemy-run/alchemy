@@ -1,0 +1,331 @@
+---
+title: Identity & bindings
+description: See which identity an Azure binding assigns its role to, which role it assigns on which resource, how hosts outside Azure sign in, and how removing a binding revokes the role.
+---
+
+On Azure, giving code access to a resource takes three steps: turn on a
+managed identity for the host, assign a role on the resource, and point
+the SDK at the identity. A binding does all three in the line that gives
+you the client:
+
+```typescript
+const files = yield* Azure.Storage.BlobContainerReadWrite(container);
+```
+
+The line assigns **Storage Blob Data Contributor** on that one container,
+puts the settings the client needs into the host's environment, and
+returns a typed client for your handlers. No keys or connection strings
+reach your code.
+
+## Bind a resource to a Function
+
+```typescript
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const account = yield* Azure.Storage.StorageAccount("Data");
+    const container = yield* Azure.Storage.BlobContainer("Files", {
+      storageAccount: account.storageAccountName,
+    });
+    const files = yield* Azure.Storage.BlobContainerReadWrite(container);
+
+    return {
+      fetch: Effect.gen(function* () {
+        yield* files.put("hello.txt", "hi");
+        const blob = yield* files.get("hello.txt");
+        return HttpServerResponse.text(blob?.text() ?? "missing");
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Azure.Storage.BlobContainerReadWriteHttp)),
+) {}
+```
+
+Run `alchemy deploy`. The Function's system-assigned managed identity
+holds the role on the `Files` container and nothing else.
+
+## Provide the implementation
+
+Yielding a binding gives you the interface. Provide its layer once, at
+the end of the host's Effect. The layer is the binding name plus `Http`:
+`BlobContainerReadWrite` → `BlobContainerReadWriteHttp`,
+`SecretRead` → `SecretReadHttp`, `QueueSend` → `QueueSendHttp`. Forget
+one and the type error names the missing layer.
+
+## Hosts with a managed identity
+
+These hosts run your code as an Azure managed identity. A binding assigns
+its role to that identity, and calls use the identity's tokens:
+
+| Host | Identity |
+| --- | --- |
+| `Azure.Functions.Function`, `Azure.Web.FunctionApp`, `Azure.Web.WebApp` | the app's system-assigned identity |
+| `Azure.ContainerApps.ContainerApp`, `Azure.ContainerApps.Job` | the app's or job's system-assigned identity |
+| `Azure.ContainerInstance.ContainerGroup` | the group's system-assigned identity |
+| `Azure.Compute.VirtualMachine` | the VM's system-assigned identity |
+| `Kubernetes.Deployment`, `Kubernetes.Job` on an `Azure.ContainerService.ManagedCluster` | a user-assigned identity federated with the pod's ServiceAccount |
+
+An AKS workload needs `workloadIdentityEnabled: true` on its cluster. See
+[AKS](/azure/compute/aks).
+
+## Which role a binding assigns
+
+Each binding assigns the narrowest role that covers its calls, on the
+bound resource only:
+
+| Binding | Role |
+| --- | --- |
+| `Storage.BlobContainerRead` | Storage Blob Data Reader |
+| `Storage.BlobContainerWrite`, `BlobContainerReadWrite` | Storage Blob Data Contributor |
+| `Storage.QueueSend` | Storage Queue Data Message Sender |
+| `Storage.QueueReceive` | Storage Queue Data Message Processor |
+| `Storage.TableRead` | Storage Table Data Reader |
+| `ServiceBus.QueueSend`, `TopicWrite` | Azure Service Bus Data Sender |
+| `ServiceBus.PeekLockMessage`, `ReceiveAndDeleteMessage`, `CompleteMessage` | Azure Service Bus Data Receiver |
+| `EventHub.Send` | Azure Event Hubs Data Sender |
+| `EventGrid.PublishCloudEvents` | EventGrid Data Sender |
+| `KeyVault.SecretRead` | Key Vault Secrets User |
+| `LogAnalytics.ExecuteQuery` and the other query bindings | Log Analytics Data Reader |
+| `KeyVault.Encrypt`, `CognitiveServices.OpenAICreateChatCompletion`, `Monitor.UploadLogs`, and others | a custom role with exactly the data actions the call needs |
+
+When a built-in role is broader than the call, the binding creates an
+`Azure.Authorization.RoleDefinition` with only the data actions it needs.
+For example, `OpenAICreateChatCompletion` assigns a role with one action,
+`OpenAI/deployments/chat/completions/action`. The built-in
+**Cognitive Services OpenAI User** role would also read every Azure OpenAI
+object.
+
+## Let your deployer assign roles
+
+Assigning a role needs `Microsoft.Authorization/roleAssignments/write` on
+the scope. Give your deploying service principal **Owner**, or
+**User Access Administrator** plus **Contributor**. **Contributor** alone
+can't assign roles. See [Setup](/azure/setup).
+
+## The first requests after a deploy
+
+A new role assignment takes a minute or more to reach the data plane.
+Until then calls fail with a typed error, such as Storage's
+`SchemaRegistryStorageAccessDenied`. Retry the first call in tests:
+
+```typescript
+const res = yield* client.get(`${url}/files/hello.txt`).pipe(
+  Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 24 }),
+);
+```
+
+## Adding and removing
+
+The bindings you yield are the roles the host holds. Each deploy assigns
+the roles a binding asks for and revokes the ones no binding asks for any
+more. Delete a `yield*`, deploy, and the role is gone. Alchemy revokes
+only the assignments it created. Destroying the host revokes every role
+it holds.
+
+## Bind from a host outside Azure
+
+The same bindings work in a Cloudflare Worker, an AWS Lambda, or a GKE
+pod. This Worker reads a Key Vault secret:
+
+```typescript
+// src/Worker.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Redacted from "effect/Redacted";
+
+export const Vault = Azure.KeyVault.Vault("Vault", { softDeleteRetentionInDays: 7 });
+
+export const Greeting = Effect.gen(function* () {
+  const vault = yield* Vault;
+  return yield* Azure.KeyVault.Secret("Greeting", {
+    vault: vault.vaultName,
+    value: Redacted.make("from-key-vault"),
+  });
+});
+
+export default class Worker extends Cloudflare.Worker<Worker>()(
+  "Worker",
+  { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
+  Effect.gen(function* () {
+    const greeting = yield* Greeting;
+    const secret = yield* Azure.KeyVault.SecretRead(greeting);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const value = yield* secret.get();
+        return HttpServerResponse.text(Redacted.value(value));
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Azure.KeyVault.SecretReadHttp)),
+) {}
+```
+
+A Worker has no Azure identity, so Alchemy creates one for it: a
+Microsoft Entra application (`<host>AzureIdentity`), its service
+principal, and a client secret. Each binding assigns its role to that
+service principal, as one `Azure.Authorization.RoleAssignment` per grant.
+
+## Deploy a mixed stack
+
+Merge both providers in `alchemy.run.ts`:
+
+```typescript
+// alchemy.run.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Worker from "./src/Worker.ts";
+
+export default Alchemy.Stack(
+  "AzureFromCloudflare",
+  {
+    providers: Layer.mergeAll(Azure.providers(), Cloudflare.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const worker = yield* Worker;
+    return { url: worker.url };
+  }),
+);
+```
+
+Creating an Entra application needs the Microsoft Graph permission
+`Application.ReadWrite.OwnedBy` on your deployer. See
+[Allow it to create Entra applications](/azure/setup#allow-it-to-create-entra-applications).
+
+## What a foreign host receives
+
+The Worker gets three environment variables:
+
+| Variable | Value |
+| --- | --- |
+| `ALCHEMY_AZURE_TENANT_ID` | the tenant of the Entra application |
+| `ALCHEMY_AZURE_CLIENT_ID` | the application's client ID |
+| `ALCHEMY_AZURE_CLIENT_SECRET` | the client secret, redacted |
+
+At runtime the binding signs in with them. Destroying the host deletes
+the application, the service principal, the secret, and every role
+assignment.
+
+## Call your own services
+
+A managed identity can also get tokens for your own APIs. This Function
+asks for a token whose audience is an Entra application's `appId`:
+
+```typescript
+// src/Gateway.ts
+import * as Azure from "@alchemy.run/azure";
+import { Credentials } from "@distilled.cloud/azure/Credentials";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Redacted from "effect/Redacted";
+import { Quotes } from "./Quotes.ts";
+import { QuotesApi } from "./resources.ts";
+
+export default class Gateway extends Azure.Functions.Function<Gateway>()(
+  "Gateway",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const quotes = yield* Quotes;
+    const quotesUrl = yield* quotes.url;
+    const api = yield* QuotesApi;
+    const audience = yield* api.appId;
+    const credentials = yield* Credentials;
+    const http = yield* HttpClient.HttpClient;
+
+    const quotesToken = Effect.gen(function* () {
+      const config = yield* credentials;
+      const appId = yield* audience;
+      if (config.tokenFor === undefined) return config.bearerToken;
+      return yield* config.tokenFor(`${appId}/.default`);
+    });
+
+    return {
+      fetch: Effect.gen(function* () {
+        const base = yield* quotesUrl;
+        const token = yield* quotesToken;
+        const response = yield* http.execute(
+          HttpClientRequest.get(`${base}/quote`).pipe(
+            HttpClientRequest.bearerToken(Redacted.value(token)),
+          ),
+        );
+        const body = yield* response.text;
+        return HttpServerResponse.text(body, { status: response.status });
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.succeed(HttpServerResponse.text(error._tag, { status: 502 })),
+        ),
+      ),
+    };
+  }),
+) {}
+```
+
+`QuotesApi` is an `Azure.Entra.Application`. The private Container App
+checks the token with built-in authentication
+(`Azure.ContainerApps.AuthConfig`) and accepts only the Gateway's
+`principalId`. The Function holds no secret.
+
+## Assign a role yourself
+
+Declare a role assignment for a host without bindings, or for a role no
+binding grants:
+
+```typescript
+const api = yield* Azure.Functions.Function("Api", { main: "./src/api.ts" });
+yield* Azure.Authorization.RoleAssignment("ApiWritesNotes", {
+  scope: container.containerId,
+  roleDefinitionId: Azure.Authorization.BuiltInRole.StorageBlobDataContributor,
+  principalId: api.principalId.as<string>(),
+  principalType: "ServicePrincipal",
+});
+```
+
+`Azure.Authorization.BuiltInRole` lists common role IDs. Pass any other
+built-in role's GUID as a string.
+
+:::caution[Changing `scope`, `roleDefinitionId`, `principalId`, or `principalType` replaces the assignment]
+Alchemy creates the new assignment and then deletes the old one.
+:::
+
+## Share one identity
+
+Create a user-assigned identity when several resources need the same
+principal:
+
+```typescript
+const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api");
+yield* Azure.Authorization.RoleAssignment("api-reads-files", {
+  scope: account.storageAccountId,
+  roleDefinitionId: Azure.Authorization.BuiltInRole.StorageBlobDataReader,
+  principalId: identity.principalId,
+  principalType: "ServicePrincipal",
+});
+```
+
+## Examples
+
+- [`examples/azure-service-to-service`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-service-to-service)
+  — a Function calls a private Container App with its managed identity.
+- [`examples/azure-key-vault`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-key-vault)
+  — custom roles with one data action each.
+
+## Where next
+
+- [Key Vault](/azure/security/key-vault) — secrets and keys your
+  runtime uses.
+- [Choosing a runtime](/azure/compute/choosing-a-runtime) — every host
+  that takes bindings.
+- [Authorization reference](/providers/azure/authorization#roleassignment)
+  — role assignments and role definitions.

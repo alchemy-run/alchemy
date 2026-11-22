@@ -1,0 +1,376 @@
+---
+title: Azure Functions
+description: Run an Effect HTTP handler on Azure Functions (Flex Consumption) with Azure.Functions.Function — bindings that grant roles to its managed identity, timers, event triggers, and scaling.
+---
+
+`Azure.Functions.Function` runs an Effect program on Azure Functions
+(Flex Consumption, Node.js 22). You write a `fetch` handler. Alchemy
+bundles it, creates the function app with a system-assigned managed
+identity, and deploys the bundle. The app scales with traffic and down to
+zero.
+
+Alchemy also creates the app's `FC1` plan, a storage account for the
+Functions host, and a blob container for deployment packages. The host
+reaches its storage with the managed identity, so no connection string
+exists.
+
+:::caution[Cold starts]
+An idle app has no instances. The first request after a deploy or an idle
+period waits a few seconds for an instance to start.
+:::
+
+## Declare a Function
+
+```typescript
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello from Azure")),
+    };
+  }),
+) {}
+```
+
+`main` names the file to bundle. The Effect runs once when an instance
+starts, and `fetch` runs per request.
+
+## Add it to the Stack
+
+```typescript
+// alchemy.run.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import Api from "./src/Api.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. `api.url` is the app's
+`https://<name>.azurewebsites.net` URL. The URL is public: every request
+reaches `fetch`.
+
+## Read the request
+
+Get the request from `HttpServerRequest` (`effect/http/HttpServerRequest`):
+
+```typescript
+fetch: Effect.gen(function* () {
+  const request = yield* HttpServerRequest;
+  const url = new URL(request.url, "http://localhost");
+
+  if (url.pathname === "/") {
+    return HttpServerResponse.text("ok");
+  }
+
+  return HttpServerResponse.text("Not Found", { status: 404 });
+}),
+```
+
+## Bind a blob container
+
+Declare the storage in its own module:
+
+```typescript
+// src/Files.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export const Data = Azure.Storage.StorageAccount("Data");
+
+export const Files = Effect.gen(function* () {
+  const account = yield* Data;
+  return yield* Azure.Storage.BlobContainer("Files", {
+    storageAccount: account.storageAccountName,
+  });
+});
+```
+
+Bind the container in the Function's init, and call the client in
+`fetch`:
+
+```typescript
+Effect.gen(function* () {
+  const container = yield* Files;
+  const files = yield* Azure.Storage.BlobContainerReadWrite(container);
+
+  return {
+    fetch: Effect.gen(function* () {
+      yield* files.put("hello.txt", "hi");
+      const file = yield* files.get("hello.txt");
+      return HttpServerResponse.text(file?.text() ?? "missing");
+    }).pipe(Effect.orDie),
+  };
+}).pipe(Effect.provide(Azure.Storage.BlobContainerReadWriteHttp)),
+```
+
+`BlobContainerReadWrite` grants the app's managed identity **Storage Blob
+Data Contributor** on that container only. No key reaches the app. A new
+role assignment can take a few minutes to apply after the first deploy.
+
+## Bind other services
+
+Each binding grants the smallest data role on the one resource it binds:
+
+| Binding                          | Role                                 | Layer                                  |
+| -------------------------------- | ------------------------------------ | -------------------------------------- |
+| `Azure.Storage.QueueSend`        | Storage Queue Data Message Sender    | `Azure.Storage.QueueSendHttp`          |
+| `Azure.KeyVault.SecretRead`      | Key Vault Secrets User               | `Azure.KeyVault.SecretReadHttp`        |
+| `Azure.ServiceBus.QueueSend`     | Azure Service Bus Data Sender        | `Azure.ServiceBus.QueueSendHttp`       |
+| `Azure.EventHub.Send`            | Azure Event Hubs Data Sender         | `Azure.EventHub.SendHttp`              |
+| `Azure.CosmosDB.SqlContainerReadWrite` | Cosmos DB data role on the container | `Azure.CosmosDB.SqlContainerReadWriteHttp` |
+
+See [Storage](/azure/data/storage), [Key Vault](/azure/security/key-vault),
+[Service Bus](/azure/messaging/service-bus),
+[Event Hubs](/azure/messaging/event-hubs), and
+[Cosmos DB](/azure/data/cosmos-db) for each client's operations.
+
+## Pass environment variables
+
+`env` sets app settings:
+
+```typescript
+{
+  main: import.meta.url,
+  env: { MY_VARIABLE: "my-variable-abc123" },
+}
+```
+
+Read them with `effect/Config` in the program:
+
+```typescript
+const variable = yield* Config.String("MY_VARIABLE");
+```
+
+Values can be literals, `Config` values, Outputs, or resources. A resource
+arrives as its attributes, JSON-encoded. For credentials, use
+[Key Vault](/azure/security/key-vault).
+
+## Choose the region
+
+A Function deploys to the `Azure.location(...)` layer's location, else the
+profile's location, else `eastus`. Pin it with `location`:
+
+```typescript
+{ main: import.meta.url, location: "westeurope" }
+```
+
+:::caution
+Changing `name`, `resourceGroup`, `location`, or `app` replaces the
+Function. Alchemy creates a new function app and deletes the old one with
+its plan and storage.
+:::
+
+## Tune scaling
+
+Set the memory per instance and the most instances the app scales out to:
+
+```typescript
+{
+  main: import.meta.url,
+  instanceMemoryMB: 4096,
+  maximumInstanceCount: 40,
+}
+```
+
+`instanceMemoryMB` is `512`, `2048` (the default), or `4096`. CPU scales
+with it. `maximumInstanceCount` is 40 to 1000, and defaults to 100.
+
+## Run on a schedule
+
+`Azure.Functions.schedule` adds a timer trigger. The schedule is NCRONTAB:
+six fields, seconds first, in UTC.
+
+```typescript
+yield* Azure.Functions.schedule("Heartbeat", "0 * * * * *", (run) =>
+  Effect.log(`heartbeat${run.isPastDue ? " (past due)" : ""}`),
+);
+```
+
+The Functions host runs one instance per occurrence. No loop runs in your
+program.
+
+## Receive events
+
+An event source adds a native trigger to the app, sets its identity-based
+connection, and grants the role it needs. Consume a Storage queue:
+
+```typescript
+yield* Azure.Storage.consumeQueueMessages(Jobs, (message) =>
+  Effect.log(message.body),
+);
+```
+
+Provide the matching Functions layer on the program:
+
+```typescript
+Effect.provide(Azure.Functions.StorageQueueEventSource)
+```
+
+The event source grants the app's identity **Storage Queue Data Reader**
+and **Storage Queue Data Message Processor** on that queue only. A handler
+that fails makes the host retry the message. After five
+dequeues the message moves to `<queue>-poison`.
+
+## Pick a trigger
+
+Each trigger has its own layer:
+
+| Call                                     | Layer                                         |
+| ---------------------------------------- | --------------------------------------------- |
+| `Azure.Storage.consumeQueueMessages`     | `Azure.Functions.StorageQueueEventSource`     |
+| `Azure.Storage.consumeBlobCreated`       | `Azure.Functions.BlobCreatedEventSource`      |
+| `Azure.ServiceBus.consumeQueueMessages`  | `Azure.Functions.ServiceBusQueueEventSource`  |
+| `Azure.ServiceBus.consumeSubscriptionMessages` | `Azure.Functions.ServiceBusSubscriptionEventSource` |
+| `Azure.EventHub.consumeEvents`           | `Azure.Functions.EventHubEventSource`         |
+| `Azure.EventGrid.consumeEvents`          | `Azure.Functions.EventGridEventSource`        |
+| `Azure.CosmosDB.consumeChangeFeed`       | `Azure.Functions.CosmosDBChangeFeedEventSource` |
+
+See [Storage queues](/azure/messaging/storage-queues),
+[Service Bus](/azure/messaging/service-bus),
+[Event Hubs](/azure/messaging/event-hubs), and
+[Event Grid](/azure/messaging/event-grid).
+
+## Serve an Effect HttpApi
+
+`HttpRouter.toHttpEffect` turns an `HttpApi` layer into the Function's
+`fetch`:
+
+```typescript
+// src/JobFunction.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import * as Etag from "effect/http/Etag";
+import * as HttpPlatform from "effect/http/HttpPlatform";
+import * as HttpRouter from "effect/http/HttpRouter";
+import * as Layer from "effect/Layer";
+import { JobApiLive } from "./JobApiLive.ts";
+import { JobStorageTable } from "./JobStorage.ts";
+
+export default class JobFunction extends Azure.Functions.Function<JobFunction>()(
+  "JobFunction",
+  { main: import.meta.url },
+  HttpRouter.toHttpEffect(JobApiLive).pipe(
+    Effect.map((fetch) => ({ fetch })),
+    Effect.provide(Layer.mergeAll(JobStorageTable, HttpPlatform.layer, Etag.layer)),
+  ),
+) {}
+```
+
+Building the layer runs the handlers' init once, so bindings inside the
+handlers attach to the Function.
+[`examples/azure-function-httpapi`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-function-httpapi)
+has the API and its table.
+
+## Write a plain handler
+
+You don't have to use Effect. Point `main` at a file that default-exports
+`fetch`, and pass `env`:
+
+```typescript
+// alchemy.run.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Alchemy from "alchemy";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+export const Api = Azure.Functions.Function("Api", {
+  main: "./src/api.ts",
+  env: {
+    GREETING: Config.String("GREETING").pipe(Config.withDefault("hello")),
+  },
+});
+
+export type ApiEnv = Azure.InferEnv<typeof Api>;
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+`Azure.InferEnv` types the handler's `env` argument from the `env` prop:
+
+```typescript
+// src/api.ts
+import type { ApiEnv } from "../alchemy.run.ts";
+
+export default {
+  async fetch(request: Request, env: ApiEnv) {
+    return new Response(`${env.GREETING} from Azure Functions`);
+  },
+};
+```
+
+A plain handler has no bindings. Grant its `principalId` a role with
+`Azure.Authorization.RoleAssignment`, as in
+[`examples/azure-function-async`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-function-async).
+
+## Deploy into an existing app
+
+Pass `app` to deploy into a function app you already have. It must run
+Linux with `runtime: { name: "node" }` and a system-assigned identity:
+
+```typescript
+const api = yield* Azure.Functions.Function("Api", {
+  main: "./src/api.ts",
+  app: { siteName: "contoso-api", resourceGroup: "rg-shared" },
+});
+```
+
+Alchemy then owns only the code and the app settings it writes.
+
+## Keep a package out of the bundle
+
+Alchemy bundles `main` and every dependency into one ESM file. No
+`node_modules` ship. Pass `build` to tune Rolldown:
+
+```typescript
+{
+  main: import.meta.url,
+  build: { input: { external: ["sharp"] } },
+}
+```
+
+A deploy uploads code only when the bundle's hash changes.
+
+## Destroy
+
+`alchemy destroy` deletes the function app, its plan and host storage,
+and the role assignments its bindings created.
+
+## Example
+
+[`examples/azure-function`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-function)
+is a file API on one Function with a blob container.
+[`examples/azure-schedule`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-schedule)
+adds timers, and
+[`examples/azure-storage-queue`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-storage-queue)
+pairs an API with a queue-triggered worker.
+
+## Where next
+
+- [Local development](/azure/local-development) — run the same Function
+  on your machine.
+- [Effect workflows](/azure/compute/effect-workflows) — durable workflows
+  on Durable Functions.
+- [Functions reference](/providers/azure/functions#function) — every prop
+  and attribute.

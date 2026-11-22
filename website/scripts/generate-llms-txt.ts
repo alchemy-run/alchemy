@@ -392,6 +392,50 @@ const SECTIONS: Section[] = [
     pages: { directory: "gcp/networking" },
   },
   {
+    heading: "Azure",
+    intro:
+      "Azure as Stack resources — Azure Functions, Container Apps, AKS, Storage, Cosmos DB, Service Bus, Key Vault, Front Door websites. Bindings assign least-privilege RBAC roles to the host's managed identity.",
+    pages: {
+      slugs: ["azure/index", "azure/setup", "azure/local-development"],
+    },
+  },
+  {
+    heading: "Azure — Tutorial",
+    pages: { directory: "azure/tutorial" },
+  },
+  {
+    heading: "Azure — Compute",
+    pages: { directory: "azure/compute" },
+  },
+  {
+    heading: "Azure — Frontend",
+    pages: { directory: "azure/frontend" },
+  },
+  {
+    heading: "Azure — Data",
+    pages: { directory: "azure/data" },
+  },
+  {
+    heading: "Azure — AI",
+    pages: { directory: "azure/ai" },
+  },
+  {
+    heading: "Azure — Messaging & events",
+    pages: { directory: "azure/messaging" },
+  },
+  {
+    heading: "Azure — Security & identity",
+    pages: { directory: "azure/security" },
+  },
+  {
+    heading: "Azure — Observability",
+    pages: { directory: "azure/observability" },
+  },
+  {
+    heading: "Azure — Networking",
+    pages: { directory: "azure/networking" },
+  },
+  {
     heading: "Fly — start here",
     intro:
       "The Fly hub: overview, What is Fly? (organizations, Apps, Machines, regions, the proxy, private networking, Volumes, managed data and how Alchemy models each), setup (org, API token, profile), and networking.",
