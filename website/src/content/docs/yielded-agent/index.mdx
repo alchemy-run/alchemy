@@ -1,0 +1,88 @@
+---
+title: Yielded Agent
+description: Run Yielded Agent with Alchemy. Schema-defined agents and Threads in a Durable Object, on your models, tools and sandboxes.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+
+[Yielded Agent](https://yielded.dev/agent/) is a TypeScript library for agents with durable conversations, called Threads, built on Effect and Effect AI. You define an agent's input, output, instructions and tools as schemas, and its runtime runs the model and tool loop and validates the result. Alchemy runs it in a Durable Object and supplies what it asks an application for: a model, tool handlers, Thread history and a sandbox for each Thread, from the declarations you make with [`@alchemy.run/ai`](/ai).
+
+**New to Yielded Agent?** Start with [What is Yielded Agent?](/yielded-agent/what-is-yielded-agent).
+
+## A quick example
+
+A model, a tool, and an agent whose toolkit is that tool:
+
+```typescript title="src/agent.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as YieldedAgent from "@alchemy.run/yielded-agent";
+import { Agent, Output } from "@yielded/agent";
+import * as Schema from "effect/Schema";
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+
+export const FastLive = AICloudflare.Model(Fast, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+});
+
+export class LookupOrder extends AI.Tool<LookupOrder>()("lookup_order", {
+  description: "Look up an order by its number.",
+  parameters: Schema.Struct({ number: Schema.String }),
+  success: Schema.Struct({ status: Schema.String }),
+}) {}
+
+export const LookupOrderLive = LookupOrder.make(({ number }) => ({
+  status: number.startsWith("A") ? "shipped" : "processing",
+}));
+
+export const Support = Agent.make("support", {
+  input: Schema.String,
+  output: Output.text(Schema.String),
+  instructions: "Answer questions about orders. Look an order up before you answer.",
+  toolkit: YieldedAgent.toolkit(LookupOrder),
+});
+```
+
+A Durable Object yields the harness and runs the agent on a Thread:
+
+```typescript title="src/Threads.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as YieldedAgent from "@alchemy.run/yielded-agent";
+import * as YieldedCloudflare from "@alchemy.run/yielded-agent/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Fast, FastLive, LookupOrder, LookupOrderLive, Support } from "./agent.ts";
+
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  LookupOrderLive,
+  YieldedCloudflare.DurableObjectHistory,
+);
+
+export default class Threads extends Cloudflare.DurableObject<Threads>()(
+  "Threads",
+  Effect.gen(function* () {
+    const harness = yield* YieldedAgent.Harness({ models: [Fast], tools: [LookupOrder] });
+
+    return Effect.gen(function* () {
+      return {
+        ask: Effect.fn(function* (thread: string, text: string) {
+          const result = yield* harness.run(Support, text, { thread });
+          return result.output;
+        }, Effect.orDie),
+      };
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+## Where to start
+
+**Want to build?** Follow [Setup](/yielded-agent/setup), then [Agents & runs](/yielded-agent/agents-and-runs).
+
+**Looking for something specific?** Every section of these docs is listed below. Models, tools and sandboxes are shared by every harness, and are covered in the [AI docs](/ai).
+
+## The docs
+
+<HubMap />
