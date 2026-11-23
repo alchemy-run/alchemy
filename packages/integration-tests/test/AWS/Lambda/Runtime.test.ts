@@ -5,6 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as lambdacore from "@distilled.cloud/aws/lambda-core";
 import * as STS from "@distilled.cloud/aws/sts";
+import * as Output from "alchemy/Output";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -68,7 +69,8 @@ test.provider(
         marker: string;
         onAlias: boolean;
         description?: string;
-        shareWithSelf?: boolean;
+        /** Aliases the runtime's resource policy lets this account use. */
+        share?: string[];
       }) =>
         Effect.gen(function* () {
           const runtime = yield* AWS.Lambda.Runtime("Node", {
@@ -76,8 +78,26 @@ test.provider(
             description: options.description,
             licenseInfo: "MIT",
             recoveryWindowInDays: 7,
-            sharing: options.shareWithSelf ? { accounts: [accountId!] } : undefined,
           });
+          if (options.share) {
+            yield* AWS.Lambda.ResourcePolicy("NodeSharing", {
+              resourceArn: runtime.runtimeArn,
+              policyDocument: {
+                Version: "2012-10-17",
+                Statement: [
+                  {
+                    Sid: "AllowAccountToUseRuntime",
+                    Effect: "Allow",
+                    Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+                    Action: ["lambda:AssociateRuntimeAlias"],
+                    Resource: options.share.map(
+                      (alias) => Output.interpolate`${runtime.runtimeArn}/alias/${alias}`,
+                    ),
+                  },
+                ],
+              },
+            });
+          }
           const version = yield* AWS.Lambda.RuntimeVersion("NodeVersion", {
             runtime,
             context: runtimeContext,
@@ -154,17 +174,25 @@ test.provider(
       expect(oldVersion.State).toBe("PENDING_DELETION");
       expect(yield* invokeUntil(rollout.fn.functionName, "v2")).toBe("v2");
 
-      // Sharing writes the runtime's resource-based policy; removing it
-      // deletes the policy.
+      // A ResourcePolicy writes the runtime's resource-based policy, a
+      // change updates it in place, and removing it deletes the policy.
       yield* stack.deploy(
-        program({ marker: "v2", onAlias: true, description: "Shared", shareWithSelf: true }),
+        program({ marker: "v2", onAlias: true, description: "Shared", share: ["*"] }),
       );
       const policy = yield* Lambda.getResourcePolicy({ ResourceArn: observedRuntime.Arn });
       expect(policy.Policy).toContain("lambda:AssociateRuntimeAlias");
       expect(policy.Policy).toContain(`arn:aws:iam::${accountId}:root`);
+      expect(policy.Policy).toContain(`${observedRuntime.Arn}/alias/*`);
       expect((yield* lambdacore.getRuntime({ RuntimeName: runtimeName })).Description).toBe(
         "Shared",
       );
+      yield* stack.deploy(
+        program({ marker: "v2", onAlias: true, description: "Shared", share: ["prod"] }),
+      );
+      const narrowed = yield* Lambda.getResourcePolicy({ ResourceArn: observedRuntime.Arn });
+      expect(narrowed.Policy).toContain(`${observedRuntime.Arn}/alias/prod`);
+      expect(narrowed.Policy).not.toContain(`${observedRuntime.Arn}/alias/*`);
+      expect(narrowed.RevisionId).not.toBe(policy.RevisionId);
       yield* stack.deploy(program({ marker: "v2", onAlias: true }));
       const noPolicy = yield* Lambda.getResourcePolicy({ ResourceArn: observedRuntime.Arn }).pipe(
         Effect.map(() => "present"),

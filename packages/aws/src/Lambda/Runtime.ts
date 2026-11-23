@@ -9,9 +9,6 @@ import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { AWSEnvironment } from "../Environment.ts";
-import { normalizePolicyDocument, type PolicyDocument } from "../IAM/Policy.ts";
-import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fromLifecycle,
@@ -41,31 +38,6 @@ export interface RuntimeReleaseLifecycle {
   functionUpdateBlockDate?: string;
 }
 
-/**
- * Who may build functions on a runtime. Lambda checks it when a function
- * in another account is created on, or switched to, one of the runtime's
- * aliases. Functions already on the runtime keep running when access is
- * removed.
- */
-export interface RuntimeSharing {
-  /** AWS account IDs that may use the runtime. */
-  accounts?: string[];
-  /** An AWS Organizations ID (`o-…`); every account in it may use the runtime. */
-  organizationId?: string;
-  /**
-   * Organizational unit paths (`aws:PrincipalOrgPaths`), e.g.
-   * `"o-a1b2c3d4e5/r-ab12/ou-ab12-11111111/*"` for an OU and its children.
-   */
-  organizationalUnitPaths?: string[];
-  /** Let every AWS account use the runtime. */
-  public?: boolean;
-  /**
-   * The aliases consumers may use. Omit to share every alias and let
-   * consumers pin functions to any version.
-   */
-  aliases?: string[];
-}
-
 export interface RuntimeProps {
   /**
    * The runtime name: 2–128 lowercase letters, numbers, `-`, `_` and `.`.
@@ -82,12 +54,6 @@ export interface RuntimeProps {
    * their own. Omit to clear them.
    */
   releaseLifecycle?: RuntimeReleaseLifecycle;
-  /**
-   * Accounts, organizations or OUs outside this account that may build
-   * functions on the runtime. Alchemy writes it as the runtime's
-   * resource-based policy. Omit to share with no one.
-   */
-  sharing?: RuntimeSharing;
   /**
    * Days (7–30) Lambda keeps the runtime restorable after Alchemy deletes
    * it. The name stays reserved for that long. Alchemy restores its own
@@ -167,19 +133,29 @@ export type RuntimeLookup =
  * ```
  *
  * ### Sharing a runtime
+ * By default only this account can build functions on the runtime. Share
+ * it with other accounts, an organization or an OU by attaching a
+ * resource-based policy with {@link ResourcePolicy}.
+ *
  * **Example:** Let every account in an organization use the runtime
  * ```typescript
- * const runtime = yield* AWS.Lambda.Runtime("Node", {
- *   sharing: { organizationId: "o-a1b2c3d4e5" },
- * });
- * ```
- *
- * **Example:** Share only the `prod` alias with two accounts
- * ```typescript
- * const runtime = yield* AWS.Lambda.Runtime("Node", {
- *   sharing: {
- *     accounts: ["111122223333", "444455556666"],
- *     aliases: ["prod"],
+ * const runtime = yield* AWS.Lambda.Runtime("Node", {});
+ * yield* AWS.Lambda.ResourcePolicy("NodeSharing", {
+ *   resourceArn: runtime.runtimeArn,
+ *   policyDocument: {
+ *     Version: "2012-10-17",
+ *     Statement: [
+ *       {
+ *         Effect: "Allow",
+ *         Principal: "*",
+ *         Action: ["lambda:AssociateRuntimeAlias", "lambda:AssociateRuntimeVersion"],
+ *         Resource: [
+ *           Output.interpolate`${runtime.runtimeArn}/alias/*`,
+ *           Output.interpolate`${runtime.runtimeArn}/version/*`,
+ *         ],
+ *         Condition: { StringEquals: { "aws:PrincipalOrgID": "o-a1b2c3d4e5" } },
+ *       },
+ *     ],
  *   },
  * });
  * ```
@@ -241,100 +217,6 @@ const observedTags = (arn: string) =>
       Effect.succeed({} as Record<string, string>),
     ),
   );
-
-/** The resource-based policy that grants `sharing`, or `undefined` for none. */
-const sharingPolicy = (
-  runtimeArn: string,
-  sharing: RuntimeSharing | undefined,
-  partition: string,
-): PolicyDocument | undefined => {
-  if (sharing === undefined) return undefined;
-  const aliasResources =
-    sharing.aliases === undefined
-      ? [`${runtimeArn}/alias/*`]
-      : sharing.aliases.map((alias) => `${runtimeArn}/alias/${alias}`);
-  const versionResources = [`${runtimeArn}/version/*`];
-  const actions = [
-    "lambda:AssociateRuntimeAlias",
-    ...(sharing.aliases === undefined ? ["lambda:AssociateRuntimeVersion"] : []),
-    "lambda:GetRuntime",
-    "lambda:GetRuntimeAlias",
-    "lambda:ListRuntimeAliases",
-    "lambda:GetRuntimeVersion",
-    "lambda:ListRuntimeVersions",
-  ];
-  const resources = [runtimeArn, ...aliasResources, ...versionResources];
-  const statements: PolicyDocument["Statement"] = [];
-  if (sharing.accounts !== undefined && sharing.accounts.length > 0) {
-    statements.push({
-      Sid: "AlchemyShareWithAccounts",
-      Effect: "Allow",
-      Principal: {
-        AWS: sharing.accounts.map((account) => `arn:${partition}:iam::${account}:root`),
-      },
-      Action: actions,
-      Resource: resources,
-    });
-  }
-  if (sharing.organizationId !== undefined) {
-    statements.push({
-      Sid: "AlchemyShareWithOrganization",
-      Effect: "Allow",
-      Principal: "*",
-      Action: actions,
-      Resource: resources,
-      Condition: { StringEquals: { "aws:PrincipalOrgID": sharing.organizationId } },
-    });
-  }
-  if (sharing.organizationalUnitPaths !== undefined && sharing.organizationalUnitPaths.length > 0) {
-    statements.push({
-      Sid: "AlchemyShareWithOrganizationalUnits",
-      Effect: "Allow",
-      Principal: "*",
-      Action: actions,
-      Resource: resources,
-      Condition: {
-        "ForAnyValue:StringLike": { "aws:PrincipalOrgPaths": sharing.organizationalUnitPaths },
-      },
-    });
-  }
-  if (sharing.public === true) {
-    statements.push({
-      Sid: "AlchemySharePublicly",
-      Effect: "Allow",
-      Principal: "*",
-      Action: actions,
-      Resource: resources,
-    });
-  }
-  return statements.length === 0 ? undefined : { Version: "2012-10-17", Statement: statements };
-};
-
-const readPolicy = (runtimeArn: string) =>
-  Lambda.getResourcePolicy({ ResourceArn: runtimeArn }).pipe(
-    Effect.map((r) => r.Policy),
-    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
-  );
-
-const syncPolicy = Effect.fn(function* (runtimeArn: string, sharing: RuntimeSharing | undefined) {
-  const { region } = yield* AWSEnvironment.current;
-  const desired = sharingPolicy(runtimeArn, sharing, partitionOf(region));
-  const observed = yield* readPolicy(runtimeArn);
-  if (desired === undefined) {
-    if (observed !== undefined) {
-      yield* Lambda.deleteResourcePolicy({ ResourceArn: runtimeArn }).pipe(
-        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-      );
-    }
-    return;
-  }
-  if (
-    observed === undefined ||
-    normalizePolicyDocument(observed) !== normalizePolicyDocument(desired)
-  ) {
-    yield* Lambda.putResourcePolicy({ ResourceArn: runtimeArn, Policy: JSON.stringify(desired) });
-  }
-});
 
 const toAttrs = (runtime: lambdacore.GetRuntimeResponse): Runtime["Attributes"] => ({
   runtimeArn: runtime.Arn,
@@ -450,8 +332,6 @@ export const RuntimeProvider = () =>
       if (removed.length > 0) {
         yield* Lambda.untagResource({ Resource: runtime.Arn, TagKeys: removed });
       }
-
-      yield* syncPolicy(runtime.Arn, news.sharing);
 
       return toAttrs(runtime);
     }),

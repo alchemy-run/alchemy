@@ -714,6 +714,7 @@ export const providers = () =>
         Lambda.MicrovmImage,
         Lambda.NetworkConnector,
         Lambda.Permission,
+        Lambda.ResourcePolicy,
         Lambda.Runtime,
         Lambda.RuntimeAlias,
         Lambda.RuntimeVersion,
@@ -1436,6 +1437,7 @@ export const providers = () =>
           // Dual: glue onto the (dual) Lambda Function — a live addPermission
           // against a floci function ARN fails with ResourceNotFoundException.
           flociDual(Lambda.Permission, () => Lambda.PermissionProvider()),
+          Lambda.ResourcePolicyProvider(),
           // Live-only: floci doesn't emulate customer-managed runtimes.
           Lambda.RuntimeProvider(),
           Lambda.RuntimeAliasProvider(),

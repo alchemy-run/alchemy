@@ -56,6 +56,7 @@ export * from "./MicrovmProvider.ts";
 export * from "./MicrovmRpc.ts";
 export * from "./NetworkConnector.ts";
 export * from "./Permission.ts";
+export * from "./ResourcePolicy.ts";
 export * from "./QueueEventSource.ts";
 export * from "./RestApiEventSource.ts";
 export * from "./Runtime.ts";
