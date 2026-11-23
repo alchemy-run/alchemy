@@ -21,7 +21,7 @@ import { kubectl } from "./fixtures/kind.ts";
 import LocalDockerfileJob, { BUILD_SECRET } from "./fixtures/local-dockerfile-job.ts";
 import LocalEffectJob from "./fixtures/local-job.ts";
 import LocalEffectServer from "./fixtures/local-server.ts";
-import { TestLocalCluster } from "./fixtures/local.ts";
+import { LOCAL_NODE_PORT, TestLocalCluster } from "./fixtures/local.ts";
 import { expectFound } from "./lookup.ts";
 
 const testOptions = { providers: Kubernetes.providers() };
@@ -36,6 +36,7 @@ const attrs = (name: string): Kubernetes.LocalCluster["Attributes"] => ({
   registry: { server: "localhost:5001" },
   registryContainer: `${name}-registry`,
   architecture: "arm64",
+  ports: [],
   connection: {
     auth: { kind: "kubeconfig", context: `kind-${name}` },
     registry: { server: "localhost:5001" },
@@ -205,11 +206,35 @@ describe("Kubernetes LocalCluster E2E", { tags: [...tags, "live"] }, () => {
   );
 
   test.provider("the cluster exposes a connection with its registry and architecture", () =>
-    Effect.sync(() => {
-      expect(cluster.context).toBe("kind-alchemy-test-local");
-      expect(cluster.registry.server).toBe("localhost:5061");
-      expect(cluster.connection.registry?.server).toBe("localhost:5061");
+    Effect.gen(function* () {
+      expect(cluster.context).toBe(`kind-${cluster.name}`);
+      // The registry is on the port Docker picked for `registryPort: 0`.
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const [published] = yield* spawner.lines(
+        ChildProcess.make("docker", ["port", cluster.registryContainer, "5000/tcp"]),
+      );
+      const registryPort = published!.split(":").pop();
+      expect(cluster.registry.server).toBe(`localhost:${registryPort}`);
+      expect(cluster.connection.registry?.server).toBe(`localhost:${registryPort}`);
       expect(["amd64", "arm64"]).toContain(cluster.architecture);
+    }),
+  );
+
+  test.provider("the cluster reports the host port kind picked for a node port", () =>
+    Effect.gen(function* () {
+      const node = `${cluster.name}-control-plane`;
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const [published] = yield* spawner.lines(
+        ChildProcess.make("docker", ["port", node, `${LOCAL_NODE_PORT}/tcp`]),
+      );
+      const hostPort = Number(published!.split(":").pop());
+      expect(hostPort).toBeGreaterThan(0);
+      expect(cluster.ports).toContainEqual({
+        node,
+        containerPort: LOCAL_NODE_PORT,
+        hostPort,
+        protocol: "TCP",
+      });
     }),
   );
 
@@ -241,7 +266,9 @@ describe("Kubernetes LocalCluster E2E", { tags: [...tags, "live"] }, () => {
           };
         };
         expect(spec.status?.succeeded).toBe(1);
-        expect(spec.spec?.template?.spec?.containers?.[0]?.image).toMatch(/^localhost:5061\//);
+        expect(spec.spec?.template?.spec?.containers?.[0]?.image).toMatch(
+          new RegExp(`^${cluster.registry.server}/`),
+        );
       }),
     { timeout: 120_000 },
   );
@@ -291,13 +318,13 @@ describe("Kubernetes LocalCluster E2E", { tags: [...tags, "live"] }, () => {
           },
         })) as { spec?: { template?: { spec?: { containers?: { image?: string }[] } } } };
         const image = job.spec?.template?.spec?.containers?.[0]?.image ?? "";
-        const match = /^localhost:5061\/(.+):[^:]+$/.exec(image);
+        const match = new RegExp(`^${cluster.registry.server}/(.+):[^:]+$`).exec(image);
         expect(match).not.toBeNull();
         // `:buildcache` holds a BuildKit cache export, not another image.
         const cache = yield* client
           .execute(
             HttpClientRequest.get(
-              `http://localhost:5061/v2/${match![1]}/manifests/buildcache`,
+              `http://${cluster.registry.server}/v2/${match![1]}/manifests/buildcache`,
             ).pipe(
               HttpClientRequest.setHeader(
                 "accept",
@@ -329,7 +356,7 @@ describe("Kubernetes LocalCluster E2E", { tags: [...tags, "live"] }, () => {
           object: { apiVersion: "batch/v1", kind: "Job", name: jobName, namespace: "default" },
         })) as { spec?: { template?: { spec?: { containers?: { image?: string }[] } } } };
         const image = job.spec?.template?.spec?.containers?.[0]?.image ?? "";
-        const match = /^localhost:5061\/(.+):([^:]+)$/.exec(image);
+        const match = new RegExp(`^${cluster.registry.server}/(.+):([^:]+)$`).exec(image);
         expect(match).not.toBeNull();
         const [, repository, tag] = match!;
 
@@ -337,7 +364,7 @@ describe("Kubernetes LocalCluster E2E", { tags: [...tags, "live"] }, () => {
           client
             .execute(
               HttpClientRequest.get(
-                `http://localhost:5061/v2/${repository}/manifests/${reference}`,
+                `http://${cluster.registry.server}/v2/${repository}/manifests/${reference}`,
               ).pipe(
                 HttpClientRequest.setHeader(
                   "accept",
@@ -358,7 +385,9 @@ describe("Kubernetes LocalCluster E2E", { tags: [...tags, "live"] }, () => {
         };
         expect(manifest.mediaType).not.toMatch(/index|manifest\.list/);
         const config = (yield* client
-          .get(`http://localhost:5061/v2/${repository}/blobs/${manifest.config!.digest}`)
+          .get(
+            `http://${cluster.registry.server}/v2/${repository}/blobs/${manifest.config!.digest}`,
+          )
           .pipe(Effect.flatMap((response) => response.json))) as {
           os: string;
           architecture: string;

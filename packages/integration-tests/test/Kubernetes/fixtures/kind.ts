@@ -7,18 +7,27 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
 
 /**
- * A kind cluster for one Kubernetes test suite. Each suite gets its own
- * cluster name, registry port, and kubeconfig under `.alchemy/` so suites
- * run concurrently and never touch `~/.kube/config`.
+ * A kind cluster for one Kubernetes test suite. Its name comes from the
+ * stack and stage, and its registry is on a port Docker picks, so suites run
+ * concurrently, and beside themselves in other worktrees. Its kubeconfig is
+ * under `.alchemy/`, so a run never touches `~/.kube/config`.
  */
-export const KindTestCluster = (suite: string, registryPort: number) =>
+export const KindTestCluster = (suite: string) =>
   Kubernetes.LocalCluster(`KindTestCluster`, {
-    name: `alchemy-test-${suite}`,
-    registryPort,
+    registryPort: 0,
     kubeconfig: `.alchemy/test-${suite}.kubeconfig`,
   });
 
 export type KindCluster = Kubernetes.LocalCluster["Attributes"];
+
+/**
+ * The local URL of a node port a kind cluster forwards to the host, on the
+ * host port kind picked (`hostPort: 0`).
+ */
+export const nodePortUrl = (
+  ports: ReadonlyArray<{ readonly containerPort: number; readonly hostPort: number }>,
+  nodePort: number,
+) => `http://localhost:${ports.find((port) => port.containerPort === nodePort)?.hostPort}`;
 
 /**
  * Run kubectl against the test cluster (out-of-band of alchemy) and return
