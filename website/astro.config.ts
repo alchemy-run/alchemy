@@ -2503,6 +2503,7 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/ai" },
             { label: "What is Alchemy AI?", link: "/ai/what-is-alchemy-ai" },
+            { label: "Project layout", link: "/ai/project-layout" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "ai/tutorial" } }],

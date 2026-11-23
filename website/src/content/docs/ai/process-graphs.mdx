@@ -9,9 +9,9 @@ A process can mention another process. The session's model then has two ways to 
 
 Mention a process and tell the model to follow it:
 
-```typescript title="src/Engineer.ts"
+```typescript title="src/Releasing.process.ts"
 import * as AI from "@alchemy.run/ai";
-import { RunTests } from "./RunTests.ts";
+import { RunTests } from "./RunTests.tool.ts";
 
 export class Releasing extends AI.Process<Releasing>()("Releasing", {
   description: "How to cut a release of this project. Follow it when asked to ship.",
@@ -19,6 +19,11 @@ export class Releasing extends AI.Process<Releasing>()("Releasing", {
   Call ${RunTests} and stop if anything fails.
   Bump the version, build, and tag the commit with ${AI.Bash}.
 ` {}
+```
+
+```typescript title="src/Engineer.process.ts"
+import * as AI from "@alchemy.run/ai";
+import { Releasing } from "./Releasing.process.ts";
 
 export class Engineer extends AI.Process<Engineer>()("Engineer", {
   description: "Make one change to the project.",
@@ -38,9 +43,9 @@ A process's `description` is what another session's model reads to choose it. Sa
 
 Mention a process and tell the model to start one:
 
-```typescript title="src/Engineer.ts"
+```typescript title="src/Engineer.process.ts"
 import * as AI from "@alchemy.run/ai";
-import { Research } from "./Research.ts";
+import { Research } from "./Research.process.ts";
 
 export class Engineer extends AI.Process<Engineer>()("Engineer", {
   description: "Make one change to the project.",
@@ -60,7 +65,7 @@ A process has no output, so a started session does not return to the one that st
 
 `AI.Self` is the process being described. Mention it to let a session split its own work:
 
-```typescript title="src/Research.ts"
+```typescript title="src/Research.process.ts"
 import * as AI from "@alchemy.run/ai";
 import * as Schema from "effect/Schema";
 
@@ -79,10 +84,10 @@ export class Research extends AI.Process<Research>()("Research", {
 
 A [model](/ai/models) is mentioned like anything else. A session may then be run on it, and may start other sessions on it:
 
-```typescript title="src/Engineer.ts"
+```typescript title="src/Engineer.process.ts"
 import * as AI from "@alchemy.run/ai";
 import { Fast } from "./Models.ts";
-import { Research } from "./Research.ts";
+import { Research } from "./Research.process.ts";
 
 export class Engineer extends AI.Process<Engineer>()("Engineer", {
   description: "Make one change to the project.",
@@ -108,7 +113,7 @@ yield* research.start("parser", { question: "Where is the parser?" }, { model: F
 
 A process declared by name and inputs is mentioned the same way. The process that mentions it then requires that tag, and none of what its prose mentions:
 
-```typescript title="src/Lead.ts"
+```typescript title="src/Lead.process.ts"
 import * as AI from "@alchemy.run/ai";
 import { Engineer } from "./Engineer.process.ts";
 

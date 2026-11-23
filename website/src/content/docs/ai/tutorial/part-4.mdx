@@ -40,7 +40,7 @@ See [Sandboxes](/ai/sandboxes) for the other platforms.
 
 `AI.Grep` and `AI.Read` are names every harness has a tool for. Mention them:
 
-```diff lang="typescript" title="src/Triage.ts"
+```diff lang="typescript" title="src/Triage.process.ts"
 import { IssueId } from "./Board/Issue.id.ts";
 
 -  You look after issue ${issue} of a GitHub repository.
@@ -70,7 +70,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 
 import { ModelsLive, Smart } from "./Models.ts";
 +import { SandboxLive } from "./Sandbox.ts";
-import { Triage } from "./Triage.ts";
+import { Triage } from "./Triage.process.ts";
 
 -const HarnessLive = Pi.HarnessLive.pipe(Layer.provide(PiCloudflare.DurableObjectStorage));
 +const HarnessLive = Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools).pipe(
@@ -86,9 +86,9 @@ const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), boardOver(own))
 
 ## Declare a tool to search issues
 
-A tool is a contract and a Layer that implements it. This one finds duplicates:
+A tool is a contract and a Layer that implements it, together in a file named after the tool. This one finds duplicates:
 
-```typescript title="src/Tools.ts"
+```typescript title="src/SearchIssues.tool.ts"
 import * as AI from "@alchemy.run/ai";
 import * as GitHub from "@alchemy.run/github";
 import * as Effect from "effect/Effect";
@@ -127,32 +127,37 @@ export const SearchIssuesLive = SearchIssues.make(
 
 ## Declare a tool to answer
 
-The session answers by posting a comment. `MARKER` is hidden in each one, so the session's own comments can be told from a person's:
+The session answers by posting a comment. Each tool has its own file, with its contract and its Layer. `MARKER` is hidden in each comment, so the session's own comments can be told from a person's:
 
-```diff lang="typescript" title="src/Tools.ts"
+```typescript title="src/PostAnswer.tool.ts"
+import * as AI from "@alchemy.run/ai";
+import * as GitHub from "@alchemy.run/github";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import { Repo } from "./Repo.ts";
-+
-+export const MARKER = "<!-- ai-issues -->";
-+
-+export class PostAnswer extends AI.Tool<PostAnswer>()("post_answer", {
-+  description: "Post your answer on the issue as a comment, in Markdown.",
-+  parameters: Schema.Struct({ issue: Schema.String, markdown: Schema.String }),
-+  success: Schema.Struct({ url: Schema.String }),
-+}) {}
-+
-+export const PostAnswerLive = PostAnswer.make(
-+  Effect.gen(function* () {
-+    const comment = yield* GitHub.CreateIssueComment(yield* Repo);
-+
-+    return Effect.fn(function* ({ issue, markdown }) {
-+      const posted = yield* comment({
-+        issue_number: Number(issue),
-+        body: `${markdown}\n\n${MARKER}`,
-+      }).pipe(Effect.orDie);
-+      return { url: posted.html_url };
-+    });
-+  }),
-+).pipe(Layer.provide(GitHub.CreateIssueCommentHttp));
+
+export const MARKER = "<!-- ai-issues -->";
+
+export class PostAnswer extends AI.Tool<PostAnswer>()("post_answer", {
+  description: "Post your answer on the issue as a comment, in Markdown.",
+  parameters: Schema.Struct({ issue: Schema.String, markdown: Schema.String }),
+  success: Schema.Struct({ url: Schema.String }),
+}) {}
+
+export const PostAnswerLive = PostAnswer.make(
+  Effect.gen(function* () {
+    const comment = yield* GitHub.CreateIssueComment(yield* Repo);
+
+    return Effect.fn(function* ({ issue, markdown }) {
+      const posted = yield* comment({
+        issue_number: Number(issue),
+        body: `${markdown}\n\n${MARKER}`,
+      }).pipe(Effect.orDie);
+      return { url: posted.html_url };
+    });
+  }),
+).pipe(Layer.provide(GitHub.CreateIssueCommentHttp));
 ```
 
 ## Ignore the session's own comments
@@ -161,7 +166,7 @@ A comment the session posts arrives as an event too:
 
 ```diff lang="typescript" title="src/GitHubIssues.ts"
 import { owner, repository } from "./Repo.ts";
-+import { MARKER } from "./Tools.ts";
++import { MARKER } from "./PostAnswer.tool.ts";
 
         Match.when({ name: "issue_comment", payload: { action: "created" } }, ({ payload }) =>
 -          issues.send(
@@ -189,7 +194,7 @@ import { owner, repository } from "./Repo.ts";
 
 How to write an answer is its own process. It is prose with a description, and nothing else:
 
-```typescript title="src/Answering.ts"
+```typescript title="src/Answering.process.ts"
 import * as AI from "@alchemy.run/ai";
 
 export class Answering extends AI.Process<Answering>()("Answering", {
@@ -206,12 +211,13 @@ export class Answering extends AI.Process<Answering>()("Answering", {
 
 A session that mentions `Answering` always sees its description, and reads its prose only when it follows it:
 
-```diff lang="typescript" title="src/Triage.ts"
+```diff lang="typescript" title="src/Triage.process.ts"
 import * as AI from "@alchemy.run/ai";
-+import { Answering } from "./Answering.ts";
++import { Answering } from "./Answering.process.ts";
 import { Board } from "./Board/Board.model.ts";
 import { IssueId } from "./Board/Issue.id.ts";
-+import { PostAnswer, SearchIssues } from "./Tools.ts";
++import { PostAnswer } from "./PostAnswer.tool.ts";
++import { SearchIssues } from "./SearchIssues.tool.ts";
 
 -  description: "Say what kind of issue this is.",
 +  description: "Answer one issue of the repository and say what kind of issue it is.",
@@ -236,8 +242,9 @@ import { IssueId } from "./Board/Issue.id.ts";
 
 ```diff lang="typescript" title="src/Agents.ts"
 import { SandboxLive } from "./Sandbox.ts";
-+import { PostAnswerLive, SearchIssuesLive } from "./Tools.ts";
-import { Triage } from "./Triage.ts";
++import { PostAnswerLive } from "./PostAnswer.tool.ts";
++import { SearchIssuesLive } from "./SearchIssues.tool.ts";
+import { Triage } from "./Triage.process.ts";
 
 -const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), boardOver(own)).pipe(
 +const Live = Layer.mergeAll(

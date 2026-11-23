@@ -9,7 +9,7 @@ A **process** is prose that says how to carry out a piece of work. The prose men
 
 A process is a class with a name, a description and its prose:
 
-```typescript title="src/Research.ts"
+```typescript title="src/Research.process.ts"
 import * as AI from "@alchemy.run/ai";
 
 export class Research extends AI.Process<Research>()("Research", {
@@ -27,9 +27,9 @@ The model reads the prose with each mention replaced by its name: `grep` and `re
 
 Any [tool](/ai/tools) can be mentioned: one of yours, a [coding tool](/ai/coding-tools), or an [MCP server](/ai/mcp-servers), which stands for every tool it offers.
 
-```typescript title="src/Release.ts"
+```typescript title="src/Release.process.ts"
 import * as AI from "@alchemy.run/ai";
-import { Deploy } from "./Deploy.ts";
+import { Deploy } from "./Deploy.tool.ts";
 
 export class Release extends AI.Process<Release>()("Release", {
   description: "Build the project and upload a release.",
@@ -44,7 +44,7 @@ export class Release extends AI.Process<Release>()("Release", {
 
 An `AI.Input` is a value a session is started with: a name and a schema. Mentioning one in the prose makes it an input of the process.
 
-```typescript title="src/Research.ts"
+```typescript title="src/Research.process.ts"
 import * as AI from "@alchemy.run/ai";
 import * as Schema from "effect/Schema";
 
@@ -117,11 +117,6 @@ import * as Schema from "effect/Schema";
 export const issue = AI.Input("issue", Schema.Number);
 
 export class Triage extends AI.Process<Triage>()("Triage", { inputs: [issue] }) {}
-```
-
-```typescript title="src/Triage.ts"
-import * as AI from "@alchemy.run/ai";
-import { issue, Triage } from "./Triage.process.ts";
 
 export const TriageLive = Triage.toLayer({
   description: "Say what kind of issue this is.",

@@ -5,8 +5,8 @@ import { CommentOnIssue } from "./Board/CommentOnIssue.command.ts";
 import { Issue } from "./Board/Issue.aggregate.ts";
 import { IssueId } from "./Board/Issue.id.ts";
 import { ReportIssue } from "./Board/ReportIssue.command.ts";
+import { MARKER } from "./PostAnswer.tool.ts";
 import { owner, repository } from "./Repo.ts";
-import { MARKER } from "./Tools.ts";
 
 /**
  * The repository's events, as commands on the board. Nothing here knows

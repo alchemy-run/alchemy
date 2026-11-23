@@ -705,6 +705,7 @@ const SECTIONS: Section[] = [
       slugs: [
         "ai/index",
         "ai/what-is-alchemy-ai",
+        "ai/project-layout",
         "ai/tutorial/part-1",
         "ai/tutorial/part-2",
         "ai/tutorial/part-3",

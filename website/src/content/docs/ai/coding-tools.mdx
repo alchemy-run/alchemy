@@ -30,7 +30,7 @@ A name says nothing about how the tool works. Each harness ships its own `bash`,
 
 Mention the tools a [process](/ai/processes) should have, one at a time:
 
-```typescript title="src/Research.ts"
+```typescript title="src/Research.process.ts"
 import * as AI from "@alchemy.run/ai";
 
 export class Research extends AI.Process<Research>()("Research", {
@@ -43,7 +43,7 @@ export class Research extends AI.Process<Research>()("Research", {
 
 `AI.CodingTools` is all six at once:
 
-```typescript title="src/Engineer.ts"
+```typescript title="src/Engineer.process.ts"
 import * as AI from "@alchemy.run/ai";
 
 export class Engineer extends AI.Process<Engineer>()("Engineer", {
@@ -100,7 +100,7 @@ const reply = yield* harness.session("pr-142").prompt("Why does the login test f
 
 `make` on a name takes the description, the schema and the handler together. Here `bash` logs every command before it runs:
 
-```typescript title="src/AuditedBash.ts"
+```typescript title="src/AuditedBash.tool.ts"
 import * as AI from "@alchemy.run/ai";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";

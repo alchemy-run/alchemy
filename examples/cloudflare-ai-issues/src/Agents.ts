@@ -12,9 +12,10 @@ import type { IssueId } from "./Board/Issue.id.ts";
 import { IssueWorkLive } from "./Board/IssueWork.policy.ts";
 import { Triager } from "./Board/Triager.external.ts";
 import { ModelsLive, Smart } from "./Models.ts";
+import { PostAnswerLive } from "./PostAnswer.tool.ts";
 import { SandboxLive } from "./Sandbox.ts";
-import { PostAnswerLive, SearchIssuesLive } from "./Tools.ts";
-import { Triage } from "./Triage.ts";
+import { SearchIssuesLive } from "./SearchIssues.tool.ts";
+import { Triage } from "./Triage.process.ts";
 
 /** What the object of one issue answers. */
 interface Agent {

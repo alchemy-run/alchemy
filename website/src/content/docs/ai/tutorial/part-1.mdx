@@ -41,7 +41,7 @@ export const ModelsLive = AICloudflare.Model(Smart, {
 
 A process is prose that says how a piece of work is done. `Triage` takes one input, the issue it looks after, and mentions it so the model knows which value is which:
 
-```typescript title="src/Triage.ts"
+```typescript title="src/Triage.process.ts"
 import * as AI from "@alchemy.run/ai";
 import * as Schema from "effect/Schema";
 
@@ -71,7 +71,7 @@ import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { ModelsLive, Smart } from "./Models.ts";
-import { Triage } from "./Triage.ts";
+import { Triage } from "./Triage.process.ts";
 
 const HarnessLive = Pi.HarnessLive.pipe(Layer.provide(PiCloudflare.DurableObjectStorage));
 

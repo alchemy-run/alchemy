@@ -4,9 +4,9 @@ import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { Comment, CommentLive } from "./Comment.tool.ts";
 import { Fast, FastLive } from "./models.ts";
 import { Sandbox } from "./Sandbox.ts";
-import { Comment, CommentLive } from "./tools.ts";
 
 const HarnessLive = Layer.mergeAll(
   FastLive,

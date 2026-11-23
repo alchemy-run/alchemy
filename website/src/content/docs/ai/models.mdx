@@ -97,10 +97,10 @@ export const ModelsLive = AI.DefaultModel(Smart).pipe(
 
 A process that mentions a model may be run on it, and may start other sessions on it:
 
-```typescript title="src/Engineer.ts"
+```typescript title="src/Engineer.process.ts"
 import * as AI from "@alchemy.run/ai";
 import { Fast } from "./models.ts";
-import { Research } from "./Research.ts";
+import { Research } from "./Research.process.ts";
 
 export class Engineer extends AI.Process<Engineer>()("Engineer", {
   description: "Make one change to the project.",

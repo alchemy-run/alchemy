@@ -9,7 +9,7 @@ An MCP server offers tools over the [Model Context Protocol](https://modelcontex
 
 A server is a class with a name. Its Layer is the client: here a server reached over HTTP.
 
-```typescript title="src/mcp.ts"
+```typescript title="src/Docs.mcp.ts"
 import * as AI from "@alchemy.run/ai";
 import { McpClient, McpProtocol } from "effect/ai";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -33,9 +33,9 @@ The harness builds the client where it runs, so the client can use a Worker's se
 
 A [process](/ai/processes) that mentions the server may call every tool the server offers:
 
-```typescript title="src/Support.ts"
+```typescript title="src/Support.process.ts"
 import * as AI from "@alchemy.run/ai";
-import { Docs } from "./Docs.ts";
+import { Docs } from "./Docs.mcp.ts";
 
 export class Support extends AI.Process<Support>()("Support", {
   description: "Answer a question about the product from its documentation.",

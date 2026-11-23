@@ -6,10 +6,10 @@ import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import { Add, AddLive } from "./Add.tool.ts";
 import { Guard } from "./extensions.ts";
 import { Fast, FastLive } from "./models.ts";
 import { Notes } from "./Notes.ts";
-import { Add, AddLive } from "./tools.ts";
 
 /** Everything the harness needs: its model, its tools, where scripts run, and its storage. */
 const HarnessLive = Layer.mergeAll(

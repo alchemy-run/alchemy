@@ -27,7 +27,7 @@ export const FastLive = AICloudflare.Model(Fast, {
 
 Declare a tool: what it takes, what it returns, and a handler:
 
-```typescript title="src/tools.ts"
+```typescript title="src/Add.tool.ts"
 import * as AI from "@alchemy.run/ai";
 import * as Schema from "effect/Schema";
 
@@ -42,9 +42,9 @@ export const AddLive = Add.make(({ a, b }) => ({ sum: a + b }));
 
 Describe the work. Mentioning the tool gives it to the process:
 
-```typescript title="src/Accountant.ts"
+```typescript title="src/Accountant.process.ts"
 import * as AI from "@alchemy.run/ai";
-import { Add } from "./tools.ts";
+import { Add } from "./Add.tool.ts";
 
 export class Accountant extends AI.Process<Accountant>()("Accountant", {
   description: "Add up the numbers it is given.",
@@ -62,9 +62,9 @@ import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Accountant } from "./Accountant.ts";
+import { Accountant } from "./Accountant.process.ts";
 import { Fast, FastLive } from "./models.ts";
-import { AddLive } from "./tools.ts";
+import { AddLive } from "./Add.tool.ts";
 
 const Live = Layer.mergeAll(Pi.HarnessLive, AI.DefaultModel(Fast), AddLive).pipe(
   Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, FastLive)),

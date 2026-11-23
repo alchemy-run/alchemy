@@ -12,7 +12,7 @@ Yield the process in the object's outer Effect and provide its Layers once:
 ```typescript title="src/Engineers.ts"
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
-import { Engineer } from "./Engineer.ts";
+import { Engineer } from "./Engineer.process.ts";
 import { Live } from "./Layers.ts";
 
 export default class Engineers extends Cloudflare.DurableObject<Engineers>()(

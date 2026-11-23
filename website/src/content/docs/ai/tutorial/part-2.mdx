@@ -26,7 +26,7 @@ export type IssueId = typeof IssueId.Type;
 
 ## Use it as the process's input
 
-```diff lang="typescript" title="src/Triage.ts"
+```diff lang="typescript" title="src/Triage.process.ts"
 import * as AI from "@alchemy.run/ai";
 -import * as Schema from "effect/Schema";
 +import { IssueId } from "./Board/Issue.id.ts";
@@ -158,7 +158,7 @@ export class Board extends Domain.Model("Board", {
 
 A model's commands and views are members of its class. Mention one, and a session may use it:
 
-```diff lang="typescript" title="src/Triage.ts"
+```diff lang="typescript" title="src/Triage.process.ts"
 import * as AI from "@alchemy.run/ai";
 +import { Board } from "./Board/Board.model.ts";
 import { IssueId } from "./Board/Issue.id.ts";

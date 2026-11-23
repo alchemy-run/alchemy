@@ -151,7 +151,7 @@ import { IssueDetail } from "./IssueDetail.view.ts";
 The triager will be the Durable Object of each issue. Write down what one answers, and what the objects are, as plain types:
 
 ```diff lang="typescript" title="src/Agents.ts"
-import { Triage } from "./Triage.ts";
+import { Triage } from "./Triage.process.ts";
 +
 +interface Agent {
 +  readonly start: (issue: IssueId) => Effect.Effect<void>;
@@ -259,7 +259,7 @@ Outside the objects, the handle on them is the class:
 
 ## Tell the session about replies
 
-```diff lang="typescript" title="src/Triage.ts"
+```diff lang="typescript" title="src/Triage.process.ts"
   ${Board.LabelIssue}: bug when something is broken, feature when something
   new is asked for, question otherwise.
 +

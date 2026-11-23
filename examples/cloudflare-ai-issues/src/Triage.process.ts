@@ -1,8 +1,9 @@
 import * as AI from "@alchemy.run/ai";
-import { Answering } from "./Answering.ts";
+import { Answering } from "./Answering.process.ts";
 import { Board } from "./Board/Board.model.ts";
 import { IssueId } from "./Board/Issue.id.ts";
-import { PostAnswer, SearchIssues } from "./Tools.ts";
+import { PostAnswer } from "./PostAnswer.tool.ts";
+import { SearchIssues } from "./SearchIssues.tool.ts";
 
 /** The issue a session looks after. */
 export const issue = AI.Input("issue", IssueId);
