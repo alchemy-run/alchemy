@@ -112,6 +112,6 @@ export const Sandbox = AIBoat.Sandboxes(
 
 ## What the image needs
 
-A harness installs its own program in each new sandbox: Pi its daemon, OpenCode itself. The image needs `sh`, `curl`, `tar`, `sha512sum`, `base64`, `dd` and `mkfifo`, and the sandbox needs to reach `registry.npmjs.org` for that install. `node:22-bookworm` has them all, and so does Boat's own image.
+Pi installs its daemon in each new sandbox. The image needs `sh`, `curl`, `tar`, `sha512sum`, `base64`, `dd` and `mkfifo`, and the sandbox needs to reach `registry.npmjs.org` for that install. OpenCode installs nothing: its coding tools run `bash`, `grep` and `base64`. `node:22-bookworm` has them all, and so does Boat's own image.
 
 A platform that isn't here, or a Layer that should work differently, is a Layer of your own. See [Build your own](/ai/custom-sandboxes).

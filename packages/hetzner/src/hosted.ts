@@ -511,6 +511,10 @@ WantedBy=multi-user.target
         `set -uo pipefail`,
         `export HOME=/root`,
         `mkdir -p ${JSON.stringify(appDir)}`,
+        // The env file can hold secrets: only root may read it. scp keeps
+        // the mode of the file it overwrites.
+        `touch ${JSON.stringify(`${appDir}/env`)}`,
+        `chmod 600 ${JSON.stringify(`${appDir}/env`)}`,
         // A fresh server's cloud-init bootstrap (`ALCHEMY_BOOTSTRAP` in
         // `Server.ts`) installs these same packages and holds the dpkg lock
         // while it runs; let it finish instead of racing it.
@@ -615,6 +619,10 @@ WantedBy=multi-user.target
         `set -uo pipefail`,
         `export HOME=/root`,
         `mkdir -p ${JSON.stringify(appDir)}`,
+        // The env file can hold secrets: only root may read it. scp keeps
+        // the mode of the file it overwrites.
+        `touch ${JSON.stringify(`${appDir}/env`)}`,
+        `chmod 600 ${JSON.stringify(`${appDir}/env`)}`,
         `if command -v cloud-init >/dev/null 2>&1; then cloud-init status --wait >/dev/null 2>&1 || true; fi`,
         `if ! command -v docker >/dev/null 2>&1; then`,
         `  for attempt in 1 2 3 4 5; do`,

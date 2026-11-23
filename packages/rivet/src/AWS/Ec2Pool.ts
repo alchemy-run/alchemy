@@ -4,7 +4,7 @@ import type { SubnetId } from "@alchemy.run/aws/EC2/Subnet";
 import type { Input } from "alchemy/Input";
 import * as Effect from "effect/Effect";
 import { isImageProgram, makePoolLayer, type PoolSettings } from "../internal/PoolHost.ts";
-import { nodeEnvironment, poolNetworkOf, resolvePoolNetwork } from "./internal/Pool.ts";
+import { poolNetworkOf, resolvePoolNetwork, secretNodeEnvironment } from "./internal/Pool.ts";
 
 export interface Ec2PoolOptions extends PoolSettings {
   /**
@@ -57,6 +57,11 @@ done
  * Every Durable Object given the same pool shares its nodes: declare the
  * pool once and provide it to each class.
  *
+ * The control plane's token, and every secret a class reads as config,
+ * are kept in Secrets Manager secrets of the pool's own. Each instance
+ * reads them with its own role, granted those secrets alone, whenever its
+ * node starts; they never reach S3 or the instance's user data.
+ *
  * ### Running Durable Objects on EC2
  * **Example:** A pool of two instances
  * ```typescript
@@ -86,7 +91,9 @@ export const Ec2Pool = (id: string, options: Ec2PoolOptions = {}) =>
       Effect.gen(function* () {
         const { program } = nodes;
         const network = yield* resolvePoolNetwork(id, nodes.network, options.cidrBlock);
-        const env = nodeEnvironment(nodes);
+        // The token and the classes' secrets come from Secrets Manager,
+        // read by each instance with its own role, never from S3 or user data.
+        const { env, secrets } = yield* secretNodeEnvironment(id, nodes);
         const subnets = network.subnetIds;
         for (let i = 0; i < (options.replicas ?? 1); i++) {
           // Every class the pool hosts is bundled into the node program.
@@ -106,6 +113,7 @@ export const Ec2Pool = (id: string, options: Ec2PoolOptions = {}) =>
             securityGroupIds: [network.securityGroupId as Input<SecurityGroupId>],
             associatePublicIpAddress: true,
             env,
+            secrets,
           });
         }
       }),

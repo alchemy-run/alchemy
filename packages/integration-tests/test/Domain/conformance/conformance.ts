@@ -105,6 +105,71 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
     );
 
   test(
+    "a rewrite changes an instance's events, its state and its view, once per id",
+    Effect.gen(function* () {
+      const id = fresh("rewrite");
+      yield* call(`/write/${id}?text=${encodeURIComponent("sam was here")}`);
+      expect(yield* call(`/write/${id}?text=hello`)).toEqual({ version: 2 });
+      expect(yield* call(`/redact/${id}?word=sam&id=r-1`)).toEqual({
+        changed: 1,
+        lines: ["", "hello"],
+        // The view folded its inputs again: a blank first line joins as none.
+        text: "hello",
+      });
+      // The same run again answers as it did, and a new one finds nothing left to change.
+      expect(yield* call(`/redact/${id}?word=sam&id=r-1`)).toMatchObject({ changed: 1 });
+      expect(yield* call(`/redact/${id}?word=sam&id=r-2`)).toMatchObject({ changed: 0 });
+      // The instance takes commands again, at the version it had.
+      expect(yield* call(`/write/${id}?text=again`)).toEqual({ version: 3 });
+    }),
+    options,
+  );
+
+  test(
+    "a compaction leaves the roll-up, the same state, and an instance that goes on",
+    Effect.gen(function* () {
+      const id = fresh("compact");
+      yield* call(`/write/${id}?text=a`);
+      yield* call(`/write/${id}?text=b`);
+      expect(yield* call(`/squash/${id}`)).toMatchObject({
+        version: 3,
+        compacted: 2,
+        events: ["MemoBroughtForward"],
+        lines: ["a", "b"],
+      });
+      expect(yield* call(`/write/${id}?text=c`)).toEqual({ version: 4 });
+      // The view kept what it built, without folding the roll-up, and follows what comes after.
+      yield* eventually<{ readonly text: string | null }>(
+        `/redact/${id}?word=nothing-has-this`,
+        ({ text }) => text === "a|b|c",
+      );
+    }),
+    options,
+  );
+
+  test(
+    "a rewrite after a compaction reaches the events the view kept",
+    Effect.gen(function* () {
+      const id = fresh("compact-rewrite");
+      yield* call(`/write/${id}?text=${encodeURIComponent("sam was here")}`);
+      yield* call(`/write/${id}?text=hello`);
+      yield* call(`/squash/${id}`);
+      // The instance holds the roll-up alone; the view holds its copy of both lines.
+      expect(yield* call(`/redact/${id}?word=sam`)).toEqual({
+        changed: 1,
+        lines: ["", "hello"],
+        text: "hello",
+      });
+      expect(yield* call(`/write/${id}?text=again`)).toEqual({ version: 4 });
+      yield* eventually<{ readonly text: string | null }>(
+        `/redact/${id}?word=nothing-has-this`,
+        ({ text }) => text === "hello|again",
+      );
+    }),
+    options,
+  );
+
+  test(
     "a command commits and replies with the new state",
     Effect.gen(function* () {
       const id = fresh("commit");
@@ -534,6 +599,20 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       // Past the hold's window, and the policy's delivery.
       yield* Effect.sleep("10 seconds");
       expect(yield* call(`/hold/${id}`)).toEqual({ status: "released" });
+    }),
+    options,
+  );
+
+  test(
+    "a policy relays a command through 20 aggregate instances",
+    Effect.gen(function* () {
+      // Each hop's event makes a policy send a command to the next instance.
+      // A platform that runs each hop inside the call that delivered the last
+      // one nests deeper every hop, until the host refuses the call (#3627).
+      const chain = fresh("relay");
+      expect(yield* call(`/relay/${chain}?hops=20`)).toEqual({ passed: true });
+      const last = yield* eventually<{ passed: boolean }>(`/hop/${chain}-0`, (hop) => hop.passed);
+      expect(last).toEqual({ passed: true });
     }),
     options,
   );

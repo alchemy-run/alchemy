@@ -537,7 +537,7 @@ const syncRules = (
           compute.patchRuleFirewallPolicies({
             ...toRuleBody(rule),
             firewallPolicy: firewallPolicyId,
-            priority,
+            rulePriority: priority,
           }),
         );
       }

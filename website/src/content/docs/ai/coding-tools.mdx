@@ -13,7 +13,7 @@ A name says nothing about how the tool works. Each harness ships its own `bash`,
   nodes={[
     { id: "bash", label: "AI.Bash", type: "a name, listed on a harness", tone: "accent", icon: "square-terminal" },
     { id: "pi", label: "Pi.Bash", type: "Layer", icon: "layers", specs: [["runs", "in the harness"], ["takes", "command, timeout"]] },
-    { id: "oc", label: "OpenCode.Bash", type: "Layer", icon: "layers", specs: [["runs", "in the sandbox"], ["takes", "command, workdir"]] },
+    { id: "oc", label: "OpenCode.Bash", type: "Layer", icon: "layers", specs: [["runs", "in the harness"], ["takes", "command, timeout"]] },
     { id: "own", label: "AuditedBash", type: "your Layer", icon: "layers", specs: [["runs", "your handler"], ["takes", "your schema"]] },
   ]}
   areas={["bash bash bash", "pi oc own"]}
@@ -59,7 +59,7 @@ export const HarnessLive = Layer.mergeAll(
 );
 ```
 
-`OpenCode.CodingTools` provides OpenCode's own six tools, which OpenCode runs inside the sandbox. `Pi.CodingTools` provides Pi's, which run in the harness and reach the sandbox from there, so it needs your sandboxes:
+`OpenCode.CodingTools` and `Pi.CodingTools` each provide six tools that run in the harness and reach the sandbox from there, so both need your sandboxes:
 
 ```typescript
 const CodingToolsLive = Pi.CodingTools.pipe(Layer.provideMerge(Sandbox));
@@ -69,7 +69,7 @@ Moving a harness from one to the other changes the Layer and nothing in its `too
 
 ## What the model sees
 
-The model reads the description and parameters of whichever implementation is provided, and they differ. OpenCode's `edit` takes `filePath`, `oldString` and `newString`; Pi's takes a `path` and a list of `edits`. A prompt that names a tool's parameters is written for one harness.
+The model reads the description and parameters of whichever implementation is provided, and they differ. OpenCode's `edit` takes `path`, `oldText` and `newText`; Pi's takes a `path` and a list of `edits`. A prompt that names a tool's parameters is written for one harness.
 
 ## Pick tools for one conversation
 

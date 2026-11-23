@@ -16,6 +16,7 @@ import {
   mergeContainerCreateEnv,
   rewriteLoopbackHosts,
   toPullRef,
+  withCreatePlatform,
 } from "../Docker.ts";
 
 const PINNED =
@@ -431,6 +432,19 @@ const makeFailingStub = (verb: string, stderr: string, exitCode = 1) =>
       );
     }),
   );
+
+describe("withCreatePlatform", () => {
+  it("pins a create request to the platform", () => {
+    expect(withCreatePlatform("/v1.47/containers/create?name=app", "linux/amd64")).toBe(
+      "/v1.47/containers/create?name=app&platform=linux%2Famd64",
+    );
+  });
+  it("leaves the request alone without a platform", () => {
+    expect(withCreatePlatform("/containers/create?name=app", undefined)).toBe(
+      "/containers/create?name=app",
+    );
+  });
+});
 
 describe("buildFailureHint", () => {
   it("names the buildx plugin when docker only names the flag", () => {

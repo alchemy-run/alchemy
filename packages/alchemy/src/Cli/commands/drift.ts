@@ -19,6 +19,12 @@ import { renderPlanning } from "./render.ts";
  */
 export const EXIT_DRIFT_DETECTED = 2;
 
+/**
+ * Exit code when no drift was found but a resource could not be checked
+ * because an interrupted deploy left it mid-flight; `deploy` recovers it.
+ */
+export const EXIT_DRIFT_UNCHECKED = 3;
+
 const repairFlag = Flag.Boolean("repair").pipe(
   Flag.withDescription("Repair detected drift without prompting"),
   Flag.withDefault(false),
@@ -59,7 +65,11 @@ const routeDrift = Effect.fn(function* ({
     }),
   );
   if (!Alchemist.Drift.hasDrift(snapshot)) {
-    return yield* cli.displayPlan(snapshot.native);
+    yield* cli.displayPlan(snapshot.native);
+    if (Alchemist.Drift.hasUnchecked(snapshot)) {
+      return yield* setExitCode(EXIT_DRIFT_UNCHECKED);
+    }
+    return;
   }
 
   // `--yes` answers the repair prompt, so it repairs like `--repair`.
@@ -92,6 +102,8 @@ const routeDrift = Effect.fn(function* ({
   }
 
   yield* Alchemist.Drift.execute(snapshot).pipe(renderApply(snapshot.native));
+  // Repair never touches an interrupted deploy, so it is still unchecked.
+  if (Alchemist.Drift.hasUnchecked(snapshot)) yield* setExitCode(EXIT_DRIFT_UNCHECKED);
 });
 
 export const driftCommand = Command.make(

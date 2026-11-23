@@ -69,4 +69,16 @@ describe("containerEnvFile", { tags: ["unit"] }, () => {
       expect(error.key).toBe("ALCHEMY_DOCKER_ENV");
     }),
   );
+
+  it.effect(
+    "lists -e NAME for variables the unit loads from another file, without their values",
+    () =>
+      Effect.gen(function* () {
+        expect(yield* containerEnvFile({ A: "a" }, ["TOKEN", "A"])).toBe(
+          ['A="a"', 'ALCHEMY_DOCKER_ENV="-e A -e TOKEN"'].join("\n"),
+        );
+        const error = yield* containerEnvFile({}, ["MY.KEY"]).pipe(Effect.flip);
+        expect(error.key).toBe("MY.KEY");
+      }),
+  );
 });

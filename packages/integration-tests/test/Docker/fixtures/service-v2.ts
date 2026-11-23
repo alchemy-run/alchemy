@@ -2,7 +2,6 @@ import * as Docker from "@alchemy.run/docker";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { SERVICE_EXTERNAL_PORT } from "./service.ts";
 
 /**
  * A code change to `./service.ts`: same logical id and props, different
@@ -14,7 +13,7 @@ export default class TestServiceV2 extends Docker.Service<TestServiceV2>()(
   {
     main: import.meta.filename,
     port: 3000,
-    ports: [{ external: SERVICE_EXTERNAL_PORT, internal: 3000 }],
+    ports: [{ internal: 3000 }],
     replicas: 1,
   },
   Effect.succeed({

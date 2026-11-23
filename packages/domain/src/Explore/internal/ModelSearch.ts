@@ -2510,7 +2510,8 @@ export const search = Effect.fn(function* (
           const value = frame.signals.get(name);
           if (value) return Effect.succeed(value);
           frame.waiting = name;
-          return Effect.fail(new Value.Rejected({ rejection: SUSPENDED }));
+          // Nothing that handles a failure handles a saga that is waiting.
+          return Effect.fail(new Value.Rejected({ rejection: SUSPENDED, defect: true }));
         }),
       );
     });

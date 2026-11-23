@@ -5,7 +5,7 @@ import {
   REGIONS,
 } from "@distilled.cloud/archil/Credentials";
 import { ConfigError } from "@distilled.cloud/core/errors";
-import { lazyCredentials } from "alchemy/Auth/Resolve";
+import { lazyCredentials, orDieCredentialsUnavailable } from "alchemy/Auth/Resolve";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -53,9 +53,10 @@ const make = (
               message: `Unknown Archil region "${creds.region}". Valid regions: ${Object.keys(REGIONS).join(", ")}`,
             }),
           );
-    });
-    // `Account` is typed as never failing, so a credentials failure dies
-    // here; the engine still reports it as `CredentialsRequired`.
+      // `Credentials` has no error channel, so a failed resolution dies
+      // here; the engine reports it as `CredentialsRequired`.
+    }).pipe(orDieCredentialsUnavailable(ARCHIL_AUTH_PROVIDER_NAME));
+    // `Account` is typed as never failing too, and dies the same way.
     const accountInfo = yield* resolve.pipe(
       Effect.map((creds) => ({ region: creds.region, organization: creds.organization })),
       Effect.orDie,
