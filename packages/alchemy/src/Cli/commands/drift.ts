@@ -102,6 +102,8 @@ const routeDrift = Effect.fn(function* ({
   }
 
   yield* Alchemist.Drift.execute(snapshot).pipe(renderApply(snapshot.native));
+  // Repair never touches an interrupted deploy, so it is still unchecked.
+  if (Alchemist.Drift.hasUnchecked(snapshot)) yield* setExitCode(EXIT_DRIFT_UNCHECKED);
 });
 
 export const driftCommand = Command.make(

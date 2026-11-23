@@ -25,10 +25,10 @@ the stack program. Run `alchemy deploy` afterwards to refresh them.
 
 | Code | Meaning                                                    |
 | ---- | ---------------------------------------------------------- |
-| `0`  | No drift, or the drift was repaired                        |
+| `0`  | No drift, or the drift was repaired, and every resource was checked |
 | `1`  | The check failed, e.g. a resource couldn't be read         |
 | `2`  | Drift was found and not repaired                           |
-| `3`  | No drift found, but an interrupted deploy left a resource unchecked; run `alchemy deploy` to recover it |
+| `3`  | No drift left, but an interrupted deploy left a resource unchecked; run `alchemy deploy` to recover it |
 
 A scheduled job can alert on `2` and `3` without parsing the plan. A resource
 whose provider has no `read` (such as `Command.Build`) is listed as skipped

@@ -184,6 +184,7 @@ describe("CLI exit codes", { tags: ["unit", "local"] }, () => {
         interruptedDeploy: (yield* run(["deploy", "--yes"], undefined, true)).exitCode,
         unchecked: (yield* run(["drift"])).exitCode,
         driftedAndUnchecked: (yield* run(["drift"], "missing")).exitCode,
+        repairedButUnchecked: (yield* run(["drift", "--repair", "--yes"], "missing")).exitCode,
         destroy: (yield* run(["destroy", "--yes"])).exitCode,
       };
       expect(exitCodes).toEqual({
@@ -195,6 +196,7 @@ describe("CLI exit codes", { tags: ["unit", "local"] }, () => {
         interruptedDeploy: 1,
         unchecked: 3,
         driftedAndUnchecked: 2,
+        repairedButUnchecked: 3,
         destroy: 0,
       });
     }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
