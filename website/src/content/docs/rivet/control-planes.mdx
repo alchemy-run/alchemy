@@ -82,4 +82,17 @@ export const Cluster = Rivet.ControlPlane("Rivet", {
 
 It still creates a namespace for your stage. [Rivet Cloud](/rivet/rivet-cloud) runs the control plane for you.
 
+When the control plane also has a private address on a network your nodes can join, name both. A pool that runs its nodes on that network connects them to `nodeEndpoint`. Deploys, callers, and pools anywhere else keep using `endpoint`:
+
+```typescript title="src/cluster.ts"
+export const Cluster = Rivet.ControlPlane("Rivet", {
+  endpoint: "https://rivet.example.com",
+  token: Config.Redacted("RIVET_TOKEN"),
+  nodeEndpoint: "http://10.0.0.2:6420",
+  network: { kind: "gcp", network: "rivet", subnetwork: "rivet-us-central1", region: "us-central1" },
+});
+```
+
+`RivetGCP.CloudRunPool` and `RivetGCP.ComputeEnginePool` join a `gcp` network. See [GCP](/rivet/gcp#on-cloud-run).
+
 Next, [Pool](/rivet/pools): the nodes that run your code.

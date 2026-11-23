@@ -55,6 +55,8 @@ export const Default = RivetGCP.CloudRunPool("Default", {
 }).pipe(Layer.provide(Cluster));
 ```
 
+On a [`Rivet.ControlPlane`](/rivet/control-planes#use-one-you-already-run) with a `nodeEndpoint` on a `gcp` network, the nodes join that network and connect to the private address, with no `network` or `env` of your own. A `subnetwork` you name is used in that network. A `network` you name keeps the nodes off it, and they connect to the control plane's `endpoint`.
+
 The nodes run as the worker pool's own service account unless you name one, and that account is granted each secret before a revision reads it. The control plane's token reaches the nodes the same way, from a secret the pool keeps, so it never appears in the worker pool's configuration. Cloud Run holds a private network's addresses for up to a few hours after the pool is deleted, so a destroy in that window fails on the subnetwork, keeps it in state, and succeeds when run again later.
 
 ## On Compute Engine
