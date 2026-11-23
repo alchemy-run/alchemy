@@ -135,6 +135,105 @@ describe("aws-profile", { tags: ["unit", "provider:aws", "local"] }, () => {
   );
 });
 
+/**
+ * `profile edit --method aws-profile` reads the profile's kind and stores
+ * the method that serves it, so SSO and `aws login` profiles keep their
+ * login, refresh and logout flows.
+ */
+describe(
+  "aws-profile detects the profile kind",
+  { tags: ["unit", "provider:aws", "local"] },
+  () => {
+    const configure = (config: string) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-aws-profile-" });
+        const helper = path.join(dir, "credentials.sh");
+        yield* fs.writeFileString(
+          helper,
+          `printf '%s' '{"Version":1,"AccessKeyId":"process-key","SecretAccessKey":"process-secret"}'\n`,
+        );
+        yield* fs.writeFileString(path.join(dir, "credentials"), "");
+        yield* fs.writeFileString(path.join(dir, "config"), config.replace("$HELPER", helper));
+        const executable = yield* Effect.sync(() => process.execPath);
+        const result = yield* exec(
+          ChildProcess.make(
+            executable,
+            [path.join(import.meta.dirname, "fixtures", "aws-profile.ts")],
+            {
+              extendEnv: false,
+              env: {
+                HOME: dir,
+                ALCHEMY_HOME: dir,
+                AWS_CONFIG_FILE: path.join(dir, "config"),
+                AWS_SHARED_CREDENTIALS_FILE: path.join(dir, "credentials"),
+                AWS_PROFILE_TEST_ACTION: "configure",
+              },
+            },
+          ),
+        );
+        expect(result.stderr).toBe("");
+        expect(result.exitCode).toBe(0);
+        return JSON.parse(result.stdout) as Record<string, unknown>;
+      }).pipe(Effect.scoped, Effect.provide(PlatformServices));
+
+    it.effect("stores an SSO profile as sso", () =>
+      Effect.gen(function* () {
+        expect(
+          yield* configure(
+            [
+              "[profile sandbox]",
+              "sso_session = corp",
+              "sso_account_id = 123456789012",
+              "sso_role_name = Admin",
+              "region = us-west-2",
+              "[sso-session corp]",
+              "sso_start_url = https://corp.awsapps.com/start",
+              "sso_region = us-east-1",
+              "",
+            ].join("\n"),
+          ),
+        ).toEqual({ method: "sso", ssoProfile: "sandbox" });
+      }),
+    );
+
+    it.effect("stores an aws login profile as console-login", () =>
+      Effect.gen(function* () {
+        expect(
+          yield* configure(
+            "[profile sandbox]\nlogin_session = arn:aws:iam::123456789012:user/me\nregion = us-west-2\n",
+          ),
+        ).toEqual({ method: "console-login", loginProfile: "sandbox" });
+      }),
+    );
+
+    it.effect("verifies any other profile through STS as aws-profile", () =>
+      Effect.gen(function* () {
+        // The fixture's HTTP client reports the STS request, then interrupts it.
+        expect(
+          yield* configure(
+            '[profile sandbox]\ncredential_process = /bin/sh "$HELPER"\nregion = us-west-2\n',
+          ),
+        ).toEqual({ hostname: "sts.us-west-2.amazonaws.com" });
+      }),
+    );
+
+    for (const { name, config } of [
+      { name: "a profile that does not exist", config: "[profile other]\nregion = us-west-2\n" },
+      { name: "a profile with only a region", config: "[profile sandbox]\nregion = us-west-2\n" },
+    ]) {
+      it.effect(`asks to sign in ${name}`, () =>
+        Effect.gen(function* () {
+          const { error } = yield* configure(config);
+          expect(error).toContain("AWS profile 'sandbox' has no credentials");
+          expect(error).toContain("aws login --profile sandbox");
+        }),
+      );
+    }
+  },
+);
+
 describe("parseAwsSsoLoginOutput", { tags: ["unit", "provider:aws", "local"] }, () => {
   it("reads browser authorization JSON", () => {
     expect(

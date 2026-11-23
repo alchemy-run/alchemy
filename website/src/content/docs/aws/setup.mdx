@@ -1,6 +1,6 @@
 ---
 title: Setup
-description: Connect Alchemy to AWS with SSO, console login, stored access keys, or CI environment credentials.
+description: Connect Alchemy to AWS with an AWS CLI profile (console login, SSO, credential_process, assumed roles), stored access keys, or CI environment credentials.
 ---
 
 import PackageManagers from "../../../components/PackageManagers.astro";
@@ -29,7 +29,11 @@ authentication method. The choice is saved to your **`default`**
 command; a deploy with nothing configured fails with that exact
 command to run. Authentication changes only through the `profile` command.
 
-There are three local profile methods. Start with console login unless your organization already signs in through IAM Identity Center.
+Locally, pick **AWS CLI profile** and name a profile from `~/.aws/config`, or paste **access keys**. Alchemy reads what kind of profile it is and handles each one as below. If you don't have a profile yet, start with console login unless your organization already signs in through IAM Identity Center.
+
+```sh
+alchemy profile edit --add AWS --method aws-profile --set awsProfile=<name>
+```
 
 ### Console login (recommended)
 
@@ -42,6 +46,21 @@ Alchemy runs `aws login --profile <name>` (AWS CLI v2.32+) for you and loads the
 SSO is for organizations that have set up **IAM Identity Center**: a single sign-in for many accounts, with users and permission sets managed centrally, often connected to Okta, Google Workspace or Entra ID. It takes setup in an AWS Organization, so it pays off when a team works across several accounts.
 
 Alchemy runs `aws sso login --profile <name>` for you and loads credentials from the AWS SSO cache. The profile you pick in `~/.aws/config` decides the account and region. When the session expires, run `alchemy profile refresh`.
+
+### Any other AWS CLI profile
+
+A profile that uses `credential_process`, `role_arn` with `source_profile` or `credential_source`, `web_identity_token_file`, or keys in `~/.aws/credentials` works as it does for the AWS CLI and SDKs. Alchemy resolves it on each command and saves only the profile name and account ID.
+
+```ini
+# ~/.aws/config
+[profile sandbox]
+credential_process = /usr/local/bin/sandbox-aws-credentials
+region = us-east-1
+```
+
+Alchemy can't sign these profiles in for you, so `alchemy profile refresh` only checks that the profile still resolves. When it doesn't, fix the profile itself; `aws sts get-caller-identity --profile <name>` shows the same error. Profiles with `mfa_serial` aren't supported, since there's no prompt for the MFA code.
+
+The region comes from the profile, then `AWS_REGION`, then `AWS_DEFAULT_REGION`, the same as for console login and SSO. A set `AWS_REGION` overrides the profile's region on every method.
 
 ### Stored access keys
 
@@ -69,7 +88,7 @@ The region is required. The account ID is taken from
 ## Managing credentials
 
 Re-run the setup at any time (e.g. to switch from stored keys to
-SSO or console login, or to configure a separate `prod` profile):
+an AWS CLI profile, or to configure a separate `prod` profile):
 
 ```sh
 alchemy profile edit --reconfigure AWS

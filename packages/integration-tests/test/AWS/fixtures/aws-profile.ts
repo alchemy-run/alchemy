@@ -45,6 +45,20 @@ await Effect.runPromise(
       accountId: "123456789012",
     });
     const action = yield* Config.String("AWS_PROFILE_TEST_ACTION").pipe(Config.withDefault("read"));
+    if (action === "configure") {
+      // `profile edit --method aws-profile --set awsProfile=sandbox`. A
+      // profile resolved through `fromIni` is verified with STS, which the
+      // HTTP client above reports and interrupts.
+      const result = yield* auth.configureWith!("testing", {
+        method: "aws-profile",
+        values: { awsProfile: "sandbox" },
+      }).pipe(Effect.exit);
+      if (result._tag === "Success") {
+        return yield* Console.log(JSON.stringify(result.value));
+      }
+      if (Cause.hasInterruptsOnly(result.cause)) return;
+      return yield* Console.log(JSON.stringify({ error: Cause.pretty(result.cause) }));
+    }
     if (action === "refresh") {
       const result = yield* auth.login("testing", config).pipe(Effect.exit);
       if (result._tag !== "Failure" || !Cause.hasInterruptsOnly(result.cause)) {
