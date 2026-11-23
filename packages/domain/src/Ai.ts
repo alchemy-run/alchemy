@@ -9,7 +9,7 @@ import type * as RpcGroup from "effect/rpc/RpcGroup";
 import type * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
-import type * as Scope from "effect/Scope";
+import * as Scope from "effect/Scope";
 import type { Servable } from "./Api.ts";
 import { DefinitionError, DuplicateTool, ToolNameTooLong } from "./DefinitionError.ts";
 import { sendPayload } from "./internal.ts";
@@ -149,7 +149,7 @@ const toolOf = (api: string) => (op: Operation) => {
   // so such a value is returned as `{ value }`.
   const wrapped = !isObject(success);
   const write = op.operation === "send";
-  const tool = Tool.make(toolName({ api, name: op.name, operation: op.operation }), {
+  const spec = {
     description: toolDescription(op),
     // JSON codecs, as the Api's HTTP server uses: the tool decodes the
     // call's JSON once, and the in-process call does not decode it again.
@@ -158,13 +158,16 @@ const toolOf = (api: string) => (op: Operation) => {
     failure: Schema.toCodecJson(
       failures([rpc.errorSchema, ...[...rpc.middlewares].map((middleware) => middleware.error)]),
     ),
+  };
+  const tool = Tool.make(toolName({ api, name: op.name, operation: op.operation }), {
+    ...spec,
     // A rejection is a result the model can act on, not a failed generation.
     failureMode: "return",
   })
     .annotate(Tool.Readonly, !write)
     .annotate(Tool.Destructive, write)
     .annotate(Tool.Idempotent, !write);
-  return { tool, op, wrapped };
+  return { tool, op, wrapped, spec };
 };
 
 type Client = Record<string, unknown>;
@@ -332,3 +335,103 @@ export const toMcp = <A extends Toolable, R = never>(
     Services<A> | R
   >;
 };
+
+/** Options of {@link tools}. */
+export interface ToolsOptions<A extends Toolable, R = never> {
+  /**
+   * The calls a process may make, by name.
+   * @default every call of the Api that returns once
+   */
+  readonly expose?: ReadonlyArray<Exposable<A>>;
+  /**
+   * The headers each call carries to the Api's middleware: who the process
+   * acts as. Read in the context the process's Layer is built in. Without
+   * them, a call carries no headers.
+   */
+  readonly headers?: Effect.Effect<Headers.Input, never, R>;
+}
+
+/** A term an `AI.Process` can mention: its name in the prose, and the tools mentioning it gives. */
+export interface ApiTools<R> {
+  readonly "~alchemy/AI/Mention": {
+    readonly name: string;
+    readonly tools: Effect.Effect<ReadonlyArray<never>, never, R>;
+  };
+}
+
+/**
+ * An Api as something an `AI.Process` can mention. A process that mentions
+ * it may make the Api's calls: a command, a query, or a `get`, `peek`,
+ * `list` or `snapshot` of a view or stream. Each is a tool named
+ * `<api>_<name>_<operation>`, with the call's own schemas; a rejection
+ * comes back to the model as the tool's failure.
+ *
+ * The Api is the list of what the process may do: declare one per kind of
+ * process, or narrow one with `expose`. Running the process requires the
+ * hosted Domain and its middleware Layers, as the Api's own server does.
+ *
+ * **Example:** A process that works a board through its Api
+ * ```typescript
+ * import * as AI from "@alchemy.run/ai";
+ * import * as DomainAi from "@alchemy.run/domain/Ai";
+ *
+ * const board = DomainAi.tools(EngineerApi);
+ *
+ * export const EngineerLive = Engineer.toLayer({
+ *   description: "Fix one bug from the board.",
+ * })`
+ *   You are fixing issue ${issue} from ${board}. Mark the work started
+ *   first, and finished when you are done.
+ * `;
+ * ```
+ *
+ * **Example:** Acting as one identity, with only some calls
+ * ```typescript
+ * const board = DomainAi.tools(EngineerApi, {
+ *   expose: ["StartWork", "FinishWork", "IssueDetail.get"],
+ *   headers: Effect.succeed({ authorization: "Bearer engineer" }),
+ * });
+ * ```
+ */
+export const tools = <A extends Toolable, R = never>(
+  api: A,
+  options: ToolsOptions<A, R> = {},
+): ApiTools<Services<A> | R> => ({
+  "~alchemy/AI/Mention": {
+    name: api.apiName,
+    tools: Effect.gen(function* () {
+      const context = yield* Effect.context<Services<A> | R>();
+      const operations = operationsOf(api.serves).filter(isToolCall);
+      const exposed =
+        options.expose === undefined ? operations : exposedOf(operations, options.expose);
+      const headers = (options.headers ?? Effect.succeed(undefined)) as Effect.Effect<
+        Headers.Input | undefined,
+        never,
+        R
+      >;
+      // The client lives as long as the process's host: nothing closes it.
+      let client: Promise<Client> | undefined;
+      const clientOf = Effect.promise(
+        () =>
+          (client ??= Effect.runPromise(
+            Effect.flatMap(Scope.make(), (scope) =>
+              (outsideClient(api) as Effect.Effect<Client, never, Scope.Scope>).pipe(
+                Effect.provideService(Scope.Scope, scope),
+                Effect.provideContext(context),
+              ),
+            ),
+          )),
+      );
+      return exposed.map(toolOf(api.apiName)).map(({ tool, op, wrapped, spec }) => ({
+        "~alchemy/AI/Tool": "inline",
+        toolName: tool.name,
+        spec,
+        handler: (payload: unknown) =>
+          Effect.gen(function* () {
+            const value = yield* invoke(yield* clientOf, op, payload, yield* headers);
+            return wrapped ? { value } : value;
+          }).pipe(Effect.provideContext(context)),
+      })) as unknown as ReadonlyArray<never>;
+    }),
+  },
+});

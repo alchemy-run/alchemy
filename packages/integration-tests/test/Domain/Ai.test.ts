@@ -1,8 +1,11 @@
+import * as AI from "@alchemy.run/ai";
 import * as Domain from "@alchemy.run/domain";
 import * as DomainAi from "@alchemy.run/domain/Ai";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import * as InMemoryPlatform from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
+import { RuntimeContext } from "alchemy/RuntimeContext";
+import { LanguageModel } from "effect/ai";
 import { McpProtocol, McpServer, Tool } from "effect/ai";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -17,6 +20,7 @@ import type * as Rpc from "effect/rpc/Rpc";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import { recording } from "../AI/fixtures/recording.ts";
 
 // ---------------------------------------------------------------- a wallet domain
 
@@ -661,5 +665,133 @@ describe("Domain Ai: toMcp", { tags: ["unit", "local"] }, () => {
       expect(anonymous.isError).toBe(true);
       expect(JSON.parse(anonymous.content[0].text)).toEqual({ _tag: "Unauthenticated" });
     }).pipe(Effect.scoped),
+  );
+});
+
+// ---------------------------------------------------------------- an Api a process mentions
+
+class Smart extends AI.Model<Smart>()("smart") {}
+
+/** The wallet's calls, as the owner `ada`. */
+const wallet = DomainAi.tools(WalletApi, {
+  headers: Effect.succeed<Headers.Input>({ "x-owner": "ada" }),
+});
+
+class Teller extends (AI.Process<Teller>()("Teller", {
+  description: "Serve one customer's wallet.",
+})`
+  Deposit what the customer hands you through ${wallet}, then tell them their balance.
+`) {}
+
+/** Only deposits, and as nobody. */
+const deposits = DomainAi.tools(WalletApi, { expose: ["Deposit"] });
+
+class Anonymous extends (AI.Process<Anonymous>()("Anonymous", {
+  description: "Deposit without a session.",
+})`
+  Deposit through ${deposits}.
+`) {}
+
+describe("Domain Ai: tools", { tags: ["unit", "local"] }, () => {
+  /** Run with a recording harness over the in-memory wallets. */
+  const run = <A, E>(
+    effect: (
+      harness: ReturnType<typeof recording>,
+    ) => Effect.Effect<
+      A,
+      E,
+      AI.Harness | AI.DefaultModel | RuntimeContext | Effect.Services<typeof Teller>
+    >,
+  ) =>
+    Effect.suspend(() => {
+      const harness = recording();
+      return effect(harness).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            harness.layer,
+            AI.DefaultModel(Smart),
+            WalletsLive,
+            RuntimeContext.phantom,
+          ).pipe(
+            Layer.provideMerge(
+              Smart.layer(Layer.succeed(LanguageModel.LanguageModel, undefined as never)),
+            ),
+          ),
+        ),
+      );
+    });
+
+  it.effect("gives a process that mentions an Api every call that returns once", () =>
+    run((harness) =>
+      Effect.gen(function* () {
+        const teller = yield* Teller;
+        yield* teller.get("ada").send("Here is 30.");
+
+        const session = harness.sessions.get("Teller/ada")!;
+        expect(session.tools).toEqual([
+          "WalletApi_Deposit_send",
+          "WalletApi_Balance_get",
+          "WalletApi_Balance_list",
+          "WalletApi_Balance_snapshot",
+          "WalletApi_Rates_ask",
+        ]);
+        expect(session.instructions).toBe(
+          "Deposit what the customer hands you through WalletApi, then tell them their balance.",
+        );
+      }),
+    ),
+  );
+
+  it.effect("calls the Api in process, as the identity its headers carry", () =>
+    run((harness) =>
+      Effect.gen(function* () {
+        const teller = yield* Teller;
+        yield* teller.get("ada").send("Here is 30.");
+
+        const deposited = yield* harness.call("WalletApi_Deposit_send", {
+          input: { walletId: "ada-wallet", amount: 30 },
+        });
+        expect(deposited).toMatchObject({
+          isError: false,
+          structured: { reply: { balance: 30 }, stream: "Wallet/ada-wallet" },
+        });
+
+        // Only the wallet's owner may read it: the call carried `x-owner: ada`.
+        const balance = yield* harness.call("WalletApi_Balance_get", { key: "ada-wallet" });
+        expect(balance).toMatchObject({ isError: false, structured: { value: { balance: 30 } } });
+      }),
+    ),
+  );
+
+  it.effect("gives the model a rejection as the tool's failure", () =>
+    run((harness) =>
+      Effect.gen(function* () {
+        const teller = yield* Teller;
+        yield* teller.get("ada").send("Here is 500.");
+
+        const refused = yield* harness.call("WalletApi_Deposit_send", {
+          input: { walletId: "ada-wallet", amount: 500 },
+        });
+        expect(refused).toMatchObject({
+          isError: true,
+          structured: { _tag: "OverLimit", limit: 100 },
+        });
+      }),
+    ),
+  );
+
+  it.effect("gives only the calls it is told to, and no identity unless given one", () =>
+    run((harness) =>
+      Effect.gen(function* () {
+        const anonymous = yield* Anonymous;
+        yield* anonymous.get("x").send("Deposit 5.");
+
+        expect(harness.sessions.get("Anonymous/x")!.tools).toEqual(["WalletApi_Deposit_send"]);
+        const refused = yield* harness.call("WalletApi_Deposit_send", {
+          input: { walletId: "ada-wallet", amount: 5 },
+        });
+        expect(refused).toMatchObject({ isError: true, structured: { _tag: "Unauthenticated" } });
+      }),
+    ),
   );
 });

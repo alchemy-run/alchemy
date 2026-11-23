@@ -1,88 +1,11 @@
 import * as AI from "@alchemy.run/ai";
-import { makeHarness } from "@alchemy.run/ai/Harness";
 import { describe, expect, it } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { LanguageModel } from "effect/ai";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-
-/** What a recording harness was asked to run. */
-interface Recorded {
-  readonly instructions: string;
-  readonly tools: ReadonlyArray<string>;
-  readonly messages: Array<{
-    readonly text: string;
-    readonly requestId?: string;
-    readonly model?: string;
-  }>;
-}
-
-/** An `AI.Harness` that runs nothing: it keeps what each session was given. */
-const recording = () => {
-  const sessions = new Map<string, Recorded>();
-  const handlers = new Map<string, (parameters: unknown) => Effect.Effect<unknown, unknown, any>>();
-  const opened: Array<{ models: ReadonlyArray<string>; tools: ReadonlyArray<string> }> = [];
-  const toolName = (tool: unknown) => (tool as { toolName: string }).toolName;
-  const layer = makeHarness<never>("recording", (options) =>
-    Effect.sync(() => {
-      opened.push({
-        models: options.models.map((model) => model.modelName),
-        tools: options.tools.map(toolName),
-      });
-      for (const tool of options.tools) {
-        const handler = (tool as { handler?: (parameters: unknown) => Effect.Effect<unknown> })
-          .handler;
-        if (handler !== undefined) handlers.set(toolName(tool), handler);
-      }
-      return {
-        toolName: (tool) => `rec_${toolName(tool)}`,
-        session: (name, options) => {
-          const record = () => {
-            let session = sessions.get(name);
-            if (session === undefined) {
-              session = {
-                instructions: options.instructions,
-                tools: options.tools.map(toolName),
-                messages: [],
-              };
-              sessions.set(name, session);
-            }
-            return session;
-          };
-          const submit = (text: string, sent?: AI.SendOptions) =>
-            Effect.sync(() => {
-              const session = record();
-              if (sent?.requestId !== undefined) {
-                if (session.messages.some((message) => message.requestId === sent.requestId)) {
-                  return;
-                }
-              }
-              session.messages.push({
-                text,
-                ...(sent?.requestId === undefined ? {} : { requestId: sent.requestId }),
-                model: (sent?.model ?? options.model).modelName,
-              });
-            });
-          return {
-            exists: Effect.sync(() => sessions.has(name)),
-            submit,
-            prompt: (text, sent) => Effect.as(submit(text, sent), { text: `echo: ${text}` }),
-            wait: Effect.void,
-            abort: Effect.void,
-            messages: Effect.sync(() => sessions.get(name)?.messages ?? []),
-          };
-        },
-      };
-    }),
-  );
-  /** Call a tool the way a harness does, as one call of a conversation. */
-  const call = (name: string, parameters: unknown, callId = "call-1") =>
-    handlers.get(name)!(parameters).pipe(
-      Effect.provideService(AI.ToolCall, { conversationId: "c", callId }),
-    );
-  return { layer, sessions, opened, call };
-};
+import { recording } from "./fixtures/recording.ts";
 
 class Fast extends AI.Model<Fast>()("fast") {}
 class Smart extends AI.Model<Smart>()("smart") {}
@@ -280,7 +203,7 @@ describe("AI.Process", { tags: ["unit"] }, () => {
         yield* engineer.start("t1", { task: "x" });
 
         const followed = yield* harness.call("follow_engineer", { process: "Releasing" });
-        expect(followed).toEqual({
+        expect(followed.structured).toEqual({
           instructions: "Add the version numbers with `rec_add`, then tag the commit.",
         });
       }),
@@ -298,7 +221,7 @@ describe("AI.Process", { tags: ["unit"] }, () => {
           session: "parser",
           model: "fast",
         });
-        expect(named).toEqual({ session: "parser" });
+        expect(named.structured).toEqual({ session: "parser" });
         expect(harness.sessions.get("Research/parser")!.messages).toEqual([
           { text: "question: Where is the parser?", requestId: "start", model: "fast" },
         ]);
@@ -309,7 +232,7 @@ describe("AI.Process", { tags: ["unit"] }, () => {
           { input: { question: "y" } },
           "call-7",
         );
-        expect(unnamed).toEqual({ session: "call-7" });
+        expect(unnamed.structured).toEqual({ session: "call-7" });
         expect(harness.sessions.has("Research/call-7")).toBe(true);
       }),
     ),
@@ -322,12 +245,10 @@ describe("AI.Process", { tags: ["unit"] }, () => {
         yield* engineer.start("t1", { task: "x" });
         yield* harness.call("start_research", { input: { question: "q" }, session: "s" });
 
-        expect(yield* harness.call("send_research", { session: "s", text: "Narrow it." })).toEqual({
-          sent: true,
-        });
-        expect(yield* harness.call("send_research", { session: "nope", text: "?" })).toEqual({
-          sent: false,
-        });
+        const sent = yield* harness.call("send_research", { session: "s", text: "Narrow it." });
+        expect(sent.structured).toEqual({ sent: true });
+        const refused = yield* harness.call("send_research", { session: "nope", text: "?" });
+        expect(refused.structured).toEqual({ sent: false });
         expect(harness.sessions.get("Research/s")!.messages.map((each) => each.text)).toEqual([
           "question: q",
           "Narrow it.",
