@@ -74,6 +74,12 @@ class Books extends Domain.Model("Books", {
 
 const ENTRIES = 200;
 
+const booksOn = (disk: Disk) =>
+  Books.layer(LinesWriterLive).pipe(
+    Layer.provideMerge(DurableObjects.makePlatform(simHost({ rowsRead: 0 }, { disk }).host)),
+    Layer.provideMerge(SecureRandom.layerWebCrypto),
+  );
+
 const onSimHost = (stats: Stats) =>
   Books.layer(LinesWriterLive).pipe(
     Layer.provideMerge(DurableObjects.makePlatform(simHost(stats).host)),
@@ -232,6 +238,93 @@ const importsOn = (platform: Layer.Layer<Domain.Platform, never, SecureRandom.Se
     Layer.provideMerge(platform),
     Layer.provideMerge(SecureRandom.layerWebCrypto),
   );
+
+// ---------------------------------------------------------------- retention
+
+/** A ledger whose bookings a policy notes: receipts, cancelled names and delivery marks. */
+class Retained extends Domain.Model("Retained", {
+  aggregates: [Ledger, Audit],
+  policies: [AuditBookings],
+}) {}
+
+const DAY = 24 * 60 * 60 * 1000;
+const T0 = Date.UTC(2026, 0, 1);
+
+/**
+ * Run `effect` at the time `now` holds, set by the test. Sleeps stay real:
+ * the objects' alarms and deliveries wait on them.
+ */
+const atTime =
+  (now: { millis: number }) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    Effect.gen(function* () {
+      const live = yield* Clock.Clock;
+      const clock: Clock.Clock = {
+        ...live,
+        currentTimeMillisUnsafe: () => now.millis,
+        currentTimeMillis: Effect.sync(() => now.millis),
+        currentTimeNanosUnsafe: () => BigInt(now.millis) * 1_000_000n,
+        currentTimeNanos: Effect.sync(() => BigInt(now.millis) * 1_000_000n),
+        sleep: (duration) => live.sleep(duration),
+      };
+      return yield* effect.pipe(Effect.provideService(Clock.Clock, clock));
+    });
+
+const retainedOn = (disk: Disk, retention?: DurableObjects.Retention) =>
+  Retained.layer(AuditBookingsLive).pipe(
+    Layer.provideMerge(
+      DurableObjects.makePlatform(
+        simHost({ rowsRead: 0 }, { disk }).host,
+        retention === undefined ? {} : { retention },
+      ),
+    ),
+    Layer.provideMerge(SecureRandom.layerWebCrypto),
+  );
+
+/** The keys of every object whose id ends with `suffix` that start with one of `prefixes`. */
+const keysIn = (disk: Disk, suffix: string, prefixes: ReadonlyArray<string>) =>
+  [...disk.objects.entries()]
+    .filter(([id]) => id.endsWith(suffix))
+    .flatMap(([, saved]) => [...saved.data.keys()])
+    .filter((key) => prefixes.some((prefix) => key.startsWith(prefix)))
+    .sort();
+
+/** The ledger's receipts and scheduled names. */
+const ledgerRows = (disk: Disk) => keysIn(disk, "LedgerAggregate/main", ["receipt:", "scheduled:"]);
+/** The policy's delivery marks. */
+const marks = (disk: Disk) => keysIn(disk, "", ["seen:"]);
+
+/** Book one line on the ledger under `commandId`, and wait for the policy to note it. */
+const bookAs = (commandId: string) =>
+  Effect.gen(function* () {
+    const receipt = yield* (yield* Ledger).send(new BookMany({ id: "main", count: 1 }), {
+      commandId,
+    });
+    const audits = yield* Audit;
+    yield* Effect.gen(function* () {
+      while (!(yield* audits.get("main")).seen.includes(receipt.version))
+        yield* Effect.sleep("20 millis");
+    }).pipe(Effect.timeout("15 seconds"));
+    return receipt;
+  });
+
+/** Arm the command `name` on the ledger, an hour out, and cancel it. */
+const cancelled = (name: string) =>
+  Effect.gen(function* () {
+    const ledgers = yield* Ledger;
+    yield* ledgers.schedule(new BookMany({ id: "main", count: 1 }), {
+      after: "1 hour",
+      commandId: name,
+    });
+    yield* ledgers.unschedule("main", name);
+  });
+
+/** What cancelling `name` again answers. */
+const cancelledAgain = (name: string) =>
+  Effect.gen(function* () {
+    const ledgers = yield* Ledger;
+    return yield* Effect.flip(ledgers.unschedule("main", name));
+  });
 
 describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
   for (const [name, platform] of [
@@ -557,6 +650,171 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
         yield* MilestoneWriter.caughtUp(legacy);
         expect((yield* logged).at(-1)).toBe(1030);
       }).pipe(Effect.scoped, Effect.provide(milestonesOnSimHost(stats, disk)));
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "each kind of dedupe row is deleted once it is older than its window",
+    () => {
+      const disk: Disk = { objects: new Map() };
+      const now = { millis: T0 };
+      return Effect.gen(function* () {
+        yield* bookAs("c-1");
+        yield* cancelled("later");
+        expect(ledgerRows(disk)).toEqual(["receipt:c-1", "scheduled:later"]);
+        expect(marks(disk)).toHaveLength(1);
+
+        // A week on: nothing has outlived its window yet.
+        now.millis = T0 + 7 * DAY;
+        yield* bookAs("c-2");
+        expect(ledgerRows(disk)).toEqual(["receipt:c-1", "receipt:c-2", "scheduled:later"]);
+        expect(marks(disk)).toHaveLength(2);
+        expect(yield* cancelledAgain("later")).toMatchObject({ _tag: "AlreadyCancelled" });
+
+        // A moment later: the cancelled command and the first delivery mark go.
+        now.millis = T0 + 7 * DAY + 1;
+        yield* bookAs("c-3");
+        expect(ledgerRows(disk)).toEqual(["receipt:c-1", "receipt:c-2", "receipt:c-3"]);
+        expect(marks(disk)).toHaveLength(2);
+        expect(yield* cancelledAgain("later")).toMatchObject({ _tag: "NotScheduled" });
+
+        // Thirty days on: the first receipt goes, and its command sent again is decided again.
+        now.millis = T0 + 30 * DAY + 1;
+        expect((yield* bookAs("c-4")).version).toBe(4);
+        expect(ledgerRows(disk)).toEqual(["receipt:c-2", "receipt:c-3", "receipt:c-4"]);
+        expect((yield* bookAs("c-1")).version).toBe(5);
+        // Every index row left stands for a row that is still there.
+        expect(keysIn(disk, "LedgerAggregate/main", ["aged:", "aged-at:"])).toHaveLength(4);
+      }).pipe(Effect.scoped, Effect.provide(retainedOn(disk)), atTime(now));
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "a name cancelled again starts its window again",
+    () => {
+      const disk: Disk = { objects: new Map() };
+      const now = { millis: T0 };
+      return Effect.gen(function* () {
+        yield* cancelled("expire");
+        // Armed and cancelled again six days later: its week starts then.
+        now.millis = T0 + 6 * DAY;
+        yield* cancelled("expire");
+        now.millis = T0 + 8 * DAY;
+        yield* bookAs("c-1");
+        expect(ledgerRows(disk)).toContain("scheduled:expire");
+        expect(yield* cancelledAgain("expire")).toMatchObject({ _tag: "AlreadyCancelled" });
+        now.millis = T0 + 13 * DAY + 1;
+        yield* bookAs("c-2");
+        expect(ledgerRows(disk)).not.toContain("scheduled:expire");
+      }).pipe(Effect.scoped, Effect.provide(retainedOn(disk)), atTime(now));
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "rows kept from before an upgrade age from the first commit after it",
+    () => {
+      const disk: Disk = { objects: new Map() };
+      const now = { millis: T0 };
+      return Effect.gen(function* () {
+        yield* bookAs("c-1");
+        yield* cancelled("later");
+        // As 2.0.0-beta.87 and earlier left them: no index rows.
+        for (const saved of disk.objects.values())
+          for (const key of [...saved.data.keys()])
+            if (key.startsWith("aged")) saved.data.delete(key);
+
+        now.millis = T0 + 100 * DAY;
+        yield* bookAs("c-2");
+        expect(ledgerRows(disk)).toEqual(["receipt:c-1", "receipt:c-2", "scheduled:later"]);
+        expect(marks(disk)).toHaveLength(2);
+
+        // A week after the upgrade: the old cancelled name and both marks from then go.
+        now.millis = T0 + 107 * DAY + 1;
+        yield* bookAs("c-3");
+        expect(ledgerRows(disk)).toEqual(["receipt:c-1", "receipt:c-2", "receipt:c-3"]);
+        expect(marks(disk)).toEqual(["seen:Ledger/main:3"]);
+
+        now.millis = T0 + 130 * DAY + 1;
+        yield* bookAs("c-4");
+        expect(ledgerRows(disk)).toEqual(["receipt:c-3", "receipt:c-4"]);
+      }).pipe(Effect.scoped, Effect.provide(retainedOn(disk)), atTime(now));
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "a window of forever keeps that kind of row",
+    () => {
+      const disk: Disk = { objects: new Map() };
+      const now = { millis: T0 };
+      return Effect.gen(function* () {
+        yield* bookAs("c-1");
+        yield* cancelled("later");
+        now.millis = T0 + 365 * DAY;
+        yield* bookAs("c-2");
+        expect(ledgerRows(disk)).toEqual(["receipt:c-1", "receipt:c-2", "scheduled:later"]);
+        expect(marks(disk)).toHaveLength(2);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          retainedOn(disk, { receipts: "forever", deliveries: "forever", cancelled: "forever" }),
+        ),
+        atTime(now),
+      );
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "a commit deletes only a few expired rows",
+    () => {
+      const disk: Disk = { objects: new Map() };
+      const now = { millis: T0 };
+      return Effect.gen(function* () {
+        const ledgers = yield* Ledger;
+        for (let i = 0; i < 40; i++)
+          yield* ledgers.send(new BookMany({ id: "main", count: 1 }), { commandId: `old-${i}` });
+        now.millis = T0 + 31 * DAY;
+        const receipts = () => keysIn(disk, "LedgerAggregate/main", ["receipt:"]).length;
+        yield* ledgers.send(new BookMany({ id: "main", count: 1 }), { commandId: "late-1" });
+        expect(receipts()).toBe(25);
+        yield* ledgers.send(new BookMany({ id: "main", count: 1 }), { commandId: "late-2" });
+        expect(receipts()).toBe(10);
+        yield* ledgers.send(new BookMany({ id: "main", count: 1 }), { commandId: "late-3" });
+        expect(receipts()).toBe(3);
+      }).pipe(Effect.scoped, Effect.provide(retainedOn(disk)), atTime(now));
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "a projection deletes the inputs it handled, and a view keeps its input log",
+    () => {
+      const disk: Disk = { objects: new Map() };
+      return Effect.gen(function* () {
+        const ledgers = yield* Ledger;
+        const first = yield* ledgers.send(new BookMany({ id: "main", count: 5 }));
+        yield* LinesWriter.caughtUp(first, { timeout: "30 seconds" });
+        const projection = [...disk.objects.values()].find(
+          (saved) => saved.cls.includes("LinesWriter") && saved.data.has("meta"),
+        )!;
+        // As 2.0.0-beta.87 and earlier left a key: every input it handled.
+        for (let position = 1; position <= 5; position++)
+          projection.data.set(`in:${position.toString().padStart(12, "0")}`, { position });
+        projection.data.delete("in-pruned");
+
+        const second = yield* ledgers.send(new BookMany({ id: "main", count: 1 }));
+        yield* LinesWriter.caughtUp(second, { timeout: "30 seconds" });
+        expect([...projection.data.keys()].filter((key) => key.startsWith("in:"))).toEqual([]);
+        // A rewrite folds a view key's inputs again: it keeps every one.
+        yield* (yield* Totals).get(Ledger.ref("main"), {
+          atLeast: { stream: second.stream, version: second.version },
+        });
+        expect(keysIn(disk, "/main", ["in:"]).length).toBeGreaterThanOrEqual(6);
+      }).pipe(Effect.scoped, Effect.provide(booksOn(disk)));
     },
     { timeout: 60_000 },
   );

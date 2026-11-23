@@ -6,6 +6,7 @@
 import { expect } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -14,7 +15,7 @@ import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
-import { ConformanceApi, SECRET } from "./model.ts";
+import { ConformanceApi, RECEIPT_RETENTION, SECRET } from "./model.ts";
 
 type TestFn = (
   name: string,
@@ -329,6 +330,22 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       const id = fresh("reject");
       expect(yield* call(`/increment/${id}?by=11`)).toEqual({ rejected: "TooBig" });
       expect(yield* call(`/counter/${id}`)).toEqual({ total: 0 });
+    }),
+    options,
+  );
+
+  test(
+    "a command sent again once its receipt is past retention is decided again",
+    Effect.gen(function* () {
+      const id = fresh("retained");
+      expect(yield* call(`/increment/${id}?command=first`)).toEqual({ accepted: 1, version: 1 });
+      expect(yield* call(`/increment/${id}?command=first`)).toEqual({ accepted: 1, version: 1 });
+      yield* Effect.sleep(
+        Duration.sum(Duration.fromInputUnsafe(RECEIPT_RETENTION), Duration.seconds(5)),
+      );
+      // The commit deletes receipts past their window (a runner's sweep may have already).
+      expect(yield* call(`/increment/${id}`)).toEqual({ accepted: 2, version: 2 });
+      expect(yield* call(`/increment/${id}?command=first`)).toEqual({ accepted: 3, version: 3 });
     }),
     options,
   );

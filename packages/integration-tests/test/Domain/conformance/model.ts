@@ -348,6 +348,13 @@ const StartMirrorLive = StartMirror.toLayer(
 
 /** How long a hold lasts before it expires, unless it is released first. */
 export const HOLD_WINDOW = "4 seconds";
+
+/**
+ * How long every platform's front keeps command receipts: short, so the
+ * retention case sees one expire. Long enough that nothing else in the
+ * suite sends a command again after it.
+ */
+export const RECEIPT_RETENTION = "30 seconds";
 /** The command id a hold's expiry is scheduled under. */
 export const EXPIRY = "expire";
 
