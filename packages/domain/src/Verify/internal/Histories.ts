@@ -1,5 +1,6 @@
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "../../Aggregate.ts";
@@ -131,7 +132,8 @@ const inputsOf = (
       .slice(0, MAX_INPUTS);
   }
   return made.flatMap((given) => {
-    const built = Result.try(() => new rewrite(given));
+    const cls = rewrite as unknown as new (fields: object) => { readonly _tag: string };
+    const built = Result.try(() => new cls(given));
     return Result.isSuccess(built) ? [built.success] : [];
   });
 };
@@ -199,12 +201,10 @@ export const check = Effect.fn(function* (
   for (const view of model.views as ReadonlyArray<View.Any>) {
     const state = view.definition.state as Schema.Top | undefined;
     if (!state) continue;
-    const encoded = Result.try(() =>
-      Schema.encodeUnknownSync(
-        Schema.toCodecJson(state) as unknown as Schema.Codec<unknown, unknown>,
-      )(view.definition.initial),
-    );
-    if (Result.isSuccess(encoded)) initials.set(view.viewName, JSON.stringify(encoded.success));
+    const encoded = Schema.encodeUnknownExit(
+      Schema.toCodecJson(state) as unknown as Schema.Codec<unknown, unknown>,
+    )(view.definition.initial);
+    if (Exit.isSuccess(encoded)) initials.set(view.viewName, JSON.stringify(encoded.value));
   }
   const instantiated = new Set<string>();
   /** The rewrites some sequence left an instance for. */
@@ -226,7 +226,7 @@ export const check = Effect.fn(function* (
   const breaks = (name: string, state: Json): string | undefined => {
     const cls = aggregates.get(name);
     if (!cls || state === null) return undefined;
-    const decoded = Schema.decodeUnknownResult(
+    const decoded = Schema.decodeResult(
       Schema.toCodecJson(cls.definition.state as Schema.Top) as unknown as Schema.Codec<
         unknown,
         unknown

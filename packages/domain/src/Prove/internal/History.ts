@@ -202,7 +202,10 @@ export const compaction = Effect.fn(function* (
       }),
     );
     prefix = Value.nextPrefix(run.taken);
-    if (taken._tag === "Stopped") both(Induction.notRead(taken.error));
+    if (taken._tag === "Stopped") {
+      const unread = Induction.notRead(taken.error);
+      both(unread);
+    }
     if (taken._tag !== "Ran") continue;
     const judge = (condition: string | undefined, from: "initial" | "state") =>
       condition === undefined
@@ -665,7 +668,10 @@ export const rewrite = Effect.fn(function* (
                 };
                 const input = yield* attempt(
                   `${written.name} refuses the solver's input ${Symbolic.show(given)}`,
-                  () => new cls(given),
+                  () =>
+                    new (cls as unknown as new (fields: object) => { readonly _tag: string })(
+                      given,
+                    ),
                 );
                 let events: ReadonlyArray<{ readonly _tag: string }>;
                 let command: unknown = { _tag: written.name };
@@ -756,7 +762,8 @@ export const rewrite = Effect.fn(function* (
             Effect.catchTags({
               NotTranslated: (error) =>
                 Effect.sync(() => {
-                  all(Induction.notRead(error));
+                  const unread = Induction.notRead(error);
+                  all(unread);
                   return [] as ReadonlyArray<Paths.Check>;
                 }),
               Infeasible: () => Effect.succeed([] as ReadonlyArray<Paths.Check>),
