@@ -1177,7 +1177,214 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
     ),
   };
 
-  const values: Record<string, V> = { "effect/Stream:empty": fromChunk([]) };
+  // Sinks. A sink is what a stream is run into: it pulls chunks until it has what it wants.
+  const sinks = new WeakMap<object, (pull: Pull, site: Site) => Eval<V>>();
 
-  return { models, values };
+  const sink = (name: string, feed: (pull: Pull, site: Site) => Eval<V>): V => {
+    const made = native(name, (_, site) => wrongArguments(site, name));
+    sinks.set(made, feed);
+    return made;
+  };
+
+  /** A sink that takes every chunk, and keeps a state. */
+  const reducing = (
+    name: string,
+    initial: (site: Site) => Eval<V>,
+    step: (state: V, chunk: Chunk, site: Site) => Eval<V>,
+  ): V =>
+    sink(name, (pull, site) =>
+      Effect.gen(function* () {
+        let state = yield* initial(site);
+        for (;;) {
+          yield* tick(site);
+          const chunk = yield* pull;
+          if (chunk === undefined) return state;
+          state = yield* step(state, chunk, site);
+        }
+      }),
+    );
+
+  /**
+   * A sink that takes items while its state lets it go on. With `first`, the
+   * state it starts with is asked too, before anything is pulled.
+   */
+  const reducingWhile = (
+    name: string,
+    first: boolean,
+    initial: (site: Site) => Eval<V>,
+    goesOn: (state: V, site: Site) => Eval<boolean>,
+    step: (state: V, item: V, site: Site) => Eval<V>,
+  ): V =>
+    sink(name, (pull, site) =>
+      Effect.gen(function* () {
+        let state = yield* initial(site);
+        if (first && !(yield* goesOn(state, site))) return state;
+        for (;;) {
+          yield* tick(site);
+          const chunk = yield* pull;
+          if (chunk === undefined) return state;
+          for (const item of chunk) {
+            state = yield* step(state, item, site);
+            if (!(yield* goesOn(state, site))) return state;
+          }
+        }
+      }),
+    );
+
+  const given = (value: V) => () => Effect.succeed(value);
+  const isNone = (state: V) => Effect.succeed(Value.optionOf(state)?._tag === "None");
+  const truthy = (state: V, site: Site) => host.decide(state, site);
+
+  const sinkModels: Models = {
+    "effect/Stream:run": over("Stream.run", (self, [into], site) => {
+      const feed = into ? sinks.get(into) : undefined;
+      return feed
+        ? Effect.succeed(
+            lazy(() =>
+              Effect.suspend(() => {
+                if (depth++ === 0) pulls = 0;
+                return Effect.flatMap(self.open, (pull) => feed(pull, site)).pipe(
+                  Effect.ensuring(Effect.sync(() => void depth--)),
+                );
+              }),
+            ),
+          )
+        : wrongArguments(site, "Stream.run");
+    }),
+    "effect/Sink:collect": () =>
+      Effect.succeed(
+        reducing("Sink.collect", given(arr([])), (state, chunk) =>
+          Effect.succeed(arr([...(kit.itemsOf(state) ?? []), ...chunk])),
+        ),
+      ),
+    "effect/Sink:head": () =>
+      Effect.succeed(
+        reducingWhile("Sink.head", true, given(Value.none), isNone, (_, item) =>
+          Effect.succeed(Value.some(item)),
+        ),
+      ),
+    "effect/Sink:last": () =>
+      Effect.succeed(
+        reducing("Sink.last", given(Value.none), (_, chunk) =>
+          Effect.succeed(Value.some(chunk[chunk.length - 1]!)),
+        ),
+      ),
+    "effect/Sink:reduce": ([initial, f], site) =>
+      initial && f
+        ? Effect.succeed(
+            reducing(
+              "Sink.reduce",
+              (at) => host.call(initial, [], at),
+              (state, chunk, at) =>
+                Effect.gen(function* () {
+                  let next = state;
+                  for (const item of chunk) next = yield* host.call(f, [next, item], at);
+                  return next;
+                }),
+            ),
+          )
+        : wrongArguments(site, "Sink.reduce"),
+    // The state is folded while the function says to go on: it is asked after each item.
+    "effect/Sink:fold": ([initial, goesOn, f], site) =>
+      initial && goesOn && f
+        ? Effect.succeed(
+            reducingWhile(
+              "Sink.fold",
+              false,
+              (at) => host.call(initial, [], at),
+              (state, at) => kit.holds(goesOn, [state], at),
+              (state, item, at) => ran(f, [state, item], at),
+            ),
+          )
+        : wrongArguments(site, "Sink.fold"),
+    "effect/Sink:every": ([predicate], site) =>
+      predicate
+        ? Effect.succeed(
+            reducingWhile("Sink.every", false, given(Value.bool(true)), truthy, (_, item, at) =>
+              Effect.map(kit.holds(predicate, [item], at), Value.bool),
+            ),
+          )
+        : wrongArguments(site, "Sink.every"),
+    "effect/Sink:some": ([predicate], site) =>
+      predicate
+        ? Effect.succeed(
+            reducingWhile(
+              "Sink.some",
+              false,
+              given(Value.bool(false)),
+              (state, at) => Effect.map(truthy(state, at), (found) => !found),
+              (_, item, at) => Effect.map(kit.holds(predicate, [item], at), Value.bool),
+            ),
+          )
+        : wrongArguments(site, "Sink.some"),
+    "effect/Sink:find": ([predicate], site) =>
+      predicate
+        ? Effect.succeed(
+            reducingWhile("Sink.find", true, given(Value.none), isNone, (state, item, at) =>
+              Effect.map(kit.holds(predicate, [item], at), (found) =>
+                found ? Value.some(item) : state,
+              ),
+            ),
+          )
+        : wrongArguments(site, "Sink.find"),
+    "effect/Sink:take": ([n], site) =>
+      Effect.map(counted("Sink.take", n, site), (count) =>
+        reducingWhile(
+          "Sink.take",
+          true,
+          given(arr([])),
+          (state) => Effect.succeed((kit.itemsOf(state)?.length ?? 0) < Math.max(0, count)),
+          (state, item) => Effect.succeed(arr([...(kit.itemsOf(state) ?? []), item])),
+        ),
+      ),
+    "effect/Sink:forEach": ([f], site) =>
+      f
+        ? Effect.succeed(
+            reducing("Sink.forEach", given(Value.undef), (_, chunk, at) =>
+              Effect.gen(function* () {
+                for (const item of chunk) yield* ran(f, [item], at);
+                return Value.undef;
+              }),
+            ),
+          )
+        : wrongArguments(site, "Sink.forEach"),
+    "effect/Sink:succeed": ([value]) =>
+      Effect.succeed(sink("Sink.succeed", () => Effect.succeed(value ?? Value.undef))),
+    "effect/Sink:fail": ([error]) =>
+      Effect.succeed(sink("Sink.fail", () => rejected(error ?? Value.undef))),
+    "effect/Sink:map": (args, site) => {
+      const mapped = (self: V | undefined, f: V | undefined, at: Site): Eval<V> => {
+        const feed = self ? sinks.get(self) : undefined;
+        return feed && f
+          ? Effect.succeed(
+              sink("Sink.map", (pull, where) =>
+                Effect.flatMap(feed(pull, where), (result) => host.call(f, [result], where)),
+              ),
+            )
+          : wrongArguments(at, "Sink.map");
+      };
+      return args.length >= 2
+        ? mapped(args[0], args[1], site)
+        : Effect.succeed(native("Sink.map", ([self], at) => mapped(self, args[0], at)));
+    },
+  };
+
+  const values: Record<string, V> = {
+    "effect/Stream:empty": fromChunk([]),
+    "effect/Sink:count": reducing("Sink.count", given(Value.num(0)), (state, chunk, site) =>
+      host.arithmetic("+", state, Value.num(chunk.length), site),
+    ),
+    "effect/Sink:sum": reducing("Sink.sum", given(Value.num(0)), (state, chunk, site) =>
+      Effect.gen(function* () {
+        let total = state;
+        for (const item of chunk) total = yield* host.arithmetic("+", total, item, site);
+        return total;
+      }),
+    ),
+    "effect/Sink:drain": reducing("Sink.drain", given(Value.undef), (state) =>
+      Effect.succeed(state),
+    ),
+  };
+
+  return { models: { ...models, ...sinkModels } as Models, values };
 };

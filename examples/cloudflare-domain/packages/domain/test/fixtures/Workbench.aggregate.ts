@@ -46,6 +46,7 @@ import * as RegExp from "effect/RegExp";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as SemVer from "effect/SemVer";
+import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as String from "effect/String";
 import * as Struct from "effect/Struct";
@@ -1075,6 +1076,52 @@ const flowed = (items: ReadonlyArray<number>, a: number) =>
         Stream.runCollect,
       ),
       failed: yield* Stream.fail("no").pipe(Stream.runCollect, Effect.result),
+      sink: {
+        collect: yield* Stream.run(stream, Sink.collect()),
+        count: yield* stream.pipe(Stream.run(Sink.count)),
+        sum: yield* Stream.run(stream, Sink.sum),
+        head: yield* Stream.run(stream, Sink.head()),
+        last: yield* Stream.run(stream, Sink.last()),
+        reduce: yield* Stream.run(
+          stream,
+          Sink.reduce(
+            () => a,
+            (total, n: number) => total - n,
+          ),
+        ),
+        fold: yield* Stream.run(
+          stream,
+          Sink.fold(
+            () => 0,
+            (total) => total < 5,
+            (total, n: number) => Effect.succeed(total + n),
+          ),
+        ),
+        every: yield* Stream.run(
+          stream,
+          Sink.every((n: number) => n > a),
+        ),
+        some: yield* Stream.run(
+          stream,
+          Sink.some((n: number) => n > a),
+        ),
+        find: yield* Stream.run(
+          stream,
+          Sink.find((n: number) => n > a),
+        ),
+        take: yield* Stream.run(stream, Sink.take(1)),
+        mapped: yield* Stream.run(
+          stream,
+          Sink.map(Sink.count, (n) => n * 10),
+        ),
+        // A sink that stops early runs no effect after it, as a step that stops early does.
+        headOfChecked: yield* stream.pipe(
+          Stream.mapEffect(even),
+          Stream.run(Sink.head()),
+          Effect.result,
+        ),
+        drained: yield* Stream.run(stream, Sink.drain),
+      },
     };
   });
 
