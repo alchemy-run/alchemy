@@ -13,21 +13,31 @@ The examples come from an issue board that looks after a GitHub repository, the 
 
 <DAG
   nodes={[
-    { id: "process", label: "Triage", type: "process", tone: "accent", col: 1, row: 1 },
-    { id: "tools", label: "grep · read", type: "tools", col: 0, row: 0 },
-    { id: "answering", label: "Answering", type: "process", col: 0, row: 1 },
-    { id: "board", label: "Board.LabelIssue", type: "command", col: 0, row: 2 },
-    { id: "session", label: "issue 42", type: "session", col: 2, row: 1 },
-    { id: "harness", label: "Pi or OpenCode", type: "harness", col: 3, row: 1 },
+    { id: "answering", label: "Answering", type: "process", col: 0, row: 0 },
+    { id: "triage", label: "Triage", type: "process", tone: "accent", col: 0, row: 1 },
+    { id: "post", label: "PostAnswer", type: "tool", col: 1, row: 1 },
+    { id: "comment", label: "CreateIssueComment", type: "binding", col: 2, row: 1 },
+    { id: "repo", label: "Repo", type: "GitHub.Repository", col: 3, row: 1 },
+    { id: "label", label: "LabelIssue", kind: "command", col: 1, row: 2 },
+    { id: "issue", label: "Issue", kind: "aggregate", col: 2, row: 2 },
+    { id: "store", label: "Board", type: "Cloudflare.DurableObject", col: 3, row: 2 },
+  ]}
+  groups={[
+    { id: "processes", label: "Processes", nodes: ["answering", "triage"] },
+    { id: "tools", label: "Tools", nodes: ["post"] },
+    { id: "domain", label: "Domain model", nodes: ["label", "issue"] },
+    { id: "resources", label: "Resources", nodes: ["repo", "store"] },
   ]}
   edges={[
-    { from: "tools", to: "process" },
-    { from: "answering", to: "process" },
-    { from: "board", to: "process" },
-    { from: "process", to: "session" },
-    { from: "session", to: "harness" },
+    { from: "triage", to: "answering", label: "follows" },
+    { from: "triage", to: "post", label: "calls" },
+    { from: "triage", to: "label", label: "sends" },
+    { from: "post", to: "comment", label: "uses" },
+    { from: "comment", to: "repo", label: "may comment on" },
+    { from: "label", to: "issue", label: "decided by" },
+    { from: "issue", to: "store", label: "stored in" },
   ]}
-  caption="A process mentions tools, another process and a command of the business. A session is a running process, and a harness runs it."
+  caption="A process mentions a process, a tool and a command of the business. The tool reaches GitHub through a binding, and the Domain model keeps its issues in a Durable Object. Alchemy deploys all of it."
 />
 
 ## A process: a description of work
