@@ -35,6 +35,8 @@ export class Configure extends Domain.Command("Configure", { input, events: [See
 export class Link extends Domain.Command("Link", { input, events: [Seen] }) {}
 export class Tick extends Domain.Command("Tick", { input, events: [Seen] }) {}
 export class Index extends Domain.Command("Index", { input, events: [Seen] }) {}
+export class Stretch extends Domain.Command("Stretch", { input, events: [Seen] }) {}
+export class Shape extends Domain.Command("Shape", { input, events: [Seen] }) {}
 
 /**
  * What the prover does not read of the library, each in a command of its
@@ -61,6 +63,8 @@ export class Fog extends Domain.Aggregate("Fog", {
     Link,
     Tick,
     Index,
+    Stretch,
+    Shape,
   ],
   keyOf: (command) => command.id,
   decide: {
@@ -137,6 +141,14 @@ export class Fog extends Domain.Aggregate("Fog", {
     Index: (_fog, command) => [
       new Seen({ n: Trie.size(Trie.insert(Trie.empty<number>(), command.text, 1)) }),
     ],
+    // A string method that throws on what the code gives it.
+    Stretch: () => [new Seen({ n: "ab".repeat(-1).length })],
+    // A schema is built, never run, so this line is passed over. The real code throws on it,
+    // and the report says the two differ.
+    Shape: (_fog, command) => {
+      Schema.Struct(command.text as never);
+      return [new Seen({ n: 1 })];
+    },
   },
   evolve: { Seen: (_fog, event) => ({ n: event.n }) },
 }) {}

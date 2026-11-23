@@ -359,12 +359,16 @@ const replay = Effect.fn(function* (
     read.push({ name: key.slice(key.lastIndexOf("/") + 1), value });
   }
   const now = (yield* build("now", inputs.now)) as DateTime.Utc;
-  const prediction = Aggregate.predict(aggregate, state, command, {
-    now,
-    version: (yield* build("version", inputs.version)) as number,
-    commandId: (yield* build("commandId", inputs.commandId)) as string,
-    context: context as Context.Context<never>,
-  });
+  const version = (yield* build("version", inputs.version)) as number;
+  const commandId = (yield* build("commandId", inputs.commandId)) as string;
+  const prediction = yield* attempt(`${tag} threw`, () =>
+    Aggregate.predict(aggregate, state, command, {
+      now,
+      version,
+      commandId,
+      context: context as Context.Context<never>,
+    }),
+  );
   if (prediction._tag === "Rejected")
     return unconfirmed(
       `the solver found ${Symbolic.show(command)} on ${Symbolic.show(state)}, but the real code rejects it with ${Symbolic.show(prediction.rejection)}`,
@@ -565,11 +569,22 @@ export const agree = Effect.fn(function* (
         entry.tag as Context.Key<unknown, unknown>,
         yield* build(entry.value),
       );
-    const prediction = Aggregate.predict(aggregate, state, command, {
-      now: (yield* build(inputs.now)) as DateTime.Utc,
-      version: (yield* build(inputs.version)) as number,
-      commandId: (yield* build(inputs.commandId)) as string,
-      context: context as Context.Context<never>,
+    const now = (yield* build(inputs.now)) as DateTime.Utc;
+    const version = (yield* build(inputs.version)) as number;
+    const commandId = (yield* build(inputs.commandId)) as string;
+    // Real code that throws where the prover read none of that is a difference, not a crash.
+    const prediction = yield* Effect.try({
+      try: () =>
+        Aggregate.predict(aggregate, state, command, {
+          now,
+          version,
+          commandId,
+          context: context as Context.Context<never>,
+        }),
+      catch: (cause): Agreement => ({
+        _tag: "Differs",
+        reason: `the prover read ${Symbolic.show(command)} on ${Symbolic.show(state)}, and the real code threw: ${String(cause)}`,
+      }),
     });
     // A command that fails is one whose fields a schema the prover does not read refuses.
     if (prediction._tag === "Unpredictable") return skipped;

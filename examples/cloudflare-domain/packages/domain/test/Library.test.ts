@@ -248,8 +248,14 @@ it.effect(
         Link: "calls Graph.directed, which the prover has no model for",
         Tick: "calls Cron.next, which the prover has no model for",
         Index: "calls Trie.insert, which the prover has no model for",
+        Stretch: "calls repeat, which throws: RangeError: Invalid count value: -1",
+        // Read, but not as the real code does it: nothing is proved of it.
+        Shape: "Misread",
       });
-      expect(report.agreement.differs).toEqual([]);
+      // The real code threw where the prover read on. That is reported, and does not stop the report.
+      expect(report.agreement.differs).toEqual([
+        expect.stringMatching(/^the prover read Shape .*, and the real code threw: TypeError/),
+      ]);
     }).pipe(Effect.provide(NodeServices.layer)),
   120_000,
 );

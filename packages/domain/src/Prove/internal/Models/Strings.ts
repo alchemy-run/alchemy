@@ -44,10 +44,18 @@ export const make = (kit: Kit) => {
             : undefined,
       );
       if (text === undefined || given.some((arg) => arg === undefined)) return unread(site, name);
-      const made = run(
-        text,
-        given.map((arg) => arg!.value),
-      );
+      // A method that throws on what it is given stops the code: nothing is read past it.
+      let made: unknown;
+      try {
+        made = run(
+          text,
+          given.map((arg) => arg!.value),
+        );
+      } catch (cause) {
+        return Effect.fail(
+          Value.notTranslated(site, `calls ${name}, which throws: ${String(cause)}`),
+        );
+      }
       return typeof made === "string"
         ? Effect.succeed(Value.str(made))
         : typeof made === "number"
