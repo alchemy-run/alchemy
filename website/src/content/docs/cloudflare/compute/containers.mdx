@@ -267,11 +267,10 @@ architecture instead:
 ALCHEMY_LOCAL_CONTAINER_PLATFORM=host alchemy dev
 ```
 
-Any other value is passed to Docker as the platform, e.g.
-`linux/arm64`. Your Dockerfile then has to build for that
-architecture (use `ARG TARGETARCH` for per-architecture downloads).
-An image published only for amd64 still runs, emulated. Deploys
-always build `linux/amd64`.
+Your Dockerfile then has to build for the host's architecture (use
+`ARG TARGETARCH` for per-architecture downloads). An image published
+only for amd64 still runs, emulated. Deploys always build
+`linux/amd64`.
 
 ## Cached builds by default
 

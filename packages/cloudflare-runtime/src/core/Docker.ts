@@ -90,15 +90,17 @@ const ContainerEgressInterceptorImage = Config.String("CONTAINER_EGRESS_INTERCEP
   ),
 );
 /**
- * The platform local dev builds and pulls user images for. Defaults to
- * `linux/amd64`, the architecture Cloudflare's container runtime executes.
- * `host` leaves `--platform` out so Docker uses its own architecture (native
- * on arm64 hosts); any other value is passed through, e.g. `linux/arm64`.
- * Deploys are unaffected.
+ * The platform local dev runs user images on. Defaults to `linux/amd64`, the
+ * architecture Cloudflare's container runtime executes. `host` leaves the
+ * platform to Docker, so images run on the daemon's own architecture (native
+ * on arm64 hosts). Deploys are unaffected.
  */
-const LocalContainerPlatform = Config.String("ALCHEMY_LOCAL_CONTAINER_PLATFORM").pipe(
-  Config.orElse(() => Config.succeed("linux/amd64")),
-  Config.map((value) => (value.trim() === "host" ? undefined : value.trim())),
+const LocalContainerPlatform = Config.Literals(
+  ["host", "linux/amd64"],
+  "ALCHEMY_LOCAL_CONTAINER_PLATFORM",
+).pipe(
+  Config.withDefault("linux/amd64" as const),
+  Config.map((value) => (value === "host" ? undefined : value)),
 );
 
 /**
@@ -302,10 +304,14 @@ export const DockerLive = Layer.effect(
       const forward = (
         req: NodeHttp.IncomingMessage,
         res: NodeHttp.ServerResponse,
-        options: { body?: string; afterStart?: Effect.Effect<void, SystemError> } = {},
+        options: {
+          body?: string;
+          path?: string;
+          afterStart?: Effect.Effect<void, SystemError>;
+        } = {},
       ) =>
         Effect.gen(function* () {
-          const upstream = yield* sendDockerRequest(socketPath, req, options.body);
+          const upstream = yield* sendDockerRequest(socketPath, req, options.body, options.path);
           const status = upstream.statusCode ?? 500;
           // Docker answers a repeated start with 304; attaching again repairs
           // forwarding when an earlier start succeeded but its helper failed.
@@ -334,11 +340,13 @@ export const DockerLive = Layer.effect(
             const image = registeredImages.get(original.Image);
             // A native `start({ image })` can name an image that was never
             // prepared (e.g. a managed `cloudflare/*` image): pull it on demand.
+            // Prepared images were built or pulled for the platform already.
             const pulled = yield* Effect.exit(
-              Cache.get(ensuredImages, image?.tag ?? original.Image),
+              image ? Effect.void : Cache.get(ensuredImages, original.Image),
             );
             if (Exit.isFailure(pulled)) return sendError(res, 500, Cause.pretty(pulled.cause));
             return yield* forward(req, res, {
+              path: withCreatePlatform(req.url!, platform),
               body: JSON.stringify({
                 ...original,
                 Image: image?.tag ?? original.Image,
@@ -502,19 +510,41 @@ export const DockerLive = Layer.effect(
 
     // `docker image inspect` prints the image id when present and empty
     // stdout when absent, so only pull when the image is genuinely missing.
-    const pullIfMissing = (imageUri: string, platform?: string) =>
+    const pullIfMissing = (imageUri: string) =>
       inspect(imageUri, "{{.Id}}").pipe(
         Effect.orElseSucceed(() => undefined),
-        Effect.flatMap((id) =>
-          id?.trim() ? Effect.void : Effect.asVoid(pull({ imageUri, platform })),
-        ),
+        Effect.flatMap((id) => (id?.trim() ? Effect.void : Effect.asVoid(pull({ imageUri })))),
       );
+    // Without a platform Docker refuses an image published only for other
+    // architectures, so `host` falls back to `linux/amd64`, which Docker
+    // runs emulated, as every image runs by default.
+    const pullUserImage = (imageUri: string) =>
+      platform
+        ? pull({ imageUri, platform })
+        : pull({ imageUri }).pipe(
+            Effect.catchTag("SystemError", () => pull({ imageUri, platform: "linux/amd64" })),
+          );
     // workerd may create a container from an image nobody prepared, such as a
-    // managed `cloudflare/*` image. Failed pulls are forgotten and retried.
-    const ensuredImages = yield* Cache.makeWith((image: string) => pullIfMissing(image, platform), {
-      capacity: Number.MAX_SAFE_INTEGER,
-      timeToLive: (exit) => (Exit.isFailure(exit) ? 0 : Infinity),
-    });
+    // managed `cloudflare/*` image. Pull it when it is missing, or when it is
+    // cached for another architecture than the one containers are pinned to
+    // (e.g. left by an earlier `host` session); if that pull fails, the
+    // cached image is used. Failed pulls are forgotten and retried.
+    const ensuredImages = yield* Cache.makeWith(
+      (imageUri: string) =>
+        inspect(imageUri, "{{.Os}}/{{.Architecture}}").pipe(
+          Effect.orElseSucceed(() => ""),
+          Effect.flatMap((cached) => {
+            const present = cached.trim() !== "";
+            if (present && (!platform || cached.trim() === platform)) return Effect.void;
+            const pulled = Effect.asVoid(pullUserImage(imageUri));
+            return present ? Effect.ignore(pulled) : pulled;
+          }),
+        ),
+      {
+        capacity: Number.MAX_SAFE_INTEGER,
+        timeToLive: (exit) => (Exit.isFailure(exit) ? 0 : Infinity),
+      },
+    );
 
     const list = (ancestor: string) =>
       run([
@@ -724,12 +754,13 @@ export const DockerLive = Layer.effect(
           );
         }),
       // Pull every time so a mutable tag picks up a newly pushed image and
-      // the local platform's variant replaces any other build under the tag.
+      // the local platform's variant is present under the tag (containers
+      // are created pinned to it, see `withCreatePlatform`).
       // An image that exists only locally (built on the machine or
       // `docker load`ed) has nothing to pull from, so when the pull fails
       // and the image is present, use the local copy.
       pull: (tag, image) =>
-        pull({ ...image, platform }).pipe(
+        pullUserImage(image.imageUri).pipe(
           Effect.catchTag("SystemError", (error) =>
             inspect(image.imageUri, "{{.Id}}").pipe(
               Effect.orElseSucceed(() => ""),
@@ -844,11 +875,25 @@ const generateImageTag = (className: string, suffix?: string) =>
 const dockerProxyError = (subtag: string, message: string) => (cause: unknown) =>
   SystemError.make({ subtag, message, cause });
 
+/**
+ * Pin a user container's create request to the local platform. Docker's
+ * containerd image store keeps every pulled variant under one tag and
+ * otherwise picks the host's, so a `linux/amd64` pull alone does not decide
+ * what runs. `host` (no platform) leaves the choice to Docker.
+ */
+export const withCreatePlatform = (url: string, platform: string | undefined) => {
+  if (!platform) return url;
+  const parsed = new URL(url, "http://docker");
+  parsed.searchParams.set("platform", platform);
+  return `${parsed.pathname}${parsed.search}`;
+};
+
 /** Forward `req` to the Docker socket, replacing its body when one is given. */
 const sendDockerRequest = (
   socketPath: string,
   req: NodeHttp.IncomingMessage,
   body: string | undefined,
+  path: string = req.url!,
 ) =>
   Effect.callback<NodeHttp.IncomingMessage, SystemError>((resume) => {
     const headers: NodeHttp.OutgoingHttpHeaders = { ...req.headers };
@@ -866,7 +911,7 @@ const sendDockerRequest = (
     const upstream = NodeHttp.request(
       {
         socketPath: socketPath.replace(/^unix:/, ""),
-        path: req.url,
+        path,
         method: req.method,
         headers,
       },

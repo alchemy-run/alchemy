@@ -28,8 +28,8 @@ it.live(
       expect(failed.status).toBe(500);
 
       // Once the image exists, the same create must succeed: the failed pull
-      // was not cached.
-      yield* docker("pull", "alpine:3.21");
+      // was not cached. Containers are pinned to linux/amd64 by default.
+      yield* docker("pull", "--platform", "linux/amd64", "alpine:3.21");
       yield* docker("tag", "alpine:3.21", image);
       const created = yield* create;
       expect(created.status).toBe(201);
@@ -72,12 +72,12 @@ it.live(
 );
 
 /**
- * Runs DockerLive with `ALCHEMY_LOCAL_CONTAINER_PLATFORM` set and its docker
- * CLI wrapped in a shim that logs every invocation, then returns the `build`
- * and `pull` commands it ran.
+ * Runs DockerLive with `ALCHEMY_LOCAL_CONTAINER_PLATFORM` set (when given) and
+ * its docker CLI wrapped in a shim that logs every invocation, then returns
+ * the `build` and `pull` commands it ran.
  */
 const withLocalPlatform = <A, E>(
-  platform: string,
+  platform: string | undefined,
   body: Effect.Effect<A, E, Docker | FileSystem.FileSystem>,
 ) =>
   Effect.gen(function* () {
@@ -99,7 +99,7 @@ const withLocalPlatform = <A, E>(
             SecureRandom.layerWebCrypto,
             ConfigProvider.layer(
               ConfigProvider.fromUnknown({
-                ALCHEMY_LOCAL_CONTAINER_PLATFORM: platform,
+                ...(platform === undefined ? {} : { ALCHEMY_LOCAL_CONTAINER_PLATFORM: platform }),
                 DOCKER_BIN: shim,
               }),
             ),
@@ -107,14 +107,12 @@ const withLocalPlatform = <A, E>(
         ),
       ),
     );
-    const commands = (yield* fs.readFileString(log))
+    const commands = (yield* fs.readFileString(log).pipe(Effect.orElseSucceed(() => "")))
       .split("\n")
       .filter((line) => /^(build|pull) /.test(line));
     return { result, commands };
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
 
-// A FROM-only Dockerfile has no RUN step, so a foreign platform builds
-// without emulation on any host.
 const buildAndPull = (built: string, pulled: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -130,17 +128,15 @@ const removeImages = (...tags: Array<string>) =>
   Effect.forEach(tags, (tag) => Effect.ignore(docker("rmi", tag)), { discard: true });
 
 it.live(
-  "builds and pulls the platform set in ALCHEMY_LOCAL_CONTAINER_PLATFORM",
+  "builds and pulls linux/amd64 by default",
   () => {
     const built = `alchemy-platform-build-${crypto.randomUUID()}:latest`;
     const pulled = `alchemy-platform-pull-${crypto.randomUUID()}:latest`;
     return Effect.gen(function* () {
-      const { commands } = yield* withLocalPlatform("linux/arm64", buildAndPull(built, pulled));
+      const { commands } = yield* withLocalPlatform(undefined, buildAndPull(built, pulled));
       expect(commands).toHaveLength(2);
-      expect(commands[0]).toContain("--platform linux/arm64");
-      expect(commands[1]).toBe("pull alpine:3.21 --platform linux/arm64");
-      const arch = yield* docker("image", "inspect", built, "--format", "{{.Architecture}}");
-      expect(arch.trim()).toBe("arm64");
+      expect(commands[0]).toContain("--platform linux/amd64");
+      expect(commands[1]).toBe("pull alpine:3.21 --platform linux/amd64");
     }).pipe(Effect.ensuring(removeImages(built, pulled)));
   },
   120_000,
@@ -159,4 +155,37 @@ it.live(
     }).pipe(Effect.ensuring(removeImages(built, pulled)));
   },
   120_000,
+);
+
+// `amd64/alpine` has no arm64 variant, so only an arm64 daemon refuses it.
+it.live.skipIf(process.arch !== "arm64")(
+  "falls back to linux/amd64 with host when the image has no native variant",
+  () => {
+    const pulled = `alchemy-platform-pull-${crypto.randomUUID()}:latest`;
+    return Effect.gen(function* () {
+      const { commands } = yield* withLocalPlatform(
+        "host",
+        Effect.gen(function* () {
+          yield* (yield* Docker).pull(pulled, { imageUri: "amd64/alpine:3.21" });
+        }),
+      );
+      expect(commands).toEqual([
+        "pull amd64/alpine:3.21",
+        "pull amd64/alpine:3.21 --platform linux/amd64",
+      ]);
+      const arch = yield* docker("image", "inspect", pulled, "--format", "{{.Architecture}}");
+      expect(arch.trim()).toBe("amd64");
+    }).pipe(Effect.ensuring(removeImages(pulled, "amd64/alpine:3.21")));
+  },
+  120_000,
+);
+
+it.live("rejects an unknown ALCHEMY_LOCAL_CONTAINER_PLATFORM", () =>
+  Effect.gen(function* () {
+    // A blank value counts as unset and keeps the default.
+    for (const value of ["linux/arm64", " host", "HOST"]) {
+      const exit = yield* Effect.exit(withLocalPlatform(value, Effect.void));
+      expect(exit._tag, `value ${JSON.stringify(value)}`).toBe("Failure");
+    }
+  }),
 );
