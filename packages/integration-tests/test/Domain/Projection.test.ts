@@ -1,6 +1,7 @@
 import * as Domain from "@alchemy.run/domain";
 import * as InMemoryPlatform from "@alchemy.run/domain/InMemory";
 import { InMemory } from "@alchemy.run/domain/InMemory";
+import * as Projection from "@alchemy.run/domain/Projection";
 import { Story } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Context from "effect/Context";
@@ -345,6 +346,79 @@ class Balances extends Domain.Model("Balances", {
 
 const balances = Balances.layer(Layer.mergeAll(BalanceRowsLive, DepositRowsLive));
 
+// ---------------------------------------------------------------- projections that refuse inputs
+
+/** Stores each deposit's balance, but refuses a negative or a zero deposit for good. */
+class Refusing extends Domain.Projection("Refusing", {
+  from: [Wallet],
+  key: Wallet,
+  on: [Deposited],
+}) {}
+
+const RefusingLive = (calls: Array<number>) =>
+  Refusing.toLayer(
+    Effect.gen(function* () {
+      const tables = yield* Tables;
+      return Effect.fn(function* (batch) {
+        calls.push(batch.length);
+        for (const input of batch) {
+          if (input.event.amount < 0) {
+            return yield* Projection.refuseInputs([
+              { position: input.position, reason: "a negative deposit" },
+            ]);
+          }
+          if (input.event.amount === 0) return yield* Projection.refuse("a zero deposit");
+          yield* tables.set("refusing", input.key.id, input.event.balance);
+        }
+      });
+    }),
+  );
+
+class Refusals extends Domain.Model("Refusals", {
+  aggregates: [Wallet],
+  projections: [Refusing],
+}) {}
+
+/** Writes a card per deposit, but refuses a negative one for good. */
+class GuardedCards extends Domain.Projection("GuardedCards", {
+  from: [Wallet],
+  key: Wallet,
+  on: [Deposited],
+  writes: [WalletCard],
+}) {}
+const GuardedCardsLive = GuardedCards.toLayer(
+  Effect.gen(function* () {
+    const cards = yield* WalletCard;
+    return Effect.fn(function* (batch) {
+      for (const input of batch) {
+        if (input.event.amount < 0) {
+          return yield* Projection.refuseInputs([
+            { position: input.position, reason: "a negative deposit" },
+          ]);
+        }
+        yield* cards.append(
+          input,
+          new BalanceChanged({ owner: input.key.id.split("-")[0]!, balance: input.event.balance }),
+        );
+      }
+    });
+  }),
+);
+
+class RefusedWallets extends Domain.Model("RefusedWallets", {
+  aggregates: [Wallet],
+  projections: [GuardedCards],
+  streams: [WalletCard],
+  queries: [LatestBalance],
+}) {}
+
+class RefusedApi extends Domain.Api("RefusedApi", {
+  model: RefusedWallets,
+  commands: ["Deposit"],
+  streams: ["WalletCard"],
+  queries: ["LatestBalance"],
+}) {}
+
 const story = Story.make(Wallets, { layer: handlers() });
 const sam = Wallet.ref("sam-1");
 const kim = Wallet.ref("kim-1");
@@ -532,6 +606,65 @@ describe("Domain Projection", { tags: ["unit", "local"] }, () => {
       ),
     );
   });
+
+  it.live(
+    "a handler refuses inputs for good: they are buried, the rest are written, nothing is retried",
+    () => {
+      const hosted = InMemoryPlatform.make();
+      const calls: Array<number> = [];
+      return Effect.gen(function* () {
+        const wallets = yield* Wallet;
+        const tables = yield* Tables;
+        yield* wallets.send(new Deposit({ id: kim.id, amount: 10 }));
+        yield* wallets.send(new Deposit({ id: kim.id, amount: -5 }));
+        yield* wallets.send(new Deposit({ id: kim.id, amount: 0 }));
+        const receipt = yield* wallets.send(new Deposit({ id: kim.id, amount: 20 }));
+        // The refused runs count as handled: caughtUp does not wait for them forever.
+        yield* Refusing.caughtUp(receipt, { timeout: "5 seconds" });
+        expect(yield* tables.get("refusing", "kim-1")).toBe(25);
+        // The input behind the refused ones was handled, and no run was repeated.
+        yield* Effect.sleep("100 millis");
+        expect(calls).toEqual([1, 1, 1, 1]);
+        expect(hosted.control.buried).toMatchObject([
+          { projection: "Refusing", key: "kim-1", position: 2, reason: "a negative deposit" },
+          { projection: "Refusing", key: "kim-1", position: 3, reason: "a zero deposit" },
+        ]);
+        // A refusal is not a failure.
+        expect(hosted.control.failures).toEqual([]);
+      }).pipe(
+        Effect.provide(
+          Refusals.layer(RefusingLive(calls)).pipe(
+            Layer.provideMerge(Layer.mergeAll(hosted.layer, Tables.memory)),
+          ),
+        ),
+      );
+    },
+  );
+
+  it.live("a refused input writes no card, and reads at its receipt return the latest card", () =>
+    Effect.gen(function* () {
+      const wallets = yield* Wallet;
+      const api = yield* RefusedApi.clientInProcess;
+      yield* wallets.send(new Deposit({ id: kim.id, amount: 70 }));
+      const refused = yield* wallets.send(new Deposit({ id: kim.id, amount: -5 }));
+      // The refused input wrote no card, so the latest is the first deposit's.
+      expect(yield* api.LatestBalance({ wallet: "kim-1" }, { atLeast: refused })).toBe(70);
+      const card = yield* api.WalletCard.peek("kim-1", {
+        headers: { "x-viewer": "kim" },
+        atLeast: { stream: refused.stream, version: refused.version },
+      });
+      expect(card?.event.balance).toBe(70);
+      const receipt = yield* wallets.send(new Deposit({ id: kim.id, amount: 10 }));
+      expect(yield* api.LatestBalance({ wallet: "kim-1" }, { atLeast: receipt })).toBe(75);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        RefusedWallets.layer(
+          Layer.mergeAll(GuardedCardsLive, WalletCardLive, LatestBalanceLive),
+        ).pipe(Layer.provideMerge(Layer.mergeAll(InMemory, ViewerSessionLive))),
+      ),
+    ),
+  );
 
   it("refuses a second writer for one stream", () => {
     class AlsoCards extends Domain.Projection("AlsoCards", {

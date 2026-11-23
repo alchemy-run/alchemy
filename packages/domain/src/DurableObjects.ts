@@ -73,6 +73,7 @@ import {
   type ViewKit,
   type ViewSnapshot,
 } from "./Platform.ts";
+import { refusalOf, refusedReason } from "./Projection.ts";
 import * as TwoPhase from "./TwoPhase.ts";
 
 // ---------------------------------------------------------------- the host
@@ -379,7 +380,7 @@ const BURY_AFTER_ATTEMPTS = 5;
  * object's `deadLetters` method returns it. Nothing processes it again.
  */
 export const DeadLetter = Schema.Struct({
-  /** The queue it was buried from: `outbox` (aggregates, views) or `inbox` (policies). */
+  /** The queue it was buried from: `outbox` (aggregates, views), `inbox` (policies) or `projection` (a projection's refused inputs). */
   queue: Schema.String,
   /** Its position in that queue. */
   seq: Schema.Number,
@@ -2001,6 +2002,9 @@ const emptyProjectionMeta: ProjectionMeta = {
 /** How long a failed or interrupted run waits before it is retried. */
 const PROJECTION_RETRY_MS = 10_000;
 
+/** Where a key's refused inputs are buried: `projection-dead:<position>`. */
+const PROJECTION_DEAD = "projection-dead:";
+
 const projectionObject = (
   kit: ProjectionKit,
   net: Backfill.Network,
@@ -2023,7 +2027,7 @@ const projectionObject = (
     const reset = Effect.gen(function* () {
       const meta = yield* state.storage.get<ProjectionMeta>("meta");
       if (meta === undefined || (meta.generation ?? 0) >= kit.generation) return;
-      yield* clearPrefixes(["in:"]);
+      yield* clearPrefixes(["in:", PROJECTION_DEAD]);
       yield* state.storage.delete("meta");
     });
     const size = kit.options.batch?.size ?? 1;
@@ -2064,20 +2068,54 @@ const projectionObject = (
             ) {
               return yield* wake(run[0]!.at + waitMillis);
             }
-            yield* kit.run(meta.key, run);
+            const ran = yield* Effect.exit(kit.run(meta.key, run));
+            // A refused run is not retried: its refused inputs are buried and the run counts as handled.
+            const refusal = ran._tag === "Failure" ? refusalOf(ran.cause) : undefined;
+            if (ran._tag === "Failure" && refusal === undefined) {
+              return yield* Effect.failCause(ran.cause);
+            }
+            const buried =
+              refusal === undefined
+                ? []
+                : run.flatMap(({ position, delivery }) => {
+                    const reason = refusedReason(refusal, position);
+                    return reason === undefined ? [] : [{ position, delivery, reason }];
+                  });
+            if (buried.length > 0) {
+              yield* Effect.logError(
+                `projection ${kit.name} refused ${buried.length} input${buried.length === 1 ? "" : "s"} of ${meta.key}; buried`,
+                buried.map(({ position, reason }) => `${position}: ${reason}`),
+              );
+            }
             yield* exclusively(
-              Effect.gen(function* () {
-                const current = yield* readMeta;
-                const handled: Record<string, number> = {};
-                for (const { delivery } of run) {
-                  handled[delivery.source] = Math.max(handled[delivery.source] ?? 0, delivery.seq);
-                }
-                yield* state.storage.put("meta", {
-                  ...current,
-                  processed: run[run.length - 1]!.position,
-                  checkpoints: mergeCheckpoints(current.checkpoints, handled),
-                } satisfies ProjectionMeta);
-              }),
+              state.storage.transaction(
+                Effect.gen(function* () {
+                  const current = yield* readMeta;
+                  const handled: Record<string, number> = {};
+                  for (const { delivery } of run) {
+                    handled[delivery.source] = Math.max(
+                      handled[delivery.source] ?? 0,
+                      delivery.seq,
+                    );
+                  }
+                  const buriedAt = yield* Clock.currentTimeMillis;
+                  for (const { position, delivery, reason } of buried) {
+                    yield* state.storage.put(`${PROJECTION_DEAD}${pad(position)}`, {
+                      queue: "projection",
+                      seq: position,
+                      row: delivery,
+                      attempts: 1,
+                      error: reason,
+                      buriedAt,
+                    } satisfies DeadLetter);
+                  }
+                  yield* state.storage.put("meta", {
+                    ...current,
+                    processed: run[run.length - 1]!.position,
+                    checkpoints: mergeCheckpoints(current.checkpoints, handled),
+                  } satisfies ProjectionMeta);
+                }),
+              ),
             );
           }
         }),
@@ -2187,6 +2225,12 @@ const projectionObject = (
           }),
         ),
       checkpoints: () => reportDefects(readMeta.pipe(Effect.map((meta) => meta.checkpoints))),
+      deadLetters: () =>
+        reportDefects(
+          state.storage
+            .list<DeadLetter>({ prefix: PROJECTION_DEAD })
+            .pipe(Effect.map((rows) => [...rows.values()])),
+        ),
       // The backfill protocol, as a consumer and a scanner.
       ...scannerRpc(() => scannerFor()),
       ...runRpc(relay, runFor),

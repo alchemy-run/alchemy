@@ -36,6 +36,7 @@ import {
   type ViewSnapshot,
   RunWait,
 } from "./Platform.ts";
+import { refusalOf, refusedReason } from "./Projection.ts";
 import { serveSocket } from "./Watch.ts";
 
 /**
@@ -82,6 +83,21 @@ export interface Control {
   readonly suspended: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   /** Defects raised by policy and projection runs. */
   readonly failures: ReadonlyArray<unknown>;
+  /**
+   * Projection inputs a handler refused for good (`Projection.refuse`,
+   * `Projection.refuseInputs`), in the order they were buried: the
+   * projection, its key, the input's position in the key's log, the source
+   * and `seq` it came from, and why. They are not retried and are not in
+   * `failures`.
+   */
+  readonly buried: ReadonlyArray<{
+    readonly projection: string;
+    readonly key: string;
+    readonly position: number;
+    readonly source: string;
+    readonly seq: number;
+    readonly reason: string;
+  }>;
   /** Saga runs that ended with a defect, in the order they died. */
   readonly deaths: ReadonlyArray<{
     readonly saga: string;
@@ -254,6 +270,14 @@ export const make = (
     return Deferred.await(changed).pipe(Effect.flatMap(wait));
   });
   const failures: Array<unknown> = [];
+  const buried: Array<{
+    projection: string;
+    key: string;
+    position: number;
+    source: string;
+    seq: number;
+    reason: string;
+  }> = [];
   const deaths: Array<{ saga: string; executionId: string; defect: unknown }> = [];
   const commits: Array<{ aggregate: string; id: string; index: number }> = [];
   // Scheduled commands by `aggregate/id/commandId`, so rescheduling replaces.
@@ -430,6 +454,7 @@ export const make = (
     ),
     suspended: waiting,
     failures,
+    buried,
     deaths,
     commits,
   };
@@ -1299,7 +1324,25 @@ export const make = (
                       return;
                     }
                     const run = p.log.slice(p.processed, p.processed + size);
-                    yield* kit.run(key, run).pipe(pollsWait);
+                    const ran = yield* Effect.exit(kit.run(key, run).pipe(pollsWait));
+                    // A refused run is not retried: its refused inputs are buried, and the run counts as handled.
+                    if (ran._tag === "Failure") {
+                      const refusal = refusalOf(ran.cause);
+                      if (refusal === undefined) return yield* Effect.failCause(ran.cause);
+                      for (const { position, delivery } of run) {
+                        const reason = refusedReason(refusal, position);
+                        if (reason !== undefined) {
+                          buried.push({
+                            projection: kit.name,
+                            key,
+                            position,
+                            source: delivery.source,
+                            seq: delivery.seq,
+                            reason,
+                          });
+                        }
+                      }
+                    }
                     p.processed += run.length;
                     for (const { delivery } of run) {
                       p.checkpoints[delivery.source] = Math.max(

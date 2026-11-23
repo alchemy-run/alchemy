@@ -1,6 +1,7 @@
 import * as Domain from "@alchemy.run/domain";
 import * as DurableObjects from "@alchemy.run/domain/DurableObjects";
 import { InMemory } from "@alchemy.run/domain/InMemory";
+import * as Projection from "@alchemy.run/domain/Projection";
 import { describe, expect, it } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Clock from "effect/Clock";
@@ -261,6 +262,32 @@ class Strict extends Domain.View("Strict", {
 
 class Guarded extends Domain.Model("Guarded", { aggregates: [Ledger], views: [Strict] }) {}
 
+const archive = { written: [] as Array<number>, runs: 0 };
+
+/** Archives every booking but one: it refuses booking 2 for good. */
+class Archive extends Domain.Projection("Archive", {
+  from: [Ledger],
+  key: Ledger,
+  on: [Booked],
+}) {}
+const ArchiveLive = Archive.toLayer(
+  Effect.succeed(
+    Effect.fn(function* (batch) {
+      archive.runs += 1;
+      for (const input of batch) {
+        if (input.event.n === POISON) {
+          return yield* Projection.refuseInputs([
+            { position: input.position, reason: `booking ${input.event.n} cannot be archived` },
+          ]);
+        }
+        archive.written.push(input.event.n);
+      }
+    }),
+  ),
+);
+
+class Refusals extends Domain.Model("Refusals", { aggregates: [Ledger], projections: [Archive] }) {}
+
 describe("Domain queues on Durable Objects", { tags: ["unit"] }, () => {
   it.effect(
     "a row that keeps failing is buried, and the rows behind it are delivered",
@@ -317,6 +344,69 @@ describe("Domain queues on Durable Objects", { tags: ["unit"] }, () => {
         Effect.scoped,
         Effect.provide(
           Guarded.layer(Layer.empty).pipe(
+            Layer.provideMerge(DurableObjects.makePlatform(sim.host)),
+            Layer.provideMerge(SecureRandom.layerWebCrypto),
+          ),
+        ),
+      );
+    },
+    { timeout: 60_000 },
+  );
+
+  it.effect(
+    "a projection's refused input is buried once: nothing retries, and no wake-up is left",
+    () => {
+      const sim = simHost({ rowsRead: 0 });
+      archive.written = [];
+      archive.runs = 0;
+      return Effect.gen(function* () {
+        const ledgers = yield* Ledger;
+        const ledger = Ledger.ref("main");
+        const until = (done: () => boolean) =>
+          Effect.gen(function* () {
+            for (let second = 0; second < 120 && !done(); second++) {
+              yield* TestClock.adjust("1 second");
+            }
+            expect(done()).toBe(true);
+          });
+        // The projection's first backfill is over before the bookings that matter.
+        yield* ledgers.send(new BookMany({ id: ledger.id, count: 1 }));
+        yield* until(() => archive.written.length === 1);
+        yield* TestClock.adjust("10 seconds");
+        // Booking 2 is refused for good; 3 and 4 are written behind it.
+        for (let i = 0; i < 3; i++) yield* ledgers.send(new BookMany({ id: ledger.id, count: 1 }));
+        yield* until(() => archive.written.length === 3);
+        expect(archive.written).toEqual([1, 3, 4]);
+        // Long enough for a retry, if one were scheduled.
+        yield* TestClock.adjust("2 hours");
+        expect(archive.runs).toBe(4);
+        expect(archive.written).toEqual([1, 3, 4]);
+        const projection = sim.host.lookup!(
+          { modelName: "Refusals", id: {}, sagas: [], legacyData: false },
+          "ArchiveProjection",
+        )!.getByName(ledger.id);
+        const letters = (yield* Effect.suspend(
+          () => projection.deadLetters() as Effect.Effect<ReadonlyArray<DurableObjects.DeadLetter>>,
+        )) as ReadonlyArray<DurableObjects.DeadLetter>;
+        expect(letters).toHaveLength(1);
+        expect(letters[0]).toMatchObject({
+          queue: "projection",
+          seq: 2,
+          attempts: 1,
+          error: "booking 2 cannot be archived",
+        });
+        expect(letters[0]!.row).toMatchObject({ seq: 2 });
+        // Nothing is scheduled: the wake-up that would retry the run is not there.
+        const stored = [...sim.disk.objects.entries()].find(([name]) =>
+          name.includes("ArchiveProjection"),
+        )?.[1];
+        expect(stored).toBeDefined();
+        expect([...stored!.data.keys()].filter((key) => key.startsWith("cb:"))).toEqual([]);
+        expect(stored!.alarm ?? undefined).toBeUndefined();
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Refusals.layer(ArchiveLive).pipe(
             Layer.provideMerge(DurableObjects.makePlatform(sim.host)),
             Layer.provideMerge(SecureRandom.layerWebCrypto),
           ),
