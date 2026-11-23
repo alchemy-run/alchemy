@@ -185,7 +185,8 @@ export interface ViewClient<V extends View.Any> {
   /**
    * The key's state and the cursor it is valid at, read together. Render the
    * state, then follow `events(key, { after: cursor })`: every later change
-   * arrives once, and none is missed.
+   * arrives once, and none is missed. `position` is the address of the last
+   * fact the key applied, read with the state (absent before it applied one).
    */
   readonly snapshot: (
     key: Key.IdOf<View.KeyOf<V>>,
@@ -922,7 +923,11 @@ const handlersOf = (
         });
         handlers[`${name}.snapshot`] = effect(rpcs.snapshot!, ({ key: id, atLeast, where }) =>
           judgedSnapshot(id, "get", atLeast).pipe(
-            Effect.map(({ state, cursor }) => ({ state: visible(state, where), cursor })),
+            Effect.map(({ state, cursor, position }) => ({
+              state: visible(state, where),
+              cursor,
+              ...(position === undefined ? {} : { position }),
+            })),
           ),
         );
         handlers[`${name}.list`] = effect(

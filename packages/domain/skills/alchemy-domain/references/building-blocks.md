@@ -439,7 +439,7 @@ export class CustomerApi extends Domain.Api("CustomerApi", {
 // A kind left out is served whole; `[]` serves none. An aggregate's state is never served.
 ```
 
-Clients call commands and queries as methods (`bank.WithdrawMoney({ accountId, amount }, { commandId, headers })`, `bank.AccountLedger({ account }, { take })`) and reads as namespaces. A view has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. What an Api serves authorizes itself: a command in `decide`, a view or stream in its Layer's `validate`, a query in its handler.
+Clients call commands and queries as methods (`bank.WithdrawMoney({ accountId, amount }, { commandId, headers })`, `bank.AccountLedger({ account }, { take })`) and reads as namespaces. A view has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state, the cursor to pass as `events(id, { after })`, and the `position` (`{ stream, seq }`) of the last fact it applied, to say what a read reflects. A stream has `peek`, `watch`, `events` and `list`. What an Api serves authorizes itself: a command in `decide`, a view or stream in its Layer's `validate`, a query in its handler.
 
 Give every declaration a `{ description }` as its last argument, written for the person or agent who calls it; `toMcp` tools, `toCli` help and the `toHttpApi` OpenAPI document show it. Add your own keys by augmenting `Domain.Annotations` (`declare module "@alchemy.run/domain"`), and read them as `X.annotations`.
 

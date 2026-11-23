@@ -1316,6 +1316,7 @@ const viewHost = (
         Effect.map((snapshot) => ({
           state: Option.getOrNull(decodeSnapshot(kernel, view, snapshot)),
           cursor: snapshot.seq,
+          ...(snapshot.last === undefined ? {} : { position: snapshot.last }),
         })),
       ),
     waitFor: (key, where, options) =>

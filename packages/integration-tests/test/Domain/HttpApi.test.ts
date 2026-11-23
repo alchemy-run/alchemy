@@ -447,7 +447,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.provide(Served)),
   );
 
-  it.live("a snapshot endpoint answers with the state and its cursor", () =>
+  it.live("a snapshot endpoint answers with the state, its cursor and the fact it reflects", () =>
     Effect.gen(function* () {
       yield* send("POST", "/Deposit", {
         owner: "kim",
@@ -456,7 +456,11 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       const snapshot = yield* send("GET", "/Balance/w-4/snapshot", { owner: "kim" });
       expect(snapshot).toEqual({
         status: 200,
-        body: { state: { owner: "kim", balance: 7 }, cursor: expect.any(Number) },
+        body: {
+          state: { owner: "kim", balance: 7 },
+          cursor: expect.any(Number),
+          position: { stream: "Wallet/w-4", seq: 1 },
+        },
       });
       // Its own path: `get` still answers with the bare state.
       expect((yield* send("GET", "/Balance/w-4", { owner: "kim" })).body).toEqual({

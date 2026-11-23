@@ -1739,6 +1739,7 @@ const build = (
           codec && snapshot.state !== null ? codec.decode(snapshot.state) : null;
         let { version, seq } = snapshot;
         const checkpoints: Record<string, number> = { ...snapshot.checkpoints };
+        let lastFact = snapshot.last;
         // Written before this record existed: each source's fills in on its next delivery.
         const emitted: Record<string, EmittedRange> = { ...snapshot.emitted };
         let changed = false;
@@ -1760,6 +1761,7 @@ const build = (
           }
           if ((checkpoints[delivery.source] ?? 0) >= delivery.seq) continue;
           checkpoints[delivery.source] = delivery.seq;
+          lastFact = { stream: delivery.source, seq: delivery.seq };
           changed = true;
           const emittedBefore = seq;
           const origin = sources.get(delivery.origin)!;
@@ -1851,6 +1853,7 @@ const build = (
           checkpoints,
           seq,
           ...(generation > 0 ? { generation } : {}),
+          ...(lastFact === undefined ? {} : { last: lastFact }),
           emitted,
         };
         return { snapshot: next, changed, entries, downstream };

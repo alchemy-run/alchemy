@@ -299,6 +299,38 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
     );
   }
 
+  for (const [name, platform] of [
+    ["Durable Objects", () => DurableObjects.makePlatform(simHost({ rowsRead: 0 }).host)],
+    ["the in-memory platform", () => InMemory],
+  ] as const) {
+    it.live(
+      `a view's snapshot says which fact it reflects, on ${name}`,
+      () =>
+        Effect.gen(function* () {
+          const ledger = Ledger.ref("positioned");
+          const totals = yield* Totals;
+          expect((yield* totals.snapshot(ledger)).position).toBeUndefined();
+          yield* (yield* Ledger).send(new BookMany({ id: ledger.id, count: 2 }));
+          const receipt = yield* (yield* Ledger).send(new BookMany({ id: ledger.id, count: 1 }));
+          const atLeast = { stream: receipt.stream, version: receipt.version };
+          expect(yield* totals.snapshot(ledger, { atLeast })).toEqual({
+            state: { count: 3 },
+            cursor: 3,
+            position: { stream: "Ledger/positioned", seq: 3 },
+          });
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(
+            BooksBefore.layer(Layer.empty).pipe(
+              Layer.provideMerge(platform()),
+              Layer.provideMerge(SecureRandom.layerWebCrypto),
+            ),
+          ),
+        ),
+      { timeout: 60_000 },
+    );
+  }
+
   it.live(
     "a stream's list reads only the page it returns",
     () => {

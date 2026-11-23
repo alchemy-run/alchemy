@@ -503,6 +503,12 @@ export interface ViewSnapshot {
   /** The view's generation the key was built by: an earlier one is stale and starts over. */
   readonly generation?: number;
   /**
+   * The address of the last fact the key applied: the `stream` of the source
+   * it came from, and its `seq` there. Absent until the key applies one, and
+   * on snapshots written before it existed.
+   */
+  readonly last?: { readonly stream: string; readonly seq: number };
+  /**
    * Per source, what the last command to reach the key from it became: see
    * {@link EmittedRange}. A reader finds a command's emissions with it instead
    * of scanning entries. Absent from snapshots written before it existed, and

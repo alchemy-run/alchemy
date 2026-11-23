@@ -16,6 +16,14 @@ export interface Snapshot<S> {
   readonly state: S;
   /** Pass as `after` to `events` to receive every later event, once. */
   readonly cursor: number;
+  /**
+   * A view's `snapshot` only: the address of the last fact the key applied
+   * (the `stream` of the source it came from and its `seq` there), read from
+   * the same stored snapshot as the state. Absent before the key applies one,
+   * and on a key last written before positions were recorded. A fact's address
+   * names it across the model, so two reads can be compared by it.
+   */
+  readonly position?: { readonly stream: string; readonly seq: number };
 }
 
 /**

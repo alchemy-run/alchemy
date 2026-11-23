@@ -25,8 +25,14 @@ import * as View from "./View.ts";
  * @internal
  */
 
-/** What `watch` sends: a state with its cursor. */
-const snapshotSchema = (state: Schema.Top) => Schema.Struct({ state, cursor: Schema.Number });
+/** What `watch` and a view's `snapshot` send: a state with its cursor. */
+const snapshotSchema = (state: Schema.Top) =>
+  Schema.Struct({
+    state,
+    cursor: Schema.Number,
+    /** A view's `snapshot`: the address of the last fact the key applied (see `Read.Snapshot`). */
+    position: Schema.optionalKey(Schema.Struct({ stream: Schema.String, seq: Schema.Number })),
+  });
 
 /** Something an Api can expose for reading. */
 export type Readable = View.Any | DomainStream.Any;

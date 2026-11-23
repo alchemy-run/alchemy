@@ -157,6 +157,43 @@ const neverCaughtUp = (settle: Effect.Effect<void>) =>
     return [command, ...reads];
   });
 
+/**
+ * A snapshot says the last fact it reflects: the source stream and seq of the
+ * latest write it applied, per key, and none for a key that applied nothing.
+ */
+const positionOfTheLastFact = Effect.gen(function* () {
+  const api = yield* CounterApi.Client;
+  const reflecting = (receipt: { readonly stream: string; readonly version: number }) =>
+    api.Totals.snapshot(receipt.stream.slice("Counter/".length), {
+      atLeast: { stream: receipt.stream, version: receipt.version },
+    });
+  expect(yield* api.Totals.snapshot("p-none")).toEqual({ state: null, cursor: 0 });
+  yield* api.Increment({ id: "p-1", by: 1 });
+  yield* api.Increment({ id: "p-1", by: 2 });
+  const third = yield* api.Increment({ id: "p-1", by: 3 });
+  const other = yield* api.Increment({ id: "p-2", by: 5 });
+  // After the third write, the view reflects fact 3 of Counter/p-1, whatever its cursor.
+  const first = yield* reflecting(third);
+  expect(first).toEqual({
+    state: { total: 6 },
+    cursor: 3,
+    position: { stream: "Counter/p-1", seq: 3 },
+  });
+  // Each key reflects its own source.
+  expect((yield* reflecting(other)).position).toEqual({ stream: "Counter/p-2", seq: 1 });
+  // A later write moves it; reading again without a write does not.
+  const fourth = yield* api.Increment({ id: "p-1", by: 4 });
+  expect((yield* reflecting(fourth)).position).toEqual({ stream: "Counter/p-1", seq: 4 });
+  expect((yield* api.Totals.snapshot("p-1")).position).toEqual({ stream: "Counter/p-1", seq: 4 });
+  // A filter that hides the state still says where the key is.
+  const hidden = yield* api.Totals.snapshot("p-1", { where: { total: { gt: 1000 } } });
+  expect(hidden).toEqual({
+    state: null,
+    cursor: 4,
+    position: { stream: "Counter/p-1", seq: 4 },
+  });
+});
+
 /** A snapshot, two writes, then a feed that resumes after the snapshot's cursor. */
 const snapshotThenFeed = Effect.gen(function* () {
   const api = yield* CounterApi.Client;
@@ -188,15 +225,27 @@ describe("Domain View reads", { tags: ["unit", "local"] }, () => {
         atLeast: { stream: receipt.stream, version: receipt.version },
       });
       const page = yield* api.Totals.list("c-1", { order: "desc", take: 1 });
-      expect(snapshot).toEqual({ state: { total: 4 }, cursor: 1 });
+      expect(snapshot).toEqual({
+        state: { total: 4 },
+        cursor: 1,
+        position: { stream: "Counter/c-1", seq: 1 },
+      });
       expect(page.entries[0]!.envelope.seq).toBe(snapshot.cursor);
     }).pipe(Effect.provide(InProcess)),
+  );
+
+  it.live("a snapshot says which fact it reflects", () =>
+    positionOfTheLastFact.pipe(Effect.provide(InProcess)),
   );
 
   it.live("writes between the snapshot and the feed arrive once each", () =>
     Effect.gen(function* () {
       const { snapshot, entries, now } = yield* snapshotThenFeed;
-      expect(snapshot).toEqual({ state: { total: 1 }, cursor: 1 });
+      expect(snapshot).toEqual({
+        state: { total: 1 },
+        cursor: 1,
+        position: { stream: "Counter/c-1", seq: 1 },
+      });
       expect(entries.map((entry) => entry.envelope.seq)).toEqual([2, 3]);
       // The snapshot's state plus the feed is the current state: no gap, nothing twice.
       expect(entries.at(-1)!.state).toEqual(now);
@@ -206,10 +255,18 @@ describe("Domain View reads", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.provide(InProcess)),
   );
 
+  it.live("a snapshot says which fact it reflects, over the wire", () =>
+    positionOfTheLastFact.pipe(Effect.scoped, Effect.provide(Wire)),
+  );
+
   it.live("works over the wire", () =>
     Effect.gen(function* () {
       const { snapshot, entries } = yield* snapshotThenFeed;
-      expect(snapshot).toEqual({ state: { total: 1 }, cursor: 1 });
+      expect(snapshot).toEqual({
+        state: { total: 1 },
+        cursor: 1,
+        position: { stream: "Counter/c-1", seq: 1 },
+      });
       expect(entries.map((entry) => entry.envelope.seq)).toEqual([2, 3]);
     }).pipe(Effect.scoped, Effect.provide(Wire)),
   );
