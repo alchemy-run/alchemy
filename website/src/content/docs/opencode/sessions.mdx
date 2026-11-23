@@ -3,7 +3,7 @@ title: Sessions & prompts
 description: Name an OpenCode session, prompt it, choose the model, tools and instructions a prompt runs with, make prompts exactly-once, and read the transcript.
 ---
 
-A session is one OpenCode session in a sandbox of its own. You reach it by a name of your choosing, from the Durable Object whose harness owns it. A prompt sends it a message and returns OpenCode's answer.
+A session is one OpenCode session, kept in the Durable Object's SQLite. You reach it by a name of your choosing, from the object whose harness owns it. A prompt sends it a message and returns OpenCode's answer.
 
 ## Name a session
 
@@ -13,7 +13,7 @@ A session is one OpenCode session in a sandbox of its own. You reach it by a nam
 const session = harness.session("pr-142");
 ```
 
-The session's first call opens its sandbox, installs OpenCode and starts it. Later calls, from this instance of the Durable Object or a later one, find it running.
+The first call on any session starts OpenCode in the Durable Object, which takes a few tens of milliseconds. Later calls, from this instance of the object or a later one, find the session by its name.
 
 ## Prompt it
 
@@ -24,7 +24,7 @@ const reply = yield* session.prompt("Why does the login test fail?");
 return reply.text;
 ```
 
-`reply.text` is the answer's text. `reply.parts` is the whole message as OpenCode stores it: text, reasoning and each tool call.
+`reply.text` is the answer's text. `reply.messages` is what the prompt added to the transcript, as OpenCode stores it: the prompt, each step of the answer with its text, reasoning and tool calls, and an `idle` entry that ends it.
 
 ## Choose what a prompt runs with
 
@@ -38,7 +38,7 @@ const reply = yield* session.prompt("Run the tests and fix what fails.", {
 });
 ```
 
-`tools` is exact. The model gets these and nothing else, including any tools the sandbox's image configured for OpenCode. `instructions` are added to OpenCode's system prompt for this prompt.
+`tools` is exact. The model gets these and nothing else, including OpenCode's own tools. `instructions` are added to OpenCode's system prompt for this prompt.
 
 ## Set defaults for a session
 
@@ -59,11 +59,22 @@ A caller that retries after a timeout must not prompt twice. Give the prompt a `
 const reply = yield* session.prompt(text, { requestId: deliveryId });
 ```
 
-A second prompt with the same id waits for the first and returns its answer. This holds while the session's sandbox runs.
+A second prompt with the same id waits for the first and returns its answer. OpenCode stores the id with the prompt, so this holds after the Durable Object restarts too.
+
+## Submit without waiting
+
+`submit` gives the session a prompt and returns once it is stored. `wait` returns when the session has nothing left to run:
+
+```typescript
+yield* session.submit("Fix the failing test.");
+yield* session.wait;
+```
+
+A submitted prompt runs on after the call returns. While it runs the harness keeps the Durable Object's alarm armed, so an object evicted midway wakes up and the prompt resumes within about half a minute.
 
 ## Prompts take minutes
 
-A prompt returns when OpenCode is done, which for real work is minutes. A request that must answer quickly, such as a webhook, can't wait for it. Store the job and run the prompt from the Durable Object's alarm:
+A prompt returns when OpenCode is done, which for real work is minutes. A request that must answer quickly, such as a webhook, can't wait for it. Submit the prompt, or store the job and run it from the Durable Object's alarm when something must happen with the answer:
 
 ```typescript
 const answer = yield* Alchemy.makeCallback(
@@ -87,16 +98,20 @@ yield* session.abort;
 
 ## Read the transcript
 
-`messages` is every message of the session, oldest first, as OpenCode stores them:
+`messages` is the session's transcript, oldest first, as OpenCode stores it. Each entry has a `type`; an `assistant` entry is one step of an answer, and its `content` holds the step's text and tool calls:
 
 ```typescript
 const messages = yield* session.messages;
 const calls = messages.flatMap((message) =>
-  message.parts.flatMap((part) => (part.type === "tool" ? [part.tool] : [])),
+  message.type === "assistant"
+    ? (message as OpenCode.AssistantMessage).content.flatMap((content) =>
+        content.type === "tool" ? [content.name] : [],
+      )
+    : [],
 );
 ```
 
-A `tool` part has the tool's name as OpenCode knows it and its `state`: `pending`, `running`, `completed` with an `output`, or `error`.
+A `tool` entry has the tool's name as OpenCode knows it and its `state`: `running`, `completed` with its `content`, or `error` with its `error`. In [code mode](/opencode/code-mode) the call is the tool that ran the program: `alchemy_codemode`, or `execute` under OpenCode's own code mode, where `state.metadata.toolCalls` lists the calls its program made.
 
 ## Use one of OpenCode's agents
 

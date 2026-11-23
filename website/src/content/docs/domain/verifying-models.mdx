@@ -297,7 +297,8 @@ Left out, and no rule depends on it
 
 Assumed
   - whole numbers are exact: a number stays within ±2^53, and a bigint has no limit
-  - a list an input holds has up to 2 items more than its schema asks for
+  - a duration an input holds is a whole number of milliseconds
+  - a list, a hash set or a hash map an input holds has up to 2 items more than its schema asks for
   - an external system answers what its schema allows, and nothing else
   - middleware lets every caller in: who sends a command is anyone its request context allows
   - what a projection writes, and what a stream or a query gives, is not checked: only what a projection is given
@@ -576,7 +577,9 @@ A proof also covers two things you didn't write down. Every command leaves the s
 
 ## Write handlers the prover can read
 
-The prover reads `decide`, `evolve` and the rules as written, so they have to be plain functions of their inputs. Most ordinary TypeScript is read: conditions, `switch`, spreads, rest patterns, local variables that change, `+=` and `++`, array methods, and helpers from `effect/Option`, `effect/Array`, `effect/Record`, `effect/Struct` and `effect/Match`. The whole list is in [What the prover reads](/domain/verifiable-code).
+The prover reads `decide`, `evolve` and the rules as written, so they have to be plain functions of their inputs. Most ordinary TypeScript is read: conditions, `switch`, spreads, rest patterns, local variables that change, `+=` and `++`, array and string methods, and Effect's own library: effects and their failures, `Option`, `Result`, `Match`, arrays, records, decimals, hash sets and maps, times, and a stream run to a value. The whole list is in [What the prover reads](/domain/verifiable-code).
+
+A package of shared rules is read like your own files. An exported helper the prover cannot read, such as a hash, is [opaque](/domain/verifiable-code#opaque-functions): rules that do not depend on its result are still proved.
 
 Whole numbers are exact, and so is a `bigint`. A division is read where its result is exact: through `Math.floor`, `Math.ceil` or `Math.trunc`, or compared with a whole number.
 
@@ -632,7 +635,7 @@ Checked: in every sequence of up to 3 commands on a new instance
       not proved for AddLines: state.lines was tried with up to 2 items, command.lines was tried with up to 2 items
 ```
 
-A schema's checks are read where the solver has the words for them: whole numbers, bounds, multiples, and the length of a string or a list. Any other check is named in the report. A command that writes to a field with such a check is listed too, since nothing proves the new value passes it.
+A schema's checks are read where the solver has the words for them: whole numbers, bounds, multiples, the bounds of a decimal, and the length of a string or a list. Any other check is named in the report. A command that writes to a field with such a check is listed too, since nothing proves the new value passes it.
 
 ```text
 Schema checks not proved kept

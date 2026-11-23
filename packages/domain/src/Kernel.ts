@@ -43,7 +43,7 @@ import {
   WriterKeyMismatch,
 } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
-import { judge, pathsWithoutJson, rejectionTag, settle } from "./internal.ts";
+import { decidedAt, judge, pathsWithoutJson, rejectionTag, settle } from "./internal.ts";
 import * as Key from "./Key.ts";
 import type {
   Accepted,
@@ -1291,7 +1291,10 @@ const build = (
             const context = yield* RequestContext.restore(input.context);
             const settled = settle(
               yield* Effect.exit(
-                Effect.provideContext(decision, context as Context.Context<unknown>),
+                Effect.provideContext(
+                  decidedAt(decision, now),
+                  context as Context.Context<unknown>,
+                ),
               ),
             );
             if (settled._tag === "Failed")
@@ -1480,7 +1483,10 @@ const build = (
             const context = yield* RequestContext.restore(input.context);
             const settled = settle(
               yield* Effect.exit(
-                Effect.provideContext(decision, context as Context.Context<unknown>),
+                Effect.provideContext(
+                  decidedAt(decision, now),
+                  context as Context.Context<unknown>,
+                ),
               ),
             );
             if (settled._tag === "Failed")

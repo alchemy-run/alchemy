@@ -12,7 +12,7 @@ import type { Annotations } from "./Annotations.ts";
 import type * as Command from "./Command.ts";
 import { DefinitionError, UnhandledCommand } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
-import { judge, settle, targetId as internalTargetId } from "./internal.ts";
+import { decidedAt, judge, settle, targetId as internalTargetId } from "./internal.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as Telemetry from "./Telemetry.ts";
 
@@ -639,7 +639,7 @@ export const predict = (
     };
   }
   if (Effect.isEffect(decision)) {
-    const settled = decision.pipe(
+    const settled = decidedAt(decision, options.now).pipe(
       Effect.provideContext((options.context ?? Context.empty()) as Context.Context<unknown>),
       Effect.runSyncExit,
       settle,

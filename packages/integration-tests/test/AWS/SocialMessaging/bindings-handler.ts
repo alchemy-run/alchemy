@@ -1,5 +1,6 @@
 import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as SocialMessaging from "@alchemy.run/aws/SocialMessaging";
+import { adopt } from "alchemy/AdoptPolicy";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -30,9 +31,10 @@ export default SocialMessagingBindingsFunction.make(
   Effect.gen(function* () {
     // Adopts the console-linked WABA (see LinkedWhatsAppBusinessAccount
     // docs) — stack.destroy() disassociates it, requiring console re-signup.
+    // The account was linked outside alchemy, so adopt(true) takes it over.
     const account = yield* SocialMessaging.LinkedWhatsAppBusinessAccount("BindingsWaba", {
       accountId: WABA_ID,
-    });
+    }).pipe(adopt(true));
 
     const sendMessage = yield* SocialMessaging.SendWhatsAppMessage(account);
     const postMedia = yield* SocialMessaging.PostWhatsAppMessageMedia(account);

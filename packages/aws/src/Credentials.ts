@@ -96,7 +96,10 @@ export const makeAssumeRoleResolver = (options: {
         secretAccessKey: Redacted.isRedacted(creds.SecretAccessKey)
           ? creds.SecretAccessKey
           : Redacted.make(creds.SecretAccessKey),
-        sessionToken: Redacted.make(creds.SessionToken),
+        sessionToken:
+          typeof creds.SessionToken === "string"
+            ? Redacted.make(creds.SessionToken)
+            : creds.SessionToken,
         region: options.region ?? "us-east-1",
         expiration: creds.Expiration?.getTime(),
       } satisfies ResolvedCredentials;

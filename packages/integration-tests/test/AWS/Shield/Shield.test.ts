@@ -29,13 +29,23 @@ describe("AWS.Shield", { tags: ["provider:aws", "provider:aws:shield", "live"] }
     { timeout: 60_000 },
   );
 
+  // The entitlement probes: on a non-subscribed account the wire error is
+  // ResourceNotFoundException "The subscription does not exist." — patched in
+  // distilled to the synthetic typed tag `SubscriptionNotFound`. A subscribed
+  // account (the gated lifecycle below needs one) answers normally.
+  const subscribed = shield
+    .getSubscriptionState({})
+    .pipe(Effect.map((state) => state.SubscriptionState === "ACTIVE"));
+
   test.provider(
-    "describeSubscription on a non-subscribed account fails with typed SubscriptionNotFound",
+    "describeSubscription answers or fails with typed SubscriptionNotFound",
     () =>
       Effect.gen(function* () {
-        // The entitlement probe: the wire error is ResourceNotFoundException
-        // "The subscription does not exist." — patched in distilled to the
-        // synthetic typed tag `SubscriptionNotFound`.
+        if (yield* subscribed) {
+          const described = yield* shield.describeSubscription({});
+          expect(described.Subscription?.SubscriptionLimits).toBeDefined();
+          return;
+        }
         const error = yield* Effect.flip(shield.describeSubscription({}));
         expect(error._tag).toBe("SubscriptionNotFound");
       }),
@@ -43,7 +53,7 @@ describe("AWS.Shield", { tags: ["provider:aws", "provider:aws:shield", "live"] }
   );
 
   test.provider(
-    "describeProtection without a subscription fails with typed SubscriptionNotFound",
+    "describeProtection for a nonexistent protection fails with a typed tag",
     () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
@@ -51,15 +61,22 @@ describe("AWS.Shield", { tags: ["provider:aws", "provider:aws:shield", "live"] }
             ProtectionId: "00000000-0000-0000-0000-000000000000",
           }),
         );
-        expect(error._tag).toBe("SubscriptionNotFound");
+        expect(error._tag).toBe(
+          (yield* subscribed) ? "ResourceNotFoundException" : "SubscriptionNotFound",
+        );
       }),
     { timeout: 60_000 },
   );
 
   test.provider(
-    "listProtections without a subscription fails with typed SubscriptionNotFound",
+    "listProtections answers or fails with typed SubscriptionNotFound",
     () =>
       Effect.gen(function* () {
+        if (yield* subscribed) {
+          const listed = yield* shield.listProtections({});
+          expect(Array.isArray(listed.Protections ?? [])).toBe(true);
+          return;
+        }
         const error = yield* Effect.flip(shield.listProtections({}));
         expect(error._tag).toBe("SubscriptionNotFound");
       }),
