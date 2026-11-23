@@ -704,7 +704,7 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "ai/index",
-        "ai/what-is-a-harness",
+        "ai/what-is-alchemy-ai",
         "ai/tutorial/part-1",
         "ai/tutorial/part-2",
         "ai/tutorial/part-3",

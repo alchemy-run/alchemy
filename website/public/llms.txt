@@ -884,7 +884,7 @@ Archil runs commands, processes and programs against durable disks in Firecracke
 Work described as processes that run on any agent harness: prose that mentions the models, tools, MCP servers and other processes it uses, the sandboxes tools work in, and where sessions run.
 
 - [AI](https://alchemy.run/ai) — Describe work as a process with @alchemy.run/ai, prose that mentions the tools, models and other processes it uses, and run it on any agent harness.
-- [What is an agent harness?](https://alchemy.run/ai/what-is-a-harness) — The concepts behind an agent harness — the loop, models, tools, coding tools, MCP servers, sandboxes and processes — and how @alchemy.run/ai models each of them.
+- [What is Alchemy AI?](https://alchemy.run/ai/what-is-alchemy-ai) — The concepts of Alchemy AI, from the top down. A process describes work in prose, its mentions grant what the work uses, sessions run it, and a harness is the Layer that carries it out.
 - [Part 1: A process](https://alchemy.run/ai/tutorial/part-1) — Start an issue board run by AI processes. Declare a model, describe the work as a process, run a session of it in a Durable Object on a harness, and ask it from a Worker.
 - [Part 2: A board to report to](https://alchemy.run/ai/tutorial/part-2) — Model the issue board with Domain, an aggregate, two commands and a view, and mention the command and the view a Triage session may use, so it reports by sending a command.
 - [Part 3: Events start the work](https://alchemy.run/ai/tutorial/part-3) — Let the board decide when a session starts. A Domain policy asks for each reported issue to be looked after, the issue's Durable Object answers, and GitHub's events become commands.

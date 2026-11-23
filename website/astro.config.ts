@@ -2502,7 +2502,7 @@ export default defineConfig({
           label: "AI",
           items: [
             { label: "Overview", link: "/ai" },
-            { label: "What is an agent harness?", link: "/ai/what-is-a-harness" },
+            { label: "What is Alchemy AI?", link: "/ai/what-is-alchemy-ai" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "ai/tutorial" } }],

@@ -60,6 +60,7 @@ const REDIRECTS: Record<string, string> = {
   "/tutorial/cloudflare/queue-consumer": "/cloudflare/messaging/queues",
   "/tutorial/cloudflare/rpc-durable-object": "/cloudflare/compute/durable-objects#schemaless-rpc",
   "/tutorial/cloudflare/rpc-worker": "/cloudflare/compute/workers#call-another-worker",
+  "/ai/what-is-a-harness": "/ai/what-is-alchemy-ai",
   "/ai/skills": "/ai/process-graphs#follow-a-process",
   "/pi/skills": "/ai/process-graphs#follow-a-process",
   "/opencode/skills": "/ai/process-graphs#follow-a-process",
