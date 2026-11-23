@@ -954,10 +954,25 @@ export const awaitsRevision = (
     // One the key is no longer given may never arrive: its source has removed
     // it. Held, it is dropped if it does arrive, so the key has taken it already.
     if (delivery.revision?.gone) continue;
+    // A rewrite for the key's own copies waits for no event: see `keptRecalls`.
+    if (delivery.revision?.recall) continue;
     if (delivery.source === source && delivery.revision?.root === root) return true;
   }
   return false;
 };
+
+/**
+ * The recalls a key still holds once it has applied through `checkpoints`. A
+ * key takes a recall when its source says it has sent it, which can be before
+ * the events it is for arrive (the key is still reading its history). So it
+ * holds each until it has read its source past the events the recall covers,
+ * and runs it over what arrives meanwhile.
+ */
+export const keptRecalls = (
+  recalls: ReadonlyArray<Delivery>,
+  checkpoints: Readonly<Record<string, number>>,
+): ReadonlyArray<Delivery> =>
+  recalls.filter((held) => (checkpoints[held.source] ?? 0) < (held.revision?.recall?.through ?? 0));
 
 /** Where a pending revision is kept, per source event. */
 export const revisionKey = (source: string, seq: number) => `${source}|${seq}`;

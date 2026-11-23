@@ -1030,6 +1030,7 @@ describe("Domain rewrites, data stored before them", { tags: ["unit", "local"] }
 class OneView extends Domain.Model("Bank", {
   aggregates: [Account],
   views: [Summary],
+  rewrites: [ForgetOwnerForGood],
   compactions: [BringForward],
 }) {}
 class TwoViews extends Domain.Model("Bank", {
@@ -1160,6 +1161,29 @@ describe("Domain rewrites, a consumer behind", { tags: ["unit", "local"] }, () =
         );
         expect(read).toEqual({ was: null, is: { owners: { "a-1": "Sam" } } });
       }),
+  );
+});
+
+describe("Domain rewrites, a key still reading its history", { tags: ["unit", "local"] }, () => {
+  it.live("a rewrite after a compaction reaches the events a key has yet to apply", () =>
+    Effect.gen(function* () {
+      const bank = outliving();
+      const read = yield* bank.deploy(
+        OneView,
+        Effect.gen(function* () {
+          const accounts = yield* Account;
+          // Nothing is delivered until the platform is drained: the summary's key
+          // is told of the rewrite before it has applied the events it is for.
+          yield* accounts.send(new Open({ id: "a-1", customerId: "c-1", owner: "Sam" }));
+          yield* accounts.send(new Deposit({ id: "a-1", amount: 100 }));
+          yield* accounts.compact("a-1", BringForward);
+          yield* accounts.rewrite("a-1", new ForgetOwnerForGood());
+          yield* bank.settle;
+          return Option.getOrNull(yield* (yield* Summary).get(Account.ref("a-1")));
+        }),
+      );
+      expect(read).toEqual({ customerId: "c-1", owner: "", balance: 100 });
+    }),
   );
 });
 

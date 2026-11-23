@@ -29,6 +29,7 @@ import {
   outOfOrder,
   Platform,
   refolded,
+  keptRecalls,
   type Reached,
   recallOf,
   reviseEntries,
@@ -39,6 +40,7 @@ import {
   stampRevisions,
   storedDecisionReceipt,
   storedResult,
+  viewInputOf,
   withoutRevision,
   type Json,
   type ModelHost,
@@ -1271,6 +1273,8 @@ export const make = (
                 readonly revised: Map<string, ReadonlyArray<Revised>>;
                 /** The same, for a rewrite it still holds revisions of, for events yet to arrive. */
                 readonly waiting: Map<string, ReadonlyArray<Revised>>;
+                /** Rewrites of events its sources removed, held for those yet to arrive. */
+                recalls: ReadonlyArray<Delivery>;
               }
             >(),
             lock: Semaphore.makeUnsafe(1),
@@ -1298,6 +1302,7 @@ export const make = (
                   revisions: 0,
                   revised: new Map<string, ReadonlyArray<Revised>>(),
                   waiting: new Map<string, ReadonlyArray<Revised>>(),
+                  recalls: [] as ReadonlyArray<Delivery>,
                 })),
                 Effect.tap((created) => Effect.sync(() => keys.set(key, created))),
               );
@@ -1310,7 +1315,7 @@ export const make = (
               const before = yield* SubscriptionRef.get(current.snapshot);
               // An event a rewrite changed before it got here arrives as it is now.
               const taken: Array<Delivery> = [];
-              const deliveries = arrived.flatMap((delivery) => {
+              let deliveries: ReadonlyArray<Delivery> = arrived.flatMap((delivery) => {
                 const id = revisionKey(delivery.source, delivery.seq);
                 const revised = current.pending.get(id);
                 if (revised === undefined) return [delivery];
@@ -1318,7 +1323,13 @@ export const make = (
                 taken.push(revised);
                 return revised.revision?.gone ? [] : [withoutRevision(revised)];
               });
+              // An event its source removed, rewritten since: it arrives as the rewrite leaves it.
+              for (const recall of current.recalls) {
+                const { rows } = yield* kit.recall(key, recall, deliveries);
+                deliveries = rows.map((row) => viewInputOf(row).delivery);
+              }
               const result = yield* kit.apply(key, before, deliveries);
+              current.recalls = keptRecalls(current.recalls, result.snapshot.checkpoints);
               // The last event a rewrite was waiting for: the key has now taken all of it.
               for (const revised of taken) {
                 const root = revised.revision!.root;
@@ -1360,7 +1371,10 @@ export const make = (
               const before = yield* SubscriptionRef.get(current.snapshot);
               // The rewrite itself, for what the key kept of events its source no longer holds.
               const recall = recallOf(current.pending, source);
-              if (recall !== undefined) current.pending.delete(revisionKey(source, 0));
+              if (recall !== undefined) {
+                current.pending.delete(revisionKey(source, 0));
+                current.recalls = keptRecalls([...current.recalls, recall], before.checkpoints);
+              }
               const recalled =
                 recall === undefined
                   ? { rows: current.inputs as ReadonlyArray<StoredViewInput>, changed: false }

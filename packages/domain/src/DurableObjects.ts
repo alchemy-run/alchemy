@@ -70,6 +70,7 @@ import {
   reviseEntries,
   type Revised,
   revisedBy,
+  keptRecalls,
   type Reached,
   recallOf,
   reviseInputs,
@@ -85,6 +86,7 @@ import {
   storedDecisionReceipt,
   type StoredResult,
   storedResult,
+  viewInputOf,
   type StoredViewInput,
   type StreamEntry,
   type StreamHandled,
@@ -2182,7 +2184,19 @@ const viewObject = (
           }
           deliveries = taken;
         }
+        // An event its source removed, rewritten since: it arrives as the rewrite leaves it.
+        const recalls = held.recalls ?? [];
+        for (const recall of recalls) {
+          const { rows } = yield* kit.recall(key, recall, deliveries);
+          deliveries = rows.map((row) => viewInputOf(row).delivery);
+        }
         const result = yield* kit.apply(key, before, deliveries);
+        if (recalls.length > 0) {
+          const kept = keptRecalls(recalls, result.snapshot.checkpoints);
+          if (kept.length < recalls.length) {
+            yield* state.storage.put("revs", { ...(yield* revs), recalls: kept });
+          }
+        }
         if (!result.changed) return;
         const rows: Record<string, ViewEntry> = {};
         for (const entry of result.entries) rows[`entry:${pad(entry.seq)}`] = entry;
@@ -2264,6 +2278,10 @@ const viewObject = (
         // The rewrite itself, for what the key kept of events its source no longer holds.
         const recall = recallOf(pending, source);
         if (recall !== undefined) pending.delete(revisionKey(source, 0));
+        const recalls =
+          recall === undefined
+            ? held.recalls
+            : keptRecalls([...(held.recalls ?? []), recall], before.checkpoints);
         const recalled =
           recall === undefined
             ? { rows: inputs, changed: false }
@@ -2278,7 +2296,7 @@ const viewObject = (
           ),
         );
         if (!taken.changed && !recalled.changed) {
-          yield* state.storage.put("revs", { ...held, pending: taken.left.size });
+          yield* state.storage.put("revs", { ...held, pending: taken.left.size, recalls });
           return yield* note([]);
         }
         const folded = yield* kit.refold(key, { snapshot: emptySnapshot, top: 0 }, taken.rows);
@@ -2334,6 +2352,7 @@ const viewObject = (
           ...held,
           pending: taken.left.size,
           n: stamped.last,
+          recalls,
         } satisfies ViewRevisions);
         yield* outbox.stage([...stamped.deliveries, ...live.send]);
         yield* note(stamped.sent);
@@ -2555,6 +2574,8 @@ interface ViewRevisions {
   readonly taken: Readonly<Record<string, number>>;
   /** The revisions it has sent its own consumers. */
   readonly n: number;
+  /** Rewrites of events its sources removed, held for those yet to arrive (see `keptRecalls`). */
+  readonly recalls?: ReadonlyArray<Delivery>;
 }
 
 const policyObject = (kit: PolicyKit) =>
