@@ -145,6 +145,7 @@ export const encodeEnvelope = (
   commandId: envelope.commandId,
   correlationId: envelope.correlationId,
   ...(envelope.originator === undefined ? {} : { originator: envelope.originator }),
+  ...(envelope.metadata === undefined ? {} : { metadata: envelope.metadata }),
   ...(trace ? { trace } : {}),
 });
 
@@ -157,6 +158,7 @@ export const decodeEnvelope = (json: EnvelopeJson): Aggregate.Envelope => ({
   commandId: json.commandId,
   correlationId: json.correlationId ?? json.commandId,
   ...(json.originator === undefined ? {} : { originator: json.originator }),
+  ...(json.metadata === undefined ? {} : { metadata: json.metadata }),
 });
 
 /** The aggregate event a delivery derives from: its own, unless a view passed it on. @internal */
@@ -301,9 +303,10 @@ export interface Kernel {
 export const make = (
   definitions: Definitions,
   telemetry: Telemetry.Resolved = Telemetry.resolve(undefined),
+  commitHook?: Aggregate.CommitHook["Service"],
 ): Effect.Effect<Kernel> =>
   Effect.suspend(() => {
-    const { kernel, problems } = collect(definitions, telemetry);
+    const { kernel, problems } = collect(definitions, telemetry, commitHook);
     return problems.length > 0
       ? Effect.failCause(Cause.fromReasons(problems.map(Cause.makeDieReason)))
       : Effect.succeed(kernel);
@@ -333,10 +336,14 @@ const describe = (cause: unknown) =>
   Predicate.hasProperty(cause, "message") ? String(cause.message) : String(cause);
 
 /** Build the kernel and collect every definition problem, each once, in order. */
-const collect = (definitions: Definitions, telemetry: Telemetry.Resolved) => {
+const collect = (
+  definitions: Definitions,
+  telemetry: Telemetry.Resolved,
+  commitHook?: Aggregate.CommitHook["Service"],
+) => {
   const problems: Array<DefinitionError> = [];
   const seen = new Set<string>();
-  const kernel = build(definitions, telemetry, (problem) => {
+  const kernel = build(definitions, telemetry, commitHook, (problem) => {
     if (seen.has(problem.message)) return;
     seen.add(problem.message);
     problems.push(problem);
@@ -351,6 +358,7 @@ const collect = (definitions: Definitions, telemetry: Telemetry.Resolved) => {
 const build = (
   definitions: Definitions,
   telemetry: Telemetry.Resolved,
+  commitHook: Aggregate.CommitHook["Service"] | undefined,
   report: (problem: DefinitionError) => void,
 ): Kernel => {
   const problem = (reason: Reason) => report(new DefinitionError({ reason }));
@@ -1080,6 +1088,18 @@ const build = (
       : viewCodec(entry.view).decode(json);
 
   // ------------------------------------------------------------------ kits
+  /**
+   * The host's commit rule, for an instance's events about to commit: what it
+   * attaches to their envelopes. A refusal dies, so nothing is stored
+   * (`Aggregate.CommitRefused`). Nothing runs for an instance with no events.
+   */
+  const attached = (input: Aggregate.CommitHookInput) =>
+    commitHook === undefined || input.events.length === 0
+      ? Effect.succeed(undefined)
+      : Effect.map(Effect.orDie(commitHook.commit(input)), (metadata) =>
+          metadata === undefined ? undefined : { ...metadata },
+        );
+
   /** Fold decided events into an instance's state, stamp them, and route them. */
   const commitOf = (aggregate: Aggregate.Any) => {
     const def = aggregate.definition;
@@ -1096,6 +1116,7 @@ const build = (
       trace?: Telemetry.TraceJson,
       at?: ReadonlyArray<number | null>,
       originator?: Json,
+      metadata?: Aggregate.Envelope["metadata"],
     ) {
       const stream = `${aggregate.aggregateName}/${id}`;
       const events: Array<StoredEvent> = [];
@@ -1121,6 +1142,7 @@ const build = (
           commandId,
           correlationId,
           ...(originator === undefined ? {} : { originator }),
+          ...(metadata === undefined ? {} : { metadata }),
         };
         next = (def.evolve as Record<string, (...args: any[]) => unknown>)[event._tag](
           next,
@@ -1181,6 +1203,7 @@ const build = (
           input.trace,
           undefined,
           input.originator,
+          input.metadata,
         );
         return {
           state: codecs.state.encode(result.next),
@@ -1316,6 +1339,16 @@ const build = (
             return { _tag: "Rejected", rejection: codec.encode(rejection) } as HandleResult;
           }
           const trace = yield* Telemetry.currentTrace;
+          const metadata = yield* attached({
+            aggregate: aggregate.aggregateName,
+            id,
+            stream: `${aggregate.aggregateName}/${id}`,
+            version: input.version,
+            commandId: input.commandId,
+            command: tag,
+            events: judged.events,
+            context: input.context,
+          });
           const { next, events, deliveries } = yield* commit(
             id,
             state,
@@ -1328,6 +1361,7 @@ const build = (
             trace,
             undefined,
             input.context[RequestContext.ORIGINATOR],
+            metadata,
           );
           const replyFn = (def.reply as Record<string, (...args: any[]) => unknown> | undefined)?.[
             decoded._tag
@@ -1550,6 +1584,17 @@ const build = (
                 );
               }
             }
+            // The host's commit rule sees what each instance is to commit, before anything is stored.
+            const metadata = yield* attached({
+              aggregate: read.aggregate.aggregateName,
+              id: read.id,
+              stream: read.stream,
+              version,
+              commandId: input.commandId,
+              command: command.tag,
+              events: decided,
+              context: input.context,
+            });
             // The reply reads each instance's state after its events.
             const next =
               def.reply === undefined || decided.length === 0
@@ -1566,6 +1611,7 @@ const build = (
                     undefined,
                     undefined,
                     input.context[RequestContext.ORIGINATOR],
+                    metadata,
                   )).next;
             after.set(read.stream, next);
             writes.push({
@@ -1575,6 +1621,7 @@ const build = (
               stream: read.stream,
               version,
               events: yield* Effect.forEach(decided, encodeEvent),
+              ...(metadata === undefined ? {} : { metadata }),
             });
           }
           yield* Effect.annotateCurrentSpan({
@@ -1823,6 +1870,7 @@ const build = (
                 commandId: envelope.commandId,
                 correlationId: envelope.correlationId,
                 ...(envelope.originator === undefined ? {} : { originator: envelope.originator }),
+                ...(envelope.metadata === undefined ? {} : { metadata: envelope.metadata }),
               };
               const entry: ViewEntry = {
                 seq,

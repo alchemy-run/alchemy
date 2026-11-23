@@ -314,6 +314,8 @@ export interface RecordInput {
   readonly trace?: TraceJson;
   /** Who sent the command (see `RequestContext.Originator`), as its context encoded it. */
   readonly originator?: Json;
+  /** What the host's commit hook attached to the envelope of `events`. */
+  readonly metadata?: Readonly<Record<string, unknown>>;
 }
 
 /** One aggregate instance a decision reads, by the name `reads` gives it. */
@@ -338,6 +340,8 @@ export interface DecisionWrite extends DecisionRead {
   /** The version the instance was read at: it must still have it. */
   readonly version: number;
   readonly events: ReadonlyArray<Json>;
+  /** What the host's commit hook attached to the envelope of `events`. */
+  readonly metadata?: Readonly<Record<string, unknown>>;
 }
 
 /** The receipt of an accepted decision, in JSON form. */

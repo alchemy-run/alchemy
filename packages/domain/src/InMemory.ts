@@ -988,6 +988,7 @@ export const make = (
                       correlationId: result.correlationId,
                       trace: result.trace,
                       originator: result.originator,
+                      metadata: write.metadata,
                     });
                   }
                   const sent: DecisionResult = { _tag: "Accepted", receipt: result.receipt };

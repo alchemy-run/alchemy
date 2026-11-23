@@ -646,7 +646,9 @@ const build = <A, E, R>(
       sagas: sagas.map((saga) => saga.workflow._tag),
       legacyData,
     });
-    const kernel = yield* Kernel.make(definitions, telemetry);
+    // The commit rule belongs to the host: read from the Layer the model is built in, never from a sender.
+    const commitHook = yield* Effect.serviceOption(Aggregate.CommitHook);
+    const kernel = yield* Kernel.make(definitions, telemetry, Option.getOrUndefined(commitHook));
     const random = yield* SecureRandom.SecureRandom;
 
     const aggregateStores = new Map<string, AggregateStore>();
