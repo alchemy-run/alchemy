@@ -765,6 +765,37 @@ describe("Domain Ai: tools", { tags: ["unit", "local"] }, () => {
     ),
   );
 
+  it.effect("sends each call's command under that call's id, never one the model chose", () =>
+    run((harness) =>
+      Effect.gen(function* () {
+        const teller = yield* Teller;
+        yield* teller.get("ada").send("Here is 10, twice.");
+
+        // A model fills an id it is offered with the same text on every call.
+        const first = yield* harness.call(
+          "WalletApi_Deposit_send",
+          { input: { walletId: "ada-wallet", amount: 10 }, commandId: "null" },
+          "call-1",
+        );
+        const second = yield* harness.call(
+          "WalletApi_Deposit_send",
+          { input: { walletId: "ada-wallet", amount: 10 }, commandId: "null" },
+          "call-2",
+        );
+        expect(first.structured).toMatchObject({ reply: { balance: 10 } });
+        expect(second.structured).toMatchObject({ reply: { balance: 20 } });
+
+        // The same call, run again after a crash, sends nothing new.
+        const again = yield* harness.call(
+          "WalletApi_Deposit_send",
+          { input: { walletId: "ada-wallet", amount: 10 } },
+          "call-2",
+        );
+        expect(again.structured).toMatchObject({ reply: { balance: 20 } });
+      }),
+    ),
+  );
+
   it.effect("gives the model a rejection as the tool's failure", () =>
     run((harness) =>
       Effect.gen(function* () {

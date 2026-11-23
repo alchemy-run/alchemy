@@ -9,11 +9,12 @@ import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import BoardAgents, { BoardLive } from "./Agents.ts";
 import { CommentOnIssue, Issue, IssueDetail, ReportIssue } from "./Board.ts";
-import { IssueId } from "./Triage.process.ts";
+import { IssueId, Triage } from "./Triage.process.ts";
 
 /**
  * Stands in for a webhook: `POST /report/<issue>` and `POST /comment/<issue>`
- * become commands on the board, and `POST /issue/<issue>` reads it.
+ * become commands on the board, `POST /issue/<issue>` reads it, and
+ * `POST /session/<issue>` reads the transcript of the issue's session.
  */
 export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
   "BoardWorker",
@@ -21,6 +22,7 @@ export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
   Effect.gen(function* () {
     const issues = yield* Issue;
     const details = yield* IssueDetail;
+    const triage = yield* Triage;
 
     return {
       fetch: Effect.gen(function* () {
@@ -55,6 +57,12 @@ export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
             ),
           ),
           Match.when("issue", () => Effect.map(details.get(Issue.ref(issueId)), Option.getOrNull)),
+          // What the issue's session was told and did, as its harness stores it.
+          Match.when("session", () =>
+            Effect.map(triage.get(issueId).messages, (messages) => ({
+              messages: JSON.stringify(messages),
+            })),
+          ),
           Match.orElse(() => Effect.succeed(undefined)),
         );
         return answer === undefined
@@ -67,5 +75,7 @@ export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
         ),
       ),
     };
-  }).pipe(Effect.provide(BoardLive.pipe(Layer.provide(AICloudflare.ProcessClient(BoardAgents))))),
+  }).pipe(
+    Effect.provide(BoardLive.pipe(Layer.provideMerge(AICloudflare.ProcessClient(BoardAgents)))),
+  ),
 ) {}

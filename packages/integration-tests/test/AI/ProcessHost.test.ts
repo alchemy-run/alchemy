@@ -98,6 +98,30 @@ for (const harness of ["pi", "opencode"] as const) {
       );
 
       test(
+        "a message sent without waiting is answered",
+        Effect.gen(function* () {
+          yield* call(`${harness}/Adder/total-4/start`, { input: { a: 5, b: 5 } });
+          yield* call(`${harness}/Adder/total-4/wait`);
+          // `send` returns once the message is stored; the session answers on its own.
+          yield* call(`${harness}/Adder/total-4/send`, {
+            text: "Now call the tool once more to add 7 to the number it returned. Reply with exactly what it returns.",
+            requestId: "more",
+          });
+          const { messages } = yield* call(`${harness}/Adder/total-4/messages`).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (answer) => answer.messages?.includes("2017") === true,
+              times: 20,
+            }),
+          );
+
+          // 5 + 5 + 1000, then + 7 + 1000.
+          expect(messages).toContain("2017");
+        }),
+        { timeout: 180_000 },
+      );
+
+      test(
         "a session that never started refuses a message",
         Effect.gen(function* () {
           const reply = yield* call(`${harness}/Adder/never/send`, { text: "hello" });

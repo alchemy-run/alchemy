@@ -1,4 +1,5 @@
 import { McpServer, Tool, Toolkit } from "effect/ai";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Headers from "effect/http/Headers";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -336,6 +337,25 @@ export const toMcp = <A extends Toolable, R = never>(
   >;
 };
 
+/**
+ * The tool call a process's harness is answering (`AI.ToolCall`), read by
+ * its key so this package needs nothing of `@alchemy.run/ai`.
+ */
+class ToolCall extends Context.Service<
+  ToolCall,
+  { readonly conversationId: string; readonly callId: string }
+>()("AI.ToolCall") {}
+
+/**
+ * A command's parameters as a model is given them: its input and when to
+ * answer. The command's id is not the model's to choose.
+ */
+const withoutCommandId = (payload: Schema.Top): Schema.Top => {
+  const { commandId: _, ...fields } = (payload as unknown as Schema.Struct<Schema.Struct.Fields>)
+    .fields;
+  return Schema.toCodecJson(Schema.Struct(fields));
+};
+
 /** Options of {@link tools}. */
 export interface ToolsOptions<A extends Toolable, R = never> {
   /**
@@ -364,7 +384,9 @@ export interface ApiTools<R> {
  * it may make the Api's calls: a command, a query, or a `get`, `peek`,
  * `list` or `snapshot` of a view or stream. Each is a tool named
  * `<api>_<name>_<operation>`, with the call's own schemas; a rejection
- * comes back to the model as the tool's failure.
+ * comes back to the model as the tool's failure. A command is sent under
+ * the id of the tool call that asked for it: the model never chooses a
+ * command's id, and a call that runs again sends its command once.
  *
  * The Api is the list of what the process may do: declare one per kind of
  * process, or narrow one with `expose`. Running the process requires the
@@ -421,16 +443,27 @@ export const tools = <A extends Toolable, R = never>(
             ),
           )),
       );
-      return exposed.map(toolOf(api.apiName)).map(({ tool, op, wrapped, spec }) => ({
-        "~alchemy/AI/Tool": "inline",
-        toolName: tool.name,
-        spec,
-        handler: (payload: unknown) =>
-          Effect.gen(function* () {
-            const value = yield* invoke(yield* clientOf, op, payload, yield* headers);
-            return wrapped ? { value } : value;
-          }).pipe(Effect.provideContext(context)),
-      })) as unknown as ReadonlyArray<never>;
+      return exposed.map(toolOf(api.apiName)).map(({ tool, op, wrapped, spec }) => {
+        const command = op.operation === "send";
+        return {
+          "~alchemy/AI/Tool": "inline",
+          toolName: tool.name,
+          spec: command ? { ...spec, parameters: withoutCommandId(op.rpc.payloadSchema) } : spec,
+          handler: (payload: unknown) =>
+            Effect.gen(function* () {
+              // The command's id is the tool call's, so a call that is run
+              // again after a crash sends the command once, and two calls
+              // never share one.
+              const call = Option.getOrUndefined(yield* Effect.serviceOption(ToolCall));
+              const sent =
+                command && call !== undefined
+                  ? { ...(payload as object), commandId: `${call.conversationId}:${call.callId}` }
+                  : payload;
+              const value = yield* invoke(yield* clientOf, op, sent, yield* headers);
+              return wrapped ? { value } : value;
+            }).pipe(Effect.provideContext(context)),
+        };
+      }) as unknown as ReadonlyArray<never>;
     }),
   },
 });
