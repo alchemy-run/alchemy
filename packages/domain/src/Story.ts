@@ -1294,19 +1294,14 @@ const make =
                   if (call.exit === undefined) yield* Deferred.await(call.done);
                 }
                 yield* platform.control.drain;
-                yield* Effect.yieldNow;
                 if (yield* platform.control.idle) {
-                  yield* Effect.yieldNow;
-                  yield* platform.control.drain;
-                  if (yield* platform.control.idle) {
-                    if (platform.control.failures.length > 0) {
-                      return yield* new StepFailed({
-                        step,
-                        message: `a policy or projection failed: ${String(platform.control.failures[0])}`,
-                      });
-                    }
-                    return;
+                  if (platform.control.failures.length > 0) {
+                    return yield* new StepFailed({
+                      step,
+                      message: `a policy or projection failed: ${String(platform.control.failures[0])}`,
+                    });
                   }
+                  return;
                 }
               }
               return yield* new StepFailed({
