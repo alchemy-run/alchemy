@@ -4,8 +4,7 @@ import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { groups } from "./conformance/cases.ts";
-import type { Group } from "./conformance/cases.ts";
+import type { Group } from "./cases.ts";
 
 // Every function of the library the prover reads, in every way it is called,
 // on a grid of inputs. `conformance/cases.ts` is the table; this writes one
@@ -71,12 +70,13 @@ interface Chunk {
 const chunksOf = (group: Group): ReadonlyArray<Chunk> => {
   const out: Array<Chunk> = [];
   const add = (expressions: ReadonlyArray<string>, modes: ReadonlyArray<boolean>) => {
-    for (let at = 0; at < expressions.length; at += CHUNK)
+    const size = group.chunk ?? CHUNK;
+    for (let at = 0; at < expressions.length; at += size)
       for (const known of modes)
         out.push({
           command: `${group.name}${out.length}${known ? "Known" : "Held"}`,
           known,
-          expressions: expressions.slice(at, at + CHUNK),
+          expressions: expressions.slice(at, at + size),
         });
   };
   add(group.both, [true, false]);
@@ -118,56 +118,59 @@ const sourceOf = (group: Group, chunks: ReadonlyArray<Chunk>): string =>
     `}) {}`,
   ].join("\n");
 
-for (const group of groups)
-  it.effect(
-    `${group.name}: every expression is what the real code gives, on known inputs and on held ones`,
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const chunks = chunksOf(group);
-        const directory = yield* path.fromFileUrl(new URL("./conformance/", import.meta.url));
-        const file = path.join(directory, `${group.name}.generated.aggregate.ts`);
-        yield* fs.writeFileString(file, sourceOf(group, chunks));
-        yield* Effect.addFinalizer(() =>
-          process.env.KEEP_GENERATED ? Effect.void : Effect.ignore(fs.remove(file)),
-        );
-        const url = yield* path.toFileUrl(file);
-        const fixture: { readonly Bench: Parameters<typeof Prove.report>[0] } =
-          yield* Effect.promise(() => import(/* @vite-ignore */ url.href));
-        const report = yield* Prove.report(fixture.Bench, { source: url });
-        if (process.env.CONFORMANCE_DUMP)
-          yield* fs.writeFileString(
-            path.join(process.env.CONFORMANCE_DUMP, `probe-${group.name}.json`),
-            JSON.stringify(
-              {
-                agreement: report.agreement,
-                unread: report.unread,
-                commands: report.commands,
-                chunks,
-              },
-              (_, value) => (typeof value === "bigint" ? String(value) : value),
-              1,
-            ),
+/** One test for each group: its aggregate is written, read and compared. */
+export const check = (groups: ReadonlyArray<Group>): void => {
+  for (const group of groups)
+    it.effect(
+      `${group.name}: every expression is what the real code gives, on known inputs and on held ones`,
+      () =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const chunks = chunksOf(group);
+          const directory = yield* path.fromFileUrl(new URL("./", import.meta.url));
+          const file = path.join(directory, `${group.name}.generated.aggregate.ts`);
+          yield* fs.writeFileString(file, sourceOf(group, chunks));
+          yield* Effect.addFinalizer(() =>
+            process.env.KEEP_GENERATED ? Effect.void : Effect.ignore(fs.remove(file)),
           );
-        // What was not read, with the expressions the command computes.
-        const unread = report.commands.flatMap((command) =>
-          command.schema._tag === "Proved" || command.schema._tag === "Bounded"
-            ? []
-            : [
+          const url = yield* path.toFileUrl(file);
+          const fixture: { readonly Bench: Parameters<typeof Prove.report>[0] } =
+            yield* Effect.promise(() => import(/* @vite-ignore */ url.href));
+          const report = yield* Prove.report(fixture.Bench, { source: url });
+          if (process.env.CONFORMANCE_DUMP)
+            yield* fs.writeFileString(
+              path.join(process.env.CONFORMANCE_DUMP, `probe-${group.name}.json`),
+              JSON.stringify(
                 {
-                  command: command.command,
-                  verdict: command.schema._tag,
-                  reason: "reason" in command.schema ? command.schema.reason : undefined,
-                  expressions: chunks.find((chunk) => chunk.command === command.command)
-                    ?.expressions,
+                  agreement: report.agreement,
+                  unread: report.unread,
+                  commands: report.commands,
+                  chunks,
                 },
-              ],
-        );
-        expect(unread).toEqual([]);
-        expect(report.agreement.differs.map((reason) => reason.slice(0, 400))).toEqual([]);
-        expect(report.agreement.uncompared).toBe(0);
-        expect(report.agreement.compared).toBeGreaterThan(0);
-      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-    600_000,
-  );
+                (_, value) => (typeof value === "bigint" ? String(value) : value),
+                1,
+              ),
+            );
+          // What was not read, with the expressions the command computes.
+          const unread = report.commands.flatMap((command) =>
+            command.schema._tag === "Proved" || command.schema._tag === "Bounded"
+              ? []
+              : [
+                  {
+                    command: command.command,
+                    verdict: command.schema._tag,
+                    reason: "reason" in command.schema ? command.schema.reason : undefined,
+                    expressions: chunks.find((chunk) => chunk.command === command.command)
+                      ?.expressions,
+                  },
+                ],
+          );
+          expect(unread).toEqual([]);
+          expect(report.agreement.differs.map((reason) => reason.slice(0, 400))).toEqual([]);
+          expect(report.agreement.uncompared).toBe(0);
+          expect(report.agreement.compared).toBeGreaterThan(0);
+        }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+      600_000,
+    );
+};

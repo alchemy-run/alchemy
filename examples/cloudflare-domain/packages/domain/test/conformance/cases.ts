@@ -19,6 +19,42 @@ const o = (fn: string, by: string, self: string, arg: string): ReadonlyArray<str
   `pipe(${self}, ${fn}(${by})(${arg}))`,
 ];
 
+/** A sequence of numbers that is the same every run: the grids are fixed, and wide. */
+const seeded = (seed: number) => {
+  let state = seed;
+  return (from: number, to: number): number => {
+    state = (state * 1103515245 + 12345) % 2147483648;
+    return from + (state % (to - from + 1));
+  };
+};
+
+/** The pins a group names, and so many more drawn from a fixed sequence, as source. */
+const pinned = <A>(
+  named: ReadonlyArray<A>,
+  more: number,
+  draw: (next: ReturnType<typeof seeded>) => A,
+  seed: number,
+): string => {
+  const next = seeded(seed);
+  const drawn = Array.from({ length: more }, () => draw(next));
+  const seen = new Set<string>();
+  return JSON.stringify(
+    [...named, ...drawn].filter((pin) => {
+      const key = JSON.stringify(pin);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }),
+  );
+};
+
+const LETTERS = ["", "a", "b", "ab", "z", "an", ",", " ", "ba", "A"];
+const text = (next: ReturnType<typeof seeded>, parts: number): string =>
+  Array.from({ length: next(0, parts) }, () => LETTERS[next(1, LETTERS.length - 1)]).join("");
+const list = (next: ReturnType<typeof seeded>, least: number, most: number): Array<number> =>
+  Array.from({ length: next(least, most) }, () => next(-6, 6));
+const distinct = (items: ReadonlyArray<number>): Array<number> => [...new Set(items)];
+
 export interface Group {
   readonly name: string;
   /** The command's input fields, as schema source. */
@@ -35,11 +71,27 @@ export interface Group {
   readonly both: ReadonlyArray<string>;
   /** Read only on inputs the prover knows. */
   readonly known?: ReadonlyArray<string>;
+  /** How many expressions one command computes: fewer, where each splits the path many ways. */
+  readonly chunk?: number;
 }
 
 const numbers = {
   input: `a: Small, b: Small, flag: Schema.Boolean`,
-  pins: `[{ a: 0, b: 0, flag: true }, { a: 1, b: -1, flag: false }, { a: -3, b: 2, flag: true }, { a: 4, b: 4, flag: false }, { a: 7, b: 3, flag: true }, { a: -2, b: -5, flag: false }, { a: 6, b: 9, flag: true }]`,
+  pins: pinned(
+    [
+      { a: 0, b: 0, flag: true },
+      { a: 1, b: -1, flag: false },
+      { a: -3, b: 2, flag: true },
+      { a: 4, b: 4, flag: false },
+      { a: 7, b: 3, flag: true },
+      { a: -2, b: -5, flag: false },
+      { a: 6, b: 9, flag: true },
+      { a: 20, b: -20, flag: false },
+    ],
+    6,
+    (next) => ({ a: next(-20, 20), b: next(-20, 20), flag: next(0, 1) === 1 }),
+    11,
+  ),
   differs: `command.a !== pin.a || command.b !== pin.b || command.flag !== pin.flag`,
   bind: (known: boolean) =>
     known
@@ -49,7 +101,19 @@ const numbers = {
 
 const lists = {
   input: `items: Schema.Array(Small), a: Small`,
-  pins: `[{ items: [], a: 1 }, { items: [3], a: 3 }, { items: [3, 1], a: 2 }, { items: [-2, -2], a: -2 }, { items: [0, 5], a: 0 }, { items: [4, -1], a: 4 }]`,
+  pins: pinned(
+    [
+      { items: [], a: 1 },
+      { items: [3], a: 3 },
+      { items: [3, 1], a: 2 },
+      { items: [-2, -2], a: -2 },
+      { items: [0, 5], a: 0 },
+      { items: [4, -1], a: 4 },
+    ],
+    5,
+    (next) => ({ items: list(next, 0, 2), a: next(-6, 6) }),
+    23,
+  ),
   differs: `command.a !== pin.a || command.items.length !== pin.items.length || command.items.some((n, i) => n !== pin.items[i])`,
   bind: (known: boolean) =>
     known
@@ -57,7 +121,7 @@ const lists = {
       : `const a = command.a; const items = command.items;`,
 };
 
-export const groups: ReadonlyArray<Group> = [
+const base: ReadonlyArray<Group> = [
   {
     name: "Number",
     ...numbers,
@@ -417,7 +481,21 @@ export const groups: ReadonlyArray<Group> = [
   {
     name: "String",
     input: `text: Schema.String, other: Schema.String`,
-    pins: `[{ text: "", other: "" }, { text: "a", other: "a" }, { text: "ab", other: "b" }, { text: "abz", other: "z" }, { text: "banana", other: "an" }, { text: "a,b c", other: "," }, { text: "xaby", other: "ab" }]`,
+    pins: pinned(
+      [
+        { text: "", other: "" },
+        { text: "a", other: "a" },
+        { text: "ab", other: "b" },
+        { text: "abz", other: "z" },
+        { text: "banana", other: "an" },
+        { text: "a,b c", other: "," },
+        { text: "xaby", other: "ab" },
+        { text: "b", other: "" },
+      ],
+      6,
+      (next) => ({ text: text(next, 4), other: text(next, 1) }),
+      37,
+    ),
     differs: `command.text !== pin.text || command.other !== pin.other`,
     bind: (known) =>
       known
@@ -724,7 +802,18 @@ export const groups: ReadonlyArray<Group> = [
   {
     name: "Option",
     input: `maybe: Schema.Option(Small), a: Small`,
-    pins: `[{ maybe: null, a: 1 }, { maybe: 2, a: 1 }, { maybe: -3, a: 0 }, { maybe: 0, a: 0 }, { maybe: 4, a: 4 }]`,
+    pins: pinned(
+      [
+        { maybe: null, a: 1 },
+        { maybe: 2, a: 1 },
+        { maybe: -3, a: 0 },
+        { maybe: 0, a: 0 },
+        { maybe: 4, a: 4 },
+      ],
+      5,
+      (next) => ({ maybe: next(0, 3) === 0 ? null : next(-8, 8), a: next(-8, 8) }),
+      41,
+    ),
     differs: `command.a !== pin.a || Option.getOrNull(command.maybe) !== pin.maybe`,
     bind: (known) =>
       known
@@ -843,7 +932,22 @@ export const groups: ReadonlyArray<Group> = [
   {
     name: "BigDecimal",
     input: `amount: Schema.BigDecimal, a: Small`,
-    pins: `[{ amount: "0", a: 0 }, { amount: "1.5", a: 2 }, { amount: "-2.25", a: -1 }, { amount: "100", a: 3 }, { amount: "0.1", a: 1 }, { amount: "2.5", a: 5 }]`,
+    pins: pinned(
+      [
+        { amount: "0", a: 0 },
+        { amount: "1.5", a: 2 },
+        { amount: "-2.25", a: -1 },
+        { amount: "100", a: 3 },
+        { amount: "0.1", a: 1 },
+        { amount: "2.5", a: 5 },
+      ],
+      6,
+      (next) => ({
+        amount: `${next(-30, 30)}.${next(0, 99)}`.replace(/^-0\./, "-0."),
+        a: next(-8, 8),
+      }),
+      53,
+    ),
     differs: `command.a !== pin.a || !BigDecimal.equals(command.amount, BigDecimal.fromStringUnsafe(pin.amount))`,
     bind: (known) =>
       known
@@ -903,7 +1007,21 @@ export const groups: ReadonlyArray<Group> = [
   {
     name: "Time",
     input: `at: Schema.DateTimeUtc, wait: Schema.Duration, a: Small`,
-    pins: `[{ at: 0, wait: 0, a: 1 }, { at: 86400000, wait: 90000, a: 2 }, { at: 1767225600000, wait: -5000, a: -3 }, { at: 1000, wait: 604800000, a: 0 }]`,
+    pins: pinned(
+      [
+        { at: 0, wait: 0, a: 1 },
+        { at: 86400000, wait: 90000, a: 2 },
+        { at: 1767225600000, wait: -5000, a: -3 },
+        { at: 1000, wait: 604800000, a: 0 },
+      ],
+      6,
+      (next) => ({
+        at: next(0, 2000000) * 1000 + next(0, 999),
+        wait: next(-200000, 200000),
+        a: next(-8, 8),
+      }),
+      67,
+    ),
     differs: `command.a !== pin.a || DateTime.toEpochMillis(command.at) !== pin.at || Duration.toMillis(command.wait) !== pin.wait`,
     bind: (known) =>
       known
@@ -978,7 +1096,18 @@ export const groups: ReadonlyArray<Group> = [
   {
     name: "HashSet",
     input: `members: Schema.HashSet(Small), a: Small`,
-    pins: `[{ members: [], a: 1 }, { members: [2], a: 2 }, { members: [2, 5], a: 5 }, { members: [-1, 0], a: 3 }, { members: [7], a: 1 }]`,
+    pins: pinned(
+      [
+        { members: [], a: 1 },
+        { members: [2], a: 2 },
+        { members: [2, 5], a: 5 },
+        { members: [-1, 0], a: 3 },
+        { members: [7], a: 1 },
+      ],
+      4,
+      (next) => ({ members: distinct(list(next, 0, 2)), a: next(-6, 6) }),
+      71,
+    ),
     differs: `command.a !== pin.a || !Equal.equals(command.members, HashSet.fromIterable(pin.members))`,
     bind: (known) =>
       known
@@ -1314,3 +1443,198 @@ export const groups: ReadonlyArray<Group> = [
     known: [`Stream.runCollect(Stream.range(1, 3))`, `Stream.runCollect(Stream.range(a, a + 2))`],
   },
 ];
+
+const expressionsOf = (name: string): ReadonlyArray<string> =>
+  base.find((group) => group.name === name)?.both ?? [];
+
+// Larger collections. A list, a hash set or a hash map an input holds is
+// tried with up to two items more than its schema asks for, so these ask for
+// more: a list of three or four, and a set and a map made in the handler from
+// numbers and strings the solver holds.
+// The list is looked at first: every path has then given it its items.
+const longDiffers = `command.items.length !== pin.items.length || command.items.some((n, i) => n !== pin.items[i]) || command.a !== pin.a`;
+
+const larger: ReadonlyArray<Group> = [
+  {
+    name: "LongArray",
+    input: `items: Schema.Array(Small).check(Schema.isMinLength(3), Schema.isMaxLength(4)), a: Small`,
+    pins: pinned(
+      [
+        { items: [3, 1, 2], a: 2 },
+        { items: [5, 5, -1, 0], a: 0 },
+        { items: [-2, 4, -2], a: -2 },
+        { items: [1, 2, 3, 4], a: 3 },
+      ],
+      1,
+      (next) => ({ items: list(next, 3, 4), a: next(-6, 6) }),
+      83,
+    ),
+    differs: longDiffers,
+    bind: (known) => `${lists.bind(known)} const stream = Stream.fromIterable(items);`,
+    chunk: 1,
+    both: [
+      ...d("Array.sort", "items", "Order.Number"),
+      ...d("Array.sortWith", "items", "(n) => -n", "Order.Number"),
+      `pipe(items, Array.sortBy(Order.mapInput(Order.Number, (n) => n % 2), Order.Number))`,
+      `Array.min(items, Order.Number)`,
+      `Array.max(items, Order.Number)`,
+      `Array.dedupe(items)`,
+      ...d("Array.dedupeWith", "items", "(item, kept) => item > kept"),
+      ...d("Array.union", "items", "[a, 1]"),
+      ...d("Array.intersection", "items", "[a, 1, 2]"),
+      ...d("Array.difference", "items", "[a, 2]"),
+      ...d("Array.groupBy", "items", "(n) => (n > a ? 'up' : 'down')"),
+      ...d("Array.partition", "items", "halved"),
+      ...d("Array.take", "items", "2"),
+      ...d("Array.takeRight", "items", "2"),
+      ...d("Array.drop", "items", "2"),
+      ...d("Array.dropRight", "items", "3"),
+      ...d("Array.takeWhile", "items", "(n) => n > a"),
+      ...d("Array.dropWhile", "items", "(n) => n > a"),
+      ...d("Array.span", "items", "(n) => n >= a"),
+      ...d("Array.splitAt", "items", "2"),
+      ...d("Array.chunksOf", "items", "2"),
+      ...d("Array.chunksOf", "items", "3"),
+      ...d("Array.insertAt", "items", "2", "a"),
+      ...d("Array.modify", "items", "2", "(n) => n + a"),
+      ...d("Array.remove", "items", "2"),
+      ...d("Array.zip", "items", "['x', 'y']"),
+      ...d("Array.zipWith", "items", "items", "(x, y) => x - y"),
+      ...d("Array.findFirst", "items", "(n) => n > a"),
+      ...d("Array.findLast", "items", "(n) => n > a"),
+      ...d("Array.findLastIndex", "items", "(n) => n > a"),
+      ...d("Array.countBy", "items", "(n) => n > a"),
+      ...d("Array.reduce", "items", "a", "(total, n) => total - n"),
+      ...d("Array.reduceRight", "items", "a", "(total, n) => total - n"),
+      ...d("Array.scan", "items", "0", "(total, n) => total + n"),
+      ...d("Array.contains", "items", "a"),
+      ...d("Array.intersperse", "items", "0"),
+      `Array.reverse(items)`,
+      `Array.tail(items)`,
+      `Array.init(items)`,
+      `Array.unprepend(items)`,
+      `Array.unappend(items)`,
+      `items.slice(1, -1)`,
+      `items.slice(-2)`,
+      `items.indexOf(a)`,
+      `items.findLast((n) => n > a) ?? "none"`,
+      `items.toReversed()`,
+      `items.join("-")`,
+      `Number.sumAll(items)`,
+      `Array.every(items, (n) => n > a)`,
+      `Array.some(items, (n) => n > a)`,
+      `HashSet.size(HashSet.fromIterable(items))`,
+      `Array.sort(Array.fromIterable(HashSet.fromIterable(items)), Order.Number)`,
+    ],
+  },
+  {
+    name: "LongStream",
+    input: `items: Schema.Array(Small).check(Schema.isMinLength(3), Schema.isMaxLength(4)), a: Small`,
+    pins: pinned(
+      [
+        { items: [3, 1, 2], a: 2 },
+        { items: [4, 4, -1, 0], a: 0 },
+        { items: [-2, 4, -2], a: -2 },
+        { items: [2, 2, 3, 6], a: 3 },
+      ],
+      2,
+      (next) => ({ items: list(next, 3, 4), a: next(-6, 6) }),
+      89,
+    ),
+    differs: longDiffers,
+    bind: (known) => `${lists.bind(known)} const stream = Stream.fromIterable(items);`,
+    effectful: true,
+    chunk: 3,
+    both: [
+      `stream.pipe(Stream.take(2), Stream.runCollect)`,
+      `stream.pipe(Stream.drop(2), Stream.runCollect)`,
+      `stream.pipe(Stream.takeRight(2), Stream.runCollect)`,
+      `stream.pipe(Stream.takeWhile((n) => n > a), Stream.runCollect)`,
+      `stream.pipe(Stream.dropWhile((n) => n > a), Stream.runCollect)`,
+      `stream.pipe(Stream.takeUntil((n) => n > a), Stream.runCollect)`,
+      `stream.pipe(Stream.filter((n) => n > a), Stream.map((n) => n * 2), Stream.runCollect)`,
+      `stream.pipe(Stream.grouped(2), Stream.runCollect)`,
+      `stream.pipe(Stream.grouped(3), Stream.runCollect)`,
+      `stream.pipe(Stream.rechunk(2), Stream.take(3), Stream.runCollect)`,
+      `stream.pipe(Stream.changes, Stream.runCollect)`,
+      `stream.pipe(Stream.scan(() => 0, (total, n) => total + n), Stream.runCollect)`,
+      `stream.pipe(Stream.zip(stream.pipe(Stream.drop(1))), Stream.runCollect)`,
+      `stream.pipe(Stream.flatMap((n) => Stream.make(n, a)), Stream.take(5), Stream.runCollect)`,
+      `stream.pipe(Stream.mapEffect(even), Stream.take(2), Stream.runCollect, Effect.result)`,
+      `stream.pipe(Stream.mapEffect(even), Stream.runCollect, Effect.result)`,
+      `stream.pipe(Stream.mapEffect(even), Stream.catchTag("Odd", (error) => Stream.make(-error.n)), Stream.runCollect)`,
+      `stream.pipe(Stream.filterEffect((n) => Effect.map(even(n), (m) => m > a)), Stream.take(1), Stream.runCollect, Effect.result)`,
+      `stream.pipe(Stream.mapEffect(positive), Stream.grouped(2), Stream.runCollect, Effect.result)`,
+      `stream.pipe(Stream.tap(even), Stream.runHead, Effect.result)`,
+      `Stream.run(stream, Sink.take(2))`,
+      `Stream.run(stream, Sink.find((n) => n > a))`,
+      `Stream.run(stream, Sink.fold(() => 0, (total) => total < 4, (total, n) => Effect.succeed(total + n)))`,
+      `Stream.run(stream, Sink.every((n) => n > a))`,
+      `stream.pipe(Stream.mapEffect(even), Stream.run(Sink.take(2)), Effect.result)`,
+      `Stream.runFold(stream, () => a, (total, n) => total * 2 + n)`,
+    ],
+  },
+  {
+    name: "BigHashSet",
+    input: `a: Small, b: Small, c: Small`,
+    pins: pinned(
+      [
+        { a: 1, b: 2, c: 3 },
+        { a: 2, b: 2, c: 5 },
+        { a: 0, b: -4, c: 0 },
+        { a: 7, b: 7, c: 7 },
+        { a: 100 - 96, b: 5, c: 9 },
+      ],
+      3,
+      (next) => ({ a: next(-4, 6), b: next(-4, 6), c: next(-4, 6) }),
+      97,
+    ),
+    differs: `command.a !== pin.a || command.b !== pin.b || command.c !== pin.c`,
+    bind: (known) =>
+      `${known ? `const a = pin.a; const b = pin.b; const c = pin.c;` : `const a = command.a; const b = command.b; const c = command.c;`} const members = HashSet.make(a, b, c);`,
+    chunk: 2,
+    both: expressionsOf("HashSet"),
+  },
+  {
+    // Four items, on values the prover knows: every order of them is read.
+    name: "HugeHashSet",
+    input: `a: Small, b: Small, c: Small`,
+    pins: pinned(
+      [
+        { a: 1, b: 2, c: 3 },
+        { a: 2, b: 2, c: 5 },
+        { a: 0, b: -4, c: 9 },
+      ],
+      1,
+      (next) => ({ a: next(-4, 6), b: next(-4, 6), c: next(-4, 6) }),
+      103,
+    ),
+    differs: `command.a !== pin.a || command.b !== pin.b || command.c !== pin.c`,
+    bind: () =>
+      `const a = pin.a; const b = pin.b; const c = pin.c; const members = HashSet.make(a, b, c, 4);`,
+    both: [`a`],
+    known: expressionsOf("HashSet"),
+  },
+  {
+    name: "BigHashMap",
+    input: `a: Small, b: Small, key: Schema.String`,
+    pins: pinned(
+      [
+        { a: 1, b: 2, key: "a" },
+        { a: 2, b: -3, key: "b" },
+        { a: 0, b: 0, key: "q" },
+        { a: 5, b: 4, key: "" },
+      ],
+      2,
+      (next) => ({ a: next(-4, 6), b: next(-4, 6), key: text(next, 1) }),
+      101,
+    ),
+    differs: `command.a !== pin.a || command.b !== pin.b || command.key !== pin.key`,
+    bind: (known) =>
+      `${known ? `const a = pin.a; const b = pin.b; const key = pin.key;` : `const a = command.a; const b = command.b; const key = command.key;`} const scores = HashMap.make(["a", a], [key, b], ["zz", 3]);`,
+    chunk: 2,
+    both: expressionsOf("HashMap"),
+  },
+];
+
+export const groups: ReadonlyArray<Group> = [...base, ...larger];
