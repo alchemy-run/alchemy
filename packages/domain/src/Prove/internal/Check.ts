@@ -1,9 +1,13 @@
+import * as BigDecimal from "effect/BigDecimal";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as HashMap from "effect/HashMap";
+import * as HashSet from "effect/HashSet";
 import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "../../Aggregate.ts";
 import type * as Decision from "../../Decision.ts";
@@ -79,6 +83,10 @@ export const solve = Effect.fn(function* (
   for (const test of tests)
     for (const term of test.terms)
       if (!run.declarations.has(term.text)) wanted.set(term.text, term);
+  // What an opaque function is applied to may be a formula: it is read back by a name, as an output is.
+  for (const application of applications)
+    if (!run.declarations.has(application.argument))
+      wanted.set(application.argument, { sort: application.sort, text: application.argument });
   const named = [...wanted.values()].map((term, index) => ({
     term,
     name: Smt.symbol(`$out.${index}`),
@@ -101,7 +109,9 @@ export const solve = Effect.fn(function* (
         base.push(`(=> (= ${a.term} ${b.term}) (= ${a.argument} ${b.argument}))`);
   const values = [
     ...run.constants,
-    ...applications.flatMap((a) => [a.term, a.argument]),
+    ...applications.flatMap((a) =>
+      run.declarations.has(a.argument) ? [a.term, a.argument] : [a.term],
+    ),
     ...named.map((read) => read.name),
   ];
   const facts: Array<string> = [];
@@ -390,6 +400,17 @@ const canon = (value: unknown): string => {
   if (DateTime.isDateTime(value)) return `@${DateTime.toEpochMillis(value)}`;
   if (Duration.isDuration(value)) return `~${Duration.toMillis(value)}`;
   if (Option.isOption(value)) return Option.isSome(value) ? `some(${canon(value.value)})` : "none";
+  if (Result.isResult(value))
+    return Result.isSuccess(value) ? `ok(${canon(value.success)})` : `err(${canon(value.failure)})`;
+  if (BigDecimal.isBigDecimal(value))
+    return `#${value.pipe(BigDecimal.normalize, BigDecimal.format)}`;
+  // A hash set and a hash map are what they hold, in whatever order.
+  if (HashSet.isHashSet(value)) return `set(${[...value].map(canon).sort().join(",")})`;
+  if (HashMap.isHashMap(value))
+    return `map(${[...value]
+      .map(([key, held]) => `${canon(key)}=>${canon(held)}`)
+      .sort()
+      .join(",")})`;
   if (Array.isArray(value)) return `[${value.map(canon).join(",")}]`;
   return `{${Object.entries(value)
     .filter(([, field]) => field !== undefined)
@@ -492,6 +513,24 @@ export const agree = Effect.fn(function* (
     const built = Symbolic.concretize(value, model, run.lists);
     return "value" in built ? Effect.succeed(built.value) : Effect.fail(skipped);
   };
+  /**
+   * Whether the real hash sets and hash maps give their items in the order
+   * this path read them in. Where one does not, the real code took another
+   * path, which the prover read too.
+   */
+  const ordered = Effect.gen(function* () {
+    for (const order of run.orders) {
+      const read: Array<unknown> = [];
+      for (const item of order.items) read.push(yield* build(item));
+      const real =
+        order.kind === "HashSet"
+          ? [...HashSet.fromIterable(read)]
+          : [...HashMap.fromIterable(read as ReadonlyArray<readonly [unknown, unknown]>)];
+      if (real.length !== read.length || real.some((item, i) => canon(item) !== canon(read[i])))
+        return false;
+    }
+    return true;
+  });
   const tried = Effect.gen(function* () {
     const definition = aggregate.definition;
     const state = yield* build(inputs.state);
@@ -557,7 +596,9 @@ export const agree = Effect.fn(function* (
           `recording ${events.map(Symbolic.show).join(", ")} and leaving ${Symbolic.show(after)}`,
         );
   });
-  return yield* tried.pipe(Effect.catch((agreement) => Effect.succeed(agreement)));
+  const agreement = yield* tried.pipe(Effect.catch((agreement) => Effect.succeed(agreement)));
+  if (agreement._tag !== "Differs") return agreement;
+  return (yield* ordered.pipe(Effect.orElseSucceed(() => true))) ? agreement : skipped;
 });
 
 /**

@@ -31,7 +31,7 @@ export interface Module {
 export type Declaration =
   | { readonly _tag: "Const"; readonly init: Node | undefined }
   | { readonly _tag: "Function"; readonly node: Node }
-  | { readonly _tag: "Class" };
+  | { readonly _tag: "Class"; readonly node: Node };
 
 export interface Import {
   readonly specifier: string;
@@ -60,8 +60,28 @@ export interface Brand {
    * value it matches and the cases it has so far.
    * `Duration`: an `effect/Duration` of a whole number of milliseconds, kept
    * in its one field, `millis`.
+   * `Result`: an `effect/Result`, whose `_tag` is `Success` or `Failure`.
+   * `BigDecimal`: an `effect/BigDecimal`, kept in its one field, `value`:
+   * the text of a decimal the prover knows, or a real number of the solver's.
+   * `HashSet` and `HashMap`: an `effect/HashSet` kept in `items`, and an
+   * `effect/HashMap` kept in `entries` as pairs. No two items, and no two
+   * keys, are equal on the path the value is on.
+   * `Data`: an instance of a class of `effect/Data` or `effect/Schema`,
+   * whose `cls` is the class.
    */
-  readonly kind: "Event" | "Rejection" | "Command" | "Option" | "Recorded" | "Matcher" | "Duration";
+  readonly kind:
+    | "Event"
+    | "Rejection"
+    | "Command"
+    | "Option"
+    | "Recorded"
+    | "Matcher"
+    | "Duration"
+    | "Result"
+    | "BigDecimal"
+    | "HashSet"
+    | "HashMap"
+    | "Data";
   readonly cls: unknown;
 }
 
@@ -98,7 +118,16 @@ export type V =
    * A list an input holds, before the code looks at it. Looking gives it a
    * length, which the run chooses, and an input for each item.
    */
-  | { readonly _tag: "List"; readonly name: string; readonly ast: unknown }
+  | {
+      readonly _tag: "List";
+      readonly name: string;
+      readonly ast: unknown;
+      /**
+       * The list holds a hash set's items, or a hash map's pairs: no two
+       * items, or no two keys, are equal.
+       */
+      readonly distinct?: "items" | "keys";
+    }
   | {
       readonly _tag: "Fn";
       readonly node: Node;
@@ -130,6 +159,11 @@ export type V =
   | { readonly _tag: "Namespace"; readonly module: Module }
   | { readonly _tag: "Host"; readonly value: unknown; readonly name: string }
   | { readonly _tag: "Effect"; readonly run: Eval<V> }
+  /**
+   * An `effect/Stream`, as the library runs one: opening it gives a pull, and
+   * each pull gives the next chunk of items, or `undefined` at the end.
+   */
+  | { readonly _tag: "Stream"; readonly open: Eval<Pull> }
   | { readonly _tag: "Time"; readonly millis: Term }
   | { readonly _tag: "Opaque"; readonly what: string }
   /**
@@ -248,8 +282,15 @@ export interface Site {
   readonly node: Node;
 }
 
+/** The next chunk of a stream's items, or `undefined` when it has ended. */
+export type Pull = Eval<ReadonlyArray<V> | undefined>;
+
 /** `decide` refused the command. */
-export class Rejected extends Data.TaggedError("Rejected")<{ readonly rejection: V }> {}
+export class Rejected extends Data.TaggedError("Rejected")<{
+  readonly rejection: V;
+  /** The effect died: nothing that handles a failure handles it. */
+  readonly defect?: boolean;
+}> {}
 
 /** The prover met code it cannot turn into a formula. */
 export class NotTranslated extends Data.TaggedError("NotTranslated")<{
@@ -326,6 +367,17 @@ export class Run {
   /** The constants that are a `bigint`: they have no largest value. */
   readonly bigs = new Set<string>();
   /**
+   * Each hash set and hash map the code read in order, with the order this
+   * path gave its items. The real one gives them in the order of their
+   * hashes, which the prover does not know: every order is a path.
+   */
+  readonly orders: Array<{
+    readonly kind: "HashSet" | "HashMap";
+    /** What the set or the map holds, in no order: one that holds the same is read in the same order. */
+    readonly key: string;
+    readonly items: ReadonlyArray<V>;
+  }> = [];
+  /**
    * Each result of an opaque function the code tested, by the call's key:
    * whether it is truthy is an input, which the real function decides.
    */
@@ -358,6 +410,7 @@ export class Run {
     for (const [name, list] of this.lists) next.lists.set(name, list);
     for (const [name, bound] of this.bounds) next.bounds.set(name, bound);
     for (const name of this.bigs) next.bigs.add(name);
+    next.orders.push(...this.orders);
     for (const [key, test] of this.tests) next.tests.set(key, test);
     for (const [condition, taken] of this.decided) next.decided.set(condition, taken);
     next.label = this.label;
