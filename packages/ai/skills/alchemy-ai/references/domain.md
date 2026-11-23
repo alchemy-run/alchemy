@@ -58,6 +58,28 @@ Do not provide the HTTP `Session` Layer there: it would look for a cookie on a s
 
 More: [Answer a middleware that checks something](https://alchemy.run/ai/domain#answer-a-middleware-that-checks-something).
 
+## Prove what a session can't break
+
+State rules on the aggregate and verify them. A proved rule holds for every state and command, whoever sends it.
+
+```typescript
+// test/Board.verify.test.ts
+const story = Story.make(Board, { layer: IssueWorkLive, stub: [Triager] });
+
+it.effect(
+  "no command, from a person or a session, breaks the board's rules",
+  () =>
+    Verify.model(Board, {
+      apis: [BoardApi],
+      story,
+      require: { proved: ["Issue.OnlyLabelingChangesTheLabel"] },
+    }).pipe(Effect.provide(NodeServices.layer)),
+  120_000,
+);
+```
+
+More: [Prove what a session can't break](https://alchemy.run/ai/domain#prove-what-a-session-cant-break), [Verifying models](https://alchemy.run/domain/verifying-models).
+
 ## Let the model ask for work
 
 The model declares what it asks for as an external system. A policy calls it; it never names a process and never waits.

@@ -11,7 +11,8 @@
   "type": "module",
   "scripts": {
     "deploy": "alchemy deploy",
-    "destroy": "alchemy destroy"
+    "destroy": "alchemy destroy",
+    "test": "vitest run"
   },
   "dependencies": {
     "@alchemy.run/ai": "workspace:*",
@@ -24,5 +25,10 @@
     "@cloudflare/workers-types": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
+    "vitest": "catalog:"
   }
 }

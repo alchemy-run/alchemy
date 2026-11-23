@@ -37,14 +37,17 @@ export const GitHubIssues = Effect.gen(function* () {
           // A session's own answers arrive here too.
           payload.comment.body.includes(MARKER)
             ? Effect.void
-            : issues.send(
-                new CommentOnIssue({
-                  issueId,
-                  commentId: String(payload.comment.id),
-                  body: payload.comment.body,
-                }),
-                once,
-              ),
+            : issues
+                .send(
+                  new CommentOnIssue({
+                    issueId,
+                    commentId: String(payload.comment.id),
+                    body: payload.comment.body,
+                  }),
+                  once,
+                )
+                // A reply on an issue opened before the board existed.
+                .pipe(Effect.catchTag("NotReported", () => Effect.void)),
         ),
         Match.orElse(() => Effect.void),
       );

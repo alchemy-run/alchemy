@@ -710,6 +710,7 @@ const SECTIONS: Section[] = [
         "ai/tutorial/part-2",
         "ai/tutorial/part-3",
         "ai/tutorial/part-4",
+        "ai/tutorial/part-5",
         "ai/processes",
         "ai/process-graphs",
         "ai/domain",

@@ -81,6 +81,22 @@ A middleware that has a Layer where the process runs is run with it. So do not p
 
 A command sent by a session takes its id from the tool call that asked for it. A call that runs again after a crash sends its command once, and the model cannot make two commands look like one.
 
+## Prove what a session can't break
+
+A session chooses which commands to send, so you can't test every path it might take. State the rules on the aggregate, and [verify](/domain/verifying-models) them: a proved rule holds for every state and every command, whoever sends it.
+
+```typescript
+transitions: {
+  OnlyLabelingChangesTheLabel: ({ before, after, command }) =>
+    before._tag !== "Open" ||
+    after._tag !== "Open" ||
+    before.label === after.label ||
+    command._tag === "LabelIssue",
+},
+```
+
+[Part 5 of the tutorial](/ai/tutorial/part-5) states and proves the issue board's rules.
+
 ## Let a policy ask for the work
 
 A model should not know that an AI process does part of its work. It declares what it asks for as an [external system](/domain/external-system), and a policy calls that:

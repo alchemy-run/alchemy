@@ -57,6 +57,7 @@ More: [Project layout](https://alchemy.run/ai/project-layout).
 - Never give a model an id to choose. Derive ids from `AI.ToolCall` in a tool; a Domain command a session sends already takes its id from the tool call.
 - Mention one Domain command or view, not a whole aggregate, unless the work needs every command.
 - Start a session as the person it acts for, authenticated where you already authenticate (your Worker). Never pass credentials through an input or a message.
+- A session picks its own commands, so state the rules it must not break as `invariants` and `transitions` on the aggregate, and verify them with `Verify.model` in a test.
 - For each middleware that checks something on a mentioned command (a second factor), provide a Layer that says what the check means for a session. Never provide your HTTP session middleware where a process runs.
 - Starting a key twice does nothing, and `requestId` makes a message exactly-once: use both from code that may run twice (a policy, a webhook).
 - Yield processes where the runtime's dependencies are resolved (a Durable Object's outer Effect). Build one Layer and provide it once.
