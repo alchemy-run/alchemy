@@ -1,8 +1,11 @@
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 import type * as Aggregate from "./Aggregate.ts";
 import type { Annotations } from "./Annotations.ts";
 import type * as Event from "./Event.ts";
@@ -34,9 +37,101 @@ export interface Input<Key extends Key.Any, S, E> {
  * least once per input, so make its writes idempotent (an upsert keyed by
  * `envelope.stream` and `envelope.seq` is). Resolve your store, and any stream
  * it writes, while building it, in `toLayer`; the handler itself may only need
- * the runtime it runs in (`RuntimeContext`), as a database binding does.
+ * the runtime it runs in (`RuntimeContext`), as a database binding does. A
+ * failure is retried; inputs that can never be written are refused for good
+ * with {@link refuse} or {@link refuseInputs}.
  */
 export type Handler<I> = (batch: ReadonlyArray<I>) => Effect.Effect<void, never, RuntimeContext>;
+
+/**
+ * One input of a run that its handler refuses for good, by its place in the
+ * key's input log (`Input.position`), with why.
+ */
+export interface RefusedInput {
+  readonly position: number;
+  readonly reason: string;
+}
+
+/**
+ * A handler's refusal, for good, of its run or of some of its inputs: those
+ * inputs can never be written (they do not decode, or they are not its
+ * store's to keep), so running them again fails the same way. The host buries
+ * each refused input with its reason (on Durable Objects the key's
+ * `deadLetters` lists them, in memory `Control.buried` does), records the
+ * whole run as processed, and goes on with the inputs behind it. Without
+ * `inputs` every input of the run is refused with `reason`; with `inputs` only
+ * those are, and the handler has written every other input of the run (an
+ * empty list buries none). A refused run is never retried. Raise it with
+ * {@link refuse} or {@link refuseInputs}; every other failure of a run is
+ * retried.
+ */
+export class Refused extends Data.TaggedError("ProjectionRefused")<{
+  readonly reason: string;
+  readonly inputs?: ReadonlyArray<RefusedInput>;
+}> {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
+/** Refuse the handler's whole run for good (see {@link Refused}). */
+export const refuse = (reason: string): Effect.Effect<never> => Effect.die(new Refused({ reason }));
+
+/**
+ * Refuse these inputs of the run for good, each with its reason, having
+ * written every other input of the run (see {@link Refused}).
+ */
+export const refuseInputs = (inputs: ReadonlyArray<RefusedInput>): Effect.Effect<never> =>
+  Effect.die(
+    new Refused({
+      reason: `${inputs.length} input${inputs.length === 1 ? "" : "s"} refused`,
+      inputs,
+    }),
+  );
+
+/** What a host buries for a refused run: the reason of each refused input, by its place in the key's log. @internal */
+export interface Refusal {
+  readonly reason: string;
+  /** The refused inputs; `undefined` when every input of the run is refused with `reason`. */
+  readonly inputs: ReadonlyMap<number, string> | undefined;
+}
+
+const isRefusedInput = (value: unknown): value is RefusedInput =>
+  Predicate.hasProperty(value, "position") &&
+  typeof value.position === "number" &&
+  Predicate.hasProperty(value, "reason") &&
+  typeof value.reason === "string";
+
+/**
+ * The refusal a failed run's cause carries, if any: a defect tagged
+ * `ProjectionRefused`, matched by its tag, so a refusal raised through another
+ * copy of this module counts too. Interrupts and other failures carry none.
+ * @internal
+ */
+export const refusalOf = (cause: Cause.Cause<unknown>): Refusal | undefined => {
+  for (const reason of cause.reasons) {
+    if (!Cause.isDieReason(reason)) continue;
+    const defect = reason.defect;
+    if (
+      Predicate.isTagged(defect, "ProjectionRefused") &&
+      Predicate.hasProperty(defect, "reason") &&
+      typeof defect.reason === "string"
+    ) {
+      const inputs = Predicate.hasProperty(defect, "inputs") ? defect.inputs : undefined;
+      return {
+        reason: defect.reason,
+        inputs: Array.isArray(inputs)
+          ? new Map(inputs.filter(isRefusedInput).map((input) => [input.position, input.reason]))
+          : undefined,
+      };
+    }
+  }
+  return undefined;
+};
+
+/** The reason the input at `position` of a refused run is buried with, or `undefined` when the refusal leaves it written. @internal */
+export const refusedReason = (refusal: Refusal, position: number): string | undefined =>
+  refusal.inputs === undefined ? refusal.reason : refusal.inputs.get(position);
 
 /**
  * How a projection's Layer tunes it. These are variants: they change how it

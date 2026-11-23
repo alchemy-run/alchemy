@@ -146,6 +146,28 @@ Inputs arrive at least once. If a handler fails halfway, or its host restarts, t
 
 The platform helps on its side too: every key keeps an input log, and a delivery it has already accepted is dropped on arrival.
 
+## Refuse inputs that can never be written
+
+A handler that fails is run again: on Durable Objects, ten seconds later, for as long as it keeps failing, and the inputs behind it wait. That is right for a store that is down, and wrong for an input the store can never take, such as a row that violates a constraint or an event that no longer decodes. Refuse those for good.
+
+```typescript title="packages/domain/src/Ledger/Ledger.projection.ts"
+import * as Projection from "@alchemy.run/domain/Projection";
+
+return Effect.fn(function* (batch) {
+  const refused = batch.filter(({ event }) => event.amount < 0);
+  yield* store.record(batch.filter(({ event }) => event.amount >= 0).map(toRow));
+  if (refused.length > 0) {
+    return yield* Projection.refuseInputs(
+      refused.map(({ position }) => ({ position, reason: "a negative amount has no ledger row" })),
+    );
+  }
+});
+```
+
+`refuseInputs` names the inputs of the run to refuse by their `position`, and the handler has written every other input of the run first. `Projection.refuse(reason)` refuses the whole run. A refused run is not retried and no retry is scheduled for it: its refused inputs are buried with their reasons, the run counts as handled (so `caughtUp` and stream reads see it), and the inputs behind it go on.
+
+On Durable Objects a key's `deadLetters()` lists what was buried, `{ queue: "projection", seq, row, attempts, error, buriedAt }`, with `seq` the input's position and `row` the delivery. On the in-memory platform they are in `Control.buried`. Any other failure of a handler is still retried, so refuse only what retrying cannot fix.
+
 ## Partition it by key
 
 `key` decides which inputs are handled in order. Inputs for one key are handled one batch at a time, in the order they were accepted; different keys run in parallel.
