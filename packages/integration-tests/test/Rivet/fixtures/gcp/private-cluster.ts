@@ -18,6 +18,7 @@ import { Random } from "alchemy/Random";
 import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 
 const API_PORT = 6420;
 const DATA = "/mnt/stateful_partition/rivet";
@@ -48,6 +49,11 @@ docker run -d --name rivet-engine --restart always --network host \\
 
 export const PrivateCluster = Layer.unwrap(
   Effect.gen(function* () {
+    // A node reads its endpoint and token from its own environment: the
+    // engine is only declared while deploying.
+    if (globalThis.__ALCHEMY_RUNTIME__) {
+      return Rivet.ControlPlane("Private", { endpoint: "", token: Redacted.make("") });
+    }
     const { region } = yield* GcpEnvironment.current.pipe(Effect.orDie);
     const { stage } = yield* Stack;
     // A network tag of this stage's own: `default` is shared by every stage.
