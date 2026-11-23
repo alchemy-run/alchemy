@@ -54,8 +54,10 @@ export interface SandboxPermissionRule {
    */
   readonly operations?: ReadonlyArray<string>;
   /**
-   * The targets it matches, with `*` and `**` wildcards: for `network`,
-   * `dns://<host>`, `tcp://<host>:<port>` and `unix:<path>`.
+   * The targets it matches: for `network`, `dns://<host>`,
+   * `tcp://<host>:<port>` and `unix:<path>`. `*` matches within one part of
+   * a name (`tcp://api.example.com:*`), `**` across dots
+   * (`dns://**.amazonaws.com`).
    * @default every target
    */
   readonly patterns?: ReadonlyArray<string>;
