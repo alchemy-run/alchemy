@@ -53,6 +53,8 @@ import {
   ObjectState,
   type ObjectStateShape,
   RUN_ROOT,
+  type Retention,
+  receiptWindow,
   type Stub,
   runClass,
   SUBSCRIPTION_HEADER,
@@ -273,6 +275,7 @@ const cloudflareHost = (
   legacySagas: Map<string, string>,
   /** The class each saga's runs live on, by its name before Domain version 0. */
   sagaRenames: Map<string, InlineDurableObjectProps>,
+  retention: Retention | undefined,
 ): Layer.Layer<Platform, never, Worker | SecureRandom.SecureRandom> =>
   Layer.unwrap(
     Effect.gen(function* () {
@@ -430,7 +433,7 @@ const cloudflareHost = (
               });
           }),
       };
-      return makePlatform(host);
+      return makePlatform(host, { retention });
     }),
   );
 
@@ -539,6 +542,7 @@ export function layerDurableObjects({
   jurisdiction,
   locationHint,
   backfillTimeout,
+  retention,
 }: DurableObjectsOptions = {}): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine,
   never,
@@ -548,7 +552,7 @@ export function layerDurableObjects({
     backfillTimeout === undefined ? undefined : Duration.toSeconds(backfillTimeout);
   // The same options return the same Layer, so models that each provide it
   // share one platform and one workflow engine.
-  const key = `${jurisdiction ?? ""}|${locationHint ?? ""}|${timeoutSeconds ?? ""}`;
+  const key = `${jurisdiction ?? ""}|${locationHint ?? ""}|${timeoutSeconds ?? ""}|${receiptWindow(retention) ?? "forever"}`;
   const placement: Placement = { jurisdiction, locationHint };
   let platform = platforms.get(key);
   if (platform === undefined)
@@ -561,7 +565,7 @@ export function layerDurableObjects({
           const engine = sagaEngine(placement, sagaRenames);
           const legacySagas = new Map<string, string>();
           return Layer.merge(
-            cloudflareHost(placement, timeoutSeconds, version, legacySagas, sagaRenames),
+            cloudflareHost(placement, timeoutSeconds, version, legacySagas, sagaRenames, retention),
             version === undefined ? legacyEngine(legacySagas).pipe(Layer.provide(engine)) : engine,
           );
         }),
@@ -675,6 +679,14 @@ export interface DurableObjectsOptions {
    * @default "30 minutes"
    */
   readonly backfillTimeout?: Duration.Input;
+  /**
+   * How long each Durable Object keeps what only dedupe needs. An aggregate
+   * prunes its own storage as it commits, so a window only matters to an
+   * object that is still being written to.
+   *
+   * @default { receipts: "30 days" }
+   */
+  readonly retention?: Retention;
 }
 
 const platforms = new Map<

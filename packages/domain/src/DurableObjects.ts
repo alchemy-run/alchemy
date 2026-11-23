@@ -351,6 +351,11 @@ const CANCELLED = "cancelled";
 interface Armed {
   readonly commandId: string;
   readonly at: number;
+  /**
+   * Set once the arming's command committed. Its receipt is pruned in time,
+   * and `unschedule` keeps answering `AlreadyExecuted` from this.
+   */
+  readonly executed?: true;
 }
 
 /** How long a queue drain may hold its lease before another drain may take over. */
@@ -635,6 +640,77 @@ const clearPrefixes = (prefixes: ReadonlyArray<string>) =>
       }
     }
   });
+
+/** Keys one delete call takes: Cloudflare deletes at most 128 keys a call. */
+const PRUNE_KEYS = 128;
+
+/** Keys one prune deletes beyond what its caller just added: a log that grew before pruning shrinks a step at a time. */
+const PRUNE_BACKLOG = 1_024;
+
+/**
+ * Delete a view's or projection's `in:` rows through position `through`,
+ * from the watermark `in-pruned` up. `added` is how many rows the caller
+ * just logged, so a log of steady size stays pruned, and a log that grew
+ * before pruning shrinks {@link PRUNE_BACKLOG} rows a call. Neither reads its
+ * log to dedupe (a view checks its checkpoints, a projection its intake). Call
+ * inside the exclusive section that writes the log.
+ */
+const pruneInputs = (through: number, added: number) =>
+  Effect.gen(function* () {
+    const state = yield* ObjectState;
+    const pruned = (yield* state.storage.get<number>("in-pruned")) ?? 0;
+    if (through <= pruned) return;
+    const upTo = Math.min(through, pruned + added + PRUNE_BACKLOG);
+    for (let from = pruned; from < upTo; from += PRUNE_KEYS) {
+      const keys: Array<string> = [];
+      for (let position = from + 1; position <= Math.min(upTo, from + PRUNE_KEYS); position++) {
+        keys.push(`in:${pad(position)}`);
+      }
+      yield* state.storage.delete(keys);
+    }
+    yield* state.storage.put("in-pruned", upTo);
+  });
+
+/** Inputs a view keeps in its `in:` log; older ones are pruned. */
+const VIEW_INPUTS_KEPT = 1_000;
+
+/** How long a Durable Object host keeps what only dedupe needs. */
+export interface Retention {
+  /**
+   * Receipts of commands, accepted and rejected. A command sent again after
+   * this time is decided again, so it must outlast every resend: a caller's
+   * retries, a scheduled command's job after a crash, a saga that resumes.
+   * `"forever"` keeps them.
+   * @default "30 days"
+   */
+  readonly receipts?: Duration.Input | "forever";
+}
+
+/** Options for {@link makePlatform}. */
+export interface PlatformOptions {
+  /** How long the objects keep what only dedupe needs. */
+  readonly retention?: Retention;
+}
+
+/**
+ * The window a receipt is kept for, in milliseconds; `undefined` keeps
+ * receipts forever. Matches the default of Effect Cluster's `retention.receipts`.
+ * @internal
+ */
+export const receiptWindow = (retention: Retention | undefined): number | undefined => {
+  if (retention?.receipts === "forever") return undefined;
+  const window = Duration.fromInputUnsafe(retention?.receipts ?? "30 days");
+  return Duration.isFinite(window) ? Duration.toMillis(window) : undefined;
+};
+
+/** Expired receipts one commit deletes at most: more than it adds, so a backlog drains. */
+const RECEIPTS_PRUNED_PER_COMMIT = 4;
+
+/** What `receipt-at:<time>:<commandId>` holds: a receipt of an aggregate, and when its command first ran. */
+interface ReceiptAt {
+  readonly commandId: string;
+  readonly at: number;
+}
 
 /**
  * What the backfill protocol runs on in one Durable Object: its storage (an
@@ -990,6 +1066,7 @@ const aggregateObject = (
   random: Random,
   peer: Peer,
   decisionOf: DecisionOf,
+  receiptMillis: number | undefined,
 ) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
@@ -1049,14 +1126,43 @@ const aggregateObject = (
           ),
       }));
 
+    /**
+     * Index a receipt by when its command first ran, and delete the receipts
+     * older than the window, the oldest first, a few per commit: they stop
+     * growing without a pass of their own. Call inside the transaction that
+     * writes the receipt.
+     */
+    const keepReceipt = (commandId: string) =>
+      Effect.gen(function* () {
+        if (receiptMillis === undefined) return;
+        const now = yield* Clock.currentTimeMillis;
+        const written: ReceiptAt = { commandId, at: now };
+        yield* state.storage.put(
+          `receipt-at:${String(now).padStart(16, "0")}:${commandId}`,
+          written,
+        );
+        const oldest = yield* state.storage.list<ReceiptAt>({
+          prefix: "receipt-at:",
+          limit: RECEIPTS_PRUNED_PER_COMMIT,
+        });
+        const expired: Array<string> = [];
+        for (const [key, receipt] of oldest) {
+          if (receipt.at > now - receiptMillis) break;
+          expired.push(key, `receipt:${receipt.commandId}`);
+        }
+        if (expired.length > 0) yield* state.storage.delete(expired);
+      });
     // Callers run it `exclusively`.
     const commit = (id: string, command: Json, meta: Aggregate.SendMeta) =>
       Effect.gen(function* () {
         // A rejected command runs again: only an accepted receipt answers a resend.
-        const duplicate = resent(yield* state.storage.get<ReceiptRow>(`receipt:${meta.commandId}`));
+        const stored = yield* state.storage.get<ReceiptRow>(`receipt:${meta.commandId}`);
+        const duplicate = resent(stored);
         // A resend may follow an instance that died before delivering what the
         // first commit staged: deliver it now rather than at the backstop.
         if (duplicate) return { sent: duplicate, kick: true };
+        // Indexed for pruning once, when its command first runs: a rejected command run again keeps its place.
+        const keep = stored === undefined ? keepReceipt(meta.commandId) : Effect.void;
         const current = yield* storedMeta;
         if (current.held) return yield* new InstanceHeld();
         const result = yield* kit.handle({
@@ -1074,7 +1180,12 @@ const aggregateObject = (
         if (result._tag === "Rejected") {
           const sent: SendResult = { _tag: "Rejected", rejection: result.rejection };
           // Kept like an accepted receipt, and readable (`receipt`) as long.
-          yield* state.storage.put(`receipt:${meta.commandId}`, receiptRow(sent, command));
+          yield* state.storage.transaction(
+            Effect.gen(function* () {
+              yield* state.storage.put(`receipt:${meta.commandId}`, receiptRow(sent, command));
+              yield* keep;
+            }),
+          );
           return { sent, kick: false };
         }
         const sent: SendResult = {
@@ -1089,6 +1200,7 @@ const aggregateObject = (
         const kick = yield* state.storage.transaction(
           Effect.gen(function* () {
             yield* state.storage.put(`receipt:${meta.commandId}`, receiptRow(sent, command));
+            yield* keep;
             return yield* persist(id, current.version, result);
           }),
         );
@@ -1138,6 +1250,7 @@ const aggregateObject = (
               _tag: "Accepted",
               receipt,
             });
+            if (duplicate === undefined) yield* keepReceipt(meta.commandId);
             return yield* persist(id, current.version, result);
           }),
         );
@@ -1454,15 +1567,21 @@ const aggregateObject = (
         readonly name?: string;
       }) =>
         Effect.gen(function* () {
-          const key = `scheduled:${job.name ?? job.meta.commandId}`;
+          const name = job.name ?? job.meta.commandId;
+          const key = `scheduled:${name}`;
           const kick = yield* whenFree(
             job.id,
             Effect.gen(function* () {
               // A job scheduled before tokens existed has none, and runs.
               if (job.token !== undefined && (yield* state.storage.get<string>(key)) !== job.token)
                 return false;
-              const { kick } = yield* commit(job.id, job.command, job.meta);
+              const { sent, kick } = yield* commit(job.id, job.command, job.meta);
               yield* state.storage.delete(key);
+              // The arming keeps that its command ran: the receipt is pruned in time.
+              const armed = yield* state.storage.get<Armed>(`armed:${name}`);
+              if (sent._tag === "Accepted" && armed?.commandId === job.meta.commandId) {
+                yield* state.storage.put(`armed:${name}`, { ...armed, executed: true });
+              }
               return kick;
             }),
           );
@@ -1509,7 +1628,9 @@ const aggregateObject = (
         Effect.gen(function* () {
           // Before names, the command id was the name.
           const armed = yield* state.storage.get<Armed>(`armed:${name}`);
-          if (yield* executed(armed?.commandId ?? name)) return "AlreadyExecuted" as const;
+          if (armed?.executed === true || (yield* executed(armed?.commandId ?? name))) {
+            return "AlreadyExecuted" as const;
+          }
           const key = `scheduled:${name}`;
           const token = yield* state.storage.get<string>(key);
           if (token === CANCELLED) return "AlreadyCancelled" as const;
@@ -1629,7 +1750,7 @@ const viewObject = (
     const reset = Effect.gen(function* () {
       if (!stale(yield* stored)) return;
       yield* clearPrefixes(["entry:", "in:"]);
-      yield* state.storage.delete(["snapshot", "routed", "in-seq"]);
+      yield* state.storage.delete(["snapshot", "routed", "in-seq", "in-pruned"]);
     });
     const entriesAfter = (after: number) =>
       stored.pipe(
@@ -1676,6 +1797,7 @@ const viewObject = (
         });
         if (accepted.length > 0) yield* state.storage.put(log);
         yield* state.storage.put("in-seq", inputs + accepted.length);
+        yield* pruneInputs(inputs + accepted.length - VIEW_INPUTS_KEPT, accepted.length);
         yield* state.storage.put("snapshot", result.snapshot);
         if (result.entries.length > 0) yield* state.storage.put(rows);
         const live = yield* Backfill.routeCommit(
@@ -1880,16 +2002,49 @@ const policyObject = (kit: PolicyKit) =>
     // Detached: a delivery arrives inside the sender's drain, so draining it
     // here would run the policy's commands one call deeper than the sender.
     const inbox = yield* queue<Delivery>("inbox", kit.run, { detached: true });
+    /**
+     * A source's watermark from the `seen:<source>:<seq>` rows written before
+     * watermarks, one per delivery: the highest seq among them, or `undefined`
+     * when it has none. The rows are deleted, and the watermark stored, so
+     * this runs once per source. Call inside the transaction that accepts a delivery.
+     */
+    const migrateSeen = (source: string) =>
+      Effect.gen(function* () {
+        const prefix = `seen:${source}:`;
+        let highest: number | undefined;
+        let after: string | undefined;
+        while (true) {
+          const rows = yield* state.storage.list({
+            prefix,
+            limit: PRUNE_KEYS,
+            ...(after === undefined ? {} : { startAfter: after }),
+          });
+          const keys = [...rows.keys()];
+          if (keys.length === 0) break;
+          after = keys[keys.length - 1];
+          // Only this source's rows: another source's id may start with this one's.
+          const own = keys.filter((key) => /^\d+$/.test(key.slice(prefix.length)));
+          for (const key of own) highest = Math.max(highest ?? 0, Number(key.slice(prefix.length)));
+          if (own.length > 0) yield* state.storage.delete(own);
+        }
+        if (highest !== undefined) yield* state.storage.put(`seen-hw:${source}`, highest);
+        return highest;
+      });
     return {
       receive: (delivery: Delivery) =>
         reportDefects(
           Effect.gen(function* () {
-            const id = `${delivery.source}:${delivery.seq}`;
             const accepted = yield* exclusively(
               state.storage.transaction(
                 Effect.gen(function* () {
-                  if (yield* state.storage.get(`seen:${id}`)) return false;
-                  yield* state.storage.put(`seen:${id}`, true);
+                  // Deliveries arrive in order per source (a platform's promise), so the
+                  // last seq accepted from a source stands for every earlier one.
+                  const mark = `seen-hw:${delivery.source}`;
+                  const last =
+                    (yield* state.storage.get<number>(mark)) ??
+                    (yield* migrateSeen(delivery.source));
+                  if (last !== undefined && delivery.seq <= last) return false;
+                  yield* state.storage.put(mark, delivery.seq);
                   yield* inbox.stage([delivery]);
                   return true;
                 }),
@@ -1950,7 +2105,7 @@ const projectionObject = (
       const meta = yield* state.storage.get<ProjectionMeta>("meta");
       if (meta === undefined || (meta.generation ?? 0) >= kit.generation) return;
       yield* clearPrefixes(["in:"]);
-      yield* state.storage.delete("meta");
+      yield* state.storage.delete(["meta", "in-pruned"]);
     });
     const size = kit.options.batch?.size ?? 1;
     const waitMillis = kit.options.batch?.waitMillis ?? 0;
@@ -1998,11 +2153,14 @@ const projectionObject = (
                 for (const { delivery } of run) {
                   handled[delivery.source] = Math.max(handled[delivery.source] ?? 0, delivery.seq);
                 }
+                const processed = run[run.length - 1]!.position;
                 yield* state.storage.put("meta", {
                   ...current,
-                  processed: run[run.length - 1]!.position,
+                  processed,
                   checkpoints: mergeCheckpoints(current.checkpoints, handled),
                 } satisfies ProjectionMeta);
+                // Handled inputs leave the log: duplicates are dropped by `intake`, not by the log.
+                yield* pruneInputs(processed, run.length);
               }),
             );
           }
@@ -2310,6 +2468,7 @@ const claimsOf = (key: object) => {
  */
 export const makePlatform = <R>(
   host: Host<R>,
+  options: PlatformOptions = {},
 ): Layer.Layer<Platform, never, R | SecureRandom.SecureRandom> =>
   Layer.effect(
     Platform,
@@ -2321,6 +2480,7 @@ export const makePlatform = <R>(
         // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `init` is the host's context minus its Scope, which declaring needs none of
         Effect.provide(effect, init) as Effect.Effect<A, E>;
       const random = yield* SecureRandom.SecureRandom;
+      const receiptMillis = receiptWindow(options.retention);
       const commitDecision = yield* TwoPhase.DecisionCommit;
       // Model names are unique per host, not per platform build: two different
       // models named alike would declare the same classes. The same model
@@ -2543,6 +2703,7 @@ export const makePlatform = <R>(
                           bound(`${address.aggregate}Aggregate`)
                         )?.getByName(address.id),
                       (name) => decisions.get(name),
+                      receiptMillis,
                     ),
                   );
                   sources.set(name, namespace);

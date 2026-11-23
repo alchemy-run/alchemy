@@ -566,7 +566,8 @@ export interface EntitiesOptions<PoolReq> {
    * Cluster's processed messages to the entity. Every runner sweeps them
    * each `interval`. Only pools with a cluster database sweep: on
    * `ClusterCloudflare.DurableObjectPool`, each instance keeps these rows in
-   * its own storage, and they are kept.
+   * its own storage, where only `receipts` applies (an instance prunes them
+   * as it commits) and the other rows are kept.
    *
    * @default { receipts: "30 days", deliveries: "7 days", cancelled: "7 days", messages: "7 days", interval: "1 hour" }
    */
@@ -970,7 +971,7 @@ export const layerEntities = <PoolReq>(
           claimKey: runtimeClaim(name),
         };
         return Layer.merge(
-          makePlatform(host),
+          makePlatform(host, { retention: options.retention }),
           Layer.succeed(WorkflowEngine.WorkflowEngine, deferredEngine),
         ).pipe(Layer.provideMerge(SecureRandom.layerWebCrypto));
       }
@@ -984,7 +985,7 @@ export const layerEntities = <PoolReq>(
         claimKey: runtimeClaim(name),
       };
       return Layer.merge(
-        makePlatform(host),
+        makePlatform(host, { retention: options.retention }),
         Layer.succeed(WorkflowEngine.WorkflowEngine, remoteEngine(self(WORKFLOWS))),
       ).pipe(Layer.provideMerge(SecureRandom.layerWebCrypto));
     }),

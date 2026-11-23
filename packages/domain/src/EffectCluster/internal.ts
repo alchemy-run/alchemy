@@ -140,8 +140,10 @@ export interface Retention {
    */
   readonly receipts?: Duration.Input | "forever";
   /**
-   * The marks that a policy instance ran a delivery. A delivery that arrives
-   * again after this time runs again.
+   * The marks that a policy instance ran a delivery, one per delivery. A
+   * delivery that arrives again after this time runs again. A source's
+   * next delivery replaces its marks with one that holds the last seq the
+   * instance ran, and that one is never swept.
    * @default "7 days"
    */
   readonly deliveries?: Duration.Input | "forever";

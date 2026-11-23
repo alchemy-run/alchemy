@@ -47,6 +47,7 @@ import {
   type ObjectStateShape,
   type ObjectStorage,
   parseMultiplexedName,
+  type Retention,
   runtimeClaim,
   type Stub,
   SUBSCRIPTION_HEADER,
@@ -199,6 +200,7 @@ const multiplexed = (
   name: string,
   namespace: DurableObjectNamespace<any>,
   onDeclare: (className: string, build: InstanceBuild) => void,
+  retention: Retention | undefined,
 ) => {
   const remote = (cls: string): Namespace => ({
     getByName: (key: string) => namespace.getByName(`${cls}/${key}`) as unknown as Stub,
@@ -226,7 +228,7 @@ const multiplexed = (
     // The engine reads only `toArray` from its cursors, which Rivet's have.
     state: EngineState as never,
   });
-  return Layer.merge(makePlatform(host), engine).pipe(
+  return Layer.merge(makePlatform(host, { retention }), engine).pipe(
     // The model's Layer needs it too.
     Layer.provideMerge(SecureRandom.layerWebCrypto),
   );
@@ -249,6 +251,13 @@ export interface DurableObjectsOptions<PoolReq> {
   readonly handler?: string;
   /** The pool whose nodes run the model, e.g. `RivetDocker.SwarmPool("Default")`. */
   readonly pool: Layer.Layer<PoolHost, never, PoolReq>;
+  /**
+   * How long the Durable Objects keep what only dedupe needs. Each instance
+   * prunes its own storage as it commits.
+   *
+   * @default { receipts: "30 days" }
+   */
+  readonly retention?: Retention;
 }
 
 /**
@@ -382,11 +391,16 @@ export const layerDurableObjects = <PoolReq>(
             pool: Config.String("RIVET_POOL").pipe(Config.withDefault("")),
           }).pipe(Effect.orDie),
         );
-        return multiplexed(options.name, self, (cls, build) => classes.set(cls, build));
+        return multiplexed(
+          options.name,
+          self,
+          (cls, build) => classes.set(cls, build),
+          options.retention,
+        );
       }
       // A caller: deploy the class, and reach it through the gateway.
       const namespace = (yield* Objects) as DurableObjectNamespace<any>;
-      return multiplexed(options.name, namespace, () => undefined);
+      return multiplexed(options.name, namespace, () => undefined, options.retention);
     }),
   ) as Layer.Layer<
     Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,

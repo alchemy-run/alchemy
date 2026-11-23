@@ -5,6 +5,7 @@ import * as Model from "@alchemy.run/domain/Model";
 import { describe, expect, it } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
 import type * as Duration from "effect/Duration";
@@ -13,9 +14,11 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
+import * as TestClock from "effect/testing/TestClock";
 import { type Disk, type Intercept, simHost, type Stats } from "./sim-host.ts";
 
 // ---------------------------------------------------------------- a ledger with a view and a stream
@@ -714,4 +717,214 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
       { timeout: 30_000 },
     );
   }
+});
+
+// ---------------------------------------------------------------- what the objects keep
+
+/** The keys under `prefix` in the storage of every object whose class name contains `cls`. */
+const keysOf = (disk: Disk, cls: string, prefix: string) =>
+  [...disk.objects.values()]
+    .filter((object) => object.cls.includes(cls))
+    .flatMap((object) => [...object.data.keys()].filter((key) => key.startsWith(prefix)));
+
+describe("Domain on Durable Objects, what the objects keep", { tags: ["unit"] }, () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const pursesWith = (disk: Disk, retention?: DurableObjects.Retention) =>
+    pursesOn(DurableObjects.makePlatform(simHost({ rowsRead: 0 }, { disk }).host, { retention }));
+
+  it.effect("an instance prunes receipts older than 30 days as it commits", () => {
+    const disk: Disk = { objects: new Map() };
+    return Effect.gen(function* () {
+      const purses = yield* Purse;
+      const first = yield* purses.send(new Deposit({ id: "a", amount: 5 }), { commandId: "d1" });
+      yield* TestClock.adjust(29 * DAY);
+      yield* purses.send(new Deposit({ id: "a", amount: 1 }), { commandId: "d2" });
+      expect(keysOf(disk, "PurseAggregate", "receipt:")).toEqual(["receipt:d1", "receipt:d2"]);
+      // The receipt is as old as the window, and the next commit prunes it.
+      yield* TestClock.adjust(1 * DAY);
+      yield* purses.send(new Deposit({ id: "a", amount: 1 }), { commandId: "d3" });
+      expect(keysOf(disk, "PurseAggregate", "receipt:")).toEqual(["receipt:d2", "receipt:d3"]);
+      expect(keysOf(disk, "PurseAggregate", "receipt-at:")).toHaveLength(2);
+      // A command sent again after that is decided again.
+      const again = yield* purses.send(new Deposit({ id: "a", amount: 5 }), { commandId: "d1" });
+      expect(again.version).toBe(first.version + 3);
+    }).pipe(Effect.scoped, Effect.provide(pursesWith(disk)));
+  });
+
+  it.effect("a rejected receipt is pruned with the accepted ones", () => {
+    const disk: Disk = { objects: new Map() };
+    return Effect.gen(function* () {
+      const purses = yield* Purse;
+      yield* purses
+        .send(new Withdraw({ id: "a", amount: 1 }), { commandId: "w1" })
+        .pipe(Effect.flip);
+      expect(keysOf(disk, "PurseAggregate", "receipt:")).toEqual(["receipt:w1"]);
+      yield* TestClock.adjust(31 * DAY);
+      yield* purses.send(new Deposit({ id: "a", amount: 1 }), { commandId: "d1" });
+      expect(keysOf(disk, "PurseAggregate", "receipt:")).toEqual(["receipt:d1"]);
+    }).pipe(Effect.scoped, Effect.provide(pursesWith(disk)));
+  });
+
+  it.effect("receipts are kept for as long as `retention` says", () => {
+    const disk: Disk = { objects: new Map() };
+    return Effect.gen(function* () {
+      const purses = yield* Purse;
+      yield* purses.send(new Deposit({ id: "a", amount: 1 }), { commandId: "d1" });
+      yield* TestClock.adjust(2 * DAY);
+      yield* purses.send(new Deposit({ id: "a", amount: 1 }), { commandId: "d2" });
+      expect(keysOf(disk, "PurseAggregate", "receipt:")).toEqual(["receipt:d2"]);
+    }).pipe(Effect.scoped, Effect.provide(pursesWith(disk, { receipts: "1 day" })));
+  });
+
+  it.effect("receipts are kept forever on request, with nothing indexed", () => {
+    const disk: Disk = { objects: new Map() };
+    return Effect.gen(function* () {
+      const purses = yield* Purse;
+      yield* purses.send(new Deposit({ id: "a", amount: 1 }), { commandId: "d1" });
+      yield* TestClock.adjust(400 * DAY);
+      yield* purses.send(new Deposit({ id: "a", amount: 1 }), { commandId: "d2" });
+      expect(keysOf(disk, "PurseAggregate", "receipt:")).toEqual(["receipt:d1", "receipt:d2"]);
+      expect(keysOf(disk, "PurseAggregate", "receipt-at:")).toEqual([]);
+    }).pipe(Effect.scoped, Effect.provide(pursesWith(disk, { receipts: "forever" })));
+  });
+
+  it.effect(
+    "a scheduled command that ran is still AlreadyExecuted once its receipt is pruned",
+    () => {
+      const disk: Disk = { objects: new Map() };
+      return Effect.gen(function* () {
+        const purses = yield* Purse;
+        const purse = Purse.ref("a");
+        yield* purses.schedule(new Deposit({ id: "a", amount: 3 }), {
+          after: "1 minute",
+          commandId: "dep",
+        });
+        yield* TestClock.adjust("1 minute");
+        // The alarm runs in the background: wait for its commit.
+        for (
+          let turn = 0;
+          turn < 100 && keysOf(disk, "PurseAggregate", "receipt:").length === 0;
+          turn++
+        ) {
+          yield* Effect.yieldNow;
+        }
+        // The job's command has an id of its own: the name is the arming's, not the receipt's.
+        expect(keysOf(disk, "PurseAggregate", "receipt:")).toHaveLength(1);
+        expect((yield* Effect.flip(purses.unschedule(purse, "dep")))._tag).toBe("AlreadyExecuted");
+        yield* TestClock.adjust(31 * DAY);
+        yield* purses.send(new Deposit({ id: "a", amount: 1 }), { commandId: "d1" });
+        expect(keysOf(disk, "PurseAggregate", "receipt:")).toEqual(["receipt:d1"]);
+        expect((yield* Effect.flip(purses.unschedule(purse, "dep")))._tag).toBe("AlreadyExecuted");
+      }).pipe(Effect.scoped, Effect.provide(pursesWith(disk)));
+    },
+  );
+
+  // A policy that counts what reaches it.
+  class Reactions extends Context.Service<Reactions, Ref.Ref<number>>()("Test/Reactions") {}
+  class OnBooked extends Domain.Policy("OnBooked", { from: [Ledger], on: [Booked] }) {}
+  const OnBookedLive = OnBooked.toLayer(
+    Effect.gen(function* () {
+      const reactions = yield* Reactions;
+      return Effect.fn(function* () {
+        yield* Ref.update(reactions, (n) => n + 1);
+      });
+    }),
+  );
+  class Watched extends Domain.Model("Watched", { aggregates: [Ledger], policies: [OnBooked] }) {}
+
+  it.live(
+    "a policy keeps one mark per source, and replaces the per-delivery marks it finds",
+    () => {
+      const disk: Disk = { objects: new Map() };
+      let replay: Effect.Effect<unknown, unknown> | undefined;
+      let source = "";
+      const intercept: Intercept = ({ cls, method, args }, run) => {
+        if (cls.endsWith("OnBookedPolicy") && method === "receive" && replay === undefined) {
+          replay = run;
+          source = (args[0] as { readonly source: string }).source;
+        }
+        return run;
+      };
+      const live = Watched.layer(OnBookedLive).pipe(
+        Layer.provideMerge(
+          DurableObjects.makePlatform(simHost({ rowsRead: 0 }, { disk, intercept }).host),
+        ),
+        Layer.provideMerge(SecureRandom.layerWebCrypto),
+        Layer.provideMerge(Layer.effect(Reactions, Ref.make(0))),
+      );
+      return Effect.gen(function* () {
+        const ledgers = yield* Ledger;
+        const reactions = yield* Reactions;
+        const reacted = (count: number) =>
+          Effect.gen(function* () {
+            while ((yield* Ref.get(reactions)) < count) yield* Effect.sleep("20 millis");
+          }).pipe(Effect.timeout("15 seconds"));
+        yield* ledgers.send(new BookMany({ id: "p", count: 2 }));
+        yield* reacted(2);
+        const policy = [...disk.objects.values()].find((o) => o.cls.endsWith("OnBookedPolicy"))!;
+        expect(source).toBe("Ledger/p");
+        expect(policy.data.get(`seen-hw:${source}`)).toBe(2);
+        expect(keysOf(disk, "OnBookedPolicy", "seen:")).toEqual([]);
+
+        // Storage as an earlier version left it: a mark per delivery, and another
+        // source's whose id starts with this one's.
+        policy.data.delete(`seen-hw:${source}`);
+        policy.data.set(`seen:${source}:1`, true);
+        policy.data.set(`seen:${source}:2`, true);
+        policy.data.set(`seen:${source}:1:7`, true);
+        // The first delivery again: dropped, and the marks become the watermark.
+        yield* replay!;
+        expect(yield* Ref.get(reactions)).toBe(2);
+        expect(keysOf(disk, "OnBookedPolicy", "seen:")).toEqual([`seen:${source}:1:7`]);
+        expect(policy.data.get(`seen-hw:${source}`)).toBe(2);
+
+        // A new delivery still runs.
+        yield* ledgers.send(new BookMany({ id: "p", count: 1 }));
+        yield* reacted(3);
+        expect(policy.data.get(`seen-hw:${source}`)).toBe(3);
+      }).pipe(Effect.scoped, Effect.provide(live));
+    },
+  );
+
+  const inputs = (disk: Disk, cls: string) => keysOf(disk, cls, "in:").length;
+
+  it.live("a projection drops the inputs it has handled from its log", () => {
+    const disk: Disk = { objects: new Map() };
+    const live = Books.layer(LinesWriterLive).pipe(
+      Layer.provideMerge(DurableObjects.makePlatform(simHost({ rowsRead: 0 }, { disk }).host)),
+      Layer.provideMerge(SecureRandom.layerWebCrypto),
+    );
+    return Effect.gen(function* () {
+      yield* booked;
+      yield* eventually(() => inputs(disk, "LinesWriter") === 0);
+      const meta = [...disk.objects.values()]
+        .filter((object) => object.cls.includes("LinesWriter") && object.data.has("meta"))
+        .map((object) => object.data.get("meta") as { accepted: number; processed: number });
+      expect(meta).toEqual([expect.objectContaining({ accepted: ENTRIES, processed: ENTRIES })]);
+    }).pipe(Effect.scoped, Effect.provide(live));
+  });
+
+  it.live(
+    "a view keeps the last 1000 inputs in its log",
+    () => {
+      const disk: Disk = { objects: new Map() };
+      const live = Books.layer(LinesWriterLive).pipe(
+        Layer.provideMerge(DurableObjects.makePlatform(simHost({ rowsRead: 0 }, { disk }).host)),
+        Layer.provideMerge(SecureRandom.layerWebCrypto),
+      );
+      return Effect.gen(function* () {
+        const ledgers = yield* Ledger;
+        const ledger = Ledger.ref("main");
+        const receipt = yield* ledgers.send(new BookMany({ id: ledger.id, count: 1_200 }));
+        yield* (yield* Totals).get(ledger, {
+          atLeast: { stream: receipt.stream, version: receipt.version },
+        });
+        expect(inputs(disk, "Totals")).toBe(1_000);
+        const view = [...disk.objects.values()].find((object) => object.data.has("in-seq"))!;
+        expect(view.data.get("in-seq")).toBe(1_200);
+        expect(view.data.get("in-pruned")).toBe(200);
+      }).pipe(Effect.scoped, Effect.provide(live));
+    },
+    { timeout: 120_000 },
+  );
 });
