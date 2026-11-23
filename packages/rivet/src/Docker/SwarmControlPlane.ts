@@ -13,7 +13,9 @@ export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.1.1";
 
 export interface SwarmControlPlaneProps {
   /**
-   * Host port the control plane's API is published on.
+   * Host port the control plane's API is published on. `0` publishes it on
+   * a free port Swarm picks, which `endpoint` resolves to, so several
+   * control planes run side by side.
    * @default 6420
    */
   port?: number;
@@ -53,6 +55,12 @@ export interface SwarmControlPlaneProps {
  * export const Cluster = RivetDocker.SwarmControlPlane("Rivet", { port: 16420 });
  * ```
  *
+ * **Example:** On any free port
+ * ```typescript
+ * // `endpoint` resolves to the port Swarm picks.
+ * export const Cluster = RivetDocker.SwarmControlPlane("Rivet", { port: 0 });
+ * ```
+ *
  * @primitive
  */
 export const SwarmControlPlane = (
@@ -87,19 +95,25 @@ export const SwarmControlPlane = (
           RIVET__OBJECT_STORAGE__PRIMARY__FILE_SYSTEM__PATH: "/var/lib/rivet/objects",
           RIVET__TELEMETRY__ENABLED: "false",
         },
-        ports: [{ external: port, internal: 6420 }],
+        ports: [port === 0 ? { internal: 6420 } : { external: port, internal: 6420 }],
         volumes: [{ hostPath: data.name, containerPath: "/var/lib/rivet" }],
         networks: [{ name: network.name, aliases: ["rivet-engine"] }],
         replicas: 1,
       });
+      // Read from the engine, so the namespace is created after it, through
+      // the API it serves, and a free port resolves to the one Swarm picked.
+      const published = engine.ports.pipe(
+        Output.map((ports) => {
+          const api = ports.find((mapping) => mapping.internal === 6420)?.external ?? port;
+          return `http://localhost:${api}`;
+        }),
+      );
       const namespace = yield* Namespace(`${id}Namespace`, {
-        // Ordered after the engine container: the namespace is created
-        // through the API it serves.
-        endpoint: engine.name.pipe(Output.map(() => endpoint)),
+        endpoint: published,
         token: token.text,
       });
       return {
-        endpoint,
+        endpoint: port === 0 ? published : endpoint,
         nodeEndpoint: "http://rivet-engine:6420",
         // `localhost` is the deploying machine's; callers run on the network.
         clientEndpoint: "http://rivet-engine:6420",
