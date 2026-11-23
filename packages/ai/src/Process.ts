@@ -3,7 +3,6 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { isCodeMode, type CodeModeConvention, type CodeModeGroup } from "./CodeMode.ts";
 import { Harness, HarnessError, type Engine, type Reply, type SendOptions } from "./Harness.ts";
@@ -113,18 +112,18 @@ export interface Session {
   readonly send: (
     text: string,
     options?: SendOptions,
-  ) => Effect.Effect<void, NotStarted | HarnessError>;
+  ) => Effect.Effect<void, NotStarted | HarnessError, RuntimeContext>;
   /** Send a message and wait for the answer, through every tool call it takes. */
   readonly prompt: (
     text: string,
     options?: SendOptions,
-  ) => Effect.Effect<Reply, NotStarted | HarnessError>;
+  ) => Effect.Effect<Reply, NotStarted | HarnessError, RuntimeContext>;
   /** Return once the session has nothing left to run. */
-  readonly wait: Effect.Effect<void, HarnessError>;
+  readonly wait: Effect.Effect<void, HarnessError, RuntimeContext>;
   /** Stop what is running. The session keeps its transcript. */
-  readonly abort: Effect.Effect<void, HarnessError>;
+  readonly abort: Effect.Effect<void, HarnessError, RuntimeContext>;
   /** The transcript, oldest first, as the harness stores it. */
-  readonly messages: Effect.Effect<ReadonlyArray<unknown>, HarnessError>;
+  readonly messages: Effect.Effect<ReadonlyArray<unknown>, HarnessError, RuntimeContext>;
 }
 
 /** What starting a session takes besides its inputs. */
@@ -143,7 +142,10 @@ export interface ProcessClient<I = {}> {
    * Start the session with this key and return once its inputs are stored.
    * Starting a key that already started does nothing.
    */
-  readonly start: (key: string, ...args: StartArgs<I>) => Effect.Effect<void, HarnessError>;
+  readonly start: (
+    key: string,
+    ...args: StartArgs<I>
+  ) => Effect.Effect<void, HarnessError, RuntimeContext>;
   /** The session with this key. Nothing runs until it is used. */
   readonly get: (key: string) => Session;
 }
@@ -162,27 +164,7 @@ interface Definition {
 export type ProcessService<I = {}> = ProcessClient<I> & {
   /** @internal */
   readonly "~definition"?: Definition;
-  /** @internal Every model the processes of this harness mention, by name. */
-  readonly "~models"?: ReadonlyMap<string, AnyModel>;
 };
-
-/**
- * Where the sessions of a mentioned process run, when that is not the
- * place that mentions it. A process host provides it, so a session started
- * from another session gets an object of its own.
- *
- * @internal
- */
-export class Router extends Context.Service<
-  Router,
-  {
-    readonly route: (
-      name: string,
-      inputs: ReadonlyArray<AnyInput>,
-      local: ProcessClient<any>,
-    ) => ProcessClient<any>;
-  }
->()("AI.ProcessRouter") {}
 
 /** The object type of a list of inputs: one property per input, by its schema. */
 export type InputsOf<M> = Schema.Struct<{
@@ -402,21 +384,8 @@ interface Known {
 
 const knownBy = new WeakMap<object, Known>();
 
-/**
- * Run an Effect of the harness where a session is used. A session is only
- * ever used inside a running instance, which has the runtime context, so a
- * client can be called from code that requires nothing (a Domain policy).
- */
-const inRuntime = <A, E>(effect: Effect.Effect<A, E, RuntimeContext>): Effect.Effect<A, E> =>
-  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the instance that uses a session provides its runtime context
-  effect as Effect.Effect<A, E>;
-
-/**
- * The schema of a list of inputs: one property per input.
- *
- * @internal
- */
-export const structOf = (inputs: ReadonlyArray<AnyInput>) =>
+/** The schema of a list of inputs: one property per input. */
+const structOf = (inputs: ReadonlyArray<AnyInput>) =>
   Schema.Struct(Object.fromEntries(inputs.map((input) => [input.name, input.schema])));
 
 /** A session's first message: each input by name. */
@@ -516,16 +485,6 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
 
     const { model: defaultModel } = yield* DefaultModel;
     const context = yield* Effect.context<never>();
-    const router = Option.getOrUndefined(yield* Effect.serviceOption(Router));
-    const routed = (
-      name: string,
-      inputs: ReadonlyArray<AnyInput>,
-      local: () => ProcessClient<any>,
-    ): (() => ProcessClient<any>) => {
-      let client: ProcessClient<any> | undefined;
-      return () =>
-        (client ??= router === undefined ? local() : router.route(name, inputs, local()));
-    };
     const inputs = definition.inputs;
 
     const tools: Array<unknown> = [];
@@ -548,9 +507,7 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
               name: prose.name,
               description: prose.description,
               inputs: prose.inputs,
-              client: routed(prose.name, prose.inputs, () =>
-                prose === definition ? service! : state.services.get(prose)!,
-              ),
+              client: () => (prose === definition ? service! : state.services.get(prose)!),
               definition: undefined,
             });
           } else if (isProcess(ref)) {
@@ -574,7 +531,7 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
                 name: ref.processName,
                 description: local?.description ?? ref.description ?? ref.processName,
                 inputs: ref.inputs,
-                client: routed(ref.processName, ref.inputs, () => client),
+                client: () => client,
                 definition: local,
               });
               if (local !== undefined) yield* gather(local);
@@ -636,7 +593,7 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
               success: Schema.Struct({ instructions: Schema.String }),
             },
             Effect.fn(function* ({ process }: { readonly process: string }) {
-              const engine = yield* inRuntime(harness.open).pipe(Effect.orDie);
+              const engine = yield* harness.open.pipe(Effect.orDie);
               const child = followable.find((each) => each.name === process)!;
               return { instructions: render(engine, child.definition!) };
             }),
@@ -680,7 +637,7 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
     };
 
     const sessionOf = (key: string) =>
-      Effect.map(inRuntime(harness.open), (engine) =>
+      Effect.map(harness.open, (engine) =>
         engine.session(`${definition.name}/${key}`, {
           instructions: instructionsOn(engine),
           tools: every,
@@ -692,7 +649,7 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
       Effect.flatMap(sessionOf(key), (session) =>
         inputs.length === 0
           ? Effect.succeed(session)
-          : Effect.flatMap(inRuntime(session.exists), (exists) =>
+          : Effect.flatMap(session.exists, (exists) =>
               exists
                 ? Effect.succeed(session)
                 : Effect.fail(new NotStarted({ process: definition.name, key })),
@@ -701,27 +658,24 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
 
     service = {
       "~definition": definition,
-      "~models": state.models,
       start: (key: string, input?: unknown, options?: StartOptions) =>
         Effect.gen(function* () {
           if (inputs.length === 0) return;
           const session = yield* sessionOf(key);
-          if (yield* inRuntime(session.exists)) return;
-          yield* inRuntime(
-            session.submit(yield* firstMessage(inputs, input), {
-              requestId: "start",
-              ...(options?.model === undefined ? {} : { model: options.model }),
-            }),
-          );
+          if (yield* session.exists) return;
+          yield* session.submit(yield* firstMessage(inputs, input), {
+            requestId: "start",
+            ...(options?.model === undefined ? {} : { model: options.model }),
+          });
         }),
       get: (key: string): Session => ({
         send: (text, options) =>
-          Effect.flatMap(started(key), (session) => inRuntime(session.submit(text, options))),
+          Effect.flatMap(started(key), (session) => session.submit(text, options)),
         prompt: (text, options) =>
-          Effect.flatMap(started(key), (session) => inRuntime(session.prompt(text, options))),
-        wait: Effect.flatMap(sessionOf(key), (session) => inRuntime(session.wait)),
-        abort: Effect.flatMap(sessionOf(key), (session) => inRuntime(session.abort)),
-        messages: Effect.flatMap(sessionOf(key), (session) => inRuntime(session.messages)),
+          Effect.flatMap(started(key), (session) => session.prompt(text, options)),
+        wait: Effect.flatMap(sessionOf(key), (session) => session.wait),
+        abort: Effect.flatMap(sessionOf(key), (session) => session.abort),
+        messages: Effect.flatMap(sessionOf(key), (session) => session.messages),
       }),
     };
     state.services.set(definition, service);

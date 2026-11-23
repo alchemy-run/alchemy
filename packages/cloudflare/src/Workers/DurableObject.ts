@@ -421,7 +421,9 @@ export interface DurableObjectClass extends Effect.Effect<DurableObject, never, 
     ): Effect.Effect<
       DurableObject<Self>,
       never,
-      Worker | Extract<Req, Container.Application<any>>
+      // Only the Containers the object uses: what a Durable Object has
+      // anyway (its Worker among them) is left out before looking for them.
+      Worker | Extract<Exclude<Req, DurableObjectServices>, Container.Application<any>>
     > & {
       new (_: never): Shape;
     };

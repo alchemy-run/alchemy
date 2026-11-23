@@ -403,4 +403,3 @@ interface RawWorkerLoader {
     },
   ): { getEntrypoint(): unknown };
 }
-export { ProcessClient, ProcessHost, type ProcessHostClass } from "./Process.ts";

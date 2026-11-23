@@ -1,27 +1,80 @@
-import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import type * as AI from "@alchemy.run/ai";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as OpenCode from "@alchemy.run/opencode";
 import * as OpenCodeCloudflare from "@alchemy.run/opencode/Cloudflare";
 import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import { Adder, Operator, ProcessesLive } from "./Processes.ts";
 
+/** What a test asks of a session. */
+export interface Ask {
+  readonly action: string;
+  readonly input?: unknown;
+  readonly text?: string;
+  readonly requestId?: string;
+}
+
+/**
+ * A Durable Object's methods over the processes, on whichever harness its
+ * Layer provides. One object holds every session of a test run.
+ */
+const sessions = Effect.gen(function* () {
+  const processes: Record<string, AI.ProcessClient<any>> = {
+    Adder: yield* Adder,
+    Operator: yield* Operator,
+  };
+
+  return Effect.succeed({
+    ask: Effect.fn(function* (name: string, key: string, ask: Ask) {
+      const process = processes[name];
+      if (process === undefined) return undefined;
+      const session = process.get(key);
+      const sent = ask.requestId === undefined ? {} : { requestId: ask.requestId };
+      return yield* Match.value(ask.action).pipe(
+        Match.when("start", () => Effect.as(process.start(key, ask.input), { ok: true })),
+        Match.when("send", () => Effect.as(session.send(ask.text ?? "", sent), { ok: true })),
+        Match.when("prompt", () => session.prompt(ask.text ?? "", sent)),
+        Match.when("wait", () => Effect.as(session.wait, { ok: true })),
+        Match.when("abort", () => Effect.as(session.abort, { ok: true })),
+        Match.when("messages", () =>
+          Effect.map(session.messages, (messages) => ({ messages: JSON.stringify(messages) })),
+        ),
+        Match.orElse(() => Effect.succeed(undefined)),
+        // A session that never started is an answer, not a failure of the call.
+        Effect.catchTag("NotStarted", ({ _tag, process, key }) =>
+          Effect.succeed({ _tag, process, key }),
+        ),
+        Effect.orDie,
+      );
+    }),
+  });
+});
+
 /** The processes on Pi. */
-export class PiAgents extends AICloudflare.ProcessHost<PiAgents>()(
+export class PiAgents extends Cloudflare.DurableObject<PiAgents>()(
   "PiAgents",
-  { processes: [Adder, Operator] },
-  ProcessesLive.pipe(
-    Layer.provide(Pi.HarnessLive),
-    Layer.provide(PiCloudflare.DurableObjectStorage),
+  sessions.pipe(
+    Effect.provide(
+      ProcessesLive.pipe(
+        Layer.provide(Pi.HarnessLive),
+        Layer.provide(PiCloudflare.DurableObjectStorage),
+      ),
+    ),
   ),
 ) {}
 
 /** The same processes on OpenCode: only the harness and its storage differ. */
-export class OpenCodeAgents extends AICloudflare.ProcessHost<OpenCodeAgents>()(
+export class OpenCodeAgents extends Cloudflare.DurableObject<OpenCodeAgents>()(
   "OpenCodeAgents",
-  { processes: [Adder, Operator] },
-  ProcessesLive.pipe(
-    Layer.provide(OpenCode.HarnessLive),
-    Layer.provide(OpenCodeCloudflare.DurableObjectStorage),
+  sessions.pipe(
+    Effect.provide(
+      ProcessesLive.pipe(
+        Layer.provide(OpenCode.HarnessLive),
+        Layer.provide(OpenCodeCloudflare.DurableObjectStorage),
+      ),
+    ),
   ),
 ) {}

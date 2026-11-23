@@ -67,7 +67,11 @@ export const HarnessLive: Layer.Layer<AiHarness, never, Storage> = makeHarness<S
                 tools: session.tools as ReadonlyArray<Enabled>,
                 instructions: session.instructions,
                 ...(model === undefined ? {} : { model }),
-                ...(sent?.requestId === undefined ? {} : { requestId: sent.requestId }),
+                // OpenCode's message ids are one space for every session of
+                // an instance, so a request's id is scoped to its session.
+                ...(sent?.requestId === undefined
+                  ? {}
+                  : { requestId: `${name}/${sent.requestId}` }),
               };
             });
           const whenStarted = <A>(effect: Effect.Effect<A, OpenCodeError, any>, otherwise: A) =>

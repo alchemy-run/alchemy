@@ -13,7 +13,7 @@ const providers = Cloudflare.providers();
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({ providers });
 
 const Stack = Alchemy.Stack(
-  "ProcessHostStack",
+  "ProcessHarnessStack",
   { providers, state: Cloudflare.state() },
   Effect.gen(function* () {
     const api = yield* ProcessApi;
@@ -144,12 +144,12 @@ for (const harness of ["pi", "opencode"] as const) {
       );
 
       test(
-        "a session starts a process it mentions, in an object of its own",
+        "a session starts a process it mentions, as a session of its own",
         Effect.gen(function* () {
           yield* call(`${harness}/Operator/desk-2/prompt`, {
             text: "Add 40 and 2, in a session named child-1.",
           });
-          // The Adder session is reached by its own key, not through the Operator's.
+          // The Adder session has its own key and its own conversation.
           yield* call(`${harness}/Adder/child-1/wait`);
           const { messages } = yield* call(`${harness}/Adder/child-1/messages`).pipe(
             Effect.repeat({

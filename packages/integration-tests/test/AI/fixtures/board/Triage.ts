@@ -1,10 +1,15 @@
+import * as AI from "@alchemy.run/ai";
 import * as DomainAi from "@alchemy.run/domain/Ai";
 import { TriageApi } from "./Board.ts";
-import { issue, Triage } from "./Triage.process.ts";
+import { IssueId } from "./Issue.id.ts";
+
+/** The issue a session works on. */
+export const issue = AI.Input("issue", IssueId);
 
 const board = DomainAi.tools(TriageApi, { expose: ["LabelIssue", "IssueDetail.get"] });
 
-export const TriageLive = Triage.toLayer({
+/** Labels one issue of the board. */
+export class Triage extends (AI.Process<Triage>()("Triage", {
   description: "Label one issue of the board as a bug, a feature or a question.",
 })`
   You label issue ${issue} on ${board}.
@@ -15,4 +20,4 @@ export const TriageLive = Triage.toLayer({
 
   Later messages are comments on the issue. When a comment asks for another
   label, send the label command again with that label.
-`;
+`) {}

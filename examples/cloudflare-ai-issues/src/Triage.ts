@@ -1,15 +1,18 @@
 import * as AI from "@alchemy.run/ai";
 import * as DomainAi from "@alchemy.run/domain/Ai";
 import { Answering } from "./Answering.ts";
-import { issue, Triage } from "./Board/Triage.process.ts";
+import { IssueId } from "./Board/Issue.id.ts";
 import { TriageApi } from "./Board/TriageApi.api.ts";
 import { PostAnswer, SearchIssues } from "./Tools.ts";
+
+/** The issue a session looks after. */
+export const issue = AI.Input("issue", IssueId);
 
 /** The board, as a session reaches it: the calls `TriageApi` lists, and no others. */
 const board = DomainAi.tools(TriageApi);
 
-/** One way to carry out Triage: read the code, answer on the issue, label it on the board. */
-export const TriageLive = Triage.toLayer({
+/** Read the code, answer on the issue, and label it on the board. */
+export class Triage extends (AI.Process<Triage>()("Triage", {
   description: "Answer one issue of the repository and say what kind of issue it is.",
 })`
   You look after issue ${issue} of a GitHub repository. The repository is
@@ -25,4 +28,4 @@ export const TriageLive = Triage.toLayer({
 
   Later messages are replies on the issue. Answer each the same way, and
   send the label command again when a reply changes what kind of issue it is.
-`;
+`) {}

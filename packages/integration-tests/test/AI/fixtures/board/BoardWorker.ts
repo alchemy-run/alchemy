@@ -1,15 +1,13 @@
-import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import BoardAgents, { BoardLive } from "./Agents.ts";
 import { CommentOnIssue, Issue, IssueDetail, ReportIssue } from "./Board.ts";
-import { IssueId, Triage } from "./Triage.process.ts";
+import { IssueId } from "./Issue.id.ts";
 
 /**
  * Stands in for a webhook: `POST /report/<issue>` and `POST /comment/<issue>`
@@ -22,7 +20,7 @@ export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
   Effect.gen(function* () {
     const issues = yield* Issue;
     const details = yield* IssueDetail;
-    const triage = yield* Triage;
+    const agents = yield* BoardAgents;
 
     return {
       fetch: Effect.gen(function* () {
@@ -59,9 +57,7 @@ export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
           Match.when("issue", () => Effect.map(details.get(Issue.ref(issueId)), Option.getOrNull)),
           // What the issue's session was told and did, as its harness stores it.
           Match.when("session", () =>
-            Effect.map(triage.get(issueId).messages, (messages) => ({
-              messages: JSON.stringify(messages),
-            })),
+            Effect.map(agents.getByName(issueId).transcript(issueId), (messages) => ({ messages })),
           ),
           Match.orElse(() => Effect.succeed(undefined)),
         );
@@ -75,7 +71,5 @@ export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
         ),
       ),
     };
-  }).pipe(
-    Effect.provide(BoardLive.pipe(Layer.provideMerge(AICloudflare.ProcessClient(BoardAgents)))),
-  ),
+  }).pipe(Effect.provide(BoardLive)),
 ) {}
