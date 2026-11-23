@@ -373,16 +373,12 @@ referenced before its implementation exists:
 
 See [Circular Bindings](/infrastructure-as-effects/circular-bindings) for the full A↔B
 build-up and how alchemy plans the two-phase create-then-wire deploy.
-Declarations whose props Effects yield each other directly can't be
-planned, since each is still being declared when the other reads it: the
-plan fails with `DeclarationCycleError`, naming the cycle.
 
-Two [async Workers](/cloudflare/compute/workers#async-workers) that bind
-each other break the cycle with a ref instead: declare one normally and
-reach it from the other with `Worker.ref(id)` (its logical id, prefixed
-with its namespace path inside one), which the Worker provider turns into
-a binding (see
-[References](/infrastructure-as-code/references#reference-a-resource-declared-in-this-stack)).
+A cycle has to run through bindings: resources whose props reference
+each other fail the plan with `DeclarationCycleError`. Two
+[async Workers](/cloudflare/compute/workers#async-workers) can instead
+reach one another with
+[`Worker.ref`](/infrastructure-as-code/references#reference-a-resource-declared-in-this-stack).
 
 ## Where next
 
