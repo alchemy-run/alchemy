@@ -216,13 +216,16 @@ export const stageRustProgram = Effect.fn(function* (
     }
   }
 
-  const dir = path.resolve(yield* dotAlchemyDirectory, "rivet", "rust", label);
+  const dotAlchemy = path.resolve(yield* dotAlchemyDirectory);
+  const dir = path.resolve(dotAlchemy, "rivet", "rust", label);
   const copy = (from: string, to: string): Effect.Effect<void, unknown> =>
     Effect.gen(function* () {
       yield* fs.makeDirectory(to, { recursive: true });
       for (const entry of yield* fs.readDirectory(from)) {
         if (SKIPPED.has(entry)) continue;
         const source = path.join(from, entry);
+        // A moved ALCHEMY_DIR inside the workspace holds this staging directory.
+        if (source === dotAlchemy) continue;
         const target = path.join(to, entry);
         const info = yield* fs.stat(source);
         if (info.type === "Directory") yield* copy(source, target);
