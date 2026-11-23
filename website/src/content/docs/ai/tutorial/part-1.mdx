@@ -39,18 +39,15 @@ export const ModelsLive = AICloudflare.Model(Smart, {
 
 ## Describe the work
 
-A process is prose that says how a piece of work is done. `Triage` takes one input, the issue it looks after, and mentions it so the model knows which value is which:
+A process is prose that says how a piece of work is done. `Triage` says what to do with an issue:
 
 ```typescript title="src/Triage.process.ts"
 import * as AI from "@alchemy.run/ai";
-import * as Schema from "effect/Schema";
-
-export const issue = AI.Input("issue", Schema.String);
 
 export class Triage extends AI.Process<Triage>()("Triage", {
   description: "Say what kind of issue this is.",
 })`
-  You look after issue ${issue} of a GitHub repository.
+  You look after one issue of a GitHub repository.
   When you are told what the issue says, reply with one word:
   bug when something is broken, feature when something new is asked for,
   question otherwise.
@@ -84,7 +81,6 @@ export default class IssueAgents extends Cloudflare.DurableObject<IssueAgents>()
 
     return Effect.succeed({
       ask: Effect.fn(function* (issue: string, text: string) {
-        yield* triage.start(issue, { issue });
         const reply = yield* triage.get(issue).prompt(text);
         return reply.text;
       }, Effect.orDie),
@@ -95,7 +91,7 @@ export default class IssueAgents extends Cloudflare.DurableObject<IssueAgents>()
 
 `Pi.HarnessLive` is the harness: the session runs on Pi, in this object, on its storage. `AI.DefaultModel(Smart)` is the model a session runs on when nobody chose one. Part 4 runs the same session on OpenCode by changing `HarnessLive`.
 
-`start` takes the session's key and its inputs, and does nothing when the key already started. `prompt` sends a message and waits for the answer.
+`get` reaches a session by a key you choose, here the issue, and the session's first message makes it. `prompt` sends a message and waits for the answer.
 
 ## Call it from a Worker
 
@@ -163,7 +159,7 @@ Send the same issue again and the session answers with the first message still i
 
 ## What you have
 
-- A process, `Triage`: prose that mentions its input.
+- A process, `Triage`: prose that says how an issue is triaged.
 - A Durable Object for each issue, where its session runs on Pi.
 - A Worker that asks an issue's object.
 

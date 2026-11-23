@@ -51,7 +51,7 @@ export class DepositMoney extends Domain.Command("DepositMoney", {
 A session has no cookie to show. It is started as someone, and that answers every middleware which only says who is calling:
 
 ```typescript
-yield* assistant.start(customer.customerId, {}, { as: CurrentActor.context(customer) });
+yield* assistant.start(customer.customerId, { as: CurrentActor.context(customer) });
 ```
 
 `as` is required: `start` does not compile without a `CurrentActor`, because `Assistant` mentions a command that needs one. It is kept with the session and never shown to the model. Every command the session sends runs as that customer, so the model's own rules decide what happens: a session started as Ada cannot touch Bob's account, because `decide` rejects it.
@@ -144,16 +144,16 @@ A policy never waits for a session. `Triage` reports by sending `LabelIssue`, wh
 
 ## Answer from the session's Durable Object
 
-The adapter for `Triager` calls the [Durable Object](/ai/hosting) that runs the session. A policy can run twice for one event: starting a key twice does nothing, and `requestId` keeps a message from being sent twice.
+The adapter for `Triager` calls the [Durable Object](/ai/hosting) that runs the session. A policy can run twice for one event, and `requestId` keeps a message from being sent twice.
 
 ```typescript
 return Effect.succeed({
-  start: (issue) => triage.start(issue, { issue }).pipe(Effect.orDie),
-  tell: (issue, text, id) =>
+  start: (issue) =>
     triage
       .get(issue)
-      .send(text, { requestId: id })
-      .pipe(Effect.catchTag("NotStarted", () => Effect.void), Effect.orDie),
+      .send(`The issue is ${issue}.`, { requestId: "start" })
+      .pipe(Effect.orDie),
+  tell: (issue, text, id) => triage.get(issue).send(text, { requestId: id }).pipe(Effect.orDie),
 } satisfies Agent);
 ```
 

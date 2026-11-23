@@ -55,7 +55,7 @@ export class Engineer extends AI.Process<Engineer>()("Engineer", {
 ` {}
 ```
 
-Starting is a tool call. Its parameters are `Research`'s inputs, with an optional name for the session, and it returns that name at once. The new session has its own conversation, and nothing it reads fills up the `Engineer`'s.
+Starting is a tool call. It takes the new session's first message, which says what it is to do, and an optional name for the session, and it returns that name at once. The new session has its own conversation, and nothing it reads fills up the `Engineer`'s.
 
 ## Hear back from a started session
 
@@ -67,14 +67,11 @@ A process has no output, so a started session does not return to the one that st
 
 ```typescript title="src/Research.process.ts"
 import * as AI from "@alchemy.run/ai";
-import * as Schema from "effect/Schema";
-
-export const question = AI.Input("question", Schema.String);
 
 export class Research extends AI.Process<Research>()("Research", {
   description: "Answer one question about the code, with file paths.",
 })`
-  Answer ${question} about the repository in your working directory.
+  Answer one question about the repository in your working directory.
   Search with ${AI.Grep} and open what looks relevant with ${AI.Read}.
   If the question is too broad, start a ${AI.Self} for each part.
 ` {}
@@ -103,15 +100,15 @@ export class Engineer extends AI.Process<Engineer>()("Engineer", {
 yield* engineer.get("task-7").send("Rename the config flag.", { model: Fast });
 ```
 
-A process with inputs can be started on a model, as `start`'s last argument:
+A session can also be started on a model, before its first message:
 
 ```typescript
-yield* research.start("parser", { question: "Where is the parser?" }, { model: Fast });
+yield* research.start("parser", { model: Fast });
 ```
 
 ## Mention a tagged process
 
-A process declared by name and inputs is mentioned the same way. The process that mentions it then requires that tag, and none of what its prose mentions:
+A process declared by name alone is mentioned the same way. The process that mentions it then requires that tag, and none of what its prose mentions:
 
 ```typescript title="src/Lead.process.ts"
 import * as AI from "@alchemy.run/ai";

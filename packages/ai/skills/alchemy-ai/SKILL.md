@@ -1,6 +1,6 @@
 ---
 name: alchemy-ai
-description: Build AI agents with @alchemy.run/ai - describe work as an AI.Process (prose that mentions the tools, models, inputs, other processes and Domain model commands it uses), declare tools one per file, start and talk to sessions, choose a harness (Pi or OpenCode) as a Layer, run sessions in a Durable Object, give tools a sandbox, and connect a process to an @alchemy.run/domain model with sessions that act as a user. Use when designing or changing a process, adding a tool, wiring a harness, hosting or a sandbox, connecting agents to a Domain model, or reviewing such code.
+description: Build AI agents with @alchemy.run/ai - describe work as an AI.Process (prose that mentions the tools, models, other processes and Domain model commands it uses), declare tools one per file, start and talk to sessions, choose a harness (Pi or OpenCode) as a Layer, run sessions in a Durable Object, give tools a sandbox, and connect a process to an @alchemy.run/domain model with sessions that act as a user. Use when designing or changing a process, adding a tool, wiring a harness, hosting or a sandbox, connecting agents to a Domain model, or reviewing such code.
 ---
 
 # Building with @alchemy.run/ai
@@ -41,7 +41,7 @@ More: [What is Alchemy AI?](https://alchemy.run/ai/what-is-alchemy-ai).
 
 - **One declaration per file, named `<Name>.<kind>.ts`.** The kinds are `.tool`, `.process` and `.mcp`. Never a `tools.ts` or `processes.ts` that collects several.
 - **A tool's file holds its class and its Layer** (`PostAnswer` and `PostAnswerLive` in `PostAnswer.tool.ts`), and any failure only it returns.
-- **A process's file holds the process and the inputs it mentions.** A tagged process keeps its `toLayer` there as `<Name>Live`.
+- **A process's file holds the process.** A tagged process keeps its `toLayer` there as `<Name>Live`.
 - **Models share `Models.ts`.** `.model.ts` means a Domain model.
 - **The Durable Object, the Worker and the sandbox Layer keep plain names** (`Agents.ts`, `Worker.ts`, `Sandbox.ts`).
 - **A Domain model never imports a process or a tool.** It asks for work through a `Domain.ExternalSystem`.
@@ -53,13 +53,13 @@ More: [Project layout](https://alchemy.run/ai/project-layout).
 - Mention everything the prose refers to. A tool named in plain words is not granted, and the model cannot call it.
 - Write prose for the model: say what to do, in order, and when to use each mention. Write each `description` for another model that must decide whether to follow or start the process.
 - A process has no output. Give a session somewhere to report: a Domain command, or a tool.
-- Never put a value in the prose with string interpolation. Per-run values are inputs: the prose stays the same for every session, and a value never becomes an instruction.
+- Never put a value in the prose with string interpolation. A process has no inputs: the prose stays the same for every session, and what one session works on is its first message.
 - Never give a model an id to choose. Derive ids from `AI.ToolCall` in a tool; a Domain command a session sends already takes its id from the tool call.
 - Mention one Domain command or view, not a whole aggregate, unless the work needs every command.
-- Start a session as the person it acts for, authenticated where you already authenticate (your Worker). Never pass credentials through an input or a message.
+- Start a session as the person it acts for, authenticated where you already authenticate (your Worker). Never pass credentials through a message.
 - A session picks its own commands, so state the rules it must not break as `invariants` and `transitions` on the aggregate, and verify them with `Verify.model` in a test.
 - For each middleware that checks something on a mentioned command (a second factor), provide a Layer that says what the check means for a session. Never provide your HTTP session middleware where a process runs.
-- Starting a key twice does nothing, and `requestId` makes a message exactly-once: use both from code that may run twice (a policy, a webhook).
+- `requestId` makes a message exactly-once, and starting a key twice does nothing: use them from code that may run twice (a policy, a webhook).
 - A method that uses a session requires `RuntimeContext`: declare it on the interface (`Effect.Effect<void, never, RuntimeContext>`). Never capture the context and provide it by hand.
 - Yield processes where the runtime's dependencies are resolved (a Durable Object's outer Effect). Build one Layer and provide it once.
 - Never `throw`. A tool fails with its declared `failure` (`Schema.TaggedError`).
@@ -68,9 +68,9 @@ More: [Processes](https://alchemy.run/ai/processes), [Processes and Domain model
 
 ## Checklist for a change
 
-1. Name the work. Put each process in `<Name>.process.ts` with a `description` and the inputs it mentions.
+1. Name the work. Put each process in `<Name>.process.ts` with a `description`.
 2. Put each new tool in `<Name>.tool.ts`, with its class and `<Name>Live`. Mention it in the prose that uses it.
-3. Mention the Domain commands and views the work needs, through the model. Add `as` to every `start` if one is behind a middleware.
+3. Mention the Domain commands and views the work needs, through the model. Start each session with `as` if one is behind a middleware.
 4. Provide every new Layer where the process runs: each tool, each model, the hosted Domain model, and a Layer for each middleware that checks something. A missing one is a type error.
 5. Deploy and send one real message. Read `session.messages` to see what the model did.
 

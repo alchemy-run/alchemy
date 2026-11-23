@@ -35,18 +35,19 @@ export default class Agents extends Cloudflare.DurableObject<Agents>()(
     const triage = yield* Triage;
 
     return Effect.succeed({
-      start: (issue: number) => triage.start(String(issue), { issue }).pipe(Effect.orDie),
-      tell: (issue: number, text: string, id: string) =>
+      start: (issue: number) =>
         triage
           .get(String(issue))
-          .send(text, { requestId: id })
-          .pipe(Effect.catchTag("NotStarted", () => Effect.void), Effect.orDie),
+          .send(`The issue is ${issue}.`, { requestId: "start" })
+          .pipe(Effect.orDie),
+      tell: (issue: number, text: string, id: string) =>
+        triage.get(String(issue)).send(text, { requestId: id }).pipe(Effect.orDie),
     });
   }).pipe(Effect.provide(Live)),
 ) {}
 ```
 
-Name the object after the session's key for one object per session (`agents.getByName(String(issue))`), or keep many sessions in one. A session started by another lives in the starter's object. Handle `NotStarted` inside the object.
+Name the object after the session's key for one object per session (`agents.getByName(String(issue))`), or keep many sessions in one. A session started by another lives in the starter's object.
 
 More: [Yield a process in a Durable Object](https://alchemy.run/ai/hosting#yield-a-process-in-a-durable-object), [One object for each session](https://alchemy.run/ai/hosting#one-object-for-each-session).
 

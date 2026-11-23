@@ -1,9 +1,9 @@
 ---
 title: Processes
-description: "Declare a process with AI.Process: prose that says how to do a piece of work with the tools, models and inputs it mentions. Start sessions of it and talk to them."
+description: "Declare a process with AI.Process: prose that says how to do a piece of work with the tools, models and other processes it mentions. Reach sessions of it by key and talk to them."
 ---
 
-A **process** is prose that says how to carry out a piece of work. The prose mentions what the work uses: tools, models, inputs, other processes. Mentioning something grants it to the process, and makes running the process require it. A **session** is one running instance: a conversation on a harness, with the process's prose as its instructions.
+A **process** is prose that says how to carry out a piece of work. The prose mentions what the work uses: tools, models, other processes. Mentioning something grants it to the process, and makes running the process require it. A **session** is one running instance: a conversation on a harness, with the process's prose as its instructions.
 
 ## Declare a process
 
@@ -40,45 +40,14 @@ export class Release extends AI.Process<Release>()("Release", {
 
 `Release` now requires `Deploy`'s Layer and a Layer for `AI.Bash`. Leave either out and the program that runs it does not compile.
 
-## Take an input
+## Talk to a session
 
-An `AI.Input` is a value a session is started with: a name and a schema. Mentioning one in the prose makes it an input of the process.
-
-```typescript title="src/Research.process.ts"
-import * as AI from "@alchemy.run/ai";
-import * as Schema from "effect/Schema";
-
-export const question = AI.Input("question", Schema.String);
-
-export class Research extends AI.Process<Research>()("Research", {
-  description: "Answer one question about the code, with file paths.",
-})`
-  Answer ${question} about the repository in your working directory.
-  Search with ${AI.Grep} and open what looks relevant with ${AI.Read}.
-  Reply with file paths and line numbers. Never edit files.
-` {}
-```
-
-The model reads the input's name in the prose, and its value in the session's first message. The prose is the same for every session, and a value never becomes part of the instructions.
-
-## Start a session
-
-Yielding a process gives a client. `start` takes a key and the inputs the prose mentions, typed by their schemas:
+Yielding a process gives a client, and `get` reaches a session by a key you choose. A session's first message makes it. `prompt` sends a message and waits for the answer:
 
 ```typescript
 const research = yield* Research;
 
-yield* research.start("parser", { question: "Where is the parser?" });
-```
-
-`start` returns once the inputs are stored, and the session works on. Starting a key that already started does nothing, so code that may run twice can call it safely.
-
-## Talk to a session
-
-`get` reaches a session by its key. `prompt` sends a message and waits for the answer:
-
-```typescript
-const reply = yield* research.get("parser").prompt("Which file should I read first?");
+const reply = yield* research.get("parser").prompt("Where is the parser?");
 // reply.text
 ```
 
@@ -88,7 +57,25 @@ const reply = yield* research.get("parser").prompt("Which file should I read fir
 yield* research.get("parser").send("Also check the tests.", { requestId: "comment-812" });
 ```
 
-A session of a process with inputs has to be started before it is sent anything. Until then, `send` and `prompt` fail with `NotStarted`. A process without inputs needs no `start`: its first message starts it.
+## A process has no inputs
+
+A process is told what to do in the messages it is sent, so the prose is the same for every session and what one session works on is its first message:
+
+```typescript
+yield* research.get("issue-42").send("The question is in issue 42.", { requestId: "start" });
+```
+
+The same `requestId` on every delivery means code that may run twice gives the session its work once.
+
+## Start a session on a model
+
+`start` makes a session before it has a message, on a [model](/ai/models) the process mentions:
+
+```typescript
+yield* research.start("parser", { model: Fast });
+```
+
+Starting a key that already started does nothing. A process that mentions a guarded command of a [Domain model](/ai/domain) has to be started, because `start` is where you say who its session acts as. Until then, `send` and `prompt` fail with `NotStarted`.
 
 ## Wait, read and stop
 
@@ -108,25 +95,22 @@ A session is not a function call. It can run for a second or for a month, and it
 
 ## Separate the name from the prose
 
-A process can be declared by its name and inputs alone. `toLayer` then gives it prose, and each Layer is one way to carry the process out.
+A process can be declared by its name alone. `toLayer` then gives it prose, and each Layer is one way to carry the process out.
 
 ```typescript title="src/Triage.process.ts"
 import * as AI from "@alchemy.run/ai";
-import * as Schema from "effect/Schema";
 
-export const issue = AI.Input("issue", Schema.Number);
-
-export class Triage extends AI.Process<Triage>()("Triage", { inputs: [issue] }) {}
+export class Triage extends AI.Process<Triage>()("Triage", {}) {}
 
 export const TriageLive = Triage.toLayer({
   description: "Say what kind of issue this is.",
 })`
-  Read issue ${issue} and the code it is about with ${AI.Grep} and ${AI.Read}.
+  Read the issue you are given and the code it is about with ${AI.Grep} and ${AI.Read}.
   Reply with one word: bug, feature or question.
 `;
 ```
 
-Code that yields `Triage` depends on the name and the input alone: it never sees the prose, the tools or the models. `TriageLive` requires what its own prose mentions, and a second Layer with other words and other tools can replace it without touching that code. Prose may only mention the inputs its tag lists.
+Code that yields `Triage` depends on the name alone: it never sees the prose, the tools or the models. `TriageLive` requires what its own prose mentions, and a second Layer with other words and other tools can replace it without touching that code.
 
 ## Run it
 

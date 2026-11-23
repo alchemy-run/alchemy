@@ -51,26 +51,23 @@ export const PostAnswerLive = PostAnswer.make(
 
 The Layer is named after the tool, with `Live`. A failure only this tool returns lives in its file too.
 
-## Keep a process with its inputs
+## Keep a process in a file of its own
 
-A process's file holds the process and the inputs it mentions:
+A process's file holds the process, and imports what it mentions:
 
 ```typescript title="src/Triage.process.ts"
 import * as AI from "@alchemy.run/ai";
-import * as Schema from "effect/Schema";
 import { Answering } from "./Answering.process.ts";
 import { PostAnswer } from "./PostAnswer.tool.ts";
-
-export const issue = AI.Input("issue", Schema.Number);
 
 export class Triage extends AI.Process<Triage>()("Triage", {
   description: "Answer one issue of the repository.",
 })`
-  You look after issue ${issue}. Follow ${Answering}, then call ${PostAnswer}.
+  You look after one issue. Follow ${Answering}, then call ${PostAnswer}.
 ` {}
 ```
 
-A process declared by name and inputs keeps its `toLayer` in the same file, as `TriageLive`. A second way to carry it out gets a file of its own.
+A process declared by name alone keeps its `toLayer` in the same file, as `TriageLive`. A second way to carry it out gets a file of its own.
 
 ## Plain names for the rest
 

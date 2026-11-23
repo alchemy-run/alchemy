@@ -12,20 +12,20 @@ The examples come from an issue board that looks after a GitHub repository, the 
 <DAG
   nodes={[
     { id: "process", label: "Triage", type: "process", tone: "accent", col: 1, row: 1 },
-    { id: "input", label: "issue", type: "input", col: 0, row: 0 },
-    { id: "tools", label: "grep · read", type: "tools", col: 0, row: 1 },
+    { id: "tools", label: "grep · read", type: "tools", col: 0, row: 0 },
+    { id: "answering", label: "Answering", type: "process", col: 0, row: 1 },
     { id: "board", label: "Board.LabelIssue", type: "command", col: 0, row: 2 },
     { id: "session", label: "issue 42", type: "session", col: 2, row: 1 },
     { id: "harness", label: "Pi or OpenCode", type: "harness", col: 3, row: 1 },
   ]}
   edges={[
-    { from: "input", to: "process" },
     { from: "tools", to: "process" },
+    { from: "answering", to: "process" },
     { from: "board", to: "process" },
     { from: "process", to: "session" },
     { from: "session", to: "harness" },
   ]}
-  caption="A process mentions an input, tools and a command. A session is one running instance of it, and a harness carries the session out."
+  caption="A process mentions tools, another process and a command. A session is one running instance of it, and a harness carries the session out."
 />
 
 ## A process: work, written as prose
@@ -72,25 +72,7 @@ const reply = yield* triage.get("issue-42").prompt("The app crashes on the setti
 
 A session keeps its conversation between messages, for a second or for a month. `prompt` waits for the answer, and `send` leaves a message without waiting.
 
-## Inputs: what a session is started with
-
-An **input** is a value a session is started with: a name and a schema. Mentioning one makes it part of what `start` takes.
-
-```typescript title="src/Triage.process.ts"
-export const issue = AI.Input("issue", Schema.Number);
-
-export class Triage extends AI.Process<Triage>()("Triage", {
-  description: "Say what kind of issue this is.",
-})`
-  You look after issue ${issue} of a GitHub repository.
-` {}
-```
-
-```typescript
-yield* triage.start("issue-42", { issue: 42 });
-```
-
-The model reads the input's name in the prose and its value in its first message. A process has inputs and no output: a session reports through what it is given to use.
+A process has no inputs and no output. A session is told what to do in the messages it is sent, and it reports through what it is given to use.
 
 ## Tools: what a session can do
 
@@ -160,7 +142,7 @@ A session has no return value, so it needs somewhere to report. A [Domain model]
 A command may be guarded by middleware that says who is calling. A session is started as someone, and every command it sends is sent as them:
 
 ```typescript
-yield* assistant.start(customer.id, {}, { as: CurrentActor.context(customer) });
+yield* assistant.start(customer.id, { as: CurrentActor.context(customer) });
 ```
 
 The model's own rules then apply to the session as they would to that person. In the other direction, a policy of the model decides when there is work for a session.
@@ -203,7 +185,11 @@ export default class Agents extends Cloudflare.DurableObject<Agents>()(
     const triage = yield* Triage;
 
     return Effect.succeed({
-      start: (issue: number) => triage.start(String(issue), { issue }).pipe(Effect.orDie),
+      start: (issue: number) =>
+        triage
+          .get(String(issue))
+          .send(`The issue is ${issue}.`, { requestId: "start" })
+          .pipe(Effect.orDie),
     });
   }).pipe(Effect.provide(Live)),
 ) {}
@@ -213,7 +199,7 @@ See [Where sessions run](/ai/hosting).
 
 ## How @alchemy.run/ai models these concepts
 
-Each concept is a declaration: [`AI.Process`](/ai/processes), `AI.Input`, [`AI.Tool`](/ai/tools), [`AI.Model`](/ai/models) and `AI.McpServer`. A process's mentions are its dependencies, in the type system: every tool, model, process and Domain model it mentions is a Layer the program must provide, and whoever a session must act as is an argument `start` requires. The harness, `AI.Harness`, is one more Layer.
+Each concept is a declaration: [`AI.Process`](/ai/processes), [`AI.Tool`](/ai/tools), [`AI.Model`](/ai/models) and `AI.McpServer`. A process's mentions are its dependencies, in the type system: every tool, model, process and Domain model it mentions is a Layer the program must provide, and whoever a session must act as is an argument `start` requires. The harness, `AI.Harness`, is one more Layer.
 
 So a process says what the work is, and Layers say how it is carried out. The same process runs on another harness, another LLM or another sandbox platform by changing a Layer.
 

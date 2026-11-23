@@ -24,17 +24,6 @@ export const IssueId = Schema.String.pipe(Schema.brand("IssueId"));
 export type IssueId = typeof IssueId.Type;
 ```
 
-## Use it as the process's input
-
-```diff lang="typescript" title="src/Triage.process.ts"
-import * as AI from "@alchemy.run/ai";
--import * as Schema from "effect/Schema";
-+import { IssueId } from "./Board/Issue.id.ts";
-
--export const issue = AI.Input("issue", Schema.String);
-+export const issue = AI.Input("issue", IssueId);
-```
-
 ## Report an issue
 
 A command says what someone wants to happen, and an event says what did. `ReportIssue` records that an issue was opened:
@@ -161,19 +150,20 @@ A model's commands and views are members of its class. Mention one, and a sessio
 ```diff lang="typescript" title="src/Triage.process.ts"
 import * as AI from "@alchemy.run/ai";
 +import { Board } from "./Board/Board.model.ts";
-import { IssueId } from "./Board/Issue.id.ts";
 
-  You look after issue ${issue} of a GitHub repository.
+-  You look after one issue of a GitHub repository.
 -  When you are told what the issue says, reply with one word:
 -  bug when something is broken, feature when something new is asked for,
 -  question otherwise.
++  You look after one issue of a GitHub repository. Your first message says
++  which.
 +
 +  Get the issue with ${Board.IssueDetail}: its key is the issue. Then send
 +  ${Board.LabelIssue}: bug when something is broken, feature when something
 +  new is asked for, question otherwise.
 ```
 
-A `Triage` session can read an `IssueDetail` and send `LabelIssue`. `ReportIssue` is not mentioned, so it is out of the session's reach. `Triage` now also requires the hosted `Board`.
+A session is told which issue is its own in its first message, because the prose is the same for every session. A `Triage` session can read an `IssueDetail` and send `LabelIssue`. `ReportIssue` is not mentioned, so it is out of the session's reach. `Triage` now also requires the hosted `Board`.
 
 ## Host the board
 
@@ -213,15 +203,18 @@ import { BoardLive } from "./Board.ts";
 
     return Effect.succeed({
 -      ask: Effect.fn(function* (issue: string, text: string) {
--        yield* triage.start(issue, { issue });
 -        const reply = yield* triage.get(issue).prompt(text);
 -        return reply.text;
 -      }, Effect.orDie),
-+      start: (issue: IssueId) => triage.start(issue, { issue }).pipe(Effect.orDie),
++      start: (issue: IssueId) =>
++        triage
++          .get(issue)
++          .send(`The issue is ${issue}.`, { requestId: "start" })
++          .pipe(Effect.orDie),
     });
 ```
 
-`start` returns once the session has its input.
+`send` returns once the message is stored. The same `requestId` on every call means a session is given its issue once.
 
 ## Report from the Worker, and read the board
 

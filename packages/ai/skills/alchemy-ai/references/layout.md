@@ -10,7 +10,7 @@ src/
   PostAnswer.tool.ts      the tool's class and PostAnswerLive
   Sandbox.ts              the AI.Sandboxes Layer
   SearchIssues.tool.ts
-  Triage.process.ts       the process and the inputs it mentions
+  Triage.process.ts       the process
   Worker.ts
 ```
 

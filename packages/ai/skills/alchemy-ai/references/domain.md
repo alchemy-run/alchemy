@@ -28,7 +28,7 @@ A middleware that provides request context (who is calling) is answered by `as`.
 ```typescript
 // in the Durable Object that runs the session
 chat: Effect.fn(function* (customer: Actor, text: string) {
-  yield* assistant.start(customer.customerId, {}, { as: CurrentActor.context(customer) });
+  yield* assistant.start(customer.customerId, { as: CurrentActor.context(customer) });
   const reply = yield* assistant.get(customer.customerId).prompt(text);
   return reply.text;
 }, Effect.orDie),
@@ -159,12 +159,13 @@ export default class IssueAgents extends Cloudflare.DurableObject<IssueAgents>()
     const triage = yield* Triage;
 
     return Effect.succeed({
-      start: (issue) => triage.start(issue, { issue }).pipe(Effect.orDie),
-      tell: (issue, text, id) =>
+      start: (issue) =>
         triage
           .get(issue)
-          .send(text, { requestId: id })
-          .pipe(Effect.catchTag("NotStarted", () => Effect.void), Effect.orDie),
+          .send(`The issue is ${issue}.`, { requestId: "start" })
+          .pipe(Effect.orDie),
+      tell: (issue, text, id) =>
+        triage.get(issue).send(text, { requestId: id }).pipe(Effect.orDie),
     } satisfies Agent);
   }).pipe(Effect.provide(Live)),
 ) {}

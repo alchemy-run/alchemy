@@ -21,7 +21,8 @@ export default class Engineers extends Cloudflare.DurableObject<Engineers>()(
     const engineer = yield* Engineer;
 
     return Effect.succeed({
-      start: (id: string, task: string) => engineer.start(id, { task }).pipe(Effect.orDie),
+      start: (id: string, task: string) =>
+        engineer.get(id).send(task, { requestId: "start" }).pipe(Effect.orDie),
       tell: Effect.fn(function* (id: string, text: string) {
         const reply = yield* engineer.get(id).prompt(text);
         return reply.text;
@@ -85,18 +86,6 @@ export default class Api extends Cloudflare.Worker<Api>()(
     };
   }),
 ) {}
-```
-
-## Handle a session that never started
-
-Handle `NotStarted` inside the object, so what calls it need not know that a session has to be started:
-
-```typescript
-tell: (id: string, text: string) =>
-  engineer
-    .get(id)
-    .send(text)
-    .pipe(Effect.catchTag("NotStarted", () => Effect.void), Effect.orDie),
 ```
 
 ## Reach it from a Domain policy
