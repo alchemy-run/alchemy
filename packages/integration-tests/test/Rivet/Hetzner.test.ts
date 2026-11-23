@@ -12,7 +12,7 @@ import { conformanceTests, waitForReady } from "../Cloudflare/Workers/conformanc
 import { ClassSecretConfig } from "./fixtures/class-secret.ts";
 import { controlPlaneToken, deployed, expectNoSecrets } from "./fixtures/deployed.ts";
 import { expectDurableStream } from "./fixtures/durable-stream-check.ts";
-import { Cluster } from "./fixtures/hetzner/cluster.ts";
+import { Cluster, SERVER_TYPE } from "./fixtures/hetzner/cluster.ts";
 import { CounterLive } from "./fixtures/hetzner/counter-live.ts";
 import Front from "./fixtures/hetzner/front.ts";
 import { expectRustCounter, RustActors, rustTarget, type RustTarget } from "./fixtures/rust.ts";
@@ -27,7 +27,9 @@ let baseUrl = "";
 let rust: RustTarget;
 
 // A Rust Durable Object on a pool of its own.
-const RustPool = RivetHetzner.ServerPool("Rust").pipe(Layer.provide(Cluster));
+const RustPool = RivetHetzner.ServerPool("Rust", { serverType: SERVER_TYPE }).pipe(
+  Layer.provide(Cluster),
+);
 
 // The engine conformance spec, run against Rivet Durable Objects on a
 // control plane of Hetzner Servers and a pool of Hetzner Services, called from a Hetzner Service.
