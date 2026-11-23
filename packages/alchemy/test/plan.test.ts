@@ -4251,7 +4251,7 @@ describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, (
           expect(error.message).toContain("A -> B -> A");
           expect(error.message).toContain("/infrastructure-as-effects/circular-bindings");
           // The other way out, for resources that aren't Effect-native runtimes.
-          expect(error.message).toContain("Worker.ref(");
+          expect(error.message).toContain(".ref(id)");
           expect(error.message).toContain("/infrastructure-as-code/references");
         }
       }),

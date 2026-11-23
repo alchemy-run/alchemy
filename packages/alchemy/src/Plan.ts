@@ -462,7 +462,7 @@ export class DeclarationCycleError extends Data.TaggedError("DeclarationCycleErr
         : `Resources ${this.cycle.join(" -> ")} yield each other in their props, so none can be planned first.`;
     return (
       `${what} Bind them instead (https://alchemy.run/infrastructure-as-effects/circular-bindings). ` +
-      `Two async Cloudflare Workers can also reach one by id with \`Worker.ref(id)\` (https://alchemy.run/infrastructure-as-code/references).`
+      `Where the provider turns refs into bindings, reach one by id with \`.ref(id)\` (https://alchemy.run/infrastructure-as-code/references).`
     );
   }
 }
