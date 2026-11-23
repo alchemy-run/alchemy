@@ -9,6 +9,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
+import WorkerFirstCall from "./fixtures/catch-up/first-call.ts";
 import WorkerV1 from "./fixtures/catch-up/v1.ts";
 import WorkerV2 from "./fixtures/catch-up/v2.ts";
 import WorkerV3 from "./fixtures/catch-up/v3.ts";
@@ -45,7 +46,7 @@ const call = (url: string, method: "GET" | "POST", path: string) =>
   );
 
 /** Wait until the Worker serves `version`: a redeploy takes a few seconds to roll out. */
-const serving = (url: string, version: "v1" | "v2" | "v3" | "v3b") =>
+const serving = (url: string, version: "v1" | "v2" | "v3" | "v3b" | "first-call") =>
   call(url, "GET", "/version").pipe(
     Effect.filterOrFail(
       (body) => body === version,
@@ -130,6 +131,9 @@ const historyNow = (url: string) =>
       times: 30,
     }),
   );
+
+/** How many new accounts open just before the deploy that adds the view. */
+const OPENED = 120;
 
 // Locally a redeploy restarts every object at once; live, an object keeps its old
 // code until it has been idle, and the catch-up must wait it out.
@@ -238,6 +242,98 @@ for (const dev of [true, false]) {
           }),
         { timeout: 600_000 },
       );
+
+      test.provider(
+        `${dev ? "local" : "live"}: accounts opened just before and during the deploy that adds a view all reach it`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+
+            const { worker: v1 } = yield* stack.deploy(
+              Effect.gen(function* () {
+                return { worker: yield* WorkerV1 };
+              }),
+            );
+            const url = v1.url!.replace(/\/+$/, "");
+            yield* serving(url, "v1");
+
+            // A new account's first commit answers before the account is listed in the
+            // directory: a stored job lists it afterwards. Open many at once, so their
+            // listings queue up on the new directory nodes and are still running when
+            // the redeploy restarts the objects (locally every object restarts at once).
+            const before = Array.from({ length: OPENED }, (_, i) => `o-${i}`);
+            yield* Effect.forEach(before, (account, i) => deposit(url, account, i + 1), {
+              concurrency: 32,
+              discard: true,
+            });
+            // More open while the deploy's backfill runs: committed after its run may have
+            // read the directory, and listed later still.
+            const during = Array.from({ length: OPENED / 4 }, (_, i) => `d-${i}`);
+            const writes = yield* Effect.forkChild(
+              Effect.gen(function* () {
+                yield* serving(url, "v2");
+                yield* Effect.forEach(during, (account, i) => deposit(url, account, i + 1), {
+                  concurrency: 8,
+                  discard: true,
+                });
+              }),
+            );
+            yield* stack.deploy(
+              Effect.gen(function* () {
+                return { worker: yield* WorkerV2 };
+              }),
+            );
+            yield* Fiber.join(writes);
+            yield* serving(url, "v2");
+
+            // Every account reached the view, with no further command to any of them.
+            expect(yield* historyComplete(url)).toBe(true);
+            yield* Effect.forEach(
+              [...before, ...during],
+              (account) =>
+                Effect.gen(function* () {
+                  const amount = Number(account.slice(2)) + 1;
+                  expect(yield* deposits(url, account, [amount])).toEqual([amount]);
+                }),
+              { concurrency: 16, discard: true },
+            );
+
+            yield* stack.destroy();
+          }),
+        { timeout: 600_000 },
+      );
+
+      // Live only: locally there is no isolate to start fresh, and no object far away.
+      if (!dev)
+        test.provider(
+          "live: the first Domain call in a fresh isolate doesn't wait for the runs it starts",
+          (stack) =>
+            Effect.gen(function* () {
+              yield* stack.destroy();
+              const { worker } = yield* stack.deploy(
+                Effect.gen(function* () {
+                  return { worker: yield* WorkerFirstCall };
+                }),
+              );
+              const url = worker.url!.replace(/\/+$/, "");
+              yield* serving(url, "first-call");
+
+              // The deploy's first Domain call: the isolate's runs are not yet started.
+              // Each read is of a new account, so only the first call starts the runs.
+              const timing = JSON.parse(yield* call(url, "GET", "/first")) as {
+                fresh: boolean;
+                first: number;
+                second: number;
+              };
+              expect(timing.fresh).toBe(true);
+              // Starting ten far-away runs one after another takes seconds; the
+              // first read takes about as long as the second.
+              expect(timing.first - timing.second).toBeLessThan(1_000);
+
+              yield* stack.destroy();
+            }),
+          { timeout: 600_000 },
+        );
     },
   );
 }

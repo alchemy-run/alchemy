@@ -28,16 +28,18 @@ export const preferLocalFlociImage = Effect.fn(function* (label: string) {
   const configured = yield* Config.String("ALCHEMY_FLOCI_IMAGE").pipe(Config.withDefault(""));
   if (configured !== "") return configured;
   const spawner = yield* ChildProcessSpawner;
-  const exitCode = yield* spawner
-    .exitCode(
-      ChildProcess.make("docker", ["image", "inspect", "floci:dev"], {
-        stdin: "ignore",
-        stdout: "ignore",
-        stderr: "ignore",
-      }),
-    )
-    // No docker binary behaves like a missing image.
-    .pipe(Effect.orElseSucceed(() => 1));
+  const exitCode = yield* (
+    spawner
+      .exitCode(
+        ChildProcess.make("docker", ["image", "inspect", "floci:dev"], {
+          stdin: "ignore",
+          stdout: "ignore",
+          stderr: "ignore",
+        }),
+      )
+      // No docker binary behaves like a missing image.
+      .pipe(Effect.orElseSucceed(() => 1))
+  );
   if (exitCode === 0) {
     yield* Effect.sync(() => {
       // oxlint-disable-next-line effecttsgo/process-env-in-effect -- writes the real env so child test processes inherit it

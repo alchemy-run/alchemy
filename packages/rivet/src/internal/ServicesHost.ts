@@ -102,8 +102,8 @@ export const makeServicesLayer = <Network, Req>(options: {
 const output = <T>(value: Input<T>): Output.Output<T> =>
   (Output.isOutput(value) ? value : Output.literal(value)) as Output.Output<T>;
 
-/** The Services node's environment as plain values, for hosts that take a record. */
-export const servicesEnvironment = ({ environment }: ServicesNodes<unknown>) =>
+/** The Services node's environment, its token left `Redacted`. */
+export const secretServicesEnvironment = ({ environment }: ServicesNodes<unknown>) =>
   Output.all(
     output(environment.RIVET_ENDPOINT),
     output(environment.RIVET_TOKEN),
@@ -112,9 +112,18 @@ export const servicesEnvironment = ({ environment }: ServicesNodes<unknown>) =>
   ).pipe(
     Output.map(([endpoint, token, namespace, pool]) => ({
       RIVET_ENDPOINT: endpoint,
-      RIVET_TOKEN: Redacted.value(token),
+      RIVET_TOKEN: token,
       RIVET_NAMESPACE: namespace,
       RIVET_POOL: pool,
       HOST: environment.HOST,
+    })),
+  );
+
+/** The Services node's environment as plain values, for hosts that take a record. */
+export const servicesEnvironment = (nodes: ServicesNodes<unknown>) =>
+  secretServicesEnvironment(nodes).pipe(
+    Output.map(({ RIVET_TOKEN, ...rest }) => ({
+      ...rest,
+      RIVET_TOKEN: Redacted.value(RIVET_TOKEN),
     })),
   );

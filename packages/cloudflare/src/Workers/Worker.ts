@@ -26,11 +26,13 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type { Self as SelfService } from "alchemy/Self";
 import { isPathWithin } from "alchemy/Util/isPathWithin";
 import type { WebhookHost } from "alchemy/WebhookHost";
+import type { TcpSocket } from "alchemy/Workers/Workerd/Socket";
 import type { ConfigError } from "effect/Config";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import type * as Scope from "effect/Scope";
 import path from "pathe";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
@@ -140,7 +142,22 @@ export type WorkerServices =
   | Container.Application<any>
   | SelfService;
 
-export type WorkerShape<Req = never> = Main<WorkerServices | Req> & MainRpc<WorkerServices | Req>;
+/**
+ * The handler for inbound TCP connections: Spectrum (a Spectrum application
+ * whose origin is this Worker) or another Worker's `connect()` over a
+ * service binding. Runs once per connection; the connection stays open until
+ * the Effect settles.
+ */
+export type ConnectHandler<Req = never> = (
+  socket: TcpSocket,
+) => Effect.Effect<void, never, PlatformServices | RuntimeContext | Scope.Scope | Req>;
+
+export type WorkerShape<Req = never> = Main<WorkerServices | Req> & {
+  /**
+   * Accept inbound TCP connections. See {@link ConnectHandler}.
+   */
+  connect?: ConnectHandler<WorkerServices | Req>;
+} & MainRpc<WorkerServices | Req>;
 
 export type WorkerEnv = Record<
   string,
@@ -2614,6 +2631,51 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  *     return ctx.exports.Public.fetch(request);
  *   },
  * };
+ * ```
+ *
+ * ### TCP Connections
+ * Return a `connect` handler to accept raw TCP connections: from a
+ * Spectrum application whose origin is the Worker (`trafficType:
+ * "worker"`), or from another Worker's `connect()` over a service binding.
+ * The handler gets an Effect `Socket` (`socket.raw` is the native one) and
+ * the connection stays open until its Effect settles. See
+ * [Accept TCP connections](/cloudflare/compute/tcp).
+ *
+ * **Example:** Echo every line back in capitals
+ * ```typescript
+ * const decoder = new TextDecoder();
+ *
+ * export default class Echo extends Cloudflare.Worker<Echo>()(
+ *   "Echo",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     return {
+ *       connect: (socket) =>
+ *         Effect.gen(function* () {
+ *           const { pull } = yield* socket.reader;
+ *           const writer = yield* socket.writer;
+ *           while (true) {
+ *             for (const chunk of yield* pull) {
+ *               const text = typeof chunk === "string" ? chunk : decoder.decode(chunk);
+ *               yield* writer.write(text.toUpperCase());
+ *             }
+ *           }
+ *         }).pipe(Effect.catch(() => Effect.void)),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * **Example:** Serve it on a public port with Spectrum
+ * ```typescript
+ * const echo = yield* Echo;
+ * yield* Cloudflare.Spectrum.Application("EchoTcp", {
+ *   zoneId: zone.zoneId,
+ *   dns: { type: "CNAME", name: "tcp.example.com" },
+ *   protocol: "tcp/9000",
+ *   trafficType: "worker",
+ *   originWorkerId: echo.workerId,
+ * });
  * ```
  *
  * ### Background Work & Scopes

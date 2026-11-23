@@ -401,15 +401,13 @@ export const WasmPluginsVersionProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsWasmPluginsVersions({
+            labels: desiredLabels,
+            description: news.description,
+            imageUri: news.imageUri,
+            pluginConfigData: news.pluginConfigData,
+            pluginConfigUri: news.pluginConfigUri,
             parent,
             wasmPluginVersionId: versionId,
-            body: {
-              labels: desiredLabels,
-              description: news.description,
-              imageUri: news.imageUri,
-              pluginConfigData: news.pluginConfigData,
-              pluginConfigUri: news.pluginConfigUri,
-            },
           })
           .pipe(
             Effect.retry({
@@ -445,12 +443,9 @@ export const WasmPluginsVersionProvider = () =>
           const nextMain = lastSegment(other.name ?? "");
           const switched = yield* networkservices
             .patchProjectsLocationsWasmPlugins({
+              mainVersionId: nextMain,
               name: output.wasmPlugin,
               updateMask: "mainVersionId",
-              body: {
-                name: output.wasmPlugin,
-                mainVersionId: nextMain,
-              },
             })
             .pipe(Effect.catchTag(["NotFound"], () => Effect.undefined));
           if (switched !== undefined) {

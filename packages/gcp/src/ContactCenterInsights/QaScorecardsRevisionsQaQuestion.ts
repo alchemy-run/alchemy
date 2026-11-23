@@ -383,19 +383,17 @@ export const QaScorecardsRevisionsQaQuestionProvider = () =>
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsQaScorecardsRevisionsQaQuestions({
+            questionBody: news.questionBody,
+            abbreviation: news.abbreviation,
+            questionType: news.questionType,
+            answerInstructions,
+            order: news.order,
+            answerChoices: news.answerChoices,
+            tags: tags.length > 0 ? tags : undefined,
+            predefinedQuestionConfig: news.predefinedQuestionConfig,
+            qaQuestionDataOptions: news.qaQuestionDataOptions,
             parent: news.parent,
             qaQuestionId,
-            body: {
-              questionBody: news.questionBody,
-              abbreviation: news.abbreviation,
-              questionType: news.questionType,
-              answerInstructions,
-              order: news.order,
-              answerChoices: news.answerChoices,
-              tags: tags.length > 0 ? tags : undefined,
-              predefinedQuestionConfig: news.predefinedQuestionConfig,
-              qaQuestionDataOptions: news.qaQuestionDataOptions,
-            },
           })
           .pipe(
             Effect.retry({
@@ -431,6 +429,12 @@ export const QaScorecardsRevisionsQaQuestionProvider = () =>
         tagsChanged
       ) {
         current = yield* cci.patchProjectsLocationsQaScorecardsRevisionsQaQuestions({
+          questionBody: news.questionBody,
+          abbreviation: news.abbreviation,
+          answerInstructions,
+          order: news.order,
+          answerChoices: news.answerChoices,
+          tags,
           name: currentName,
           updateMask: updateMaskOf(
             bodyChanged ? "question_body" : undefined,
@@ -440,15 +444,6 @@ export const QaScorecardsRevisionsQaQuestionProvider = () =>
             choicesChanged ? "answer_choices" : undefined,
             tagsChanged ? "tags" : undefined,
           ),
-          body: {
-            name: currentName,
-            questionBody: news.questionBody,
-            abbreviation: news.abbreviation,
-            answerInstructions,
-            order: news.order,
-            answerChoices: news.answerChoices,
-            tags,
-          },
         });
       }
 

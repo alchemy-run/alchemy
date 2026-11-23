@@ -282,9 +282,13 @@ export const OrganizationMuteConfigProvider = () =>
       if (current === undefined) {
         const created = yield* scc
           .createOrganizationsMuteConfigs({
+            filter,
+            type,
+            expiryTime,
+            displayName,
+            description,
             parent: organization,
             muteConfigId,
-            body: { filter, type, expiryTime, displayName, description },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -304,9 +308,12 @@ export const OrganizationMuteConfigProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* scc.patchOrganizationsMuteConfigs({
+          filter,
+          expiryTime,
+          displayName,
+          description,
           name: currentName,
           updateMask,
-          body: { filter, expiryTime, displayName, description },
         });
       }
 

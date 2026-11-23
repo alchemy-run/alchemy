@@ -5,14 +5,13 @@
  * @internal
  */
 import { NodeServices } from "@effect/platform-node";
-import { reifyBoundConfigProvider } from "alchemy/Runtime";
+import { RuntimeConfigProviderLive } from "alchemy/Runtime";
 import {
   entrypointLayer,
   entrypointTag,
   runProcess,
   stackFromEnv,
 } from "alchemy/Runtime/Bootstrap";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -28,23 +27,39 @@ import {
 } from "../DurableObject.ts";
 import { NodeHost } from "../Host.ts";
 import { runDurableObjects } from "./Runtime.ts";
+import { SECRET_ENV } from "./SecretEnv.ts";
 
-/** Build each entrypoint's class phase, then run the node until it is stopped. */
-export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> => {
+/**
+ * Secrets the node's classes read as config, handed over as one JSON value
+ * by hosts that keep them in a secret store: set each as its own variable,
+ * before any class reads its config.
+ */
+const loadSecretEnv = Effect.sync(() => {
+  // oxlint-disable-next-line effecttsgo/process-env-in-effect -- the node's own env, written before any Config read
+  const blob = process.env[SECRET_ENV];
+  if (blob === undefined || blob === "") return;
+  // oxlint-disable-next-line effecttsgo/process-env-in-effect -- see above
+  delete process.env[SECRET_ENV];
+  for (const [name, value] of Object.entries(JSON.parse(blob) as Record<string, string>)) {
+    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- see above
+    process.env[name] = value;
+  }
+});
+
+/**
+ * Build each entrypoint's class phase, then run the node until it is
+ * stopped, each class with the actor options its pool recorded.
+ */
+export const bootstrap = (
+  entrypoints: ReadonlyArray<unknown>,
+  options: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {},
+): Promise<void> => {
   const platform = Layer.mergeAll(
     // Node services run under both Node (Fly) and Bun (every other host).
     NodeServices.layer,
     FetchHttpClient.layer,
     Logger.layer([Logger.consolePretty()]),
-  ).pipe(
-    Layer.provideMerge(stackFromEnv),
-    Layer.provideMerge(
-      Layer.succeed(
-        ConfigProvider.ConfigProvider,
-        reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env),
-      ),
-    ),
-  );
+  ).pipe(Layer.provideMerge(stackFromEnv), Layer.provideMerge(RuntimeConfigProviderLive));
 
   const program = Effect.gen(function* () {
     // Every class this node hosts: its exported ones, and those Layers host themselves.
@@ -59,7 +74,7 @@ export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> =>
         (entrypoint as { [PlatformDeclaration]?: unknown } | undefined)?.[PlatformDeclaration] ??
         entrypoint;
       const context = yield* Layer.build(entrypointLayer(declaration)).pipe(
-        Effect.provideService(NodeHost, NodeHost.of({ host })),
+        Effect.provideService(NodeHost, NodeHost.of({ host, entrypoint })),
       );
       // A Layer that hosts its classes itself (a Domain model's) provides
       // none: it handed them to `NodeHost`.
@@ -76,8 +91,9 @@ export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> =>
       }
       yield* host(built);
     }
-    return yield* runDurableObjects(yield* Ref.get(hosted));
+    return yield* runDurableObjects(yield* Ref.get(hosted), options);
   }).pipe(Effect.provide(platform), Effect.scoped);
 
-  return runProcess("Rivet node", program);
+  // Before the platform's Layers read the environment.
+  return runProcess("Rivet node", Effect.andThen(loadSecretEnv, program));
 };

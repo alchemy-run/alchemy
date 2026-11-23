@@ -333,16 +333,14 @@ export const GlobalPublicDelegatedPrefixProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertGlobalPublicDelegatedPrefixes({
+            name: prefixName,
+            description,
+            parentPrefix: news.parentPrefix,
+            ipCidrRange: news.ipCidrRange,
+            mode: news.mode,
+            allocatablePrefixLength: news.allocatablePrefixLength,
+            isLiveMigration: news.isLiveMigration,
             project: env.project,
-            body: {
-              name: prefixName,
-              description,
-              parentPrefix: news.parentPrefix,
-              ipCidrRange: news.ipCidrRange,
-              mode: news.mode,
-              allocatablePrefixLength: news.allocatablePrefixLength,
-              isLiveMigration: news.isLiveMigration,
-            },
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -364,12 +362,10 @@ export const GlobalPublicDelegatedPrefixProvider = () =>
       if ((current.description ?? "") !== description) {
         yield* compute
           .patchGlobalPublicDelegatedPrefixes({
+            description,
+            fingerprint: current.fingerprint,
             project: env.project,
             publicDelegatedPrefix: prefixName,
-            body: {
-              description,
-              fingerprint: current.fingerprint,
-            },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, prefixName);

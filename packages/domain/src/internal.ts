@@ -1,4 +1,7 @@
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -6,6 +9,46 @@ import * as SchemaAST from "effect/SchemaAST";
 import { DefinitionError, UndeclaredDecision } from "./DefinitionError.ts";
 
 export { DefinitionError } from "./DefinitionError.ts";
+
+/** The defects {@link internalError} made: already logged, sent as they are. */
+const internalErrors = new WeakSet<object>();
+
+/**
+ * The one defect a client receives in place of any other: a defect's text
+ * can hold stacks, file paths and nested errors (an adapter's SQL error).
+ *
+ * @internal
+ */
+export const internalError = (): Error => {
+  const error = new Error("Internal server error");
+  internalErrors.add(error);
+  return error;
+};
+
+/**
+ * Keep what of a cause a client may see: interrupts, and the failures
+ * `declared` keeps. Anything else (a defect, an undeclared failure) is
+ * logged here with its whole cause, and becomes {@link internalError}.
+ *
+ * @internal
+ */
+export const redactCause =
+  (declared: (error: unknown) => boolean, rpc: string) =>
+  <E>(cause: Cause.Cause<E>): Effect.Effect<never, E> =>
+    cause.reasons.every(
+      (reason) =>
+        Cause.isInterruptReason(reason) ||
+        (Cause.isFailReason(reason) && declared(reason.error)) ||
+        (Cause.isDieReason(reason) &&
+          typeof reason.defect === "object" &&
+          reason.defect !== null &&
+          internalErrors.has(reason.defect)),
+    )
+      ? Effect.failCause(cause)
+      : Effect.logError("Domain: a request failed with an undeclared error", cause).pipe(
+          Effect.annotateLogs({ "domain.rpc": rpc }),
+          Effect.andThen(Effect.die(internalError())),
+        );
 
 /**
  * The schema of a command's or a query's `input`. With no fields it is an
@@ -40,6 +83,82 @@ export const rejectionTag = (rejection: Schema.Top): string => {
   tags.set(rejection, value);
   return value;
 };
+
+/** `name` as it reads in a path. */
+const member = (path: string, name: PropertyKey) =>
+  typeof name === "string" && /^[A-Za-z_$][\w$]*$/.test(name)
+    ? `${path}.${name}`
+    : `${path}[${JSON.stringify(String(name))}]`;
+
+/**
+ * Where a schema has no JSON form: the paths under `path` of each declaration
+ * (such as `Schema.instanceOf`) with no `toCodecJson` annotation. Its values
+ * can't be stored or sent: they fail when they are encoded, in production.
+ * `Schema.Unknown` and `Schema.Any` pass, because a value decides those.
+ *
+ * @internal
+ */
+export const pathsWithoutJson = (
+  ast: SchemaAST.AST,
+  path: string,
+  seen: Set<SchemaAST.AST> = new Set(),
+): ReadonlyArray<string> => {
+  const encoding = ast.encoding?.at(-1)?.to;
+  if (encoding) return pathsWithoutJson(encoding, path, seen);
+  const within = (child: SchemaAST.AST, at = path) => pathsWithoutJson(child, at, seen);
+  switch (ast._tag) {
+    case "Declaration": {
+      const { toCodecJson, toCodec } = ast.annotations ?? {};
+      return toCodecJson || toCodec ? ast.typeParameters.flatMap((tp) => within(tp)) : [path];
+    }
+    case "Objects":
+      return [
+        ...ast.propertySignatures.flatMap((p) => within(p.type, member(path, p.name))),
+        ...ast.indexSignatures.flatMap((signature) => within(signature.type, `${path}[key]`)),
+      ];
+    case "Arrays":
+      return [
+        ...ast.elements.flatMap((element, index) => within(element, `${path}[${index}]`)),
+        ...ast.rest.flatMap((element) => within(element, `${path}[]`)),
+      ];
+    case "Union":
+      return ast.types.flatMap((type) => within(type));
+    case "Suspend": {
+      // A recursive schema: one pass over it finds what is there.
+      if (seen.has(ast)) return [];
+      seen.add(ast);
+      return within(ast.thunk());
+    }
+    default:
+      return [];
+  }
+};
+
+/**
+ * An effectful decision, run at the time its command is handled at. The clock
+ * reads that time for as long as `decide` runs, so `Clock.currentTimeMillis`
+ * and `DateTime.now` give what `decide` is given as `now`: a decision is the
+ * same however late it runs, and the prover reads the clock as that input.
+ *
+ * @internal
+ */
+export const decidedAt = <A, E, R>(
+  decision: Effect.Effect<A, E, R>,
+  now: DateTime.Utc,
+): Effect.Effect<A, E, R> =>
+  Clock.clockWith((clock) => {
+    const millis = DateTime.toEpochMillis(now);
+    const nanos = BigInt(millis) * 1_000_000n;
+    return Effect.provideService(decision, Clock.Clock, {
+      currentTimeMillisUnsafe: () => millis,
+      currentTimeMillis: Effect.succeed(millis),
+      currentTimeNanosUnsafe: () => nanos,
+      currentTimeNanos: Effect.succeed(nanos),
+      monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+      monotonicTimeNanos: clock.monotonicTimeNanos,
+      sleep: (duration) => clock.sleep(duration),
+    });
+  });
 
 /** What `decide` returned, once its Effect (if any) ran. @internal */
 export type Settled =
@@ -204,4 +323,27 @@ export const evolveView = (
       }) ?? null;
   }
   return current;
+};
+
+/**
+ * Call a command's client with a decoded wire payload.
+ *
+ * @internal
+ */
+export const sendPayload = (
+  send: unknown,
+  payload: unknown,
+  options: object,
+): Effect.Effect<unknown, unknown> => {
+  const { input, commandId, consistency } = payload as {
+    readonly input: unknown;
+    readonly commandId?: string;
+    readonly consistency?: string;
+  };
+  const call = send as (input: unknown, options: object) => Effect.Effect<unknown, unknown>;
+  return call(input, {
+    ...options,
+    ...(commandId === undefined ? {} : { commandId }),
+    ...(consistency === undefined ? {} : { consistency }),
+  });
 };

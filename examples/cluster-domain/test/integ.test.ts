@@ -93,11 +93,11 @@ const bankUrl = Effect.gen(function* () {
 /** Each command in this file has its own id: one id sent twice is one command, replayed. */
 let commands = 0;
 
-const command = (url: string, name: string, customer: string, target: string, input: unknown) =>
+/** Send a command for one instance: its id is the input's `accountId`, or `transferId` for a transfer. */
+const command = (url: string, name: string, customer: string, id: string, input: object) =>
   call(url, "POST", `/${name}`, customer, {
-    target,
-    commandId: `${name}-${customer}-${target}-${++commands}`,
-    input,
+    commandId: `${name}-${customer}-${id}-${++commands}`,
+    input: { [name === "RequestTransfer" ? "transferId" : "accountId"]: id, ...input },
   });
 
 /** Read a view until `done` holds: views and the saga catch up after the command commits. */
@@ -143,9 +143,8 @@ test(
     expect(stranger).toEqual({ status: 403, body: { _tag: "NotOwner" } });
 
     const anonymous = yield* call(url, "POST", "/DepositMoney", undefined, {
-      target: "sam-a",
       commandId: "anon",
-      input: { amount: 1 },
+      input: { accountId: "sam-a", amount: 1 },
     });
     expect(anonymous.status).toBe(401);
 

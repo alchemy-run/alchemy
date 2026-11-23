@@ -421,14 +421,12 @@ export const InstancesClustersBackupProvider = () =>
       if (current === undefined) {
         const created = yield* bigtable
           .createProjectsInstancesClustersBackups({
+            sourceTable,
+            expireTime,
+            backupType: news.backupType,
+            hotToStandardTime: news.hotToStandardTime,
             parent,
             backupId,
-            body: {
-              sourceTable,
-              expireTime,
-              backupType: news.backupType,
-              hotToStandardTime: news.hotToStandardTime,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -457,9 +455,9 @@ export const InstancesClustersBackupProvider = () =>
 
       if (mask.length > 0) {
         current = yield* bigtable.patchProjectsInstancesClustersBackups({
+          ...patchBody,
           name,
           updateMask: mask.join(","),
-          body: patchBody,
         });
       }
 

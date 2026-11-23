@@ -64,8 +64,8 @@ describe.skipIf(!entitled || !!process.env.FAST)(
             // Conditions, so the viewer role is granted on the project.
             const project = yield* currentProject;
             const policy = yield* resourcemanager.getIamPolicyProjects({
+              options: { requestedPolicyVersion: 3 },
               resource: `projects/${project}`,
-              body: { options: { requestedPolicyVersion: 3 } },
             });
             expect(
               (policy.bindings ?? [])

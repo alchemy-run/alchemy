@@ -56,6 +56,13 @@ const workerContainers = dockerLines(
   "--filter",
   "name=^workerd-native-container-",
 );
+const sessionVolumes = dockerLines(
+  "volume",
+  "ls",
+  "--quiet",
+  "--filter",
+  "label=dev.workerd.session",
+);
 const snapshotImages = dockerLines(
   "images",
   "--quiet",
@@ -68,6 +75,7 @@ it.live(
   () =>
     Effect.gen(function* () {
       const snapshotsBefore = new Set(yield* snapshotImages);
+      const volumesBefore = new Set(yield* sessionVolumes);
       yield* Effect.gen(function* () {
         const worker = yield* startTestWorker({
           name: "native-container-images",
@@ -127,6 +135,8 @@ it.live(
       // Snapshot restores and managed images start containers from images the
       // runtime never prepared; shutdown must still remove all of them.
       expect(yield* workerContainers).toEqual([]);
+      // Snapshot clone volumes belong to the session and go with it.
+      expect((yield* sessionVolumes).filter((name) => !volumesBefore.has(name))).toEqual([]);
       const created = (yield* snapshotImages).filter((id) => !snapshotsBefore.has(id));
       if (created.length > 0) yield* docker("rmi", "--force", ...new Set(created));
     }),

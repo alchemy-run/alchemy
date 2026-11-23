@@ -1,3 +1,4 @@
+import * as Config from "effect/Config";
 import * as EffectContext from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -31,9 +32,13 @@ export class AlchemyContext extends EffectContext.Service<
   }
 >()("alchemy/Context") {}
 
-/** Use the configured runtime directory, with a relative fallback for standalone callers. */
+/** Use the configured runtime directory, falling back to ALCHEMY_DIR or .alchemy. */
 export const dotAlchemyDirectory = Effect.serviceOption(AlchemyContext).pipe(
-  Effect.map((context) => (Option.isSome(context) ? context.value.dotAlchemy : ".alchemy")),
+  Effect.flatMap((context) =>
+    Option.isSome(context)
+      ? Effect.succeed(context.value.dotAlchemy)
+      : Config.String("ALCHEMY_DIR").pipe(Config.withDefault(".alchemy"), Effect.orDie),
+  ),
 );
 
 export const AlchemyContextLive = Layer.effect(

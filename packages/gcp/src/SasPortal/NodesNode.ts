@@ -201,10 +201,7 @@ export const NodesNodeProvider = () =>
 
       if (current === undefined) {
         const created = yield* sasportal
-          .createNodesNodes({
-            parent,
-            body: desired,
-          })
+          .createNodesNodes({ ...desired, parent })
           .pipe(
             Effect.catchTag("Conflict", () =>
               findOwnedNodeNode(id, parent).pipe(Effect.map((found) => found?.row)),
@@ -226,12 +223,12 @@ export const NodesNodeProvider = () =>
         news.sasUserIds !== undefined && !sameStringList(current.sasUserIds, news.sasUserIds);
       if (nameChanged || usersChanged) {
         current = yield* sasportal.patchNodesNodes({
+          ...desired,
           name,
           updateMask: updateMaskOf(
             "displayName",
             news.sasUserIds !== undefined ? "sasUserIds" : undefined,
           ),
-          body: desired,
         });
       }
 

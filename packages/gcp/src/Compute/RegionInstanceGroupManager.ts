@@ -519,13 +519,11 @@ const syncNamedPorts = (
     );
     const operation = yield* compute
       .setNamedPortsRegionInstanceGroups({
+        namedPorts,
+        fingerprint: group.fingerprint,
         project,
         region,
         instanceGroup,
-        body: {
-          namedPorts,
-          fingerprint: group.fingerprint,
-        },
       })
       .pipe(
         Effect.retry({
@@ -658,26 +656,21 @@ export const RegionInstanceGroupManagerProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertRegionInstanceGroupManagers({
+            name: managerName,
+            description,
+            instanceTemplate,
+            baseInstanceName,
+            targetSize,
+            namedPorts: namedPorts !== undefined && namedPorts.length > 0 ? namedPorts : undefined,
+            versions:
+              news.versions !== undefined ? toVersionBodies(env.project, news.versions) : undefined,
+            autoHealingPolicies: news.autoHealingPolicies,
+            updatePolicy: news.updatePolicy,
+            distributionPolicy: news.distributionPolicy,
+            targetPools: news.targetPools,
+            instanceLifecyclePolicy: news.instanceLifecyclePolicy,
             project: env.project,
             region,
-            body: {
-              name: managerName,
-              description,
-              instanceTemplate,
-              baseInstanceName,
-              targetSize,
-              namedPorts:
-                namedPorts !== undefined && namedPorts.length > 0 ? namedPorts : undefined,
-              versions:
-                news.versions !== undefined
-                  ? toVersionBodies(env.project, news.versions)
-                  : undefined,
-              autoHealingPolicies: news.autoHealingPolicies,
-              updatePolicy: news.updatePolicy,
-              distributionPolicy: news.distributionPolicy,
-              targetPools: news.targetPools,
-              instanceLifecyclePolicy: news.instanceLifecyclePolicy,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () => Effect.undefined),
@@ -758,10 +751,10 @@ export const RegionInstanceGroupManagerProvider = () =>
       if (dirty) {
         yield* compute
           .patchRegionInstanceGroupManagers({
+            ...patch,
             project: env.project,
             region,
             instanceGroupManager: managerName,
-            body: patch,
           })
           .pipe(
             Effect.retry({
