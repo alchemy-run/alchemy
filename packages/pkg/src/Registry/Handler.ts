@@ -164,10 +164,19 @@ const lookupRun = Effect.fn("lookupRun")(function* (ref: RunRef) {
     // the run's head lives in. The same commit can head several pull
     // requests, including one opened from a fork against a commit the
     // repository already published; matching the head repository keeps a
-    // run's publication on its own pull request.
+    // run's publication on its own pull request. GitHub can list a pull
+    // request a moment late, so an empty answer is checked again before the
+    // run counts as having no open pull request.
     const pulls = yield* github
       .pullRequestsForCommit(ref.repo, headRepo, data.head_branch, data.head_sha)
-      .pipe(Effect.mapError(upstream));
+      .pipe(
+        Effect.mapError(upstream),
+        Effect.repeat({
+          until: (found) => found.length > 0,
+          schedule: Schedule.spaced("2 seconds"),
+          times: 3,
+        }),
+      );
     const first = pulls[0];
     if (first === undefined) {
       return yield* NoOpenPullRequest.make({

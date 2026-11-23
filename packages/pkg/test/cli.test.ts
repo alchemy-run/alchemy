@@ -301,6 +301,7 @@ const scenarios = [
   "flaky registry",
   "storage unavailable",
   "pull request closed",
+  "closed during upload",
 ] as const;
 
 for (const scenario of scenarios) {
@@ -319,12 +320,17 @@ for (const scenario of scenarios) {
           expect(request.headers["content-length"]).toBe("3");
           puts++;
           return respond(
-            scenario === "storage unavailable" && puts === 1
+            scenario === "closed during upload"
               ? Response.json(
-                  { _tag: "Unavailable", message: "upload failed, try again" },
-                  { status: 503 },
+                  { _tag: "NoOpenPullRequest", message: "no open pull request" },
+                  { status: 410 },
                 )
-              : Response.json({ ...manifest.packages[1], uploaded: true }),
+              : scenario === "storage unavailable" && puts === 1
+                ? Response.json(
+                    { _tag: "Unavailable", message: "upload failed, try again" },
+                    { status: 503 },
+                  )
+                : Response.json({ ...manifest.packages[1], uploaded: true }),
           );
         }
         attempts++;
@@ -349,7 +355,9 @@ for (const scenario of scenarios) {
                     { status: 410 },
                   )
                 : scenario === "still missing" ||
-                    ((scenario === "upload" || scenario === "storage unavailable") &&
+                    ((scenario === "upload" ||
+                      scenario === "storage unavailable" ||
+                      scenario === "closed during upload") &&
                       attempts === 1)
                   ? Response.json(missing, { status: 409 })
                   : Response.json(published),
@@ -383,7 +391,10 @@ for (const scenario of scenarios) {
       return yield* Fiber.join(fiber);
     }).pipe(Effect.provide(TestClock.layer()), Effect.runPromise);
     const uploads =
-      scenario === "upload" || scenario === "still missing" || scenario === "storage unavailable";
+      scenario === "upload" ||
+      scenario === "still missing" ||
+      scenario === "storage unavailable" ||
+      scenario === "closed during upload";
     // A run GitHub does not report as in progress yet is retried every five
     // seconds for three minutes; a transient failure is sent again.
     const publishes =
@@ -391,7 +402,7 @@ for (const scenario of scenarios) {
         ? 37
         : scenario === "run catching up" || scenario === "flaky registry"
           ? 3
-          : uploads
+          : uploads && scenario !== "closed during upload"
             ? 2
             : 1;
     const put = `PUT https://pkg.ing/api/tarballs/%40alchemy.run%2Fpkg/${"1".repeat(64)}?repo=alchemy-run%2Falchemy&runId=123&attempt=2`;
@@ -402,7 +413,7 @@ for (const scenario of scenarios) {
         ? [
             "POST https://pkg.ing/api/publish",
             ...(scenario === "storage unavailable" ? [put, put] : [put]),
-            "POST https://pkg.ing/api/publish",
+            ...(scenario === "closed during upload" ? [] : ["POST https://pkg.ing/api/publish"]),
           ]
         : Array.from({ length: publishes }, () => "POST https://pkg.ing/api/publish"),
     );
@@ -419,7 +430,9 @@ for (const scenario of scenarios) {
     } else {
       // A pull request merged or closed while the job ran publishes nothing.
       expect(Result.getOrThrow(result)).toEqual(
-        scenario === "pull request closed" ? { packages: [] } : published,
+        scenario === "pull request closed" || scenario === "closed during upload"
+          ? { packages: [] }
+          : published,
       );
     }
   });
