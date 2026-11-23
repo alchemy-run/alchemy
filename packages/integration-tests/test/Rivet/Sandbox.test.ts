@@ -83,6 +83,24 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     test(
+      "a VM reaches only the hosts its template's network permissions allow",
+      Effect.gen(function* () {
+        const fetchFrom = (route: string, target: string) =>
+          get<ExecResult>(`/${route}/${key()}?url=${encodeURIComponent(target)}`).pipe(
+            Effect.map((result) => result.stdout.trim()),
+          );
+        // The default base reaches no outside host.
+        expect(yield* fetchFrom("fetch", "https://example.com")).toContain(
+          "blocked by network.http policy",
+        );
+        // The base that allows example.com reaches it, and nothing else.
+        expect(yield* fetchFrom("fetch-online", "https://example.com")).toBe("200");
+        expect(yield* fetchFrom("fetch-online", "https://example.org")).toContain("EACCES");
+      }),
+      { timeout: 120_000 },
+    );
+
+    test(
       "files written to a VM are read back, listed and removed, and the VM keeps them between calls",
       Effect.gen(function* () {
         const vm = key();

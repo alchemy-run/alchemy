@@ -33,6 +33,21 @@ export default class SandboxFront extends Docker.Service<SandboxFront>()(
       environment: { GREETING: "hello from the template" },
     });
     const sandboxes = yield* Rivet.CreateSandbox(base);
+    // A base whose VMs may reach one host, as a presigned URL's would be.
+    const online = yield* Rivet.SandboxTemplate("Online", {
+      permissions: {
+        network: {
+          default: "deny",
+          rules: [
+            {
+              mode: "allow",
+              patterns: ["dns://example.com", "tcp://example.com:*"],
+            },
+          ],
+        },
+      },
+    });
+    const onlineSandboxes = yield* Rivet.CreateSandbox(online);
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -42,6 +57,20 @@ export default class SandboxFront extends Docker.Service<SandboxFront>()(
         if (!key) return HttpServerResponse.text("Not Found", { status: 404 });
         const sandbox = sandboxes.getOrCreate(key);
         switch (step) {
+          case "fetch":
+          case "fetch-online": {
+            // `fetch` a URL from inside a VM: one from the default base, or
+            // one from the base that allows example.com.
+            const vm = step === "fetch" ? sandbox : onlineSandboxes.getOrCreate(key);
+            return yield* HttpServerResponse.json(
+              yield* vm.exec([
+                "node",
+                "-e",
+                "fetch(process.argv[1]).then((r) => console.log(r.status), (e) => console.log(String(e.cause ?? e)))",
+                url.searchParams.get("url") ?? "",
+              ]),
+            );
+          }
           case "exec":
             return yield* HttpServerResponse.json(
               yield* sandbox.exec(url.searchParams.get("command") ?? "true"),
