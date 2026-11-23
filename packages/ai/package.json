@@ -81,6 +81,7 @@
         "worker": "./src/Modal/index.ts",
         "default": "./lib/Modal/index.js"
       },
+      "./internal/*": null,
       "./*": {
         "types": "./lib/*.d.ts",
         "bun": "./src/*.ts",
@@ -94,6 +95,10 @@
   "scripts": {
     "build": "pnpm -r --filter \"{.}...\" run build:package",
     "build:package": "node scripts/build.ts"
+  },
+  "dependencies": {
+    "@earendil-works/pi-codemode": "1.5.0",
+    "acorn": "8.18.0"
   },
   "devDependencies": {
     "@alchemy.run/archil": "workspace:*",

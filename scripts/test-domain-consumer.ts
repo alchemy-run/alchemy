@@ -103,11 +103,14 @@ const command = Command.make(
     // `node_modules`, so only what is installed here resolves.
     const project = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-domain-consumer-" });
     yield* fs.copy(path.join(example, "src"), path.join(project, "src"));
-    yield* fs.makeDirectory(path.join(project, "test"));
-    yield* fs.copyFile(
-      path.join(example, "test", "Consumer.test.ts"),
-      path.join(project, "test", "Consumer.test.ts"),
-    );
+    yield* fs.makeDirectory(path.join(project, "test", "fixtures"), { recursive: true });
+    // The test, and the fixtures it reads that are not in `src`.
+    for (const file of [
+      ["Consumer.test.ts"],
+      ["fixtures", "hash.ts"],
+      ["fixtures", "Receipt.aggregate.ts"],
+    ])
+      yield* fs.copyFile(path.join(example, "test", ...file), path.join(project, "test", ...file));
     yield* fs.writeFileString(
       path.join(project, "package.json"),
       `${JSON.stringify(

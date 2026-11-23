@@ -27,8 +27,9 @@ import * as Value from "./Prove/internal/Value.ts";
 
 export type { Counterexample, Verdict } from "./Prove/internal/Check.ts";
 export type { Suggestion } from "./Prove/internal/Suggest.ts";
+export type { Reading } from "./Prove/internal/Source.ts";
 
-export interface Options {
+export interface Options extends Source.Reading {
   /** The file the aggregate is declared in: `new URL("../src/Account.ts", import.meta.url)`, or a path. */
   readonly source: URL | string;
   /**
@@ -49,7 +50,7 @@ export interface Options {
 }
 
 /** Where a decision is declared. */
-export interface DecisionOptions {
+export interface DecisionOptions extends Source.Reading {
   /** The file the decision is declared in: `new URL("../src/Transfer.decision.ts", import.meta.url)`, or a path. */
   readonly source: URL | string;
 }
@@ -190,8 +191,17 @@ export const ATOMIC =
 
 const ASSUMPTIONS = [
   "whole numbers are exact: a number stays within ±2^53, and a bigint has no limit",
+  "a duration an input holds is a whole number of milliseconds",
   "an event or rejection whose fields fail its schema crashes the command, and nothing is committed",
 ];
+
+/** What a proof takes for granted of the functions the prover did not read. */
+export const pure = (names: ReadonlyArray<string>): ReadonlyArray<string> =>
+  names.length === 0
+    ? []
+    : [
+        `${names.join(", ")} ${names.length === 1 ? "is" : "are each"} a pure function: the same result for the same arguments, nothing changed, and a result its place in a state or an event allows`,
+      ];
 
 /**
  * Check every invariant of an aggregate against every command, and say what
@@ -210,7 +220,7 @@ export const report = (
   options: Options,
 ): Effect.Effect<Report, ProveError, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function* () {
-    const { loader, definition } = yield* Paths.load(aggregate, options.source);
+    const { loader, definition } = yield* Paths.load(aggregate, options.source, options);
     const names = Paths.invariantNames(definition);
     const real = (aggregate.definition.invariants ?? {}) as unknown as Record<
       string,
@@ -309,7 +319,7 @@ export const report = (
         uncompared: own.reduce((sum, row) => sum + row.uncompared, 0),
         differs: own.flatMap((row) => row.differs),
       },
-      assumptions: ASSUMPTIONS,
+      assumptions: [...ASSUMPTIONS, ...pure(loader.opaques())],
     };
     return made;
   }).pipe(
@@ -556,7 +566,7 @@ export const decisionReport = (
   options: DecisionOptions,
 ): Effect.Effect<DecisionReport, ProveError, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function* () {
-    const loader = yield* Source.loader;
+    const loader = yield* Source.loader(options);
     loader.adopt(decision);
     const solver = yield* Smt.solver;
     const interpreter = Interpreter.make(loader, new Value.Run([]));
@@ -596,7 +606,7 @@ export const decisionReport = (
         ),
       ].map((check) => `${check.at}: ${check.check}`),
       unkept: Induction.unkept([row]),
-      assumptions: [...ASSUMPTIONS, ATOMIC],
+      assumptions: [...ASSUMPTIONS, ATOMIC, ...pure(loader.opaques())],
     };
     return made;
   }).pipe(

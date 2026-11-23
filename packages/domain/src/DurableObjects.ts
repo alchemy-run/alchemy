@@ -205,6 +205,15 @@ export interface Host<R = never> {
     /** Every plan the model has for these targets. */
     plans: (targets: ReadonlyArray<string>) => Readonly<Record<string, Backfill.Plan>>,
   ) => Effect.Effect<(targets: ReadonlyArray<string>) => Effect.Effect<void, never, R>, never, R>;
+  /**
+   * Hand `effect` to the current invocation's lifetime (a Worker's or Durable
+   * Object's `waitUntil`), so it finishes after the call that started it
+   * returns. Succeeds with `false` when the current call has no lifetime to
+   * extend (a Workflow step): `effect` then runs before the call does.
+   * Without it, `effect` runs on a detached fiber, as a long-running process
+   * keeps it alive.
+   */
+  readonly background?: (effect: Effect.Effect<void>) => Effect.Effect<boolean>;
   /** Models whose names collide on the same key fail to host: one per Worker, pool or class. */
   readonly claimKey: Effect.Effect<object, never, R>;
 }
@@ -363,8 +372,18 @@ const acquireLease = (state: ObjectStateShape, lease: string) =>
  * right after the commit (`kick`), and again by a durable callback if the
  * instance dies first. One drain runs at a time (a storage lease), rows are
  * processed in order, and a row is deleted only after its work succeeds.
+ *
+ * A `detached` queue never drains inside the call that staged its rows: its
+ * callback runs them at once, as an event of its own. A drain's calls nest
+ * inside the call it runs in, so an aggregate → policy → aggregate chain that
+ * drained each hop inline would nest one level deeper per hop until the host
+ * refuses the call (Cloudflare limits how deep a chain of calls may go).
  */
-const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
+const queue = <Row>(
+  name: string,
+  process: (row: Row) => Effect.Effect<void>,
+  options: { readonly detached?: boolean } = {},
+) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
     const prefix = `${name}:`;
@@ -407,11 +426,26 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
           yield* state.storage.put(`${name}-seq`, last);
           // The backstop: delivered even if this instance dies before `kick` runs.
           // Its rows are progress, so a callback staging them doesn't hand it
-          // its retry budget.
-          yield* callback.schedule("drain", { after: "10 seconds", payload: {}, progress: last });
+          // its retry budget. A detached queue's only drain.
+          yield* callback.schedule("drain", {
+            after: options.detached ? 0 : "10 seconds",
+            payload: {},
+            progress: last,
+          });
         }),
-      /** Process staged rows now, in the background, keeping the instance alive until done. */
-      kick: state.waitUntil(drain.pipe(Effect.ignoreCause)),
+      /**
+       * Process staged rows now, in the background, keeping the instance alive
+       * until done. A detached queue leaves them to its callback.
+       */
+      kick: options.detached
+        ? Effect.void
+        : state.waitUntil(
+            drain.pipe(
+              Effect.catchCause((cause) =>
+                Effect.logError(`domain ${name} drain failed; its callback retries`, cause),
+              ),
+            ),
+          ),
       /** Process staged rows now, and wait (unless another drain holds the lease). */
       flush: drain,
     };
@@ -1824,7 +1858,9 @@ const viewObject = (
 const policyObject = (kit: PolicyKit) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
-    const inbox = yield* queue<Delivery>("inbox", kit.run);
+    // Detached: a delivery arrives inside the sender's drain, so draining it
+    // here would run the policy's commands one call deeper than the sender.
+    const inbox = yield* queue<Delivery>("inbox", kit.run, { detached: true });
     return {
       receive: (delivery: Delivery) =>
         reportDefects(
@@ -2445,21 +2481,29 @@ export const makePlatform = <R>(
 
           // The first Domain call in each isolate starts the runs of the model's
           // consumers (each starts once): where no deploy-time job runs them, that
-          // starts a catch-up.
+          // starts a catch-up. The call doesn't wait for it: the runs start in the
+          // background, kept alive by the invocation, and a later call starts them
+          // again if they didn't all start.
           let news: Effect.Effect<void> | undefined;
-          const announce = Effect.suspend(() => {
-            const pending = news;
-            if (pending === undefined) return Effect.void;
-            news = undefined;
-            return pending.pipe(
-              Effect.timeout("5 seconds"),
-              Effect.catchCause(() =>
-                Effect.sync(() => {
-                  news = pending;
-                }),
-              ),
-            );
-          });
+          const announce = Effect.uninterruptible(
+            Effect.suspend(() => {
+              const pending = news;
+              if (pending === undefined) return Effect.void;
+              news = undefined;
+              const retry = Effect.sync(() => {
+                news = pending;
+              });
+              const begin = pending.pipe(
+                Effect.timeout("5 seconds"),
+                Effect.catchCause(() => retry),
+              );
+              if (host.background === undefined)
+                return begin.pipe(Effect.forkDetach, Effect.asVoid);
+              return host
+                .background(begin)
+                .pipe(Effect.flatMap((handed) => (handed ? Effect.void : begin)));
+            }),
+          );
 
           const modelHost: ModelHost = {
             aggregate: (aggregate, kit) =>
@@ -2800,12 +2844,13 @@ export const makePlatform = <R>(
                     planOf = plansOfTarget;
                     if (backfilled.length === 0) return;
                     // Where no deploy-time job runs, the first call starts each run (once).
+                    // Each run's root is an object of its own: start them all at once.
                     news = Effect.suspend(() => {
                       const plans = plansOf(backfilled, planOf);
                       return Effect.forEach(
                         backfilled.filter((target) => plans[target] !== undefined),
                         (target) => net.run.begin(target, plans[target]!),
-                        { discard: true },
+                        { discard: true, concurrency: "unbounded" },
                       );
                     });
                   }),

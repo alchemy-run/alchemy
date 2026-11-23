@@ -305,6 +305,8 @@ overrides:
   "@effect/sql-sqlite-do": 4.1.4
   drizzle-kit: 1.0.0-rc.5
   drizzle-orm: 1.0.0-rc.5
+  # OpenCode is built against a drizzle-orm snapshot with exports rc.5 lacks.
+  "@opencode/core>drizzle-orm": 1.0.0-rc.5-169397b
   # Keep drizzle-orm's optional peer graph identical across workspace
   # packages so TypeScript sees one drizzle-orm identity.
   mysql2: 3.24.5

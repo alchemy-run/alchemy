@@ -1,3 +1,4 @@
+import type { JsonValue } from "@earendil-works/chord";
 import type { JsonObject, ToolExecutionResult, ToolRegistration } from "@earendil-works/pi-durable";
 import type { McpClient } from "effect/ai";
 import * as Cause from "effect/Cause";
@@ -31,6 +32,10 @@ export const mcpRegistrations = (
           name: mcpToolName(server, tool.name),
           description: tool.description ?? tool.title ?? tool.name,
           parameters: tool.inputSchema as JsonObject,
+          // What a program gets back, when the server types its results.
+          ...(tool.outputSchema === undefined
+            ? {}
+            : { structuredOutputSchema: tool.outputSchema as object }),
           execute: async (args, _api, context): Promise<ToolExecutionResult> => {
             const exit = await run(
               client.callTool({ tool, arguments: args as Record<string, unknown> }),
@@ -39,6 +44,11 @@ export const mcpRegistrations = (
             if (Exit.isSuccess(exit)) {
               return {
                 ...(exit.value.isError === true ? { isError: true } : {}),
+                ...(tool.outputSchema !== undefined &&
+                exit.value.isError !== true &&
+                exit.value.structuredContent !== undefined
+                  ? { structuredOutput: exit.value.structuredContent as JsonValue }
+                  : {}),
                 output: exit.value.content.map((block) => ({
                   type: "text" as const,
                   text: block.type === "text" ? block.text : JSON.stringify(block),

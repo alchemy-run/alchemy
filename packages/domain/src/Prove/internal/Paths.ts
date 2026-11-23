@@ -179,6 +179,7 @@ export const step = (
       .pipe(
         Effect.flatMap((made) => (made._tag === "Effect" ? made.run : Effect.succeed(made))),
         Effect.catchTag("Rejected", (rejected) => Effect.succeed(rejected)),
+        decidedAt(interpreter, now),
       );
     if (decision._tag === "Rejected")
       return { inputs, applied: { _tag: "Rejected", rejection: decision.rejection } } as const;
@@ -206,6 +207,25 @@ const commandOf = (command: CommandClass, label: string, run: Value.Run): V => {
   }
   return Value.obj(fields, { kind: "Command", cls: command });
 };
+
+/**
+ * Runs `decide` at a time: what the clock reads while it runs. The runtime
+ * sets the clock to the command's time the same way.
+ */
+const decidedAt =
+  (interpreter: Interpreter, now: V) =>
+  <A, E>(decide: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+    Effect.suspend(() => {
+      const before = interpreter.hooks.now;
+      interpreter.hooks.now = now;
+      return decide.pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            interpreter.hooks.now = before;
+          }),
+        ),
+      );
+    });
 
 /** The id a command is sent with and the time it is handled at, as inputs. */
 const stamp = (label: string, run: Value.Run): { readonly commandId: V; readonly now: V } => {
@@ -428,6 +448,7 @@ export const decided = (
       .pipe(
         Effect.flatMap((made) => (made._tag === "Effect" ? made.run : Effect.succeed(made))),
         Effect.catchTag("Rejected", (rejected) => Effect.succeed(rejected)),
+        decidedAt(interpreter, now),
       );
     if (decision_._tag === "Rejected")
       return done({ _tag: "Rejected", rejection: decision_.rejection });
@@ -1048,6 +1069,7 @@ export const find = (
 export const load = (
   aggregate: Aggregate.Any,
   source: URL | string,
+  reading?: Source.Reading,
 ): Effect.Effect<
   { readonly loader: Source.Loader; readonly definition: Definition },
   Source.LoadError,
@@ -1065,7 +1087,7 @@ export const load = (
                 (error) => new Source.LoadError({ file: String(source), message: error.message }),
               ),
             );
-    const loader = yield* Source.loader;
+    const loader = yield* Source.loader(reading);
     loader.adopt(aggregate);
     const module = yield* loader.load(file);
     const node = find(module.program, aggregate.aggregateName, "evolve");
