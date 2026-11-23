@@ -72,6 +72,26 @@ export default Bank.layer(BankHandlers).pipe(
 - Both platforms push live reads over `Domain.protocolWebSocket`: the runtime that serves the Api holds the caller's socket, and the owner of the key pushes each commit. Over `Domain.protocolHttp`, live reads poll instead.
 - A deploy that adds a view or projection doesn't wait for its backfill; the first call starts it.
 
+A process that hosts nothing can still read a model's history, for an export or an audit. `DomainRivet.modelReader(namespace, "Bank")` pages the instances of an aggregate or view and reads an aggregate's stored events. It builds no model and never sends a command:
+
+```ts
+const bank = DomainRivet.modelReader(namespace, "Bank");
+const page = yield* bank.instances("Account", undefined, 100); // { rows: [{ source, id }], next? }
+const events = yield* bank.log("Account", "a-1", 0, 500);      // stored events with seq > 0, in seq order
+```
+
+Pass `page.next` as `after` for the next page. An instance may be listed twice while the directory splits, so key by id.
+
+To move an instance to another host, `DomainRivet.modelRestorer(namespace, "Bank")` (or `store.restore` on a platform's aggregate store) writes the rows `log` read, as stored: the same `seq`, `at`, `commandId`, `correlationId` and `trace`. They reach views and projections as history and no policy reacts to them:
+
+```ts
+const rows = yield* bank.log("Account", "a-1", 0, 500);
+const target = DomainRivet.modelRestorer(otherNamespace, "Bank");
+const receipt = yield* target.restore("Account", "a-1", rows, { expectedVersion: 0 });
+```
+
+Every row is checked before anything is written, so a refused restore (`RestoreRefused`, with a `reason` of `version`, `seqGap`, `wrongInstance` or `undecodable`) leaves the instance as it was. `expectedVersion` is the number of events the instance must hold: `0` for one never written, or the last version of the previous batch to continue a long log. Restoring rows the instance already holds answers the receipt and writes nothing.
+
 More: [Rivet](https://alchemy.run/domain/rivet), [Effect Cluster](https://alchemy.run/domain/effect-cluster).
 
 ## Calling the Api in process

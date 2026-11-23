@@ -41,12 +41,17 @@ import {
   type Host,
   type ListOptions,
   makePlatform,
+  type ModelReader,
+  type ModelRestorer,
+  multiplexedName,
   type Namespace,
   type ObjectImpl,
   ObjectState,
   type ObjectStateShape,
   type ObjectStorage,
   parseMultiplexedName,
+  readModel,
+  restoreModel,
   runtimeClaim,
   type Stub,
   SUBSCRIPTION_HEADER,
@@ -393,3 +398,32 @@ export const layerDurableObjects = <PoolReq>(
     never,
     PoolReq | Providers
   >;
+
+/**
+ * Read-only reads of the model `modelName` hosted on the Rivet class that
+ * `namespace` reaches (a caller's `makeNamespace` of
+ * `@alchemy.run/rivet/DurableObject`): its backfill directory's instances and
+ * its aggregates' stored logs, by the names this platform gives its objects.
+ * Never a command, and nothing is declared or hosted.
+ */
+export const modelReader = (
+  namespace: DurableObjectNamespace<any>,
+  modelName: string,
+): ModelReader =>
+  readModel(
+    (name, key) => namespace.getByName(multiplexedName(modelName, name, key)) as unknown as Stub,
+  );
+
+/**
+ * Restore aggregate instances of the model `modelName` hosted on the Rivet
+ * class that `namespace` reaches, from another host's stored rows (see
+ * `AggregateStore.restore`), by the names this platform gives its objects. The
+ * rows are what {@link modelReader}'s `log` reads. Sends no command.
+ */
+export const modelRestorer = (
+  namespace: DurableObjectNamespace<any>,
+  modelName: string,
+): ModelRestorer =>
+  restoreModel(
+    (name, key) => namespace.getByName(multiplexedName(modelName, name, key)) as unknown as Stub,
+  );

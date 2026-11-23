@@ -67,6 +67,7 @@ import type {
   ViewKit,
   ViewSnapshot,
 } from "./Platform.ts";
+import { EnvelopeJson as EnvelopeJsonSchema, RestoreRefused } from "./Platform.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
 import type * as Query from "./Query.ts";
@@ -1246,6 +1247,90 @@ const build = (
           deliveries: result.deliveries,
         };
       }),
+      // Another host's stored rows, taken as stored: checked, folded and routed as history.
+      restore: (input) =>
+        Effect.gen(function* () {
+          const refused = (reason: RestoreRefused["reason"], detail: string) =>
+            new RestoreRefused({
+              aggregate: aggregate.aggregateName,
+              id: input.id,
+              reason,
+              detail,
+            });
+          if (input.version !== input.expectedVersion) {
+            return yield* refused(
+              "version",
+              `the instance holds ${input.version} events, not the ${input.expectedVersion} expected`,
+            );
+          }
+          const id = yield* Effect.try({
+            try: () => decodeId(input.id) as string,
+            catch: () =>
+              refused("wrongInstance", `${input.id} is no id of ${aggregate.aggregateName}`),
+          });
+          const stream = `${aggregate.aggregateName}/${id}`;
+          const sourceRef = Aggregate.makeRef(aggregate, id);
+          let next: unknown = codecs.state.decode(input.state ?? codecs.initial);
+          const deliveries: Array<Delivery> = [];
+          for (const [index, row] of input.rows.entries()) {
+            const seq = input.version + index + 1;
+            const at = `${stream} row ${index + 1}`;
+            const json = yield* Schema.decodeEffect(EnvelopeJsonSchema)(row.envelope).pipe(
+              Effect.mapError((error) =>
+                refused("undecodable", `${at}: its envelope: ${error.message}`),
+              ),
+            );
+            if (json.stream !== stream || json.id !== id) {
+              return yield* refused("wrongInstance", `${at} is ${json.stream}'s (id ${json.id})`);
+            }
+            if (json.seq !== seq) {
+              return yield* refused("seqGap", `${at} has seq ${json.seq} where ${seq} follows`);
+            }
+            const tag = (row.event as { readonly _tag?: unknown } | null)?._tag;
+            if (typeof tag !== "string" || !codecs.events.has(tag)) {
+              return yield* refused(
+                "undecodable",
+                `${at}: ${String(tag)} is no event of ${aggregate.aggregateName}`,
+              );
+            }
+            const event = yield* Effect.try({
+              try: () => eventCodecs.get(tag)!.codec.decode(row.event) as { readonly _tag: string },
+              catch: (error) => refused("undecodable", `${at}: its ${tag}: ${String(error)}`),
+            });
+            const envelope = decodeEnvelope(json);
+            const folded = next;
+            next = yield* Effect.try({
+              try: () =>
+                (def.evolve as Record<string, (...args: any[]) => unknown>)[tag](
+                  folded,
+                  event,
+                  envelope,
+                ),
+              catch: (error) =>
+                refused("undecodable", `${at}: its ${tag} does not fold: ${String(error)}`),
+            });
+            deliveries.push(
+              ...fanOut(
+                { event, source: sourceRef, envelope, state: undefined, stream },
+                {
+                  source: stream,
+                  seq,
+                  origin: aggregate.aggregateName,
+                  tag,
+                  event: row.event,
+                  envelope: row.envelope,
+                  history: true,
+                },
+              ),
+            );
+          }
+          return {
+            state: codecs.state.encode(next),
+            version: input.version + input.rows.length,
+            events: input.rows,
+            deliveries,
+          };
+        }),
       handle: (input) => {
         const tag = (input.command as { readonly _tag: string })._tag;
         const correlationId = input.correlationId ?? input.commandId;

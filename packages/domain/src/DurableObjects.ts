@@ -25,6 +25,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Random from "effect/Random";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
@@ -38,6 +39,7 @@ import { DecisionsUnsupported, DefinitionError } from "./DefinitionError.ts";
 import { admitStreamWrite, advanceStreamMeta, mergeCheckpoints } from "./InMemory.ts";
 import {
   type Accepted,
+  alreadyRestored,
   type AggregateKit,
   type DecisionKit,
   type DecisionResult,
@@ -59,6 +61,8 @@ import {
   type PolicyKit,
   type ProjectionKit,
   type Push,
+  type ReceiptJson,
+  RestoreRefused,
   REAUTHORIZE_CLOSE_CODE,
   type SeedResult,
   type SendResult,
@@ -1133,6 +1137,48 @@ const aggregateObject = (
         const imported: ImportResult = { _tag: "Imported", receipt };
         return { imported, kick };
       });
+    // Callers run it through `whenFree`: a restore never lands under a decision's intent.
+    // Every row is checked, by `kit.restore`, before anything is written.
+    const restoreEvents = (id: string, rows: ReadonlyArray<StoredEvent>, expectedVersion: number) =>
+      Effect.gen(function* () {
+        const current = yield* storedMeta;
+        if (current.held) return yield* new InstanceHeld();
+        const receipt = (version: number): ReceiptJson => ({
+          stream: `${kit.name}/${id}`,
+          version,
+          events: rows.map((row) => row.event),
+          reply: null,
+        });
+        // Nothing to take, and nothing to list the instance for.
+        if (rows.length === 0 && current.version === expectedVersion) {
+          return { answer: { receipt: receipt(current.version) } as RestoreAnswer, kick: false };
+        }
+        if (current.version === expectedVersion + rows.length && rows.length > 0) {
+          const held = yield* state.storage.list<StoredEvent>({
+            prefix: "event:",
+            start: `event:${pad(expectedVersion + 1)}`,
+            limit: rows.length,
+          });
+          if (alreadyRestored([...held.values()], rows)) {
+            return { answer: { receipt: receipt(current.version) } as RestoreAnswer, kick: false };
+          }
+        }
+        const result = yield* Effect.result(
+          kit.restore({
+            id,
+            state: current.state,
+            version: current.version,
+            expectedVersion,
+            rows,
+          }),
+        );
+        if (Result.isFailure(result)) {
+          const { reason, detail } = result.failure;
+          return { answer: { refused: { reason, detail } } as RestoreAnswer, kick: false };
+        }
+        const kick = yield* state.storage.transaction(persist(id, current.version, result.success));
+        return { answer: { receipt: receipt(result.success.version) } as RestoreAnswer, kick };
+      });
     /**
      * Store decided events, the state after them and their deliveries. Call
      * inside the storage transaction that commits them; `true` when there are
@@ -1513,6 +1559,12 @@ const aggregateObject = (
           const { imported, kick } = yield* whenFree(id, importEvents(id, events, meta));
           if (kick) yield* outbox.kick;
           return imported;
+        }).pipe(reportDefects),
+      restoreRows: (id: string, rows: ReadonlyArray<StoredEvent>, expectedVersion: number) =>
+        Effect.gen(function* () {
+          const { answer, kick } = yield* whenFree(id, restoreEvents(id, rows, expectedVersion));
+          if (kick) yield* outbox.kick;
+          return answer;
         }).pipe(reportDefects),
       state: () => reportDefects(currentMeta),
       after: (after: number) => reportDefects(eventsAfter(after)),
@@ -2571,6 +2623,10 @@ export const makePlatform = <R>(
                           ),
                         ),
                       ),
+                    restore: (id, rows, { expectedVersion }) =>
+                      unwrapDefects<RestoreAnswer>(
+                        namespace.getByName(id).restoreRows(id, rows, expectedVersion),
+                      ).pipe(Effect.flatMap(restoreOutcome(aggregate.aggregateName, id))),
                     state: (id) =>
                       announce.pipe(
                         Effect.andThen(
@@ -2594,6 +2650,11 @@ export const makePlatform = <R>(
                             namespace.getByName(id).after(cursor),
                           ),
                         (event) => event.envelope.seq,
+                      ),
+                    // The log a backfill reader reads (`SourceRpc.log`): a page, as stored.
+                    log: (id, after, limit) =>
+                      unwrapDefects<ReadonlyArray<StoredEvent>>(
+                        namespace.getByName(id).bfLog(id, after, limit),
                       ),
                   };
                 }),
@@ -2826,6 +2887,14 @@ export const makePlatform = <R>(
               net.run
                 .phase(target)
                 .pipe(Effect.map((phase) => ({ complete: phase === "complete" }))),
+            // A read: a call that failed in transit is asked again.
+            instances: (source, after, limit) =>
+              Backfill.listInstances(
+                (path, from) => unwrapDefects<Backfill.Listing>(nodeStub(path).list(path, from)),
+                source,
+                after,
+                limit,
+              ),
             start: (targets, plansOfTarget, backfilled) =>
               Effect.gen(function* () {
                 // At deploy time: the host runs the backfill of new consumers and waits.
@@ -2897,6 +2966,85 @@ export const multiplexedName = (model: string, name: string, key: string) =>
 /** A model's class name: `Billing.AccountAggregate`. */
 export const className = (modelName: string, name: string) =>
   `${modelName}.${name}`.replace(/[^A-Za-z0-9_.]/g, "_");
+
+/** What {@link readModel} reads of a model: its backfill directory and its aggregates' stored logs, nothing else. */
+export interface ModelReader {
+  /** A page of the instances the directory lists of `source` (see `ModelHost.instances`). */
+  readonly instances: (
+    source: string,
+    after: string | undefined,
+    limit: number,
+  ) => Effect.Effect<Backfill.Instances>;
+  /** A page of an aggregate instance's stored events (see `AggregateStore.log`). */
+  readonly log: (
+    aggregate: string,
+    id: string,
+    after: number,
+    limit: number,
+  ) => Effect.Effect<ReadonlyArray<StoredEvent>>;
+}
+
+/**
+ * Read-only access to a model's backfill directory and its aggregates' stored
+ * logs, from any process that reaches its objects (`objectOf(name, key)`, by
+ * the names its host gives them): no kit and no declaration, and never a
+ * command. The calls are the ones a backfill run makes (`NodeRpc.list`,
+ * `SourceRpc.log`), which any code answers.
+ */
+export const readModel = (objectOf: (name: string, key: string) => Stub): ModelReader => ({
+  instances: (source, after, limit) =>
+    Backfill.listInstances(
+      (path, from) =>
+        unwrapDefects<Backfill.Listing>(
+          objectOf("DomainDirectory", `node:${path}`).list!(path, from),
+        ),
+      source,
+      after,
+      limit,
+    ),
+  log: (aggregate, id, after, limit) =>
+    unwrapDefects<ReadonlyArray<StoredEvent>>(
+      objectOf(`${aggregate}Aggregate`, id).bfLog!(id, after, limit),
+    ),
+});
+
+/** What an aggregate object answers a restore: the receipt, or why it took none. */
+type RestoreAnswer =
+  | { readonly receipt: ReceiptJson }
+  | { readonly refused: { readonly reason: RestoreRefused["reason"]; readonly detail: string } };
+
+/** An object's restore answer as `AggregateStore.restore` answers it: the receipt, or {@link RestoreRefused}. */
+const restoreOutcome =
+  (aggregate: string, id: string) =>
+  (answer: RestoreAnswer): Effect.Effect<ReceiptJson, RestoreRefused> =>
+    "refused" in answer
+      ? Effect.fail(new RestoreRefused({ aggregate, id, ...answer.refused }))
+      : Effect.succeed(answer.receipt);
+
+/** What {@link restoreModel} writes into a model: an aggregate instance's stored rows, nothing else. */
+export interface ModelRestorer {
+  /** Restore an aggregate instance from another host's stored rows (see `AggregateStore.restore`). */
+  readonly restore: (
+    aggregate: string,
+    id: string,
+    rows: ReadonlyArray<StoredEvent>,
+    options: { readonly expectedVersion: number },
+  ) => Effect.Effect<ReceiptJson, RestoreRefused>;
+}
+
+/**
+ * The writing counterpart of {@link readModel}: restore an aggregate instance
+ * of a model hosted in another process, by the names its host gives its
+ * objects, as `AggregateStore.restore` does on the model's own host. The
+ * aggregate's object runs the restore, so the code behind it is the one that
+ * checks and folds the rows. It sends no command.
+ */
+export const restoreModel = (objectOf: (name: string, key: string) => Stub): ModelRestorer => ({
+  restore: (aggregate, id, rows, { expectedVersion }) =>
+    unwrapDefects<RestoreAnswer>(
+      objectOf(`${aggregate}Aggregate`, id).restoreRows!(id, rows, expectedVersion),
+    ).pipe(Effect.flatMap(restoreOutcome(aggregate, id))),
+});
 
 /** Split a {@link multiplexedName} back into its class and key. */
 export const parseMultiplexedName = (name: string) => {

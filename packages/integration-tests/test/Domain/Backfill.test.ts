@@ -534,3 +534,44 @@ describe("Domain backfill (simulated)", { tags: ["unit", "local"] }, () => {
     seeds: 60,
   });
 });
+
+describe("Domain backfill directory listing", { tags: ["unit", "local"] }, () => {
+  /** Every page of the instances of `A`, `limit` rows a page, as a reader keeps the cursor. */
+  const walk = (sim: Sim, source: string, limit: number) =>
+    Effect.gen(function* () {
+      const ids: Array<string> = [];
+      let after: string | undefined;
+      do {
+        const page = yield* Backfill.listInstances(sim.net.node.list, source, after, limit);
+        expect(page.rows.length).toBeLessThanOrEqual(limit);
+        ids.push(...page.rows.map((row) => row.id));
+        after = page.next;
+      } while (after !== undefined);
+      return ids;
+    });
+
+  it.effect(
+    "a source's instances are listed depth first a page at a time, over nodes that split",
+    () =>
+      Effect.gen(function* () {
+        const sim = new Sim(1, TARGET, noFaults);
+        for (const commit of history(sim, 20, 20, 1)) yield* commit();
+        yield* sim.deploy();
+        yield* sim.run();
+        const expected = Array.from({ length: 20 }, (_, i) => `s${i}`).sort();
+        // The root lists children, not just rows of its own.
+        expect((yield* sim.net.node.list("A:", undefined)).children.length).toBeGreaterThan(0);
+        // The directory is split into children (a node holds three): every page size reaches all of it.
+        for (const limit of [1, 2, 3, 7, 50]) {
+          const ids = yield* walk(sim, "A", limit);
+          expect([...new Set(ids)].sort()).toEqual(expected);
+          // Nothing is moving, so nothing is listed twice.
+          expect(ids.length).toBe(expected.length);
+        }
+        // A source nothing was committed on lists nothing, with no cursor.
+        const none = yield* Backfill.listInstances(sim.net.node.list, "Z", undefined, 5);
+        expect(none).toEqual({ rows: [] });
+      }),
+    { tags: ["unit", "local"] },
+  );
+});

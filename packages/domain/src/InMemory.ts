@@ -17,6 +17,7 @@ import {
   type Accepted,
   type DecisionResult,
   type Delivery,
+  alreadyRestored,
   emptySnapshot,
   emptyStreamMeta,
   hostedModels,
@@ -26,6 +27,7 @@ import {
   type Json,
   type ModelHost,
   type RecordInput,
+  type SeedResult,
   type SendResult,
   type StoredEvent,
   type StreamEntry,
@@ -789,15 +791,23 @@ export const make = (
           ) =>
             Effect.gen(function* () {
               const current = instance(id);
-              const result = yield* kit.seed({
+              return yield* absorb(
                 id,
-                state: current.state,
-                version: current.version,
-                events,
-                commandId,
-                now: now(),
-                ...(at === undefined ? {} : { at }),
-              });
+                yield* kit.seed({
+                  id,
+                  state: current.state,
+                  version: current.version,
+                  events,
+                  commandId,
+                  now: now(),
+                  ...(at === undefined ? {} : { at }),
+                }),
+              );
+            });
+          // Store what the kernel folded and routed, and send it on. Callers hold `lock`.
+          const absorb = (id: string, result: SeedResult) =>
+            Effect.gen(function* () {
+              const current = instance(id);
               if (current.version === 0) yield* register({ source: kit.name, id });
               const live = yield* Backfill.routeCommit(
                 sourceRole(id),
@@ -890,6 +900,13 @@ export const make = (
             state: (id) =>
               Effect.sync(() => ({ state: instance(id).state, version: instance(id).version })),
             events: (id) => Effect.sync(() => [...instance(id).events]),
+            // The log a backfill reader reads (`SourceRpc.log`), creating no instance.
+            log: (id, after, limit) =>
+              Effect.sync(() =>
+                (instances.get(id)?.events ?? [])
+                  .filter((event) => event.envelope.seq > after)
+                  .slice(0, limit),
+              ),
             changes: (id) =>
               Stream.unwrap(
                 versionOf(id).pipe(
@@ -923,6 +940,37 @@ export const make = (
                 Effect.suspend(() => append(id, events, `seed:${id}:${instance(id).version}`)).pipe(
                   Effect.asVoid,
                 ),
+              ),
+            restore: (id, rows, { expectedVersion }) =>
+              lock.withPermits(1)(
+                Effect.gen(function* () {
+                  const current = instance(id);
+                  const receipt = (version: number) => ({
+                    stream: `${kit.name}/${id}`,
+                    version,
+                    events: rows.map((row) => row.event),
+                    reply: null,
+                  });
+                  if (rows.length === 0 && current.version === expectedVersion)
+                    return receipt(current.version);
+                  if (
+                    current.version > expectedVersion &&
+                    alreadyRestored(
+                      current.events.filter((row) => row.envelope.seq > expectedVersion),
+                      rows,
+                    )
+                  )
+                    return receipt(current.version);
+                  // Checked before the instance is listed: a refused restore leaves it as it was.
+                  const result = yield* kit.restore({
+                    id,
+                    state: current.state,
+                    version: current.version,
+                    expectedVersion,
+                    rows,
+                  });
+                  return yield* absorb(id, result);
+                }),
               ),
             import: (id, events, meta) =>
               lock.withPermits(1)(
@@ -1534,6 +1582,8 @@ export const make = (
         }),
       history: (target) =>
         Effect.map(run(target).phase(target), (phase) => ({ complete: phase === "complete" })),
+      instances: (source, after, limit) =>
+        Backfill.listInstances(net.node.list, source, after, limit),
     };
   });
   const claim = hostedModels({ release: true });

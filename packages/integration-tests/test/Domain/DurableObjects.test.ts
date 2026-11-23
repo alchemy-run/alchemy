@@ -1,6 +1,8 @@
 import * as Domain from "@alchemy.run/domain";
 import * as DurableObjects from "@alchemy.run/domain/DurableObjects";
 import { InMemory } from "@alchemy.run/domain/InMemory";
+import type { AggregateStore, ModelHost, StoredEvent } from "@alchemy.run/domain/Platform";
+import * as DomainRivet from "@alchemy.run/domain/Rivet";
 import { describe, expect, it } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Clock from "effect/Clock";
@@ -233,6 +235,111 @@ const importsOn = (platform: Layer.Layer<Domain.Platform, never, SecureRandom.Se
     Layer.provideMerge(SecureRandom.layerWebCrypto),
   );
 
+// ---------------------------------------------------------------- reading a model's instances and logs
+
+/**
+ * A platform that keeps the host it built for the model and the store of each
+ * aggregate, so a test reads through them as a caller of the platform does.
+ */
+const spyingOn = (platform: Layer.Layer<Domain.Platform, never, SecureRandom.SecureRandom>) => {
+  const seen = {
+    host: undefined as ModelHost | undefined,
+    stores: new Map<string, AggregateStore>(),
+  };
+  const layer = Layer.effect(
+    Domain.Platform,
+    Effect.gen(function* () {
+      const inner = yield* Domain.Platform;
+      return Domain.Platform.of({
+        model: (hosted) =>
+          inner.model(hosted).pipe(
+            Effect.map((host) => {
+              const spy: ModelHost = {
+                ...host,
+                aggregate: (aggregate, kit) =>
+                  host
+                    .aggregate(aggregate, kit)
+                    .pipe(
+                      Effect.tap((store) =>
+                        Effect.sync(() => seen.stores.set(aggregate.aggregateName, store)),
+                      ),
+                    ),
+              };
+              seen.host = spy;
+              return spy;
+            }),
+          ),
+      });
+    }),
+  ).pipe(Layer.provide(platform));
+  return { seen, layer };
+};
+
+/**
+ * A host of the Imports model, built on its own platform, with the store of each
+ * of its aggregates and the context a test runs its clients in.
+ */
+const hostOf = (platform: Layer.Layer<Domain.Platform, never, SecureRandom.SecureRandom>) =>
+  Effect.gen(function* () {
+    const { seen, layer } = spyingOn(platform);
+    const context = yield* Layer.build(importsOn(layer));
+    return {
+      context,
+      store: (aggregate: string) => seen.stores.get(aggregate)!,
+    };
+  });
+
+/** Wait until the Audit instance has seen `count` bookings. */
+const untilAudited = (id: string, count: number) =>
+  Effect.gen(function* () {
+    const audits = yield* Audit;
+    while ((yield* audits.get(id)).seen.length < count) yield* Effect.sleep("20 millis");
+  }).pipe(Effect.timeout("15 seconds"));
+
+/** Every page of a source's instances, `limit` rows a page, until the cursor ends. */
+const pagesOf = (
+  list: (
+    source: string,
+    after: string | undefined,
+    limit: number,
+  ) => Effect.Effect<{
+    readonly rows: ReadonlyArray<{ readonly id: string }>;
+    readonly next?: string;
+  }>,
+  source: string,
+  limit: number,
+) =>
+  Effect.gen(function* () {
+    const ids: Array<string> = [];
+    let pages = 0;
+    let after: string | undefined;
+    do {
+      const page = yield* list(source, after, limit);
+      expect(page.rows.length).toBeLessThanOrEqual(limit);
+      ids.push(...page.rows.map((row) => row.id));
+      after = page.next;
+      pages += 1;
+    } while (after !== undefined);
+    return { ids, pages };
+  });
+
+/** Page the source's instances until `count` distinct ones are listed: an instance lists itself after its first commit. */
+const untilListed = (
+  list: Parameters<typeof pagesOf>[0],
+  source: string,
+  limit: number,
+  count: number,
+) =>
+  Effect.gen(function* () {
+    while (true) {
+      const listed = yield* pagesOf(list, source, limit);
+      if (new Set(listed.ids).size >= count) return listed;
+      yield* Effect.sleep("20 millis");
+    }
+  }).pipe(Effect.timeout("15 seconds"));
+
+const LEDGERS = Array.from({ length: 7 }, (_, i) => `ledger-${i}`);
+
 describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
   for (const [name, platform] of [
     ["Durable Objects", () => DurableObjects.makePlatform(simHost({ rowsRead: 0 }).host)],
@@ -297,7 +404,269 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
         }).pipe(Effect.scoped, Effect.provide(importsOn(platform()))),
       { timeout: 60_000 },
     );
+    it.live(
+      `a model's instances are read a page at a time, and an instance's stored events by seq, on ${name}`,
+      () => {
+        const { seen, layer } = spyingOn(platform());
+        return Effect.gen(function* () {
+          const ledgers = yield* Ledger;
+          for (const id of LEDGERS) yield* ledgers.send(new BookMany({ id, count: 3 }));
+          const host = seen.host!;
+          const store = seen.stores.get("Ledger")!;
+
+          // Pages of two reach every instance, each at least once, and keep their cursor.
+          const listed = yield* untilListed(host.instances!, "Ledger", 2, LEDGERS.length);
+          expect([...new Set(listed.ids)].sort()).toEqual(LEDGERS);
+          expect(listed.pages).toBeGreaterThanOrEqual(Math.ceil(LEDGERS.length / 2));
+          // One page takes them all, and a name that is no source lists none.
+          expect((yield* host.instances!("Ledger", undefined, 100)).next).toBeUndefined();
+          expect((yield* host.instances!("Unknown", undefined, 100)).rows).toEqual([]);
+
+          // An instance's log, as stored: its events in seq order, from after a seq.
+          const rows = yield* store.log!("ledger-3", 0, 100);
+          expect(rows.map((row) => row.envelope.seq)).toEqual([1, 2, 3]);
+          expect(rows.map((row) => row.event)).toMatchObject([
+            { _tag: "Booked", n: 1 },
+            { _tag: "Booked", n: 2 },
+            { _tag: "Booked", n: 3 },
+          ]);
+          expect(rows[0]!.envelope).toMatchObject({ stream: "Ledger/ledger-3", seq: 1 });
+          expect((yield* store.log!("ledger-3", 1, 1)).map((row) => row.envelope.seq)).toEqual([2]);
+          expect(yield* store.log!("ledger-3", 3, 10)).toEqual([]);
+
+          // Reading an instance that was never written creates nothing: it is never listed.
+          expect(yield* store.log!("never-written", 0, 10)).toEqual([]);
+          yield* Effect.sleep("300 millis");
+          expect(
+            new Set((yield* pagesOf(host.instances!, "Ledger", 100)).ids).has("never-written"),
+          ).toBe(false);
+          expect(yield* ledgers.get("ledger-3")).toEqual({ count: 3 });
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(
+            BooksBefore.layer(Layer.empty).pipe(
+              Layer.provideMerge(layer),
+              Layer.provideMerge(SecureRandom.layerWebCrypto),
+            ),
+          ),
+        );
+      },
+      { timeout: 60_000 },
+    );
   }
+
+  for (const [name, platform] of [
+    ["Durable Objects", () => DurableObjects.makePlatform(simHost({ rowsRead: 0 }).host)],
+    ["the in-memory platform", () => InMemory],
+  ] as const) {
+    it.live(
+      `an instance's stored log is restored as stored on another host, on ${name}`,
+      () =>
+        Effect.gen(function* () {
+          const source = yield* hostOf(platform());
+          const target = yield* hostOf(platform());
+
+          // The source decides two commands: its log has their ids, and the policy reacted.
+          yield* Effect.gen(function* () {
+            const ledgers = yield* Ledger;
+            yield* ledgers.send(new BookMany({ id: "moved", count: 2 }), { commandId: "cmd-a" });
+            yield* ledgers.send(new BookMany({ id: "moved", count: 1 }), { commandId: "cmd-b" });
+            yield* ledgers.send(new BookMany({ id: "other", count: 1 }), { commandId: "cmd-c" });
+            yield* untilAudited("moved", 3);
+          }).pipe(Effect.provide(source.context));
+          const rows = yield* source.store("Ledger").log!("moved", 0, 100);
+          expect(rows.map((row) => row.envelope.commandId)).toEqual(["cmd-a", "cmd-a", "cmd-b"]);
+          const store = target.store("Ledger");
+          const receipt = {
+            stream: "Ledger/moved",
+            version: 3,
+            events: rows.map((r) => r.event),
+            reply: null,
+          };
+
+          // Refused, it leaves the instance as it was: nothing stored, nothing listed.
+          const refusal = (rows: ReadonlyArray<StoredEvent>, expectedVersion = 0) =>
+            store.restore!("moved", rows, { expectedVersion }).pipe(Effect.flip);
+          expect(yield* refusal(rows, 2)).toMatchObject({
+            _tag: "RestoreRefused",
+            aggregate: "Ledger",
+            id: "moved",
+            reason: "version",
+          });
+          expect(yield* refusal([rows[0]!, rows[2]!])).toMatchObject({ reason: "seqGap" });
+          expect(yield* refusal(rows.slice(1))).toMatchObject({ reason: "seqGap" });
+          expect(
+            yield* refusal(
+              rows.map((row) => ({
+                ...row,
+                envelope: { ...row.envelope, id: "x", stream: "Ledger/x" },
+              })),
+            ),
+          ).toMatchObject({ reason: "wrongInstance" });
+          expect(
+            yield* refusal(rows.map((row) => ({ ...row, event: { _tag: "Nope", n: 1 } }))),
+          ).toMatchObject({ reason: "undecodable" });
+          expect(
+            yield* refusal(rows.map((row) => ({ ...row, event: { _tag: "Booked", n: "one" } }))),
+          ).toMatchObject({ reason: "undecodable" });
+          expect(
+            yield* refusal(
+              rows.map((row) => ({ ...row, envelope: { ...row.envelope, at: "now" } }) as never),
+            ),
+          ).toMatchObject({ reason: "undecodable" });
+          // The last row is bad: the ones before it are not taken either.
+          expect(
+            yield* refusal([rows[0]!, rows[1]!, { ...rows[2]!, event: { _tag: "Nope" } }]),
+          ).toMatchObject({ reason: "undecodable" });
+          expect(yield* store.log!("moved", 0, 100)).toEqual([]);
+          expect((yield* target.store("Ledger").log!("moved", 0, 100)).length).toBe(0);
+
+          // Taken, every row is as the source stored it.
+          expect(yield* store.restore!("moved", rows, { expectedVersion: 0 })).toEqual(receipt);
+          expect(yield* store.log!("moved", 0, 100)).toEqual(rows);
+          expect(yield* store.state("moved")).toEqual(yield* source.store("Ledger").state("moved"));
+
+          // Again, the same rows: the receipt, and nothing written. Other rows at those seqs are refused.
+          expect(yield* store.restore!("moved", rows, { expectedVersion: 0 })).toEqual(receipt);
+          expect(yield* store.log!("moved", 0, 100)).toEqual(rows);
+          expect(
+            yield* store.restore!(
+              "moved",
+              rows.map((row) => ({ ...row, event: { _tag: "Booked", n: 9 } })),
+              {
+                expectedVersion: 0,
+              },
+            ).pipe(Effect.flip),
+          ).toMatchObject({ reason: "version" });
+          // Nothing to restore from where the instance already is.
+          expect((yield* store.restore!("moved", [], { expectedVersion: 3 })).version).toBe(3);
+
+          yield* Effect.gen(function* () {
+            const ledgers = yield* Ledger;
+            const atLeast = { stream: "Ledger/moved", version: 3 };
+            // The view has the restored history, the policy did not react to it,
+            // and a command is decided from the restored state, as the next event.
+            expect(yield* (yield* Totals).get(Ledger.ref("moved"), { atLeast })).toEqual(
+              Option.some({ count: 3 }),
+            );
+            expect(yield* ledgers.get("moved")).toEqual({ count: 3 });
+            const next = yield* ledgers.send(new BookMany({ id: "moved", count: 1 }), {
+              commandId: "cmd-d",
+            });
+            expect(next.version).toBe(4);
+            yield* untilAudited("moved", 1);
+            expect((yield* (yield* Audit).get("moved")).seen).toEqual([4]);
+          }).pipe(Effect.provide(target.context));
+        }).pipe(Effect.scoped),
+      { timeout: 60_000 },
+    );
+  }
+
+  it.live(
+    "an instance is restored from outside its host by the names its host gives its objects",
+    () =>
+      Effect.gen(function* () {
+        const source = yield* hostOf(DurableObjects.makePlatform(simHost({ rowsRead: 0 }).host));
+        const sim = simHost({ rowsRead: 0 });
+        const target = yield* hostOf(DurableObjects.makePlatform(sim.host));
+        yield* Effect.provide(
+          Effect.gen(function* () {
+            yield* (yield* Ledger).send(new BookMany({ id: "m-1", count: 2 }), {
+              commandId: "cmd-a",
+            });
+          }),
+          source.context,
+        );
+        const rows = yield* source.store("Ledger").log!("m-1", 0, 100);
+        const hosted = { modelName: "Imports", id: {}, sagas: [], legacyData: false };
+        const direct = DurableObjects.restoreModel((cls, key) =>
+          sim.host.lookup!(hosted, cls)!.getByName(key),
+        );
+        const multiplexed = DomainRivet.modelRestorer(
+          {
+            getByName: (name: string) => {
+              const { className, key } = DurableObjects.parseMultiplexedName(name)!;
+              return sim.host.lookup!(hosted, className.slice("Imports.".length))!.getByName(key);
+            },
+          } as never,
+          "Imports",
+        );
+        // The target's own objects take it, refuse it and recognise it again.
+        const refused = yield* direct
+          .restore("Ledger", "m-1", rows, { expectedVersion: 1 })
+          .pipe(Effect.flip);
+        expect(refused).toMatchObject({ _tag: "RestoreRefused", reason: "version" });
+        expect((yield* direct.restore("Ledger", "m-1", rows, { expectedVersion: 0 })).version).toBe(
+          2,
+        );
+        expect(
+          (yield* multiplexed.restore("Ledger", "m-1", rows, { expectedVersion: 0 })).version,
+        ).toBe(2);
+        expect(yield* target.store("Ledger").log!("m-1", 0, 100)).toEqual(rows);
+        // A second instance, through the Rivet names.
+        const more = yield* multiplexed.restore(
+          "Ledger",
+          "m-2",
+          rows.map((row) => ({
+            ...row,
+            envelope: { ...row.envelope, id: "m-2", stream: "Ledger/m-2" },
+          })),
+          { expectedVersion: 0 },
+        );
+        expect(more).toMatchObject({ stream: "Ledger/m-2", version: 2 });
+        const moved = Effect.gen(function* () {
+          return yield* (yield* Ledger).get("m-2");
+        });
+        expect(yield* Effect.provide(moved, target.context)).toEqual({ count: 2 });
+      }).pipe(Effect.scoped),
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "a model is read from outside its host by the names its host gives its objects",
+    () => {
+      const sim = simHost({ rowsRead: 0 });
+      const hosted = { modelName: "Books", id: {}, sagas: [], legacyData: false };
+      // What a caller reaches: one object per class and key, by the host's names.
+      const direct = DurableObjects.readModel((cls, key) =>
+        sim.host.lookup!(hosted, cls)!.getByName(key),
+      );
+      // The same objects, as one Rivet class holds them: `Books.LedgerAggregate/ledger-0`.
+      const multiplexed = DomainRivet.modelReader(
+        {
+          getByName: (name: string) => {
+            const { className, key } = DurableObjects.parseMultiplexedName(name)!;
+            return sim.host.lookup!(hosted, className.slice("Books.".length))!.getByName(key);
+          },
+        } as never,
+        "Books",
+      );
+      return Effect.gen(function* () {
+        const ledgers = yield* Ledger;
+        for (const id of LEDGERS) yield* ledgers.send(new BookMany({ id, count: 2 }));
+        for (const reader of [direct, multiplexed]) {
+          const listed = yield* untilListed(reader.instances, "Ledger", 3, LEDGERS.length);
+          expect([...new Set(listed.ids)].sort()).toEqual(LEDGERS);
+          const rows = yield* reader.log("Ledger", "ledger-5", 0, 100);
+          expect(rows.map((row) => row.envelope.seq)).toEqual([1, 2]);
+          expect(rows[1]!.envelope).toMatchObject({ stream: "Ledger/ledger-5", seq: 2 });
+          expect(
+            (yield* reader.log("Ledger", "ledger-5", 1, 100)).map((row) => row.envelope.seq),
+          ).toEqual([2]);
+          expect(yield* reader.log("Ledger", "never-written", 0, 100)).toEqual([]);
+        }
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          BooksBefore.layer(Layer.empty).pipe(
+            Layer.provideMerge(DurableObjects.makePlatform(sim.host)),
+            Layer.provideMerge(SecureRandom.layerWebCrypto),
+          ),
+        ),
+      );
+    },
+    { timeout: 60_000 },
+  );
 
   it.live(
     "a stream's list reads only the page it returns",

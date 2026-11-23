@@ -1,11 +1,12 @@
 import type { HttpEffect } from "alchemy/Http";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import * as Aggregate from "./Aggregate.ts";
-import type { Plan } from "./Backfill.ts";
+import type { Instances, Plan } from "./Backfill.ts";
 import type { ReplayInput, ReplayResult } from "./CatchUp.ts";
 import type * as Decision from "./Decision.ts";
 import { ModelHostedTwice } from "./DefinitionError.ts";
@@ -234,6 +235,44 @@ export type ImportResult =
     };
 
 /**
+ * Why a restore took nothing: the instance does not hold exactly
+ * `expectedVersion` events (`version`), a row's `seq` does not follow the one
+ * before it (`seqGap`), a row's `stream` or `id` names another instance
+ * (`wrongInstance`), or a row's envelope or event does not decode, or its
+ * event does not fold into the state, in this code (`undecodable`). A refused
+ * restore leaves the instance as it was.
+ */
+export class RestoreRefused extends Data.TaggedError("RestoreRefused")<{
+  readonly aggregate: string;
+  readonly id: string;
+  readonly reason: "version" | "seqGap" | "wrongInstance" | "undecodable";
+  readonly detail: string;
+}> {}
+
+/** A JSON value with its object keys sorted, as text: equal for equal values, whatever order their keys were written in. */
+const canonical = (value: unknown): string =>
+  JSON.stringify(value, (_key, inner: unknown) =>
+    inner !== null && typeof inner === "object" && !Array.isArray(inner)
+      ? Object.fromEntries(Object.entries(inner).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : inner,
+  );
+
+/**
+ * Whether the rows an instance holds after `expectedVersion` (`held`, which
+ * the instance has exactly as many of as `rows`) are exactly `rows`: the
+ * restore was taken before, and a repeat answers as taken, writing nothing.
+ *
+ * @internal
+ */
+export const alreadyRestored = (
+  held: ReadonlyArray<StoredEvent>,
+  rows: ReadonlyArray<StoredEvent>,
+): boolean =>
+  rows.length > 0 &&
+  held.length === rows.length &&
+  held.every((row, index) => canonical(row) === canonical(rows[index]));
+
+/**
  * What {@link AggregateStore.import} receives with the events.
  */
 export interface ImportMeta {
@@ -266,6 +305,13 @@ export interface AggregateKit {
    * route them, without running `decide`: they reach policies like any other.
    */
   readonly record: (input: RecordInput) => Effect.Effect<SeedResult>;
+  /**
+   * Fold another host's stored rows into state as stored (their seqs,
+   * envelopes and events unchanged) and route them as history, without
+   * `decide`: no policy reacts to them. Refused unless the instance is at
+   * `expectedVersion` and every row is the instance's next, decodable here.
+   */
+  readonly restore: (input: RestoreInput) => Effect.Effect<SeedResult, RestoreRefused>;
   /** Route a delivery produced by `handle` to its target's host. */
   readonly deliver: (delivery: Delivery) => Effect.Effect<void>;
   /** The views and projections that consume this aggregate, by `CatchUp.targetId`. */
@@ -298,6 +344,18 @@ export interface SeedResult {
   readonly version: number;
   readonly events: ReadonlyArray<StoredEvent>;
   readonly deliveries: ReadonlyArray<Delivery>;
+}
+
+/** Input to {@link AggregateKit.restore}. */
+export interface RestoreInput {
+  readonly id: string;
+  /** The instance's stored state and version, as the platform holds them now. */
+  readonly state: Json;
+  readonly version: number;
+  /** The version the instance must be at for the rows to be taken: 0 for one never written. */
+  readonly expectedVersion: number;
+  /** The rows, as another host stored them, in seq order from `expectedVersion + 1`. */
+  readonly rows: ReadonlyArray<StoredEvent>;
 }
 
 /** Input to {@link AggregateKit.record}. */
@@ -448,6 +506,18 @@ export interface AggregateStore {
   readonly state: (id: string) => Effect.Effect<{ readonly state: Json; readonly version: number }>;
   /** Read the committed events of an instance (tests and diagnostics; optional). */
   readonly events?: (id: string) => Effect.Effect<ReadonlyArray<StoredEvent>>;
+  /**
+   * Up to `limit` of an instance's stored events with `seq > after`, as
+   * stored, in seq order: its log as the backfill's sources serve it
+   * (`SourceRpc.log`). Read-only and bounded; ends where the log ends, and
+   * answers none for an id that was never written, without creating it.
+   * Optional.
+   */
+  readonly log?: (
+    id: string,
+    after: number,
+    limit: number,
+  ) => Effect.Effect<ReadonlyArray<StoredEvent>>;
   /** The stored state and version of an instance, then every new one. */
   readonly changes: (
     id: string,
@@ -473,6 +543,23 @@ export interface AggregateStore {
     events: ReadonlyArray<Json>,
     meta: ImportMeta,
   ) => Effect.Effect<ImportResult>;
+  /**
+   * Store another host's rows as they are (the rows `log` serves: `seq`, `at`,
+   * `commandId`, `correlationId`, `trace`, whatever the envelope holds) and
+   * fold them into the instance's state with their own envelopes. They reach
+   * views and projections as history, and never trigger policies. Atomic per
+   * instance: every row is checked before anything is written, and the
+   * instance is refused with {@link RestoreRefused} unless it holds exactly
+   * `expectedVersion` events (0: never written) and each row is the next, an
+   * event of this aggregate, and decodes. An instance that already holds
+   * exactly these rows after `expectedVersion` answers the receipt and writes
+   * nothing. Optional: a client fails with a defect on a platform without it.
+   */
+  readonly restore?: (
+    id: string,
+    rows: ReadonlyArray<StoredEvent>,
+    options: { readonly expectedVersion: number },
+  ) => Effect.Effect<ReceiptJson, RestoreRefused>;
 }
 
 /** How much history has reached a consumer: see `View.History`. */
@@ -916,6 +1003,18 @@ export interface ModelHost {
    * across deploys, so there is no history to wait for.
    */
   readonly history?: (target: string) => Effect.Effect<HistoryJson>;
+  /**
+   * A page of the instances of `source` (an aggregate or view, by name) the
+   * model's backfill directory lists, after the cursor `after` an earlier
+   * page gave (`NodeRpc.list`, walked by `Backfill.listInstances`).
+   * Read-only and bounded by `limit`; an instance may be listed twice while
+   * its directory node splits, so a reader keys by id. Optional.
+   */
+  readonly instances?: (
+    source: string,
+    after: string | undefined,
+    limit: number,
+  ) => Effect.Effect<Instances>;
 }
 
 /** What a platform is told about a model it hosts. */
