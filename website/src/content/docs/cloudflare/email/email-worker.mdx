@@ -142,9 +142,10 @@ yield* Cloudflare.email({ zone: "example.com" }).subscribe((message) =>
 
 A local Worker isn't uploaded, so under `alchemy dev` the event
 source creates no `Email.Routing`, `Email.Rule` or
-`Email.CatchAll`, and the zone keeps its routing as deployed. Send
-mail to the local Worker through its trigger route instead, with
-the raw message as the body:
+`Email.CatchAll`. Run dev on its own stage: on your deployed stage,
+the dev run removes that stage's rule. Send mail to the local
+Worker through its trigger route instead, with the raw message as
+the body:
 
 ```sh
 curl -X POST "http://localhost:1337/cdn-cgi/handler/email?from=sender@example.com&to=inbox@example.com" \

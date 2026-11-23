@@ -154,7 +154,7 @@ test.provider(
       const rules = yield* rulesFor(worker.workerName);
       expect(rules).toHaveLength(1);
       expect(rules[0]!.matchers).toEqual([
-        { type: "literal", field: "to", value: remoteInbox(ZONE) },
+        { type: "literal", field: "to", value: remoteInbox(ZONE, stack.stage) },
       ]);
 
       yield* stack.destroy();

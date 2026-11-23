@@ -1,4 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -30,15 +31,19 @@ export default class EmailLocalWorker extends Cloudflare.Worker<EmailLocalWorker
   "EmailLocalWorker",
   { main: import.meta.filename },
   Effect.gen(function* () {
-    yield* Cloudflare.email({ zone: LocalEmailZone }).subscribe((message) =>
-      Effect.gen(function* () {
-        const subject = message.headers.get("subject");
-        if (subject === "reject-me") {
-          return yield* message.setReject("not on the list");
-        }
-        received.push({ from: message.from, to: message.to, subject });
-      }),
-    );
+    // `remote()` around the subscription alone leaves the Worker local, so
+    // it still provisions no routing.
+    yield* Cloudflare.email({ zone: LocalEmailZone })
+      .subscribe((message) =>
+        Effect.gen(function* () {
+          const subject = message.headers.get("subject");
+          if (subject === "reject-me") {
+            return yield* message.setReject("not on the list");
+          }
+          received.push({ from: message.from, to: message.to, subject });
+        }),
+      )
+      .pipe(Alchemy.remote());
 
     return {
       fetch: Effect.gen(function* () {
