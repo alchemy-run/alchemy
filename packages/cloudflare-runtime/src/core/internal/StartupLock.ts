@@ -27,8 +27,11 @@ export const LOCK_NAME = ".cloudflare-runtime-startup.lock";
 export const LOCK_STALE_MS = 30_000;
 const LOCK_RETRY_MS = 50;
 /**
- * Generous enough to outlast a stale lock being reclaimed, low enough that a
- * lock we can never remove fails loudly instead of hanging startup forever.
+ * How long one holder may keep the lock before we give up: generous enough
+ * to outlast a stale lock being reclaimed, low enough that a lock we can
+ * never remove fails loudly instead of hanging startup forever. The count
+ * restarts whenever the lock changes hands, so waiting behind a queue of
+ * other runtimes' startups never times out.
  */
 const LOCK_MAX_ATTEMPTS = 2 * Math.ceil(LOCK_STALE_MS / LOCK_RETRY_MS);
 
@@ -140,6 +143,7 @@ export const withStartupLock = <A, E, R>(
 
       const acquire = Effect.gen(function* () {
         yield* fs.makeDirectory(directory, { recursive: true });
+        let holder: string | undefined;
         for (let attempt = 0; ; attempt++) {
           const written = yield* fs
             .writeFileString(lockPath, token, { flag: "wx", mode: 0o600 })
@@ -151,6 +155,11 @@ export const withStartupLock = <A, E, R>(
               ),
             );
           if (written) return;
+          const current = yield* readLock;
+          if (current !== holder) {
+            holder = current;
+            attempt = 0;
+          }
           if (attempt >= LOCK_MAX_ATTEMPTS) {
             return yield* fail(
               `Timed out waiting for the runtime startup lock at ${lockPath}. Another process may still be holding it.`,

@@ -349,7 +349,9 @@ export const RuntimeLive = Layer.effect(
             return yield* withStartupLocks(
               config.startupLocks,
               serveWorker(pinned).pipe(
-                Effect.tap((ports) => context.start(ports).pipe(Scope.provide(pluginScope))),
+                Effect.tap((ports) =>
+                  context.start(ports, { pid }).pipe(Scope.provide(pluginScope)),
+                ),
               ),
             ).pipe(
               Effect.provideService(FileSystem.FileSystem, fs),

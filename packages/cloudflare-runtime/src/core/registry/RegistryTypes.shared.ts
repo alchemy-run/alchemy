@@ -49,11 +49,13 @@ export interface RegistryEntry {
   readonly instanceId?: string;
   readonly services: ReadonlyArray<RegistryEntry.Service>;
   /**
-   * How long the entry stays valid without a heartbeat. Defaults to
-   * {@link DEFAULT_STALE_AFTER_MS}; storage candidates use a short window so
-   * a dead owner is replaced quickly.
+   * The workerd process behind the entry. Once it has exited the entry is
+   * dead, however recent its heartbeat; while it runs, a missed heartbeat
+   * (a paused or sleeping host) does not expire it before
+   * {@link DEFAULT_STALE_AFTER_MS}. Storage candidates set it, so a crashed
+   * owner is replaced within seconds and a live one is never replaced.
    */
-  readonly staleAfterMs?: number;
+  readonly pid?: number;
 }
 
 export declare namespace RegistryEntry {
@@ -102,9 +104,6 @@ export declare namespace RegistryEntry {
 
 /** Default staleness window for registry entries (ms). */
 export const DEFAULT_STALE_AFTER_MS = 300_000;
-
-/** Staleness window for storage candidates (ms); heartbeats run every fifth of it. */
-export const STORAGE_CANDIDATE_STALE_AFTER_MS = 10_000;
 
 /** Registry entry name of a storage candidate. */
 export const storageCandidateName = (ownerId: string) => `__storage-candidate__${ownerId}`;

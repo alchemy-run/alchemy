@@ -42,7 +42,10 @@ export interface PluginConfig {
    * Resources and tasks acquired here are released before the next process
    * starts. Replay any state held only inside workerd from this hook.
    */
-  readonly start?: (ports: Workerd.WorkerdPorts) => Effect.Effect<void, RuntimeError, Scope.Scope>;
+  readonly start?: (
+    ports: Workerd.WorkerdPorts,
+    process: StartedProcess,
+  ) => Effect.Effect<void, RuntimeError, Scope.Scope>;
 }
 
 export interface Middleware {
@@ -96,3 +99,8 @@ export const useSync = <Self, Identifier extends PluginIdentifier, Api, A>(
   plugin: PluginService<Self, Identifier, Api>,
   f: (plugin: Plugin<Api>) => A,
 ): ConfigHook<A, never, Self> => use(plugin, (plugin) => Effect.succeed(f(plugin)));
+
+/** The workerd process a plugin's `start` initializes. */
+export interface StartedProcess {
+  readonly pid: number;
+}

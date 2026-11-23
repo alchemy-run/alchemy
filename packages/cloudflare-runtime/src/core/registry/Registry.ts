@@ -1,7 +1,6 @@
 import * as NFS from "node:fs";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -48,8 +47,9 @@ export class Registry extends Context.Service<
 
 /**
  * How often the registry is re-read even without a filesystem event, so an
- * entry whose process died (no more heartbeats, no more writes) expires on
- * time. Storage candidates rely on this to hand ownership over.
+ * entry whose process died without removing it (an exited `pid`, or no more
+ * heartbeats) expires on time. Storage candidates rely on this to hand
+ * ownership over.
  */
 const REFRESH_INTERVAL = "2 seconds";
 
@@ -68,6 +68,20 @@ const readMtime = (entryPath: string) =>
     });
   });
 
+/**
+ * Whether process `pid` is still running. Signal 0 only checks it exists;
+ * `EPERM` means it exists but belongs to another user.
+ */
+const isRunning = (pid: number) =>
+  Effect.sync(() => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (error) {
+      return (error as NodeJS.ErrnoException).code === "EPERM";
+    }
+  });
+
 export const RegistryLive = Layer.effect(
   Registry,
   Effect.gen(function* () {
@@ -83,12 +97,16 @@ export const RegistryLive = Layer.effect(
           concurrent: true,
         });
         if (!mtime) return undefined;
+        const stale = mtime.getTime() <= now.getTime() - DEFAULT_STALE_AFTER_MS;
         const content = yield* fs.readFileString(entryPath);
         // Other processes (including older runtimes) may expose a partial
-        // write. A parse failure must leave refresh alive.
-        const value = yield* Effect.try(() => JSON.parse(content) as RegistryEntry);
-        const staleAfterMs = value.staleAfterMs ?? DEFAULT_STALE_AFTER_MS;
-        if (mtime.getTime() <= now.getTime() - staleAfterMs) {
+        // write. A parse failure must leave refresh alive, and an entry that
+        // never parses is still reaped once stale.
+        const value = yield* Effect.try(() => JSON.parse(content) as RegistryEntry).pipe(
+          Effect.tapError(() => (stale ? fs.remove(entryPath) : Effect.void)),
+        );
+        const exited = value.pid !== undefined && !(yield* isRunning(value.pid));
+        if (stale || exited) {
           yield* fs.remove(entryPath);
           return undefined;
         }
@@ -214,18 +232,7 @@ export const RegistryLive = Layer.effect(
             ),
           ),
           Effect.tap(() =>
-            // Beat well within this entry's staleness window: entries with a
-            // short window (storage candidates) need faster beats.
-            heartbeat.pipe(
-              Effect.delay(
-                Duration.min(
-                  heartbeatInterval,
-                  Duration.millis(Math.floor((entry.staleAfterMs ?? DEFAULT_STALE_AFTER_MS) / 5)),
-                ),
-              ),
-              Effect.forever,
-              Effect.forkScoped,
-            ),
+            heartbeat.pipe(Effect.delay(heartbeatInterval), Effect.forever, Effect.forkScoped),
           ),
           Effect.mapError((error) =>
             SystemError.make({

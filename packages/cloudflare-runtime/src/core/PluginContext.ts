@@ -20,7 +20,10 @@ export class PluginContext extends Context.Service<
     readonly get: <Self, Identifier extends Plugin.PluginIdentifier, Api>(
       service: Plugin.PluginService<Self, Identifier, Api>,
     ) => Effect.Effect<Plugin.Plugin<Api>, ConfigError>;
-    readonly start: (ports: Workerd.WorkerdPorts) => Effect.Effect<void, RuntimeError, Scope.Scope>;
+    readonly start: (
+      ports: Workerd.WorkerdPorts,
+      process: Plugin.StartedProcess,
+    ) => Effect.Effect<void, RuntimeError, Scope.Scope>;
     readonly config: Effect.Effect<
       {
         entry: string | undefined;
@@ -96,8 +99,11 @@ export const make = (
           ],
         };
       }),
-      start: Effect.fn(function* (ports) {
-        yield* Effect.forEach(plugins.values(), (plugin) => plugin.start?.(ports) ?? Effect.void);
+      start: Effect.fn(function* (ports, process) {
+        yield* Effect.forEach(
+          plugins.values(),
+          (plugin) => plugin.start?.(ports, process) ?? Effect.void,
+        );
       }),
       get: Effect.fn(function* (service) {
         const plugin = plugins.get(service.key);

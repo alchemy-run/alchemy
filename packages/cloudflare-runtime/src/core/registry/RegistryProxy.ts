@@ -23,7 +23,6 @@ import * as Registry from "./Registry.ts";
 import {
   HEADER_REGISTRY_UPDATE_SECRET,
   resolvedTargetKey,
-  STORAGE_CANDIDATE_STALE_AFTER_MS,
   storageCandidateName,
   type ResolvedTargetMap,
   type StorageTarget,
@@ -108,11 +107,11 @@ export const RegistryProxyLive = Layer.effect(
 
         /**
          * Advertise this runtime as a candidate owner of each storage
-         * directory it binds. The entry has a short staleness window, so a
-         * runtime that dies without cleaning up stops owning the storage
-         * within seconds.
+         * directory it binds. The entry carries workerd's PID, so a runtime
+         * that dies without cleaning up stops owning the storage within
+         * seconds, while one that is merely paused keeps it.
          */
-        const registerStorageCandidates = (ports: Record<string, number>) =>
+        const registerStorageCandidates = (ports: Record<string, number>, pid: number) =>
           Effect.forEach(
             storageScopes,
             Effect.fnUntraced(function* (scope) {
@@ -128,10 +127,14 @@ export const RegistryProxyLive = Layer.effect(
               // oxlint-disable-next-line effecttsgo/global-date-in-effect -- cross-process ordering needs real time
               const created = Date.now();
               yield* registry.write({
-                scriptName: storageCandidateName(`${ownerId}:${scope}`),
+                // A hash keeps the entry's file name short; the scope
+                // itself can be any length.
+                scriptName: storageCandidateName(
+                  `${ownerId}:${NodeCrypto.createHash("sha256").update(scope).digest("hex").slice(0, 16)}`,
+                ),
                 debugPortAddress: `127.0.0.1:${debugPort}`,
                 instanceId: yield* random.uuidV4(),
-                staleAfterMs: STORAGE_CANDIDATE_STALE_AFTER_MS,
+                pid,
                 services: [
                   {
                     kind: "storage-owner",
@@ -193,10 +196,10 @@ export const RegistryProxyLive = Layer.effect(
             };
             return { sockets: [socket], services: [service] };
           }),
-          start: (ports) =>
+          start: (ports, { pid }) =>
             // Register as a storage candidate first, so the targets pushed
             // below already include this runtime when it is the owner.
-            registerStorageCandidates(ports).pipe(
+            registerStorageCandidates(ports, pid).pipe(
               // When the worker starts, publish it to the registry.
               // If we have external services, subscribe to the registry and push updates to the proxy.
               Effect.andThen(

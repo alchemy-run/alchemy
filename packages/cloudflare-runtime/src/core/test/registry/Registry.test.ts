@@ -1,3 +1,4 @@
+import * as NodeChildProcess from "node:child_process";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import type { Done } from "effect/Cause";
@@ -149,6 +150,34 @@ describe.each(watcherModes)(
         // A crashed provider cannot run its finalizer. Refresh must actively
         // reap the expired file rather than leave ignored garbage on disk.
         expect(yield* fs.exists(entryPath)).toBe(false);
+      }).pipe(Effect.provide(services)),
+    );
+
+    it.live("read reaps an entry once its process exits, however fresh", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const registry = yield* Registry.Registry;
+        const live = yield* makeTestData("pid-live");
+        const dead = yield* makeTestData("pid-dead");
+        // A process that has already exited, so its PID is free.
+        const exitedPid = NodeChildProcess.spawnSync(process.execPath, ["-e", ""]).pid!;
+
+        // Written directly: a crashed runtime leaves its file without a
+        // finalizer or heartbeat.
+        yield* fs.writeFileString(
+          live.entryPath,
+          JSON.stringify({ ...live.registryEntry, pid: process.pid }),
+        );
+        yield* fs.writeFileString(
+          dead.entryPath,
+          JSON.stringify({ ...dead.registryEntry, pid: exitedPid }),
+        );
+        yield* waitForRegistryEntry(live.subscriberEntry, { toBeDefined: true });
+
+        expect(yield* registry.read([dead.subscriberEntry])).toEqual({});
+        expect(yield* fs.exists(dead.entryPath)).toBe(false);
+        expect(yield* registry.read([live.subscriberEntry])).toEqual(live.registryServiceMap);
+        yield* fs.remove(live.entryPath);
       }).pipe(Effect.provide(services)),
     );
 
