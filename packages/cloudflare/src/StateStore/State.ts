@@ -113,11 +113,9 @@ export const state = (options: CloudflareStateOptions = {}) =>
           }),
         );
 
-        const ensureLatest = (
-          { url, authToken }: { url: string; authToken: string },
-          observed: number | undefined,
-        ) =>
+        const ensureLatest = ({ url, authToken }: { url: string; authToken: string }) =>
           Effect.gen(function* () {
+            const observed = yield* observeServedVersion(accountId, scriptName, domain);
             if (observed === undefined) return yield* deployMissing;
             const expected = STATE_STORE_VERSION;
             const matches = observed === expected;
@@ -147,12 +145,30 @@ export const state = (options: CloudflareStateOptions = {}) =>
             return yield* Provisioning.upgradeOutdated({ ...store, observed, expected }, upgrade);
           });
 
+        // Whether the cached credentials are accepted at their URL. Renaming
+        // the account's workers.dev subdomain leaves the cached URL on a host
+        // that no longer resolves, so a first failed attempt checks where the
+        // store serves now before spending the retry budget on the old host.
+        const authorized = (credentials: HttpStateStoreCredentials) =>
+          checkHttpStateStoreAuth(credentials, { retry: false }).pipe(
+            Effect.catch(() =>
+              Effect.gen(function* () {
+                const current = yield* stateStoreUrl({ accountId, scriptName, domain }).pipe(
+                  Effect.catchTag("SubdomainNotFound", () => Effect.undefined),
+                );
+                // A moved store needs its credentials minted again.
+                if (current !== undefined && current !== credentials.url) return false;
+                return yield* checkHttpStateStoreAuth(credentials);
+              }),
+            ),
+          );
+
         const ensureAccess = (credentials: HttpStateStoreCredentials) =>
           Effect.gen(function* () {
-            if (yield* checkHttpStateStoreAuth(credentials)) {
+            if (yield* authorized(credentials)) {
               return yield* makeCloudflareStateStore(credentials);
             }
-            // our token is wrong, force a refresh
+            // our token is wrong, or the store moved: force a refresh
             const refreshed = yield* loginWithCloudflare(
               profileName,
               true,
@@ -169,7 +185,6 @@ export const state = (options: CloudflareStateOptions = {}) =>
           });
 
         const credentials = yield* readStoreCredentials(credStore, profileName, scriptName);
-        let observed: number | undefined | "unobserved" = "unobserved";
         if (credentials) {
           // The cached `url`/`authToken` are minted per-account (the `url`
           // encodes the account via its workers.dev subdomain). If the
@@ -183,30 +198,16 @@ export const state = (options: CloudflareStateOptions = {}) =>
                 `Cloudflare account; re-deriving for the current account.`,
             );
             yield* deleteStoreCredentials(credStore, profileName, scriptName).pipe(Effect.ignore);
-          } else {
-            // Checking the cached URL costs a subdomain lookup, so it runs
-            // beside the version check every run makes anyway.
-            const [serves, version] = yield* Effect.all(
-              [
-                servesAt(credentials.url, accountId, scriptName, domain),
-                observeServedVersion(accountId, scriptName, domain),
-              ],
-              { concurrency: "unbounded" },
-            );
-            if (serves) return yield* ensureLatest(credentials, version);
-            // The store's `domain`, or the account's workers.dev subdomain,
-            // changed since these were cached.
+          } else if (!servesOn(credentials.url, domain)) {
+            // The store's `domain` changed since these were cached.
             yield* deleteStoreCredentials(credStore, profileName, scriptName).pipe(Effect.ignore);
-            observed = version;
+          } else {
+            return yield* ensureLatest(credentials);
           }
         }
-        if (observed === "unobserved") {
-          observed = yield* observeServedVersion(accountId, scriptName, domain);
-        }
-        if (observed !== undefined) {
+        if ((yield* observeServedVersion(accountId, scriptName, domain)) !== undefined) {
           return yield* ensureLatest(
             yield* loginWithCloudflare(profileName, false, scriptName, accountId, domain),
-            observed,
           );
         }
         return yield* deployMissing;
@@ -629,7 +630,7 @@ export const loginWithCloudflare = Effect.fn("state_store.login", {
       if (
         credentials &&
         !isStateStoreCredentialsStale(credentials, accountId) &&
-        (yield* servesAt(credentials.url, accountId, scriptName, domain))
+        servesOn(credentials.url, domain)
       ) {
         return credentials;
       }
@@ -725,15 +726,12 @@ const isStateStoreAvailable = (accountId: string, scriptName: string) =>
 
 /**
  * Whether cached credentials point at where the store serves now: its
- * custom `domain`, or its workers.dev URL under the account's current
- * subdomain, which the dashboard can rename.
+ * custom `domain`, or workers.dev without one.
  */
-const servesAt = (url: string, accountId: string, scriptName: string, domain: string | undefined) =>
-  stateStoreUrl({ accountId, scriptName, domain }).pipe(
-    Effect.map((current) => url === current),
-    // Without a workers.dev subdomain, nothing serves the cached URL.
-    Effect.catchTag("SubdomainNotFound", () => Effect.succeed(false)),
-  );
+const servesOn = (url: string, domain: string | undefined) =>
+  domain === undefined
+    ? new URL(url).hostname.endsWith(".workers.dev")
+    : url === `https://${domain}`;
 
 /**
  * Does this account have a *functioning* state-store worker,
