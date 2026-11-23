@@ -883,8 +883,8 @@ Archil runs commands, processes and programs against durable disks in Firecracke
 
 Work described as processes that run on any agent harness: prose that mentions the models, tools, MCP servers and other processes it uses, the sandboxes tools work in, and where sessions run.
 
-- [AI](https://alchemy.run/ai) — Describe work as a process with @alchemy.run/ai, prose that mentions the tools, models and other processes it uses, and run it on any agent harness.
-- [What is Alchemy AI?](https://alchemy.run/ai/what-is-alchemy-ai) — The concepts of Alchemy AI, from the top down. A process describes work in prose, its mentions grant what the work uses, sessions run it, and a harness is the Layer that carries it out.
+- [AI](https://alchemy.run/ai) — Model agentic processes in code with @alchemy.run/ai. A process is prose that mentions the tools, models, other processes and business domain it works on, and runs on any agent harness.
+- [What is Alchemy AI?](https://alchemy.run/ai/what-is-alchemy-ai) — The concepts of Alchemy AI, from the top down. Processes describe agentic work in prose, mention the tools, models and business domain they work on, and deploy with their infrastructure as one type-checked program.
 - [Project layout](https://alchemy.run/ai/project-layout) — How to lay out an Alchemy AI project. One file per tool and per process, named after what it declares and its kind, with the contract and its Layer together.
 - [Part 1: A process](https://alchemy.run/ai/tutorial/part-1) — Start an issue board run by AI processes. Declare a model, describe the work as a process, run a session of it in a Durable Object on a harness, and ask it from a Worker.
 - [Part 2: A board to report to](https://alchemy.run/ai/tutorial/part-2) — Model the issue board with Domain, an aggregate, two commands and a view, and mention the command and the view a Triage session may use, so it reports by sending a command.
@@ -1395,4 +1395,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~292 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~293 KB) — only fetch it when you need to locate a specific resource's reference page.

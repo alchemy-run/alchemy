@@ -1,12 +1,14 @@
 ---
 title: AI
-description: Describe work as a process with @alchemy.run/ai, prose that mentions the tools, models and other processes it uses, and run it on any agent harness.
+description: Model agentic processes in code with @alchemy.run/ai. A process is prose that mentions the tools, models, other processes and business domain it works on, and runs on any agent harness.
 ---
 
 import HubMap from "../../../components/HubMap.astro";
 import PackageManagers from "../../../components/PackageManagers.astro";
 
-`@alchemy.run/ai` describes work for an AI model as a **process**: prose that says what to do, and mentions the tools, models and other processes it does it with. A process names no coding agent. The **harness** that runs it, [Pi](/pi) or [OpenCode](/opencode), is one Layer.
+`@alchemy.run/ai` models agentic processes in code. A **process** is prose that describes a piece of work, and everything it mentions is a real reference: a tool, an LLM, another process, a command of your [Domain model](/domain).
+
+Processes, tools, your business rules and your infrastructure are one declarative program that the compiler checks and Alchemy deploys. The **harness** that runs a process, [Pi](/pi) or [OpenCode](/opencode), is one Layer.
 
 **New to this?** Start with [What is Alchemy AI?](/ai/what-is-alchemy-ai).
 
@@ -40,7 +42,7 @@ export class Add extends AI.Tool<Add>()("add", {
 export const AddLive = Add.make(({ a, b }) => ({ sum: a + b }));
 ```
 
-Describe the work. Mentioning the tool gives it to the process:
+Describe the work as a process. Mentioning the tool gives it to the process:
 
 ```typescript title="src/Accountant.process.ts"
 import * as AI from "@alchemy.run/ai";
