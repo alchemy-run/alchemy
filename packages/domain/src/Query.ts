@@ -88,6 +88,18 @@ export type Handler<I, Result, E, Ctx, Page> = (
 export interface LayerOptions {
   /** Page size limits of a paged query. @default { default: 50, max: 500 } */
   readonly take?: Take;
+  /**
+   * Where the handler runs. `"caller"`: in the process that asks, wherever the
+   * Api runs. `"host"`: where the model is hosted, on a platform that hosts
+   * queries (`ModelHost.query`; on Durable Objects, an object of the query's
+   * own class addressed by the input's `target`, which stores nothing): for a
+   * handler whose services only the model's host holds. The caller sends the
+   * input and decodes the answer, a rejection with the query's Schemas; the
+   * handler gets nothing its middleware provides. A platform that hosts no
+   * queries (`InMemory`) runs it in place.
+   * @default "caller"
+   */
+  readonly runs?: "caller" | "host";
 }
 
 /** A query's implementation, as its Layer provides it. @internal */

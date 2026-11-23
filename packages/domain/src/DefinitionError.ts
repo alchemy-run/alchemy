@@ -423,6 +423,15 @@ export class PagedWithoutSuccess extends Data.TaggedError("PagedWithoutSuccess")
   }
 }
 
+/** A query that runs on its model's host has no `target` in its input to address the call to. */
+export class HostedQueryNeedsTarget extends Data.TaggedError("HostedQueryNeedsTarget")<{
+  readonly query: string;
+}> {
+  override get message() {
+    return `Query '${this.query}' runs on its model's host (\`runs: "host"\`), which addresses the call by its input's \`target\`: add a \`target\` field to its input`;
+  }
+}
+
 /** A query waits for a projection, view or stream the Domain does not list. */
 export class UnknownWait extends Data.TaggedError("UnknownWait")<{
   readonly query: string;
@@ -475,6 +484,7 @@ export type Reason =
   | ModelHostedTwice
   | LazyViewNeedsOneSource
   | PagedWithoutSuccess
+  | HostedQueryNeedsTarget
   | UnknownWait
   | UnvalidatedRead;
 

@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -7,7 +8,9 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import type * as Rpc from "effect/rpc/Rpc";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
@@ -18,6 +21,7 @@ import type * as Decision from "./Decision.ts";
 import {
   DecisionsUnsupported,
   DefinitionError,
+  HostedQueryNeedsTarget,
   UnhandledCommand,
   ForeignAppend,
   LazyViewNeedsOneSource,
@@ -25,6 +29,7 @@ import {
   UnvalidatedRead,
 } from "./DefinitionError.ts";
 import { type Filter, matches } from "./Filter.ts";
+import { inputSchema } from "./internal.ts";
 import * as Kernel from "./Kernel.ts";
 import * as Key from "./Key.ts";
 import {
@@ -935,7 +940,8 @@ const build = <A, E, R>(
         kernel.targets.filter((target) => !lazyTargets.has(target)),
       );
 
-    // Queries run where the Api runs, reading your store and the model's members.
+    // Queries run where the Api runs, reading your store and the model's members;
+    // one that `runs: "host"` is sent to the model's host, on a platform that hosts queries.
     const queryHosts = new Map<string, Query.Host>();
     const progressOf = (projection: Projection.Any) =>
       Context.getUnsafe(hosts, projection.Progress as Context.Key<unknown, Projection.Progress>);
@@ -953,10 +959,20 @@ const build = <A, E, R>(
     };
     // The kernel has refused duplicate names and unknown projections.
     for (const query of queries) {
-      const implementation = Context.getUnsafe(
+      const given = Context.getUnsafe(
         implementations as Context.Context<unknown>,
         query as Context.Key<unknown, Query.Implementation>,
       );
+      // Whichever platform hosts it: a handler that runs on the host is addressed by its input's target.
+      if (given.options.runs === "host" && query.definition.input?.["target"] === undefined) {
+        return yield* Effect.die(
+          new DefinitionError({ reason: new HostedQueryNeedsTarget({ query: query.queryName }) }),
+        );
+      }
+      const implementation =
+        given.options.runs === "host" && platform.query !== undefined
+          ? yield* hostedQuery(query, given, hosts, platform.query)
+          : given;
       queryHosts.set(query.queryName, Query.host(query, implementation, hosts, caughtUpOf));
     }
     const caughtUp = new Map<string, Query.CaughtUp>();
@@ -987,6 +1003,79 @@ const build = <A, E, R>(
         })),
       ),
     });
+  });
+
+/**
+ * A query whose handler runs where the model is hosted (`Query.LayerOptions`
+ * `runs: "host"`): the platform hosts `implementation` there, as the object
+ * named by the input's `target`, and the handle this process runs sends that
+ * object the input and decodes its answer with the query's Schemas. The
+ * handler's rejection travels as data and fails here typed; anything else it
+ * fails with, a defect, and a call lost in transit are defects of the read.
+ */
+const hostedQuery = (
+  query: Query.Any,
+  implementation: Query.Implementation,
+  model: Context.Context<unknown>,
+  host: NonNullable<ModelHost["query"]>,
+): Effect.Effect<Query.Implementation> =>
+  Effect.gen(function* () {
+    // The Schemas the query's RPC carries: the model's own, which need no services.
+    const input = inputSchema(query.definition.input) as unknown as Schema.Codec<unknown>;
+    const rpc = query.rpc as Rpc.AnyWithProps;
+    const result = rpc.successSchema as unknown as Schema.Codec<unknown>;
+    const rejection = rpc.errorSchema as unknown as Schema.Codec<unknown>;
+    const ask = yield* host(query.queryName, (sent) =>
+      Effect.gen(function* () {
+        const decoded = yield* Schema.decodeUnknownEffect(input)(sent.input);
+        const page =
+          sent.page === null
+            ? undefined
+            : {
+                after: sent.page.after,
+                take: sent.page.take,
+              };
+        const exit = yield* Effect.exit(
+          implementation.handle(decoded, page).pipe(
+            // The model's members fill in, as `Query.host` gives them.
+            Effect.updateContext((context: Context.Context<never>) =>
+              Context.merge(model as Context.Context<never>, context),
+            ),
+          ),
+        );
+        if (Exit.isSuccess(exit)) {
+          return {
+            _tag: "Success" as const,
+            value: yield* Schema.encodeUnknownEffect(result)(exit.value),
+          };
+        }
+        const failure = Cause.findErrorOption(exit.cause);
+        if (Option.isNone(failure)) return yield* Effect.failCause(exit.cause);
+        const encoded = yield* Effect.exit(Schema.encodeUnknownEffect(rejection)(failure.value));
+        if (Exit.isFailure(encoded)) return yield* Effect.die(failure.value);
+        return { _tag: "Rejected" as const, rejection: encoded.value };
+      }).pipe(Effect.orDie),
+    );
+    return {
+      options: implementation.options,
+      handle: (asked, page) =>
+        Effect.gen(function* () {
+          const sent = yield* Schema.encodeUnknownEffect(input)(asked).pipe(Effect.orDie);
+          const answer = yield* ask(Aggregate.targetId(Reflect.get(sent as object, "target")), {
+            input: sent,
+            page:
+              page === undefined
+                ? null
+                : { ...(page.after === undefined ? {} : { after: page.after }), take: page.take },
+          });
+          if (answer._tag === "Success") {
+            return yield* Schema.decodeUnknownEffect(result)(answer.value).pipe(Effect.orDie);
+          }
+          return yield* Effect.fail(
+            yield* Schema.decodeUnknownEffect(rejection)(answer.rejection).pipe(Effect.orDie),
+          );
+        }),
+    };
   });
 
 const aggregateClient = (

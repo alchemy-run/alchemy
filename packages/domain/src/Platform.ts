@@ -916,7 +916,38 @@ export interface ModelHost {
    * across deploys, so there is no history to wait for.
    */
   readonly history?: (target: string) => Effect.Effect<HistoryJson>;
+  /**
+   * Host a query's handler where the model is hosted, for a query whose Layer
+   * says `runs: "host"` (see `Query.LayerOptions`). Called once per such query
+   * while the model's Layer is built, with the query's name and a function
+   * that runs it for one input. The platform keeps `run` where the model's
+   * services are, and returns the function that reaches it from any process:
+   * given the object the call is addressed to (the input's target) and the
+   * input, it answers. It stores nothing. A platform without it runs the
+   * handler in the caller's process, as `runs: "caller"` does.
+   */
+  readonly query?: (
+    name: string,
+    run: (sent: QueryInput) => Effect.Effect<QueryAnswer>,
+  ) => Effect.Effect<(key: string, sent: QueryInput) => Effect.Effect<QueryAnswer>>;
 }
+
+/** What a query hosted on the model's host is sent: the input as its Schema encodes it, and the page asked for. */
+export interface QueryInput {
+  readonly input: unknown;
+  /** `null` for a query that is not paged. */
+  readonly page: { readonly after?: string; readonly take: number } | null;
+}
+
+/**
+ * What a query hosted on the model's host answers, as data a transport can
+ * carry: the result, or the handler's rejection, each encoded with the
+ * query's Schemas. Anything else the handler fails with is a defect of the
+ * read.
+ */
+export type QueryAnswer =
+  | { readonly _tag: "Success"; readonly value: unknown }
+  | { readonly _tag: "Rejected"; readonly rejection: unknown };
 
 /** What a platform is told about a model it hosts. */
 export interface HostedModel {

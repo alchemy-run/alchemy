@@ -96,6 +96,18 @@ More: [Api: Call it in process](https://alchemy.run/domain/api#call-it-in-proces
 
 A query has no key, so no Durable Object owns it: it runs in the Worker, inside the Api, where the store it reads (D1) is bound. Its handler reads views from their Durable Objects; `atLeast` reads the command's events from the aggregate's object, then polls the projection's objects for their checkpoints.
 
+A handler whose services only the model's host binds can say `runs: "host"` in its Layer's options. The caller sends it the input (one object per input `target`, which stores nothing) and decodes the answer; a rejection still fails typed, and middleware still runs at the caller:
+
+```ts
+export const SealLive = Seal.toLayer(
+  Effect.gen(function* () {
+    const keys = yield* KeyService; // bound only where the model is hosted
+    return ({ target, text }) => keys.seal(target, text);
+  }),
+  { runs: "host" },
+);
+```
+
 More: [Query](https://alchemy.run/domain/query), [Cloudflare](https://alchemy.run/domain/cloudflare).
 
 ## Live reads
