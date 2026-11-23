@@ -13,14 +13,14 @@ The examples come from an issue board that looks after a GitHub repository, the 
 
 <DAG
   nodes={[
-    { id: "answering", label: "Answering", type: "process", col: 0, row: 0 },
-    { id: "triage", label: "Triage", type: "process", tone: "accent", col: 0, row: 1 },
-    { id: "post", label: "PostAnswer", type: "tool", col: 1, row: 1 },
-    { id: "comment", label: "CreateIssueComment", type: "binding", col: 2, row: 1 },
-    { id: "repo", label: "Repo", type: "GitHub.Repository", col: 3, row: 1 },
+    { id: "answering", label: "Answering", kind: "process", col: 0, row: 0 },
+    { id: "triage", label: "Triage", kind: "process", col: 0, row: 1 },
+    { id: "post", label: "PostAnswer", kind: "tool", col: 1, row: 1 },
+    { id: "comment", label: "CreateIssueComment", kind: "binding", col: 2, row: 1 },
+    { id: "repo", label: "Repo", kind: "resource", type: "GitHub.Repository", col: 3, row: 1 },
     { id: "label", label: "LabelIssue", kind: "command", col: 1, row: 2 },
     { id: "issue", label: "Issue", kind: "aggregate", col: 2, row: 2 },
-    { id: "store", label: "Board", type: "Cloudflare.DurableObject", col: 3, row: 2 },
+    { id: "store", label: "Board", kind: "resource", type: "Cloudflare.DurableObject", col: 3, row: 2 },
   ]}
   groups={[
     { id: "processes", label: "Processes", nodes: ["answering", "triage"] },
