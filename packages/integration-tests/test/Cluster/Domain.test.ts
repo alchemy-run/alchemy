@@ -73,7 +73,10 @@ describe.skipIf(!!process.env.FAST)(
     test(
       "the runners run with the model's revision",
       Effect.gen(function* () {
-        expect(yield* domainRevisions(front)).toEqual({ DomainObjects: { Conformance: 1 } });
+        expect(yield* domainRevisions(front)).toEqual({
+          DomainObjects: { Conformance: 1 },
+          DomainTickers: { Tickers: 1 },
+        });
       }),
     );
 
