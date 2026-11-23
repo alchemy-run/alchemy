@@ -113,9 +113,11 @@ export const state = (options: CloudflareStateOptions = {}) =>
           }),
         );
 
-        const ensureLatest = ({ url, authToken }: { url: string; authToken: string }) =>
+        const ensureLatest = (
+          { url, authToken }: { url: string; authToken: string },
+          observed: number | undefined,
+        ) =>
           Effect.gen(function* () {
-            const observed = yield* observeServedVersion(accountId, scriptName, domain);
             if (observed === undefined) return yield* deployMissing;
             const expected = STATE_STORE_VERSION;
             const matches = observed === expected;
@@ -167,6 +169,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
           });
 
         const credentials = yield* readStoreCredentials(credStore, profileName, scriptName);
+        let observed: number | undefined | "unobserved" = "unobserved";
         if (credentials) {
           // The cached `url`/`authToken` are minted per-account (the `url`
           // encodes the account via its workers.dev subdomain). If the
@@ -180,17 +183,30 @@ export const state = (options: CloudflareStateOptions = {}) =>
                 `Cloudflare account; re-deriving for the current account.`,
             );
             yield* deleteStoreCredentials(credStore, profileName, scriptName).pipe(Effect.ignore);
-          } else if (!(yield* servesAt(credentials.url, accountId, scriptName, domain))) {
+          } else {
+            // Checking the cached URL costs a subdomain lookup, so it runs
+            // beside the version check every run makes anyway.
+            const [serves, version] = yield* Effect.all(
+              [
+                servesAt(credentials.url, accountId, scriptName, domain),
+                observeServedVersion(accountId, scriptName, domain),
+              ],
+              { concurrency: "unbounded" },
+            );
+            if (serves) return yield* ensureLatest(credentials, version);
             // The store's `domain`, or the account's workers.dev subdomain,
             // changed since these were cached.
             yield* deleteStoreCredentials(credStore, profileName, scriptName).pipe(Effect.ignore);
-          } else {
-            return yield* ensureLatest(credentials);
+            observed = version;
           }
         }
-        if ((yield* observeServedVersion(accountId, scriptName, domain)) !== undefined) {
+        if (observed === "unobserved") {
+          observed = yield* observeServedVersion(accountId, scriptName, domain);
+        }
+        if (observed !== undefined) {
           return yield* ensureLatest(
             yield* loginWithCloudflare(profileName, false, scriptName, accountId, domain),
+            observed,
           );
         }
         return yield* deployMissing;
