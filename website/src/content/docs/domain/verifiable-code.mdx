@@ -14,7 +14,7 @@ A handler has to be a plain function of what it is given: the state, the command
 
 ## Statements
 
-Read: `const` and `let`, assignment to a local variable, `+=` and the other compound assignments, `++` and `--`, `if` and `else`, `switch`, `return`, block statements, and function declarations.
+Read: `const`, `let` and `var`, assignment to a local variable or to several at once (`[x, y] = [y, x]`), `+=` and the other compound assignments, `++` and `--`, `if` and `else`, `switch`, `return`, block statements, and function declarations, which a block can call before the line that declares them.
 
 Loops are read: `for`, `for…of`, `for…in`, `while` and `do…while`, with `break` and `continue`. A loop has to end after a number of turns the prover can count, so a loop over a list from the state or a command is tried for short lists only (see [Lists](#lists)).
 
@@ -26,23 +26,23 @@ Read:
 
 - Arithmetic on whole numbers: `+`, `-`, `*`, `/`, `%`, and the comparisons `<`, `<=`, `>`, `>=`.
 - `===` and `!==`. `==` and `!=` are read only against `null`.
-- `&&`, `||`, `??`, `!`, the conditional `a ? b : c`, and optional chaining `a?.b`.
+- `&&`, `||`, `??`, `!`, the conditional `a ? b : c`, and optional chaining: `a?.b`, `a?.b.c()` and `f?.()`.
 - `typeof`, `void` and `in`.
 - Object and array literals, spread in both, and property access by a name or by a key the prover can see.
 - Destructuring of objects and arrays, with defaults and rest patterns.
 - Arrow functions and function expressions, and calls to them.
-- Template literals, and `+` on strings.
+- Template literals, and `+` on strings. A number, a boolean, `null` and `undefined` are written into one as JavaScript writes them.
 - `new` on an event, a rejection or a command, and the class's `make`: `Started.make({})` is `new Started({})`.
 - `new` on a class of `effect/Data` (`Data.Class`, `Data.TaggedClass`, `Data.Error`, `Data.TaggedError`) or of `effect/Schema` (`Schema.Class`, `Schema.TaggedClass`, `Schema.TaggedError`). The instance is its fields and its `_tag`.
 - TypeScript's `as`, `satisfies` and `!`, which change nothing at run time.
 
-Not read: bitwise operators, `instanceof`, regular expressions, `delete`, and a property read by a key that depends on an input.
+Not read: bitwise operators, `**`, `instanceof`, the comma operator, regular expressions, tagged templates, `delete`, `this`, a getter or a setter in an object literal, and a property read by a key that depends on an input.
 
 ## Numbers
 
 A whole number is exact, and a `bigint` is exact with no limit. A number is assumed to stay within ±2^53, which the report lists under what it assumes.
 
-A division is read where its result is exact: through `Math.floor`, `Math.ceil` or `Math.trunc`, or compared with a whole number. `Math.abs`, `Math.max` and `Math.min` are read too.
+A division is read where its result is exact: through `Math.floor`, `Math.ceil` or `Math.trunc`, or compared with a whole number. `Math.abs` is read too, and `Math.max` and `Math.min` of any number of numbers.
 
 Arithmetic on numbers that may not be whole is not proved. A solver counts exactly and JavaScript rounds, so `0.1 + 0.2 === 0.3` is true to one and false to the other. Keep money in whole cents, or in a [decimal](#decimals).
 
@@ -188,14 +188,16 @@ A call to a package is read when it is one of these. Each does to a value from t
 
 Every module of Effect is either read as above, run as it is, or left unread on purpose.
 
-**Run as it is, on values the code writes.** A pure function the prover has no reading of its own for is computed by the library itself when every argument is known: a constant, or something made from constants. That covers `SemVer`, `SemVerRange`, `ByteSize`, `Bytes`, `Trie`, `TextDiff`, `JsonPatch`, `JsonPointer`, `Glob`, `RegExp.escape`, `Formatter`, `LogLevel`, `Cron.parse` and `Cron.match`, and the functions of the modules above that are not listed, such as `Array.rotate`, `String.camelToSnake` and `Duration.format`.
+**Run as it is, on values the code writes.** A pure function the prover has no reading of its own for is computed by the library itself when every argument is known: a constant, or something made from constants. That covers `SemVer`, `SemVerRange`, `ByteSize`, `Trie`, `TextDiff`, `JsonPatch`, `JsonPointer`, `Glob`, `RegExp.escape`, `Formatter`, `LogLevel`, `Cron.parse` and `Cron.match`, and the functions of the modules above that are not listed, such as `Array.rotate`, `String.camelToSnake` and `Duration.format`.
 
 ```typescript
 const MINIMUM = SemVer.parseUnsafe("1.9.3");
 const LIMIT = ByteSize.mebibytes(5);
 ```
 
-Called on a value from the state or a command, or given a function of yours, such a function is not read, and the report names it. `Combiner` and `Reducer` are made from functions, so they are not read: write the fold.
+Called on a value from the state or a command, or given a function of yours, such a function is not read, and the report names it. `Combiner` and `Reducer` are made from functions, and `Bytes` works on byte arrays, so they are not read: write the fold.
+
+Every name on these lists has a line in a table the tests run: each call is read on values the prover knows and on values the solver holds, and both have to be what the real code gives. A test fails when the prover reads a function, a method or a kind of syntax that no table has.
 
 **Left unread.** A call to one of these is reported with its name, and the rule is not proved.
 

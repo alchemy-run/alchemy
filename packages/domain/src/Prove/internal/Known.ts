@@ -3,10 +3,8 @@ import * as BigDecimal from "effect/BigDecimal";
 import * as BigInt_ from "effect/BigInt";
 import * as Boolean_ from "effect/Boolean";
 import * as Brand_ from "effect/Brand";
-import * as Bytes_ from "effect/Bytes";
 import * as ByteSize_ from "effect/ByteSize";
 import * as Chunk_ from "effect/Chunk";
-import * as Combiner_ from "effect/Combiner";
 import * as Cron_ from "effect/Cron";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -34,7 +32,6 @@ import * as PrimaryKey_ from "effect/PrimaryKey";
 import * as Rational from "effect/Rational";
 import * as Record_ from "effect/Record";
 import * as Redacted from "effect/Redacted";
-import * as Reducer_ from "effect/Reducer";
 import * as RegExp_ from "effect/RegExp";
 import * as Result from "effect/Result";
 import * as Schema_ from "effect/Schema";
@@ -64,9 +61,7 @@ const PURE: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   "effect/Boolean": Boolean_,
   "effect/Brand": Brand_,
   "effect/ByteSize": ByteSize_,
-  "effect/Bytes": Bytes_,
   "effect/Chunk": Chunk_,
-  "effect/Combiner": Combiner_,
   "effect/Cron": Cron_,
   "effect/Duration": Duration,
   "effect/Equal": Equal_,
@@ -92,7 +87,6 @@ const PURE: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   "effect/Rational": Rational,
   "effect/Record": Record_,
   "effect/Redacted": Redacted,
-  "effect/Reducer": Reducer_,
   "effect/RegExp": RegExp_,
   "effect/Result": Result,
   "effect/SemVer": SemVer_,
@@ -148,6 +142,12 @@ export const schemaOf = (module: string, path: ReadonlyArray<string>): unknown =
   return found;
 };
 
+/**
+ * The schema, or the check of one, each value the prover does not look inside
+ * stands for: a schema built from it is then built from the real one.
+ */
+export const schemas = new WeakMap<object, unknown>();
+
 // A function the library gave back, as the value the prover calls, and the other way.
 const functions = new WeakMap<object, (...args: ReadonlyArray<unknown>) => unknown>();
 
@@ -187,6 +187,8 @@ export const real = (v: V): { readonly value: unknown } | undefined => {
       return { value: undefined };
     case "Host":
       return { value: v.value };
+    case "Opaque":
+      return schemas.has(v) ? { value: schemas.get(v) } : undefined;
     case "Lib": {
       const host = v.host ?? hostOf(v.module, v.path) ?? schemaOf(v.module, v.path);
       return host === undefined ? undefined : { value: host };

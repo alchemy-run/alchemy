@@ -2164,6 +2164,21 @@ const syntax: ReadonlyArray<Group> = [
       [body(`items.reverse(); return items.length;`), reported],
       [body(`const made = { n: a }; delete made.n; return made;`), reported],
       [body(`debugger; return a;`), reported],
+      [body(`let x = a; x **= 2; return x;`), reported],
+      [body(`let x = a; x <<= 1; return x;`), reported],
+      [body(`let x = a; x >>= 1; return x;`), reported],
+      [body(`let x = a; x >>>= 1; return x;`), reported],
+      [body(`let x = a; x &= 1; return x;`), reported],
+      [body(`let x = a; x |= 1; return x;`), reported],
+      [body(`let x = a; x ^= 1; return x;`), reported],
+      [body(`const run = async () => { await undefined; return a; }; return run();`), reported],
+      [
+        body(`const made = await import("effect/Number"); return a;`).replace(
+          "(() =>",
+          "(async () =>",
+        ),
+        reported,
+      ],
       [body(`const run = async () => a; return run();`), reported],
       [body(`function* each() { yield a; } return [...each()];`), reported],
       [body(`enum Kind { A, B } return Kind.A + a;`), reported],
@@ -2213,4 +2228,254 @@ const syntax: ReadonlyArray<Group> = [
   },
 ];
 
-export const groups: ReadonlyArray<Group> = [...base, ...larger, ...cut, ...collections, ...syntax];
+// What the other tables leave: each model once, and one call of each module that is run as it is.
+const rest: ReadonlyArray<Group> = [
+  {
+    name: "Rest",
+    ...numbers,
+    // `absurd` is what code calls where it cannot be: reaching it is reported.
+    unread: [
+      [`absurd(a)`, /reaches absurd/],
+      // A function given a function, or bytes, is not one the prover runs as it is.
+      [
+        `Combiner.make((x, y) => x + y).combine(a, b)`,
+        /Combiner\.make, which the prover has no model for/,
+      ],
+      [
+        `Reducer.make((x, y) => x + y, 0).combineAll([a, b])`,
+        /Reducer\.make, which the prover has no model for/,
+      ],
+      [`Bytes.Equivalence(new Uint8Array([a]), new Uint8Array([b]))`, reported],
+    ],
+    prelude: [`export class Plain extends Data.Error<{ readonly code: number }> {}`],
+    both: [
+      `Equivalence.BigInt(BigInt(a), BigInt(b))`,
+      `Equivalence.String("a" + a, "a" + b)`,
+      `Rational.equals(Rational.divideUnsafe(ratio(a), third), ratio(a * 3))`,
+      `Match.value(a > 0 ? { _tag: "Up" } : { _tag: "Down" }).pipe(Match.tags({ Down: () => "down", Up: () => "up" }), Match.orElseAbsurd)`,
+      `(() => { const held = MutableHashMap.make(["a", a], ["b", b]); return [Array.sort(Array.fromIterable(MutableHashMap.keys(held)), Order.String), Array.sort(Array.fromIterable(MutableHashMap.values(held)), Order.Number)]; })()`,
+      `new Plain({ code: a }).code`,
+      `Newtype.value(a)`,
+    ],
+    known: [
+      `Formatter.format({ a })`,
+      `Formatter.formatJson({ a, list: [b] })`,
+      `Glob.escape("a*b" + a)`,
+      `Inspectable.toStringUnknown({ a })`,
+      `JsonPatch.apply(JsonPatch.get({ n: 1 }, { n: a }), { n: 1 })`,
+      `JsonPointer.escapeToken("a/b~" + a)`,
+      `LogLevel.isGreaterThan("Error", "Info")`,
+      `LogLevel.getOrdinal("Info") + a`,
+      `NonEmptyIterable.unprepend([a, b])[0]`,
+      `PrimaryKey.isPrimaryKey({ a })`,
+      `SemVerRange.matches(SemVerRange.parseUnsafe("^1.2.0"), SemVer.parseUnsafe("1.3.0"))`,
+      `TextDiff.diff("ab", "ac" + a)`,
+    ],
+  },
+  {
+    name: "Services",
+    ...numbers,
+    effectful: true,
+    prelude: [
+      `export class Counter extends Domain.RequestContext<Counter>()("Bench/Counter", Schema.Struct({ start: Small })) {}`,
+    ],
+    both: [
+      `Effect.gen(function* () { return [(yield* Clock.currentTimeMillis) >= 0, (yield* Clock.currentTimeNanos) >= 0n]; })`,
+      `Effect.gen(function* () { return [DateTime.toEpochMillis(yield* DateTime.now) >= 0, yield* DateTime.isPast(DateTime.makeUnsafe(-1)), yield* DateTime.isFuture(DateTime.makeUnsafe("2970-01-01T00:00:00Z"))]; })`,
+      `Effect.service(Counter).pipe(Effect.provideService(Counter, { start: a }), Effect.map((counter) => counter.start + b))`,
+      `Effect.gen(function* () { yield* Console.log("l"); yield* Console.debug("d"); yield* Console.info("i"); yield* Console.warn("w"); yield* Console.error("e"); return a; })`,
+      `Effect.gen(function* () { yield* Effect.logInfo("i"); yield* Effect.logWarning("w"); yield* Effect.logError("e"); yield* Effect.logFatal("f"); return b; })`,
+    ],
+  },
+];
+
+// An input that is a record: fields that may be left out, an `Option`, a
+// tagged union and a record inside it. The solver picks the record, so every
+// way it can be is a path: with a field and without, each kind in turn.
+const shapes: ReadonlyArray<Group> = [
+  {
+    name: "Shape",
+    input: `shape: Row, n: Small`,
+    prelude: [
+      `const Kind = Schema.TaggedUnion({ Good: { grams: Small }, Service: { minutes: Small }, Gift: {} });`,
+      `const Row = Schema.Struct({ id: Schema.String, n: Small, label: Schema.optionalKey(Schema.String), note: Schema.Option(Small), kind: Kind, inner: Schema.Struct({ flag: Schema.optionalKey(Schema.Boolean), m: Small }) });`,
+    ],
+    pins: `[
+      { n: 0, shape: { id: "a", n: 1, note: Option.none(), kind: { _tag: "Gift" }, inner: { m: 2 } } },
+      { n: 1, shape: { id: "b", n: -2, label: "l", note: Option.some(3), kind: { _tag: "Good", grams: 5 }, inner: { flag: true, m: 0 } } },
+      { n: 2, shape: { id: "", n: 0, label: "", note: Option.some(0), kind: { _tag: "Service", minutes: -1 }, inner: { flag: false, m: -3 } } },
+    ]`,
+    differs: `command.n !== pin.n`,
+    bind: (known) => (known ? `const shape = pin.shape;` : `const shape = command.shape;`),
+    chunk: 4,
+    both: [
+      // One field read: the others are not chosen.
+      `shape.n`,
+      `shape.label`,
+      `shape.label ?? "none"`,
+      `shape.label === undefined`,
+      `typeof shape.label`,
+      `shape.label?.length ?? -1`,
+      `shape.inner.flag ?? "unset"`,
+      `shape.inner.m + shape.n`,
+      `shape["label"] ?? shape["id"]`,
+      // The keys of a record: every field is chosen.
+      `"label" in shape`,
+      `"flag" in shape.inner`,
+      `Object.keys(shape.inner)`,
+      `Object.entries(shape.inner).length`,
+      `Object.values(shape.inner).length`,
+      `Record.keys(shape.inner)`,
+      `Record.has(shape.inner, "flag")`,
+      `Predicate.hasProperty(shape, "label")`,
+      body(`const keys = []; for (const key in shape.inner) keys.push(key); return keys;`),
+      // Copies, and what is left of one.
+      `{ ...shape, n: 0 }`,
+      `{ ...shape }.label ?? "none"`,
+      `{ ...shape.inner, flag: true }`,
+      `{ ...shape.inner, ...{ m: 1 } }`,
+      `(({ label, ...others }) => [label ?? "none", others])(shape)`,
+      `(({ label = "default" }) => label)(shape)`,
+      `(({ inner: { flag = true, m } }) => [flag, m])(shape)`,
+      `Struct.pick(shape, ["n", "label"])`,
+      `Struct.omit(shape, ["kind", "note", "inner"])`,
+      `Struct.evolve(shape.inner, { m: (m) => m + 1 })`,
+      // The whole record, kept and compared.
+      `shape`,
+      `shape.inner`,
+      `[shape, shape].length`,
+      `shape === shape`,
+      `shape.inner === shape.inner`,
+      `Equal.equals(shape, shape)`,
+      `Equal.equals(shape, { ...shape })`,
+      `Equal.equals(shape.inner, { m: shape.inner.m })`,
+      `Equal.equals({ ...shape, label: "x" }, shape)`,
+      `[shape].map((each) => each.label ?? "none")`,
+      `Array.map([shape, shape], (each) => each.n)`,
+      `[shape].filter((each) => each.label !== undefined).length`,
+      // An `Option` field.
+      `shape.note`,
+      `Option.isSome(shape.note)`,
+      `Option.getOrElse(shape.note, () => 0)`,
+      `Option.map(shape.note, (value) => value + shape.n)`,
+      `Option.match(shape.note, { onNone: () => "none", onSome: (value) => (value > 0 ? "more" : "not") })`,
+      `shape.note._tag`,
+      // A tagged union field, by its tag and by the union's own helpers.
+      `shape.kind`,
+      `shape.kind._tag`,
+      `shape.kind._tag === "Good" ? shape.kind.grams : 0`,
+      `Kind.guards.Good(shape.kind)`,
+      `Kind.guards.Gift(shape.kind)`,
+      `Kind.guards.Good({ _tag: "Good" })`,
+      `Kind.guards.Good(shape)`,
+      `Kind.isAnyOf(["Good", "Gift"])(shape.kind)`,
+      `Kind.isAnyOf([])(shape.kind)`,
+      `Kind.match(shape.kind, { Good: (good) => good.grams, Service: (service) => service.minutes, Gift: () => 0 })`,
+      `Kind.match({ Good: () => "g", Service: () => "s", Gift: () => "f" })(shape.kind)`,
+      `Kind.matchOrElse(shape.kind, { Good: (good) => good.grams }, () => -1)`,
+      `Kind.matchOrElse({ Gift: () => "gift" }, (other) => other._tag)(shape.kind)`,
+      `Predicate.isTagged(shape.kind, "Service")`,
+      `Match.value(shape.kind).pipe(Match.tag("Gift", () => 1), Match.orElse(() => 0))`,
+      `Match.value(shape).pipe(Match.when({ kind: { _tag: "Good" } }, () => "good"), Match.orElse(() => "other"))`,
+      `Match.value(shape).pipe(Match.when({ inner: { flag: true } }, () => "set"), Match.orElse(() => "not"))`,
+      body(
+        `switch (shape.kind._tag) { case "Good": return shape.kind.grams; case "Service": return shape.kind.minutes; default: return 0; }`,
+      ),
+    ],
+  },
+  {
+    // What a function the prover does not read returns, taken for what the code uses it as.
+    name: "Opaque",
+    input: `text: Schema.String, a: Small`,
+    prelude: [
+      `export const nameOf = (ref) => ref.slice(0, ref.indexOf("@"));`,
+      `export const versionOf = (ref) => { const at = ref.lastIndexOf("@"); const n = +ref.slice(at + 1); return at < 0 || n % 1 !== 0 || ref.slice(at + 1) === "" ? Option.none() : Option.some(n); };`,
+      `export const partsOf = (list) => (list === "" ? [] : list.split(","));`,
+      `export const countOf = (list) => partsOf(list).length;`,
+      `export const isBlank = (text) => text.trim() === "";`,
+      `export const flagOf = (text) => text.startsWith("a");`,
+    ],
+    opaque: ["nameOf", "versionOf", "partsOf", "countOf", "isBlank", "flagOf"],
+    pins: pinned(
+      [
+        { text: "", a: 0 },
+        { text: "acct@3", a: 1 },
+        { text: "a,b", a: 2 },
+        { text: "x@y@2", a: 3 },
+        { text: ",", a: -1 },
+        { text: "a@b,c@1", a: 1 },
+        { text: " ", a: 0 },
+        { text: "acct@x", a: 5 },
+      ],
+      0,
+      () => ({ text: "", a: 0 }),
+      1,
+    ),
+    differs: `command.text !== pin.text || command.a !== pin.a`,
+    bind: (known) =>
+      known
+        ? `const text = pin.text; const a = pin.a;`
+        : `const text = command.text; const a = command.a;`,
+    chunk: 2,
+    both: [
+      // Kept and passed along, and the same call twice.
+      `nameOf(text)`,
+      `[nameOf(text), versionOf(text)].length`,
+      `nameOf(text) === nameOf(text)`,
+      // Text.
+      `nameOf(text) === "acct"`,
+      `nameOf(text) === text`,
+      `nameOf(text) !== "x"`,
+      `[nameOf(text)].includes("acct")`,
+      `nameOf(text) + "!"`,
+      `\`<\${nameOf(text)}>\``,
+      body(
+        `switch (nameOf(text)) { case "acct": return 1; case "x@y": return 2; default: return 0; }`,
+      ),
+      // A boolean, tested and compared.
+      `isBlank(text) ? "blank" : "text"`,
+      `!isBlank(text)`,
+      `isBlank(text) && a > 0`,
+      `flagOf(text) === true`,
+      // A number.
+      `countOf(text) > 1`,
+      `countOf(text) === a`,
+      `countOf(text) <= a`,
+      `countOf(text) === 0 ? "none" : "some"`,
+      // An `Option`.
+      `Option.isSome(versionOf(text))`,
+      `Option.isNone(versionOf(text))`,
+      `Option.getOrElse(versionOf(text), () => -1) > 2`,
+      `Option.match(versionOf(text), { onNone: () => "none", onSome: (version) => (version > 1 ? "new" : "old") })`,
+      `versionOf(text).pipe(Option.map((version) => version > 0), Option.getOrElse(() => false))`,
+      `Option.exists(versionOf(text), (version) => version === a)`,
+      // A list.
+      `[...partsOf(text)].length`,
+      `partsOf(text).map((part) => part === "a")`,
+      `partsOf(text).some((part) => part === text)`,
+      `partsOf(text).filter((part) => part !== "").length`,
+      body(
+        `let found = 0; for (const part of partsOf(text)) if (part === "a") found++; return found;`,
+      ),
+      `Array.map(partsOf(text), (part) => part === "b")`,
+      `Array.length(partsOf(text))`,
+    ],
+    unread: [
+      [`nameOf(text).length`, /what nameOf returned/],
+      // Two results the code compares with each other: nothing says what kind either is.
+      [`flagOf(text) === isBlank(text)`, /compares what flagOf returned/],
+      [`countOf(text) + 1`, /may not be whole/],
+      [`versionOf(text)._tag`, /what versionOf returned/],
+    ],
+  },
+];
+
+export const groups: ReadonlyArray<Group> = [
+  ...shapes,
+  ...base,
+  ...larger,
+  ...cut,
+  ...collections,
+  ...syntax,
+  ...rest,
+];

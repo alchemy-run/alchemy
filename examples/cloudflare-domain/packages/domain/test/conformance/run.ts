@@ -39,9 +39,12 @@ export const PRELUDE = [
   `import * as Domain from "@alchemy.run/domain";`,
   ...MODULES.map((module) => `import * as ${module} from "effect/${module}";`),
   `import * as BigInts from "effect/BigInt";`,
-  ...["ByteSize", "Cron", "RegExp", "SemVer", "Trie"].map(
-    (module) => `import * as ${module} from "effect/${module}";`,
-  ),
+  ...[
+    ...["ByteSize", "Bytes", "Clock", "Combiner", "Console", "Cron", "Formatter", "Glob"],
+    ...["Inspectable", "JsonPatch", "JsonPointer", "LogLevel", "Newtype", "NonEmptyIterable"],
+    ...["PrimaryKey", "Reducer", "RegExp", "SemVer", "SemVerRange", "TextDiff", "Trie"],
+  ].map((module) => `import * as ${module} from "effect/${module}";`),
+  `import { absurd } from "effect/Function";`,
   `import { apply, cast, compose, constant, constFalse, constNull, constTrue, constUndefined, constVoid, dual, flip, flow, identity, memoize, pipe, satisfies, tupled, untupled } from "effect/Function";`,
   `const Small = Schema.Int.check(Schema.isBetween({ minimum: -20, maximum: 20 }));`,
   `export class Done extends Domain.Event("Done", { results: Schema.Unknown }) {}`,
@@ -69,7 +72,7 @@ interface Chunk {
   readonly unread?: RegExp;
 }
 
-const chunksOf = (group: Group): ReadonlyArray<Chunk> => {
+export const chunksOf = (group: Group): ReadonlyArray<Chunk> => {
   const out: Array<Chunk> = [];
   const add = (expressions: ReadonlyArray<string>, modes: ReadonlyArray<boolean>) => {
     const size = group.chunk ?? CHUNK;
@@ -94,7 +97,7 @@ const chunksOf = (group: Group): ReadonlyArray<Chunk> => {
   return out;
 };
 
-const sourceOf = (group: Group, chunks: ReadonlyArray<Chunk>): string =>
+export const sourceOf = (group: Group, chunks: ReadonlyArray<Chunk>): string =>
   [
     ...PRELUDE,
     ...(group.prelude ?? []),

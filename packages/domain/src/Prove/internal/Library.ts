@@ -1342,7 +1342,7 @@ export const make = (host: Host) => {
     const length = options?._tag === "Obj" ? options.fields.length : undefined;
     return f && length?._tag === "Num" && Number.isInteger(length.value)
       ? Effect.forEach(
-          Array.from({ length: Math.max(0, length.value) }, (_, i) => i),
+          Array.from({ length: Math.max(1, Math.floor(length.value)) }, (_, i) => i),
           (i) => host.call(f, [Value.num(i)], site),
         ).pipe(Effect.map(arr))
       : Effect.fail(
@@ -1418,23 +1418,28 @@ export const make = (host: Host) => {
    * any other schema is one the prover does not look inside.
    */
   const schemaOf = (lib: V & { readonly _tag: "Lib" }, args: ReadonlyArray<V>): V => {
-    const unseen: V = { _tag: "Opaque", what: "a schema" };
+    const unseen = (): V => ({ _tag: "Opaque", what: "a schema" });
     const fn = lib.host ?? Known.schemaOf(lib.module, lib.path);
-    if (typeof fn !== "function") return unseen;
+    if (typeof fn !== "function") return unseen();
     const given: Array<unknown> = [];
     for (const arg of args) {
       const made = Known.real(arg);
-      if (!made) return unseen;
+      if (!made) return unseen();
       given.push(made.value);
     }
     try {
-      const made: unknown = (fn as (...args: ReadonlyArray<unknown>) => unknown)(...given);
-      // Only a tagged union is kept: its helpers are functions the code calls on values.
-      return unionOf(made)
-        ? { _tag: "Host", value: made, name: `Schema.${lib.path.join(".")}` }
-        : unseen;
+      // `Schema.Int.check(...)` is a method of the schema it is called on.
+      const self = Known.schemaOf(lib.module, lib.path.slice(0, -1));
+      const made: unknown = (fn as (...args: ReadonlyArray<unknown>) => unknown).apply(self, given);
+      // A tagged union is kept: its helpers are functions the code calls on values.
+      if (unionOf(made)) return { _tag: "Host", value: made, name: `Schema.${lib.path.join(".")}` };
+      // Any other schema is not looked inside, and stands for the real one where a schema is built from it.
+      const kept = unseen();
+      if ((typeof made === "object" || typeof made === "function") && made !== null)
+        Known.schemas.set(kept, made);
+      return kept;
     } catch {
-      return unseen;
+      return unseen();
     }
   };
 
