@@ -417,8 +417,11 @@ export type Mentions<
   >;
 };
 
-/** A name known as a literal: a model whose members were widened has no members to mention. */
-type Named<Name extends string> = string extends Name ? never : Name;
+/**
+ * A name known as one literal. A model whose members were widened, or
+ * named by a pattern (`Balance\${number}`), has no member to mention for them.
+ */
+type Named<Name extends string> = {} extends Record<Name, unknown> ? never : Name;
 
 /** How a model's `layer` hosts it: tuning that doesn't change what the model means. */
 export interface LayerOptions<Views extends string = string> {
