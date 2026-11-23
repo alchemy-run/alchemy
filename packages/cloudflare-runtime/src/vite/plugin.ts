@@ -214,8 +214,9 @@ const DENIED_FILES = [
 
 /**
  * Alchemy's state when `ALCHEMY_DIR` moves it out of `.alchemy`. The dev
- * server inherits the CLI's environment and working directory, so it resolves
- * the same directory.
+ * server runs from the project root, not the CLI's working directory, so the
+ * processes that start it (`ViteChild`, `Website/Server`) pass `ALCHEMY_DIR`
+ * as an absolute path.
  */
 const deniedAlchemyDir = (): string[] => {
   const dir = process.env.ALCHEMY_DIR;
