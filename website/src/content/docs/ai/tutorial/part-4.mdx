@@ -41,7 +41,6 @@ See [Sandboxes](/ai/sandboxes) for the other platforms.
 `AI.Grep` and `AI.Read` are names every harness has a tool for. Mention them:
 
 ```diff lang="typescript" title="src/Triage.ts"
-+import * as AI from "@alchemy.run/ai";
 import * as DomainAi from "@alchemy.run/domain/Ai";
 
 -  You look after issue ${issue} of a GitHub repository.
@@ -58,30 +57,31 @@ import * as DomainAi from "@alchemy.run/domain/Ai";
 +  feature when something new is asked for, question otherwise.
 ```
 
-`TriageLive` now requires a Layer for each of the two tools.
+`Triage` now requires a Layer for each of the two tools.
 
 ## Provide the coding tools and the sandbox
 
 `Pi.CodingTools` is Pi's own implementation of those names, working in the session's sandbox:
 
 ```diff lang="typescript" title="src/Agents.ts"
-import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as AI from "@alchemy.run/ai";
 +import * as Boat from "@alchemy.run/boat";
-import * as Pi from "@alchemy.run/pi";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 import { ModelsLive, Smart } from "./Models.ts";
 +import { SandboxLive } from "./Sandbox.ts";
-import { TriageLive } from "./Triage.ts";
+import { Triage } from "./Triage.ts";
 
 -const HarnessLive = Pi.HarnessLive.pipe(Layer.provide(PiCloudflare.DurableObjectStorage));
 +const HarnessLive = Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools).pipe(
 +  Layer.provide(PiCloudflare.DurableObjectStorage),
 +);
 
-    Layer.provide(Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), BoardLive)),
--    Layer.provide(ModelsLive),
-+    Layer.provide(Layer.mergeAll(ModelsLive, SandboxLive)),
-+    Layer.provide(Boat.CreateSandboxHttp),
+const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), boardOver(own)).pipe(
+-  Layer.provide(ModelsLive),
++  Layer.provide(Layer.mergeAll(ModelsLive, SandboxLive)),
++  Layer.provide(Boat.CreateSandboxHttp),
+);
 ```
 
 ## Declare a tool to search issues
@@ -209,7 +209,7 @@ A session that mentions `Answering` always sees its description, and reads its p
 ```diff lang="typescript" title="src/Triage.ts"
 import * as DomainAi from "@alchemy.run/domain/Ai";
 +import { Answering } from "./Answering.ts";
-import { issue, Triage } from "./Board/Triage.process.ts";
+import { IssueId } from "./Board/Issue.id.ts";
 import { TriageApi } from "./Board/TriageApi.api.ts";
 +import { PostAnswer, SearchIssues } from "./Tools.ts";
 
@@ -237,18 +237,17 @@ import { TriageApi } from "./Board/TriageApi.api.ts";
 ```diff lang="typescript" title="src/Agents.ts"
 import { SandboxLive } from "./Sandbox.ts";
 +import { PostAnswerLive, SearchIssuesLive } from "./Tools.ts";
-import { TriageLive } from "./Triage.ts";
+import { Triage } from "./Triage.ts";
 
--    Layer.provide(Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), BoardLive)),
-+    Layer.provide(
-+      Layer.mergeAll(
-+        HarnessLive,
-+        AI.DefaultModel(Smart),
-+        SearchIssuesLive,
-+        PostAnswerLive,
-+        BoardLive,
-+      ),
-+    ),
+-const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), boardOver(own)).pipe(
++const Live = Layer.mergeAll(
++  HarnessLive,
++  AI.DefaultModel(Smart),
++  SearchIssuesLive,
++  PostAnswerLive,
++  boardOver(own),
++).pipe(
+  Layer.provide(Layer.mergeAll(ModelsLive, SandboxLive)),
 ```
 
 `Answering` needs no Layer: its prose is on the class, and it mentions nothing.
@@ -282,7 +281,7 @@ curl "$URL/issues/2"
 Every session so far ran on Pi. The harness is one constant in `Agents.ts`:
 
 ```diff lang="typescript" title="src/Agents.ts"
-import * as Boat from "@alchemy.run/boat";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 -import * as Pi from "@alchemy.run/pi";
 -import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 +import * as OpenCode from "@alchemy.run/opencode";
@@ -301,7 +300,7 @@ The process, its prose, the board, the policy and the tools are unchanged. Sessi
 ## What you built
 
 - A board that models the work: issues, replies, labels.
-- A policy that decides when a session starts and what it is told.
+- A policy that decides when an issue is looked after, and an object for each issue that answers.
 - A process that says how the work is done, in prose that mentions what it uses.
 - A harness you chose in one line.
 
@@ -310,7 +309,7 @@ The process, its prose, the board, the policy and the tools are unchanged. Sessi
 - [Processes](/ai/processes): inputs, sessions and the two ways to declare one.
 - [Processes that use processes](/ai/process-graphs): following, starting, and models.
 - [Processes and Domain models](/ai/domain): Apis as tools, and policies that start sessions.
-- [Where sessions run](/ai/hosting): hosts, clients, and your own Durable Object.
+- [Where sessions run](/ai/hosting): one object for each session or one for many, and reaching them.
 
 ## Tear down
 

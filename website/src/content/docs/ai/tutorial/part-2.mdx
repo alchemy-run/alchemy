@@ -26,10 +26,10 @@ export type IssueId = typeof IssueId.Type;
 
 ## Use it as the process's input
 
-```diff lang="typescript" title="src/Board/Triage.process.ts"
+```diff lang="typescript" title="src/Triage.ts"
 import * as AI from "@alchemy.run/ai";
 -import * as Schema from "effect/Schema";
-+import { IssueId } from "./Issue.id.ts";
++import { IssueId } from "./Board/Issue.id.ts";
 
 -export const issue = AI.Input("issue", Schema.String);
 +export const issue = AI.Input("issue", IssueId);
@@ -176,15 +176,15 @@ export class TriageApi extends Domain.Api("TriageApi", {
 `DomainAi.tools` makes the Api something a process can mention. Each call it lists becomes a tool of the session.
 
 ```diff lang="typescript" title="src/Triage.ts"
+import * as AI from "@alchemy.run/ai";
 +import * as DomainAi from "@alchemy.run/domain/Ai";
-import { issue, Triage } from "./Board/Triage.process.ts";
+import { IssueId } from "./Board/Issue.id.ts";
 +import { TriageApi } from "./Board/TriageApi.api.ts";
+
+export const issue = AI.Input("issue", IssueId);
 +
 +const board = DomainAi.tools(TriageApi);
 
-export const TriageLive = Triage.toLayer({
-  description: "Say what kind of issue this is.",
-})`
   You look after issue ${issue} of a GitHub repository.
 -  When you are told what the issue says, reply with one word:
 -  bug when something is broken, feature when something new is asked for,
@@ -193,10 +193,9 @@ export const TriageLive = Triage.toLayer({
 +  Get the issue from ${board}: its key is the issue. Then send the label
 +  command to ${board}: bug when something is broken, feature when
 +  something new is asked for, question otherwise.
-`;
 ```
 
-`TriageLive` now also requires the hosted `Board`.
+`Triage` now also requires the hosted `Board`.
 
 ## Host the board
 
@@ -212,41 +211,56 @@ export const BoardLive = Board.layer(Layer.empty).pipe(
 );
 ```
 
-## Give it to the host
+## Give the session the board
 
 ```diff lang="typescript" title="src/Agents.ts"
 import * as Layer from "effect/Layer";
 +import { BoardLive } from "./Board.ts";
-import { Triage } from "./Board/Triage.process.ts";
+import { ModelsLive, Smart } from "./Models.ts";
 
-  TriageLive.pipe(
--    Layer.provide(Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart))),
-+    Layer.provide(Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), BoardLive)),
-    Layer.provide(ModelsLive),
-  ),
+-const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(Layer.provide(ModelsLive));
++const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), BoardLive).pipe(
++  Layer.provide(ModelsLive),
++);
 ```
+
+## Start a session without waiting for it
+
+The session now reports to the board, so nothing has to wait for its answer:
+
+```diff lang="typescript" title="src/Agents.ts"
+import * as Layer from "effect/Layer";
+import { BoardLive } from "./Board.ts";
++import type { IssueId } from "./Board/Issue.id.ts";
+
+    return Effect.succeed({
+-      ask: Effect.fn(function* (issue: string, text: string) {
+-        yield* triage.start(issue, { issue });
+-        const reply = yield* triage.get(issue).prompt(text);
+-        return reply.text;
+-      }, Effect.orDie),
++      start: (issue: IssueId) => triage.start(issue, { issue }).pipe(Effect.orDie),
+    });
+```
+
+`start` returns once the session has its input.
 
 ## Report from the Worker, and read the board
 
-The Worker now reports the issue to the board and starts its session. A `GET` reads the issue as the board shows it.
+The Worker reports the issue to the board and starts its session. A `GET` reads the issue as the board shows it.
 
 ```typescript title="src/Worker.ts"
-import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import Agents from "./Agents.ts";
+import IssueAgents from "./Agents.ts";
 import { BoardLive } from "./Board.ts";
 import { Issue } from "./Board/Issue.aggregate.ts";
 import { IssueId } from "./Board/Issue.id.ts";
 import { IssueDetail } from "./Board/IssueDetail.view.ts";
 import { ReportIssue } from "./Board/ReportIssue.command.ts";
-import { Triage } from "./Board/Triage.process.ts";
-
-const Live = Layer.mergeAll(BoardLive, AICloudflare.ProcessClient(Agents));
 
 export default class Worker extends Cloudflare.Worker<Worker>()(
   "Worker",
@@ -254,7 +268,7 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
   Effect.gen(function* () {
     const issues = yield* Issue;
     const details = yield* IssueDetail;
-    const triage = yield* Triage;
+    const agents = yield* IssueAgents;
 
     return {
       // POST /issues/<number> with the issue's title reports it; GET shows it.
@@ -265,18 +279,16 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
         const issueId = IssueId.make(number);
         if (request.method === "POST") {
           yield* issues.send(new ReportIssue({ issueId, title: yield* request.text, body: "" }));
-          yield* triage.start(issueId, { issue: issueId });
+          yield* agents.getByName(issueId).start(issueId);
           return HttpServerResponse.text("reported");
         }
         const detail = yield* details.get(Issue.ref(issueId));
         return yield* HttpServerResponse.json(Option.getOrNull(detail));
       }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(Live)),
+  }).pipe(Effect.provide(BoardLive)),
 ) {}
 ```
-
-`start` returns once the session has its input. Nothing waits for the session: its answer is the command it sends.
 
 ## Add Domain's providers
 

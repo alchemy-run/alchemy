@@ -131,7 +131,7 @@ export const TriageLive = Triage.toLayer({
 `;
 ```
 
-Code that starts sessions depends on `Triage` alone: it never sees the prose, the tools or the models. `TriageLive` requires what its own prose mentions, and a second Layer with other words and other tools can replace it without touching a caller. Prose may only mention the inputs its tag lists.
+Code that yields `Triage` depends on the name and the input alone: it never sees the prose, the tools or the models. `TriageLive` requires what its own prose mentions, and a second Layer with other words and other tools can replace it without touching that code. Prose may only mention the inputs its tag lists.
 
 ## Run it
 
