@@ -102,8 +102,17 @@ export type Step =
       readonly _tag: "Rewrite";
       readonly ref: Aggregate.Ref;
       readonly rewrite: { readonly _tag: string };
+      /** The next `then` sees nothing of it: see {@link quietly}. */
+      readonly quiet?: true;
     }
-  | { readonly _tag: "Compact"; readonly ref: Aggregate.Ref; readonly compaction: Compaction.Any }
+  | {
+      readonly _tag: "Compact";
+      readonly ref: Aggregate.Ref;
+      readonly compaction: Compaction.Any;
+      readonly quiet?: true;
+    }
+  | { readonly _tag: "Probe"; readonly run: (probed: Probed) => Effect.Effect<void, string> }
+  | { readonly _tag: "Loose" }
   | {
       readonly _tag: "Start";
       readonly saga: Saga.Any;
@@ -179,6 +188,17 @@ export type Step =
       readonly service: Context.Key<unknown, unknown>;
       readonly value: unknown;
     };
+
+/**
+ * What a {@link probe} is given of the run so far.
+ *
+ * @internal
+ */
+export interface Probed {
+  readonly internals: Model.Internals["Service"];
+  /** Every instance that has committed, in the order each first did. */
+  readonly instances: ReadonlyArray<{ readonly aggregate: string; readonly id: string }>;
+}
 
 /** The step with this `_tag`. */
 export type StepOf<Tag extends Step["_tag"]> = Extract<Step, { readonly _tag: Tag }>;
@@ -748,6 +768,36 @@ const advanceDuration = (by: Duration.Input) =>
 const showDurationInput = (by: Duration.Input): string =>
   typeof by === "string" ? by : Formatter.format(by);
 
+/**
+ * Look at the model where a story has got to: `Verify` reads what its
+ * instances hold. It fails the story with the text it fails with.
+ *
+ * @internal
+ */
+export const probe = (run: (probed: Probed) => Effect.Effect<void, string>): Step => ({
+  _tag: "Probe",
+  run,
+});
+
+/**
+ * From here on a command may be rejected without a step that says so: the
+ * steps before changed what the ones after meet.
+ *
+ * @internal
+ */
+export const loose: Step = { _tag: "Loose" };
+
+/**
+ * A rewrite or a compaction the `then`s after it see nothing of: a story
+ * `Verify` found goes on as it was written.
+ *
+ * @internal
+ */
+export const quietly = (step: StepOf<"Rewrite"> | StepOf<"Compact">): Step => ({
+  ...step,
+  quiet: true,
+});
+
 /** A one-line summary of a step, before it runs. */
 const describeStep = (s: Step): string => {
   switch (s._tag) {
@@ -772,6 +822,9 @@ const describeStep = (s: Step): string => {
       return `${refName(s.ref)}: ${summarize(s.rewrite)}`;
     case "Compact":
       return `${refName(s.ref)}: ${s.compaction.compactionName}`;
+    case "Probe":
+    case "Loose":
+      return "";
     case "Rejected":
       return summarize(s.rejection);
     case "Replied":
@@ -1225,6 +1278,8 @@ const make =
               }
             | undefined;
           let provided = Context.empty() as Context.Context<unknown>;
+          // Set by `loose`: a rejection no step asserts is no longer a failure.
+          let lenient = false;
           const assertedDeaths = new Set<string>();
 
           const storeOf = (ref: Aggregate.Ref) => internals.aggregates.get(ref.aggregate)!;
@@ -1363,10 +1418,25 @@ const make =
                   if (result._tag === "Failure") return yield* fail(result.failure.message);
                 }
                 yield* settle(step);
+                const now = yield* committed(s.ref);
                 cursors.set(
                   stream,
-                  (yield* committed(s.ref)).filter((event) => event.envelope.seq <= seen).length,
+                  s.quiet ? now.length : now.filter((event) => event.envelope.seq <= seen).length,
                 );
+                break;
+              }
+              case "Loose": {
+                lenient = true;
+                break;
+              }
+              case "Probe": {
+                const instances = new Map<string, { aggregate: string; id: string }>();
+                for (const { aggregate, id } of platform.control.commits)
+                  instances.set(`${aggregate}/${id}`, { aggregate, id });
+                const result = yield* s
+                  .run({ internals, instances: [...instances.values()] })
+                  .pipe(Effect.result);
+                if (result._tag === "Failure") return yield* fail(result.failure);
                 break;
               }
               case "When": {
@@ -1385,7 +1455,7 @@ const make =
                     _tag: "Rejected",
                     rejection: result.failure as { readonly _tag: string },
                   };
-                  unassertedRejection = { step, rejection: last.rejection };
+                  if (!lenient) unassertedRejection = { step, rejection: last.rejection };
                 }
                 yield* settle(step);
                 break;

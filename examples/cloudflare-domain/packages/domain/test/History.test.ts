@@ -4,14 +4,14 @@ import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import {
   BringForward,
-  DeleteVault,
+  DeleteCoffer,
   DoubleDeposits,
   DropDeposits,
   ForgetOwner,
   SumUp,
-} from "./fixtures/Vault.history.ts";
+} from "./fixtures/Coffer.history.ts";
 
-const source = new URL("./fixtures/Vault.history.ts", import.meta.url);
+const source = new URL("./fixtures/Coffer.history.ts", import.meta.url);
 
 it.effect(
   "a roll-up that carries the whole state is proved to lose nothing",
@@ -94,7 +94,7 @@ it.effect(
       expect(overdrawn.steps.find((step) => step.step === "Withdraw")!.verdict._tag).not.toBe(
         "Proved",
       );
-      // The vault folds roll-ups no command records, and none was given.
+      // The coffer folds roll-ups no command records, and none was given.
       expect(report.outside).toEqual(["BroughtForward", "Summed"]);
     }).pipe(Effect.provide(NodeServices.layer)),
   60_000,
@@ -104,7 +104,7 @@ it.effect(
   "a rewrite that removes the instance has nothing left to break",
   () =>
     Effect.gen(function* () {
-      const report = yield* Prove.rewrite(DeleteVault, { source });
+      const report = yield* Prove.rewrite(DeleteCoffer, { source });
       expect(report.deletes).toBe(true);
     }).pipe(Effect.provide(NodeServices.layer)),
   60_000,

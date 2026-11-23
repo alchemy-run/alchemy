@@ -344,6 +344,15 @@ const rewritten = (
 const fieldsOf = (state: V): ReadonlyArray<string> | undefined =>
   state._tag === "Obj" && state.brand === undefined ? Object.keys(state.fields) : undefined;
 
+/** Whether two states are objects of the same fields: a state that is one of several shapes may not be. */
+const alike = (a: V, b: V): boolean => {
+  const x = fieldsOf(a);
+  const y = fieldsOf(b);
+  return (
+    x !== undefined && y !== undefined && x.length === y.length && x.every((key) => y.includes(key))
+  );
+};
+
 interface Ran {
   readonly state: V;
   /** What the rewritten history has folded to before these events. */
@@ -379,17 +388,21 @@ const taken = (
     if (!ast) return yield* Value.notTranslated(site, "the state is not a schema");
     const state = yield* Paths.assumed(interpreter, definition, "state");
     const fresh = Symbolic.symbolic(ast, "rewritten", run);
-    const other: V =
-      differs !== "all" && state._tag === "Obj" && fresh._tag === "Obj"
-        ? Value.obj(
-            Object.fromEntries(
-              Object.keys(state.fields).map((key) => [
-                key,
-                differs.has(key) ? fresh.fields[key]! : state.fields[key]!,
-              ]),
-            ),
-          )
-        : fresh;
+    const plain = (value: V) => value._tag === "Obj" && value.brand === undefined;
+    let other = fresh;
+    if (differs !== "all" && plain(state) && plain(fresh)) {
+      if (alike(state, fresh) && state._tag === "Obj" && fresh._tag === "Obj")
+        other = Value.obj(
+          Object.fromEntries(
+            Object.keys(state.fields).map((key) => [
+              key,
+              differs.has(key) ? fresh.fields[key]! : state.fields[key]!,
+            ]),
+          ),
+        );
+      // A state of several shapes: the rewritten one has another only where the rewrite can change which.
+      else if (!differs.has("_tag")) return yield* new Value.Infeasible();
+    }
     // Assume: the state the rewritten history has reached satisfies every invariant.
     for (const check of yield* Paths.checks(interpreter, definition, other).pipe(
       Effect.catchTag("NotTranslated", () => Effect.succeed<ReadonlyArray<Paths.Check>>([])),
@@ -537,6 +550,12 @@ const differing = Effect.fn(function* (
             const others = fieldsOf(ran.afterRewritten);
             if (!fields || !others) {
               whole = true;
+              return;
+            }
+            // The rewritten events fold to another shape of the state: everything may differ.
+            if (!alike(ran.after, ran.afterRewritten)) {
+              found.add("_tag");
+              for (const key of [...fields, ...others]) found.add(key);
               return;
             }
             const force = forcing(run);
