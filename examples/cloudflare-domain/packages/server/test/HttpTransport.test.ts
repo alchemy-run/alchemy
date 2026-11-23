@@ -20,7 +20,12 @@ import { register } from "./flows.ts";
 import { SessionKeyTest, signedInAs } from "./session.ts";
 
 // The Worker's HTTP surface (`yield* CustomerApi`, its `fetch`) on a real HTTP server, over the in-memory platform.
-const Ports = Layer.mergeAll(SiftFraudCheck, StripePayments, MemoryLedgerStore);
+const Ports = Layer.mergeAll(
+  SiftFraudCheck,
+  StripePayments,
+  MemoryLedgerStore,
+  Domain.VaultLive.pipe(Layer.provide(Domain.VaultKeysMemory)),
+);
 const World = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
   Layer.provideMerge(
     Bank.layer(BankHandlers).pipe(Layer.provide(Layer.mergeAll(Ports, Domain.InMemory))),

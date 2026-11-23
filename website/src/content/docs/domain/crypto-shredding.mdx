@@ -1,0 +1,379 @@
+---
+title: Crypto-shredding
+description: Seal personal data under a key kept per person, and erase it everywhere at once by deleting the key, including the copies a rewrite can't reach.
+---
+
+A [rewrite](/domain/rewrite) changes the events the model stores. It can't change a backup, an archive a [compaction](/domain/compaction) wrote, or a copy another system already took. Seal the personal fields under a key kept per person, and deleting that key makes every copy unreadable at once.
+
+## Seal a field
+
+`Domain.Sealed` wraps the schema of a value. A field of it holds the name of a subject and the value encrypted under that subject's key.
+
+```typescript title="packages/domain/src/Customer/Address.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+
+/**
+ * A customer's postal address, sealed under the customer's own key. The
+ * model stores and carries it, and can't read it.
+ */
+export const Address = Domain.Sealed(Schema.String);
+```
+
+The subject is whoever the data is about: here, the customer's id. One key per subject seals everything of theirs.
+
+## Record it
+
+A sealed field goes where any other field does: in a command's input, and in the event it records.
+
+```typescript title="packages/domain/src/Customer/SetAddress.command.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Session } from "../Session.middleware.ts";
+import { Address } from "./Address.ts";
+import { CustomerId } from "./Customer.id.ts";
+
+/** A customer may only set their own address, sealed under their own key. */
+export class NotYourAddress extends Domain.Rejection("NotYourAddress") {}
+
+export class AddressSet extends Domain.Event("AddressSet", { address: Address }) {}
+
+/** Tell the bank where a customer lives. */
+export class SetAddress extends Domain.Command("SetAddress", {
+  middleware: [Session],
+  input: { customerId: CustomerId, address: Address },
+  events: [AddressSet],
+  rejects: [NotYourAddress],
+}) {}
+```
+
+## Decide without reading it
+
+`decide` and `evolve` see the subject and the ciphertext, never the address. The aggregate carries the value into its event and its state, and checks whose key sealed it.
+
+```typescript title="packages/domain/src/Customer/ContactDetails.aggregate.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { CurrentActor } from "../CurrentActor.context.ts";
+import { Address } from "./Address.ts";
+import { CustomerId } from "./Customer.id.ts";
+import { AddressSet, NotYourAddress, SetAddress } from "./SetAddress.command.ts";
+
+/**
+ * How to reach a customer. Everything it records is sealed under the
+ * customer's key, so shredding that key is all it takes to forget it.
+ */
+export class ContactDetails extends Domain.Aggregate("ContactDetails", {
+  id: CustomerId,
+  state: Schema.Struct({ address: Schema.NullOr(Address) }),
+  initial: { address: null },
+  commands: [SetAddress],
+  keyOf: (cmd) => cmd.customerId,
+  transitions: {
+    /** An address is only ever sealed under the key of the customer it belongs to. */
+    AnAddressIsSealedForItsCustomer: ({ command, after }) =>
+      after.address === null || after.address.subject === command.customerId,
+  },
+  decide: {
+    SetAddress: Effect.fn(function* (_, cmd) {
+      const actor = yield* CurrentActor;
+      if (actor._tag === "Customer" && actor.customerId !== cmd.customerId) {
+        return yield* new NotYourAddress();
+      }
+      // The subject names whose key seals the value: it must be this customer's.
+      if (cmd.address.subject !== cmd.customerId) return yield* new NotYourAddress();
+      return [new AddressSet({ address: cmd.address })];
+    }),
+  },
+  evolve: {
+    AddressSet: (_, e) => ({ address: e.address }),
+  },
+}) {}
+```
+
+A client names the subject when it sends a value, so `decide` checks it. An address sealed under another customer's key would outlive this customer's erasure.
+
+## Send a value to be sealed
+
+A client makes the value with `Address.plain`, naming the subject. It travels to the server as it is, and the model seals it when the command arrives, before the command is stored or decided.
+
+```typescript title="packages/web/src/setAddress.ts"
+import { Address } from "@bank/domain/Customer/Address";
+import type { CustomerId } from "@bank/domain/Customer/Customer.id";
+import { CustomerApi } from "@bank/domain/CustomerApi.api";
+import * as Effect from "effect/Effect";
+
+/** Send a customer's address to be sealed under their key, and read it back opened. */
+export const setAddress = Effect.fn(function* (customerId: CustomerId, address: string) {
+  const bank = yield* CustomerApi.Client;
+  yield* bank.SetAddress({ customerId, address: Address.plain(customerId, address) });
+  return yield* bank.CustomerAddress({ customerId });
+});
+```
+
+Nothing plain is ever stored. A value made with `plain` that reaches an event any other way, such as an import, fails with `Unsealed`. Server code that builds its own events seals the value first, with `vault.seal(Address, customerId, "1 Main St")`.
+
+## Open it where it is served
+
+Views, streams and aggregate state hold the sealed value. A [query](/domain/query) opens it with the `Vault`, after checking who is asking.
+
+```typescript title="packages/domain/src/Customer/CustomerAddress.query.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import { CurrentActor } from "../CurrentActor.context.ts";
+import { Forbidden } from "../Forbidden.rejection.ts";
+import { Session } from "../Session.middleware.ts";
+import { Address } from "./Address.ts";
+import { ContactDetails } from "./ContactDetails.aggregate.ts";
+import { CustomerId } from "./Customer.id.ts";
+
+/**
+ * A customer's address, opened for the customer or an agent. It is `null`
+ * when none was set, and once the customer's key is shredded.
+ */
+export class CustomerAddress extends Domain.Query("CustomerAddress", {
+  input: { customerId: CustomerId },
+  success: Schema.Struct({ address: Schema.NullOr(Schema.String) }),
+  middleware: [Session],
+  rejects: [Forbidden],
+}) {}
+
+/** Checks who is asking, then opens the sealed address with the Vault. */
+export const CustomerAddressLive = CustomerAddress.toLayer(
+  Effect.gen(function* () {
+    const vault = yield* Domain.Vault;
+    const contacts = yield* ContactDetails;
+    return Effect.fn(function* ({ customerId }) {
+      const actor = yield* CurrentActor;
+      if (actor._tag === "Customer" && actor.customerId !== customerId) {
+        return yield* new Forbidden({ reason: "that is not your address" });
+      }
+      const { address } = yield* contacts.get(customerId);
+      if (address === null) return { address: null };
+      const opened = yield* vault.open(Address, address).pipe(Effect.orDie);
+      return { address: Option.getOrNull(opened) };
+    });
+  }),
+);
+```
+
+`vault.open` gives `None` once the subject's key is gone. The query returns `null` then, as it does for a customer who never set an address.
+
+A policy, a saga step or a projection opens a value the same way: each resolves `Domain.Vault` while its Layer is built.
+
+## Keep the keys in a store of your own
+
+The Vault keeps one key per subject in `Domain.VaultKeys`, which you implement. Put it somewhere that is backed up and exported apart from the model, or a restored backup brings the keys back with the data.
+
+The bank keeps them in a D1 database of their own.
+
+```typescript title="packages/server/src/Vault/KeysDatabase.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+
+/**
+ * The D1 database that holds one key per customer, apart from the model's
+ * own storage: deleting a row is what makes a customer's sealed data unreadable.
+ */
+export const KeysDatabase = Cloudflare.D1.Database("KeysDatabase", {
+  migrations: "packages/server/migrations/vault",
+});
+```
+
+```sql title="packages/server/migrations/vault/0001_keys.sql"
+CREATE TABLE vault_keys (
+  subject TEXT PRIMARY KEY,
+  key TEXT NOT NULL
+);
+```
+
+```typescript title="packages/server/src/Vault/D1VaultKeys.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import { KeysDatabase } from "./KeysDatabase.ts";
+
+/** The Vault's keys in D1: one row per subject. */
+export const D1VaultKeys = Layer.effect(
+  Domain.VaultKeys,
+  Effect.gen(function* () {
+    const db = yield* Cloudflare.D1.QueryDatabase(yield* KeysDatabase);
+    const failed = (subject: string) => (cause: { readonly message: string }) =>
+      new Domain.VaultError({ subject, reason: cause.message });
+    const get = (subject: string) =>
+      db
+        .prepare("SELECT key FROM vault_keys WHERE subject = ?")
+        .bind(subject)
+        .first<{ readonly key: string }>()
+        .pipe(
+          Effect.map((row) => Option.fromNullishOr(row?.key)),
+          Effect.mapError(failed(subject)),
+        );
+    return {
+      get,
+      // Two callers may make a key for the same subject at once: the first row wins, and both read it.
+      create: (subject, key) =>
+        db
+          .prepare(
+            "INSERT INTO vault_keys (subject, key) VALUES (?, ?) ON CONFLICT (subject) DO NOTHING",
+          )
+          .bind(subject, key)
+          .run()
+          .pipe(
+            Effect.mapError(failed(subject)),
+            Effect.andThen(get(subject)),
+            Effect.map(Option.getOrElse(() => key)),
+          ),
+      delete: (subject) =>
+        db
+          .prepare("DELETE FROM vault_keys WHERE subject = ?")
+          .bind(subject)
+          .run()
+          .pipe(Effect.asVoid, Effect.mapError(failed(subject))),
+    };
+  }),
+);
+```
+
+`create` is called for a subject with no key. Two commands can get there at once, so it keeps the first key stored and returns that one to both.
+
+## Give the model its Vault
+
+`Domain.VaultLive` encrypts with AES-256-GCM over those keys. Provide it where the model's Layer is built, and the model seals with it.
+
+```diff lang="typescript" title="packages/server/src/BankWorker.ts"
+ const BankLive = Layer.mergeAll(
+   SessionLive,
+   MfaChallengeLive,
+   Stripe.ConsumeEventsLive,
+   Observability,
+ ).pipe(
+   Layer.provideMerge(SessionKeyLive),
+   Layer.provideMerge(Bank.layer(BankHandlers)),
+   Layer.provideMerge(D1LedgerStore),
++  Layer.provideMerge(Domain.VaultLive.pipe(Layer.provide(D1VaultKeys))),
+   Layer.provide(
+     Layer.mergeAll(
+       DomainCloudflare.layerDurableObjects(),
+       SiftFraudCheck,
+       StripePayments,
+       Cloudflare.D1.QueryDatabaseBinding,
+     ),
+   ),
+ );
+```
+
+A model with no Vault refuses a command that carries a value to be sealed, with `VaultMissing`, and stores nothing of it.
+
+## Shred the key
+
+Erasing a customer is one call. The bank makes it the first step of the [saga that erases a customer](/domain/erasing-personal-data), before the rewrites.
+
+```diff lang="typescript" title="packages/domain/src/Customer/EraseCustomer.saga.ts"
+ export const EraseCustomerLive = EraseCustomer.toLayer(
+   Effect.gen(function* () {
+     const accounts = yield* Account;
+     const customers = yield* Customer;
+     const claims = yield* UsernameClaim;
+     const dashboards = yield* CustomerDashboard;
++    const vault = yield* Domain.Vault;
+```
+
+The step runs after the one that reads which accounts the customer has, and before the first rewrite.
+
+```diff lang="typescript" title="packages/domain/src/Customer/EraseCustomer.saga.ts"
++      yield* Activity.make({
++        name: "shred-key",
++        execute: vault.shred(key).pipe(Effect.orDie),
++      });
++
+ for (const accountId of found.accounts) {
+   yield* Activity.make({
+     name: `forget-owner:${accountId}`,
+     execute: accounts
+       .rewrite(accountId, new ForgetOwner({ customerId: key }))
+       .pipe(Effect.flatMap(accounts.rewritten), Effect.orDie),
+   });
+ }
+```
+
+No event changes and no view folds again. The address is still in `AddressSet`, in the state of `ContactDetails`, and in every backup of them, and none of those copies opens.
+
+## Test it
+
+A [story](/domain/story) runs with a test Vault that encrypts nothing, so the same value always seals to the same box. `Domain.sealedInTest` builds the value a step expects, and `Story.shred` shreds a subject's key.
+
+```typescript title="packages/domain/test/Address.test.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Story } from "@alchemy.run/domain/Story";
+import { it } from "@effect/vitest";
+import * as Layer from "effect/Layer";
+import { customer } from "../src/Actor.ts";
+import { Bank, BankHandlers } from "../src/Bank.model.ts";
+import { CurrentActor } from "../src/CurrentActor.context.ts";
+import { Address } from "../src/Customer/Address.ts";
+import { ContactDetails } from "../src/Customer/ContactDetails.aggregate.ts";
+import { CustomerId } from "../src/Customer/Customer.id.ts";
+import { CustomerAddress } from "../src/Customer/CustomerAddress.query.ts";
+import { AddressSet, NotYourAddress, SetAddress } from "../src/Customer/SetAddress.command.ts";
+import { FraudCheck } from "../src/Fraud/FraudCheck.external.ts";
+import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
+import { Payments } from "../src/Settlement/Payments.external.ts";
+
+const story = Story.make(Bank, {
+  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
+  stub: [FraudCheck, Payments],
+});
+const sam = CustomerId.make("c-1");
+const contact = ContactDetails.ref(sam);
+
+it.effect("an address is recorded sealed, and stops opening once its key is shredded", () =>
+  story(
+    Story.provide(CurrentActor, customer(sam)),
+    Story.when(new SetAddress({ customerId: sam, address: Address.plain(sam, "1 Main St") })),
+    Story.then(
+      contact,
+      new AddressSet({ address: Domain.sealedInTest(Address, sam, "1 Main St") }),
+    ),
+    Story.query(CustomerAddress, { customerId: sam }, { address: "1 Main St" }),
+    Story.shred(sam),
+    // The event and the state are what they were. Only the key is gone.
+    Story.state(contact, { address: Domain.sealedInTest(Address, sam, "1 Main St") }),
+    Story.query(CustomerAddress, { customerId: sam }, { address: null }),
+  ),
+);
+
+it.effect("an address sealed under someone else's key is refused", () =>
+  story(
+    Story.provide(CurrentActor, customer(sam)),
+    Story.when(new SetAddress({ customerId: sam, address: Address.plain("c-2", "2 Side St") })),
+    Story.rejected(new NotYourAddress()),
+    Story.then(contact),
+  ),
+);
+```
+
+## Verify it
+
+[`Verify.model`](/domain/verifying-models) reads a model with sealed fields like any other. A sealed value is a subject and a box to it, so a rule can say whose key a value is sealed under, and the prover checks it for every command.
+
+`ContactDetails` has such a rule, `AnAddressIsSealedForItsCustomer`. Take the subject check out of `decide`, and the proof fails with the command that breaks it.
+
+## Know what sealing leaves readable
+
+The model can't read a sealed value, so nothing in it can depend on one. An id, a value a rule compares, and a value that must be unique stay plain. The bank's username is one: [its claim](/domain/unique-values) is keyed by it, so it is removed with a rewrite.
+
+A handler that opens a value and writes it somewhere holds a plain copy: a projection's table, an email, a log line. Shredding the key does not reach those, and they are yours to remove.
+
+A subject sealed for again after its key is shredded gets a new key. What was sealed before stays unreadable, and the new value is stored. Shred after the last command that could write for the subject, or shred again.
+
+## Shred, rewrite, or both
+
+Shred when copies leave the model, or when the record must never change. It costs one delete however much history there is.
+
+[Rewrite](/domain/erasing-personal-data) when the model's rules need the value, or it is already recorded in plain text.
+
+The bank does both: it shreds the key for the address, then rewrites the events that hold the customer's name.

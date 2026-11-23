@@ -350,6 +350,38 @@ yield* accounts.rewritten(receipt); // every view, projection and stream has cau
 
 More: [Rewrite](https://alchemy.run/domain/rewrite), [Erasing personal data](https://alchemy.run/domain/erasing-personal-data).
 
+## Sealed fields and the Vault
+
+Seal personal data under a key kept per subject, and erase it everywhere by deleting the key: backups, archives and exported copies included.
+
+```ts
+// Customer/Address.ts
+export const Address = Domain.Sealed(Schema.String);
+
+// Customer/SetAddress.command.ts
+export class AddressSet extends Domain.Event("AddressSet", { address: Address }) {}
+export class SetAddress extends Domain.Command("SetAddress", {
+  input: { customerId: CustomerId, address: Address },
+  events: [AddressSet],
+  rejects: [NotYourAddress],
+}) {}
+
+// a client: the model seals the value when the command arrives
+yield* bank.SetAddress({ customerId, address: Address.plain(customerId, "1 Main St") });
+
+// a query, policy or saga step: open it, or shred the subject's key
+const vault = yield* Domain.Vault;
+const address = yield* vault.open(Address, contact.address); // Option; None once shredded
+yield* vault.shred(customerId);
+```
+
+- `decide`, `evolve` and views see `{ subject, box }`, never the value. In `decide`, reject a value whose `subject` is not the instance's own.
+- Keep ids, unique values and anything a rule compares plain; remove those with a rewrite.
+- Provide `Domain.VaultLive` over your own `Domain.VaultKeys` (a store backed up apart from the model) where the model's Layer is built.
+- Stories run with a test Vault: expect values with `Domain.sealedInTest(Address, subject, value)`, shred with `Story.shred(subject)`.
+
+More: [Crypto-shredding](https://alchemy.run/domain/crypto-shredding), [Erasing personal data: Or seal it under a key you can delete](https://alchemy.run/domain/erasing-personal-data#or-seal-it-under-a-key-you-can-delete).
+
 ## Compaction
 
 Replaces an instance's history with a roll-up of its state, so its log stops growing. The declaration says what the roll-up is. Its Layer says where the replaced events go and when an instance compacts.
