@@ -714,6 +714,9 @@ export const providers = () =>
         Lambda.MicrovmImage,
         Lambda.NetworkConnector,
         Lambda.Permission,
+        Lambda.Runtime,
+        Lambda.RuntimeAlias,
+        Lambda.RuntimeVersion,
         Lambda.WebFunction,
         Lambda.WebFunctionEndpoint,
         Lambda.WebFunctionPermission,
@@ -1433,6 +1436,10 @@ export const providers = () =>
           // Dual: glue onto the (dual) Lambda Function — a live addPermission
           // against a floci function ARN fails with ResourceNotFoundException.
           flociDual(Lambda.Permission, () => Lambda.PermissionProvider()),
+          // Live-only: floci doesn't emulate customer-managed runtimes.
+          Lambda.RuntimeProvider(),
+          Lambda.RuntimeAliasProvider(),
+          Lambda.RuntimeVersionProvider(),
           // Requires the alchemy floci fork ≥ 2.4.0-alchemy.1, which serves
           // the Web Function API (web functions, revisions, endpoints).
           flociDual(Lambda.WebFunction, () => Lambda.WebFunctionProvider()),
