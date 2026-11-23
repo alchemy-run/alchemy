@@ -191,6 +191,7 @@ export const ATOMIC =
 
 const ASSUMPTIONS = [
   "whole numbers are exact: a number stays within ±2^53, and a bigint has no limit",
+  "a duration an input holds is a whole number of milliseconds",
   "an event or rejection whose fields fail its schema crashes the command, and nothing is committed",
 ];
 
