@@ -74,5 +74,22 @@ export const writeRoutes = (
       const object = yield* upload.complete([p1, p2]).pipe(Effect.orDie);
       return yield* HttpServerResponse.json({ ok: true, size: object.size });
     }
+    // `POST /mpu-missing?key=` — upload a part to a multipart upload that
+    // does not exist, and report the `R2Error` the binding surfaces, so the
+    // test can assert R2's error code is parsed onto `R2Error.code`.
+    if (request.method === "POST" && url.pathname === "/mpu-missing") {
+      const key = url.searchParams.get("key") ?? "";
+      const upload = yield* r2.resumeMultipartUpload(key, "missing-upload-id").pipe(Effect.orDie);
+      return yield* upload.uploadPart(1, "part").pipe(
+        Effect.flatMap(() => HttpServerResponse.json({ failed: false })),
+        Effect.catchTag("R2Error", (error) =>
+          HttpServerResponse.json({
+            failed: true,
+            code: error.code ?? null,
+            message: error.message,
+          }),
+        ),
+      );
+    }
     return undefined;
   });

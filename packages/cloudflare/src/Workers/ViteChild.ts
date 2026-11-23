@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import * as NodeV8 from "node:v8";
-import { AlchemyContext } from "alchemy/AlchemyContext";
+import { AlchemyContext, dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import { BundleError } from "alchemy/Bundle/Bundle";
 import * as DevTrust from "alchemy/Local/DevTrust";
 import {
@@ -114,12 +114,20 @@ export const startViteChild = (
         () => base.stack as { name: string; stage: string },
       ),
     };
+    // The child runs from `config.rootDir`, so give it the resolved runtime
+    // directory: a relative `ALCHEMY_DIR` would resolve against the wrong root
+    // there, and the Vite plugin denies serving it.
+    const path = yield* Path.Path;
+    const dotAlchemy = path.resolve(
+      childEnvironment.alchemyContext?.dotAlchemy ?? (yield* dotAlchemyDirectory),
+    );
     const childEnv: Record<string, string | undefined> = {
       ...process.env,
       // Under `alchemy dev`, one bundle of every CA the session trusts as of
       // now, so the dev server's Node process sees a CA minted after the
       // sidecar started. Removed with the child's scope, after the child.
       ...(yield* DevTrust.nodeEnv()),
+      ALCHEMY_DIR: dotAlchemy,
       [RPC_SERVER_ENVIRONMENT_KEY]: JSON.stringify(childEnvironment),
     };
     // The parent CLI process sets NODE_ENV for its own React/renderer

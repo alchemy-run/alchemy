@@ -3,7 +3,7 @@ import * as NodeOs from "node:os";
 import * as NodePath from "node:path";
 import { cloudflare as officialCloudflare } from "@cloudflare/vite-plugin";
 import * as vite from "vite";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import cloudflareVitePlugin from "../../plugin.ts";
 import { AHEAD_OF_RELEASE_BUILT_IN_MODULES } from "./ahead-of-release.ts";
 
@@ -150,6 +150,31 @@ describe.each([
     expect(actual.appType).toBe(expected.appType);
     // Alchemy also denies its own state and stack files.
     expect(actual.server.fs.deny).toEqual(expect.arrayContaining(expected.server.fs.deny));
+  });
+});
+
+describe("ALCHEMY_DIR", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("denies the moved runtime directory", async () => {
+    vi.stubEnv("ALCHEMY_DIR", NodePath.join(root, ".alchemy-ci"));
+    const actual = await resolve(alchemy([]), "serve");
+    // Vite matches posix paths, Windows included.
+    const posixRoot = root.replaceAll("\\", "/");
+    expect(actual.server.fs.deny).toContain(`${posixRoot}/.alchemy-ci/**`);
+    // Vite's own matcher, as the dev server checks each request.
+    const denied = (actual as unknown as { fsDenyGlob: (file: string) => boolean }).fsDenyGlob;
+    expect(denied(`${posixRoot}/.alchemy-ci/state/test/stage/Api.json`)).toBe(true);
+    expect(denied(`${posixRoot}/.alchemy-ci-sibling/file.txt`)).toBe(false);
+  });
+
+  it("adds nothing when unset", async () => {
+    vi.stubEnv("ALCHEMY_DIR", "");
+    const actual = await resolve(alchemy([]), "serve");
+    const posixRoot = root.replaceAll("\\", "/");
+    expect(actual.server.fs.deny.filter((pattern) => pattern.startsWith(posixRoot))).toEqual([]);
   });
 });
 
