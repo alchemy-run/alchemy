@@ -27,13 +27,16 @@ export const poolSecrets = Effect.fn(function* (
 ) {
   const refs: Record<string, Output.Output<string>> = {};
   for (const [name, { key, value }] of Object.entries(values)) {
-    const secret = yield* SecretsManager.Secret(`${id}${key}`, { secretString: value });
-    refs[name] = Output.all(secret.secretArn, secret.versionId).pipe(
-      Output.map(([arn, version]) => (version === undefined ? arn : `${arn}:::${version}`)),
-    );
+    refs[name] = valueFrom(yield* SecretsManager.Secret(`${id}${key}`, { secretString: value }));
   }
   return refs;
 });
+
+/** A Secrets Manager secret as an ECS `valueFrom`, pinned to its current version. */
+export const valueFrom = (secret: SecretsManager.Secret) =>
+  Output.all(secret.secretArn, secret.versionId).pipe(
+    Output.map(([arn, version]) => (version ? `${arn}:::${version}` : arn)),
+  );
 
 /**
  * A node's environment for an AWS host that reads secrets from Secrets

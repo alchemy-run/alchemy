@@ -98,6 +98,32 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     test(
+      "the engines read the admin token and the bucket's secret key from App secrets, never their Machine config",
+      fly(
+        Effect.gen(function* () {
+          const token = yield* controlPlaneToken(sharedStack);
+          const engines = yield* deployed(sharedStack, "Fly.Machine", /RivetEngine\d+$/);
+          expect(engines.length).toBeGreaterThan(0);
+          const app = engines[0]!.attr.appName as string;
+          for (const machine of yield* machines.listMachines({ app_name: app })) {
+            const env = Object.keys(machine.config?.env ?? {});
+            expect(env).not.toContain("RIVET__AUTH__ADMIN_TOKEN");
+            expect(env).not.toContain("RIVET__OBJECT_STORAGE__PRIMARY__S3__SECRET_ACCESS_KEY");
+            expectNoSecrets(machine.config, token);
+          }
+          const { secrets } = yield* machines.listSecrets({ app_name: app, show_secrets: false });
+          expect((secrets ?? []).map((secret) => secret.name).sort()).toEqual(
+            expect.arrayContaining([
+              "RIVET__AUTH__ADMIN_TOKEN",
+              "RIVET__OBJECT_STORAGE__PRIMARY__S3__SECRET_ACCESS_KEY",
+            ]),
+          );
+        }),
+      ),
+      { timeout: 120_000 },
+    );
+
+    test(
       "a Rust Durable Object runs on a Fly Service pool",
       Effect.gen(function* () {
         yield* expectRustCounter(rust, "fly-rust");

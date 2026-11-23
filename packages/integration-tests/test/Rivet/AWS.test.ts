@@ -4,6 +4,7 @@ import * as RivetAWS from "@alchemy.run/rivet/AWS";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
+import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
@@ -107,6 +108,29 @@ describe.skipIf(!!process.env.FAST)(
                 .map((secret) => secret.valueFrom.split(":").slice(0, 7).join(":"))
                 .sort(),
             );
+          }
+        }),
+      ),
+      { timeout: 120_000 },
+    );
+
+    test(
+      "the engines read the admin token from Secrets Manager at boot, never their user data",
+      aws(
+        Effect.gen(function* () {
+          const token = yield* controlPlaneToken(sharedStack);
+          const engines = yield* deployed(sharedStack, "AWS.EC2.Instance", /RivetInstance\d+$/);
+          expect(engines.length).toBeGreaterThan(0);
+          for (const { attr } of engines) {
+            const userData = yield* ec2.describeInstanceAttribute({
+              InstanceId: attr.instanceId as string,
+              Attribute: "userData",
+            });
+            const script = yield* Effect.sync(() =>
+              Buffer.from(userData.UserData?.Value ?? "", "base64").toString("utf8"),
+            );
+            expectNoSecrets(script, token);
+            expect(script).toContain("secretsmanager get-secret-value");
           }
         }),
       ),

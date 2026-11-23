@@ -145,6 +145,42 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     test(
+      "the engines' tasks read the admin token from Secrets Manager, never their task definition or user data",
+      aws(
+        Effect.gen(function* () {
+          const token = yield* controlPlaneToken(sharedStack);
+          const engines = yield* deployed(sharedStack, "AWS.ECS.Service", /RivetEngine\d+$/);
+          expect(engines.length).toBeGreaterThan(0);
+          for (const { attr } of engines) {
+            const { taskDefinition } = yield* ecs.describeTaskDefinition({
+              taskDefinition: attr.taskDefinitionArn as string,
+            });
+            expectNoSecrets(taskDefinition, token);
+            const [container] = taskDefinition?.containerDefinitions ?? [];
+            expect(container?.secrets?.map((secret) => secret.name)).toEqual([
+              "RIVET__AUTH__ADMIN_TOKEN",
+            ]);
+          }
+          const hosts = yield* deployed(sharedStack, "AWS.EC2.Instance", /RivetInstance\d+$/);
+          expect(hosts.length).toBeGreaterThan(0);
+          for (const { attr } of hosts) {
+            const userData = yield* ec2.describeInstanceAttribute({
+              InstanceId: attr.instanceId as string,
+              Attribute: "userData",
+            });
+            expectNoSecrets(
+              yield* Effect.sync(() =>
+                Buffer.from(userData.UserData?.Value ?? "", "base64").toString("utf8"),
+              ),
+              token,
+            );
+          }
+        }),
+      ),
+      { timeout: 120_000 },
+    );
+
+    test(
       "a Rust Durable Object runs on an EC2 pool",
       Effect.gen(function* () {
         yield* expectRustCounter(rust, "awsecs-rust");
