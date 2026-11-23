@@ -509,6 +509,22 @@ export const DockerLive = Layer.effect(
     const inspect = (tag: string, format: string) =>
       Effect.map(run(["image", "inspect", tag, "--format", format]), (result) => result.stdout);
 
+    // Whether an image is in the local Docker at all, and whether it has the
+    // variant containers are pinned to. Plain `inspect` cannot tell: the
+    // containerd image store keeps several variants under one tag and
+    // reports the host's.
+    const localImage = (imageUri: string) =>
+      Effect.gen(function* () {
+        const idOf = (args: Array<string>) =>
+          run(["image", "inspect", ...args, imageUri, "--format", "{{.Id}}"]).pipe(
+            Effect.map((result) => (result.exitCode === 0 ? result.stdout.trim() : "")),
+            Effect.orElseSucceed(() => ""),
+          );
+        const id = yield* idOf([]);
+        const fits = id !== "" && (!platform || (yield* idOf(["--platform", platform])) !== "");
+        return { present: id !== "", fits };
+      });
+
     // `docker image inspect` prints the image id when present and empty
     // stdout when absent, so only pull when the image is genuinely missing.
     const pullIfMissing = (imageUri: string) =>
@@ -533,15 +549,11 @@ export const DockerLive = Layer.effect(
     // when the cached image stood in for them.
     const ensuredImages = yield* Cache.makeWith(
       (imageUri: string) =>
-        inspect(imageUri, "{{.Os}}/{{.Architecture}}").pipe(
-          Effect.orElseSucceed(() => ""),
-          Effect.flatMap((cached) => {
-            const present = cached.trim() !== "";
-            if (present && (!platform || cached.trim() === platform)) return Effect.succeed(true);
-            const pulled = Effect.as(pullUserImage(imageUri), true);
-            return present ? Effect.orElseSucceed(pulled, () => false) : pulled;
-          }),
-        ),
+        Effect.flatMap(localImage(imageUri), ({ present, fits }) => {
+          if (fits) return Effect.succeed(true);
+          const pulled = Effect.as(pullUserImage(imageUri), true);
+          return present ? Effect.orElseSucceed(pulled, () => false) : pulled;
+        }),
       {
         capacity: Number.MAX_SAFE_INTEGER,
         timeToLive: (exit) => (Exit.isSuccess(exit) && exit.value ? Infinity : 0),
@@ -764,25 +776,23 @@ export const DockerLive = Layer.effect(
       pull: (tag, image) =>
         pullUserImage(image.imageUri).pipe(
           Effect.catchTag("SystemError", (error) =>
-            inspect(image.imageUri, "{{.Id}} {{.Os}}/{{.Architecture}}").pipe(
-              Effect.orElseSucceed(() => ""),
-              Effect.map((out) => out.trim().split(" ")),
-              Effect.flatMap(([id, local]) =>
+            localImage(image.imageUri).pipe(
+              Effect.flatMap(({ present, fits }) =>
                 // Containers are created pinned to the platform, which a
-                // local image built for another one cannot provide.
-                id && platform && local && local !== platform
+                // local image built only for another one cannot provide.
+                present && !fits
                   ? Effect.fail(
                       SystemError.make({
                         subtag: "DockerPullFailed",
-                        message: `Image "${image.imageUri}" could not be pulled, and the local copy is ${local}, not ${platform}.`,
+                        message: `Image "${image.imageUri}" could not be pulled, and the local copy has no ${platform} variant.`,
                         hint: `Build it with \`docker build --platform ${platform} -t ${image.imageUri} .\`, or run local containers on Docker's own architecture with ALCHEMY_LOCAL_CONTAINER_PLATFORM=host.`,
                         detail: error.detail,
                         cause: error,
                       }),
                     )
-                  : id
+                  : present
                     ? Effect.logDebug(
-                        `docker: pull ${image.imageUri} failed, using the local image ${id}`,
+                        `docker: pull ${image.imageUri} failed, using the local image`,
                       )
                     : Effect.fail(
                         SystemError.make({

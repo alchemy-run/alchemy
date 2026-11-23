@@ -235,9 +235,42 @@ it.live(
           }),
         ),
       );
-      expect(result.message).toContain("the local copy is linux/arm64, not linux/amd64");
+      expect(result.message).toContain("the local copy has no linux/amd64 variant");
       expect(result.hint).toContain("ALCHEMY_LOCAL_CONTAINER_PLATFORM=host");
     }).pipe(Effect.ensuring(removeImages(tag, image, "arm64v8/alpine:3.21")));
+  },
+  60_000,
+);
+
+it.live(
+  "uses a local-only image whose tag also holds a linux/amd64 variant",
+  () => {
+    // Unpullable. The containerd image store keeps both variants under the
+    // tag (and inspect reports the host's); the classic store keeps the last
+    // pull, so amd64 goes last.
+    const image = "alchemy-test.invalid/multi-arch:dev";
+    const tag = `alchemy-multi-arch-${crypto.randomUUID()}:latest`;
+    return Effect.gen(function* () {
+      yield* docker("pull", "--platform", "linux/arm64", "alpine:3.20");
+      yield* docker("pull", "--platform", "linux/amd64", "alpine:3.20");
+      yield* docker("tag", "alpine:3.20", image);
+      yield* withLocalPlatform(
+        undefined,
+        Effect.gen(function* () {
+          yield* (yield* Docker).pull(tag, { imageUri: image });
+        }),
+      );
+      const id = yield* docker(
+        "image",
+        "inspect",
+        "--platform",
+        "linux/amd64",
+        tag,
+        "-f",
+        "{{.Id}}",
+      );
+      expect(id.trim()).not.toBe("");
+    }).pipe(Effect.ensuring(removeImages(tag, image, "alpine:3.20")));
   },
   60_000,
 );
