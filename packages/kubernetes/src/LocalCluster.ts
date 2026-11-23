@@ -12,6 +12,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { applyObject, connectCluster } from "./Client.ts";
 import type { Connection, ContainerRegistry } from "./Connection.ts";
@@ -421,8 +422,17 @@ export const LocalClusterProvider = () =>
         return result;
       });
 
+      // kind locks the kubeconfig while it writes a context and fails at once
+      // when another kind process holds the lock, as one does while another
+      // cluster in the same kubeconfig is created or deleted.
       const kind = Effect.fn(function* (args: string[]) {
-        return yield* exec(yield* KindBin, args);
+        return yield* exec(yield* KindBin, args).pipe(
+          Effect.retry({
+            while: (error) => /failed to lock config file/i.test(error.message),
+            schedule: Schedule.spaced("2 seconds"),
+            times: 30,
+          }),
+        );
       });
       const docker = Effect.fn(function* (args: string[], stdin?: string) {
         return yield* exec(yield* DockerBin, args, stdin);
