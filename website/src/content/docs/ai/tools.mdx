@@ -73,13 +73,22 @@ export const DeployLive = Deploy.make(
 ).pipe(Layer.provide(Cloudflare.R2.WriteBucketBinding));
 ```
 
-## List it on a harness
+## Mention it in a process
 
-A harness lists the tools its conversations may use. Each listed tool's Layer is a requirement of the harness, so a harness with a Layer missing does not compile:
+A [process](/ai/processes) that mentions a tool may call it. The tool's Layer becomes a requirement of the process, so a program with a Layer missing does not compile:
 
-```typescript
-const harness = yield* Pi.Harness({ models: [Fast], tools: [Add, Deploy] });
+```typescript title="src/Release.ts"
+import * as AI from "@alchemy.run/ai";
+import { Add, Deploy } from "./tools.ts";
+
+export class Release extends AI.Process<Release>()("Release", {
+  description: "Work out the next version and upload a release.",
+})`
+  Work out the next version number with ${Add}, then upload the build with ${Deploy}.
+` {}
 ```
+
+A harness can also be given tools directly, without a process. See [Tools on Pi](/pi/tools) and [Tools on OpenCode](/opencode/tools).
 
 ## Work in the sandbox
 
@@ -168,11 +177,9 @@ const SaveNote = AI.Tool(
     yield* notes.put(key, text).pipe(Effect.orDie);
   }),
 );
-
-const harness = yield* Pi.Harness({ models: [Fast], tools: [SaveNote] });
 ```
 
-An inline tool has no Layer to provide.
+An inline tool has no Layer to provide. Mention it, or list it on a harness, like any other.
 
 ## Know which call is running
 

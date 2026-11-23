@@ -1,0 +1,105 @@
+---
+title: Where sessions run
+description: A session lives in a Durable Object. Yield a process in one of your own, or declare a process host that gives each session its own object and reach it from a Worker, a policy or another object.
+---
+
+A session needs somewhere to keep its conversation and to wake up again after an eviction. On Cloudflare that is a Durable Object: the harness runs in it, on its storage. You can yield a process in an object of your own, or let a **process host** give every session an object.
+
+## Yield a process in your own Durable Object
+
+Yield the process in the object's outer Effect and provide its Layers once:
+
+```typescript title="src/Engineers.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import { Engineer } from "./Engineer.process.ts";
+import { Live } from "./Layers.ts";
+
+export default class Engineers extends Cloudflare.DurableObject<Engineers>()(
+  "Engineers",
+  Effect.gen(function* () {
+    const engineer = yield* Engineer;
+
+    return Effect.gen(function* () {
+      return {
+        start: Effect.fn(function* (id: string, task: string) {
+          yield* engineer.start(id, { task });
+        }),
+        tell: Effect.fn(function* (id: string, text: string) {
+          const reply = yield* engineer.get(id).prompt(text);
+          return reply.text;
+        }),
+      };
+    });
+  }).pipe(Effect.provide(Live)),
+) {}
+```
+
+Every session started here lives in this object instance. Its methods are yours to write.
+
+## Declare a process host
+
+`AICloudflare.ProcessHost` is a Durable Object that runs the processes you list, one object for each session. Its Layer gives each process its prose and everything the prose mentions:
+
+```typescript title="src/Agents.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Layer from "effect/Layer";
+import { Engineer } from "./Engineer.process.ts";
+import { EngineerLive } from "./Engineer.ts";
+import { ModelsLive, Smart } from "./Models.ts";
+
+export default class Agents extends AICloudflare.ProcessHost<Agents>()(
+  "Agents",
+  { processes: [Engineer] },
+  EngineerLive.pipe(
+    Layer.provide(Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools, AI.DefaultModel(Smart))),
+    Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, ModelsLive)),
+  ),
+) {}
+```
+
+A host lists processes [declared by name and inputs](/ai/processes#separate-the-name-from-the-prose), since those are what other code can ask for.
+
+## Reach sessions from elsewhere
+
+`AICloudflare.ProcessClient` provides every process a host lists, each as a client that calls the session's own object. Provide it to a Worker, and the Worker starts and talks to sessions without knowing where they are:
+
+```typescript title="src/Api.ts"
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import Agents from "./Agents.ts";
+import { Engineer } from "./Engineer.process.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const engineer = yield* Engineer;
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const id = new URL(request.url, "http://api").pathname.slice(1);
+        yield* engineer.start(id, { task: yield* request.text });
+        return HttpServerResponse.text("started");
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(AICloudflare.ProcessClient(Agents))),
+) {}
+```
+
+The same Layer serves a [Domain policy](/ai/domain#start-sessions-from-a-policy), a queue consumer or another Durable Object.
+
+## Sessions started by sessions
+
+In a host, a session that [starts](/ai/process-graphs#start-a-process) a listed process gets that session an object of its own, reached by its key like any other. A process the host does not list, mentioned with its prose on the class, runs inside the object of the session that started it.
+
+## A session survives its object
+
+A harness arms the object's alarm while a session has work to do. An object that is evicted in the middle of a tool call wakes up, and the session carries on. See [Surviving a crash](/pi/durability) for Pi and [Sessions & prompts](/opencode/sessions) for OpenCode.

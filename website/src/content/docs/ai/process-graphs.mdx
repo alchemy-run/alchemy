@@ -1,0 +1,122 @@
+---
+title: Processes that use processes
+description: A process that mentions another may follow it, reading its prose into its own conversation, or start it as a session of its own. Models are mentioned the same way.
+---
+
+A process can mention another process. The session's model then has two ways to use it. It can **follow** it: read that process's prose into its own conversation and carry it out itself. Or it can **start** it: open a separate session, with its own conversation.
+
+## Follow a process
+
+Mention a process and tell the model to follow it:
+
+```typescript title="src/Engineer.ts"
+import * as AI from "@alchemy.run/ai";
+import { RunTests } from "./RunTests.ts";
+
+export class Releasing extends AI.Process<Releasing>()("Releasing", {
+  description: "How to cut a release of this project. Follow it when asked to ship.",
+})`
+  Call ${RunTests} and stop if anything fails.
+  Bump the version, build, and tag the commit with ${AI.Bash}.
+` {}
+
+export class Engineer extends AI.Process<Engineer>()("Engineer", {
+  description: "Make one change to the project.",
+})`
+  Make the change you are asked for with ${AI.Edit}.
+  When asked to ship, follow ${Releasing}.
+` {}
+```
+
+An `Engineer` session always sees `Releasing`'s name and description. Its prose is read only when the model decides to follow it, so twenty processes to follow cost twenty short descriptions. The tools `Releasing` mentions are the session's from the start: `Engineer` requires `RunTests` and `AI.Bash` too.
+
+## Write the description for the model
+
+A process's `description` is what another session's model reads to choose it. Say what the process is for and when to use it.
+
+## Start a process
+
+Mention a process and tell the model to start one:
+
+```typescript title="src/Engineer.ts"
+import * as AI from "@alchemy.run/ai";
+import { Research } from "./Research.ts";
+
+export class Engineer extends AI.Process<Engineer>()("Engineer", {
+  description: "Make one change to the project.",
+})`
+  Before changing anything, start a ${Research} for each thing you need to know.
+  Then make the change with ${AI.Edit}.
+` {}
+```
+
+Starting is a tool call. Its parameters are `Research`'s inputs, with an optional name for the session, and it returns that name at once. The new session has its own conversation, and nothing it reads fills up the `Engineer`'s.
+
+## Hear back from a started session
+
+A process has no output, so a started session does not return to the one that started it. Give both the same place to write: a command and a view of a [Domain model](/ai/domain), or any tool both mention. The starter can also send the session another message later, with the tool the mention gives it.
+
+## Start more of itself
+
+`AI.Self` is the process being described. Mention it to let a session split its own work:
+
+```typescript title="src/Research.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Schema from "effect/Schema";
+
+export const question = AI.Input("question", Schema.String);
+
+export class Research extends AI.Process<Research>()("Research", {
+  description: "Answer one question about the code, with file paths.",
+})`
+  Answer ${question} about the repository in your working directory.
+  Search with ${AI.Grep} and open what looks relevant with ${AI.Read}.
+  If the question is too broad, start a ${AI.Self} for each part.
+` {}
+```
+
+## Mention a model
+
+A [model](/ai/models) is mentioned like anything else. A session may then be run on it, and may start other sessions on it:
+
+```typescript title="src/Engineer.ts"
+import * as AI from "@alchemy.run/ai";
+import { Fast } from "./Models.ts";
+import { Research } from "./Research.ts";
+
+export class Engineer extends AI.Process<Engineer>()("Engineer", {
+  description: "Make one change to the project.",
+})`
+  Before changing anything, start a ${Research} on ${Fast} for each thing
+  you need to know. Then make the change with ${AI.Edit}.
+` {}
+```
+
+`Engineer` now requires `Fast`'s Layer. The model that runs an `Engineer` session itself is the [default model](/ai/harnesses#set-the-default-model), until a message names another. The session keeps that model from then on:
+
+```typescript
+yield* engineer.get("task-7").send("Rename the config flag.", { model: Fast });
+```
+
+A process with inputs can be started on a model, as `start`'s last argument:
+
+```typescript
+yield* research.start("parser", { question: "Where is the parser?" }, { model: Fast });
+```
+
+## Mention a tagged process
+
+A process declared by name and inputs is mentioned the same way. The process that mentions it then requires that tag, and none of what its prose mentions:
+
+```typescript title="src/Lead.ts"
+import * as AI from "@alchemy.run/ai";
+import { Engineer } from "./Engineer.process.ts";
+
+export class Lead extends AI.Process<Lead>()("Lead", {
+  description: "Split a feature into tasks and hand each to an engineer.",
+})`
+  Split the feature you are given into tasks, and start an ${Engineer} for each.
+` {}
+```
+
+Whatever provides `Engineer` decides where its sessions run. Provided with its prose, in the same place, an `Engineer` can be followed as well as started. Provided by a [process host](/ai/hosting#reach-sessions-from-elsewhere), it can only be started, and each session gets a Durable Object of its own.

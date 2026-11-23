@@ -1,6 +1,6 @@
 ---
 title: What is an agent harness?
-description: The concepts behind an agent harness — the loop, models, tools, coding tools, skills, MCP servers and sandboxes — and how @alchemy.run/ai models each of them.
+description: The concepts behind an agent harness — the loop, models, tools, coding tools, MCP servers, sandboxes and processes — and how @alchemy.run/ai models each of them.
 ---
 
 import Tree from "../../../components/diagrams/Tree.astro";
@@ -71,10 +71,6 @@ See [Tools](/ai/tools).
 
 Every coding agent has the same few tools for working in a codebase: run a command, read a file, edit a file, write a file, search. `@alchemy.run/ai` names them (`AI.Bash`, `AI.Read`, `AI.Edit`, `AI.Write`, `AI.Grep`, `AI.Glob`) and each harness implements them its own way. You can replace any of them with your own.
 
-```typescript
-const harness = yield* Pi.Harness({ models: [Smart], tools: [AI.CodingTools, Deploy] });
-```
-
 See [Coding tools](/ai/coding-tools).
 
 ## Sandboxes
@@ -98,21 +94,27 @@ export class Docs extends AI.McpServer<Docs>()("docs") {}
 
 See [MCP servers](/ai/mcp-servers).
 
-## Skills
+## Processes
 
-A **skill** is instructions the model loads only when a task calls for them. The model always sees the skill's name and description, and reads the rest, with any files the skill brings, when it decides the skill applies.
+A harness needs to be told what to do: its instructions, and which tools and models it may use. A **process** is that, written as prose. The prose mentions what the work uses, and a mention is what grants it.
 
 ```typescript
-export class Releasing extends AI.Skill<Releasing>()("releasing", {
-  description: "Cut and upload a release. Use when the user asks to ship.",
-  instructions: "Run the tests, bump the version, build, then call deploy.",
-}) {}
+export class Coder extends AI.Process<Coder>()("Coder", {
+  description: "Fix the failing tests and ship the build.",
+})`
+  Run the tests with ${AI.Bash} and fix what fails with ${AI.Edit}.
+  When they pass, upload the build with ${Deploy}.
+` {}
 ```
 
-See [Skills](/ai/skills).
+A **session** is one running instance of a process: one conversation of the loop. A process can mention another process, which its sessions may then follow, like a skill, or start, like a subagent.
+
+See [Processes](/ai/processes).
 
 ## How @alchemy.run/ai models these concepts
 
-Each concept is a declaration with a name: `AI.Model`, `AI.Tool`, `AI.McpServer` and `AI.Skill`. A harness lists the declarations it uses, and each one that needs an implementation becomes a requirement of the harness: a model's Layer, a tool's Layer, an MCP server's client, and `AI.Sandboxes` when a tool works in a sandbox. A harness with a Layer missing does not compile. The harness itself is yielded in a Durable Object's outer Effect, where those Layers are provided and where the bindings they declare are known at deploy.
+Each concept is a declaration with a name: `AI.Model`, `AI.Tool`, `AI.McpServer` and `AI.Process`. A process mentions the declarations it uses, and each one that needs an implementation becomes a requirement of the process: a model's Layer, a tool's Layer, an MCP server's client, and `AI.Sandboxes` when a tool works in a sandbox. A program with a Layer missing does not compile.
 
-Next: build an issue bot with [Pi](/pi/tutorial/part-1) or [OpenCode](/opencode/tutorial/part-1).
+The harness is a requirement too. `AI.Harness` is provided by `Pi.HarnessLive` or `OpenCode.HarnessLive`, so the same processes run on either. A process is yielded in a Durable Object's outer Effect, where those Layers are provided and where the bindings they declare are known at deploy.
+
+Next: build an issue board in the [tutorial](/ai/tutorial/part-1).

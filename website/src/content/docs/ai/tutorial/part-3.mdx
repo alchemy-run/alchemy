@@ -1,0 +1,326 @@
+---
+title: "Part 3: Events start the work"
+description: Let the board decide when a session starts. A Domain policy starts a Triage session for each reported issue and passes replies on, and GitHub's events become commands.
+sidebar:
+  order: 3
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+In [Part 2](/ai/tutorial/part-2) the Worker reported an issue and then started its session by hand. This part moves that decision into the board: a policy starts a session whenever an issue is reported, and sends it every reply. The Worker then only turns GitHub's events into commands.
+
+## Install
+
+<PackageManagers add="@alchemy.run/github" />
+
+## Record a reply
+
+A reply on an issue is a third command:
+
+```typescript title="src/Board/CommentOnIssue.command.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { IssueId } from "./Issue.id.ts";
+
+export class IssueCommented extends Domain.Event("IssueCommented", {
+  commentId: Schema.String,
+  body: Schema.String,
+}) {}
+
+export class CommentOnIssue extends Domain.Command("CommentOnIssue", {
+  input: { issueId: IssueId, commentId: Schema.String, body: Schema.String },
+  events: [IssueCommented],
+  rejects: [],
+}) {}
+```
+
+## Take it on the aggregate
+
+```diff lang="typescript" title="src/Board/Issue.aggregate.ts"
+import * as Schema from "effect/Schema";
++import { CommentOnIssue, IssueCommented } from "./CommentOnIssue.command.ts";
+import { IssueId } from "./Issue.id.ts";
+
+-  commands: [ReportIssue, LabelIssue],
++  commands: [ReportIssue, LabelIssue, CommentOnIssue],
+
+    LabelIssue: (_, command) => [new IssueLabeled({ label: command.label })],
++    CommentOnIssue: (_, command) => [
++      new IssueCommented({ commentId: command.commentId, body: command.body }),
++    ],
+
+    IssueLabeled: (issue) => issue,
++    IssueCommented: (issue) => issue,
+```
+
+## Show replies on the issue
+
+```diff lang="typescript" title="src/Board/IssueDetail.view.ts"
+import { Label } from "./LabelIssue.command.ts";
+
+      label: Schema.NullOr(Label),
++      comments: Schema.Array(Schema.String),
+    }),
+-    initial: { title: "", body: "", label: null },
++    initial: { title: "", body: "", label: null, comments: [] },
+    evolve: {
+      IssueReported: (detail, event) => ({ ...detail, title: event.title, body: event.body }),
+      IssueLabeled: (detail, event) => ({ ...detail, label: event.label }),
++      IssueCommented: (detail, event) => ({
++        ...detail,
++        comments: [...detail.comments, event.body],
++      }),
+    },
+```
+
+## Start a session when an issue is reported
+
+A policy reacts to events. `IssueWork` yields `Triage` while its Layer is built, and starts a session for each `IssueReported`:
+
+```typescript title="src/Board/IssueWork.policy.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import * as Match from "effect/Match";
+import { Issue } from "./Issue.aggregate.ts";
+import { IssueReported } from "./ReportIssue.command.ts";
+import { Triage } from "./Triage.process.ts";
+
+export class IssueWork extends Domain.Policy("IssueWork", {
+  from: Issue,
+  on: [IssueReported],
+}) {}
+
+export const IssueWorkLive = IssueWork.toLayer(
+  Effect.gen(function* () {
+    const triage = yield* Triage;
+    return Effect.fn(function* ({ source, event }) {
+      yield* Match.valueTags(event, {
+        IssueReported: () => triage.start(source.id, { issue: source.id }),
+      }).pipe(Effect.orDie);
+    });
+  }),
+);
+```
+
+The policy knows `Triage` by its name and input. It never sees the prose, the tools or the harness. A policy can run twice for one event, and starting a key twice does nothing.
+
+## Send replies to the session
+
+```diff lang="typescript" title="src/Board/IssueWork.policy.ts"
+import * as Match from "effect/Match";
++import { IssueCommented } from "./CommentOnIssue.command.ts";
+import { Issue } from "./Issue.aggregate.ts";
+
+-  on: [IssueReported],
++  on: [IssueReported, IssueCommented],
+
+        IssueReported: () => triage.start(source.id, { issue: source.id }),
++        IssueCommented: ({ body, commentId }) =>
++          triage
++            .get(source.id)
++            .send(`A reply on the issue: ${body}`, { requestId: commentId })
++            .pipe(Effect.catchTag("NotStarted", () => Effect.void)),
+```
+
+`send` returns once the message is stored, so the policy never waits for a model. `requestId` keeps a reply from reaching the session twice. A reply on an issue that was never reported has no session, which is `NotStarted`.
+
+## Add the policy to the model
+
+```diff lang="typescript" title="src/Board/Board.model.ts"
+import { IssueDetail } from "./IssueDetail.view.ts";
++import { IssueWork } from "./IssueWork.policy.ts";
+
+  views: [IssueDetail],
++  policies: [IssueWork],
+```
+
+## Host the policy
+
+```diff lang="typescript" title="src/Board.ts"
+import { Board } from "./Board/Board.model.ts";
++import { IssueWorkLive } from "./Board/IssueWork.policy.ts";
+
+-export const BoardLive = Board.layer(Layer.empty).pipe(
++export const BoardLive = Board.layer(IssueWorkLive).pipe(
+  Layer.provide(DomainCloudflare.layerDurableObjects()),
+);
+```
+
+`BoardLive` now requires `Triage`. In the Worker, `ProcessClient(Agents)` will provide it. In `Agents`, the board and the process ask for each other: the host gives its own client to whatever in its Layer asks for a process it lists, so that file does not change.
+
+## Tell the session about replies
+
+```diff lang="typescript" title="src/Triage.ts"
+  command to ${board}: bug when something is broken, feature when
+  something new is asked for, question otherwise.
++
++  Later messages are replies on the issue. Send the label command again
++  when a reply changes what kind of issue it is.
+`;
+```
+
+## Declare the repository
+
+```typescript title="src/Repo.ts"
+import * as GitHub from "@alchemy.run/github";
+
+export const owner = "my-org";
+export const repository = "issue-board";
+
+export const Repo = GitHub.Repository("Repo", {
+  owner,
+  name: repository,
+  visibility: "public",
+  autoInit: true,
+});
+```
+
+## Turn GitHub's events into commands
+
+`GitHub.consumeRepositoryEvents` registers a webhook on the repository and verifies each delivery. An opened issue is reported, and a reply is recorded:
+
+```typescript title="src/GitHubIssues.ts"
+import * as GitHub from "@alchemy.run/github";
+import * as Effect from "effect/Effect";
+import * as Match from "effect/Match";
+import { CommentOnIssue } from "./Board/CommentOnIssue.command.ts";
+import { Issue } from "./Board/Issue.aggregate.ts";
+import { IssueId } from "./Board/Issue.id.ts";
+import { ReportIssue } from "./Board/ReportIssue.command.ts";
+import { owner, repository } from "./Repo.ts";
+
+export const GitHubIssues = Effect.gen(function* () {
+  const issues = yield* Issue;
+
+  yield* GitHub.consumeRepositoryEvents(
+    { owner, repository, events: ["issues", "issue_comment"] },
+    Effect.fn(function* (event) {
+      const issueId = IssueId.make(String(event.payload.issue.number));
+      const once = { commandId: event.id };
+      yield* Match.value(event).pipe(
+        Match.when({ name: "issues", payload: { action: "opened" } }, ({ payload }) =>
+          issues.send(
+            new ReportIssue({
+              issueId,
+              title: payload.issue.title,
+              body: payload.issue.body ?? "",
+            }),
+            once,
+          ),
+        ),
+        Match.when({ name: "issue_comment", payload: { action: "created" } }, ({ payload }) =>
+          issues.send(
+            new CommentOnIssue({
+              issueId,
+              commentId: String(payload.comment.id),
+              body: payload.comment.body,
+            }),
+            once,
+          ),
+        ),
+        Match.orElse(() => Effect.void),
+      );
+    }, Effect.orDie),
+  );
+});
+```
+
+GitHub's delivery id is the command id, so a delivery that arrives twice changes nothing. Nothing in this file knows a process exists.
+
+## Serve the events from the Worker
+
+The Worker no longer starts sessions. It consumes the events and shows the board:
+
+```typescript title="src/Worker.ts"
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as GitHub from "@alchemy.run/github";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import Agents from "./Agents.ts";
+import { BoardLive } from "./Board.ts";
+import { Issue } from "./Board/Issue.aggregate.ts";
+import { IssueId } from "./Board/Issue.id.ts";
+import { IssueDetail } from "./Board/IssueDetail.view.ts";
+import { GitHubIssues } from "./GitHubIssues.ts";
+
+const Live = Layer.mergeAll(BoardLive, GitHub.RepositoryEventSourceLive).pipe(
+  Layer.provide(AICloudflare.ProcessClient(Agents)),
+);
+
+export default class Worker extends Cloudflare.Worker<Worker>()(
+  "Worker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const details = yield* IssueDetail;
+    yield* GitHubIssues;
+
+    return {
+      // GET /issues/<number> shows the issue as the board has it.
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const [, area, number] = new URL(request.url, "http://board").pathname.split("/");
+        if (area !== "issues" || number === undefined) {
+          return HttpServerResponse.text("not found", { status: 404 });
+        }
+        const detail = yield* details.get(Issue.ref(IssueId.make(number)));
+        return yield* HttpServerResponse.json(Option.getOrNull(detail));
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Live)),
+) {}
+```
+
+`ProcessClient(Agents)` is what gives the board's policy its `Triage`.
+
+## Add the repository to the Stack
+
+```diff lang="typescript" title="alchemy.run.ts"
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
++import * as GitHub from "@alchemy.run/github";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
++import { Repo } from "./src/Repo.ts";
+import Worker from "./src/Worker.ts";
+
+-    providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
++    providers: Layer.mergeAll(
++      Cloudflare.providers(),
++      DomainCloudflare.providers(),
++      GitHub.providers(),
++    ),
+
+  Effect.gen(function* () {
++    const repo = yield* Repo;
+    const worker = yield* Worker;
+-    return { url: worker.url };
++    return { url: worker.url, repository: repo.htmlUrl };
+  }),
+```
+
+<PackageManagers run="alchemy deploy" />
+
+## Try it
+
+Open an issue on the repository, then read it from the board:
+
+```sh
+gh issue create -R my-org/issue-board --title "The build fails on Windows" --body "npm run build exits with code 1."
+
+curl "$URL/issues/1"
+# {"title":"The build fails on Windows","body":"npm run build exits with code 1.","label":"bug","comments":[]}
+```
+
+Reply on the issue that it was your own mistake, and the label changes to `question`.
+
+## What you have
+
+- A policy that starts a session for each reported issue and sends it every reply.
+- GitHub's events as commands, with no knowledge of processes.
+- A Worker that only consumes events and shows the board.
+
+The session labels an issue it has never read the code for. [Part 4](/ai/tutorial/part-4) gives it the repository and lets it answer.

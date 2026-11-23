@@ -1,0 +1,177 @@
+---
+title: "Part 1: A process"
+description: Start an issue board run by AI processes. Declare a model and a process, give it prose, host its sessions in Durable Objects on a harness, and start one from a Worker.
+sidebar:
+  order: 1
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+Build an issue board that looks after a GitHub repository. When someone opens an issue, a session reads the code, answers on the issue and says what kind of issue it is. When they reply, the same session carries on.
+
+Nothing in the board names a coding agent. The work is described as a process, and the harness that runs it is one Layer you can change at the end. This part declares the process and runs one session of it. The later parts give it a board to report to, connect it to GitHub, and give it the repository.
+
+The finished code is in [`examples/cloudflare-ai-issues`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-ai-issues).
+
+## Prerequisites
+
+Finish [Cloudflare setup](/cloudflare/setup). Part 3 also needs [GitHub setup](/github/setup), and Part 4 [Boat setup](/boat/setup).
+
+## Install
+
+<PackageManagers add="@alchemy.run/ai @alchemy.run/pi @alchemy.run/cloudflare" />
+
+## Declare a model
+
+A model is a name. `ModelsLive` says which LLM answers under it: Llama 3.3 on Workers AI, through the Worker's own AI binding.
+
+```typescript title="src/Models.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+
+export class Smart extends AI.Model<Smart>()("smart") {}
+
+export const ModelsLive = AICloudflare.Model(Smart, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  parameters: { temperature: 0, maxTokens: 2048 },
+});
+```
+
+## Name the process
+
+A process starts as a name and the inputs a session is started with. `Triage` takes one: the issue it looks after.
+
+```typescript title="src/Board/Triage.process.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Schema from "effect/Schema";
+
+export const issue = AI.Input("issue", Schema.String);
+
+export class Triage extends AI.Process<Triage>()("Triage", { inputs: [issue] }) {}
+```
+
+Anything that starts a `Triage` session depends on this file alone.
+
+## Give it prose
+
+`toLayer` says how the process is carried out. The prose mentions `issue`, so the model knows which value is which.
+
+```typescript title="src/Triage.ts"
+import { issue, Triage } from "./Board/Triage.process.ts";
+
+export const TriageLive = Triage.toLayer({
+  description: "Say what kind of issue this is.",
+})`
+  You look after issue ${issue} of a GitHub repository.
+  When you are told what the issue says, reply with one word:
+  bug when something is broken, feature when something new is asked for,
+  question otherwise.
+`;
+```
+
+`TriageLive` is a Layer. It requires a harness to run on and a model to run with, and nothing else yet.
+
+## Host its sessions
+
+A session needs somewhere to keep its conversation. `AICloudflare.ProcessHost` is a Durable Object that gives each session of the processes it lists an object of its own.
+
+```typescript title="src/Agents.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Layer from "effect/Layer";
+import { Triage } from "./Board/Triage.process.ts";
+import { ModelsLive, Smart } from "./Models.ts";
+import { TriageLive } from "./Triage.ts";
+
+const HarnessLive = Pi.HarnessLive.pipe(Layer.provide(PiCloudflare.DurableObjectStorage));
+
+export default class Agents extends AICloudflare.ProcessHost<Agents>()(
+  "Agents",
+  { processes: [Triage] },
+  TriageLive.pipe(
+    Layer.provide(Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart))),
+    Layer.provide(ModelsLive),
+  ),
+) {}
+```
+
+`Pi.HarnessLive` is the harness: sessions run on Pi, in the object, on its storage. `AI.DefaultModel(Smart)` is the model a session runs on when nobody chose one. Part 4 runs the same sessions on OpenCode by changing `HarnessLive`.
+
+## Start a session from a Worker
+
+`AICloudflare.ProcessClient(Agents)` provides `Triage` to the Worker, as a client that calls each session's object.
+
+```typescript title="src/Worker.ts"
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import Agents from "./Agents.ts";
+import { Triage } from "./Board/Triage.process.ts";
+
+export default class Worker extends Cloudflare.Worker<Worker>()(
+  "Worker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const triage = yield* Triage;
+
+    return {
+      // POST /issues/<number> with what the issue says.
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const [, , number] = new URL(request.url, "http://board").pathname.split("/");
+        if (number === undefined) return HttpServerResponse.text("not found", { status: 404 });
+        yield* triage.start(number, { issue: number });
+        const reply = yield* triage.get(number).prompt(yield* request.text);
+        return HttpServerResponse.text(reply.text);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(AICloudflare.ProcessClient(Agents))),
+) {}
+```
+
+`start` takes the session's key and its inputs, and does nothing when the key already started. `prompt` sends a message and waits for the answer.
+
+## Deploy it
+
+A Stack with the Worker is the whole app:
+
+```typescript title="alchemy.run.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import Worker from "./src/Worker.ts";
+
+export default Alchemy.Stack(
+  "CloudflareAiIssues",
+  { providers: Cloudflare.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const worker = yield* Worker;
+    return { url: worker.url };
+  }),
+);
+```
+
+<PackageManagers run="alchemy deploy" />
+
+## Try it
+
+Send the Worker what an issue says:
+
+```sh
+curl -X POST "$URL/issues/1" -d "The app crashes when I open the settings page."
+# bug
+```
+
+Send the same issue again and the session answers with the first message still in its conversation.
+
+## What you have
+
+- A process, `Triage`, declared by name and input, with its prose in a Layer.
+- A host that gives each session a Durable Object, on Pi.
+- A Worker that starts a session and talks to it.
+
+The session can only answer whoever prompts it. [Part 2](/ai/tutorial/part-2) gives it a board to report to.

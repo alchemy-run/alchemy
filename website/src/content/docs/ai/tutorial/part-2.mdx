@@ -1,0 +1,322 @@
+---
+title: "Part 2: A board to report to"
+description: Model the issue board with Domain, an aggregate, two commands and a view, and give the Triage process the calls it may make, so a session reports by sending a command.
+sidebar:
+  order: 2
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+In [Part 1](/ai/tutorial/part-1) a session could only answer whoever prompted it. A process has no output, so it needs somewhere to report. This part models the issue board with [Domain](/domain), and lets a session read an issue from it and label it.
+
+## Install
+
+<PackageManagers add="@alchemy.run/domain" />
+
+## Give issues an id
+
+An issue is known by its number on GitHub, as text:
+
+```typescript title="src/Board/Issue.id.ts"
+import * as Schema from "effect/Schema";
+
+export const IssueId = Schema.String.pipe(Schema.brand("IssueId"));
+export type IssueId = typeof IssueId.Type;
+```
+
+## Use it as the process's input
+
+```diff lang="typescript" title="src/Board/Triage.process.ts"
+import * as AI from "@alchemy.run/ai";
+-import * as Schema from "effect/Schema";
++import { IssueId } from "./Issue.id.ts";
+
+-export const issue = AI.Input("issue", Schema.String);
++export const issue = AI.Input("issue", IssueId);
+```
+
+## Report an issue
+
+A command says what someone wants to happen, and an event says what did. `ReportIssue` records that an issue was opened:
+
+```typescript title="src/Board/ReportIssue.command.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { IssueId } from "./Issue.id.ts";
+
+export class IssueReported extends Domain.Event("IssueReported", {
+  title: Schema.String,
+  body: Schema.String,
+}) {}
+
+export class ReportIssue extends Domain.Command("ReportIssue", {
+  input: { issueId: IssueId, title: Schema.String, body: Schema.String },
+  events: [IssueReported],
+  rejects: [],
+}) {}
+```
+
+## Label an issue
+
+`LabelIssue` is the command a session will send. Its description is what the model reads about it:
+
+```typescript title="src/Board/LabelIssue.command.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { IssueId } from "./Issue.id.ts";
+
+export const Label = Schema.Literals(["bug", "feature", "question"]);
+
+export class IssueLabeled extends Domain.Event("IssueLabeled", { label: Label }) {}
+
+export class LabelIssue extends Domain.Command(
+  "LabelIssue",
+  {
+    input: { issueId: IssueId, label: Label },
+    events: [IssueLabeled],
+    rejects: [],
+  },
+  { description: "Record what kind of issue this is: a bug, a feature or a question." },
+) {}
+```
+
+## Decide what each command does
+
+The `Issue` aggregate takes both commands and decides which events they produce:
+
+```typescript title="src/Board/Issue.aggregate.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { IssueId } from "./Issue.id.ts";
+import { IssueLabeled, LabelIssue } from "./LabelIssue.command.ts";
+import { IssueReported, ReportIssue } from "./ReportIssue.command.ts";
+
+export class Issue extends Domain.Aggregate("Issue", {
+  id: IssueId,
+  state: Schema.Struct({ reported: Schema.Boolean }),
+  initial: { reported: false },
+  commands: [ReportIssue, LabelIssue],
+  keyOf: (command) => command.issueId,
+  decide: {
+    ReportIssue: (issue, command) =>
+      issue.reported ? [] : [new IssueReported({ title: command.title, body: command.body })],
+    LabelIssue: (_, command) => [new IssueLabeled({ label: command.label })],
+  },
+  evolve: {
+    IssueReported: () => ({ reported: true }),
+    IssueLabeled: (issue) => issue,
+  },
+}) {}
+```
+
+An issue reported twice produces one event. See [Aggregates](/domain/aggregate).
+
+## Show an issue
+
+A view is what a reader sees, built from the events:
+
+```typescript title="src/Board/IssueDetail.view.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { Issue } from "./Issue.aggregate.ts";
+import { Label } from "./LabelIssue.command.ts";
+
+export class IssueDetail extends Domain.View(
+  "IssueDetail",
+  {
+    from: [Issue],
+    key: Issue,
+    state: Schema.Struct({
+      title: Schema.String,
+      body: Schema.String,
+      label: Schema.NullOr(Label),
+    }),
+    initial: { title: "", body: "", label: null },
+    evolve: {
+      IssueReported: (detail, event) => ({ ...detail, title: event.title, body: event.body }),
+      IssueLabeled: (detail, event) => ({ ...detail, label: event.label }),
+    },
+  },
+  { description: "An issue's title and body, and its label." },
+) {}
+```
+
+## Put them in a model
+
+```typescript title="src/Board/Board.model.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Issue } from "./Issue.aggregate.ts";
+import { IssueDetail } from "./IssueDetail.view.ts";
+
+export class Board extends Domain.Model("Board", {
+  aggregates: [Issue],
+  views: [IssueDetail],
+}) {}
+```
+
+## Say what a Triage session may do
+
+An Api is a list of calls. This one is for `Triage` sessions: they may read an issue and label it. They may not report one.
+
+```typescript title="src/Board/TriageApi.api.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Board } from "./Board.model.ts";
+
+export class TriageApi extends Domain.Api("TriageApi", {
+  model: Board,
+  commands: ["LabelIssue"],
+  views: ["IssueDetail"],
+  streams: [],
+  queries: [],
+}) {}
+```
+
+## Mention the board in the prose
+
+`DomainAi.tools` makes the Api something a process can mention. Each call it lists becomes a tool of the session.
+
+```diff lang="typescript" title="src/Triage.ts"
++import * as DomainAi from "@alchemy.run/domain/Ai";
+import { issue, Triage } from "./Board/Triage.process.ts";
++import { TriageApi } from "./Board/TriageApi.api.ts";
++
++const board = DomainAi.tools(TriageApi);
+
+export const TriageLive = Triage.toLayer({
+  description: "Say what kind of issue this is.",
+})`
+  You look after issue ${issue} of a GitHub repository.
+-  When you are told what the issue says, reply with one word:
+-  bug when something is broken, feature when something new is asked for,
+-  question otherwise.
++
++  Get the issue from ${board}: its key is the issue. Then send the label
++  command to ${board}: bug when something is broken, feature when
++  something new is asked for, question otherwise.
+`;
+```
+
+`TriageLive` now also requires the hosted `Board`.
+
+## Host the board
+
+`Board.layer` hosts the model, here on Durable Objects. It takes the model's policies; there are none yet.
+
+```typescript title="src/Board.ts"
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import * as Layer from "effect/Layer";
+import { Board } from "./Board/Board.model.ts";
+
+export const BoardLive = Board.layer(Layer.empty).pipe(
+  Layer.provide(DomainCloudflare.layerDurableObjects()),
+);
+```
+
+## Give it to the host
+
+```diff lang="typescript" title="src/Agents.ts"
+import * as Layer from "effect/Layer";
++import { BoardLive } from "./Board.ts";
+import { Triage } from "./Board/Triage.process.ts";
+
+  TriageLive.pipe(
+-    Layer.provide(Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart))),
++    Layer.provide(Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), BoardLive)),
+    Layer.provide(ModelsLive),
+  ),
+```
+
+## Report from the Worker, and read the board
+
+The Worker now reports the issue to the board and starts its session. A `GET` reads the issue as the board shows it.
+
+```typescript title="src/Worker.ts"
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import Agents from "./Agents.ts";
+import { BoardLive } from "./Board.ts";
+import { Issue } from "./Board/Issue.aggregate.ts";
+import { IssueId } from "./Board/Issue.id.ts";
+import { IssueDetail } from "./Board/IssueDetail.view.ts";
+import { ReportIssue } from "./Board/ReportIssue.command.ts";
+import { Triage } from "./Board/Triage.process.ts";
+
+const Live = Layer.mergeAll(BoardLive, AICloudflare.ProcessClient(Agents));
+
+export default class Worker extends Cloudflare.Worker<Worker>()(
+  "Worker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const issues = yield* Issue;
+    const details = yield* IssueDetail;
+    const triage = yield* Triage;
+
+    return {
+      // POST /issues/<number> with the issue's title reports it; GET shows it.
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const [, , number] = new URL(request.url, "http://board").pathname.split("/");
+        if (number === undefined) return HttpServerResponse.text("not found", { status: 404 });
+        const issueId = IssueId.make(number);
+        if (request.method === "POST") {
+          yield* issues.send(new ReportIssue({ issueId, title: yield* request.text, body: "" }));
+          yield* triage.start(issueId, { issue: issueId });
+          return HttpServerResponse.text("reported");
+        }
+        const detail = yield* details.get(Issue.ref(issueId));
+        return yield* HttpServerResponse.json(Option.getOrNull(detail));
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Live)),
+) {}
+```
+
+`start` returns once the session has its input. Nothing waits for the session: its answer is the command it sends.
+
+## Add Domain's providers
+
+```diff lang="typescript" title="alchemy.run.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
++import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
+import Worker from "./src/Worker.ts";
+
+export default Alchemy.Stack(
+  "CloudflareAiIssues",
+-  { providers: Cloudflare.providers(), state: Alchemy.localState() },
++  {
++    providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
++    state: Alchemy.localState(),
++  },
+```
+
+<PackageManagers run="alchemy deploy" />
+
+## Try it
+
+Report an issue, then read it a few seconds later:
+
+```sh
+curl -X POST "$URL/issues/2" -d "Please add a dark mode."
+# reported
+
+curl "$URL/issues/2"
+# {"title":"Please add a dark mode.","body":"","label":"feature"}
+```
+
+The label was put there by the session.
+
+## What you have
+
+- A board: an `Issue` aggregate, two commands and a view.
+- An Api that lists what a `Triage` session may do, mentioned in its prose.
+- A session that reports by sending a command.
+
+The Worker still starts each session by hand. [Part 3](/ai/tutorial/part-3) lets the board do it, from GitHub's events.

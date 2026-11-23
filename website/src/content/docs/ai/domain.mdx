@@ -1,0 +1,129 @@
+---
+title: Processes and Domain models
+description: Give a process the calls of a Domain Api with DomainAi.tools, and start sessions from a Domain policy, so a model of your business drives the processes and they report back to it.
+---
+
+A process has no output, so it needs somewhere to report. A [Domain model](/domain) is a good place: a session issues commands and reads views like any other client, and the model's policies decide which sessions to start.
+
+## Say what a process may do
+
+A Domain Api is a list of commands and views. Declare one for a kind of process, with exactly what it may do:
+
+```typescript title="src/TriageApi.api.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Board } from "./Board.model.ts";
+
+export class TriageApi extends Domain.Api("TriageApi", {
+  model: Board,
+  commands: ["LabelIssue"],
+  views: ["IssueDetail"],
+  streams: [],
+  queries: [],
+}) {}
+```
+
+## Mention the Api
+
+`DomainAi.tools` turns an Api into something a process can mention. Each call becomes a tool, with the call's own schemas:
+
+```typescript title="src/Triage.ts"
+import * as DomainAi from "@alchemy.run/domain/Ai";
+import { issue, Triage } from "./Triage.process.ts";
+import { TriageApi } from "./TriageApi.api.ts";
+
+const board = DomainAi.tools(TriageApi);
+
+export const TriageLive = Triage.toLayer({
+  description: "Say what kind of issue this is.",
+})`
+  Get issue ${issue} from ${board}: its key is the issue.
+  Then send the label command: bug, feature or question.
+`;
+```
+
+A session of `Triage` can now get an `IssueDetail` and send `LabelIssue`. A command the Api does not list is out of its reach. A rejection comes back to the model as the tool's failure, so it can read why and try again.
+
+`TriageLive` requires the hosted model, as the Api's own server does.
+
+## Narrow it, or act as someone
+
+`expose` gives fewer calls than the Api lists. `headers` is what each call carries to the Api's middleware: who the process acts as.
+
+```typescript
+const board = DomainAi.tools(TriageApi, {
+  expose: ["LabelIssue", "IssueDetail.get"],
+  headers: Effect.succeed({ authorization: "Bearer triage" }),
+});
+```
+
+## Start sessions from a policy
+
+A policy reacts to events. Yield a process in its Layer, and start a session where the event calls for one:
+
+```typescript title="src/IssueWork.policy.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import * as Match from "effect/Match";
+import { IssueCommented } from "./CommentOnIssue.command.ts";
+import { Issue } from "./Issue.aggregate.ts";
+import { IssueReported } from "./ReportIssue.command.ts";
+import { Triage } from "./Triage.process.ts";
+
+export class IssueWork extends Domain.Policy("IssueWork", {
+  from: Issue,
+  on: [IssueReported, IssueCommented],
+}) {}
+
+export const IssueWorkLive = IssueWork.toLayer(
+  Effect.gen(function* () {
+    const triage = yield* Triage;
+    return Effect.fn(function* ({ source, event }) {
+      yield* Match.valueTags(event, {
+        IssueReported: () => triage.start(source.id, { issue: source.id }),
+        IssueCommented: ({ body, commentId }) =>
+          triage
+            .get(source.id)
+            .send(body, { requestId: commentId })
+            .pipe(Effect.catchTag("NotStarted", () => Effect.void)),
+      }).pipe(Effect.orDie);
+    });
+  }),
+);
+```
+
+The policy depends on the `Triage` tag alone. A policy can run twice for one event: starting a key twice does nothing, and `requestId` keeps a message from being sent twice.
+
+A policy never waits for a session. `Triage` reports by sending `LabelIssue`, which is an event another policy can react to.
+
+## Host the model and the processes together
+
+The model's Layer asks for `Triage`, and `Triage`'s prose asks for the model. A [process host](/ai/hosting#declare-a-process-host) takes both: whatever in its Layer asks for a process the host lists is given the host's own client.
+
+```typescript title="src/Agents.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Layer from "effect/Layer";
+import { Board } from "./Board.model.ts";
+import { IssueWorkLive } from "./IssueWork.policy.ts";
+import { ModelsLive, Smart } from "./Models.ts";
+import { Triage } from "./Triage.process.ts";
+import { TriageLive } from "./Triage.ts";
+
+export const BoardLive = Board.layer(IssueWorkLive).pipe(
+  Layer.provide(DomainCloudflare.layerDurableObjects()),
+);
+
+export default class Agents extends AICloudflare.ProcessHost<Agents>()(
+  "Agents",
+  { processes: [Triage] },
+  TriageLive.pipe(
+    Layer.provide(Layer.mergeAll(Pi.HarnessLive, AI.DefaultModel(Smart), BoardLive)),
+    Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, ModelsLive)),
+  ),
+) {}
+```
+
+The Worker that serves the model provides the same `BoardLive` with `AICloudflare.ProcessClient(Agents)`. The [tutorial](/ai/tutorial/part-1) builds this, one step at a time.

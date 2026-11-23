@@ -1,0 +1,48 @@
+---
+title: Processes on OpenCode
+description: "OpenCode.HarnessLive runs AI.Process sessions as OpenCode sessions: the Layers it needs, how a session maps to OpenCode's, and what the model calls each tool."
+---
+
+An [`AI.Process`](/ai/processes) names no harness. `OpenCode.HarnessLive` runs its sessions on OpenCode: each session is one OpenCode session, in the Durable Object that hosts it.
+
+## Provide the harness
+
+`OpenCode.HarnessLive` provides `AI.Harness` and needs OpenCode's storage. Provide it where the process's other Layers are:
+
+```typescript title="src/Layers.ts"
+import * as AI from "@alchemy.run/ai";
+import * as OpenCode from "@alchemy.run/opencode";
+import * as OpenCodeCloudflare from "@alchemy.run/opencode/Cloudflare";
+import * as Layer from "effect/Layer";
+import { EngineerLive } from "./Engineer.ts";
+import { ModelsLive, Smart } from "./Models.ts";
+
+export const Live = EngineerLive.pipe(
+  Layer.provide(
+    Layer.mergeAll(OpenCode.HarnessLive, OpenCode.CodingTools, AI.DefaultModel(Smart)),
+  ),
+  Layer.provide(Layer.mergeAll(OpenCodeCloudflare.DurableObjectStorage, ModelsLive)),
+);
+```
+
+`OpenCode.CodingTools` is only needed when a process mentions a [coding tool](/ai/coding-tools), and then so is an [`AI.Sandboxes`](/ai/sandboxes) Layer.
+
+## What a session is on OpenCode
+
+A session is the OpenCode session named `<process>/<key>`. Every message is a prompt that carries the process's prose as its instructions and the mentioned tools as the only tools allowed, so a deploy that changes a process changes its running sessions from their next message.
+
+`send` stores the prompt and returns. `prompt` waits for the session to go idle and gives the text of the answer. `messages` is OpenCode's transcript.
+
+A session keeps the model it was started on until a message names another.
+
+## It survives a crash
+
+The harness arms the object's alarm before a prompt is stored, and keeps it armed while the session has work. An evicted object wakes up, and OpenCode resumes the prompt. A message sent with a `requestId` is stored under that id, so sending it again does nothing. See [Sessions & prompts](/opencode/sessions).
+
+## What mentions are called
+
+OpenCode names a tool it did not ship after its server. A process that mentions your `Deploy` reads `alchemy_deploy` in its prose, and one that mentions `AI.Bash` reads `bash`, OpenCode's own. An MCP server's tools are `<server>_<tool>`.
+
+## Use OpenCode's own API beside it
+
+What OpenCode has beyond processes is on [`OpenCode.Harness`](/opencode/sessions): its agents, per-prompt tools, and [its own client](/opencode/api). A Durable Object that needs those yields `OpenCode.Harness` itself, with its own list of models and tools.

@@ -581,7 +581,10 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
             names.set(ref, mention.name);
             tools.push(...(yield* mention.tools as Effect.Effect<ReadonlyArray<AnyTool>>));
           } else {
-            tools.push(ref);
+            // A group stands for its tools: a harness is given each one.
+            const each = (tool: unknown): ReadonlyArray<unknown> =>
+              isToolGroup(tool) ? (tool.tools as ReadonlyArray<unknown>).flatMap(each) : [tool];
+            tools.push(...each(ref));
           }
         }
       });
