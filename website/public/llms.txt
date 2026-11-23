@@ -936,6 +936,19 @@ OpenCode on Alchemy: sessions in a sandbox, prompts, model requests answered by 
 - [The session's sandbox](https://alchemy.run/opencode/sandbox) — OpenCode runs in the Durable Object. A sandbox is where a session's tools find files and a shell, opened on a tool's first use, and suspended or removed without touching the session.
 - [OpenCode's own API](https://alchemy.run/opencode/api) — Call OpenCode's own typed client from the Durable Object it runs in, and pass OpenCode configuration through the harness.
 
+## Yielded Agent
+
+Yielded Agent on Alchemy: schema-defined agents, Threads in a Durable Object, tools, sandboxes and runs that survive eviction.
+
+- [Yielded Agent](https://alchemy.run/yielded-agent) — Run Yielded Agent with Alchemy. Schema-defined agents and Threads in a Durable Object, on your models, tools and sandboxes.
+- [What is Yielded Agent?](https://alchemy.run/yielded-agent/what-is-yielded-agent) — The concepts behind Yielded Agent on Alchemy — agents, Threads, Runs, tools and history — and how @alchemy.run/yielded-agent supplies each one in a Durable Object.
+- [Setup](https://alchemy.run/yielded-agent/setup) — Install @alchemy.run/yielded-agent, @yielded/agent and @alchemy.run/ai, and add a Yielded Agent harness to a Cloudflare Durable Object.
+- [Agents & runs](https://alchemy.run/yielded-agent/agents-and-runs) — Define a Yielded agent with schemas, run it on a Thread, follow its events, and choose the model a run uses.
+- [Threads](https://alchemy.run/yielded-agent/threads) — A Thread is a named conversation in a Durable Object. Runs on the same name share its history, which is stored in the object's SQLite.
+- [Tools](https://alchemy.run/yielded-agent/tools) — Give a Yielded agent tools declared with AI.Tool. The harness supplies each handler from its Layer, and a declared failure is returned to the model.
+- [Sandboxes](https://alchemy.run/yielded-agent/sandboxes) — Give each Yielded Thread a sandbox. A tool that uses AI.Sandbox gets its Thread's sandbox, opened by the first call that needs it.
+- [Surviving eviction](https://alchemy.run/yielded-agent/eviction) — A Durable Object can be evicted or redeployed at any time. Thread history is kept in its SQLite, and a submitted run is started again from the object's alarm.
+
 ## Boat
 
 Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any Worker and their lifecycle, programs served from a sandbox, snapshots and forks, environments, ports, and webhooks.

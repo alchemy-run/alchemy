@@ -160,6 +160,9 @@
       "path": "./packages/opencode/tsconfig.json"
     },
     {
+      "path": "./packages/yielded-agent/tsconfig.json"
+    },
+    {
       "path": "./packages/rivet/tsconfig.json"
     },
     {

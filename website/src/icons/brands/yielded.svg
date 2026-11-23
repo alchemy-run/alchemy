@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- Yielded Agent mark https://yielded.dev/agent/mark.svg (yielded.dev), without its background tile and in one colour. -->
+  <g transform="translate(-6.36 -6) scale(0.9)"><path d="M10 12.5h20M10 20h14M10 27.5h20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="28.5" cy="20" r="3.5" fill="currentColor"/></g>
+</svg>

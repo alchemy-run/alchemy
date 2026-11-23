@@ -376,6 +376,97 @@ describe("streamText chunk-shape regressions", () => {
   );
 });
 
+describe("tool call arguments", () => {
+  const Add = Tool.make("add", {
+    parameters: Schema.Struct({
+      a: Schema.Number,
+      b: Schema.Number,
+      label: Schema.String,
+      items: Schema.Array(Schema.Struct({ count: Schema.Number })),
+    }),
+    success: Schema.Number,
+  });
+  const AddTools = Toolkit.make(Add);
+  const AddHandlers = AddTools.toLayer({
+    add: ({ a, b, items }) =>
+      Effect.succeed(a + b + items.reduce((total, item) => total + item.count, 0)),
+  });
+  // llama-3.3-70b writes numbers as strings; "7" stays text where the schema says string.
+  const call = {
+    name: "add",
+    arguments: { a: "2", b: " 3.5 ", label: "7", items: [{ count: "10" }] },
+  };
+
+  test.effect(
+    "a number written as a string is read as the number, in a stream",
+    () =>
+      Effect.gen(function* () {
+        const layer = layerFor(R1, () => new Response(sse([{ response: "", tool_calls: [call] }])));
+        const parts = yield* LanguageModel.streamText({ prompt: "hi", toolkit: AddTools }).pipe(
+          Stream.provide(AddHandlers),
+          Stream.provide(layer),
+          Stream.runCollect,
+        );
+        const made = Array.from(parts).find((part) => part.type === "tool-call");
+        expect(made?.type === "tool-call" ? made.params : undefined).toEqual({
+          a: 2,
+          b: 3.5,
+          label: "7",
+          items: [{ count: 10 }],
+        });
+        const result = Array.from(parts).find((part) => part.type === "tool-result");
+        expect(result?.type === "tool-result" ? result.result : undefined).toBe(15.5);
+      }),
+    { tags },
+  );
+
+  test.effect(
+    "a number written as a string is read as the number, in one response",
+    () =>
+      Effect.gen(function* () {
+        const layer = layerFor(
+          R1,
+          () => new Response(JSON.stringify({ response: "", tool_calls: [call] })),
+        );
+        const response = yield* LanguageModel.generateText({
+          prompt: "hi",
+          toolkit: AddTools,
+        }).pipe(Effect.provide(AddHandlers), Effect.provide(layer));
+        expect(response.toolResults.map((result) => result.result)).toEqual([15.5]);
+      }),
+    { tags },
+  );
+});
+
+describe("usage", () => {
+  test.effect(
+    "an output count is the total alone: how it divides is not claimed",
+    () =>
+      Effect.gen(function* () {
+        const layer = layerFor(
+          R1,
+          () =>
+            new Response(
+              JSON.stringify({
+                response: "hello",
+                usage: { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 },
+              }),
+            ),
+        );
+        const response = yield* LanguageModel.generateText({ prompt: "hi" }).pipe(
+          Effect.provide(layer),
+        );
+        expect(response.usage.inputTokens.total).toBe(12);
+        expect(response.usage.outputTokens).toEqual({
+          total: 5,
+          text: undefined,
+          reasoning: undefined,
+        });
+      }),
+    { tags },
+  );
+});
+
 describe("generateText <think> splitting", () => {
   test.effect(
     "a leading block is split from the answer",
