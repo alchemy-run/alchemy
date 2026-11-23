@@ -165,7 +165,22 @@ export type Step =
       readonly _tag: "Provide";
       readonly service: Context.Key<unknown, unknown>;
       readonly value: unknown;
+      /**
+       * Set by `provideWith`: computes the service for each `when`, in place of
+       * `value`. `Option.none()` provides nothing for that command.
+       */
+      readonly make?: (
+        sent: Sent,
+      ) => Effect.Effect<Option.Option<unknown>, unknown, Model.Internals>;
     };
+
+/** The command a `when` is about to send, as `provideWith` sees it. */
+export interface Sent {
+  /** The command, as the `when` step has it. */
+  readonly command: { readonly _tag: string };
+  /** The aggregate instances the model routes it to: the one its aggregate targets, or each one its decision reads. */
+  readonly refs: ReadonlyArray<Aggregate.Ref>;
+}
 
 /** The step with this `_tag`. */
 export type StepOf<Tag extends Step["_tag"]> = Extract<Step, { readonly _tag: Tag }>;
@@ -644,6 +659,33 @@ const provide = <I, S>(service: Context.Key<I, S>, value: S): ProvideStep<I> => 
   value,
 });
 
+/**
+ * Provide a service computed for each command, as middleware does for each
+ * request. `make` runs at every `when` that follows, with the command that is
+ * about to be sent and the instances it is for, and may read the model's
+ * stores. `Option.none()` provides nothing for that command. It is replaced,
+ * like `provide`, by a later `provide` or `provideWith` of the same service.
+ * A `query` step does not run it: give a query its service with `provide`.
+ *
+ * ### Computing a stamp for each command
+ * **Example:** A service that depends on what the command is for
+ * ```typescript
+ * Story.provideWith(Stamp, ({ command, refs }) =>
+ *   Effect.succeed(Option.some({ command: command._tag, instances: refs.map((ref) => ref.id) })),
+ * ),
+ * Story.when(new Deposit({ accountId: a, amount: 5 })),
+ * ```
+ */
+const provideWith = <I, S, E>(
+  service: Context.Key<I, S>,
+  make: (sent: Sent) => Effect.Effect<Option.Option<S>, E, Model.Internals>,
+): ProvideStep<I> => ({
+  _tag: "Provide",
+  service: service as unknown as Context.Key<unknown, unknown>,
+  value: undefined,
+  make,
+});
+
 const normalize = (value: unknown, redact = false): unknown => {
   if (redact && Redacted.isRedacted(value)) return "<redacted>";
   if (DateTime.isDateTime(value)) return DateTime.formatIso(value);
@@ -717,7 +759,9 @@ const describeStep = (s: Step): string => {
       return Number.isNaN(at) ? String(s.at) : new Date(at).toISOString();
     }
     case "Provide":
-      return `${s.service.key} = ${summarize(s.value)}`;
+      return s.make === undefined
+        ? `${s.service.key} = ${summarize(s.value)}`
+        : `${s.service.key} = (computed at each when)`;
     case "Given":
       return `${refName(s.ref)}: ${summarizeAll(s.events)}`;
     case "Then":
@@ -1175,6 +1219,14 @@ const make =
               }
             | undefined;
           let provided = Context.empty() as Context.Context<unknown>;
+          // What `provideWith` computes at each `when`, by the service's key.
+          const computed = new Map<
+            string,
+            {
+              readonly service: Context.Key<unknown, unknown>;
+              readonly make: NonNullable<StepOf<"Provide">["make"]>;
+            }
+          >();
           const assertedDeaths = new Set<string>();
 
           const storeOf = (ref: Aggregate.Ref) => internals.aggregates.get(ref.aggregate)!;
@@ -1272,7 +1324,13 @@ const make =
                 break;
               }
               case "Provide": {
-                provided = Context.add(provided, s.service, s.value);
+                if (s.make === undefined) {
+                  computed.delete(s.service.key);
+                  provided = Context.add(provided, s.service, s.value);
+                } else {
+                  computed.set(s.service.key, { service: s.service, make: s.make });
+                  provided = Context.omit(s.service)(provided) as Context.Context<unknown>;
+                }
                 break;
               }
               case "Given": {
@@ -1292,9 +1350,24 @@ const make =
                 if (client === undefined) {
                   return yield* fail(`the model has no command ${s.command._tag}`);
                 }
+                let context = provided;
+                for (const [key, { service, make }] of computed) {
+                  const made = yield* make({
+                    command: s.command,
+                    refs: instancesOf(domain.definitions, s.command),
+                  }).pipe(Effect.exit);
+                  if (Exit.isFailure(made)) {
+                    return yield* fail(
+                      `${key} could not be provided: ${String(Cause.squash(made.cause))}`,
+                    );
+                  }
+                  if (Option.isSome(made.value)) {
+                    context = Context.add(context, service, made.value.value);
+                  }
+                }
                 const result = yield* client
                   .send(s.command, { commandId: s.commandId ?? `story:${step}` })
-                  .pipe(Effect.provide(provided), Effect.result);
+                  .pipe(Effect.provide(context), Effect.result);
                 if (result._tag === "Success") {
                   last = { _tag: "Accepted", receipt: result.success };
                 } else {
@@ -1985,6 +2058,7 @@ export const Story = {
   clock,
   advance,
   provide,
+  provideWith,
   signal,
   saga,
   /** Marker for "the view key does not exist". */

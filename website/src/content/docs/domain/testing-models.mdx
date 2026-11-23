@@ -80,6 +80,19 @@ Commands run as whoever `provide` says, as their middleware would. Here `asSam` 
 
 The checks after a `when` are type-checked against its command. `rejected` takes only a rejection the command declares, and `replied` only its reply type. A `when` needs a `provide` step before it for every service its command's middleware provides, so without `asSam` the story does not compile.
 
+### A service computed for each command
+
+Some middleware computes its service for every request, from the request itself: a stamp scoped to the command and the instance it is for, say. `provide` gives every command the same value, so use `Story.provideWith` for those. Its function runs at each `when` after it, with the command about to be sent and the aggregate instances it is for, and returns the service as an `Option`.
+
+```typescript
+Story.provideWith(Stamp, ({ command, refs }) =>
+  Effect.succeed(Option.some(stampFor(command._tag, refs))),
+),
+Story.when(new Deposit({ accountId: "a-1", amount: 100 })),
+```
+
+`Option.none()` provides nothing for that command. If the function fails, so does the `when` it was computed for, naming the service. A later `provide` or `provideWith` of the same service replaces it. A `query` step does not run it, so give a query its service with `provide`.
+
 ## Answer outside systems
 
 External system calls wait until you answer them, so you decide what the outside world says, and when.
