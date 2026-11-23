@@ -33,17 +33,15 @@ const generateCommand = Command.make(
       "bin",
       "cli.js",
     );
+    const dotAlchemy = path.resolve(yield* dotAlchemyDirectory);
     const run = Effect.gen(function* () {
       const result = yield* exec(
-        ChildProcess.make(process.execPath, [
-          bin,
-          "provider",
-          "prisma",
-          "generate",
-          "--config",
-          loaded.absolute,
-          "--no-input",
-        ]),
+        ChildProcess.make(
+          process.execPath,
+          [bin, "provider", "prisma", "generate", "--config", loaded.absolute, "--no-input"],
+          // The child doesn't see this run's --env-file, so pass the resolved directory.
+          { env: { ALCHEMY_DIR: dotAlchemy }, extendEnv: true },
+        ),
       );
       if (result.exitCode !== 0)
         return yield* new CliError({ message: `${result.stdout}\n${result.stderr}` });
@@ -54,7 +52,6 @@ const generateCommand = Command.make(
     );
     yield* run;
     yield* Effect.logInfo(`Watching ${loaded.directory}; each generation uses a fresh process.`);
-    const dotAlchemy = path.resolve(yield* dotAlchemyDirectory);
     yield* fs.watch(loaded.directory, { recursive: true }).pipe(
       Stream.filter((event) => {
         const file = path.resolve(loaded.directory, event.path);
