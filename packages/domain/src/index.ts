@@ -329,6 +329,9 @@ export const RequestContext = RequestContextModule.make;
 /** When a middleware's verdict expires; a live read is judged again then. See {@link RequestContextModule.setExpiry}. */
 export const setExpiry = RequestContextModule.setExpiry;
 
+/** Who sent a command: recorded on the envelope of every event it commits. See {@link RequestContextModule.Originator}. */
+export { Originator } from "./RequestContext.ts";
+
 export type { Filter, OrderBy } from "./Filter.ts";
 export { InMemory } from "./InMemory.ts";
 export type * as Middleware from "./Middleware.ts";

@@ -1198,6 +1198,7 @@ const aggregateObject = (
                 now: intent.now,
                 correlationId: intent.correlationId,
                 trace: intent.trace,
+                originator: intent.originator,
               });
         const kick = yield* state.storage.transaction(
           Effect.gen(function* () {

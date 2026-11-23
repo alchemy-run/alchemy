@@ -87,6 +87,8 @@ export interface Prepare {
   readonly now: number;
   readonly correlationId: string;
   readonly trace?: TraceJson;
+  /** Who sent the command (see `RequestContext.Originator`), as its context encoded it. */
+  readonly originator?: Json;
 }
 
 /** What another instance is to record: its address, and its part of the decision. */
@@ -331,6 +333,7 @@ export const decide = ({
       now,
       correlationId: result.correlationId,
       ...(result.trace ? { trace: result.trace } : {}),
+      ...(result.originator === undefined ? {} : { originator: result.originator }),
       receipt: result.receipt,
       others: theirs.map(({ aggregate, id, version, events }) => ({
         aggregate,

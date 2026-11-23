@@ -58,6 +58,12 @@ export const Envelope = Schema.Struct({
    * command, the events it records, and every reaction and command they cause.
    */
   correlationId: Schema.String,
+  /**
+   * Who sent the command that produced the event: the `Originator` request
+   * context it was sent with, as the application encoded it. Absent when the
+   * command carried none.
+   */
+  originator: Schema.optionalKey(Schema.Unknown),
 });
 
 /** An {@link Envelope} whose `id` is the aggregate's (branded) id. */

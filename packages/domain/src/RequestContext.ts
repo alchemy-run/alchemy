@@ -86,6 +86,48 @@ export const make =
   };
 
 /**
+ * The key of the {@link Originator} request context.
+ *
+ * @internal
+ */
+export const ORIGINATOR = "Domain/Originator";
+
+/**
+ * Who sent a command, as the application encodes it. When middleware provides
+ * it with the rest of a request's context, every event the command commits
+ * records its value as the envelope's `originator`, so views, policies and
+ * projections can tell who did it without the event carrying it. A command
+ * sent without it commits events with no `originator`. The value is the
+ * application's own JSON and is kept as provided.
+ *
+ * ### Recording the principal a session middleware admitted
+ * **Example:** Provide the originator next to the actor
+ * ```typescript
+ * import * as Domain from "@alchemy.run/domain";
+ * import * as Effect from "effect/Effect";
+ * import * as Layer from "effect/Layer";
+ *
+ * export const SessionLive = Layer.succeed(
+ *   Session,
+ *   Effect.fn(function* (effect, { headers }) {
+ *     const actor = yield* verifySession(headers);
+ *     return yield* effect.pipe(
+ *       Effect.provideService(CurrentActor, actor),
+ *       Effect.provideService(Domain.Originator, { actor: actor.customerId }),
+ *     );
+ *   }),
+ * );
+ * ```
+ *
+ * ### Reading it
+ * **Example:** A projection row that says who deposited
+ * ```typescript
+ * writes.put({ id: envelope.commandId, by: envelope.originator });
+ * ```
+ */
+export class Originator extends make<Originator>()(ORIGINATOR, Schema.Unknown) {}
+
+/**
  * Encode every request context service present in the current fiber.
  *
  * @internal

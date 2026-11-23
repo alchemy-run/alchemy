@@ -312,6 +312,8 @@ export interface RecordInput {
   readonly now: number;
   readonly correlationId: string;
   readonly trace?: TraceJson;
+  /** Who sent the command (see `RequestContext.Originator`), as its context encoded it. */
+  readonly originator?: Json;
 }
 
 /** One aggregate instance a decision reads, by the name `reads` gives it. */
@@ -368,6 +370,8 @@ export type DecideResult =
       readonly writes: ReadonlyArray<DecisionWrite>;
       readonly receipt: DecisionReceiptJson;
       readonly correlationId: string;
+      /** Who sent the command (see `RequestContext.Originator`), as its context encoded it. */
+      readonly originator?: Json;
       /** The span that decided, so the events' reactions continue it. */
       readonly trace?: TraceJson;
     };

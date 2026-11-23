@@ -144,6 +144,7 @@ export const encodeEnvelope = (
   at: DateTime.toEpochMillis(envelope.at),
   commandId: envelope.commandId,
   correlationId: envelope.correlationId,
+  ...(envelope.originator === undefined ? {} : { originator: envelope.originator }),
   ...(trace ? { trace } : {}),
 });
 
@@ -155,6 +156,7 @@ export const decodeEnvelope = (json: EnvelopeJson): Aggregate.Envelope => ({
   at: DateTime.makeUnsafe(json.at),
   commandId: json.commandId,
   correlationId: json.correlationId ?? json.commandId,
+  ...(json.originator === undefined ? {} : { originator: json.originator }),
 });
 
 /** The aggregate event a delivery derives from: its own, unless a view passed it on. @internal */
@@ -1093,6 +1095,7 @@ const build = (
       correlationId: string = commandId,
       trace?: Telemetry.TraceJson,
       at?: ReadonlyArray<number | null>,
+      originator?: Json,
     ) {
       const stream = `${aggregate.aggregateName}/${id}`;
       const events: Array<StoredEvent> = [];
@@ -1117,6 +1120,7 @@ const build = (
           at: typeof at?.[index] === "number" ? DateTime.makeUnsafe(at[index]) : now,
           commandId,
           correlationId,
+          ...(originator === undefined ? {} : { originator }),
         };
         next = (def.evolve as Record<string, (...args: any[]) => unknown>)[event._tag](
           next,
@@ -1175,6 +1179,8 @@ const build = (
           false,
           input.correlationId,
           input.trace,
+          undefined,
+          input.originator,
         );
         return {
           state: codecs.state.encode(result.next),
@@ -1320,6 +1326,8 @@ const build = (
             false,
             correlationId,
             trace,
+            undefined,
+            input.context[RequestContext.ORIGINATOR],
           );
           const replyFn = (def.reply as Record<string, (...args: any[]) => unknown> | undefined)?.[
             decoded._tag
@@ -1555,6 +1563,9 @@ const build = (
                     input.commandId,
                     false,
                     correlationId,
+                    undefined,
+                    undefined,
+                    input.context[RequestContext.ORIGINATOR],
                   )).next;
             after.set(read.stream, next);
             writes.push({
@@ -1596,6 +1607,9 @@ const build = (
                   : null,
             },
             correlationId,
+            ...(input.context[RequestContext.ORIGINATOR] === undefined
+              ? {}
+              : { originator: input.context[RequestContext.ORIGINATOR] }),
             ...(trace ? { trace } : {}),
           } as DecideResult;
         });
@@ -1808,6 +1822,7 @@ const build = (
                 at: envelope.at,
                 commandId: envelope.commandId,
                 correlationId: envelope.correlationId,
+                ...(envelope.originator === undefined ? {} : { originator: envelope.originator }),
               };
               const entry: ViewEntry = {
                 seq,
