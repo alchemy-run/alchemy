@@ -161,6 +161,8 @@ export interface Session {
   readonly sandboxKey: string;
   /** OpenCode's id for the session. */
   readonly id: Effect.Effect<string, OpenCodeError, RuntimeContext>;
+  /** Whether OpenCode has this session: whether it was ever given a prompt. */
+  readonly exists: Effect.Effect<boolean, OpenCodeError, RuntimeContext>;
   /** Send a prompt and wait for the answer, through every tool call it takes. */
   readonly prompt: (
     text: string,
@@ -201,6 +203,8 @@ export interface Harness {
    * are what its prompts run with unless they say otherwise.
    */
   readonly session: (name: string, defaults?: PromptOptions) => Session;
+  /** What the model calls a tool here: OpenCode's own name for its tools, `<name>_<tool>` for yours. */
+  readonly toolName: (tool: ToolRef) => string;
   /**
    * Call OpenCode's own client, for what this view doesn't cover. Starts
    * OpenCode in this instance when it is not running.
@@ -1059,6 +1063,8 @@ export const Harness = <
       }
     }
 
+    /** Sessions this instance created and has not yet given a model. */
+    const fresh = new Set<string>();
     const sessionIdOf = (session: string) =>
       use((client) => {
         let id = sessionIds.get(session);
@@ -1076,6 +1082,7 @@ export const Harness = <
                 title: sessionTitle(session),
                 location: { directory },
               });
+              fresh.add(sessionID);
             }
             namesById.set(sessionID, session);
             return sessionID;
@@ -1262,11 +1269,15 @@ export const Harness = <
           }
           const { rules, section } = yield* permissions(chosen.tools);
           const sessionID = yield* sessionIdOf(sessionName);
-          // A prompt runs with what the session has: set what this one asks for.
-          const model = { id: (chosen.model ?? models[0]!.model).modelName, providerID: name };
-          yield* apply(sessionID, "model", model, (client) =>
-            client.session.switchModel({ sessionID, model }),
-          );
+          // A prompt runs with what the session has: set what this one asks
+          // for. A session keeps its model until a prompt names another.
+          if (chosen.model !== undefined || fresh.has(sessionID)) {
+            const model = { id: (chosen.model ?? models[0]!.model).modelName, providerID: name };
+            yield* apply(sessionID, "model", model, (client) =>
+              client.session.switchModel({ sessionID, model }),
+            );
+            fresh.delete(sessionID);
+          }
           const agent = chosen.agent ?? "build";
           yield* apply(sessionID, "agent", agent, (client) =>
             client.session.switchAgent({ sessionID, agent }),
@@ -1327,6 +1338,14 @@ export const Harness = <
         name: sessionName,
         sandboxKey: sandboxKey(instanceId, sessionName),
         id: sessionIdOf(sessionName),
+        exists: use(
+          (client) =>
+            client.session.get({ sessionID: sessionIdFor(sessionName) }).then(
+              () => true,
+              () => false,
+            ),
+          "session",
+        ),
         prompt: (text, promptOptions = {}) => run(text, { ...defaults, ...promptOptions }, true),
         submit: (text, promptOptions = {}) =>
           Effect.asVoid(run(text, { ...defaults, ...promptOptions }, false)),
@@ -1344,7 +1363,12 @@ export const Harness = <
       };
     };
 
-    return { session, use } satisfies Harness;
+    const toolName = (tool: ToolRef): string =>
+      isBuiltin(tool)
+        ? tool.toolName
+        : ((isToolTag(tool) ? nativeOf.get(tool.key) : undefined) ?? nameOf(name, tool.toolName));
+
+    return { session, toolName, use } satisfies Harness;
     // Models, tools and servers are read by tag, so their requirements are stated by the signature.
   }) as unknown as Effect.Effect<
     Harness,

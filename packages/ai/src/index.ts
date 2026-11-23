@@ -25,6 +25,33 @@ export {
   type DeclaredNamespace,
   type DeclaredTool,
 } from "./Declarations.ts";
+export {
+  Harness,
+  HarnessError,
+  type Engine,
+  type EngineOptions,
+  type EngineSession,
+  type EngineSessionOptions,
+  type Reply,
+  type SendOptions,
+} from "./Harness.ts";
+export {
+  DefaultModel,
+  Input,
+  isInput,
+  isProcess,
+  NotStarted,
+  Process,
+  Self,
+  type AnyInput,
+  type AnyProcess,
+  type InlineProcess,
+  type Mentionable,
+  type ProcessClient,
+  type ProcessTag,
+  type Session,
+  type StartOptions,
+} from "./Process.ts";
 export { isModel, Model, type AnyModel, type ModelClass, type ModelOptions } from "./Model.ts";
 export {
   Sandbox,
