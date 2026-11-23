@@ -1,8 +1,16 @@
+import * as BigDecimal from "effect/BigDecimal";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
+import * as HashMap from "effect/HashMap";
+import * as HashSet from "effect/HashSet";
 import * as Option from "effect/Option";
+import * as Rational from "effect/Rational";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as SchemaAST from "effect/SchemaAST";
+import * as Brands from "./Brands.ts";
+import * as Compare from "./Compare.ts";
 import type { Sort } from "./Smt.ts";
 import * as Smt from "./Smt.ts";
 import type { Brand, Run, V } from "./Value.ts";
@@ -23,9 +31,47 @@ interface Checks {
   /** The least and the most a string's or a list's length may be. */
   minLength: number;
   maxLength: number | undefined;
+  /** The bounds of a decimal, each as the comparison it is. */
+  readonly decimals: Array<{
+    readonly operator: ">" | ">=" | "<" | "<=";
+    readonly bound: BigDecimal.BigDecimal;
+  }>;
   /** The checks the prover does not read, each as its schema says it. */
   readonly unread: Array<string>;
 }
+
+/**
+ * What a check of a `BigDecimal` says, which its schema gives only as words:
+ * `a value greater than 1.5`.
+ */
+const DECIMAL_BOUNDS: ReadonlyArray<readonly [RegExp, ReadonlyArray<">" | ">=" | "<" | "<=">]> = [
+  [/^a value greater than or equal to (\S+)$/, [">="]],
+  [/^a value greater than (\S+)$/, [">"]],
+  [/^a value less than or equal to (\S+)$/, ["<="]],
+  [/^a value less than (\S+)$/, ["<"]],
+  [/^a value between (\S+) and (\S+)$/, [">=", "<="]],
+];
+
+const decimalBounds = (expected: string): Checks["decimals"] | undefined => {
+  for (const [pattern, operators] of DECIMAL_BOUNDS) {
+    const found = pattern.exec(expected);
+    if (!found) continue;
+    const bounds = operators.map((operator, index) => ({
+      operator,
+      bound: BigDecimal.fromString(found[index + 1]!),
+    }));
+    return bounds.every((entry) => Option.isSome(entry.bound))
+      ? bounds.map((entry) => ({
+          operator: entry.operator,
+          bound: Option.getOrThrow(entry.bound),
+        }))
+      : undefined;
+  }
+  return undefined;
+};
+
+const isDecimal = (ast: SchemaAST.AST): boolean =>
+  ast._tag === "Declaration" && representationOf(ast.annotations)?.id === `${ID}BigDecimal`;
 
 interface Representation {
   readonly id?: string;
@@ -66,8 +112,10 @@ const checksOf = (ast: SchemaAST.AST): Checks => {
     multiples: [],
     minLength: 0,
     maxLength: undefined,
+    decimals: [],
     unread: [],
   };
+  const decimal = isDecimal(ast);
   const visit = (checks: ReadonlyArray<SchemaAST.Check<never>> | undefined): void => {
     for (const check of checks ?? []) {
       if (check._tag === "FilterGroup") {
@@ -136,8 +184,12 @@ const checksOf = (ast: SchemaAST.AST): Checks => {
             made.maxLength = Math.min(made.maxLength ?? Infinity, payload.maxLength);
           else miss();
           break;
-        default:
-          miss();
+        default: {
+          const bounds =
+            decimal && typeof expected === "string" ? decimalBounds(expected) : undefined;
+          if (bounds) made.decimals.push(...bounds);
+          else miss();
+        }
       }
     }
   };
@@ -156,6 +208,9 @@ const checkFormulas = (checks: Checks, sort: Sort, text: string): ReadonlyArray<
         ...(checks.maxLength === undefined ? [] : [`(<= (str.len ${text}) ${checks.maxLength})`]),
       ]
     : [
+        ...checks.decimals.map(
+          (entry) => `(${entry.operator} ${text} ${Brands.realOf(entry.bound).text})`,
+        ),
         ...checks.lower.map((b) => `(${b.strict ? ">" : ">="} ${text} ${literal(sort, b.bound)})`),
         ...checks.upper.map((b) => `(${b.strict ? "<" : "<="} ${text} ${literal(sort, b.bound)})`),
         ...checks.multiples.map((divisor) =>
@@ -171,6 +226,18 @@ const passes = (checks: Checks, value: number | bigint): boolean =>
   checks.lower.every((b) => (b.strict ? value > b.bound : value >= b.bound)) &&
   checks.upper.every((b) => (b.strict ? value < b.bound : value <= b.bound)) &&
   checks.multiples.every((divisor) => typeof value === "number" && value % divisor === 0);
+
+/** Whether a decimal the code wrote passes the checks. */
+const within = (checks: Checks, value: BigDecimal.BigDecimal): boolean =>
+  checks.decimals.every((entry) =>
+    entry.operator === ">"
+      ? BigDecimal.isGreaterThan(value, entry.bound)
+      : entry.operator === ">="
+        ? BigDecimal.isGreaterThanOrEqualTo(value, entry.bound)
+        : entry.operator === "<"
+          ? BigDecimal.isLessThan(value, entry.bound)
+          : BigDecimal.isLessThanOrEqualTo(value, entry.bound),
+  );
 
 /** Whether a string the code wrote passes the checks. */
 const long = (checks: Checks, length: number): boolean =>
@@ -254,8 +321,29 @@ export const force = (list: V & { readonly _tag: "List" }, run: Run): V => {
   }
   const made: V = { _tag: "Arr", items };
   run.lists.set(list.name, made);
+  // A hash set holds no two equal items, and a hash map no two equal keys.
+  if (list.distinct) {
+    const forcing = (v: V): V => (v._tag === "List" ? force(v, run) : v);
+    const keys =
+      list.distinct === "items"
+        ? items
+        : items.map((entry) => {
+            const pair = forcing(entry);
+            return pair._tag === "Arr" && pair.items[0] ? pair.items[0] : entry;
+          });
+    for (const [index, key] of keys.entries())
+      for (const other of keys.slice(index + 1)) {
+        const equal = Compare.equals(key, other, forcing);
+        if (equal === true) run.assume("false");
+        else if (typeof equal === "string") run.assume(Smt.not(equal));
+      }
+  }
   return made;
 };
+
+/** The schema of a list of `items`, each of the schemas given: what a hash set or a hash map holds. */
+const listOf = (elements: ReadonlyArray<SchemaAST.AST>, rest: ReadonlyArray<SchemaAST.AST>) =>
+  ({ _tag: "Arrays", elements, rest }) as unknown as SchemaAST.Arrays;
 
 /** The type side of a schema: what `decide` and `evolve` see. */
 export const typeOf = (schema: unknown): SchemaAST.AST | undefined =>
@@ -326,9 +414,45 @@ export const symbolic = (ast: SchemaAST.AST, name: string, run: Run, brand?: Bra
         return run.choose(2) === 0
           ? Value.none
           : Value.some(symbolic(ast.typeParameters[0], `${name}.value`, run));
-      return representationOf(ast.annotations)?.id === "effect/schema/DateTimeUtc"
-        ? { _tag: "Time", millis: run.constant(name, "Int") }
-        : { _tag: "Opaque", what: name };
+      switch (representationOf(ast.annotations)?.id) {
+        case "effect/schema/DateTimeUtc":
+          return { _tag: "Time", millis: run.constant(name, "Int") };
+        // A duration of a whole number of milliseconds: the others are not read.
+        case "effect/schema/Duration":
+          return Brands.duration({ _tag: "Term", term: run.constant(name, "Int") });
+        case "effect/schema/BigDecimal": {
+          const term = run.constant(name, "Real");
+          for (const formula of checkFormulas(checksOf(ast), "Real", term.text))
+            run.assume(formula);
+          return Brands.decimal(term);
+        }
+        case "effect/schema/HashSet":
+          return ast.typeParameters[0]
+            ? Brands.hashSet({
+                _tag: "List",
+                name,
+                ast: listOf([], [ast.typeParameters[0]]),
+                distinct: "items",
+              })
+            : { _tag: "Opaque", what: name };
+        case "effect/schema/HashMap":
+          return ast.typeParameters[0] && ast.typeParameters[1]
+            ? Brands.hashMap({
+                _tag: "List",
+                name,
+                ast: listOf([], [listOf([ast.typeParameters[0], ast.typeParameters[1]], [])]),
+                distinct: "keys",
+              })
+            : { _tag: "Opaque", what: name };
+        case "effect/schema/Result":
+          return !ast.typeParameters[0] || !ast.typeParameters[1]
+            ? { _tag: "Opaque", what: name }
+            : run.choose(2) === 0
+              ? Brands.success(symbolic(ast.typeParameters[0], `${name}.success`, run))
+              : Brands.failure(symbolic(ast.typeParameters[1], `${name}.failure`, run));
+        default:
+          return { _tag: "Opaque", what: name };
+      }
     default:
       return { _tag: "Opaque", what: name };
   }
@@ -359,6 +483,13 @@ export const assumeFits = (value: V, ast: SchemaAST.AST, run: Run): boolean => {
         return member === undefined || assumeFits(item, member, run);
       })
     );
+  }
+  if (isDecimal(ast)) {
+    const decimal = Brands.decimalOf(value);
+    if (!decimal) return true;
+    if (Brands.isKnown(decimal)) return within(checksOf(ast), decimal);
+    for (const formula of checkFormulas(checksOf(ast), "Real", decimal.text)) run.assume(formula);
+    return true;
   }
   if (ast._tag !== "Number" && ast._tag !== "BigInt" && ast._tag !== "String") return true;
   const checks = checksOf(ast);
@@ -424,6 +555,13 @@ export const fits = (value: V, ast: SchemaAST.AST, run?: Run): string => {
       );
     }
     case "Declaration": {
+      if (isDecimal(ast)) {
+        const decimal = Brands.decimalOf(value);
+        if (!decimal) return "false";
+        return Brands.isKnown(decimal)
+          ? String(within(checksOf(ast), decimal))
+          : all(checkFormulas(checksOf(ast), "Real", decimal.text));
+      }
       if (!isOption(ast) || !ast.typeParameters[0]) return "true";
       const option = Value.optionOf(value);
       if (!option) return "false";
@@ -560,11 +698,98 @@ export const concretize = (
           const millis = build(v.fields.millis ?? Value.num(0));
           return isUnbuildable(millis) ? millis : Duration.millis(Number(millis));
         }
+        if (v.brand?.kind === "BigDecimal") {
+          const held = v.fields.value;
+          const fraction =
+            held?._tag === "Term" ? Smt.exact.get(model)?.get(held.term.text) : undefined;
+          // The number the solver found, exactly, where a decimal can hold it.
+          const precise = fraction
+            ? BigDecimal.divide(
+                BigDecimal.fromBigInt(fraction.numerator),
+                BigDecimal.fromBigInt(fraction.denominator),
+              )
+            : Option.none();
+          if (
+            fraction &&
+            Option.isSome(precise) &&
+            BigDecimal.equals(
+              BigDecimal.multiply(precise.value, BigDecimal.fromBigInt(fraction.denominator)),
+              BigDecimal.fromBigInt(fraction.numerator),
+            )
+          )
+            return precise.value;
+          const value = build(held ?? Value.num(0));
+          if (isUnbuildable(value)) return value;
+          const decimal =
+            typeof value === "string"
+              ? BigDecimal.fromString(value)
+              : BigDecimal.fromNumber(Number(value));
+          return Option.isSome(decimal)
+            ? decimal.value
+            : ({ _tag: "Unbuildable", reason: `${String(value)} is not a decimal` } as Unbuildable);
+        }
+        if (v.brand?.kind === "Rational") {
+          const held = v.fields.value;
+          const exact =
+            held?._tag === "Term" ? Smt.exact.get(model)?.get(held.term.text) : undefined;
+          const precise = exact ? Rational.make(exact.numerator, exact.denominator) : Option.none();
+          if (Option.isSome(precise)) return precise.value;
+          const value = build(held ?? Value.num(0));
+          if (isUnbuildable(value)) return value;
+          const fraction =
+            typeof value === "string"
+              ? Rational.fromString(value)
+              : Rational.fromNumber(Number(value));
+          return Option.isSome(fraction)
+            ? fraction.value
+            : ({
+                _tag: "Unbuildable",
+                reason: `${String(value)} is not a fraction`,
+              } as Unbuildable);
+        }
+        if (v.brand?.kind === "Redacted") {
+          const value = build(v.fields.value ?? Value.undef);
+          return isUnbuildable(value) ? value : Redacted.make(value);
+        }
+        const result = Brands.resultOf(v);
+        if (result) {
+          const held = build(result._tag === "Success" ? result.success : result.failure);
+          return isUnbuildable(held)
+            ? held
+            : result._tag === "Success"
+              ? Result.succeed(held)
+              : Result.fail(held);
+        }
+        if (v.brand?.kind === "HashSet") {
+          const items = build(Brands.setOf(v)!);
+          return isUnbuildable(items)
+            ? items
+            : HashSet.fromIterable(items as ReadonlyArray<unknown>);
+        }
+        if (v.brand?.kind === "HashMap") {
+          const entries = build(Brands.mapOf(v)!);
+          return isUnbuildable(entries)
+            ? entries
+            : HashMap.fromIterable(entries as ReadonlyArray<readonly [unknown, unknown]>);
+        }
         const out: Record<string, unknown> = {};
         for (const [key, field] of Object.entries(v.fields)) {
           const built = build(field);
           if (isUnbuildable(built)) return built;
           if (built !== undefined) out[key] = built;
+        }
+        if (v.brand?.kind === "Data" && typeof v.brand.cls === "function") {
+          // An instance of the class, as the code would have made it.
+          const cls = v.brand.cls as new (fields: object) => unknown;
+          const { _tag: _, ...fields } = out;
+          try {
+            return new cls(fields);
+          } catch (cause) {
+            return {
+              _tag: "Unbuildable",
+              reason: `${cls.name} refuses ${show(fields)}: ${String(cause)}`,
+            } as Unbuildable;
+          }
         }
         return out;
       }
@@ -604,6 +829,19 @@ export const show = (value: unknown): string => {
   if (Duration.isDuration(value)) return `Duration.millis(${Duration.toMillis(value)})`;
   if (Option.isOption(value))
     return Option.isSome(value) ? `Option.some(${show(value.value)})` : "Option.none()";
+  if (Result.isResult(value))
+    return Result.isSuccess(value)
+      ? `Result.succeed(${show(value.success)})`
+      : `Result.fail(${show(value.failure)})`;
+  if (BigDecimal.isBigDecimal(value)) return `BigDecimal(${BigDecimal.format(value)})`;
+  if (Rational.isRational(value)) return `Rational(${Rational.format(value)})`;
+  if (Redacted.isRedacted(value)) return `Redacted(${value.pipe(Redacted.value, show)})`;
+  if (HashSet.isHashSet(value)) return `HashSet(${[...value].map(show).sort().join(", ")})`;
+  if (HashMap.isHashMap(value))
+    return `HashMap(${[...value]
+      .map(([key, held]) => `${show(key)} => ${show(held)}`)
+      .sort()
+      .join(", ")})`;
   if (Array.isArray(value)) return `[${value.map(show).join(", ")}]`;
   const entries = Object.entries(value).filter(([, field]) => field !== undefined);
   const name = Object.getPrototypeOf(value)?.constructor?.name as string | undefined;
