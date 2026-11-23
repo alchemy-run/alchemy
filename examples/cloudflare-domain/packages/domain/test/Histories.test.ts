@@ -67,7 +67,7 @@ it.effect(
         story,
         allow: { lossy: ["Activity.BringForward"] },
       });
-      expect(standings(allowed)["Activity.BringForward"]).toBe("unseen");
+      expect(standings(allowed)["Activity.BringForward"]).toBe("allowed");
     }).pipe(Effect.provide(NodeServices.layer)),
   120_000,
 );

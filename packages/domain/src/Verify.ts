@@ -331,8 +331,10 @@ export interface Change {
    * `proved`: for every state, or every history its commands record.
    * `checked`: in every sequence it was run in. `broken`: `story` with
    * `script` shows it. `unseen`: no sequence left an instance to run it on.
+   * `allowed`: a view named in `allow.lossy`, which holds less after the
+   * compaction on purpose.
    */
-  readonly standing: "proved" | "checked" | "broken" | "unseen";
+  readonly standing: "proved" | "checked" | "broken" | "unseen" | "allowed";
   /** How many sequences it was run in, on the real model. */
   readonly runs: number;
   readonly broken:
@@ -633,11 +635,13 @@ const changesOf = (
       kind,
       standing: rule?.broken
         ? "broken"
-        : proved
-          ? "proved"
-          : (rule?.runs ?? 0) > 0
-            ? "checked"
-            : "unseen",
+        : rule?.allowed
+          ? "allowed"
+          : proved
+            ? "proved"
+            : (rule?.runs ?? 0) > 0
+              ? "checked"
+              : "unseen",
       runs: rule?.runs ?? 0,
       broken: rule?.broken,
       unproved: proved ? undefined : proofs.get(name),
@@ -1234,7 +1238,9 @@ export const render = (report: Report | AggregateReport): string => {
               : "proved: it keeps every invariant, whatever history the commands record"
             : change.standing === "checked"
               ? `${says(change)}, in ${count(change.runs)} runs`
-              : "not looked at: no sequence left an instance to run it on"
+              : change.standing === "allowed"
+                ? "allowed to hold less after the compaction than it does built from the events"
+                : "not looked at: no sequence left an instance to run it on"
         }`,
       );
     }

@@ -246,9 +246,10 @@ Rules of thumb:
 - Where a proof fails from a state no sequence reaches, the report may print the invariant to add (`Add it to the invariants:`). Add it as written.
 - Never widen `allow` to get a pass. It names what the check may skip, and each entry is something no longer verified.
 - A rule that is true but not proved needs a second invariant that rules out the state the prover started from.
+- The model's rewrites and compactions are verified with it. A compaction is proved to lose nothing, a rewrite to keep every invariant. With `story`, each is also put into every sequence: `View.Compaction` breaks when a view's roll-up handler says less than the events did, `Rewrite.Compaction` when the rewrite has no matching handler for the roll-up. Fix the handler; name a view that keeps less on purpose in `allow: { lossy: ["Statement.ArchiveBook"] }`. `Prove.compaction(C, { source })` and `Prove.rewrite(R, { source, compactions })` do one alone.
 - An external call listed under "called again" must be safe to repeat: give the vendor an idempotency key made from the event.
 
-More: [Verifying a model](https://alchemy.run/domain/verifying-models).
+More: [Verifying a model](https://alchemy.run/domain/verifying-models), [Verifying a model: Rewrites and compactions are verified too](https://alchemy.run/domain/verifying-models#rewrites-and-compactions-are-verified-too).
 
 ## Api tests: the client's view
 

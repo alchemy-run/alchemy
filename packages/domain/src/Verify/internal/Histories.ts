@@ -81,6 +81,8 @@ export interface Checked {
   readonly says: string;
   /** How many runs looked at it. */
   runs: number;
+  /** A view said to hold less after the compaction, on purpose: what broke it is let go. */
+  readonly allowed?: true;
   /** The first run that broke it: the sequence, as a story, and what it showed. */
   broken:
     | { readonly story: ModelSearch.Story; readonly script: string; readonly shown: string }
@@ -438,7 +440,7 @@ export const check = Effect.fn(function* (
   const report: Report = {
     rules: [...rules.values()].map((checked) =>
       checked.broken && checked.kind === "roll-up" && options.lossy.includes(checked.name)
-        ? { ...checked, broken: undefined, runs: 0 }
+        ? { ...checked, broken: undefined, allowed: true }
         : checked,
     ),
     runs,

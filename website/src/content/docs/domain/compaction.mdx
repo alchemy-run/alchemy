@@ -199,6 +199,8 @@ Before it commits a roll-up, an instance folds it from `initial` and compares th
 
 A roll-up event that carries the whole state always passes. One that carries only part of it, or an `evolve` handler that forgets a field, is caught the first time it would lose something.
 
+To learn before any instance compacts, [verify the model](/domain/verifying-models#rewrites-and-compactions-are-verified-too). It proves the roll-up gives back every state the rules allow, and checks that each view's handler for the roll-up says what the events it replaces did.
+
 ## What a compaction leaves alone
 
 A compaction tells views and projections nothing but the roll-up events. They keep what they built from the events it removed: a ledger table keeps every row. To change what was built, use a [rewrite](/domain/rewrite).

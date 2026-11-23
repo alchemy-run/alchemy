@@ -181,6 +181,8 @@ export const forgetOwnerOrReport = Effect.fn(function* (
 
 A rewrite that removes the instance is not checked, since it leaves no state to check.
 
+That check happens when the rewrite meets an instance. To learn before any does, [verify the model](/domain/verifying-models#rewrites-and-compactions-are-verified-too): it proves the rewrite keeps every invariant, or shows the sequence of commands after which it breaks one.
+
 ## It runs once per id
 
 Each run has a `rewriteId`. Running a rewrite again with an id the instance has seen changes nothing and returns the first receipt.
