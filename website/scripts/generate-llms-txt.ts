@@ -728,7 +728,7 @@ const SECTIONS: Section[] = [
   {
     heading: "Pi",
     intro:
-      "Pi Durable on Alchemy: conversations in a Durable Object, tools, extensions, skills, code mode, sandboxes, and runs that resume after a crash.",
+      "Pi Durable on Alchemy: conversations in a Durable Object, tools, extensions, code mode, sandboxes, processes, and runs that resume after a crash.",
     pages: {
       slugs: [
         "pi/index",
@@ -753,7 +753,7 @@ const SECTIONS: Section[] = [
   {
     heading: "OpenCode",
     intro:
-      "OpenCode on Alchemy: sessions in a sandbox, prompts, model requests answered by your Layers, tools, MCP servers and skills.",
+      "OpenCode on Alchemy: OpenCode in a Durable Object, sessions and prompts, model requests answered by your Layers, tools, MCP servers and processes.",
     pages: {
       slugs: [
         "opencode/index",

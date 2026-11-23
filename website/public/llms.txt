@@ -905,7 +905,7 @@ Work described as processes that run on any agent harness: prose that mentions t
 
 ## Pi
 
-Pi Durable on Alchemy: conversations in a Durable Object, tools, extensions, skills, code mode, sandboxes, and runs that resume after a crash.
+Pi Durable on Alchemy: conversations in a Durable Object, tools, extensions, code mode, sandboxes, processes, and runs that resume after a crash.
 
 - [Pi](https://alchemy.run/pi) — Run the Pi coding agent's durable engine with Alchemy. Conversations in a Durable Object's storage, tools and models as Layers, coding tools in a sandbox, and runs that resume after a crash.
 - [What is Pi?](https://alchemy.run/pi/what-is-pi) — The concepts behind Pi Durable — the harness and its storage, conversations and submissions, tools, extensions, code mode and sandboxes — and how @alchemy.run/pi models each of them.
@@ -926,7 +926,7 @@ Pi Durable on Alchemy: conversations in a Durable Object, tools, extensions, ski
 
 ## OpenCode
 
-OpenCode on Alchemy: sessions in a sandbox, prompts, model requests answered by your Layers, tools, MCP servers and skills.
+OpenCode on Alchemy: OpenCode in a Durable Object, sessions and prompts, model requests answered by your Layers, tools, MCP servers and processes.
 
 - [OpenCode](https://alchemy.run/opencode) — Run the OpenCode coding agent with Alchemy, inside a Cloudflare Durable Object. Your models answer it and your tools run beside it, and a sandbox is only where tools find files and a shell.
 - [What is OpenCode?](https://alchemy.run/opencode/what-is-opencode) — The concepts behind OpenCode on Alchemy — OpenCode in a Durable Object, sessions and prompts, model requests, tools, the sandbox tools work in — and how @alchemy.run/opencode models each of them.
