@@ -11,7 +11,7 @@ export class PiAgents extends AICloudflare.ProcessHost<PiAgents>()(
   "PiAgents",
   { processes: [Adder, Operator] },
   ProcessesLive.pipe(
-    Layer.provideMerge(Pi.HarnessLive),
+    Layer.provide(Pi.HarnessLive),
     Layer.provide(PiCloudflare.DurableObjectStorage),
   ),
 ) {}
@@ -21,7 +21,7 @@ export class OpenCodeAgents extends AICloudflare.ProcessHost<OpenCodeAgents>()(
   "OpenCodeAgents",
   { processes: [Adder, Operator] },
   ProcessesLive.pipe(
-    Layer.provideMerge(OpenCode.HarnessLive),
+    Layer.provide(OpenCode.HarnessLive),
     Layer.provide(OpenCodeCloudflare.DurableObjectStorage),
   ),
 ) {}

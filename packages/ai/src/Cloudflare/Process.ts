@@ -1,14 +1,12 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import type { DurableObjectServices } from "@alchemy.run/cloudflare/Workers/DurableObject";
 import type { Worker } from "@alchemy.run/cloudflare/Workers/Worker";
-import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import { Harness, HarnessError, type SendOptions } from "../Harness.ts";
+import { HarnessError, type SendOptions } from "../Harness.ts";
 import {
-  modelNamed,
   NotStarted,
   Router,
   structOf,
@@ -74,6 +72,8 @@ export interface ProcessHostClass<Processes extends ReadonlyArray<HostedProcess>
  * session's harness, transcript and wake-ups on that object's storage.
  * `layer` gives each listed process its prose and everything the prose
  * mentions, with a harness (`Pi.HarnessLive`, `OpenCode.HarnessLive`).
+ * Whatever else in it asks for one of the processes, such as a Domain
+ * policy that starts sessions, is given the host's own client.
  *
  * Anything else reaches the sessions through `AICloudflare.ProcessClient`.
  *
@@ -98,19 +98,26 @@ export interface ProcessHostClass<Processes extends ReadonlyArray<HostedProcess>
  */
 export const ProcessHost =
   <Self>() =>
-  <const Processes extends ReadonlyArray<HostedProcess>, R extends DurableObjectServices = never>(
+  <
+    const Processes extends ReadonlyArray<HostedProcess>,
+    R extends DurableObjectServices | ServicesOf<Processes> = never,
+  >(
     name: string,
     options: {
       /** Every process this host runs. */
       readonly processes: Processes;
     },
-    layer: Layer.Layer<ServicesOf<Processes> | Harness, never, R>,
+    /**
+     * Each process's prose, and everything it mentions. Whatever else in it
+     * asks for one of the processes (a Domain policy that starts sessions)
+     * is given the host's own client.
+     */
+    layer: Layer.Layer<ServicesOf<Processes>, never, R>,
   ) => {
     const impl = Effect.gen(function* () {
-      const harness = yield* Harness;
       const clients = new Map<
         string,
-        { readonly process: HostedProcess; readonly client: Client<any> }
+        { readonly process: HostedProcess; readonly client: ProcessService<any> }
       >();
       for (const process of options.processes) {
         const client = yield* Effect.service(
@@ -125,9 +132,9 @@ export const ProcessHost =
             ? Effect.fail(new HarnessError({ message: `${name} does not run ${process}.` }))
             : Effect.succeed(found);
         });
-      const optionsOf = (sent: Sent) =>
+      const optionsOf = (sent: Sent, client: ProcessService<any>) =>
         Effect.suspend(() => {
-          const model = sent.model === undefined ? undefined : modelNamed(harness, sent.model);
+          const model = sent.model === undefined ? undefined : client["~models"]?.get(sent.model);
           return sent.model !== undefined && model === undefined
             ? Effect.fail(new HarnessError({ message: `There is no model named ${sent.model}.` }))
             : Effect.succeed({
@@ -138,8 +145,11 @@ export const ProcessHost =
       const session = <A>(
         process: string,
         key: string,
-        use: (session: Session) => Effect.Effect<A, NotStarted | HarnessError, RuntimeContext>,
-      ) => outcomeOf(Effect.flatMap(hosted(process), ({ client }) => use(client.get(key))));
+        use: (
+          session: Session,
+          client: ProcessService<any>,
+        ) => Effect.Effect<A, NotStarted | HarnessError>,
+      ) => outcomeOf(Effect.flatMap(hosted(process), ({ client }) => use(client.get(key), client)));
 
       return Effect.succeed({
         start: (process: string, key: string, input: unknown, sent: Sent) =>
@@ -157,16 +167,16 @@ export const ProcessHost =
                     }),
                 ),
               );
-              yield* found.client.start(key, decoded, yield* optionsOf(sent));
+              yield* found.client.start(key, decoded, yield* optionsOf(sent, found.client));
             }),
           ),
         send: (process: string, key: string, text: string, sent: Sent) =>
-          session(process, key, (each) =>
-            Effect.flatMap(optionsOf(sent), (options) => each.send(text, options)),
+          session(process, key, (each, client) =>
+            Effect.flatMap(optionsOf(sent, client), (options) => each.send(text, options)),
           ),
         prompt: (process: string, key: string, text: string, sent: Sent) =>
-          session(process, key, (each) =>
-            Effect.flatMap(optionsOf(sent), (options) => each.prompt(text, options)),
+          session(process, key, (each, client) =>
+            Effect.flatMap(optionsOf(sent, client), (options) => each.prompt(text, options)),
           ),
         wait: (process: string, key: string) => session(process, key, (each) => each.wait),
         abort: (process: string, key: string) => session(process, key, (each) => each.abort),
@@ -174,8 +184,13 @@ export const ProcessHost =
       });
     }).pipe(
       Effect.provide(
-        Layer.provide(
-          layer,
+        Layer.provide(layer, [
+          // What asks for a hosted process without its prose reaches the session's own object.
+          Layer.effectContext(
+            Effect.map(Cloudflare.DurableObjectScope, (namespace) =>
+              clientsOf(namespace, options.processes),
+            ),
+          ) as Layer.Layer<ServicesOf<Processes>, never, Cloudflare.DurableObjectScope>,
           // A session another session starts gets an object of its own.
           Layer.effect(
             Router,
@@ -199,7 +214,13 @@ export const ProcessHost =
               };
             }),
           ),
-        ),
+        ]) as Layer.Layer<
+          ServicesOf<Processes>,
+          never,
+          | Exclude<R, ServicesOf<Processes>>
+          | Cloudflare.DurableObjectScope
+          | Cloudflare.DurableObjectState
+        >,
       ),
     );
     return Object.assign(Cloudflare.DurableObject<Self>()(name, impl), {
@@ -298,6 +319,18 @@ const remoteClient = (
   };
 };
 
+/** Every listed process, as a client that calls each session's own object. */
+const clientsOf = (namespace: Namespace, processes: ReadonlyArray<HostedProcess>) =>
+  processes.reduce(
+    (context, process) =>
+      Context.add(
+        context,
+        process as unknown as Context.Key<unknown, ProcessService<any>>,
+        remoteClient(namespace, process.processName, process.inputs),
+      ),
+    Context.empty() as Context.Context<unknown>,
+  );
+
 /**
  * Reach the processes a host runs from anywhere else in its Worker: a
  * policy, a route, another Durable Object. Provides every process the host
@@ -312,15 +345,5 @@ export const ProcessClient = <Processes extends ReadonlyArray<HostedProcess>, R>
   host: ProcessHostClass<Processes> & Effect.Effect<Namespace, never, R>,
 ): Layer.Layer<ServicesOf<Processes>, never, R> =>
   Layer.effectContext(
-    Effect.map(host, (namespace) =>
-      host.processes.reduce(
-        (context, process) =>
-          Context.add(
-            context,
-            process as unknown as Context.Key<unknown, ProcessService<any>>,
-            remoteClient(namespace, process.processName, process.inputs),
-          ),
-        Context.empty() as Context.Context<unknown>,
-      ),
-    ),
+    Effect.map(host, (namespace) => clientsOf(namespace, host.processes)),
   ) as Layer.Layer<ServicesOf<Processes>, never, R>;
