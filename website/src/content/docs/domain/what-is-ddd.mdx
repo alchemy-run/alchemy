@@ -406,9 +406,9 @@ See [Story](/domain/story).
 
 ## Verify: rules proved for every case
 
-A test checks one example: this history, this command, this outcome. An invariant claims more than that. "An account is never overdrawn" is a claim about every history and every command, including the ones nobody thought to write a test for.
+A test checks one example: this history, this command, this outcome. A rule like "an account is never overdrawn" claims more. It is about every history and every command, including the ones nobody wrote a test for.
 
-Because an aggregate's behaviour is a function of its state and a command, that claim can be checked as it stands. This is **formal verification**: the rule is written down next to the aggregate, and a proof is attempted for every state the rules allow and every input a command accepts.
+Such a rule is written next to the aggregate, as an **invariant**:
 
 ```diff lang="typescript" title="src/Account.aggregate.ts"
 export class Account extends Domain.Aggregate("Account", {
@@ -420,35 +420,54 @@ export class Account extends Domain.Aggregate("Account", {
 +  },
 ```
 
-Nothing runs an invariant when a command arrives. It says what `decide` and `evolve` must never let happen, and verification checks that they don't.
-
-<DAG
-  nodes={[
-    { id: "state", label: "every state", type: "the rules allow", kind: "aggregate", col: 0, row: 0 },
-    { id: "command", label: "every command", type: "with any input", kind: "command", col: 1, row: 0 },
-    { id: "proved", label: "proved", type: "the rule holds after", kind: "event", col: 2, row: 0 },
-    { id: "broken", label: "or broken", type: "the inputs that break it", kind: "rejection", col: 2, row: 1 },
-  ]}
-  edges={[
-    { from: "state", to: "command" },
-    { from: "command", to: "proved" },
-    { from: "command", to: "broken" },
-  ]}
-/>
-
-One test verifies the whole model. It reads `decide`, `evolve` and each rule as logic, and asks a solver whether any state and any input lead to a state that breaks one:
+Nothing runs an invariant when a command arrives. It says what `decide` and `evolve` must never let happen, and one test checks that they don't:
 
 ```typescript title="test/Bank.verify.test.ts"
 it.effect(
   "the bank keeps its promises",
-  () => Verify.model(Bank, { apis: [BankApi] }).pipe(Effect.provide(NodeServices.layer)),
+  () => Verify.model(Bank, { apis: [CustomerApi, SupportApi] }).pipe(Effect.provide(NodeServices.layer)),
   120_000,
 );
 ```
 
-A rule that holds is **proved**: it is true after any number of commands, not only the ones that were run. A rule that doesn't hold comes back with the state and the command that break it, and the same inputs are run on the real code to confirm it.
+The test runs no examples. Because an aggregate's behaviour is a function of its state and a command, `decide`, `evolve` and each rule can be read as logic, and a solver asked whether any state and any input lead to a state that breaks one. This is **formal verification**. Run on the example bank, which also has customers, usernames and transfers, the test prints what it found:
 
-Some rules are about more than one aggregate, or about what policies and sagas do over time. Those are searched: every sequence of commands up to a length is tried, with events delivered twice and reactions arriving out of order, and a broken rule comes back as the shortest sequence that breaks it.
+```text
+Bank: 46 outcomes, 1 decision, 5 policies, 1 saga, 1 view, 1 projection, 1 external system
+
+Proved: for every state and every input, after any number of commands
+  ✓ UsernameClaim.AClaimedNameStaysWithItsHolder
+  ✓ Account.NeverOverdrawn
+  ✓ Account.WithinDailyLimit
+  ✓ Account.AClosedAccountStaysClosed
+  ✓ Account.MoneyLeavesOnlyByWithdrawalOrTransfer
+  ✓ Account.OnlyAnAgentChangesTheOwner
+```
+
+**Proved** means no account can be overdrawn, whatever commands it is sent and however many. Now take the balance check out of the withdrawal:
+
+```diff lang="typescript" title="src/Account.aggregate.ts"
+WithdrawMoney: (account, cmd) =>
+  account._tag !== "Open"
+    ? new NotOpen()
+-    : cmd.amount > account.balance
+-      ? new InsufficientFunds({ balance: account.balance, requested: cmd.amount })
+-      : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: account.balance - cmd.amount })],
++    : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: account.balance - cmd.amount })],
+```
+
+The same test fails, with the shortest sequence of commands that overdraws an account:
+
+```text
+✗ Account.NeverOverdrawn breaks
+    1. RegisterCustomer { customerId: "A", name: "B", username: "C" } as { _tag: "Customer", customerId: "A" }  → CustomerRegistered, UsernameClaimed
+       ↳ MainAccountProvisioning: Account "A-main" OpenAccount { accountId: "A-main", customerId: "A", owner: "B" }  → AccountOpened
+    2. Account "A-main" WithdrawMoney { accountId: "A-main", amount: 50000 } as { _tag: "Customer", customerId: "A" }  → MoneyWithdrawn
+```
+
+A customer registers, a policy opens their main account, and they withdraw 50000 from a balance of 0. Under it the report prints the same sequence as a [story](/domain/story), ready to keep as a test.
+
+Some rules span several aggregates, or depend on what policies and sagas do over time, such as "a transfer loses no money". Those are checked by trying every sequence of commands up to a length, with events delivered twice and reactions arriving late.
 
 See [Verifying a model](/domain/verifying-models).
 
