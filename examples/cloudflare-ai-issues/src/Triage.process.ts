@@ -1,19 +1,15 @@
 import * as AI from "@alchemy.run/ai";
 import { Answering } from "./Answering.process.ts";
 import { Board } from "./Board/Board.model.ts";
-import { IssueId } from "./Board/Issue.id.ts";
 import { PostAnswer } from "./PostAnswer.tool.ts";
 import { SearchIssues } from "./SearchIssues.tool.ts";
-
-/** The issue a session looks after. */
-export const issue = AI.Input("issue", IssueId);
 
 /** Read the code, answer on the issue, and label it on the board: the one view and the one command it mentions. */
 export class Triage extends (AI.Process<Triage>()("Triage", {
   description: "Answer one issue of the repository and say what kind of issue it is.",
 })`
-  You look after issue ${issue} of a GitHub repository. The repository is
-  checked out at ~/repo in your sandbox.
+  You look after one issue of a GitHub repository. Your first message says
+  which. The repository is checked out at ~/repo in your sandbox.
 
   Get the issue with ${Board.IssueDetail}: its key is the issue. Find the
   code it is about with ${AI.Grep} and ${AI.Read}, and look for duplicates

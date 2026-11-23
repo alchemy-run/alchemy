@@ -779,7 +779,7 @@ describe("Domain: a model a process mentions", { tags: ["unit", "local"] }, () =
     run((harness) =>
       Effect.gen(function* () {
         const keeper = yield* Keeper;
-        yield* keeper.start("ada", {}, { as: Owner.context("ada") });
+        yield* keeper.start("ada", { as: Owner.context("ada") });
         yield* keeper.get("ada").send("Here is 30.");
 
         const session = harness.sessions.get("Keeper/ada")!;
@@ -795,7 +795,7 @@ describe("Domain: a model a process mentions", { tags: ["unit", "local"] }, () =
     run((harness) =>
       Effect.gen(function* () {
         const keeper = yield* Keeper;
-        yield* keeper.start("ada", {}, { as: Owner.context("ada") });
+        yield* keeper.start("ada", { as: Owner.context("ada") });
 
         // The command's own rule sees ada: her vault takes it, another's refuses it.
         const stored = yield* harness.call(
@@ -829,8 +829,8 @@ describe("Domain: a model a process mentions", { tags: ["unit", "local"] }, () =
     run((harness) =>
       Effect.gen(function* () {
         const keeper = yield* Keeper;
-        yield* keeper.start("ada", {}, { as: Owner.context("ada") });
-        yield* keeper.start("bob", {}, { as: Owner.context("bob") });
+        yield* keeper.start("ada", { as: Owner.context("ada") });
+        yield* keeper.start("bob", { as: Owner.context("bob") });
 
         // Bob's session, asked for Ada's vault.
         const refused = yield* harness.call(
@@ -863,7 +863,7 @@ describe("Domain: a model a process mentions", { tags: ["unit", "local"] }, () =
     run((harness) =>
       Effect.gen(function* () {
         const keeper = yield* Keeper;
-        yield* keeper.start("ada", {}, { as: Owner.context("ada") });
+        yield* keeper.start("ada", { as: Owner.context("ada") });
 
         // A model fills an id it is offered with the same text on every call.
         const store = (callId: string) =>
@@ -885,7 +885,7 @@ describe("Domain: a model a process mentions", { tags: ["unit", "local"] }, () =
     run((harness) =>
       Effect.gen(function* () {
         const clerk = yield* Clerk;
-        yield* clerk.start("ada", {}, { as: Owner.context("ada") });
+        yield* clerk.start("ada", { as: Owner.context("ada") });
         yield* clerk.get("ada").send("Empty it.");
 
         // The aggregate is every command it takes.
@@ -913,7 +913,7 @@ describe("Domain: a model a process mentions", { tags: ["unit", "local"] }, () =
       (harness) =>
         Effect.gen(function* () {
           const clerk = yield* Clerk;
-          yield* clerk.start("ada", {}, { as: Owner.context("ada") });
+          yield* clerk.start("ada", { as: Owner.context("ada") });
 
           const emptied = yield* harness.call(
             "Vaults_Empty_send",

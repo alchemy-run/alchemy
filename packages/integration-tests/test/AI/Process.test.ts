@@ -21,13 +21,10 @@ class Add extends AI.Tool<Add>()("add", {
 }) {}
 const AddLive = Add.make(({ a, b }) => ({ sum: a + b }));
 
-const question = AI.Input("question", Schema.String);
-const depth = AI.Input("depth", Schema.optionalKey(Schema.Number));
-
 class Research extends (AI.Process<Research>()("Research", {
   description: "Answer one question about the code.",
 })`
-  Answer ${question} to ${depth} levels with ${Add}.
+  Answer the question with ${Add}.
   If it is too broad, start a ${AI.Self} on ${Fast} for each part.
 `) {}
 
@@ -37,14 +34,12 @@ class Releasing extends (AI.Process<Releasing>()("Releasing", {
   Add the version numbers with ${Add}, then tag the commit.
 `) {}
 
-const task = AI.Input("task", Schema.String);
-
-class Engineer extends AI.Process<Engineer>()("Engineer", { inputs: [task] }) {}
+class Engineer extends AI.Process<Engineer>()("Engineer", {}) {}
 
 const EngineerLive = Engineer.toLayer({
   description: "Implement one task.",
 })`
-  You are implementing ${task}.
+  Implement the task you are given.
   Start a ${Research} for what you need to know. When asked to ship, follow ${Releasing}.
 `;
 
@@ -73,19 +68,14 @@ const run = <A, E>(
   });
 
 describe("AI.Process", { tags: ["unit"] }, () => {
-  it.effect("starts a session with its inputs as the first message", () =>
+  it.effect("is told what to do in the messages it is sent", () =>
     run((harness) =>
       Effect.gen(function* () {
         const research = yield* Research;
-        yield* research.start("q1", { question: "Where is the parser?", depth: 2 });
+        yield* research.get("q1").send("Where is the parser?");
 
-        const session = harness.sessions.get("Research/q1")!;
-        expect(session.messages).toEqual([
-          {
-            text: "question: Where is the parser?\ndepth: 2",
-            requestId: "start",
-            model: "smart",
-          },
+        expect(harness.sessions.get("Research/q1")!.messages).toEqual([
+          { text: "Where is the parser?", model: "smart" },
         ]);
       }),
     ),
@@ -95,30 +85,13 @@ describe("AI.Process", { tags: ["unit"] }, () => {
     run((harness) =>
       Effect.gen(function* () {
         const research = yield* Research;
-        yield* research.start("q1", { question: "x" });
+        yield* research.get("q1").send("x");
 
         const { instructions } = harness.sessions.get("Research/q1")!;
         expect(instructions).toContain(
-          "Answer `question` to `depth` levels with `rec_add`.\nIf it is too broad, start a Research on `fast` for each part.",
-        );
-        expect(instructions).toContain(
-          "Your first message gives a value for each input: `question`, `depth`.",
+          "Answer the question with `rec_add`.\nIf it is too broad, start a Research on `fast` for each part.",
         );
         expect(instructions).toContain("- Research: Answer one question about the code.");
-      }),
-    ),
-  );
-
-  it.effect("does nothing when the key already started", () =>
-    run((harness) =>
-      Effect.gen(function* () {
-        const research = yield* Research;
-        yield* research.start("q1", { question: "first" });
-        yield* research.start("q1", { question: "second" });
-
-        expect(harness.sessions.get("Research/q1")!.messages.map((each) => each.text)).toEqual([
-          "question: first",
-        ]);
       }),
     ),
   );
@@ -127,37 +100,38 @@ describe("AI.Process", { tags: ["unit"] }, () => {
     run((harness) =>
       Effect.gen(function* () {
         const research = yield* Research;
-        yield* research.start("q1", { question: "x" }, { model: Fast });
+        yield* research.start("q1", { model: Fast });
+        yield* research.get("q1").send("x");
 
         expect(harness.sessions.get("Research/q1")!.messages[0]!.model).toBe("fast");
       }),
     ),
   );
 
-  it.effect("refuses a message to a session that never started", () =>
-    run(() =>
+  it.effect("does nothing when the key already started", () =>
+    run((harness) =>
       Effect.gen(function* () {
         const research = yield* Research;
-        const error = yield* Effect.flip(research.get("nope").send("hello"));
+        yield* research.start("q1", { model: Fast });
+        yield* research.start("q1", { model: Smart });
+        yield* research.get("q1").send("x");
 
-        expect(error).toMatchObject({ _tag: "NotStarted", process: "Research", key: "nope" });
+        expect(harness.sessions.get("Research/q1")!.messages[0]!.model).toBe("fast");
       }),
     ),
   );
 
-  it.effect("sends and prompts a started session", () =>
+  it.effect("sends and prompts a session", () =>
     run((harness) =>
       Effect.gen(function* () {
         const engineer = yield* Engineer;
-        yield* engineer.start("t1", { task: "Rename the flag" });
-        yield* engineer.get("t1").send("Also the docs.", { requestId: "c-1" });
-        yield* engineer.get("t1").send("Also the docs.", { requestId: "c-1" });
+        yield* engineer.get("t1").send("Rename the flag.", { requestId: "c-1" });
+        yield* engineer.get("t1").send("Rename the flag.", { requestId: "c-1" });
         const reply = yield* engineer.get("t1").prompt("Done?");
 
         expect(reply.text).toBe("echo: Done?");
         expect(harness.sessions.get("Engineer/t1")!.messages.map((each) => each.text)).toEqual([
-          "task: Rename the flag",
-          "Also the docs.",
+          "Rename the flag.",
           "Done?",
         ]);
       }),
@@ -168,8 +142,8 @@ describe("AI.Process", { tags: ["unit"] }, () => {
     run((harness) =>
       Effect.gen(function* () {
         const engineer = yield* Engineer;
-        yield* engineer.start("t1", { task: "x" });
-        yield* engineer.start("t2", { task: "y" });
+        yield* engineer.get("t1").send("x");
+        yield* engineer.get("t2").send("y");
 
         expect(harness.opened).toHaveLength(1);
         expect(harness.opened[0]!.models.toSorted()).toEqual(["fast", "smart"]);
@@ -189,7 +163,7 @@ describe("AI.Process", { tags: ["unit"] }, () => {
     run((harness) =>
       Effect.gen(function* () {
         const engineer = yield* Engineer;
-        yield* engineer.start("t1", { task: "x" });
+        yield* engineer.get("t1").send("x");
 
         expect(harness.sessions.get("Engineer/t1")!.tools).toContain("add");
       }),
@@ -200,7 +174,7 @@ describe("AI.Process", { tags: ["unit"] }, () => {
     run((harness) =>
       Effect.gen(function* () {
         const engineer = yield* Engineer;
-        yield* engineer.start("t1", { task: "x" });
+        yield* engineer.get("t1").send("x");
 
         const followed = yield* harness.call("follow_engineer", { process: "Releasing" });
         expect(followed.structured).toEqual({
@@ -214,24 +188,20 @@ describe("AI.Process", { tags: ["unit"] }, () => {
     run((harness) =>
       Effect.gen(function* () {
         const engineer = yield* Engineer;
-        yield* engineer.start("t1", { task: "x" });
+        yield* engineer.get("t1").send("x");
 
         const named = yield* harness.call("start_research", {
-          input: { question: "Where is the parser?" },
+          text: "Where is the parser?",
           session: "parser",
           model: "fast",
         });
         expect(named.structured).toEqual({ session: "parser" });
         expect(harness.sessions.get("Research/parser")!.messages).toEqual([
-          { text: "question: Where is the parser?", requestId: "start", model: "fast" },
+          { text: "Where is the parser?", requestId: "start", model: "fast" },
         ]);
 
         // Without a name, the session is named after the call, so a replayed call starts nothing new.
-        const unnamed = yield* harness.call(
-          "start_research",
-          { input: { question: "y" } },
-          "call-7",
-        );
+        const unnamed = yield* harness.call("start_research", { text: "y" }, "call-7");
         expect(unnamed.structured).toEqual({ session: "call-7" });
         expect(harness.sessions.has("Research/call-7")).toBe(true);
       }),
@@ -242,22 +212,23 @@ describe("AI.Process", { tags: ["unit"] }, () => {
     run((harness) =>
       Effect.gen(function* () {
         const engineer = yield* Engineer;
-        yield* engineer.start("t1", { task: "x" });
-        yield* harness.call("start_research", { input: { question: "q" }, session: "s" });
+        yield* engineer.get("t1").send("x");
+        yield* harness.call("start_research", { text: "q", session: "s" });
 
         const sent = yield* harness.call("send_research", { session: "s", text: "Narrow it." });
         expect(sent.structured).toEqual({ sent: true });
         const refused = yield* harness.call("send_research", { session: "nope", text: "?" });
         expect(refused.structured).toEqual({ sent: false });
+        expect(harness.sessions.has("Research/nope")).toBe(false);
         expect(harness.sessions.get("Research/s")!.messages.map((each) => each.text)).toEqual([
-          "question: q",
+          "q",
           "Narrow it.",
         ]);
       }),
     ),
   );
 
-  it.effect("a process without inputs needs no start", () =>
+  it.effect("a session that acts as nobody needs no start", () =>
     Effect.suspend(() => {
       class Chat extends (AI.Process<Chat>()("Chat", { description: "Talk." })`
         Answer in one sentence.
@@ -276,25 +247,6 @@ describe("AI.Process", { tags: ["unit"] }, () => {
           ),
         ),
       );
-    }),
-  );
-
-  it.effect("refuses prose that mentions an input its tag does not list", () =>
-    Effect.suspend(() => {
-      const harness = recording();
-      const Wrong = Engineer.toLayer({ description: "Wrong." })`Uses ${question as never}.`;
-      return Effect.gen(function* () {
-        const exit = yield* Effect.exit(
-          Effect.provide(
-            Effect.flatMap(Engineer, Effect.succeed),
-            Wrong.pipe(
-              Layer.provide(Layer.mergeAll(harness.layer, AI.DefaultModel(Smart))),
-              Layer.provide(ModelsLive),
-            ),
-          ),
-        );
-        expect(String(exit)).toContain("mentions inputs its tag does not list: question");
-      });
     }),
   );
 });

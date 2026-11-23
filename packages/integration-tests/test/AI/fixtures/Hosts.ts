@@ -12,7 +12,6 @@ import { Adder, Operator, ProcessesLive } from "./Processes.ts";
 /** What a test asks of a session. */
 export interface Ask {
   readonly action: string;
-  readonly input?: unknown;
   readonly text?: string;
   readonly requestId?: string;
 }
@@ -34,7 +33,6 @@ const sessions = Effect.gen(function* () {
       const session = process.get(key);
       const sent = ask.requestId === undefined ? {} : { requestId: ask.requestId };
       return yield* Match.value(ask.action).pipe(
-        Match.when("start", () => Effect.as(process.start(key, ask.input), { ok: true })),
         Match.when("send", () => Effect.as(session.send(ask.text ?? "", sent), { ok: true })),
         Match.when("prompt", () => session.prompt(ask.text ?? "", sent)),
         Match.when("wait", () => Effect.as(session.wait, { ok: true })),
@@ -43,10 +41,6 @@ const sessions = Effect.gen(function* () {
           Effect.map(session.messages, (messages) => ({ messages: JSON.stringify(messages) })),
         ),
         Match.orElse(() => Effect.succeed(undefined)),
-        // A session that never started is an answer, not a failure of the call.
-        Effect.catchTag("NotStarted", ({ _tag, process, key }) =>
-          Effect.succeed({ _tag, process, key }),
-        ),
         Effect.orDie,
       );
     }),

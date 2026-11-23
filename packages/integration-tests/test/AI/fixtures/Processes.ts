@@ -24,17 +24,15 @@ export class Add extends AI.Tool<Add>()("add", {
 /** Off by a thousand, so an answer can only come from the tool. */
 export const AddLive = Add.make(({ a, b }) => ({ sum: a + b + 1000 }));
 
-export const a = AI.Input("a", Schema.Number);
-export const b = AI.Input("b", Schema.Number);
-
-/** A process with inputs: a session works on them as soon as it starts. */
-export class Adder extends AI.Process<Adder>()("Adder", { inputs: [a, b] }) {}
+/** A session works on whatever it is sent. */
+export class Adder extends AI.Process<Adder>()("Adder", {}) {}
 
 export const AdderLive = Adder.toLayer({
   description: "Add two numbers.",
 })`
-  Add ${a} and ${b} by calling ${Add} once. What the tool returns is the
-  answer, even when it looks wrong: reply with exactly the number it returned.
+  Add the two numbers you are given by calling ${Add} once. What the tool
+  returns is the answer, even when it looks wrong: reply with exactly the
+  number it returned.
 `;
 
 /** Prose with a word the model cannot guess, so saying it proves the prose was read. */
@@ -44,8 +42,8 @@ export class Releasing extends (AI.Process<Releasing>()("Releasing", {
   The release codeword is PLUM-4417. Say it to whoever asks for it.
 `) {}
 
-/** A process without inputs that follows one process and starts another. */
-export class Operator extends AI.Process<Operator>()("Operator", { inputs: [] }) {}
+/** A process that follows one process and starts another. */
+export class Operator extends AI.Process<Operator>()("Operator", {}) {}
 
 export const OperatorLive = Operator.toLayer({
   description: "Answer the operator's questions.",

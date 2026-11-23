@@ -7,6 +7,8 @@ import * as Effect from "effect/Effect";
 interface Recorded {
   readonly instructions: string;
   readonly tools: ReadonlyArray<string>;
+  /** The model the session was opened on. */
+  model: string;
   readonly messages: Array<{
     readonly text: string;
     readonly requestId?: string;
@@ -39,12 +41,13 @@ export const recording = () => {
         },
         toolName: (tool) => `rec_${toolName(tool)}`,
         session: (name, options) => {
-          const record = () => {
+          const record = (opened?: AI.AnyModel) => {
             let session = sessions.get(name);
             if (session === undefined) {
               session = {
                 instructions: options.instructions,
                 tools: options.tools.map(toolName),
+                model: (opened ?? options.model).modelName,
                 messages: [],
               };
               sessions.set(name, session);
@@ -62,13 +65,13 @@ export const recording = () => {
               session.messages.push({
                 text,
                 ...(sent?.requestId === undefined ? {} : { requestId: sent.requestId }),
-                model: (sent?.model ?? options.model).modelName,
+                model: sent?.model?.modelName ?? session.model,
               });
             });
           return {
             exists: Effect.sync(() => sessions.has(name)),
             // A tool call of this harness carries the session's name.
-            open: () => Effect.sync(() => (record(), name)),
+            open: (opened) => Effect.sync(() => (record(opened?.model), name)),
             submit,
             prompt: (text, sent) => Effect.as(submit(text, sent), { text: `echo: ${text}` }),
             wait: Effect.void,

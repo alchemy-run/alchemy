@@ -39,13 +39,10 @@ export {
 export {
   Acting,
   DefaultModel,
-  Input,
-  isInput,
   isProcess,
   NotStarted,
   Process,
   Self,
-  type AnyInput,
   type AnyProcess,
   type InlineProcess,
   type Mentionable,

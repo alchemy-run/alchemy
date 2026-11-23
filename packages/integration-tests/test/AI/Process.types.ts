@@ -15,9 +15,6 @@ class Add extends AI.Tool<Add>()("add", {
 }) {}
 class Docs extends AI.McpServer<Docs>()("docs") {}
 
-const question = AI.Input("question", Schema.String);
-const depth = AI.Input("depth", Schema.optionalKey(Schema.Number));
-
 // A process requires a harness and the default model, and nothing it does not mention.
 class Bare extends (AI.Process<Bare>()("Bare", { description: "Nothing." })`Say hello.`) {}
 type _BareNeedsTheHarness = Assert<
@@ -27,7 +24,7 @@ type _BareNeedsTheHarness = Assert<
 // Each mention is a requirement: a tool, a tool tag, an MCP server and a model.
 class Research extends (AI.Process<Research>()("Research", {
   description: "Answer one question.",
-})`Answer ${question} to ${depth} levels with ${Add}, ${AI.Read} and ${Docs}, on ${Fast}.`) {}
+})`Answer the question with ${Add}, ${AI.Read} and ${Docs}, on ${Fast}.`) {}
 type _MentionsAreRequirements = Assert<
   Equals<
     Effect.Services<typeof Research>,
@@ -35,19 +32,13 @@ type _MentionsAreRequirements = Assert<
   >
 >;
 
-// The inputs a process is started with are the ones its prose mentions.
+// A session that acts as nobody is started with nothing, or on a model.
 type Client<P> = P extends Effect.Effect<infer A, any, any> ? A : never;
 declare const research: Client<typeof Research>;
+void research.start("a");
+void research.start("a", { model: Fast });
+// @ts-expect-error a process has no inputs
 void research.start("a", { question: "Where?" });
-void research.start("a", { question: "Where?", depth: 2 }, { model: Fast });
-// @ts-expect-error the input the prose mentions is required
-void research.start("a", {});
-// @ts-expect-error an input is typed by its schema
-void research.start("a", { question: 1 });
-
-// A process without inputs is started with none.
-declare const bare: Client<typeof Bare>;
-void bare.start("a");
 
 // Mentioning a process with its prose on the class brings what that prose requires.
 class Lead extends (AI.Process<Lead>()("Lead", {
@@ -57,12 +48,12 @@ type _AMentionedProcessBringsItsRequirements = Assert<
   Equals<Effect.Services<typeof Lead>, Effect.Services<typeof Research>>
 >;
 
-// A process declared by name and inputs is a tag: yielding it requires only the tag.
-class Engineer extends AI.Process<Engineer>()("Engineer", { inputs: [question] }) {}
+// A process declared by name is a tag: yielding it requires only the tag.
+class Engineer extends AI.Process<Engineer>()("Engineer", {}) {}
 type _ATagRequiresItself = Assert<Equals<Effect.Services<typeof Engineer>, Engineer>>;
 
 // Its Layer requires what its prose mentions, and provides the tag.
-const EngineerLive = Engineer.toLayer({ description: "Do it." })`Do ${question} with ${Add}.`;
+const EngineerLive = Engineer.toLayer({ description: "Do it." })`Do the task with ${Add}.`;
 type _ALayerRequiresItsMentions = Assert<
   Equals<typeof EngineerLive, Layer.Layer<Engineer, never, AI.Harness | AI.DefaultModel | Add>>
 >;
@@ -75,9 +66,9 @@ type _AMentionedTagIsRequired = Assert<
   Equals<Effect.Services<typeof Manager>, AI.Harness | AI.DefaultModel | Engineer>
 >;
 
-// Prose for a tag may only mention the inputs the tag lists.
-// @ts-expect-error `depth` is not an input of Engineer
-Engineer.toLayer({ description: "Wrong." })`Do ${question} to ${depth} levels.`;
+// Without a description, a declaration takes no prose of its own.
+// @ts-expect-error the prose goes on `toLayer`
+void AI.Process<Engineer>()("Engineer", {})`Do it.`;
 
 // The default model is one of yours, whose Layer it requires.
 type _TheDefaultModelRequiresItsModel = Assert<

@@ -20,47 +20,10 @@ import {
   type ToolTagClass,
 } from "./Tool.ts";
 
-const InputTypeId = "~alchemy/AI/Input" as const;
 const ProcessTypeId = "~alchemy/AI/Process" as const;
 const SelfTypeId = "~alchemy/AI/Self" as const;
 /** The key under which a term of another package says what mentioning it gives. */
 export const MentionTypeId = "~alchemy/AI/Mention" as const;
-
-/** A value a process is started with, mentioned by name in its prose. */
-export interface Input<Name extends string = string, S extends Schema.Top = Schema.Top> {
-  readonly [InputTypeId]: true;
-  readonly name: Name;
-  readonly schema: S;
-}
-
-export type AnyInput = Input<string, Schema.Top>;
-
-export const isInput = (u: unknown): u is AnyInput =>
-  typeof u === "object" && u !== null && InputTypeId in u;
-
-/**
- * Declare a value a process is started with. Mentioning it in a process's
- * prose makes it one of the process's inputs: the model reads its name
- * there, and its value in the session's first message.
- *
- * **Example:** An input, mentioned in prose
- * ```typescript
- * export const issue = AI.Input("issue", Schema.Number);
- *
- * export class Triage extends AI.Process<Triage>()("Triage", {
- *   description: "Label one GitHub issue.",
- * })`
- *   Label GitHub issue ${issue} as a bug, a feature or a question.
- * ` {}
- *
- * // `start` takes { issue: number }
- * yield* triage.start("issue-42", { issue: 42 });
- * ```
- */
-export const Input = <const Name extends string, S extends Schema.Top>(
-  name: Name,
-  schema: S,
-): Input<Name, S> => ({ [InputTypeId]: true, name, schema });
 
 /** The process a piece of prose belongs to: mention it to let the process start more of itself. */
 export interface Self {
@@ -76,7 +39,7 @@ export interface Self {
  * export class Research extends AI.Process<Research>()("Research", {
  *   description: "Answer one question about the code.",
  * })`
- *   Answer ${question}. If it is too broad, start a ${AI.Self} for each part.
+ *   Answer the question you are given. If it is too broad, start a ${AI.Self} for each part.
  * ` {}
  * ```
  */
@@ -113,7 +76,7 @@ export class Acting extends Context.Service<Acting, { readonly as: Stored }>()("
 const isMentionable = (u: unknown): u is Mentionable<unknown> =>
   (typeof u === "object" || typeof u === "function") && u !== null && MentionTypeId in u;
 
-/** A session was sent a message before it was started with its inputs. */
+/** A session that acts as someone was sent a message before it was started. */
 export class NotStarted extends Data.TaggedError("NotStarted")<{
   readonly process: string;
   readonly key: string;
@@ -143,7 +106,7 @@ export interface Session {
   readonly messages: Effect.Effect<ReadonlyArray<unknown>, HarnessError, RuntimeContext>;
 }
 
-/** What starting a session takes besides its inputs. */
+/** What starting a session takes. */
 export type StartOptions<As = never> = {
   /** The model the session runs on. It must be one the process mentions. @default the `AI.DefaultModel` */
   readonly model?: AnyModel;
@@ -158,21 +121,18 @@ export type StartOptions<As = never> = {
       readonly as: Context.Context<As>;
     });
 
-type StartArgs<I, As> = [As] extends [never]
-  ? [keyof I] extends [never]
-    ? [input?: I, options?: StartOptions]
-    : [input: I, options?: StartOptions]
-  : [input: I, options: StartOptions<As>];
+type StartArgs<As> = [As] extends [never] ? [options?: StartOptions] : [options: StartOptions<As>];
 
 /** What yielding a process gives: a way to start sessions and reach them. */
-export interface ProcessClient<I = {}, As = never> {
+export interface ProcessClient<As = never> {
   /**
-   * Start the session with this key and return once its inputs are stored.
-   * Starting a key that already started does nothing.
+   * Make the session with this key: on the model, and acting as who, it is
+   * started with. Starting a key that already started does nothing. A
+   * session that acts as nobody need not be started.
    */
   readonly start: (
     key: string,
-    ...args: StartArgs<I, As>
+    ...args: StartArgs<As>
   ) => Effect.Effect<void, HarnessError, RuntimeContext>;
   /** The session with this key. Nothing runs until it is used. */
   readonly get: (key: string) => Session;
@@ -184,20 +144,15 @@ interface Definition {
   readonly description: string;
   readonly strings: ReadonlyArray<string>;
   readonly refs: ReadonlyArray<unknown>;
-  /** Every value a session is started with. */
-  readonly inputs: ReadonlyArray<AnyInput>;
 }
 
 /** What a process's tag holds: its client and, where the prose is local, the prose. */
-export type ProcessService<I = {}, As = never> = ProcessClient<I, As> & {
+export type ProcessService<As = never> = ProcessClient<As> & {
   /** @internal */
   readonly "~definition"?: Definition;
+  /** @internal Whether the harness has the session with this key. */
+  readonly "~exists"?: (key: string) => Effect.Effect<boolean, HarnessError, RuntimeContext>;
 };
-
-/** The object type of a list of inputs: one property per input, by its schema. */
-export type InputsOf<M> = Schema.Struct<{
-  readonly [I in Extract<M, AnyInput> as I["name"]]: I["schema"];
-}>["Type"];
 
 type ToolRequires<T> =
   T extends CodeModeGroup<infer Inner>
@@ -215,7 +170,7 @@ type ToolRequires<T> =
               : never;
 
 /** What running a process that mentions `M` requires. */
-export type Requires<M> = M extends AnyInput | Self | string | number
+export type Requires<M> = M extends Self | string | number
   ? never
   : M extends { readonly [ProcessTypeId]: "tag"; readonly "~process": infer Service }
     ? Service
@@ -267,8 +222,8 @@ export const DefaultModel: Context.Service<DefaultModel, { readonly model: AnyMo
   }, DefaultModelKey);
 
 /** A process whose prose is on its class. Yielding it requires what the prose mentions. */
-export interface InlineProcess<Name extends string, I, R, As = never> extends Effect.Effect<
-  ProcessClient<I, As>,
+export interface InlineProcess<Name extends string, R, As = never> extends Effect.Effect<
+  ProcessClient<As>,
   never,
   R
 > {
@@ -282,31 +237,14 @@ export interface InlineProcess<Name extends string, I, R, As = never> extends Ef
   readonly "~acts": As;
 }
 
-type Declared<Inputs extends ReadonlyArray<AnyInput>> = Inputs[number];
-
-/** Prose for a process tag: only the inputs its tag lists may be mentioned. */
-type Mentions<Refs extends ReadonlyArray<unknown>, Inputs extends ReadonlyArray<AnyInput>> = {
-  readonly [K in keyof Refs]: Refs[K] extends AnyInput
-    ? Refs[K] extends Declared<Inputs>
-      ? Refs[K]
-      : { readonly "This input is not one the process's tag lists": Refs[K]["name"] }
-    : Refs[K];
-};
-
-/** A process declared by name and inputs. A Layer gives it its prose. */
-export interface ProcessTag<
-  Service,
-  Name extends string,
-  Inputs extends ReadonlyArray<AnyInput>,
-  As = never,
-> extends Context.ServiceClass<
+/** A process declared by name. A Layer gives it its prose. */
+export interface ProcessTag<Service, Name extends string, As = never> extends Context.ServiceClass<
   Service,
   `AI.Process/${Name}`,
-  ProcessService<InputsOf<Inputs[number]>, As>
+  ProcessService<As>
 > {
   readonly [ProcessTypeId]: "tag";
   readonly processName: Name;
-  readonly inputs: Inputs;
   readonly description: string | undefined;
   /** Phantom: the service a process that mentions this one requires. */
   readonly "~process": Service;
@@ -322,69 +260,62 @@ export interface ProcessTag<
     readonly description: string;
   }): <const Refs extends ReadonlyArray<unknown>>(
     strings: TemplateStringsArray,
-    ...refs: Mentions<Refs, Inputs>
+    ...refs: Refs
   ) => Layer.Layer<Service, never, Requires<Refs[number]> | Harness | DefaultModel>;
 }
 
 /** Any process, structurally. */
 export type AnyProcess =
-  | InlineProcess<string, any, any, any>
+  | InlineProcess<string, any, any>
   | {
       readonly [ProcessTypeId]: "tag";
       readonly key: string;
       readonly processName: string;
-      readonly inputs: ReadonlyArray<AnyInput>;
       readonly description: string | undefined;
     };
 
 export const isProcess = (u: unknown): u is AnyProcess =>
   (typeof u === "object" || typeof u === "function") && u !== null && ProcessTypeId in u;
 
-/** The declaration forms of a process. */
+/** The prose of a process, written on its class. */
+export type Prose<Name extends string> = <const Refs extends ReadonlyArray<unknown>>(
+  strings: TemplateStringsArray,
+  ...refs: Refs
+) => InlineProcess<Name, Requires<Refs[number]> | Harness | DefaultModel, Acts<Refs[number]>> &
+  (new () => object);
+
+/**
+ * The declaration forms of a process. Extended as it is, the declaration
+ * is a tag a Layer gives prose to; with a description, it also takes the
+ * prose itself.
+ */
 export interface ProcessConstructor {
-  <Service>(): {
-    /** A process known by its name and inputs: `toLayer` gives it prose. */
-    <
-      const Name extends string,
-      const Inputs extends ReadonlyArray<AnyInput>,
-      As extends Context.Key<any, any> = never,
-    >(
-      name: Name,
-      options: {
-        /** Every value a session is started with. */
-        readonly inputs: Inputs;
-        /**
-         * What a session must be started as: the request context of the
-         * commands and views its prose may mention.
-         */
-        readonly as?: ReadonlyArray<As>;
-        /** What a process that mentions this one reads, where the prose's own description is out of reach. */
-        readonly description?: string;
-      },
-    ): ProcessTag<
-      Service,
-      Name,
-      Inputs,
-      [As] extends [never] ? never : As extends Context.Key<infer Id, any> ? Id : never
-    >;
-    /** A process with its prose on the class. */
-    <const Name extends string>(
-      name: Name,
-      options: {
-        /** When to follow or start this process: what another process's model reads to choose it. */
-        readonly description: string;
-      },
-    ): <const Refs extends ReadonlyArray<unknown>>(
-      strings: TemplateStringsArray,
-      ...refs: Refs
-    ) => InlineProcess<
-      Name,
-      InputsOf<Refs[number]>,
-      Requires<Refs[number]> | Harness | DefaultModel,
-      Acts<Refs[number]>
-    > &
-      (new () => object);
-  };
+  <Service>(): <
+    const Name extends string,
+    const Description extends string | undefined = undefined,
+    As extends Context.Key<any, any> = never,
+  >(
+    name: Name,
+    options: {
+      /**
+       * When to follow or start this process: what another process's model
+       * reads to choose it. Required to write the prose on the class;
+       * otherwise it may be given with the prose, on `toLayer`.
+       */
+      readonly description?: Description;
+      /**
+       * What a session must be started as: the request context of the
+       * commands and views its prose may mention. Prose on the class works
+       * this out from what it mentions.
+       */
+      readonly as?: ReadonlyArray<As>;
+    },
+  ) => ProcessTag<
+    Service,
+    Name,
+    [As] extends [never] ? never : As extends Context.Key<infer Id, any> ? Id : never
+  > &
+    ([Description] extends [string] ? Prose<Name> : unknown);
 }
 
 /** A template's text with its shared indentation and outer blank lines removed. */
@@ -417,11 +348,6 @@ const snake = (name: string): string =>
 const definitionOf = (process: AnyProcess): Definition | undefined =>
   process[ProcessTypeId] === "inline" ? process.definition : undefined;
 
-/** The inputs a piece of prose mentions, once each. */
-const inputsIn = (refs: ReadonlyArray<unknown>): ReadonlyArray<AnyInput> => [
-  ...new Map(refs.filter(isInput).map((input) => [input.name, input])).values(),
-];
-
 /** Under which a session started by another session is handed what that one acts as. */
 const STORED = "~as" as const;
 
@@ -445,8 +371,7 @@ const actingIn = (harness: Harness["Service"]) =>
 interface Child {
   readonly name: string;
   readonly description: string;
-  readonly inputs: ReadonlyArray<AnyInput>;
-  readonly client: () => ProcessClient<any>;
+  readonly client: () => ProcessService<any>;
   /** The prose, where it can be followed here. */
   readonly definition: Definition | undefined;
 }
@@ -459,23 +384,6 @@ interface Known {
 }
 
 const knownBy = new WeakMap<object, Known>();
-
-/** The schema of a list of inputs: one property per input. */
-const structOf = (inputs: ReadonlyArray<AnyInput>) =>
-  Schema.Struct(Object.fromEntries(inputs.map((input) => [input.name, input.schema])));
-
-/** A session's first message: each input by name. */
-const firstMessage = (inputs: ReadonlyArray<AnyInput>, value: unknown) =>
-  Schema.encodeUnknownEffect(structOf(inputs) as unknown as Schema.Codec<unknown, unknown>)(
-    value ?? {},
-  ).pipe(
-    Effect.orDie,
-    Effect.map((encoded) =>
-      Object.entries(encoded as Record<string, unknown>)
-        .map(([name, each]) => `${name}: ${typeof each === "string" ? each : JSON.stringify(each)}`)
-        .join("\n"),
-    ),
-  );
 
 /** The tools a session gets for one process it may follow or start. */
 const childTools = (
@@ -491,7 +399,9 @@ const childTools = (
     {
       description: `Start a session of the ${child.name} process: ${child.description} It runs on its own, apart from this conversation. Returns the session's name.`,
       parameters: Schema.Struct({
-        ...(child.inputs.length > 0 ? { input: structOf(child.inputs) } : {}),
+        text: Schema.String.annotate({
+          description: "The session's first message: what it is to do.",
+        }),
         session: Schema.optionalKey(Schema.String).annotate({
           description: "A name for the session. Starting a name twice does nothing.",
         }),
@@ -502,7 +412,7 @@ const childTools = (
       success: Schema.Struct({ session: Schema.String }),
     },
     Effect.fn(function* (parameters: {
-      readonly input?: unknown;
+      readonly text: string;
       readonly session?: string;
       readonly model?: string;
     }) {
@@ -515,15 +425,18 @@ const childTools = (
         );
       }
       // A session started by another acts as whoever that one does.
-      const start = child.client().start as (
+      const client = child.client();
+      const start = client.start as (
         key: string,
-        input: unknown,
         options: StartWith,
       ) => Effect.Effect<void, HarnessError, RuntimeContext>;
-      yield* start(session, parameters.input ?? {}, {
-        ...(model === undefined ? {} : { model }),
-        [STORED]: yield* actingIn(harness),
-      }).pipe(Effect.orDie);
+      const on = model === undefined ? {} : { model };
+      yield* start(session, { ...on, [STORED]: yield* actingIn(harness) }).pipe(Effect.orDie);
+      // The same id on every replay, so a session is given its first message once.
+      yield* client
+        .get(session)
+        .send(parameters.text, { requestId: "start", ...on })
+        .pipe(Effect.orDie);
       return { session };
     }),
   );
@@ -536,8 +449,11 @@ const childTools = (
     },
     Effect.fn(function* ({ session, text }: { readonly session: string; readonly text: string }) {
       const call = yield* ToolCall;
-      return yield* child
-        .client()
+      const client = child.client();
+      // A name nobody started is a mistake, not a new session.
+      const exists = client["~exists"];
+      if (exists !== undefined && !(yield* Effect.orDie(exists(session)))) return { sent: false };
+      return yield* client
         .get(session)
         .send(text, { requestId: call.callId })
         .pipe(
@@ -571,7 +487,6 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
 
     const { model: defaultModel } = yield* DefaultModel;
     const context = yield* Effect.context<never>();
-    const inputs = definition.inputs;
 
     const tools: Array<unknown> = [];
     const models: Array<AnyModel> = [defaultModel];
@@ -600,12 +515,11 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
         if (seen.has(prose)) return;
         seen.add(prose);
         for (const ref of prose.refs) {
-          if (isInput(ref) || typeof ref === "string" || typeof ref === "number") continue;
+          if (typeof ref === "string" || typeof ref === "number") continue;
           if (ref === Self) {
             children.set(prose.name, {
               name: prose.name,
               description: prose.description,
-              inputs: prose.inputs,
               client: () => (prose === definition ? service! : state.services.get(prose)!),
               definition: undefined,
             });
@@ -616,7 +530,6 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
               children.set(inline.name, {
                 name: inline.name,
                 description: inline.description,
-                inputs: inline.inputs,
                 client: () => client,
                 definition: inline,
               });
@@ -629,7 +542,6 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
               children.set(ref.processName, {
                 name: ref.processName,
                 description: local?.description ?? ref.description ?? ref.processName,
-                inputs: ref.inputs,
                 client: () => client,
                 definition: local,
               });
@@ -664,7 +576,6 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
     /** What the model reads for a mention. */
     const mentionOf = (engine: Engine, ref: unknown): string => {
       if (typeof ref === "string" || typeof ref === "number") return String(ref);
-      if (isInput(ref)) return `\`${ref.name}\``;
       if (ref === Self) return definition.name;
       if (isProcess(ref)) return ref.processName;
       if (isModel(ref)) return `\`${ref.modelName}\``;
@@ -714,11 +625,6 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
     const instructionsOn = (engine: Engine): string => {
       if (instructions === undefined) {
         const sections = [render(engine, definition)];
-        if (inputs.length > 0) {
-          sections.push(
-            `Your first message gives a value for each input: ${inputs.map((input) => `\`${input.name}\``).join(", ")}.`,
-          );
-        }
         if (children.size > 0) {
           const how = [
             ...(follow === undefined
@@ -726,7 +632,7 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
               : [
                   `To follow a process, call \`${engine.toolName(follow)}\` with its name: its instructions are added to this conversation and you carry them out.`,
                 ]),
-            "To start a process, call its `start_` tool: it runs as a session of its own, apart from this conversation.",
+            "To start a process, call its `start_` tool with what it is to do: it runs as a session of its own, apart from this conversation.",
           ];
           sections.push(
             [
@@ -749,8 +655,8 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
           model: defaultModel,
         }),
       );
-    /** Whether a session has to be started before it is sent anything: it has inputs, or acts as someone. */
-    const needsStart = () => inputs.length > 0 || encoders.length > 0;
+    /** Whether a session has to be started before it is sent anything: it acts as someone. */
+    const needsStart = () => encoders.length > 0;
     const started = (key: string) =>
       Effect.flatMap(sessionOf(key), (session) =>
         !needsStart()
@@ -764,37 +670,32 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
 
     service = {
       "~definition": definition,
-      start: (key: string, input?: unknown, options?: StartWith) =>
+      "~exists": (key: string) => Effect.flatMap(sessionOf(key), (session) => session.exists),
+      start: (key: string, options?: StartWith) =>
         Effect.gen(function* () {
-          if (!needsStart()) return;
           const engine = yield* harness.open;
           const session = yield* sessionOf(key);
           if (yield* session.exists) return;
-          const model = options?.model === undefined ? {} : { model: options.model };
-          if (encoders.length > 0) {
-            const as =
-              options?.[STORED] ??
-              (options?.as === undefined
-                ? undefined
-                : Object.assign(
-                    {},
-                    ...(yield* Effect.forEach(encoders, (encode) => encode(options.as!))),
-                  ));
-            if (as === undefined) {
-              return yield* new HarnessError({
-                message: `A session of ${definition.name} acts as someone: start it with \`as\`.`,
-              });
-            }
-            // Stored before the session is given anything, so its first tool call finds it.
-            const id = yield* session.open(model);
-            yield* engine.values.put(`as:${id}`, JSON.stringify(as));
-          }
-          if (inputs.length > 0) {
-            yield* session.submit(yield* firstMessage(inputs, input), {
-              requestId: "start",
-              ...model,
+          const as =
+            encoders.length === 0
+              ? undefined
+              : (options?.[STORED] ??
+                (options?.as === undefined
+                  ? undefined
+                  : Object.assign(
+                      {},
+                      ...(yield* Effect.forEach(encoders, (encode) => encode(options.as!))),
+                    )));
+          if (encoders.length > 0 && as === undefined) {
+            return yield* new HarnessError({
+              message: `A session of ${definition.name} acts as someone: start it with \`as\`.`,
             });
           }
+          const id = yield* session.open(
+            options?.model === undefined ? {} : { model: options.model },
+          );
+          // Stored before the session is given anything, so its first tool call finds it.
+          if (as !== undefined) yield* engine.values.put(`as:${id}`, JSON.stringify(as));
         }),
       get: (key: string): Session => ({
         send: (text, options) =>
@@ -818,44 +719,40 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
  * - A tool (`AI.Tool`, `AI.Bash`, an MCP server): the session may call it.
  * - A model (`AI.Model`): the session may be run on it, and may start
  *   other sessions on it.
- * - An input (`AI.Input`): a value the session is started with.
  * - Another process: the session may follow it (read its prose into its
  *   own conversation) or start it (as a session of its own).
  *
- * A process has no output. It reports through the tools it is given.
+ * A process has no inputs and no output. It is told what to do in the
+ * messages it is sent, and reports through the tools it is given.
  *
  * **Example:** The prose on the class
  * ```typescript
- * export const question = AI.Input("question", Schema.String);
- *
  * export class Research extends AI.Process<Research>()("Research", {
  *   description: "Answer one question about the code, with file paths.",
  * })`
- *   Answer ${question} about the repository in your working directory.
+ *   Answer one question about the repository in your working directory.
  *   Search with ${AI.Grep} and open what looks relevant with ${AI.Read}.
  *   Never edit files.
  * ` {}
  * ```
  *
- * **Example:** A name and inputs, with the prose in a Layer
+ * **Example:** A name, with the prose in a Layer
  * ```typescript
- * export const task = AI.Input("task", Schema.String);
- *
- * export class Engineer extends AI.Process<Engineer>()("Engineer", { inputs: [task] }) {}
+ * export class Engineer extends AI.Process<Engineer>()("Engineer", {}) {}
  *
  * export const EngineerLive = Engineer.toLayer({
  *   description: "Implement one task, from reading the code to a passing change.",
  * })`
- *   You are implementing ${task}. Start a ${Research} on ${Fast} for each
- *   thing you need to know, then make the change with ${AI.Edit}.
+ *   Implement the task you are given. Start a ${Research} on ${Fast} for
+ *   each thing you need to know, then make the change with ${AI.Edit}.
  * `;
  * ```
  *
- * **Example:** Starting a session and talking to it
+ * **Example:** Talking to a session
  * ```typescript
  * const engineer = yield* Engineer;
  *
- * yield* engineer.start("task-7", { task: "Rename the config flag" });
+ * yield* engineer.get("task-7").send("Rename the config flag.");
  * const reply = yield* engineer.get("task-7").prompt("Also update the docs.");
  * ```
  */
@@ -863,7 +760,6 @@ export const Process = (() =>
   (
     name: string,
     options: {
-      readonly inputs?: ReadonlyArray<AnyInput>;
       readonly description?: string;
     },
   ) => {
@@ -876,7 +772,6 @@ export const Process = (() =>
         description: options.description ?? name,
         strings: [...strings],
         refs,
-        inputs: inputsIn(refs),
       };
       function Inline() {}
       Object.assign(Inline, { [ProcessTypeId]: "inline", processName: name, definition });
@@ -889,7 +784,6 @@ export const Process = (() =>
     Object.assign(Declared, {
       [ProcessTypeId]: "tag",
       processName: name,
-      inputs: options.inputs ?? [],
       description: options.description,
       toLayer:
         (layer: { readonly description: string }) =>
@@ -899,20 +793,8 @@ export const Process = (() =>
             description: layer.description,
             strings: [...strings],
             refs,
-            inputs: options.inputs ?? [],
           };
-          const listed = new Set(definition.inputs.map((input) => input.name));
-          const unlisted = inputsIn(refs).filter((input) => !listed.has(input.name));
-          return Layer.effect(
-            key,
-            unlisted.length > 0
-              ? Effect.die(
-                  new HarnessError({
-                    message: `The prose of ${name} mentions inputs its tag does not list: ${unlisted.map((input) => input.name).join(", ")}.`,
-                  }),
-                )
-              : compile(definition),
-          );
+          return Layer.effect(key, compile(definition));
         },
     });
     return Object.setPrototypeOf(Declared, key);

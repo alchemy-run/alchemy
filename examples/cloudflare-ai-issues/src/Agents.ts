@@ -85,16 +85,10 @@ export default class IssueAgents extends Cloudflare.DurableObject<IssueAgents>()
     const triage = yield* Triage;
 
     return Effect.succeed({
-      start: (issue) => triage.start(issue, { issue }).pipe(Effect.orDie),
-      tell: (issue, text, id) =>
-        triage
-          .get(issue)
-          .send(text, { requestId: id })
-          .pipe(
-            // A reply on an issue that was never reported here has no session.
-            Effect.catchTag("NotStarted", () => Effect.void),
-            Effect.orDie,
-          ),
+      // The same id however often the event is delivered, so the issue is taken up once.
+      start: (issue) =>
+        triage.get(issue).send(`The issue is ${issue}.`, { requestId: "start" }).pipe(Effect.orDie),
+      tell: (issue, text, id) => triage.get(issue).send(text, { requestId: id }).pipe(Effect.orDie),
     } satisfies Agent);
   }).pipe(Effect.provide(Live)),
 ) {}

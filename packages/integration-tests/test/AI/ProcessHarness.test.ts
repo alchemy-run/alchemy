@@ -27,7 +27,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 /** Call one action of a session, retrying while the fresh Worker starts serving. */
 const call = Effect.fn(function* (
   path: string,
-  body: { readonly input?: unknown; readonly text?: string; readonly requestId?: string } = {},
+  body: { readonly text?: string; readonly requestId?: string } = {},
 ) {
   const { url } = yield* stack;
   const client = yield* HttpClient.HttpClient;
@@ -44,7 +44,6 @@ const call = Effect.fn(function* (
   return (yield* response.json) as {
     readonly text?: string;
     readonly messages?: string;
-    readonly _tag?: string;
   };
 });
 
@@ -55,9 +54,12 @@ for (const harness of ["pi", "opencode"] as const) {
     { tags: ["provider:cloudflare", `provider:${harness}`, "live"] },
     () => {
       test(
-        "a started session works on its inputs",
+        "a session works on what it is sent",
         Effect.gen(function* () {
-          yield* call(`${harness}/Adder/total-1/start`, { input: { a: 2, b: 3 } });
+          yield* call(`${harness}/Adder/total-1/send`, {
+            text: "Add 2 and 3.",
+            requestId: "first",
+          });
           yield* call(`${harness}/Adder/total-1/wait`);
           const { messages } = yield* call(`${harness}/Adder/total-1/messages`);
 
@@ -68,10 +70,16 @@ for (const harness of ["pi", "opencode"] as const) {
       );
 
       test(
-        "starting a key twice starts it once",
+        "a message sent twice under one request id is run once",
         Effect.gen(function* () {
-          yield* call(`${harness}/Adder/total-2/start`, { input: { a: 10, b: 20 } });
-          yield* call(`${harness}/Adder/total-2/start`, { input: { a: 500, b: 500 } });
+          yield* call(`${harness}/Adder/total-2/send`, {
+            text: "Add 10 and 20.",
+            requestId: "first",
+          });
+          yield* call(`${harness}/Adder/total-2/send`, {
+            text: "Add 500 and 500.",
+            requestId: "first",
+          });
           yield* call(`${harness}/Adder/total-2/wait`);
           const { messages } = yield* call(`${harness}/Adder/total-2/messages`);
 
@@ -82,9 +90,12 @@ for (const harness of ["pi", "opencode"] as const) {
       );
 
       test(
-        "a started session answers later messages",
+        "a session answers later messages",
         Effect.gen(function* () {
-          yield* call(`${harness}/Adder/total-3/start`, { input: { a: 1, b: 1 } });
+          yield* call(`${harness}/Adder/total-3/send`, {
+            text: "Add 1 and 1.",
+            requestId: "first",
+          });
           yield* call(`${harness}/Adder/total-3/wait`);
           const reply = yield* call(`${harness}/Adder/total-3/prompt`, {
             text: "Now call the tool once more to add 7 to the number it returned. Reply with exactly what it returns.",
@@ -100,7 +111,10 @@ for (const harness of ["pi", "opencode"] as const) {
       test(
         "a message sent without waiting is answered",
         Effect.gen(function* () {
-          yield* call(`${harness}/Adder/total-4/start`, { input: { a: 5, b: 5 } });
+          yield* call(`${harness}/Adder/total-4/send`, {
+            text: "Add 5 and 5.",
+            requestId: "first",
+          });
           yield* call(`${harness}/Adder/total-4/wait`);
           // `send` returns once the message is stored; the session answers on its own.
           yield* call(`${harness}/Adder/total-4/send`, {
@@ -119,16 +133,6 @@ for (const harness of ["pi", "opencode"] as const) {
           expect(messages).toContain("2017");
         }),
         { timeout: 180_000 },
-      );
-
-      test(
-        "a session that never started refuses a message",
-        Effect.gen(function* () {
-          const reply = yield* call(`${harness}/Adder/never/send`, { text: "hello" });
-
-          expect(reply._tag).toBe("NotStarted");
-        }),
-        { timeout: 120_000 },
       );
 
       test(

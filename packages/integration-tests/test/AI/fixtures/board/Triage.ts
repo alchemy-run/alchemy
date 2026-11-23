@@ -1,15 +1,11 @@
 import * as AI from "@alchemy.run/ai";
 import { Board } from "./Board.ts";
-import { IssueId } from "./Issue.id.ts";
-
-/** The issue a session works on. */
-export const issue = AI.Input("issue", IssueId);
 
 /** Labels one issue of the board. */
 export class Triage extends (AI.Process<Triage>()("Triage", {
   description: "Label one issue of the board as a bug, a feature or a question.",
 })`
-  You label issue ${issue}.
+  You label one issue of the board. Your first message says which.
 
   Get its detail first with ${Board.IssueDetail}: its key is the issue. Then
   send ${Board.LabelIssue} for it: bug when something is broken, feature

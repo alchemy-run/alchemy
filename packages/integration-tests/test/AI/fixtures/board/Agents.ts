@@ -68,8 +68,13 @@ export default class BoardAgents extends Cloudflare.DurableObject<BoardAgents>()
       // Every command the session sends is sent as this labeler.
       start: (issue) =>
         triage
-          .start(issue, { issue }, { as: Labeler.context({ name: "triage-bot" }) })
-          .pipe(Effect.orDie),
+          .start(issue, { as: Labeler.context({ name: "triage-bot" }) })
+          .pipe(
+            Effect.andThen(
+              triage.get(issue).send(`The issue is ${issue}.`, { requestId: "start" }),
+            ),
+            Effect.orDie,
+          ),
       tell: (issue, text, id) =>
         triage
           .get(issue)
