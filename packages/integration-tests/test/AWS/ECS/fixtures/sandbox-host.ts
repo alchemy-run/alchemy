@@ -166,9 +166,12 @@ export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
                   ? `import sys; print("hi " + sys.argv[1])`
                   : `console.log("hi " + process.argv[2])`,
               );
-              const run = yield* sandbox.exec(image ? "python3 hello.py sam" : "node hello.mjs sam", {
-                cwd: "/work",
-              });
+              const run = yield* sandbox.exec(
+                image ? "python3 hello.py sam" : "node hello.mjs sam",
+                {
+                  cwd: "/work",
+                },
+              );
               const failed = yield* sandbox.exec(["sh", "-c", "echo oops >&2; exit 3"]);
               const env = yield* sandbox.exec("echo $SANDBOX_GREETING/$EXTRA", {
                 env: { EXTRA: "per call" },

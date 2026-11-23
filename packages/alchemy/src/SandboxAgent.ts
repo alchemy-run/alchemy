@@ -19,7 +19,6 @@ import * as Stream from "effect/Stream";
 import { HttpServer, type HttpEffect } from "./Http.ts";
 import { rpcMethodOf, serveRpc } from "./Rpc.ts";
 import type * as Sandbox from "./Sandbox.ts";
-import { Terminals } from "./Terminal.ts";
 import {
   fromBase64,
   SANDBOX_AGENT_PORT,
@@ -37,6 +36,7 @@ import {
   type WireProcessOutput,
   type WireSignal,
 } from "./SandboxAgentClient.ts";
+import { Terminals } from "./Terminal.ts";
 
 /**
  * The server half of the sandbox agent. A program that serves it answers the

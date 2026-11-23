@@ -6,8 +6,8 @@ import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import type { HttpServer } from "../Http.ts";
-import type { Terminals } from "../Terminal.ts";
 import { RuntimeConfigProviderLive } from "../Runtime.ts";
+import type { Terminals } from "../Terminal.ts";
 import { entrypointLayer, resolveProgram, runProcess, stackFromEnv } from "./Bootstrap.ts";
 
 type ProcessServices = NodeServices | HttpClient | SecureRandom.SecureRandom;

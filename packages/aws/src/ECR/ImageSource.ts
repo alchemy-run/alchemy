@@ -1,4 +1,3 @@
-import { NODE_PTY_PACKAGE, NODE_PTY_VERSION } from "alchemy/Runtime/TerminalNode";
 import {
   ContainerRuntime,
   makeContainerBootstrap,
@@ -13,6 +12,7 @@ import {
   type RegistryImageSource,
 } from "@alchemy.run/docker/ImageSource";
 import * as ecr from "@distilled.cloud/aws/ecr";
+import { NODE_PTY_PACKAGE, NODE_PTY_VERSION } from "alchemy/Runtime/TerminalNode";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";

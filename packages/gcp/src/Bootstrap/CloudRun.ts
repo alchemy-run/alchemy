@@ -9,7 +9,6 @@
  */
 import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
-import { TerminalsBun } from "alchemy/Runtime/TerminalBun";
 import { RuntimeConfigProviderLive } from "alchemy/Runtime";
 import {
   entrypointLayer,
@@ -17,6 +16,7 @@ import {
   runProcess,
   stackFromEnv,
 } from "alchemy/Runtime/Bootstrap";
+import { TerminalsBun } from "alchemy/Runtime/TerminalBun";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
