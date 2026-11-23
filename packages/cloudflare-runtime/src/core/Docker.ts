@@ -512,17 +512,27 @@ export const DockerLive = Layer.effect(
     // Whether an image is in the local Docker at all, and whether it has the
     // variant containers are pinned to. Plain `inspect` cannot tell: the
     // containerd image store keeps several variants under one tag and
-    // reports the host's.
+    // reports the host's. Docker before API 1.49 has no `--platform` here;
+    // its classic store holds one variant, so the reported one decides.
     const localImage = (imageUri: string) =>
       Effect.gen(function* () {
-        const idOf = (args: Array<string>) =>
-          run(["image", "inspect", ...args, imageUri, "--format", "{{.Id}}"]).pipe(
-            Effect.map((result) => (result.exitCode === 0 ? result.stdout.trim() : "")),
-            Effect.orElseSucceed(() => ""),
-          );
-        const id = yield* idOf([]);
-        const fits = id !== "" && (!platform || (yield* idOf(["--platform", platform])) !== "");
-        return { present: id !== "", fits };
+        const inspectImage = (args: Array<string>) =>
+          run([
+            "image",
+            "inspect",
+            ...args,
+            imageUri,
+            "--format",
+            "{{.Os}}/{{.Architecture}}",
+          ]).pipe(Effect.orElseSucceed(() => ({ exitCode: 1, stdout: "", stderr: "" })));
+        const any = yield* inspectImage([]);
+        const present = any.exitCode === 0 && any.stdout.trim() !== "";
+        if (!present || !platform) return { present, fits: present };
+        const pinned = yield* inspectImage(["--platform", platform]);
+        const fits = /requires API version|unknown flag/.test(pinned.stderr)
+          ? any.stdout.trim() === platform
+          : pinned.exitCode === 0 && pinned.stdout.trim() !== "";
+        return { present, fits };
       });
 
     // `docker image inspect` prints the image id when present and empty

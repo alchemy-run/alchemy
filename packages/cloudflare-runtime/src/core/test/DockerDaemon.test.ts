@@ -79,6 +79,7 @@ it.live(
 const withLocalPlatform = <A, E>(
   platform: string | undefined,
   body: Effect.Effect<A, E, Docker | FileSystem.FileSystem>,
+  shimEnv = "",
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -87,7 +88,7 @@ const withLocalPlatform = <A, E>(
     const shim = `${dir}/docker`;
     yield* fs.writeFileString(
       shim,
-      `#!/bin/sh\necho "$*" >> ${JSON.stringify(log)}\nexec ${JSON.stringify(DOCKER_BIN)} "$@"\n`,
+      `#!/bin/sh\necho "$*" >> ${JSON.stringify(log)}\n${shimEnv} exec ${JSON.stringify(DOCKER_BIN)} "$@"\n`,
     );
     yield* fs.chmod(shim, 0o755);
     const result = yield* body.pipe(
@@ -209,38 +210,40 @@ it.live(
       expect(commands.filter((line) => line.startsWith(`pull ${image}`))).toHaveLength(2);
     }).pipe(
       Effect.ensuring(
-        Effect.ignore(docker("rm", "--force", name)).pipe(
-          Effect.andThen(removeImages(image, "arm64v8/alpine:3.21")),
-        ),
+        Effect.ignore(docker("rm", "--force", name)).pipe(Effect.andThen(removeImages(image))),
       ),
     );
   },
   60_000,
 );
 
-it.live(
-  "rejects a local-only image built for another platform than linux/amd64",
-  () => {
-    // Unpullable, so the local arm64 copy is all there is.
-    const image = "alchemy-test.invalid/local-arm64:dev";
-    const tag = `alchemy-local-arm64-${crypto.randomUUID()}:latest`;
-    return Effect.gen(function* () {
-      yield* docker("pull", "--platform", "linux/arm64", "arm64v8/alpine:3.21");
-      yield* docker("tag", "arm64v8/alpine:3.21", image);
-      const { result } = yield* withLocalPlatform(
-        undefined,
-        Effect.flip(
-          Effect.gen(function* () {
-            yield* (yield* Docker).pull(tag, { imageUri: image });
-          }),
-        ),
-      );
-      expect(result.message).toContain("the local copy has no linux/amd64 variant");
-      expect(result.hint).toContain("ALCHEMY_LOCAL_CONTAINER_PLATFORM=host");
-    }).pipe(Effect.ensuring(removeImages(tag, image, "arm64v8/alpine:3.21")));
-  },
-  60_000,
-);
+// Docker before API 1.49 has no `image inspect --platform`.
+for (const api of ["current", "1.47"]) {
+  it.live(
+    `rejects a local-only image built for another platform than linux/amd64 (${api} API)`,
+    () => {
+      // Unpullable, so the local arm64 copy is all there is.
+      const image = "alchemy-test.invalid/local-arm64:dev";
+      const tag = `alchemy-local-arm64-${crypto.randomUUID()}:latest`;
+      return Effect.gen(function* () {
+        yield* docker("pull", "--platform", "linux/arm64", "arm64v8/alpine:3.21");
+        yield* docker("tag", "arm64v8/alpine:3.21", image);
+        const { result } = yield* withLocalPlatform(
+          undefined,
+          Effect.flip(
+            Effect.gen(function* () {
+              yield* (yield* Docker).pull(tag, { imageUri: image });
+            }),
+          ),
+          api === "current" ? "" : `DOCKER_API_VERSION=${api}`,
+        );
+        expect(result.message).toContain("the local copy has no linux/amd64 variant");
+        expect(result.hint).toContain("ALCHEMY_LOCAL_CONTAINER_PLATFORM=host");
+      }).pipe(Effect.ensuring(removeImages(tag, image)));
+    },
+    60_000,
+  );
+}
 
 it.live(
   "uses a local-only image whose tag also holds a linux/amd64 variant",
@@ -270,7 +273,27 @@ it.live(
         "{{.Id}}",
       );
       expect(id.trim()).not.toBe("");
-    }).pipe(Effect.ensuring(removeImages(tag, image, "alpine:3.20")));
+    }).pipe(Effect.ensuring(removeImages(tag, image)));
+  },
+  60_000,
+);
+
+it.live(
+  "uses a linux/amd64 local-only image on Docker without image inspect --platform",
+  () => {
+    const image = "alchemy-test.invalid/local-amd64:dev";
+    const tag = `alchemy-local-amd64-${crypto.randomUUID()}:latest`;
+    return Effect.gen(function* () {
+      yield* docker("pull", "--platform", "linux/amd64", "alpine:3.21");
+      yield* docker("tag", "alpine:3.21", image);
+      yield* withLocalPlatform(
+        undefined,
+        Effect.gen(function* () {
+          yield* (yield* Docker).pull(tag, { imageUri: image });
+        }),
+        "DOCKER_API_VERSION=1.47",
+      );
+    }).pipe(Effect.ensuring(removeImages(tag, image)));
   },
   60_000,
 );
