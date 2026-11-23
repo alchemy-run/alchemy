@@ -1,4 +1,6 @@
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
@@ -131,6 +133,32 @@ export const pathsWithoutJson = (
       return [];
   }
 };
+
+/**
+ * An effectful decision, run at the time its command is handled at. The clock
+ * reads that time for as long as `decide` runs, so `Clock.currentTimeMillis`
+ * and `DateTime.now` give what `decide` is given as `now`: a decision is the
+ * same however late it runs, and the prover reads the clock as that input.
+ *
+ * @internal
+ */
+export const decidedAt = <A, E, R>(
+  decision: Effect.Effect<A, E, R>,
+  now: DateTime.Utc,
+): Effect.Effect<A, E, R> =>
+  Clock.clockWith((clock) => {
+    const millis = DateTime.toEpochMillis(now);
+    const nanos = BigInt(millis) * 1_000_000n;
+    return Effect.provideService(decision, Clock.Clock, {
+      currentTimeMillisUnsafe: () => millis,
+      currentTimeMillis: Effect.succeed(millis),
+      currentTimeNanosUnsafe: () => nanos,
+      currentTimeNanos: Effect.succeed(nanos),
+      monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+      monotonicTimeNanos: clock.monotonicTimeNanos,
+      sleep: (duration) => clock.sleep(duration),
+    });
+  });
 
 /** What `decide` returned, once its Effect (if any) ran. @internal */
 export type Settled =

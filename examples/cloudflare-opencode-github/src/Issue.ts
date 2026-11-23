@@ -14,11 +14,11 @@ import { MARKER, SearchIssues, SearchIssuesLive } from "./tools.ts";
 const HarnessLive = Layer.mergeAll(
   FastLive,
   SearchIssuesLive,
-  Sandbox,
   OpenCode.CodingTools,
-  OpenCodeCloudflare.DurableObjectInstance,
+  OpenCodeCloudflare.DurableObjectStorage,
   GitHub.CreateIssueCommentHttp,
-);
+  // The coding tools work in the issue's sandbox.
+).pipe(Layer.provideMerge(Sandbox));
 
 const instructions = [
   "You answer issues on a GitHub repository, which is your working directory.",
@@ -26,7 +26,7 @@ const instructions = [
   "Your answer is posted on the issue as a comment, so write it in Markdown and keep it short.",
 ].join("\n");
 
-/** One Durable Object per issue: its OpenCode session, its sandbox and its answers. */
+/** One Durable Object per issue: OpenCode and its session, the sandbox its tools work in, and its answers. */
 export default class Issue extends Cloudflare.DurableObject<Issue>()(
   "Issue",
   Effect.gen(function* () {
@@ -68,11 +68,19 @@ export default class Issue extends Cloudflare.DurableObject<Issue>()(
         toolCalls: Effect.fn(function* () {
           const messages = yield* session.messages;
           return messages.flatMap((message) =>
-            message.parts.flatMap((part) =>
-              part.type === "tool"
-                ? [{ tool: part.tool, status: part.state?.status, output: part.state?.output }]
-                : [],
-            ),
+            message.type === "assistant"
+              ? (message as OpenCode.AssistantMessage).content.flatMap((content) =>
+                  content.type === "tool"
+                    ? [
+                        {
+                          tool: content.name,
+                          status: content.state?.status,
+                          input: content.state?.input,
+                        },
+                      ]
+                    : [],
+                )
+              : [],
           );
         }),
         /** The issue is closed: its sandbox is no longer needed. */

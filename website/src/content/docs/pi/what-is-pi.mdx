@@ -100,7 +100,7 @@ See [Extensions](/pi/extensions) and [Skills](/pi/skills).
 
 ## Code mode
 
-In **code mode** the model writes a JavaScript program that calls the conversation's tools, and only the program's output goes back to the model.
+In **code mode** the model writes a JavaScript program that calls tools, and only the program's output goes back to the model. The tools listed inside `AI.CodeMode(...)` are the ones a program may call.
 
 See [Code mode](/pi/code-mode).
 
@@ -112,6 +112,6 @@ See [Surviving a crash](/pi/durability).
 
 ## How @alchemy.run/pi models these concepts
 
-`Pi.Harness` is an Effect you yield where its Layers are provided. Models, tools, MCP servers, skills and sandboxes are the [`@alchemy.run/ai`](/ai) declarations, unchanged. `Pi.Extension` and `Pi.CodeMode` are Pi's own. The storage, the coding tools and the code mode runtime are Layers, so the same harness moves from a Durable Object to a machine by changing them.
+`Pi.Harness` is an Effect you yield where its Layers are provided. Models, tools, MCP servers, skills and sandboxes are the [`@alchemy.run/ai`](/ai) declarations, unchanged. `Pi.Extension` is Pi's own. The storage, the coding tools and the code mode runtime are Layers, so the same harness moves from a Durable Object to a machine by changing them.
 
 Next: [Setup](/pi/setup), then the [tutorial](/pi/tutorial/part-1).

@@ -53,3 +53,17 @@ export const GlobLive = AI.Glob.make(
   },
   ({ pattern }) => ({ matches: [`OWN-GLOB-4711/${pattern}`] }),
 );
+
+/** The `codemode` section of the system prompt a conversation was last sent, if it has one. */
+export const codemodeSection = (messages: unknown): string | undefined => {
+  const found: string[] = [];
+  const visit = (value: unknown): void => {
+    if (typeof value === "string") {
+      const match = /<codemode>\n([\s\S]*?)\n<\/codemode>/.exec(value);
+      if (match) found.push(match[1]!);
+    } else if (Array.isArray(value)) value.forEach(visit);
+    else if (value !== null && typeof value === "object") Object.values(value).forEach(visit);
+  };
+  visit(messages);
+  return found.at(-1);
+};
