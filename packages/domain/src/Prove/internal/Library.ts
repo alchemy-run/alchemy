@@ -92,7 +92,9 @@ export const make = (host: Host) => {
         );
       return tag.value === step.tag ? through(rest, source, change, site) : Effect.succeed(source);
     }
-    return through(rest, source.fields[step.key] ?? Value.undef, change, site).pipe(
+    return Effect.flatMap(host.member(source, step.key, site), (focus) =>
+      through(rest, focus, change, site),
+    ).pipe(
       Effect.map((changed) => Value.obj({ ...source.fields, [step.key]: changed }, source.brand)),
     );
   };
@@ -435,7 +437,7 @@ export const make = (host: Host) => {
       if (pattern._tag === "Obj" && pattern.brand === undefined) {
         if (input._tag !== "Obj") return false;
         for (const [key, part] of Object.entries(pattern.fields))
-          if (!(yield* takes(part, input.fields[key] ?? Value.undef, site))) return false;
+          if (!(yield* takes(part, yield* host.member(input, key, site), site))) return false;
         return true;
       }
       return yield* host.decide(yield* host.equal(input, pattern, site), site);
@@ -447,7 +449,7 @@ export const make = (host: Host) => {
     (input, site) =>
       Effect.gen(function* () {
         if (input._tag !== "Obj") return false;
-        const tag = input.fields[field] ?? Value.undef;
+        const tag = yield* host.member(input, field, site);
         for (const value of values)
           if (yield* host.decide(yield* host.equal(tag, value, site), site)) return true;
         return false;
@@ -1373,10 +1375,24 @@ export const make = (host: Host) => {
   const keyOf = (lib: V & { readonly _tag: "Lib" }): string =>
     `${lib.module}:${lib.path.join(".")}`;
 
+  /** A tagged union of `effect/Schema`: its tag's name, and the schema of each case. */
+  const unionOf = (
+    schema: unknown,
+  ): { readonly tag: string; readonly cases: Readonly<Record<string, unknown>> } | undefined => {
+    const union = schema as { readonly tag?: unknown; readonly cases?: unknown; guards?: unknown };
+    return Schema.isSchema(schema) &&
+      typeof union.tag === "string" &&
+      typeof union.cases === "object" &&
+      union.cases !== null &&
+      typeof union.guards === "object"
+      ? { tag: union.tag, cases: union.cases as Readonly<Record<string, unknown>> }
+      : undefined;
+  };
+
   /**
-   * What a function of `effect/Schema` makes. A schema built from values the
-   * prover knows is the schema itself, as the file would have made it; any
-   * other is one the prover does not look inside.
+   * What a function of `effect/Schema` makes. A tagged union built from values
+   * the prover knows is the schema itself, as the file would have made it;
+   * any other schema is one the prover does not look inside.
    */
   const schemaOf = (lib: V & { readonly _tag: "Lib" }, args: ReadonlyArray<V>): V => {
     const unseen: V = { _tag: "Opaque", what: "a schema" };
@@ -1390,26 +1406,13 @@ export const make = (host: Host) => {
     }
     try {
       const made: unknown = (fn as (...args: ReadonlyArray<unknown>) => unknown)(...given);
-      return Schema.isSchema(made)
+      // Only a tagged union is kept: its helpers are functions the code calls on values.
+      return unionOf(made)
         ? { _tag: "Host", value: made, name: `Schema.${lib.path.join(".")}` }
         : unseen;
     } catch {
       return unseen;
     }
-  };
-
-  /** A tagged union of `effect/Schema`: its tag's name, and the schema of each case. */
-  const unionOf = (
-    schema: unknown,
-  ): { readonly tag: string; readonly cases: Readonly<Record<string, unknown>> } | undefined => {
-    const union = schema as { readonly tag?: unknown; readonly cases?: unknown; guards?: unknown };
-    return Schema.isSchema(schema) &&
-      typeof union.tag === "string" &&
-      typeof union.cases === "object" &&
-      union.cases !== null &&
-      typeof union.guards === "object"
-      ? { tag: union.tag, cases: union.cases as Readonly<Record<string, unknown>> }
-      : undefined;
   };
 
   /**

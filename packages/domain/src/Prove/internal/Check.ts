@@ -78,7 +78,7 @@ export const solve = Effect.fn(function* (
   // What each tested result of an opaque function was called on: the real function is run on it.
   const tests = [...run.tests.values()].map((test) => {
     const terms = new Map<string, Smt.Term>();
-    computed(test.applied, terms);
+    computed(test.applied, terms, run.lists);
     return { ...test, terms: [...terms.values()] };
   });
   const wanted = new Map<string, Smt.Term>(reads.map((term) => [term.text, term]));
@@ -448,8 +448,18 @@ const carries = (real: unknown, read: unknown): boolean =>
   );
 
 /** Every term a value is made of that is not an input: what the solver has to work out. */
-const computed = (value: V, into: Map<string, Smt.Term>): void => {
+const computed = (
+  value: V,
+  into: Map<string, Smt.Term>,
+  /** What the path chose for each field the code read. */
+  lists?: ReadonlyMap<string, V>,
+): void => {
   switch (value._tag) {
+    case "Pending": {
+      const chosen = lists?.get(`?${value.name}`);
+      if (chosen) computed(chosen, into, lists);
+      return;
+    }
     case "Term":
       into.set(value.term.text, value.term);
       return;
@@ -457,13 +467,13 @@ const computed = (value: V, into: Map<string, Smt.Term>): void => {
       into.set(value.millis.text, value.millis);
       return;
     case "Obj":
-      for (const field of Object.values(value.fields)) computed(field, into);
+      for (const field of Object.values(value.fields)) computed(field, into, lists);
       return;
     case "Arr":
-      for (const item of value.items) computed(item, into);
+      for (const item of value.items) computed(item, into, lists);
       return;
     case "Applied":
-      for (const argument of value.args) computed(argument, into);
+      for (const argument of value.args) computed(argument, into, lists);
       return;
     default:
       return;
@@ -513,10 +523,10 @@ export const agree = Effect.fn(function* (
 ) {
   const skipped: Agreement = { _tag: "Skipped", taken: true };
   const outputs = new Map<string, Smt.Term>();
-  if (read._tag === "Rejected") computed(read.rejection, outputs);
+  if (read._tag === "Rejected") computed(read.rejection, outputs, run.lists);
   if (read._tag === "Changed") {
-    computed(read.after, outputs);
-    for (const event of read.events) computed(event, outputs);
+    computed(read.after, outputs, run.lists);
+    for (const event of read.events) computed(event, outputs, run.lists);
   }
   const answer = yield* solve(
     solver,

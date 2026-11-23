@@ -148,6 +148,16 @@ const inside = (what: string, ...values: ReadonlyArray<V | undefined>): string |
     : undefined;
 };
 
+/** The library functions that keep a value without looking at it: what they are given stays as it is. */
+const PASSES: ReadonlySet<string> = new Set([
+  "effect/Effect:succeed",
+  "effect/Option:some",
+  "effect/Result:succeed",
+  "effect/Result:fail",
+  "effect/Array:of",
+  "effect/Array:make",
+]);
+
 /**
  * The functions of Node's the prover takes to give the same result for the
  * same arguments. It reads none of them, and a hash is not something a rule
@@ -348,9 +358,11 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         : undefined;
   };
 
-  /** A list with its items, on this path. */
+  /** A list with its items, and an object with every field chosen, on this path. */
   const forced = (value: V): V =>
-    value._tag === "List" ? Symbolic.force(value, current.run) : value;
+    value._tag === "List"
+      ? Symbolic.force(value, current.run)
+      : Symbolic.settle(value, current.run);
 
   const moduleEnv = (module: Module): Env => {
     const known = roots.get(module);
@@ -788,7 +800,11 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           !value.fields.pipe
         )
           return piping(value);
-        return value.fields[key] ?? Value.undef;
+        const held = value.fields[key];
+        // A field the run has yet to choose is chosen now: this one, and no other.
+        return (
+          (held?._tag === "Pending" ? Symbolic.resolve(held, current.run) : held) ?? Value.undef
+        );
       case "List":
         // The first and the last part of a split string are known, however many parts there are.
         if (value.split && key === "0") return value.split.first;
@@ -1114,6 +1130,20 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           )
         : made;
 
+  /**
+   * What a function the prover does not read the code of is given: an object
+   * the code wrote, or an input holds, with every field chosen. An event or a
+   * command is read by its fields, one at a time, and stays as it is.
+   */
+  const whole = (value: V): V =>
+    value._tag === "Obj" && (value.brand === undefined || value.brand.kind === "Data")
+      ? Symbolic.settle(value, current.run)
+      : value;
+
+  /** Whether a library function only keeps what it is given, and looks at none of it. */
+  const passes = (fn: V & { readonly _tag: "Lib" }): boolean =>
+    PASSES.has(`${fn.module}:${fn.path.join(".")}`);
+
   const call: Interpreter["call"] = (fn, args, site) => {
     switch (fn._tag) {
       case "Fn":
@@ -1132,9 +1162,13 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           ),
         );
       case "Native":
-        return fn.call(args, site).pipe(retaken(fn, args, site));
+        return fn.call(args.map(whole), site).pipe(retaken(fn, args, site));
       case "Lib": {
-        if (library.models(fn)) return library.call(fn, args, site).pipe(retaken(fn, args, site));
+        // A library function goes over what it is given: every field of it is chosen first.
+        if (library.models(fn))
+          return library
+            .call(fn, passes(fn) ? args : args.map(whole), site)
+            .pipe(retaken(fn, args, site));
         const given = loader.opaque(fn.host, fn.path.at(-1));
         if (given) return Effect.succeed(applied(given, args, "is opaque"));
         // A function of Node's that gives the same result for the same arguments.
@@ -1566,7 +1600,9 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         if (node.operator === "in") {
           if ((left._tag !== "Str" && left._tag !== "Num") || right._tag !== "Obj")
             return yield* fail(site, "uses in on values the prover cannot see into");
-          return Value.bool(Object.hasOwn(right.fields, String(left.value)));
+          return Value.bool(
+            Object.hasOwn((forced(right) as typeof right).fields, String(left.value)),
+          );
         }
         return yield* fail(site, `uses ${node.operator}, which the prover does not translate`);
       }

@@ -3,6 +3,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { Gate } from "./fixtures/Gate.aggregate.ts";
+import { Memo } from "./fixtures/Memo.aggregate.ts";
 import {
   PayByCount,
   PayByLength,
@@ -15,6 +16,7 @@ import {
 } from "./fixtures/Refs.decision.ts";
 import { countOf, nameOf, partsOf, versionOf } from "./fixtures/refs.ts";
 import { Slug } from "./fixtures/Slug.aggregate.ts";
+import { Add, Copy, CopyGoods, Label, Relabel } from "./fixtures/Store.decision.ts";
 
 const source = (name: string) => ({
   source: new URL(`./fixtures/${name}.aggregate.ts`, import.meta.url),
@@ -105,7 +107,7 @@ it.effect(
       // `Option`, tested and then read; `countOf` gives a number.
       for (const decision of [PayByRef, PayIfNamed, PayIfVersioned, PayFromVersion, PayByCount]) {
         const report = yield* Prove.decisionReport(decision, parsing);
-        expect(report.rules, report.command).toMatchObject(proved);
+        expect(report.rules).toMatchObject(proved);
         expect(Prove.decisionProved(report)).toBe(true);
       }
       // `[...partsOf(cmd.to)]` is a list of ids: read for lists of up to two.
@@ -129,4 +131,74 @@ it.effect(
       });
     }).pipe(Effect.provide(NodeServices.layer)),
   120_000,
+);
+
+const store = { source: new URL("./fixtures/Store.decision.ts", import.meta.url) };
+
+it.effect(
+  "an optional field and a union member are chosen when the code reads them, not before",
+  () =>
+    Effect.gen(function* () {
+      // An item has six optional fields, an `Option` and a union of three: chosen before `decide`
+      // runs, two stores of up to two items are more paths than the prover takes.
+      const bounded = {
+        _tag: "Bounded",
+        reason: expect.stringContaining("state.items was tried with up to 2 items"),
+      };
+      // Reads only how many items there are.
+      const add = yield* Prove.decisionReport(Add, store);
+      expect(add.rules).toMatchObject([
+        { name: "Store.NoEmptyLabel", verdict: bounded },
+        { name: "ToNeverShrinks", verdict: bounded },
+      ]);
+      expect(add.paths).toBeLessThan(100);
+      // Finds an item by its id and records it whole: its other fields go along unread.
+      const copy = yield* Prove.decisionReport(Copy, store);
+      expect(copy.rules.map((rule) => rule.verdict)).toMatchObject([bounded, bounded]);
+      expect(copy.paths).toBeLessThan(200);
+      // Reads the kind of one item, and a rule reads the kind of the copy.
+      const goods = yield* Prove.decisionReport(CopyGoods, store);
+      expect(goods.rules.map((rule) => rule.verdict)).toMatchObject([bounded, bounded]);
+      expect(goods.paths).toBeLessThan(500);
+      // Writes a field over the one the item had: the store's rule reads what was written.
+      const label = yield* Prove.decisionReport(Label, store);
+      expect(label.rules.map((rule) => rule.verdict)).toMatchObject([bounded]);
+      // A field read is chosen: an item whose `b` is empty is found, and the real code agrees.
+      const relabel = yield* Prove.decisionReport(Relabel, store);
+      const verdict = relabel.rules[0]?.verdict;
+      expect(verdict).toMatchObject({ _tag: "Violated" });
+      if (verdict?._tag !== "Violated") return;
+      const { events } = verdict.counterexample as {
+        events: ReadonlyArray<{ item: { a?: string; b?: string } }>;
+      };
+      expect(events[0]?.item.a).toBe("");
+      expect(events[0]?.item.b).toBe("");
+    }).pipe(Effect.provide(NodeServices.layer)),
+  120_000,
+);
+
+it.effect(
+  "a command's optional field is left out on one path, and its union is each member on one",
+  () =>
+    Effect.gen(function* () {
+      const report = yield* Prove.report(Memo, source("Memo"));
+      const verdicts = verdictsOf(report, "NeverEmpty");
+      // With no title the size is zero: found only where the title is left out.
+      expect(verdicts.Write).toMatchObject({
+        _tag: "Violated",
+        counterexample: { after: { size: 0 } },
+      });
+      const { command } = (verdicts.Write as { counterexample: { command: object } })
+        .counterexample;
+      expect("title" in command).toBe(false);
+      expect(verdicts.Retitle).toEqual({ _tag: "Proved" });
+      expect(verdicts.Touch).toEqual({ _tag: "Proved" });
+      // `Touch` reads neither field: one path. `Write` and `Retitle` read one each: two paths.
+      const paths = Object.fromEntries(
+        report.commands.map((entry) => [entry.command, entry.paths]),
+      );
+      expect(paths).toEqual({ Write: 2, Retitle: 2, Touch: 1 });
+      agrees(report);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  60_000,
 );

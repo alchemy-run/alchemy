@@ -26,20 +26,25 @@ export class Account extends Domain.Aggregate("Account", {
 }) {}
 
 const input = { from: Schema.String, to: Schema.String, amount: Amount };
-const pay = <Tag extends string>(tag: Tag, more: Schema.Struct.Fields = {}) =>
-  Domain.Command(tag, {
-    input: { ...input, ...more },
-    events: [Debited, Credited],
-    rejects: [Short, SelfPay, BadRef],
-  });
+const outcomes = { events: [Debited, Credited], rejects: [Short, SelfPay, BadRef] };
 
-export class PayRef extends pay("PayRef") {}
-export class PayNamed extends pay("PayNamed", { payee: Schema.String }) {}
-export class PayVersioned extends pay("PayVersioned", { ref: Schema.String }) {}
-export class PayAtVersion extends pay("PayAtVersion", { ref: Schema.String }) {}
-export class PayMany extends pay("PayMany") {}
-export class PayCounted extends pay("PayCounted") {}
-export class PayBlind extends pay("PayBlind") {}
+export class PayRef extends Domain.Command("PayRef", { input, ...outcomes }) {}
+export class PayNamed extends Domain.Command("PayNamed", {
+  input: { ...input, payee: Schema.String },
+  ...outcomes,
+}) {}
+export class PayVersioned extends Domain.Command("PayVersioned", {
+  input: { ...input, ref: Schema.String },
+  ...outcomes,
+}) {}
+export class PayAtVersion extends Domain.Command("PayAtVersion", {
+  input: { ...input, ref: Schema.String },
+  ...outcomes,
+}) {}
+export class PayMany extends Domain.Command("PayMany", { input, ...outcomes }) {}
+export class PayCounted extends Domain.Command("PayCounted", { input, ...outcomes }) {}
+export class PayBlind extends Domain.Command("PayBlind", { input, ...outcomes }) {}
+export class PayHalved extends Domain.Command("PayHalved", { input, ...outcomes }) {}
 
 const moved = <A, B>(
   from: { readonly record: (event: Debited) => A },
@@ -119,8 +124,6 @@ export class PayUnchecked extends Domain.Decision(PayBlind, {
   keyOf: (cmd) => ({ from: nameOf(cmd.from), to: nameOf(cmd.to) }),
   decide: ({ from, to }, cmd) => moved(from, to, cmd.amount),
 }) {}
-
-export class PayHalved extends pay("PayHalved") {}
 
 /** Reads inside what `nameOf` gives: its length is not something the prover has. */
 export class PayByLength extends Domain.Decision(PayHalved, {

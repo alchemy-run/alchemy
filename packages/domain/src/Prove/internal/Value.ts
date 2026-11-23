@@ -147,6 +147,19 @@ export type V =
         readonly parts: (run: Run) => V;
       };
     }
+  /**
+   * A field of an input, before the code looks at it: whether an optional
+   * field is there, which member of a union it is. It is only ever a field
+   * of an object. Reading the field makes the choice, which the run takes
+   * each way; a field no code reads is never chosen.
+   */
+  | {
+      readonly _tag: "Pending";
+      readonly name: string;
+      readonly ast: unknown;
+      /** Whether the field may be left out. */
+      readonly optional: boolean;
+    }
   | {
       readonly _tag: "Fn";
       readonly node: Node;
@@ -212,6 +225,9 @@ export const term = (sort: Sort, text: string): V => ({ _tag: "Term", term: { so
 export const obj = (fields: Readonly<Record<string, V>>, brand?: Brand): V =>
   brand ? { _tag: "Obj", fields, brand } : { _tag: "Obj", fields };
 
+/** What a run keeps for an optional field it chose to leave out. */
+export const absent: V = { _tag: "Undef" };
+
 const OPTION: Brand = { kind: "Option", cls: undefined };
 
 /** `Option.none()`: there is one, as in the library. */
@@ -263,6 +279,8 @@ export const keyOf = (v: V): string => {
       return `(time ${v.millis.text})`;
     case "List":
       return `(list ${JSON.stringify(v.name)})`;
+    case "Pending":
+      return `(pending ${JSON.stringify(v.name)})`;
     case "Arr":
       return `[${v.items.map(keyOf).join(",")}]`;
     case "Obj":
@@ -393,8 +411,14 @@ export class Run {
   readonly applications = new Map<string, Application>();
   /** The request contexts the code read, by key: each is an input, made once. */
   readonly contexts = new Map<string, { readonly tag: unknown; readonly value: V }>();
-  /** The lists the code looked at, by name, with the items this path gave each. */
+  /**
+   * The lists the code looked at, by name, with the items this path gave
+   * each; and under `?name`, the fields it looked at, with what this path
+   * chose for each.
+   */
   readonly lists = new Map<string, V>();
+  /** Each object an input holds with every field chosen, as this run settled it. */
+  readonly settled = new WeakMap<object, V>();
   /** The lists tried only up to a length, by name: longer ones were not looked at. */
   readonly bounds = new Map<string, number>();
   /** The constants that are a `bigint`: they have no largest value. */

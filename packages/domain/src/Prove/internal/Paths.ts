@@ -203,7 +203,8 @@ const commandOf = (command: CommandClass, label: string, run: Value.Run): V => {
   const fields: Record<string, V> = { _tag: Value.str(command.tag) };
   for (const [key, schema] of Object.entries(command.fields)) {
     const ast = Symbolic.typeOf(schema);
-    if (key !== "_tag" && ast) fields[key] = Symbolic.symbolic(ast, `${label}command.${key}`, run);
+    if (key !== "_tag" && ast)
+      fields[key] = Symbolic.field(ast, `${label}command.${key}`, key, run);
   }
   return Value.obj(fields, { kind: "Command", cls: command });
 };
@@ -925,6 +926,7 @@ export const same = (a: V | undefined, b: V | undefined): boolean => {
     case "Time":
       return a.millis.text === (b as typeof a).millis.text;
     case "List":
+    case "Pending":
       return a.name === (b as typeof a).name;
     case "Obj": {
       const other = (b as typeof a).fields;
