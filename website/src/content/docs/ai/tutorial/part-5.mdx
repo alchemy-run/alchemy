@@ -96,6 +96,7 @@ import { IssueId } from "./Issue.id.ts";
 ```
 
 ```diff lang="typescript" title="src/Board/Issue.aggregate.ts"
+export class Issue extends Domain.Aggregate("Issue", {
 -    CommentOnIssue: (_, command) => [
 -      new IssueCommented({ commentId: command.commentId, body: command.body }),
 -    ],
@@ -122,6 +123,7 @@ import { MARKER } from "./PostAnswer.tool.ts";
 An invariant is given the state and returns `true` while the rule holds:
 
 ```diff lang="typescript" title="src/Board/Issue.aggregate.ts"
+export class Issue extends Domain.Aggregate("Issue", {
   keyOf: (command) => command.issueId,
 +  invariants: {
 +    RepliesAreCounted: (issue) => issue._tag !== "Open" || issue.replies >= 0,
@@ -136,6 +138,7 @@ Nothing runs it when a command arrives. It is a claim about `decide` and `evolve
 A transition is given the state before a command, the command, and the state after. These three are what a session must not be able to break:
 
 ```diff lang="typescript" title="src/Board/Issue.aggregate.ts"
+export class Issue extends Domain.Aggregate("Issue", {
   invariants: {
     RepliesAreCounted: (issue) => issue._tag !== "Open" || issue.replies >= 0,
   },
@@ -157,6 +160,7 @@ A transition is given the state before a command, the command, and the state aft
 Rules that only forbid are kept by a board that does nothing. A `sometimes` entry says what has to be reachable:
 
 ```diff lang="typescript" title="src/Board/Board.model.ts"
+export class Board extends Domain.Model("Board", {
   policies: [IssueWork],
 +  sometimes: {
 +    AnIssueGetsLabeled: (board) =>
@@ -240,6 +244,7 @@ export default defineConfig({ test: { include: ["test/**/*.test.ts"], testTimeou
 Make a reply clear the label, as a careless change might:
 
 ```diff lang="typescript" title="src/Board/Issue.aggregate.ts"
+export class Issue extends Domain.Aggregate("Issue", {
     IssueCommented: (issue) =>
 -      issue._tag === "Open" ? { ...issue, replies: issue.replies + 1 } : issue,
 +      issue._tag === "Open" ? { ...issue, replies: issue.replies + 1, label: null } : issue,
