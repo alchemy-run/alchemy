@@ -10,7 +10,7 @@ export const CONTROL_PLANE_NODE_PORT = 30642;
 export const FRONT_NODE_PORT = 30643;
 
 // Named from the stack and stage, with its registry and node ports on host
-// ports Docker and kind pick: the suite runs beside itself in other worktrees.
+// free host ports: the suite runs beside itself in other worktrees.
 export const Kind = Kubernetes.LocalCluster("RivetKind", {
   registryPort: 0,
   kubeconfig: ".alchemy/test-rivet.kubeconfig",

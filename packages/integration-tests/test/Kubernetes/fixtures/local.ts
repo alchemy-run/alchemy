@@ -5,8 +5,8 @@ export const LOCAL_NODE_PORT = 30090;
 
 /**
  * The shared `Kubernetes.LocalCluster` for LocalCluster.test.ts: a kind
- * cluster named from the stack and stage, plus its image registry on a port
- * Docker picks, so the suite runs beside itself in other worktrees. Its
+ * cluster named from the stack and stage, plus its image registry on a free
+ * port, so the suite runs beside itself in other worktrees. Its
  * kubeconfig is under `.alchemy/`, so the run never touches `~/.kube/config`.
  */
 export const TestLocalCluster = Kubernetes.LocalCluster("TestLocalCluster", {

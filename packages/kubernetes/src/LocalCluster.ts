@@ -4,6 +4,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import { findAvailablePort } from "alchemy/Util/Node";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -27,7 +28,7 @@ export interface LocalClusterProps extends KindClusterConfig {
   /**
    * Host port of the cluster's image registry, reachable from the deploying
    * machine as `localhost:<registryPort>`. Give each local cluster its own
-   * port, or `0` for one Docker picks (read it from `registry`).
+   * port, or `0` for a free one (read it from `registry`).
    * @default 5001
    */
   registryPort?: number;
@@ -304,7 +305,7 @@ export interface LocalClusterLookup {
  * **Example:** A registry on a free port
  * ```typescript
  * const cluster = yield* Kubernetes.LocalCluster("Cluster", { registryPort: 0 });
- * cluster.registry; // { server: "localhost:<the port Docker picked>" }
+ * cluster.registry; // { server: "localhost:<a free port>" }
  * ```
  *
  * ### Looking up an existing cluster
@@ -599,7 +600,7 @@ export const LocalClusterProvider = () =>
       }) {
         const container = `${options.name}-registry`;
         let info = yield* inspectContainer(container);
-        // `0` takes whatever port Docker picked for the running registry.
+        // `0` keeps whichever free port the running registry was given.
         if (
           info !== undefined &&
           options.registryPort !== 0 &&
@@ -609,28 +610,52 @@ export const LocalClusterProvider = () =>
           info = undefined;
         }
         if (info === undefined) {
-          yield* options.session.note(
-            options.registryPort === 0
-              ? "Starting image registry..."
-              : `Starting image registry on localhost:${options.registryPort}...`,
-          );
           const labels = yield* createInternalTags(options.id);
-          yield* docker([
-            "container",
-            "run",
-            "--detach",
-            "--restart=always",
-            "--publish",
-            options.registryPort === 0
-              ? "127.0.0.1::5000"
-              : `127.0.0.1:${options.registryPort}:5000`,
-            "--network",
-            "bridge",
-            "--name",
-            container,
-            ...Object.entries(labels).flatMap(([key, value]) => ["--label", `${key}=${value}`]),
-            REGISTRY_IMAGE,
-          ]);
+          const start = Effect.fn(function* (port: number) {
+            yield* options.session.note(`Starting image registry on localhost:${port}...`);
+            yield* docker([
+              "container",
+              "run",
+              "--detach",
+              "--restart=always",
+              "--publish",
+              `127.0.0.1:${port}:5000`,
+              "--network",
+              "bridge",
+              "--name",
+              container,
+              ...Object.entries(labels).flatMap(([key, value]) => ["--label", `${key}=${value}`]),
+              REGISTRY_IMAGE,
+            ]);
+          });
+          if (options.registryPort !== 0) {
+            yield* start(options.registryPort);
+          } else {
+            // Docker Desktop's daemon can't reach a port Docker picks
+            // (`127.0.0.1::5000`) at its own `localhost`, so pushes hang:
+            // pick a free port here and publish it explicitly, as kind does.
+            yield* Effect.gen(function* () {
+              const port = yield* findAvailablePort().pipe(
+                Effect.mapError(
+                  (error) => new LocalClusterError({ message: `No free port: ${error.message}` }),
+                ),
+              );
+              yield* start(port).pipe(
+                // A failed `run` can leave a created container behind.
+                Effect.tapError(() =>
+                  Effect.flatMap(DockerBin, (bin) =>
+                    run(bin, ["container", "rm", "--force", container]),
+                  ),
+                ),
+              );
+            }).pipe(
+              // Another process may take the port before the registry binds it.
+              Effect.retry({
+                while: (error) => /already allocated|address already in use/i.test(error.message),
+                times: 5,
+              }),
+            );
+          }
           info = yield* inspectContainer(container);
         } else if (info.State?.Running !== true) {
           yield* docker(["container", "start", container]);

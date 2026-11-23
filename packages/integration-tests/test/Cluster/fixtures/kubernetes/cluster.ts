@@ -6,7 +6,7 @@ import * as Layer from "effect/Layer";
 export const FRONT_NODE_PORT = 30644;
 
 // Named from the stack and stage, with its registry and the front's node
-// port on host ports Docker and kind pick: the suite runs beside itself in
+// port on free host ports: the suite runs beside itself in
 // other worktrees.
 export const Kind = Kubernetes.LocalCluster("ClusterKind", {
   registryPort: 0,

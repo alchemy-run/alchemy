@@ -8,7 +8,7 @@ import * as Stream from "effect/Stream";
 
 /**
  * A kind cluster for one Kubernetes test suite. Its name comes from the
- * stack and stage, and its registry is on a port Docker picks, so suites run
+ * stack and stage, and its registry is on a free port, so suites run
  * concurrently, and beside themselves in other worktrees. Its kubeconfig is
  * under `.alchemy/`, so a run never touches `~/.kube/config`.
  */

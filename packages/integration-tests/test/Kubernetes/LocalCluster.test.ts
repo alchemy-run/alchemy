@@ -208,7 +208,7 @@ describe("Kubernetes LocalCluster E2E", { tags: [...tags, "live"] }, () => {
   test.provider("the cluster exposes a connection with its registry and architecture", () =>
     Effect.gen(function* () {
       expect(cluster.context).toBe(`kind-${cluster.name}`);
-      // The registry is on the port Docker picked for `registryPort: 0`.
+      // The registry is on the free port `registryPort: 0` was given.
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const [published] = yield* spawner.lines(
         ChildProcess.make("docker", ["port", cluster.registryContainer, "5000/tcp"]),
