@@ -31,16 +31,17 @@ import type * as ModelSearch from "./Explore/internal/ModelSearch.ts";
 import * as Script from "./Explore/internal/Script.ts";
 import type * as Model from "./Model.ts";
 import * as Prove from "./Prove.ts";
-import * as History from "./Prove/internal/History.ts";
 import * as Interpreter from "./Prove/internal/Interpreter.ts";
 import * as Lock from "./Prove/internal/Lock.ts";
 import * as Paths from "./Prove/internal/Paths.ts";
+import * as Recorded from "./Prove/internal/Recorded.ts";
 import * as Smt from "./Prove/internal/Smt.ts";
 import * as Symbolic from "./Prove/internal/Symbolic.ts";
 import * as Value from "./Prove/internal/Value.ts";
 import { Story } from "./Story.ts";
+import * as Histories from "./Verify/internal/Histories.ts";
 
-export interface Options {
+export interface Options extends Prove.Reading {
   /** The Apis callers reach the model through: their commands are the ones a sequence is made of. */
   readonly apis: ReadonlyArray<Api.Any>;
   /**
@@ -80,12 +81,24 @@ export interface Options {
    */
   readonly walks?: Explore.ModelOptions["walks"];
   /** What a pass may leave undone. */
-  readonly allow?: Explore.ModelOptions["allow"];
+  readonly allow?: Explore.ModelOptions["allow"] & {
+    /**
+     * The views that may read a compaction's roll-up as something else than
+     * the events it replaces, each as `View.Compaction`: a view built after
+     * the compaction then holds less than one that saw the events, on purpose.
+     */
+    readonly lossy?: ReadonlyArray<string>;
+  };
   /**
    * How far a rule has to be known to hold, for the rules named: a rule in
    * `proved` that is only checked fails the verification.
    */
   readonly require?: Require;
+  /**
+   * The most sequences run again with a rewrite or a compaction put in.
+   * @default 2000
+   */
+  readonly histories?: number;
   /**
    * A file that keeps each rule as it is written, so that none is taken out
    * or made to say less without it showing: a path from the test file that
@@ -177,6 +190,7 @@ const locking = Effect.fn(function* (options: {
   readonly aggregates: ReadonlyArray<Aggregate.Any>;
   readonly decisions?: ReadonlyArray<{ readonly decisionName: string; readonly command: unknown }>;
   readonly model?: string;
+  readonly reading: Prove.Reading;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -205,6 +219,7 @@ const locking = Effect.fn(function* (options: {
     ...(options.decisions === undefined ? {} : { decisions: options.decisions }),
     ...(options.model === undefined ? {} : { model: options.model }),
     qualified: options.model !== undefined,
+    reading: options.reading,
     locked: new Map(Object.entries(entries).map(([name, entry]) => [name, entry.source])),
   }).pipe(Effect.scoped, Effect.mapError(failed));
   const ci = yield* Config.Boolean("CI").pipe(
@@ -337,9 +352,49 @@ export interface Run {
   readonly failure: string | undefined;
 }
 
+/** What is known of one of the model's rewrites or compactions. */
+export interface Change {
+  /** `ForgetOwner`, `BringForward`, `Statement.BringForward` or `ForgetOwner.BringForward`. */
+  readonly name: string;
+  /**
+   * `compaction`: no instance refuses it, and none is changed by it.
+   * `roll-up`: a view built after the compaction holds what one built from
+   * the events does. `rewrite`: no instance refuses it and each is left in
+   * its rules, or, named with a compaction, it leaves a compacted instance
+   * as it leaves one that kept its events.
+   */
+  readonly kind: "compaction" | "roll-up" | "rewrite";
+  /**
+   * `proved`: for every state, or every history its commands record.
+   * `checked`: in every sequence it was run in. `broken`: `story` with
+   * `script` shows it. `unseen`: no sequence left an instance to run it on.
+   * `allowed`: a view named in `allow.lossy`, which holds less after the
+   * compaction on purpose.
+   */
+  readonly standing: "proved" | "checked" | "broken" | "unseen" | "allowed";
+  /** How many sequences it was run in, on the real model. */
+  readonly runs: number;
+  readonly broken:
+    | {
+        readonly story: ModelSearch.Story;
+        /** The sequence as a story, with the rewrite or the compaction where it was put in. */
+        readonly script: string;
+        readonly shown: string;
+      }
+    | undefined;
+  /** For one that is not proved: the proof's report, as text. */
+  readonly unproved: string | undefined;
+}
+
 export interface Report {
   readonly model: string;
   readonly rules: ReadonlyArray<Rule>;
+  /** The model's rewrites and compactions, and how far each is known to be safe. */
+  readonly changes: ReadonlyArray<Change>;
+  /** How many sequences were run again with a rewrite or a compaction put in. */
+  readonly histories: number;
+  /** Whether those runs stopped at `histories`, the most asked for, before every place was tried. */
+  readonly historiesTruncated: boolean;
   readonly explored: Explore.ModelReport;
   /** The sequences run on the real model: empty without a `story` runner. */
   readonly runs: ReadonlyArray<Run>;
@@ -422,7 +477,8 @@ const OWN = (() => {
 
 const ASSUMPTIONS = [
   "whole numbers are exact: a number stays within ±2^53, and a bigint has no limit",
-  `a list an input holds has up to ${Symbolic.MAX_ITEMS} items more than its schema asks for`,
+  "a duration an input holds is a whole number of milliseconds",
+  `a list, a hash set or a hash map an input holds has up to ${Symbolic.MAX_ITEMS} items more than its schema asks for`,
   "an external system answers what its schema allows, and nothing else",
   "middleware lets every caller in: who sends a command is anyone its request context allows",
   "what a projection writes, and what a stream or a query gives, is not checked: only what a projection is given",
@@ -514,14 +570,14 @@ const foundIn = (explored: Explore.ModelReport) => {
   return found;
 };
 
-/** A found sequence as the real steps of a `Story`, for the model's own classes. */
-const stepsOf = (model: Model.Any, story: ModelSearch.Story): ReadonlyArray<unknown> => {
+/** One step of a found sequence as the real steps of a `Story`, for the model's own classes. */
+const stepOf = (model: Model.Any) => {
   const aggregates = new Map(
     (model.aggregates as ReadonlyArray<Aggregate.Any>).map((cls) => [cls.aggregateName, cls]),
   );
   const ref = (aggregate: string, id: string) =>
     Aggregate.makeRef(aggregates.get(aggregate)!, id as never);
-  return Script.ops(story).flatMap((op): ReadonlyArray<unknown> => {
+  return (op: Script.Op): ReadonlyArray<unknown> => {
     switch (op._tag) {
       case "Provide":
         return [Story.provide(op.tag as never, op.value as never)];
@@ -544,6 +600,89 @@ const stepsOf = (model: Model.Any, story: ModelSearch.Story): ReadonlyArray<unkn
       case "Note":
         return [];
     }
+  };
+};
+
+/** A found sequence as the real steps of a `Story`. */
+const stepsOf = (model: Model.Any, story: ModelSearch.Story): ReadonlyArray<unknown> =>
+  Script.ops(story).flatMap(stepOf(model));
+
+/**
+ * Each of the model's rewrites and compactions, by name, with its proof's
+ * report where it is not proved: `undefined` for one that is.
+ */
+const proofsOf = Effect.fn(function* (
+  model: Model.Any,
+  source: URL | string,
+  reading: Prove.Reading,
+) {
+  const compactions = model.definitions.compactions ?? [];
+  const rewrites = model.definitions.rewrites ?? [];
+  const failed = (error: { readonly message: string }) => Effect.succeed(error.message);
+  const proofs = new Map<string, string | undefined>();
+  for (const compaction of compactions)
+    proofs.set(
+      compaction.compactionName,
+      yield* Prove.compactionReport(compaction, { source, ...reading }).pipe(
+        Effect.map((made) =>
+          Prove.compactionProved(made) ? undefined : Prove.renderCompaction(made),
+        ),
+        Effect.catchTag("ProveError", failed),
+      ),
+    );
+  for (const rewrite of rewrites)
+    proofs.set(
+      rewrite.rewriteName,
+      yield* Prove.rewriteReport(rewrite, {
+        source,
+        ...reading,
+        compactions: compactions
+          .filter((compaction) => compaction.definition.of === rewrite.definition.of)
+          .map((compaction) => ({ compaction, source })),
+      }).pipe(
+        Effect.map((made) => (Prove.rewriteProved(made) ? undefined : Prove.renderRewrite(made))),
+        Effect.catchTag("ProveError", failed),
+      ),
+    );
+  return proofs;
+});
+
+/**
+ * The model's rewrites and compactions: each proved where the prover can,
+ * and run in the sequences that were found and run as stories.
+ */
+const changesOf = (
+  model: Model.Any,
+  proofs: ReadonlyMap<string, string | undefined>,
+  checked: Histories.Report | undefined,
+): ReadonlyArray<Change> => {
+  const compactions = model.definitions.compactions ?? [];
+  const rewrites = model.definitions.rewrites ?? [];
+  const ran = new Map((checked?.rules ?? []).map((rule) => [rule.name, rule]));
+  const names = [
+    ...compactions.map((c) => ({ name: c.compactionName, kind: "compaction" as const })),
+    ...rewrites.map((r) => ({ name: r.rewriteName, kind: "rewrite" as const })),
+    ...[...ran.values()].filter((rule) => !proofs.has(rule.name)),
+  ];
+  return names.map(({ name, kind }): Change => {
+    const rule = ran.get(name);
+    const proved = proofs.has(name) && proofs.get(name) === undefined;
+    return {
+      name,
+      kind,
+      standing: rule?.broken
+        ? "broken"
+        : rule?.allowed
+          ? "allowed"
+          : proved
+            ? "proved"
+            : (rule?.runs ?? 0) > 0
+              ? "checked"
+              : "unseen",
+      runs: rule?.runs ?? 0,
+      broken: rule?.broken,
+      unproved: proved ? undefined : proofs.get(name),
+    };
   });
 };
 
@@ -564,8 +703,10 @@ export const report = (
   const from = callers(new Error("caller").stack, OWN);
   return Effect.gen(function* () {
     const source = options.source ?? (yield* locate(model.modelName, "Model", from));
+    const reading: Prove.Reading = { opaque: options.opaque };
     const explored = yield* Explore.report(model, {
       source,
+      ...reading,
       apis: options.apis,
       ...(options.depth === undefined ? {} : { depth: options.depth }),
       ...(options.budget === undefined ? {} : { budget: options.budget }),
@@ -604,6 +745,28 @@ export const report = (
       }
     }
     const rules = rulesOf(explored);
+    const failing = new Set(
+      runs.filter((run) => run.failure !== undefined).map((run) => run.story),
+    );
+    const proofs = yield* proofsOf(model, source, reading);
+    const histories =
+      story && proofs.size > 0
+        ? yield* Histories.check(
+            model,
+            // Each sequence that runs as a story, and does what the explorer read.
+            runs.filter((run) => !failing.has(run.story)),
+            story,
+            stepOf(model),
+            {
+              budget: options.histories ?? 2000,
+              lossy: options.allow?.lossy ?? [],
+              proved: new Set(
+                [...proofs].flatMap(([name, unproved]) => (unproved === undefined ? [name] : [])),
+              ),
+            },
+          )
+        : undefined;
+    const changes = changesOf(model, proofs, histories);
     const unlocked =
       options.lock === undefined
         ? UNLOCKED
@@ -616,10 +779,14 @@ export const report = (
             aggregates: model.aggregates as ReadonlyArray<Aggregate.Any>,
             decisions: model.decisions,
             model: model.modelName,
+            reading,
           });
     const made: Report = {
       model: model.modelName,
       rules,
+      changes,
+      histories: histories?.runs ?? 0,
+      historiesTruncated: histories?.truncated ?? false,
       explored,
       runs,
       walked,
@@ -629,10 +796,20 @@ export const report = (
         ...required(rules, options.require),
         ...guarded(explored.guards, options.require),
         ...unlocked.reasons,
+        ...(histories?.uninstantiated ?? [])
+          .filter((name) => changes.find((change) => change.name === name)?.standing !== "proved")
+          .map(
+            (name) =>
+              `${name} was never run: no value in a sequence fits its input, and it is not proved`,
+          ),
       ],
       relocked: unlocked.relocked,
       // Only a model with a decision takes its commit for granted.
-      assumptions: explored.decisions.length > 0 ? [...ASSUMPTIONS, Prove.ATOMIC] : ASSUMPTIONS,
+      assumptions: [
+        ...ASSUMPTIONS,
+        ...(explored.decisions.length > 0 ? [Prove.ATOMIC] : []),
+        ...Prove.pure(explored.opaque),
+      ],
     };
     return made;
   });
@@ -641,6 +818,7 @@ export const report = (
 /** Whether a report verifies the model: no rule is broken, every run agrees, and nothing was left undone. */
 export const verified = (report: Report): boolean =>
   report.rules.every((rule) => rule.standing !== "broken") &&
+  report.changes.every((change) => change.standing !== "broken") &&
   report.runs.every((run) => run.failure === undefined) &&
   report.undone.length === 0;
 
@@ -681,7 +859,7 @@ export const model = (
     ),
   );
 
-export interface AggregateOptions {
+export interface AggregateOptions extends Prove.Reading {
   /**
    * The file the aggregate is declared in. Left out, it is found from the
    * test file that calls.
@@ -832,6 +1010,13 @@ const renderAggregate = (report: AggregateReport): string => {
  *   Verify.aggregate(Account).pipe(Effect.provide(NodeServices.layer)),
  * );
  * ```
+ *
+ * **Example:** With a function the prover should not read
+ * ```typescript
+ * it.effect("a ticket keeps its rules", () =>
+ *   Verify.aggregate(Ticket, { opaque: [priceOf] }).pipe(Effect.provide(NodeServices.layer)),
+ * );
+ * ```
  */
 export const aggregate = (
   target: Aggregate.Any,
@@ -843,7 +1028,8 @@ export const aggregate = (
     const source = options.source ?? (yield* locate(target.aggregateName, "Aggregate", from));
     const failed = (error: { readonly message: string }) =>
       new VerifyError({ message: error.message });
-    const proof = yield* Prove.report(target, { source }).pipe(Effect.mapError(failed));
+    const reading: Prove.Reading = { opaque: options.opaque };
+    const proof = yield* Prove.report(target, { source, ...reading }).pipe(Effect.mapError(failed));
     const unlocked =
       options.lock === undefined
         ? UNLOCKED
@@ -854,9 +1040,11 @@ export const aggregate = (
             source,
             target,
             aggregates: [target],
+            reading,
           });
     const explored = yield* Explore.report(target, {
       source,
+      ...reading,
       ...(options.depth === undefined ? {} : { depth: options.depth }),
       ...(options.budget === undefined ? {} : { budget: options.budget }),
     }).pipe(Effect.mapError(failed));
@@ -937,7 +1125,7 @@ export interface HistoryEntry<Ev = { readonly _tag: string }> {
 export interface HistoryReport {
   readonly aggregate: string;
   /** Each instance whose events were given, and what its history shows. */
-  readonly instances: ReadonlyArray<History.Report & { readonly stream: string }>;
+  readonly instances: ReadonlyArray<Recorded.Report & { readonly stream: string }>;
   /** Every rule a state along the way breaks, and every event `evolve` cannot fold. */
   readonly broken: ReadonlyArray<string>;
   /** The events no command of the aggregate records from the state they met. */
@@ -1029,7 +1217,7 @@ export const history = <A extends Aggregate.Any>(
         );
         continue;
       }
-      const checked = yield* History.check(
+      const checked = yield* Recorded.check(
         solver,
         interpreter,
         target,
@@ -1237,6 +1425,57 @@ export const render = (report: Report | AggregateReport | HistoryReport): string
         ...indent(run.failure!.trim(), "      "),
       );
     out.push("");
+  }
+
+  if (report.changes.length > 0) {
+    const says = (change: Change): string => {
+      const [first, second] = change.name.split(".");
+      return change.kind === "compaction"
+        ? "no instance refuses its roll-up, and none is changed by it"
+        : change.kind === "roll-up"
+          ? `${first}, built after ${second}, holds what it does built from the events`
+          : second === undefined
+            ? "no instance refuses it, and each is left in its rules"
+            : `${first} leaves an instance ${second} compacted as it leaves one that kept its events`;
+    };
+    out.push(
+      `Rewrites and compactions${
+        report.histories > 0
+          ? `: each put into the sequences that run as stories, before each command and at the end (${count(report.histories)} runs${
+              report.historiesTruncated ? ", which is where they were told to stop" : ""
+            })`
+          : ""
+      }`,
+    );
+    for (const change of report.changes) {
+      if (change.standing === "broken") continue;
+      out.push(
+        `  ${change.standing === "unseen" ? "?" : "✓"} ${change.name}  ${
+          change.standing === "proved"
+            ? change.kind === "compaction"
+              ? "proved: folded from nothing, its roll-up gives back every state the rules allow"
+              : "proved: it keeps every invariant, whatever history the commands record"
+            : change.standing === "checked"
+              ? `${says(change)}, in ${count(change.runs)} runs`
+              : change.standing === "allowed"
+                ? "allowed to hold less after the compaction than it does built from the events"
+                : "not looked at: no sequence left an instance to run it on"
+        }`,
+      );
+    }
+    out.push("");
+    for (const change of report.changes) {
+      if (change.standing !== "broken" || !change.broken) continue;
+      out.push(
+        `✗ ${change.name}: ${says(change)}, and here it is not so`,
+        ...indent(change.broken.shown, "    "),
+        "",
+        "    As a story, to keep as a test:",
+        "",
+        ...indent(change.broken.script, "    "),
+        "",
+      );
+    }
   }
 
   if (report.undone.length > 0)

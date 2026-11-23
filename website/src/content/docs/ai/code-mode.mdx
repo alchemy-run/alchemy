@@ -1,0 +1,251 @@
+---
+title: Code mode
+description: List tools inside AI.CodeMode and the model reaches them from a program it writes, against typed declarations of each tool, on any harness.
+---
+
+A model that calls one tool at a time reads every result, whether it needs it or not. In **code mode** the model writes a program instead. The program calls the tools, keeps what it needs, and returns an answer. Only that answer goes back to the model, so twenty tool calls cost one round trip.
+
+## Reach tools from a program
+
+Wrap the tools a program may call in `AI.CodeMode`:
+
+```typescript
+const harness = yield* Pi.Harness({
+  models: [Fast],
+  tools: [AI.CodingTools, AI.CodeMode(Add, Withdraw)],
+});
+```
+
+Here the model calls files and shell directly, and reaches `add` and `withdraw` only from a program.
+
+## Choose what goes through programs
+
+Where a tool is listed decides how the model reaches it. Outside a group, it is a direct call:
+
+```typescript
+tools: [AI.CodingTools, Add, Withdraw]
+```
+
+Inside one, it is called from programs. With every tool in the group, a program is the model's only way to act:
+
+```typescript
+tools: [AI.CodeMode(AI.CodingTools, Add, Withdraw)]
+```
+
+Listed both ways, the model chooses per turn:
+
+```typescript
+tools: [Add, AI.CodeMode(Add, Withdraw)]
+```
+
+## Say how programs are written
+
+Listing a group requires a Layer that says how programs are written and where they run. `AI.CodeModeAsync` has the model write promises:
+
+```typescript
+const CodeModeLive = AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalWorkerLoader()));
+```
+
+`AI.CodeModeEffect` has it write an Effect:
+
+```typescript
+const CodeModeLive = AI.CodeModeEffect.pipe(Layer.provide(AICloudflare.EvalWorkerLoader()));
+```
+
+Leaving the Layer out is a type error on the harness.
+
+## What the model sees
+
+The harness adds a TypeScript declaration of the tools to the system prompt. `tools` is a namespace, each tool a function in it. These two tools:
+
+```typescript title="src/tools.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Schema from "effect/Schema";
+
+/** A bank account. */
+export class Account extends Schema.Class<Account>("Account")(
+  {
+    id: Schema.String,
+    balance: Schema.Number.annotate({ description: "In cents." }),
+  },
+  { description: "A bank account." },
+) {}
+
+export class InsufficientFunds extends Schema.TaggedError<InsufficientFunds>()(
+  "InsufficientFunds",
+  { balance: Schema.Number },
+  { description: "The account holds less than the amount asked for." },
+) {}
+
+export class Add extends AI.Tool<Add>()("add", {
+  description: "Add two integers.",
+  parameters: Schema.Struct({ a: Schema.Number, b: Schema.Number }),
+  success: Schema.Struct({ sum: Schema.Number }),
+}) {}
+
+export class Withdraw extends AI.Tool<Withdraw>()("withdraw", {
+  description: "Withdraw money from an account.",
+  parameters: Schema.Struct({ account: Schema.String, amount: Schema.Number }),
+  success: Account,
+  failure: InsufficientFunds,
+}) {}
+```
+
+are declared to an async program as:
+
+```typescript
+declare namespace tools {
+  /** A bank account. */
+  interface Account {
+    readonly id: string;
+    /** In cents. */
+    readonly balance: number;
+  }
+
+  /** The account holds less than the amount asked for. */
+  class InsufficientFunds extends Error {
+    readonly _tag: "InsufficientFunds";
+    readonly balance: number;
+  }
+
+  /** Add two integers. */
+  function add(args: { a: number; b: number }): Promise<{ sum: number }>;
+
+  /**
+   * Withdraw money from an account.
+   * @throws {InsufficientFunds}
+   */
+  function withdraw(args: { account: string; amount: number }): Promise<Account>;
+}
+```
+
+A schema with a name (`Schema.Class`, `Schema.TaggedError`, or an `identifier` annotation) is declared once and referred to by that name. Its `description` is its comment, and so is each field's. A schema without a name is written out where it is used.
+
+## Async programs
+
+The model writes a module. A tool returns a `Promise`, top-level `await` works, and the default export is the answer:
+
+```javascript
+const first = await tools.add({ a: 2, b: 3 });
+const second = await tools.add({ a: 10, b: 20 });
+
+export default first.sum + second.sum;
+```
+
+A failure the tool declares rejects with an instance of its class, which extends `Error`:
+
+```javascript
+const withdraw = async () => {
+  try {
+    return await tools.withdraw({ account: "checking", amount: 500 });
+  } catch (error) {
+    if (error instanceof tools.InsufficientFunds) return error.balance;
+    throw error;
+  }
+};
+
+export default await withdraw();
+```
+
+Any other rejection is a defect of the tool.
+
+A default export that is a function is called. A model that sends the body of an async function, ending in `return`, is understood too.
+
+The program is parsed before it runs. One with a syntax error fails with the line and column of the error, which the model reads and corrects.
+
+## Effect programs
+
+Under `AI.CodeModeEffect` the same tools are declared as Effects. A tool's failures are its error type, as `Data.TaggedError` classes, and it requires nothing:
+
+```typescript
+declare namespace tools {
+  /** The account holds less than the amount asked for. */
+  class InsufficientFunds extends Data.TaggedError("InsufficientFunds")<{
+    readonly balance: number;
+  }> {}
+
+  /** Add two integers. */
+  function add(args: { a: number; b: number }): Effect<{ sum: number }>;
+
+  /** Withdraw money from an account. */
+  function withdraw(args: { account: string; amount: number }): Effect<Account, InsufficientFunds>;
+}
+```
+
+The model writes a module whose default export is an Effect. The harness runs it, and what it succeeds with is the answer:
+
+```javascript
+export default Effect.gen(function* () {
+  const added = yield* tools.add({ a: 2, b: 3 });
+  const balance = yield* tools.withdraw({ account: "checking", amount: 500 }).pipe(
+    Effect.map((account) => account.balance),
+    Effect.catchTag("InsufficientFunds", (error) => Effect.succeed(error.balance)),
+  );
+  return added.sum + balance;
+});
+```
+
+effect's modules are in scope (`Effect`, `Data`, `Option`, `Arr`, `pipe`), and a program may also import them from `effect`. Nothing else can be imported.
+
+A model that sends only the body of `Effect.gen(function* () { ... })` is understood too.
+
+Effect runs inside the sandbox with the program, so it works wherever programs run. Programs have no timers: `Effect.sleep`, `Effect.timeout`, and timed schedules fail.
+
+## MCP servers
+
+An [MCP server](/ai/mcp-servers) goes in a group like a tool. Its tools are declared in a namespace with the server's name:
+
+```typescript
+tools: [AI.CodingTools, AI.CodeMode(Add, Github)]
+```
+
+```javascript
+const issue = await tools.github.get_issue({ number: 142 });
+```
+
+A server's tool is typed by the `outputSchema` it sends. Without one, a call returns the tool's text. MCP has no failure schema, so a server's error is a plain rejection.
+
+## Where programs run
+
+An `AI.Eval` Layer is where programs run. Each is a sandbox whose only way out is the tools it was given: no network, no file system.
+
+`AICloudflare.EvalWorkerLoader()` loads each program into an isolate of its own, through a `worker_loader` binding. The program runs on V8 directly. The isolate has no network and no bindings, and each tool call comes back to the Durable Object over RPC:
+
+```typescript
+const CodeModeLive = AI.CodeModeEffect.pipe(Layer.provide(AICloudflare.EvalWorkerLoader()));
+```
+
+## Run programs in QuickJS
+
+The other Layers run programs in a QuickJS VM. The VM interprets the program, so it is slower. In return it counts a program's steps and memory, and it is deterministic, which lets [Pi resume a program](/pi/code-mode#resume-after-a-crash) after a crash.
+
+`AICloudflare.EvalQuickJS()` runs the VM on the Durable Object's own thread, with no binding to add. A program that computes for a long time without calling a tool blocks the object, so it is stopped when it spends its `interruptBudget`, or after `timeoutMs`:
+
+```typescript
+const CodeModeLive = AI.CodeModeAsync.pipe(
+  Layer.provide(AICloudflare.EvalQuickJS({ timeoutMs: 30_000 })),
+);
+```
+
+`AICloudflare.EvalQuickJSWorkerLoader()` runs the VM in a loaded isolate, off the object's thread:
+
+```typescript
+const CodeModeLive = AI.CodeModeAsync.pipe(
+  Layer.provide(AICloudflare.EvalQuickJSWorkerLoader()),
+);
+```
+
+`AI.EvalQuickJS()` runs it on a worker thread, on a machine with Node.js or Bun:
+
+```typescript
+const CodeModeLive = AI.CodeModeAsync.pipe(Layer.provide(AI.EvalQuickJS()));
+```
+
+Changing where programs run changes this one Layer. The harness and its tools stay as they are.
+
+## On each harness
+
+Both harnesses take the same groups and the same Layers. What differs is what each platform can route:
+
+- [Code mode on Pi](/pi/code-mode): every tool can go through programs, Pi's own included, and a program in a QuickJS VM resumes after a crash.
+- [Code mode on OpenCode](/opencode/code-mode): your tools and MCP servers go through programs. OpenCode can also run them with its own code mode.

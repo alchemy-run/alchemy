@@ -4,6 +4,7 @@
  * runner's job. Everything is Effect-first — plain-function tests are wrapped
  * into Effects at registration time.
  */
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -212,12 +213,30 @@ export const registerTest = (options: RegisterTestOptions): void => {
 };
 
 /** Wrap a plain (sync or async) test function into a self-contained Effect. */
+/**
+ * A plain `it`/`test` body returned an Effect. The runner only awaits a plain
+ * body, so the Effect would never run and the test would pass without
+ * asserting anything; write it with `it.effect` instead.
+ */
+export class ReturnedEffectError extends Data.TaggedError("ReturnedEffectError")<{
+  readonly message: string;
+}> {}
+
 const fromFn =
   (fn: (ctx: TestContext) => unknown): TestBody =>
   () =>
-    Effect.promise(async () => {
-      await fn(emptyContext);
-    });
+    Effect.promise(async () => await fn(emptyContext)).pipe(
+      Effect.flatMap((result) =>
+        Effect.isEffect(result)
+          ? Effect.die(
+              new ReturnedEffectError({
+                message:
+                  "The test body returned an Effect, which a plain `it`/`test` never runs. Use `it.effect` (or `test.effect`).",
+              }),
+            )
+          : Effect.void,
+      ),
+    );
 
 /** Minimal stand-in for vitest's TestContext (rarely used by our tests). */
 export interface TestContext {

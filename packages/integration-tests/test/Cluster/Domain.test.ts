@@ -5,19 +5,22 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { ensureDockerSwarm } from "../Docker/Runtime.ts";
+import { ensureDockerSwarm, publishedUrl } from "../Docker/Runtime.ts";
 import { conformance, rebuild, waitForReady } from "../Domain/conformance/conformance.ts";
 import { latency } from "../Domain/conformance/latency.ts";
-import { DOMAIN_FRONT_PORT } from "./fixtures/domain/cluster.ts";
+import { connections } from "./fixtures/domain/connections.ts";
 import { crash } from "./fixtures/domain/crash.ts";
 import DomainFrontV1 from "./fixtures/domain/front-v1.ts";
 import DomainFront from "./fixtures/domain/front.ts";
+import { beginsNewRun } from "./fixtures/domain/runs.ts";
 
 const testOptions = { providers: Layer.mergeAll(Docker.providers(), Cluster.providers()) };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const stack = Core.scratchStack(testOptions, "ClusterDomain", import.meta.url);
 
-const url = `http://localhost:${DOMAIN_FRONT_PORT}`;
+// The front's port is one Swarm picks, read from each deploy.
+let url = "";
+const frontUrl = Effect.sync(() => url);
 
 /** Deploy the front over the model at `version`, and wait until it serves. */
 const deploy = (version: 0 | 1) =>
@@ -25,11 +28,16 @@ const deploy = (version: 0 | 1) =>
     .deploy(
       Effect.gen(function* () {
         const front = yield* version === 0 ? DomainFront : DomainFrontV1;
-        return { front: front.name };
+        return { front: front.name, ports: front.ports };
       }),
     )
     .pipe(
-      Effect.tap(() => waitForReady(url)),
+      Effect.tap(({ ports }) =>
+        Effect.suspend(() => {
+          url = publishedUrl(ports);
+          return waitForReady(url);
+        }),
+      ),
       Effect.map(({ front }) => front),
     );
 
@@ -52,23 +60,26 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll.skipIf(!!process.env.NO_DESTROY)(stack.destroy(), { timeout: 300_000 });
 
-    conformance({ test, url: Effect.succeed(url), kind: "local" });
+    conformance({ test, url: frontUrl, kind: "local" });
+    connections({ test, url: () => url, stack });
     latency({
       kind: "local",
       test,
       label: "Effect Cluster (local Docker)",
-      url: Effect.succeed(url),
+      url: frontUrl,
     });
 
     // After the cases that read the model as deployed: it redeploys the front.
+    // The bump's new runners begin its new run before the case calls the model.
     rebuild({
       test,
-      url: Effect.succeed(url),
+      url: frontUrl,
       kind: "local",
-      deploy: (v) => Effect.asVoid(deploy(v)),
+      deploy: (v) =>
+        v === 1 ? beginsNewRun(stack, Effect.asVoid(deploy(1))) : Effect.asVoid(deploy(v)),
     });
 
     // Last: each case kills a runner.
-    crash({ test, url, stack });
+    crash({ test, url: () => url, stack });
   },
 );

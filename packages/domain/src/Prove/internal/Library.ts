@@ -1,45 +1,67 @@
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Brands from "./Brands.ts";
+import * as Compare from "./Compare.ts";
+import { numeric, promote } from "./Compare.ts";
+import type { Host, Model, Whole } from "./Kit.ts";
+import * as Kit from "./Kit.ts";
+import {
+  arr,
+  difference,
+  done,
+  dual,
+  effect,
+  keyed,
+  keysOf,
+  native,
+  onEffect,
+  onOption,
+  onRecord,
+  ordered,
+  picked,
+  product,
+  str,
+  sum,
+  termOf,
+  valueOfWhole,
+  wholeOf,
+  wrongArguments,
+} from "./Kit.ts";
+import * as Known from "./Known.ts";
+import { hostOf } from "./Known.ts";
+import * as Cells from "./Models/Cells.ts";
+import * as Collections from "./Models/Collections.ts";
+import * as Decimals from "./Models/Decimals.ts";
+import * as Effects from "./Models/Effects.ts";
+import * as Exits from "./Models/Exits.ts";
+import * as Hashes from "./Models/Hashes.ts";
+import * as Numbers from "./Models/Numbers.ts";
+import * as Rationals from "./Models/Rationals.ts";
+import * as Results from "./Models/Results.ts";
+import * as Streams from "./Models/Streams.ts";
+import * as Strings from "./Models/Strings.ts";
 import type { Term } from "./Smt.ts";
 import * as Smt from "./Smt.ts";
-import type { Eval, OpticStep, Run, Site, V } from "./Value.ts";
+import * as Symbolic from "./Symbolic.ts";
+import type { Eval, OpticStep, Site, V } from "./Value.ts";
+
+export type { Host, Model } from "./Kit.ts";
 import * as Value from "./Value.ts";
-
-/** What the library models need from the interpreter. */
-export interface Host {
-  readonly current: { run: Run };
-  readonly call: (fn: V, args: ReadonlyArray<V>, site: Site) => Eval<V>;
-  /** What `yield*` on the value gives. */
-  readonly settle: (value: V, site: Site) => Eval<V>;
-  /** Whether a value is truthy on this path. */
-  readonly decide: (value: V, site: Site) => Eval<boolean>;
-  /** Whether two values are `===`, as a value: known, or a condition of the inputs. */
-  readonly equal: (a: V, b: V, site: Site) => Eval<V>;
-  /** A list with its items, when the value is one. */
-  readonly force: (value: V) => V;
-  /** An array's method that takes a function, such as `map`. */
-  readonly array: (
-    name: string,
-    items: ReadonlyArray<V>,
-    fn: V,
-    initial: V | undefined,
-    site: Site,
-  ) => Eval<V>;
-  /** The request contexts provided around the code being run, by tag. */
-  readonly provided: Map<unknown, V>;
-  /** Models a caller adds, by `module:path`. They come before the prover's own. */
-  readonly extra: ReadonlyMap<string, Model>;
-}
-
-/** What a library function does to symbolic values. */
-export type Model = (args: ReadonlyArray<V>, site: Site) => Eval<V>;
 
 /** Milliseconds in a day. */
 const DAY = 86_400_000;
 
-const native = (name: string, call: Model): V => ({ _tag: "Native", name, call });
-const effect = (run: Eval<V>): V => ({ _tag: "Effect", run });
-const done: V = effect(Effect.succeed(Value.undef));
+/** Milliseconds in each unit of `DateTime.add` that is the same length whenever it starts. */
+const PARTS: Readonly<Record<string, number>> = {
+  milliseconds: 1,
+  seconds: 1_000,
+  minutes: 60_000,
+  hours: 3_600_000,
+  days: DAY,
+  weeks: 7 * DAY,
+};
 
 /**
  * The library functions the prover knows, each written once as what it does
@@ -47,6 +69,10 @@ const done: V = effect(Effect.succeed(Value.undef));
  * translated, and the report names the call.
  */
 export const make = (host: Host) => {
+  const kit = Kit.make(host);
+  const { onArray, after: then } = kit;
+  const duration = (millis: Whole): V => Brands.duration(valueOfWhole(millis));
+
   /** Change the part of `source` an optic focuses on; a focus that misses leaves it as it is. */
   const through = (
     path: ReadonlyArray<OpticStep>,
@@ -66,15 +92,12 @@ export const make = (host: Host) => {
         );
       return tag.value === step.tag ? through(rest, source, change, site) : Effect.succeed(source);
     }
-    return through(rest, source.fields[step.key] ?? Value.undef, change, site).pipe(
+    return Effect.flatMap(host.member(source, step.key, site), (focus) =>
+      through(rest, focus, change, site),
+    ).pipe(
       Effect.map((changed) => Value.obj({ ...source.fields, [step.key]: changed }, source.brand)),
     );
   };
-
-  const wrongArguments = (site: Site, name: string) =>
-    Effect.fail(
-      Value.notTranslated(site, `${name} is called in a way the prover has no model for`),
-    );
 
   /** `modify` and `replace`, data-first (`source, optic, x`) or data-last (`optic, x` then `source`). */
   const update =
@@ -94,8 +117,6 @@ export const make = (host: Host) => {
 
   const modify = update("Optic.modify", (f, site) => (focus) => host.call(f, [focus], site));
   const replace = update("Optic.replace", (value) => () => Effect.succeed(value));
-
-  const str = (v: V | undefined): string | undefined => (v?._tag === "Str" ? v.value : undefined);
 
   /** The methods of an optic value. */
   const opticMember = (optic: V & { readonly _tag: "Optic" }, key: string): V | undefined => {
@@ -126,59 +147,30 @@ export const make = (host: Host) => {
     }
   };
 
-  /** `Effect.fn(body)`, `Effect.fn("name")(body)` and `Effect.fn(options)(body)`. */
-  const fn: Model = ([first], site) =>
-    first?._tag === "Fn"
-      ? Effect.succeed<V>({ ...first, effectful: true })
-      : first?._tag === "Str" || first?._tag === "Obj"
-        ? Effect.succeed(native("Effect.fn", fn))
-        : wrongArguments(site, "Effect.fn");
+  /**
+   * `Effect.fn(body)`, `Effect.fn("name")(body)` and `Effect.fn(options)(body)`.
+   * Functions after the body are applied to the effect it gives, each with
+   * the arguments of the call after it.
+   */
+  const fn: Model = ([first, ...steps], site) => {
+    if (first?._tag === "Str" || (first?._tag === "Obj" && steps.length === 0))
+      return Effect.succeed(native("Effect.fn", fn));
+    if (first?._tag !== "Fn") return wrongArguments(site, "Effect.fn");
+    const body: V = { ...first, effectful: true };
+    if (steps.length === 0) return Effect.succeed(body);
+    return Effect.succeed(
+      native(
+        "Effect.fn",
+        Effect.fnUntraced(function* (args: ReadonlyArray<V>, at: Site) {
+          let made = yield* host.call(body, args, at);
+          for (const step of steps) made = yield* host.call(step, [made, ...args], at);
+          return made;
+        }),
+      ),
+    );
+  };
 
   const ignored: Model = () => Effect.succeed(done);
-
-  /**
-   * A function of an effect, called with the effect first (`f(effect, x)`) or
-   * later through `pipe` (`f(x)` then the effect).
-   */
-  const onEffect =
-    (
-      name: string,
-      extra: number,
-      run: (self: Eval<V>, args: ReadonlyArray<V>, site: Site) => Eval<V>,
-    ): Model =>
-    (args, site) => {
-      const [first, ...rest] = args;
-      if (args.length === extra + 1 && first?._tag === "Effect")
-        return Effect.suspend(() => run(first.run, rest, site)).pipe(effect, Effect.succeed);
-      if (args.length === extra)
-        return Effect.succeed(
-          native(name, ([self], at) =>
-            self?._tag === "Effect"
-              ? Effect.suspend(() => run(self.run, args, at)).pipe(effect, Effect.succeed)
-              : wrongArguments(at, name),
-          ),
-        );
-      return wrongArguments(site, name);
-    };
-
-  /** What a step after an effect gives: a function of its value, another effect, or a plain value. */
-  const then = (next: V, value: V, site: Site): Eval<V> =>
-    next._tag === "Effect"
-      ? next.run
-      : next._tag === "Fn" || next._tag === "Native" || next._tag === "Lib"
-        ? host
-            .call(next, [value], site)
-            .pipe(
-              Effect.flatMap((made) => (made._tag === "Effect" ? made.run : Effect.succeed(made))),
-            )
-        : Effect.succeed(next);
-
-  const tagsOf = (v: V | undefined): ReadonlyArray<string> | undefined =>
-    v?._tag === "Str"
-      ? [v.value]
-      : v?._tag === "Arr" && v.items.every((item) => item._tag === "Str")
-        ? v.items.map((item) => (item as { readonly value: string }).value)
-        : undefined;
 
   const number =
     (
@@ -187,15 +179,23 @@ export const make = (host: Host) => {
       pick: (a: string, b: string) => string,
     ): Model =>
     (args, site) => {
-      const [a, b] = args;
-      if (args.length !== 2 || !a || !b) return wrongArguments(site, name);
-      if (a._tag === "Num" && b._tag === "Num")
-        return Effect.succeed(Value.num(fold(a.value, b.value)));
-      const left = numeric(a);
-      const right = numeric(b);
-      if (!left || !right) return wrongArguments(site, name);
-      const [x, y] = promote(left, right);
-      return Effect.succeed(Value.term(x.sort, pick(x.text, y.text)));
+      // Of any number of numbers, taken two at a time. Of none it is an infinity, which is not read.
+      const [first, ...rest] = args;
+      if (!first || !numeric(first)) return wrongArguments(site, name);
+      let made: V = first;
+      for (const next of rest) {
+        const left = numeric(made);
+        const right = numeric(next);
+        if (!left || !right || Value.isBig(next) || Value.isBig(made))
+          return wrongArguments(site, name);
+        if (made._tag === "Num" && next._tag === "Num") {
+          made = Value.num(fold(made.value, next.value));
+          continue;
+        }
+        const [x, y] = promote(left, right);
+        made = Value.term(x.sort, pick(x.text, y.text));
+      }
+      return Effect.succeed(made);
     };
 
   // The date of a UTC time, as text: `formatIsoDate` and `formatIsoDateUtc` give the same.
@@ -225,36 +225,150 @@ export const make = (host: Host) => {
     });
   };
 
+  // Time. A time is its milliseconds since 1970 and a duration is a whole
+  // number of milliseconds, so comparing, adding and subtracting them is
+  // arithmetic on whole numbers.
+
+  const instant = (v: V | undefined): Term | undefined =>
+    v?._tag === "Time" ? v.millis : undefined;
+  const time = (millis: Whole): V => ({ _tag: "Time", millis: termOf(millis) });
+
   /**
-   * A function written both ways: with what it works on first (`f(self, x)`),
-   * or without it, to be given it by `pipe` (`f(x)` then `self`).
+   * The milliseconds of what a function takes as a duration: a `Duration`, a
+   * number of milliseconds, or text such as `"7 days"`. A duration that is not
+   * a whole number of milliseconds is kept in nanoseconds by the library, and
+   * is not read.
    */
-  const dual =
-    (name: string, arity: number, body: Model): Model =>
-    (args, site) =>
-      args.length >= arity
-        ? body(args, site)
-        : Effect.succeed(
-            native(name, ([self], at) =>
-              self ? body([self, ...args], at) : wrongArguments(at, name),
+  const span = (v: V | undefined): Whole | undefined => {
+    if (v?._tag === "Obj") return wholeOf(Brands.durationOf(v));
+    if (v?._tag !== "Str") return wholeOf(v);
+    // Text that is no duration, or one that is not whole milliseconds, is not a whole number.
+    const read = Duration.fromInput(v.value as Duration.Input);
+    const millis = read._tag === "Some" ? Duration.toMillis(read.value) : Number.NaN;
+    return wholeOf(Value.num(millis));
+  };
+
+  /** A function of two times, such as `DateTime.isLessThan`. */
+  const onTimes = (name: string, body: (self: Term, that: Term) => V): Model =>
+    dual(name, 2, ([self, that], site) => {
+      const a = instant(self);
+      const b = instant(that);
+      return a && b ? Effect.succeed(body(a, b)) : wrongArguments(site, name);
+    });
+
+  /** A function of two durations, such as `Duration.sum`. */
+  const onSpans = (name: string, body: (self: Whole, that: Whole) => V): Model =>
+    dual(name, 2, ([self, that], site) => {
+      const a = span(self);
+      const b = span(that);
+      return a !== undefined && b !== undefined
+        ? Effect.succeed(body(a, b))
+        : wrongArguments(site, name);
+    });
+
+  /** `Duration.days` and the like: so many of a unit. */
+  const spanOf =
+    (name: string, unit: number): Model =>
+    ([count], site) => {
+      const n = wholeOf(count);
+      return n === undefined
+        ? wrongArguments(site, name)
+        : Effect.succeed(duration(product(n, unit)));
+    };
+
+  /** `Duration.toDays` and the like: a duration counted in a unit, which need not be whole. */
+  const spanIn =
+    (name: string, unit: number): Model =>
+    ([self], site) => {
+      const millis = span(self);
+      if (millis === undefined) return wrongArguments(site, name);
+      if (unit === 1) return Effect.succeed(valueOfWhole(millis));
+      if (typeof millis === "number") return Effect.succeed(Value.num(millis / unit));
+      return Effect.succeed<V>({
+        _tag: "Term",
+        term: { sort: "Real", text: `(/ (to_real ${millis.text}) ${Smt.real(unit).text})` },
+        quotient: { dividend: millis.text, divisor: unit },
+      });
+    };
+
+  /** `DateTime.addDuration` and `DateTime.subtractDuration`. */
+  const shiftedBy = (name: string, sign: 1 | -1): Model =>
+    dual(name, 2, ([self, by], site) => {
+      const at = instant(self);
+      const millis = span(by);
+      return at && millis !== undefined
+        ? Effect.succeed(time(sign === 1 ? sum(at, millis) : difference(at, millis)))
+        : wrongArguments(site, name);
+    });
+
+  /**
+   * `DateTime.add` and `DateTime.subtract`, in the units that are the same
+   * length whenever they start. A month or a year is not: it is not read.
+   */
+  const shiftedByParts = (name: string, sign: 1 | -1): Model =>
+    dual(name, 2, ([self, parts], site) => {
+      const at = instant(self);
+      if (!at || parts?._tag !== "Obj" || parts.brand) return wrongArguments(site, name);
+      let moved: Whole = at;
+      for (const [key, value] of Object.entries(parts.fields)) {
+        const unit = PARTS[key];
+        if (unit === undefined)
+          return Effect.fail(
+            Value.notTranslated(
+              site,
+              `${name} moves a time by ${key}, which are not all the same length`,
             ),
           );
-
-  /** A function of an `Option`. */
-  const onOption = (
-    name: string,
-    arity: number,
-    body: (
-      option: NonNullable<ReturnType<typeof Value.optionOf>>,
-      rest: ReadonlyArray<V>,
-      site: Site,
-      self: V,
-    ) => Eval<V>,
-  ): Model =>
-    dual(name, arity, ([self, ...rest], site) => {
-      const option = Value.optionOf(self);
-      return option && self ? body(option, rest, site, self) : wrongArguments(site, name);
+        const count = wholeOf(value);
+        if (count === undefined) return wrongArguments(site, name);
+        const millis = product(count, unit);
+        moved = sign === 1 ? sum(moved, millis) : difference(moved, millis);
+      }
+      return Effect.succeed(time(moved));
     });
+
+  /**
+   * What the clock reads: the time the command is handled at, which is what
+   * `decide` is given as `now` and what the clock is set to while it runs.
+   */
+  const clock = (name: string, site: Site, read: (now: Term) => V): V =>
+    effect(
+      Effect.suspend(() => {
+        const now = instant(host.now());
+        return now
+          ? Effect.succeed(read(now))
+          : Effect.fail(
+              Value.notTranslated(
+                site,
+                `reads the clock with ${name} outside decide, where the time is not an input`,
+                true,
+              ),
+            );
+      }),
+    );
+
+  /** The library's values that read the clock. */
+  const clocks: Readonly<Record<string, (site: Site) => V>> = {
+    "effect/Clock:currentTimeNanos": (site) =>
+      clock("Clock.currentTimeNanos", site, (now) => ({
+        _tag: "Term",
+        term: { sort: "Int", text: `(* ${now.text} 1000000)` },
+        big: true,
+      })),
+    "effect/Clock:currentTimeMillis": (site) =>
+      clock("Clock.currentTimeMillis", site, (now) => ({ _tag: "Term", term: now })),
+    "effect/DateTime:now": (site) => clock("DateTime.now", site, time),
+  };
+
+  /** `DateTime.isPast` and `DateTime.isFuture`: a time against what the clock reads. */
+  const against =
+    (name: string, order: "<" | ">"): Model =>
+    ([self], site) => {
+      const at = instant(self);
+      return at
+        ? Effect.succeed(clock(name, site, (now) => ordered(order, now, at)))
+        : wrongArguments(site, name);
+    };
 
   /** `Option.fromNullishOr` and the two like it: what counts as nothing differs. */
   const fromNullable =
@@ -262,47 +376,11 @@ export const make = (host: Host) => {
     ([value]) =>
       Effect.succeed(!value || nothing.includes(value._tag) ? Value.none : Value.some(value));
 
-  /** A function of an array, whose items the prover has to see. */
-  const onArray = (
-    name: string,
-    arity: number,
-    body: (items: ReadonlyArray<V>, rest: ReadonlyArray<V>, site: Site) => Eval<V>,
-  ): Model =>
-    dual(name, arity, ([self, ...rest], site) => {
-      const list = self ? host.force(self) : undefined;
-      return list?._tag === "Arr" ? body(list.items, rest, site) : wrongArguments(site, name);
-    });
-
-  const arr = (items: ReadonlyArray<V>): V => ({ _tag: "Arr", items });
-
   /** An array's own method, as the library's function of the same name. */
   const method = (name: string, as = name): Model =>
     onArray(`Array.${name}`, 2, (items, [fn], site) =>
       fn ? host.array(as, items, fn, undefined, site) : wrongArguments(site, `Array.${name}`),
     );
-
-  /** A function of an object whose keys the prover sees. */
-  const onRecord = (
-    name: string,
-    arity: number,
-    body: (fields: Readonly<Record<string, V>>, rest: ReadonlyArray<V>, site: Site) => Eval<V>,
-  ): Model =>
-    dual(name, arity, ([self, ...rest], site) =>
-      self?._tag === "Obj" && !self.brand
-        ? body(self.fields, rest, site)
-        : wrongArguments(site, name),
-    );
-
-  /** A key the code names: one the prover cannot see is not translated. */
-  const keyed = (name: string, key: V | undefined, site: Site): Eval<string> =>
-    key?._tag === "Str" || key?._tag === "Num"
-      ? Effect.succeed(String(key.value))
-      : Effect.fail(Value.notTranslated(site, `${name} is given a key the prover cannot see`));
-
-  const keysOf = (name: string, keys: V | undefined, site: Site): Eval<ReadonlyArray<string>> =>
-    keys?._tag === "Arr"
-      ? Effect.forEach(keys.items, (key) => keyed(name, key, site))
-      : Effect.fail(Value.notTranslated(site, `${name} is given keys the prover cannot see`));
 
   /** `Math.floor` and the functions like it: a whole number stays what it is. */
   const whole =
@@ -367,7 +445,7 @@ export const make = (host: Host) => {
       if (pattern._tag === "Obj" && pattern.brand === undefined) {
         if (input._tag !== "Obj") return false;
         for (const [key, part] of Object.entries(pattern.fields))
-          if (!(yield* takes(part, input.fields[key] ?? Value.undef, site))) return false;
+          if (!(yield* takes(part, yield* host.member(input, key, site), site))) return false;
         return true;
       }
       return yield* host.decide(yield* host.equal(input, pattern, site), site);
@@ -379,7 +457,7 @@ export const make = (host: Host) => {
     (input, site) =>
       Effect.gen(function* () {
         if (input._tag !== "Obj") return false;
-        const tag = input.fields[field] ?? Value.undef;
+        const tag = yield* host.member(input, field, site);
         for (const value of values)
           if (yield* host.decide(yield* host.equal(tag, value, site), site)) return true;
         return false;
@@ -669,7 +747,7 @@ export const make = (host: Host) => {
       finished("Match.option", matcherOf(self), () => Effect.succeed(Value.none), Value.some, site),
   };
 
-  const models: Readonly<Record<string, Model>> = {
+  const own: Readonly<Record<string, Model>> = {
     ...matchModels,
     "effect/pipe:": piped,
     "effect/Function:pipe": piped,
@@ -827,16 +905,6 @@ export const make = (host: Host) => {
     "effect/Array:flatMap": method("flatMap"),
     "effect/Array:some": method("some"),
     "effect/Array:every": method("every"),
-    "effect/Array:findFirst": onArray("Array.findFirst", 2, (items, [fn], site) =>
-      fn
-        ? Effect.gen(function* () {
-            for (const item of items)
-              if (yield* host.decide(yield* host.call(fn, [item], site), site))
-                return Value.some(item);
-            return Value.none;
-          })
-        : wrongArguments(site, "Array.findFirst"),
-    ),
     "effect/Array:reduce": onArray("Array.reduce", 3, (items, [initial, fn], site) =>
       initial && fn
         ? host.array("reduce", items, fn, initial, site)
@@ -950,23 +1018,12 @@ export const make = (host: Host) => {
     "effect/Effect:asVoid": onEffect("Effect.asVoid", 0, (self) =>
       self.pipe(Effect.as(Value.undef)),
     ),
-    // A rejection the code turns into a defect stops the path the same way.
-    "effect/Effect:orDie": onEffect("Effect.orDie", 0, (self) => self),
-    "effect/Effect:catchTag": onEffect("Effect.catchTag", 2, (self, [tag, handler], site) => {
-      const tags = tagsOf(tag);
-      if (!tags || !handler) return wrongArguments(site, "Effect.catchTag");
-      return self.pipe(
-        Effect.catchTag("Rejected", (rejected) => {
-          const thrown = rejected.rejection;
-          const name = thrown._tag === "Obj" ? thrown.fields._tag : undefined;
-          return name?._tag === "Str" && tags.includes(name.value)
-            ? host
-                .call(handler, [thrown], site)
-                .pipe(Effect.flatMap((made) => host.settle(made, site)))
-            : Effect.fail(rejected);
-        }),
-      );
-    }),
+    // A rejection the code turns into a defect stops the path, and nothing after handles it.
+    "effect/Effect:orDie": onEffect("Effect.orDie", 0, (self) =>
+      Kit.onFailure(self, (error) =>
+        Effect.fail(new Value.Rejected({ rejection: error, defect: true })),
+      ),
+    ),
     "effect/Effect:provideService": onEffect(
       "Effect.provideService",
       2,
@@ -999,54 +1056,655 @@ export const make = (host: Host) => {
       time?._tag === "Time"
         ? Effect.succeed<V>({ _tag: "Term", term: time.millis })
         : wrongArguments(site, "DateTime.toEpochMillis"),
+    "effect/DateTime:isLessThan": onTimes("DateTime.isLessThan", (a, b) => ordered("<", a, b)),
+    "effect/DateTime:isLessThanOrEqualTo": onTimes("DateTime.isLessThanOrEqualTo", (a, b) =>
+      ordered("<=", a, b),
+    ),
+    "effect/DateTime:isGreaterThan": onTimes("DateTime.isGreaterThan", (a, b) =>
+      ordered(">", a, b),
+    ),
+    "effect/DateTime:isGreaterThanOrEqualTo": onTimes("DateTime.isGreaterThanOrEqualTo", (a, b) =>
+      ordered(">=", a, b),
+    ),
+    "effect/DateTime:between": dual("DateTime.between", 2, ([self, bounds], site) => {
+      const at = instant(self);
+      const minimum = bounds?._tag === "Obj" ? instant(bounds.fields.minimum) : undefined;
+      const maximum = bounds?._tag === "Obj" ? instant(bounds.fields.maximum) : undefined;
+      return at && minimum && maximum
+        ? Effect.succeed(
+            Value.term(
+              "Bool",
+              `(and (<= ${minimum.text} ${at.text}) (<= ${at.text} ${maximum.text}))`,
+            ),
+          )
+        : wrongArguments(site, "DateTime.between");
+    }),
+    "effect/DateTime:min": onTimes("DateTime.min", (a, b) => time(picked("<=", a, b))),
+    "effect/DateTime:max": onTimes("DateTime.max", (a, b) => time(picked(">=", a, b))),
+    // From the first time to the second: negative when the second is the earlier.
+    "effect/DateTime:distance": onTimes("DateTime.distance", (a, b) => duration(difference(b, a))),
+    "effect/DateTime:addDuration": shiftedBy("DateTime.addDuration", 1),
+    "effect/DateTime:subtractDuration": shiftedBy("DateTime.subtractDuration", -1),
+    "effect/DateTime:add": shiftedByParts("DateTime.add", 1),
+    "effect/DateTime:subtract": shiftedByParts("DateTime.subtract", -1),
+    "effect/DateTime:isPast": against("DateTime.isPast", ">"),
+    "effect/DateTime:isFuture": against("DateTime.isFuture", "<"),
+    "effect/Duration:millis": spanOf("Duration.millis", 1),
+    "effect/Duration:seconds": spanOf("Duration.seconds", 1_000),
+    "effect/Duration:minutes": spanOf("Duration.minutes", 60_000),
+    "effect/Duration:hours": spanOf("Duration.hours", 3_600_000),
+    "effect/Duration:days": spanOf("Duration.days", DAY),
+    "effect/Duration:weeks": spanOf("Duration.weeks", 7 * DAY),
+    "effect/Duration:toMillis": spanIn("Duration.toMillis", 1),
+    "effect/Duration:toSeconds": spanIn("Duration.toSeconds", 1_000),
+    "effect/Duration:toMinutes": spanIn("Duration.toMinutes", 60_000),
+    "effect/Duration:toHours": spanIn("Duration.toHours", 3_600_000),
+    "effect/Duration:toDays": spanIn("Duration.toDays", DAY),
+    "effect/Duration:toWeeks": spanIn("Duration.toWeeks", 7 * DAY),
+    "effect/Duration:sum": onSpans("Duration.sum", (a, b) => duration(sum(a, b))),
+    "effect/Duration:subtract": onSpans("Duration.subtract", (a, b) => duration(difference(a, b))),
+    "effect/Duration:min": onSpans("Duration.min", (a, b) => duration(picked("<=", a, b))),
+    "effect/Duration:max": onSpans("Duration.max", (a, b) => duration(picked(">=", a, b))),
+    "effect/Duration:equals": onSpans("Duration.equals", (a, b) => ordered("=", a, b)),
+    "effect/Duration:isLessThan": onSpans("Duration.isLessThan", (a, b) => ordered("<", a, b)),
+    "effect/Duration:isLessThanOrEqualTo": onSpans("Duration.isLessThanOrEqualTo", (a, b) =>
+      ordered("<=", a, b),
+    ),
+    "effect/Duration:isGreaterThan": onSpans("Duration.isGreaterThan", (a, b) =>
+      ordered(">", a, b),
+    ),
+    "effect/Duration:isGreaterThanOrEqualTo": onSpans("Duration.isGreaterThanOrEqualTo", (a, b) =>
+      ordered(">=", a, b),
+    ),
     "Math:max": number("Math.max", Math.max, (a, b) => `(ite (>= ${a} ${b}) ${a} ${b})`),
     "Math:min": number("Math.min", Math.min, (a, b) => `(ite (<= ${a} ${b}) ${a} ${b})`),
   };
 
+  /** `Duration.between` and `Duration.clamp`: the two ends, as milliseconds. */
+  const ends = (options: V | undefined): readonly [Whole, Whole] | undefined => {
+    const fields = options?._tag === "Obj" && !options.brand ? options.fields : undefined;
+    const minimum = span(fields?.minimum);
+    const maximum = span(fields?.maximum);
+    return minimum !== undefined && maximum !== undefined ? [minimum, maximum] : undefined;
+  };
+
+  /** A function of one duration. */
+  const onSpan =
+    (name: string, body: (self: Whole) => V): Model =>
+    ([self], site) => {
+      const millis = span(self);
+      return millis === undefined ? wrongArguments(site, name) : Effect.succeed(body(millis));
+    };
+
+  /** A time from what the code gives: milliseconds since 1970, or a date written as text. */
+  const made = (input: V | undefined): V | undefined => {
+    if (input?._tag === "Time") return input;
+    const millis = wholeOf(input);
+    if (millis !== undefined) return time(millis);
+    const parsed = input?._tag === "Str" ? DateTime.make(input.value) : undefined;
+    return parsed?._tag === "Some" ? time(parsed.value.pipe(DateTime.toEpochMillis)) : undefined;
+  };
+
+  const timeModels: Readonly<Record<string, Model>> = {
+    "effect/DateTime:makeUnsafe": ([input], site) => {
+      const at = made(input);
+      return at ? Effect.succeed(at) : wrongArguments(site, "DateTime.makeUnsafe");
+    },
+    "effect/DateTime:make": ([input], site) => {
+      const at = made(input);
+      return at
+        ? Effect.succeed(Value.some(at))
+        : input?._tag === "Str"
+          ? Effect.succeed(Value.none)
+          : wrongArguments(site, "DateTime.make");
+    },
+    "effect/Duration:times": dual("Duration.times", 2, ([self, times], site) => {
+      const millis = span(self);
+      const count = wholeOf(times);
+      return millis !== undefined && count !== undefined
+        ? Effect.succeed(duration(product(millis, count)))
+        : wrongArguments(site, "Duration.times");
+    }),
+    "effect/Duration:isZero": onSpan("Duration.isZero", (millis) => ordered("=", millis, 0)),
+    "effect/Duration:isNegative": onSpan("Duration.isNegative", (millis) =>
+      ordered("<", millis, 0),
+    ),
+    "effect/Duration:isPositive": onSpan("Duration.isPositive", (millis) =>
+      ordered(">", millis, 0),
+    ),
+    // Only a duration of a whole number of milliseconds is read, and every one of those ends.
+    "effect/Duration:isFinite": onSpan("Duration.isFinite", () => Value.bool(true)),
+    "effect/Duration:negate": onSpan("Duration.negate", (millis) =>
+      duration(difference(0, millis)),
+    ),
+    "effect/Duration:abs": onSpan("Duration.abs", (millis) =>
+      duration(picked(">=", millis, difference(0, millis))),
+    ),
+    "effect/Duration:between": dual("Duration.between", 2, ([self, options], site) => {
+      const millis = span(self);
+      const bounds = ends(options);
+      if (millis === undefined || !bounds) return wrongArguments(site, "Duration.between");
+      const above = ordered("<=", bounds[0], millis);
+      const below = ordered("<=", millis, bounds[1]);
+      return Effect.flatMap(
+        Effect.all([host.truth(above, site), host.truth(below, site)]),
+        (parts) =>
+          kit.known(Compare.all(parts), site, "compares durations the prover does not model"),
+      );
+    }),
+    "effect/Duration:clamp": dual("Duration.clamp", 2, ([self, options], site) => {
+      const millis = span(self);
+      const bounds = ends(options);
+      return millis !== undefined && bounds
+        ? Effect.succeed(duration(picked("<=", picked(">=", millis, bounds[0]), bounds[1])))
+        : wrongArguments(site, "Duration.clamp");
+    }),
+  };
+
+  /** A test of two values by a number each one is: a time's milliseconds, a duration's. */
+  const by =
+    (name: string, read: (v: V) => Whole | undefined, order: "<" | "=") =>
+    (a: V, b: V, site: Site): Eval<V> => {
+      const x = read(a);
+      const y = read(b);
+      return x !== undefined && y !== undefined
+        ? Effect.succeed(ordered(order, x, y))
+        : wrongArguments(site, name);
+    };
+
+  // The classes of `effect/Data`, for a class a file keeps to itself: one it
+  // exports is the class Node loaded.
+  const classes = new WeakSet<object>();
+
+  /** A class whose instances are their fields, with a tag when it gives one. */
+  const dataClass = (name: string, tag: string | undefined, error: boolean): V => {
+    const brand: Value.Brand = { kind: "Data", cls: { name, error } };
+    const made = native(name, ([fields], site) =>
+      fields === undefined || fields._tag === "Undef" || (fields._tag === "Obj" && !fields.brand)
+        ? Effect.succeed(
+            Value.obj(
+              {
+                ...(fields?._tag === "Obj" ? fields.fields : {}),
+                ...(tag === undefined ? {} : { _tag: Value.str(tag) }),
+              },
+              brand,
+            ),
+          )
+        : wrongArguments(site, name),
+    );
+    classes.add(made);
+    bases.set(made, { tag, error });
+    return made;
+  };
+  const bases = new WeakMap<
+    object,
+    { readonly tag: string | undefined; readonly error: boolean }
+  >();
+
+  const dataModels: Readonly<Record<string, Model>> = {
+    "effect/Data:TaggedError": ([tag], site) => {
+      const name = str(tag);
+      return name === undefined
+        ? wrongArguments(site, "Data.TaggedError")
+        : Effect.succeed(dataClass(name, name, true));
+    },
+    "effect/Data:TaggedClass": ([tag], site) => {
+      const name = str(tag);
+      return name === undefined
+        ? wrongArguments(site, "Data.TaggedClass")
+        : Effect.succeed(dataClass(name, name, false));
+    },
+  };
+  const plainClass = dataClass("Data.Class", undefined, false);
+  const plainError = dataClass("Data.Error", undefined, true);
+
+  // `Data.taggedEnum()`: a constructor for each tag, `$is` and `$match`.
+  const ENUM = ["taggedEnum", "()"] as const;
+  const isEnum = (lib: V & { readonly _tag: "Lib" }): boolean =>
+    lib.module === "effect/Data" && lib.path[0] === "taggedEnum" && lib.path.length <= 3;
+
+  const taggedEnum = (
+    lib: V & { readonly _tag: "Lib" },
+    args: ReadonlyArray<V>,
+    site: Site,
+  ): Eval<V> => {
+    const name = lib.path[2];
+    if (lib.path.length === 1)
+      return Effect.succeed<V>({ _tag: "Lib", module: "effect/Data", path: [...ENUM] });
+    if (name === undefined) return wrongArguments(site, "Data.taggedEnum");
+    if (name === "$is") {
+      const tag = str(args[0]);
+      return tag === undefined
+        ? wrongArguments(site, "$is")
+        : Effect.succeed(
+            native("$is", ([value]) => Effect.succeed(Value.bool(Kit.tagOf(value) === tag))),
+          );
+    }
+    if (name === "$match") {
+      const matching = (value: V | undefined, cases: V | undefined, at: Site): Eval<V> => {
+        const handler = cases?._tag === "Obj" ? cases.fields[Kit.tagOf(value) ?? ""] : undefined;
+        return value && handler ? host.call(handler, [value], at) : wrongArguments(at, "$match");
+      };
+      return args.length >= 2
+        ? matching(args[0], args[1], site)
+        : Effect.succeed(native("$match", ([value], at) => matching(value, args[0], at)));
+    }
+    const fields = args[0];
+    return fields === undefined ||
+      fields._tag === "Undef" ||
+      (fields._tag === "Obj" && !fields.brand)
+      ? Effect.succeed(
+          Value.obj({ ...(fields?._tag === "Obj" ? fields.fields : {}), _tag: Value.str(name) }),
+        )
+      : wrongArguments(site, name);
+  };
+
+  const effects = Effects.make(kit);
+  const results = Results.make(kit);
+  const collections = Collections.make(kit);
+  const numbers = Numbers.make(kit);
+  const strings = Strings.make(kit);
+  const decimals = Decimals.make(kit);
+  const hashes = Hashes.make(kit);
+  const streams = Streams.make(kit);
+  const cells = Cells.make(kit, (key, args, site) => models[key]!(args, site));
+  const exits = Exits.make(kit);
+  const rationals = Rationals.make(kit);
+
+  const written: Record<string, Model> = {
+    ...own,
+    ...timeModels,
+    ...dataModels,
+    ...effects.models,
+    ...results.models,
+    ...collections.models,
+    ...numbers.models,
+    ...strings.models,
+    ...decimals.models,
+    ...hashes.models,
+    ...streams.models,
+    ...cells.models,
+    ...exits.models,
+    ...rationals.models,
+  };
+
+  // A `Chunk` and an `Iterable` are read as the array of their items: the
+  // functions the three modules share do the same to one.
+  const models: Record<string, Model> = { ...written };
+  for (const [key, model] of Object.entries(written)) {
+    if (!key.startsWith("effect/Array:")) continue;
+    const name = key.slice("effect/Array:".length);
+    if (CHUNK.has(name)) models[`effect/Chunk:${name}`] = model;
+    if (ITERABLE.has(name)) models[`effect/Iterable:${name}`] = model;
+  }
+  // `Iterable.makeBy(f, { length })` takes the function first, and gives as many items as it is told to.
+  models["effect/Iterable:makeBy"] = ([f, options], site) => {
+    const length = options?._tag === "Obj" ? options.fields.length : undefined;
+    return f && length?._tag === "Num" && Number.isInteger(length.value)
+      ? Effect.forEach(
+          Array.from({ length: Math.max(1, Math.floor(length.value)) }, (_, i) => i),
+          (i) => host.call(f, [Value.num(i)], site),
+        ).pipe(Effect.map(arr))
+      : Effect.fail(
+          Value.notTranslated(
+            site,
+            "Iterable.makeBy is given no length the prover can see: it then gives items without end",
+          ),
+        );
+  };
+  const identity: Model = ([self], site) =>
+    kit.itemsOf(self) ? Effect.succeed(arr(kit.itemsOf(self)!)) : wrongArguments(site, "Chunk");
+  for (const name of ["toArray", "toReadonlyArray", "fromArrayUnsafe", "fromNonEmptyArrayUnsafe"])
+    models[`effect/Chunk:${name}`] = identity;
+  models["effect/Chunk:size"] = models["effect/Array:length"]!;
+  models["effect/Iterable:size"] = models["effect/Array:length"]!;
+  models["effect/Chunk:isEmpty"] = models["effect/Array:isArrayEmpty"]!;
+  models["effect/Iterable:isEmpty"] = models["effect/Array:isArrayEmpty"]!;
+  models["effect/Chunk:isNonEmpty"] = models["effect/Array:isArrayNonEmpty"]!;
+
+  const timeOrder = kit.order(
+    "DateTime.Order",
+    by("DateTime.Order", (v) => instant(v), "<"),
+  );
+  const spanOrder = kit.order("Duration.Order", by("Duration.Order", span, "<"));
+
   /** Library values that are not functions. */
   const values: Readonly<Record<string, V>> = {
     "effect/Effect:void": done,
+    "effect/Duration:zero": duration(0),
+    "effect/Data:Class": plainClass,
+    "effect/Data:Error": plainError,
+    "effect/DateTime:Order": timeOrder,
+    "effect/Duration:Order": spanOrder,
+    "effect/DateTime:Equivalence": native("DateTime.Equivalence", ([a, b], site) =>
+      a && b
+        ? by("DateTime.Equivalence", (v) => instant(v), "=")(a, b, site)
+        : wrongArguments(site, "DateTime.Equivalence"),
+    ),
+    "effect/Duration:Equivalence": native("Duration.Equivalence", ([a, b], site) =>
+      a && b
+        ? by("Duration.Equivalence", span, "=")(a, b, site)
+        : wrongArguments(site, "Duration.Equivalence"),
+    ),
+    ...effects.values,
+    ...results.values,
+    ...numbers.values,
+    ...strings.values,
+    ...decimals.values,
+    ...rationals.values,
+    ...streams.values,
   };
 
   const keyOf = (lib: V & { readonly _tag: "Lib" }): string =>
     `${lib.module}:${lib.path.join(".")}`;
 
+  /** A tagged union of `effect/Schema`: its tag's name, and the schema of each case. */
+  const unionOf = (
+    schema: unknown,
+  ): { readonly tag: string; readonly cases: Readonly<Record<string, unknown>> } | undefined => {
+    const union = schema as { readonly tag?: unknown; readonly cases?: unknown; guards?: unknown };
+    return Schema.isSchema(schema) &&
+      typeof union.tag === "string" &&
+      typeof union.cases === "object" &&
+      union.cases !== null &&
+      typeof union.guards === "object"
+      ? { tag: union.tag, cases: union.cases as Readonly<Record<string, unknown>> }
+      : undefined;
+  };
+
+  /**
+   * What a function of `effect/Schema` makes. A tagged union built from values
+   * the prover knows is the schema itself, as the file would have made it;
+   * any other schema is one the prover does not look inside.
+   */
+  const schemaOf = (lib: V & { readonly _tag: "Lib" }, args: ReadonlyArray<V>): V => {
+    const unseen = (): V => ({ _tag: "Opaque", what: "a schema" });
+    const fn = lib.host ?? Known.schemaOf(lib.module, lib.path);
+    if (typeof fn !== "function") return unseen();
+    const given: Array<unknown> = [];
+    for (const arg of args) {
+      const made = Known.real(arg);
+      if (!made) return unseen();
+      given.push(made.value);
+    }
+    try {
+      // `Schema.Int.check(...)` is a method of the schema it is called on.
+      const self = Known.schemaOf(lib.module, lib.path.slice(0, -1));
+      const made: unknown = (fn as (...args: ReadonlyArray<unknown>) => unknown).apply(self, given);
+      // A tagged union is kept: its helpers are functions the code calls on values.
+      if (unionOf(made)) return { _tag: "Host", value: made, name: `Schema.${lib.path.join(".")}` };
+      // Any other schema is not looked inside, and stands for the real one where a schema is built from it.
+      const kept = unseen();
+      if ((typeof made === "object" || typeof made === "function") && made !== null)
+        Known.schemas.set(kept, made);
+      return kept;
+    } catch {
+      return unseen();
+    }
+  };
+
+  /**
+   * `Status.guards`, `Status.isAnyOf`, `Status.match` and `Status.matchOrElse`
+   * of a tagged union: each reads the value's tag, and a guard also asks that
+   * the value is one its case allows.
+   */
+  const unionMember = (schema: unknown, key: string, name: string): V | undefined => {
+    const union = unionOf(schema);
+    if (!union) return undefined;
+    const seen = (value: V | undefined): value is V =>
+      value !== undefined && value._tag !== "Opaque" && value._tag !== "Applied";
+    /** Whether the value's tag is the one named, known or as a formula. */
+    const tagged = (value: V, tag: string, site: Site): Eval<boolean | string> =>
+      value._tag !== "Obj" || (value.brand !== undefined && Brands.SEALED.has(value.brand.kind))
+        ? Effect.succeed(false)
+        : host
+            .equal(value.fields[union.tag] ?? Value.undef, Value.str(tag), site)
+            .pipe(Effect.flatMap((equal) => host.truth(equal, site)));
+    /** The case's handler, called with the value: the first case whose tag the value has. */
+    const matching = (
+      value: V | undefined,
+      cases: V | undefined,
+      orElse: V | undefined,
+      what: string,
+      site: Site,
+    ): Eval<V> =>
+      Effect.gen(function* () {
+        if (!seen(value) || cases?._tag !== "Obj") return yield* wrongArguments(site, what);
+        for (const tag of Object.keys(union.cases)) {
+          const is = yield* tagged(value, tag, site);
+          if (typeof is === "boolean" ? !is : !host.current.run.branch(is)) continue;
+          const handler = cases.fields[tag] ?? orElse;
+          return handler
+            ? yield* host.call(handler, [value], site)
+            : yield* wrongArguments(site, what);
+        }
+        return orElse ? yield* host.call(orElse, [value], site) : yield* wrongArguments(site, what);
+      });
+    switch (key) {
+      case "guards":
+        return Value.obj(
+          Object.fromEntries(
+            Object.entries(union.cases).map(([tag, member]) => [
+              tag,
+              native(`${name}.guards.${tag}`, ([value], site) => {
+                const ast = Symbolic.typeOf(member);
+                return seen(value) && ast
+                  ? Effect.succeed(Compare.fromTruth(Symbolic.fits(value, ast, host.current.run)))
+                  : wrongArguments(site, `${name}.guards.${tag}`);
+              }),
+            ]),
+          ),
+        );
+      case "isAnyOf":
+        return native(`${name}.isAnyOf`, ([tags], site) => {
+          const names = Kit.tagsOf(tags);
+          return names === undefined
+            ? wrongArguments(site, `${name}.isAnyOf`)
+            : Effect.succeed(
+                native(`${name}.isAnyOf`, ([value], at) =>
+                  seen(value)
+                    ? Effect.forEach(names, (tag) => tagged(value, tag, at)).pipe(
+                        Effect.map((parts) => Compare.fromTruth(Compare.any(parts) ?? false)),
+                      )
+                    : wrongArguments(at, `${name}.isAnyOf`),
+                ),
+              );
+        });
+      case "match":
+        return native(`${name}.match`, (args, site) =>
+          args.length >= 2
+            ? matching(args[0], args[1], undefined, `${name}.match`, site)
+            : Effect.succeed(
+                native(`${name}.match`, ([value], at) =>
+                  matching(value, args[0], undefined, `${name}.match`, at),
+                ),
+              ),
+        );
+      case "matchOrElse":
+        return native(`${name}.matchOrElse`, (args, site) =>
+          args.length >= 3
+            ? matching(args[0], args[1], args[2], `${name}.matchOrElse`, site)
+            : Effect.succeed(
+                native(`${name}.matchOrElse`, ([value], at) =>
+                  matching(value, args[0], args[1], `${name}.matchOrElse`, at),
+                ),
+              ),
+        );
+      default:
+        return undefined;
+    }
+  };
+
   return {
+    /**
+     * Every library function and value the prover has a model for, as
+     * `module:path`, and every method of a string it reads.
+     */
+    surface: {
+      library: [...Object.keys(models), ...Object.keys(values), ...Object.keys(clocks)].sort(),
+      strings: [...strings.names].sort(),
+    },
     opticMember,
-    valueOf: (lib: V & { readonly _tag: "Lib" }): V | undefined => values[keyOf(lib)],
+    /** A helper of a tagged union of `effect/Schema`, as a value the code calls. */
+    unionMember,
+    /** A method of a string, as a value the code calls. */
+    stringMember: strings.member,
+    /** What `yield*` gives inside `Option.gen` and `Result.gen`. */
+    yielded: results.yielded,
+    /** What a loop or a spread goes over. */
+    iterate: kit.iterate,
+    /** Whether a value is a class of `effect/Data`, which `new` makes an instance of. */
+    isClass: (value: V): boolean => classes.has(value),
+    /** A class a file declares by extending one of `effect/Data`'s: its own class, with the same fields. */
+    subclass: (base: V, name: string): V | undefined => {
+      const kind = bases.get(base);
+      return kind && dataClass(name, kind.tag, kind.error);
+    },
+    valueOf: (lib: V & { readonly _tag: "Lib" }, site: Site): V | undefined =>
+      values[keyOf(lib)] ?? clocks[keyOf(lib)]?.(site),
+    /**
+     * Whether a package is one the prover knows by its models, and never
+     * reads the code of: Effect, and Alchemy's own.
+     */
+    known: (specifier: string): boolean =>
+      /^(effect|alchemy|@effect\/[^/]+|@alchemy\.run\/[^/]+)(\/|$)/.test(specifier) ||
+      [...host.extra.keys(), ...Object.keys(models)].some((key) => key.startsWith(`${specifier}:`)),
+    /** Whether the prover has a model for a library function. */
+    models: (lib: V & { readonly _tag: "Lib" }): boolean =>
+      host.extra.has(keyOf(lib)) || Object.hasOwn(models, keyOf(lib)) || isEnum(lib),
     call: (lib: V & { readonly _tag: "Lib" }, args: ReadonlyArray<V>, site: Site): Eval<V> => {
+      // A pure function is run as it is, where the prover knows every argument.
+      const computed = () => {
+        const fn = hostOf(lib.module, lib.path);
+        return typeof fn === "function"
+          ? Known.applied(
+              fn as (...args: ReadonlyArray<unknown>) => unknown,
+              args,
+              `${lib.module.replace(/^effect\//, "")}.${lib.path.join(".")}`,
+            )
+          : undefined;
+      };
       const model = host.extra.get(keyOf(lib)) ?? models[keyOf(lib)];
-      if (model) return model(args, site);
+      // A model that has no reading of a call gives way to the function itself.
+      if (model)
+        return model(args, site).pipe(
+          Effect.catchTag("NotTranslated", (stop) => {
+            const made = stop.reaches ? undefined : computed();
+            return made ? Effect.succeed(made) : Effect.fail(stop);
+          }),
+        );
+      if (isEnum(lib)) return taggedEnum(lib, args, site);
+      const made = computed();
+      if (made) return Effect.succeed(made);
       // A schema is built, never run: what it describes is read where it is used.
-      if (lib.module === "effect/Schema")
-        return Effect.succeed<V>({ _tag: "Opaque", what: "a schema" });
+      if (lib.module === "effect/Schema") return Effect.succeed(schemaOf(lib, args));
       return Effect.fail(
         Value.notTranslated(
           site,
           `calls ${lib.module.replace(/^effect\//, "")}.${lib.path.join(".")}, which the prover has no model for`,
+          true,
         ),
       );
     },
   };
 };
 
-/** A number as a solver term, or `undefined` when the value is not a number. */
-export const numeric = (v: V): Term | undefined =>
-  v._tag === "Big"
-    ? Smt.big(v.value)
-    : v._tag === "Num"
-      ? Number.isFinite(v.value)
-        ? Number.isInteger(v.value)
-          ? Smt.int(v.value)
-          : Smt.real(v.value)
-        : undefined
-      : v._tag === "Term" && (v.term.sort === "Int" || v.term.sort === "Real")
-        ? v.term
-        : undefined;
+/** The functions of `effect/Array` that `effect/Chunk` has under the same name, doing the same. */
+const CHUNK: ReadonlySet<string> = new Set([
+  "append",
+  "appendAll",
+  "prepend",
+  "prependAll",
+  "map",
+  "filter",
+  "flatMap",
+  "flatten",
+  "some",
+  "every",
+  "findFirst",
+  "findLast",
+  "findFirstIndex",
+  "findLastIndex",
+  "reduce",
+  "reduceRight",
+  "contains",
+  "take",
+  "takeRight",
+  "takeWhile",
+  "drop",
+  "dropRight",
+  "dropWhile",
+  "reverse",
+  "zip",
+  "zipWith",
+  "unzip",
+  "dedupe",
+  "union",
+  "intersection",
+  "difference",
+  "join",
+  "head",
+  "last",
+  "get",
+  "make",
+  "of",
+  "empty",
+  "range",
+  "makeBy",
+  "sort",
+  "sortWith",
+  "partition",
+  "filterMap",
+  "separate",
+  "forEach",
+  "headNonEmpty",
+  "lastNonEmpty",
+  "tailNonEmpty",
+  "fromIterable",
+  "chunksOf",
+  "splitAt",
+  "mapAccum",
+  "modify",
+  "replace",
+  "remove",
+]);
 
-const toReal = (term: Term): Term =>
-  term.sort === "Int" ? { sort: "Real", text: `(to_real ${term.text})` } : term;
-
-/** Two numbers in one sort: an integer next to a real becomes a real. */
-export const promote = (a: Term, b: Term): readonly [Term, Term] =>
-  a.sort === b.sort ? [a, b] : [toReal(a), toReal(b)];
+/** The functions of `effect/Array` that `effect/Iterable` has under the same name, doing the same. */
+const ITERABLE: ReadonlySet<string> = new Set([
+  "append",
+  "appendAll",
+  "prepend",
+  "prependAll",
+  "map",
+  "filter",
+  "flatMap",
+  "flatten",
+  "some",
+  "findFirst",
+  "findLast",
+  "reduce",
+  "contains",
+  "take",
+  "takeWhile",
+  "drop",
+  "head",
+  "zip",
+  "zipWith",
+  "of",
+  "empty",
+  "range",
+  "makeBy",
+  "forEach",
+  "countBy",
+  "groupBy",
+  "intersperse",
+  "scan",
+  "getSomes",
+  "getSuccesses",
+  "getFailures",
+  "filterMap",
+  "fromRecord",
+  "cartesian",
+  "cartesianWith",
+  "chunksOf",
+]);

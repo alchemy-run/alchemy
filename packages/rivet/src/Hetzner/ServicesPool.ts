@@ -1,9 +1,12 @@
 import * as Hetzner from "@alchemy.run/hetzner";
-import * as Output from "alchemy/Output";
+import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import { stackDnsLabel } from "../internal/PoolHost.ts";
 import {
   makeServicesLayer,
-  servicesEnvironment,
+  secretServicesEnvironment,
   type ServicesPoolSettings,
 } from "../internal/ServicesHost.ts";
 
@@ -25,26 +28,37 @@ export interface ServicesPoolOptions extends ServicesPoolSettings {
   serverType?: string;
 }
 
-const shellQuote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
-
-/** Boot one Services node: run the image on Docker, with its environment. */
-const userData = (image: string, environment: Record<string, string>) => `#!/bin/bash
-set -euo pipefail
-until docker info >/dev/null 2>&1; do sleep 2; done
-docker rm -f rivet-services >/dev/null 2>&1 || true
-docker run -d --name rivet-services --restart always \\
-${Object.entries(environment)
-  .map(([name, value]) => `  -e ${name}=${shellQuote(value)} \\`)
-  .join("\n")}
-  ${shellQuote(image)}
-`;
+/**
+ * A build context whose image is Rivet's Services image as it is: the
+ * Service runs it with its env, which reaches the Server over SSH.
+ */
+const stageServicesImage = Effect.fn(function* (id: string, image: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const dir = path.resolve(
+    yield* dotAlchemyDirectory,
+    "rivet",
+    "hetzner-services",
+    yield* stackDnsLabel(id),
+  );
+  yield* fs.makeDirectory(dir, { recursive: true });
+  yield* fs.writeFileString(path.join(dir, "Dockerfile"), `FROM ${image}\n`);
+  return dir;
+});
 
 /**
  * Run Rivet Services on Hetzner Cloud: the `services` pool on the control
  * plane, and Servers running Rivet's prebuilt Services node on Docker, which
  * hosts Durable Streams and agentOS. A firewall drops every inbound
- * connection: callers reach every stream through the control plane's
- * gateway, with its token. Works with any control plane it can reach.
+ * connection except SSH, which deploys the nodes: callers reach every
+ * stream through the control plane's gateway, with its token. Works with
+ * any control plane it can reach.
+ *
+ * Hetzner Cloud has no secret store and no instance identity a node could
+ * read one with, so the control plane's token is copied over SSH into an
+ * env file on each Server that only root can read. It never goes into the
+ * Server's user data, which any process on it can read from the metadata
+ * service. Root on the Server can still read it.
  *
  * ### Running Rivet Services on Hetzner
  * **Example:** Services next to a Hetzner control plane
@@ -63,20 +77,29 @@ export const ServicesPool = (id: string, options: ServicesPoolOptions = {}) =>
     expected: "a reachable control plane",
     network: (cluster) => cluster.network ?? { kind: "none" as const },
     nodes: Effect.fn(function* (nodes) {
-      const firewall = yield* Hetzner.Firewall(`${id}Firewall`, {});
-      const environment = servicesEnvironment(nodes);
+      const firewall = yield* Hetzner.Firewall(`${id}Firewall`, {
+        rules: [
+          {
+            description: "SSH, which deploys the nodes",
+            direction: "in",
+            protocol: "tcp",
+            port: "22",
+            sourceIps: ["0.0.0.0/0", "::/0"],
+          },
+        ],
+      });
+      const context = yield* stageServicesImage(id, nodes.image).pipe(Effect.orDie);
+      const env = secretServicesEnvironment(nodes);
       for (let i = 0; i < (options.replicas ?? 1); i++) {
-        yield* Hetzner.Server(`${id}Node${i}`, {
+        const server = yield* Hetzner.Server(`${id}Node${i}`, {
           serverType: options.serverType ?? "cx23",
           // Services nodes only dial out, over IPv4.
           enableIpv6: false,
           image: "docker-ce",
           location: options.location ?? "nbg1",
           firewalls: [firewall],
-          userData: environment.pipe(
-            Output.map((env) => userData(nodes.image, env)),
-          ) as unknown as string,
         });
+        yield* Hetzner.Service(`${id}Node${i}Service`, { server, context, env });
       }
     }),
   });

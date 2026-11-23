@@ -1,105 +1,111 @@
-import type * as Domain from "@alchemy.run/domain";
-import * as Verify from "@alchemy.run/domain/Verify";
+import * as Prove from "@alchemy.run/domain/Prove";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
-import * as Context from "effect/Context";
-import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import { Account } from "../src/Account/Account.aggregate.ts";
-import { AccountId } from "../src/Account/Account.id.ts";
-import { DepositMoney } from "../src/Account/DepositMoney.command.ts";
-import { FreezeAccount } from "../src/Account/FreezeAccount.command.ts";
-import { OpenAccount } from "../src/Account/OpenAccount.command.ts";
-import { MoneyWithdrawn, WithdrawMoney } from "../src/Account/WithdrawMoney.command.ts";
-import { agent, customer } from "../src/Actor.ts";
-import { CurrentActor } from "../src/CurrentActor.context.ts";
-import { CustomerId } from "../src/Customer/Customer.id.ts";
+import {
+  BringForward,
+  DeleteCoffer,
+  DoubleDeposits,
+  DropDeposits,
+  ForgetOwner,
+  SumUp,
+} from "./fixtures/Coffer.history.ts";
 
-// Events on record are held against the account as it is written today: the
-// states they lead through keep its rules, and each is one a command records.
-
-const accountId = AccountId.make("a-1");
-const ada = CustomerId.make("ada");
-const start = DateTime.makeUnsafe("2026-03-01T09:00:00Z");
-
-type Entry = Verify.HistoryEntry<Domain.Aggregate.EventOf<typeof Account>>;
-
-/** A history as the bank would have recorded it: each command decided by the real account. */
-const record = (
-  commands: ReadonlyArray<{
-    readonly command: Domain.Aggregate.CommandOf<typeof Account>;
-    readonly by?: ReturnType<typeof customer>;
-  }>,
-) => {
-  const entries: Array<Entry> = [];
-  let state: Domain.Aggregate.StateOf<typeof Account> = Account.definition.initial;
-  for (const [index, { command, by }] of commands.entries()) {
-    const made = Account.predict(state, command as never, {
-      now: DateTime.add(start, { minutes: index }),
-      version: entries.length,
-      commandId: `c-${index + 1}`,
-      context: Context.make(CurrentActor, by ?? customer("ada")) as never,
-    });
-    if (made._tag !== "Accepted") continue;
-    state = made.state;
-    made.events.forEach((event, at) =>
-      entries.push({ event, envelope: made.envelopes[at]! } as Entry),
-    );
-  }
-  return entries;
-};
-
-const opened = [
-  { command: new OpenAccount({ accountId, customerId: ada, owner: "Ada" }) },
-  { command: new DepositMoney({ accountId, amount: 500 }) },
-  { command: new WithdrawMoney({ accountId, amount: 120 }) },
-];
+const source = new URL("./fixtures/Coffer.history.ts", import.meta.url);
 
 it.effect(
-  "what the bank recorded is what its commands record",
+  "a roll-up that carries the whole state is proved to lose nothing",
   () =>
     Effect.gen(function* () {
-      const report = yield* Verify.history(Account, [
-        ...record(opened),
-        ...record([
-          {
-            command: new OpenAccount({
-              accountId: AccountId.make("a-2"),
-              customerId: ada,
-              owner: "Ada",
-            }),
-          },
-          {
-            command: new FreezeAccount({ accountId: AccountId.make("a-2"), reason: "lost card" }),
-            by: agent("sam"),
-          },
-        ]),
-      ]);
-      expect(report.instances).toMatchObject([
-        { stream: "Account/a-1", events: 3, commands: 3, explained: 3, undecided: [] },
-        { stream: "Account/a-2", events: 2, commands: 2, explained: 2, undecided: [] },
-      ]);
-      expect(report.instances[0]?.state).toMatchObject({ _tag: "Open", balance: 380 });
+      const report = yield* Prove.compaction(BringForward, { source });
+      expect(report.lossless._tag).toBe("Proved");
+      expect(report.standing._tag).toBe("Proved");
     }).pipe(Effect.provide(NodeServices.layer)),
-  120_000,
+  60_000,
 );
 
 it.effect(
-  "a withdrawal the account would have refused is found among them",
+  "a roll-up that leaves part of the state out is shown the state it loses",
   () =>
     Effect.gen(function* () {
-      const history = record(opened);
-      // Written past the account: more than it held leaves, and the balance is made up.
-      const forged: Entry = {
-        event: new MoneyWithdrawn({ amount: 900, balanceAfter: 10 }),
-        envelope: { id: accountId, stream: "Account/a-1", seq: 4, commandId: "c-4" },
-      };
-      const failed = yield* Verify.history(Account, [...history, forged]).pipe(Effect.flip);
-      if (failed._tag !== "NotVerified") return expect(failed._tag).toBe("NotVerified");
-      expect(failed.report.unexplained).toHaveLength(1);
-      expect(failed.report.unexplained[0]).toContain(
-        "Account/a-1, event 4: MoneyWithdrawn { amount: 900, balanceAfter: 10 } from",
-      );
+      const failed = yield* Prove.compaction(SumUp, { source }).pipe(Effect.flip);
+      expect(failed._tag).toBe("CompactionNotProved");
+      if (failed._tag !== "CompactionNotProved") return;
+      // From nothing, the deposits are not counted again.
+      expect(failed.report.lossless._tag).toBe("Violated");
+      if (failed.report.lossless._tag !== "Violated") return;
+      const lost = failed.report.lossless.counterexample;
+      expect((lost.state as { deposits: number }).deposits).toBeGreaterThan(0);
+      expect((lost.after as { deposits: number }).deposits).toBe(0);
+      // Onto the state it was made from, nothing changes: the instance itself would not notice.
+      expect(failed.report.standing._tag).toBe("Proved");
+      expect(failed.message).toContain("Folded from the initial state");
     }).pipe(Effect.provide(NodeServices.layer)),
-  120_000,
+  60_000,
+);
+
+it.effect(
+  "a rewrite that changes only what no rule speaks of is proved",
+  () =>
+    Effect.gen(function* () {
+      const report = yield* Prove.rewrite(ForgetOwner, {
+        source,
+        compactions: [{ compaction: BringForward, source }],
+      });
+      expect(report.differs).toEqual(["owner"]);
+      expect(Prove.rewriteProved(report)).toBe(true);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  60_000,
+);
+
+it.effect(
+  "a rewrite that removes what a later event relied on is shown the history it breaks",
+  () =>
+    Effect.gen(function* () {
+      const failed = yield* Prove.rewrite(DropDeposits, {
+        source,
+        compactions: [{ compaction: BringForward, source }],
+      }).pipe(Effect.flip);
+      expect(failed._tag).toBe("RewriteNotProved");
+      if (failed._tag !== "RewriteNotProved") return;
+      expect(failed.report.differs).toEqual(["balance", "deposits"]);
+      const overdrawn = failed.report.invariants.find((rule) => rule.name === "NeverOverdrawn")!;
+      const withdraw = overdrawn.steps.find((step) => step.step === "Withdraw")!;
+      // A withdrawal the recorded balance allowed, on a rewritten balance that has less. It is
+      // two states and not a history, so it is not called a violation: a sequence shows one.
+      expect(withdraw.verdict._tag).toBe("Unconfirmed");
+      expect(failed.message).toContain("which breaks NeverOverdrawn");
+      // Removing a deposit breaks nothing by itself.
+      expect(overdrawn.steps.find((step) => step.step === "Deposit")!.verdict._tag).toBe("Proved");
+    }).pipe(Effect.provide(NodeServices.layer)),
+  60_000,
+);
+
+it.effect(
+  "a rewrite that only adds money is proved, though the balance differs",
+  () =>
+    Effect.gen(function* () {
+      const report = yield* Prove.rewriteReport(DoubleDeposits, { source });
+      expect(report.differs).toEqual(["balance"]);
+      // A withdrawal is checked against a rewritten balance that may be anything the rules allow:
+      // the proof cannot know it is larger, so it does not pass.
+      const overdrawn = report.invariants.find((rule) => rule.name === "NeverOverdrawn")!;
+      expect(overdrawn.steps.find((step) => step.step === "Deposit")!.verdict._tag).toBe("Proved");
+      expect(overdrawn.steps.find((step) => step.step === "Withdraw")!.verdict._tag).not.toBe(
+        "Proved",
+      );
+      // The coffer folds roll-ups no command records, and none was given.
+      expect(report.outside).toEqual(["BroughtForward", "Summed"]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  60_000,
+);
+
+it.effect(
+  "a rewrite that removes the instance has nothing left to break",
+  () =>
+    Effect.gen(function* () {
+      const report = yield* Prove.rewrite(DeleteCoffer, { source });
+      expect(report.deletes).toBe(true);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  60_000,
 );

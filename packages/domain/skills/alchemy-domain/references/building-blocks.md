@@ -107,7 +107,7 @@ More: [Aggregate](https://alchemy.run/domain/aggregate).
 - **decide answers one of three ways.** Events when the command changes something; `[]` when the state already is what it asks for (freezing a frozen account); a declared rejection when it can't be done.
 - **Name shared rules as pure guards** that return the narrowed state or the rejection (`openFor`), and start each handler from one. In an `Effect.fn` handler, fail with `return yield* o`.
 - **Events carry the outcome**, not just the request (`balanceAfter`), so `evolve` copies it and never repeats a rule. Views and policies see the same numbers.
-- **decide reads time from `now`** (its third argument) and the actor from middleware context. Never `Date.now()`, `Clock` or randomness.
+- **decide reads time from `now`** (its third argument) and the actor from middleware context. In an effectful `decide`, `DateTime.now` and `Clock.currentTimeMillis` give that same time. Never `Date.now()` or randomness.
 - **evolve and reply are total and never fail.** decide already refused the command, so a handler keeps any state its event can't follow: `s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s`. An event that changes the stage returns the new state whole.
 - **Optics are an opt-in shorthand** for many handlers that repeat the same check. `const balance = Optic.id<State>().tag("Open").key("balance")` focuses on the Open state; `Optic.replace(s, balance, e.balanceAfter)` sets one field and `open.modify((o) => ({ ...o, ... }))(s)` several, leaving other states unchanged. The example bank uses them.
 - **A compensation never refuses.** A command that undoes another process's step (`RefundTransfer`) records a fact for every state (`TransferRefunded`, or `RefundStranded` when the account closed), so the saga that sent it has no refusal to handle.
@@ -318,6 +318,72 @@ Rules:
 
 More: [Saga](https://alchemy.run/domain/saga).
 
+## Rewrite
+
+Changes events an instance has already recorded: for removing personal data, or what should never have been stored. Each handler keeps (returns the event), replaces (returns another event) or removes (returns `null`) one kind of event. `delete: true` removes the whole instance.
+
+```ts
+// Account/ForgetOwner.rewrite.ts
+export class ForgetOwner extends Domain.Rewrite("ForgetOwner", {
+  of: Account,
+  input: { customerId: CustomerId },
+  events: {
+    AccountOpened: (event, { customerId }) =>
+      event.customerId === customerId ? new AccountOpened({ ...event, owner: "" }) : event,
+  },
+}) {}
+
+// Customer/DeleteCustomer.rewrite.ts
+export class DeleteCustomer extends Domain.Rewrite("DeleteCustomer", { of: Customer, delete: true }) {}
+
+// anywhere the aggregate's client is available
+const receipt = yield* accounts.rewrite(accountId, new ForgetOwner({ customerId }));
+yield* accounts.rewritten(receipt); // every view, projection and stream has caught up
+```
+
+- List it in the model's `rewrites`.
+- Handlers are pure. Sequence numbers never change: a removed event leaves a gap.
+- It fails with `InvariantBroken`, changing nothing, when the rewritten state breaks an invariant.
+- Views fold again by themselves. Every projection a rewrite reaches needs a `rewrite` handler, or the model won't build.
+- Policies and sagas are not told.
+- Run several rewrites as one process in a saga: one `Activity` per rewrite, each ending with `rewritten`.
+
+More: [Rewrite](https://alchemy.run/domain/rewrite), [Erasing personal data](https://alchemy.run/domain/erasing-personal-data).
+
+## Compaction
+
+Replaces an instance's history with a roll-up of its state, so its log stops growing. The declaration says what the roll-up is. Its Layer says where the replaced events go and when an instance compacts.
+
+```ts
+// Account/BringForward.compaction.ts
+export class BringForward extends Domain.Compaction("BringForward", {
+  of: Account,
+  rollup: (account) => [new AccountBroughtForward({ state: account })],
+}) {}
+
+// Account/BringForward.live.ts
+export const BringForwardLive = BringForward.toLayer(
+  Effect.gen(function* () {
+    const archive = yield* Cloudflare.R2.WriteBucket(Archive);
+    return Effect.fn(function* ({ stream, events }) {
+      const first = events[0]!.envelope.seq;
+      const last = events[events.length - 1]!.envelope.seq;
+      yield* archive.put(`${stream}/${first}-${last}.json`, JSON.stringify(events)).pipe(Effect.orDie);
+    });
+  }).pipe(Effect.provide(Cloudflare.R2.WriteBucketBinding)),
+  { after: { events: 1_000 } },
+);
+```
+
+- The roll-up is ordinary events of the aggregate: `evolve` handles them, and so does every view that reads the aggregate.
+- A view's roll-up handler says what the replaced events amount to (a total adds `e.state.balance`). A view key that already holds those events never folds the roll-up; only one added or rebuilt later does.
+- Folding the roll-up from `initial` must give the state back, or it is refused with `CompactionLossy`.
+- List it in the model's `compactions`, and its Layer in the model's handlers.
+- `after: { events }` makes each instance compact by itself after its own commits. Without it, call `accounts.compact(id, BringForward)`.
+- Views and projections keep what they built. A later rewrite still reaches the copies views kept.
+
+More: [Compaction](https://alchemy.run/domain/compaction), [Compaction: Teach the views the roll-up](https://alchemy.run/domain/compaction#teach-the-views-the-roll-up).
+
 ## External system
 
 ```ts
@@ -367,7 +433,9 @@ export const LedgerLive = Ledger.toLayer(
 
 The server provides `LedgerStore` with D1; a story provides it with memory.
 
-More: [Projection](https://alchemy.run/domain/projection).
+A projection given events a `Domain.Rewrite` changes returns `{ write, rewrite }` instead of the handler alone. `rewrite` gets each such event as it was (`before`) and as it is now (`after`, `undefined` when removed).
+
+More: [Projection](https://alchemy.run/domain/projection), [Projection: Follow a rewrite](https://alchemy.run/domain/projection#follow-a-rewrite).
 
 ## Stream
 
@@ -389,7 +457,9 @@ export const AccountCardLive = AccountCard.toLayer(
 
 A projection with `writes: [AccountCard]` appends entries with `yield* cards.append(input, new CardChanged({...}))`. Clients `peek`, `watch`, `list` and read `events`.
 
-More: [Stream](https://alchemy.run/domain/stream).
+In the writer's `rewrite` handler, `cards.rewrite(input, ...entries)` replaces what was appended for that input; with no entries it removes them.
+
+More: [Stream](https://alchemy.run/domain/stream), [Stream: Rewrite what was appended](https://alchemy.run/domain/stream#rewrite-what-was-appended).
 
 ## Query
 
@@ -458,8 +528,9 @@ export class Bank extends Domain.Model("Bank", {
   policies: [MainAccountProvisioning, TransferExecution],
   projections: [Ledger, AccountCards],
   streams: [AccountCard],
-  sagas: [ExecuteTransfer],
+  sagas: [ExecuteTransfer, EraseCustomer],
   queries: [AccountLedger],
+  rewrites: [ForgetOwner, ReleaseUsername, DeleteCustomer],
 }) {}
 
 /** Every policy, saga, projection and query implementation, as one Layer. */

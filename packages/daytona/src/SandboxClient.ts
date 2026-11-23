@@ -542,10 +542,14 @@ export const makeSandboxMethods = (
           const preview = yield* sandboxes.getPortPreviewUrl({ sandboxIdOrName, port });
           const client = yield* HttpClient.HttpClient;
           const base = preview.url.replace(/\/$/, "");
+          const token =
+            typeof preview.token === "string"
+              ? preview.token
+              : Redacted.value<string>(preview.token);
           return {
             port,
             url: preview.url,
-            token: Redacted.make(preview.token),
+            token: Redacted.make(token),
             fetch: Sandbox.portFetch<DaytonaError>((request) =>
               Effect.suspend(() => {
                 // Only the path and query reach the port: a proxied server
@@ -554,7 +558,7 @@ export const makeSandboxMethods = (
                 return client.execute(
                   request.pipe(
                     HttpClientRequest.setUrl(`${base}${target.pathname}${target.search}`),
-                    HttpClientRequest.setHeader("X-Daytona-Preview-Token", preview.token),
+                    HttpClientRequest.setHeader("X-Daytona-Preview-Token", token),
                   ),
                 );
               }),

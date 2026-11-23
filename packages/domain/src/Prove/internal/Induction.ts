@@ -89,7 +89,7 @@ const unguarded = Effect.fn(function* (
   test: number,
 ) {
   // The choices the rejected path had made once the test was settled: the inputs stay the ones it refused.
-  const at = rejected.run.tests[test]!;
+  const at = rejected.run.checks[test]!;
   const base = rejected.run.taken.slice(0, at).map((choice) => choice.chosen);
   const rules = new Set<string>();
   let moved = false;
@@ -289,7 +289,7 @@ export const rows = Effect.fn(function* (
         guards.set(rejection.value, guard);
         // The test it depends on is the last one that, told the opposite, lets the command go on.
         let why: string | undefined;
-        const last = taken.run.tests.length - 1;
+        const last = taken.run.checks.length - 1;
         for (
           let test = last;
           guard.rules.size === 0 && test >= taken.from && test > last - MAX_TESTS;

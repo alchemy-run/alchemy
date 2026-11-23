@@ -7,7 +7,7 @@ sidebar:
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-The bot answers an issue once. A person who replies should reach the same session, with everything OpenCode already read. OpenCode should be able to look at other issues, without a GitHub token in its sandbox. And an issue that closes should stop costing anything.
+The bot answers an issue once. A person who replies should reach the same session, with everything OpenCode already read. OpenCode should be able to look at other issues, without a GitHub token in the sandbox. And an issue that closes should stop costing anything.
 
 ## Mark the bot's own comments
 
@@ -69,11 +69,11 @@ yield* GitHub.consumeRepositoryEvents(
 );
 ```
 
-`event.name` says which event arrived, and narrows `event.payload` to its type. The session's transcript is on the sandbox's disk, so OpenCode still has the issue, the files it read and its first answer.
+`event.name` says which event arrived, and narrows `event.payload` to its type. The session's transcript is in the Durable Object's SQLite, so OpenCode still has the issue, the files it read and its first answer.
 
 ## Declare a tool of your own
 
-OpenCode's tools work in the sandbox. A tool of yours runs in the Durable Object, where the GitHub token is. Declare one that searches the repository's issues:
+The coding tools work in the sandbox. A tool of yours needs no sandbox: it runs in the Durable Object, where the GitHub token is. Declare one that searches the repository's issues:
 
 ```diff lang="typescript"
 +import * as AI from "@alchemy.run/ai";
@@ -160,7 +160,7 @@ const session = harness.session("issue", {
 });
 ```
 
-OpenCode sees the tool as `alchemy_search_issues`. When it calls it, the call waits in the sandbox while the handler runs in the Durable Object, and only the result goes back.
+OpenCode sees the tool as `alchemy_search_issues`. When it calls it, the handler runs in the Durable Object, beside OpenCode.
 
 ## Remove the sandbox when the issue closes
 
@@ -186,7 +186,7 @@ And call it when the issue closes:
 }
 ```
 
-OpenCode's session is in that sandbox, so removing it ends the session. An issue that is reopened and replied to starts a new one.
+The sandbox held only files. The session's transcript stays in the Durable Object, so an issue that is reopened and replied to continues it, in a new sandbox from the snapshot.
 
 ## Deploy and reply
 
@@ -196,7 +196,7 @@ Reply on the issue from Part 3: "Use the alchemy_search_issues tool with the que
 
 ```json
 [
-  { "tool": "read", "status": "completed", "output": "<path>/home/user/repo/README.md</path>…" },
+  { "tool": "alchemy_read", "status": "completed", "output": "{\"content\":\"1\\t# Issue bot…\",\"lines\":3}" },
   {
     "tool": "alchemy_search_issues",
     "status": "completed",
@@ -209,8 +209,8 @@ Close the issue, and its sandbox is gone from your Boat dashboard.
 
 ## What you built
 
-- A Durable Object for each issue, driving an OpenCode session in a sandbox of its own.
-- A sandbox for each issue, started from a snapshot of the repository and removed when the issue closes.
+- A Durable Object for each issue, running OpenCode and its session.
+- A sandbox for each issue's tools, started from a snapshot of the repository and removed when the issue closes.
 - A model and a GitHub tool that run in the Durable Object, so the sandbox holds no key and no token.
 - An event source that turns issues and replies into jobs, each run from the object's alarm.
 

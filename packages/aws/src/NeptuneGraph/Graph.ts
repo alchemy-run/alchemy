@@ -479,12 +479,16 @@ export const GraphProvider = () =>
               })
               .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           }
-          yield* neptunegraph
-            .deleteGraph({
-              graphIdentifier: output.graphId,
-              skipSnapshot: true,
-            })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          // A delete already under way (an interrupted destroy) is refused
+          // with ConflictException; wait for it instead of starting another.
+          if (observed.status !== "DELETING") {
+            yield* neptunegraph
+              .deleteGraph({
+                graphIdentifier: output.graphId,
+                skipSnapshot: true,
+              })
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          }
           // Block until the graph is fully gone — deletion is async and the
           // graph bills until it disappears.
           yield* Effect.repeat(

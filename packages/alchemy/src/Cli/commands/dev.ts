@@ -8,6 +8,7 @@ import * as ChildProcess from "effect/process/ChildProcess";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { resolveStackEntrypoint } from "../../Alchemist/Entrypoint.ts";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Contributions from "../../Contributions.ts";
 import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
@@ -118,6 +119,8 @@ export const devCommand = Command.make(
         env: {
           ALCHEMY_EXEC_OPTIONS: JSON.stringify(options),
           ALCHEMY_DEV: "true",
+          // The exec child never sees `--env-file`, so it gets the resolved directory.
+          ALCHEMY_DIR: (yield* AlchemyContext).dotAlchemy,
           [LOG_FD_ENV]: "3",
           // The exec child renders the run's logs but never sees this argv.
           ...consoleSettingsEnv(consoleSettings),

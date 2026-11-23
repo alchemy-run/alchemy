@@ -83,6 +83,10 @@ it.effect(
       expect(report.explored.disagreements).toEqual([]);
       // Every sequence found ran on the real bank, with its policies, saga, views and
       // projections, and so did the walks of commands picked at random.
+      // Its rewrites are part of what it promises: each is proved to break no rule of its aggregate.
+      expect(
+        Object.fromEntries(report.changes.map((change) => [change.name, change.standing])),
+      ).toEqual({ ForgetOwner: "proved", ReleaseUsername: "proved", DeleteCustomer: "proved" });
       expect(report.runs.length - report.walked).toBeGreaterThan(20);
       expect(report.walked).toBeGreaterThan(50);
       expect(report.explored.projections).toEqual(["Ledger"]);

@@ -5,14 +5,18 @@ import { AccountActivity, AccountActivityLive } from "./Account/AccountActivity.
 import { AccountCard, AccountCardLive } from "./Account/AccountCard.stream.ts";
 import { AccountCards, AccountCardsLive } from "./Account/AccountCards.projection.ts";
 import { AccountSummary, AccountSummaryLive } from "./Account/AccountSummary.view.ts";
+import { ForgetOwner } from "./Account/ForgetOwner.rewrite.ts";
 import { Statement, StatementLive } from "./Account/Statement.view.ts";
 import { Customer } from "./Customer/Customer.aggregate.ts";
 import { CustomerDashboard, CustomerDashboardLive } from "./Customer/CustomerDashboard.view.ts";
+import { DeleteCustomer } from "./Customer/DeleteCustomer.rewrite.ts";
+import { EraseCustomer, EraseCustomerLive } from "./Customer/EraseCustomer.saga.ts";
 import {
   MainAccountProvisioning,
   MainAccountProvisioningLive,
 } from "./Customer/MainAccountProvisioning.policy.ts";
 import { Registration } from "./Customer/Registration.decision.ts";
+import { ReleaseUsername } from "./Customer/ReleaseUsername.rewrite.ts";
 import { UsernameClaim } from "./Customer/UsernameClaim.aggregate.ts";
 import { DailyOutflow } from "./Fraud/DailyOutflow.view.ts";
 import { FraudReview, FraudReviewLive } from "./Fraud/FraudReview.policy.ts";
@@ -51,7 +55,8 @@ export class Bank extends Domain.Model("Bank", {
   ],
   projections: [Ledger, AccountCards],
   streams: [AccountCard],
-  sagas: [ExecuteTransfer],
+  sagas: [ExecuteTransfer, EraseCustomer],
+  rewrites: [ForgetOwner, ReleaseUsername, DeleteCustomer],
   queries: [AccountLedger],
   relations: {
     /** Whoever a username is claimed for is registered under it. */
@@ -134,6 +139,7 @@ export const BankReads = Layer.mergeAll(
 export const BankHandlers = Layer.mergeAll(
   BankReads,
   MainAccountProvisioningLive,
+  EraseCustomerLive,
   TransferExecutionLive,
   ExecuteTransferLive,
   TransferApprovalDeadlineLive,

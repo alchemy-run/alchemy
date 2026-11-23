@@ -31,7 +31,7 @@ export interface Module {
 export type Declaration =
   | { readonly _tag: "Const"; readonly init: Node | undefined }
   | { readonly _tag: "Function"; readonly node: Node }
-  | { readonly _tag: "Class" };
+  | { readonly _tag: "Class"; readonly node: Node };
 
 export interface Import {
   readonly specifier: string;
@@ -58,8 +58,36 @@ export interface Brand {
    * `cls` is that instance's place among the ones read.
    * `Matcher`: an `effect/Match` matcher being built, whose `cls` is the
    * value it matches and the cases it has so far.
+   * `Duration`: an `effect/Duration` of a whole number of milliseconds, kept
+   * in its one field, `millis`.
+   * `Result`: an `effect/Result`, whose `_tag` is `Success` or `Failure`.
+   * `BigDecimal`: an `effect/BigDecimal`, kept in its one field, `value`:
+   * the text of a decimal the prover knows, or a real number of the solver's.
+   * `HashSet` and `HashMap`: an `effect/HashSet` kept in `items`, and an
+   * `effect/HashMap` kept in `entries` as pairs. No two items, and no two
+   * keys, are equal on the path the value is on.
+   * `Data`: an instance of a class of `effect/Data` or `effect/Schema`,
+   * whose `cls` is the class.
+   * `Ref`: an `effect/Ref` the code made, with what it holds now in `value`.
+   * `Rational`: an `effect/Rational`, kept in `value` as a `BigDecimal` is.
+   * `Redacted`: an `effect/Redacted`, with what it hides in `value`.
    */
-  readonly kind: "Event" | "Rejection" | "Command" | "Option" | "Recorded" | "Matcher";
+  readonly kind:
+    | "Event"
+    | "Rejection"
+    | "Command"
+    | "Option"
+    | "Recorded"
+    | "Matcher"
+    | "Duration"
+    | "Result"
+    | "BigDecimal"
+    | "HashSet"
+    | "HashMap"
+    | "Data"
+    | "Ref"
+    | "Rational"
+    | "Redacted";
   readonly cls: unknown;
 }
 
@@ -96,13 +124,56 @@ export type V =
    * A list an input holds, before the code looks at it. Looking gives it a
    * length, which the run chooses, and an input for each item.
    */
-  | { readonly _tag: "List"; readonly name: string; readonly ast: unknown }
+  | {
+      readonly _tag: "List";
+      readonly name: string;
+      readonly ast: unknown;
+      /**
+       * The list holds a hash set's items, or a hash map's pairs: no two
+       * items, or no two keys, are equal.
+       */
+      readonly distinct?: "items" | "keys";
+      /**
+       * The list is what `split` gave of a string an input holds. Its first
+       * and last parts are known without counting the parts; looking at the
+       * rest gives it a number of parts, which the run chooses.
+       */
+      readonly split?: {
+        readonly self: V;
+        readonly separator: string;
+        readonly first: V;
+        /** `undefined` where the last part is not what follows the last separator. */
+        readonly last?: V;
+        readonly parts: (run: Run) => V;
+      };
+    }
+  /**
+   * A field of an input, before the code looks at it: whether an optional
+   * field is there, which member of a union it is. It is only ever a field
+   * of an object. Reading the field makes the choice, which the run takes
+   * each way; a field no code reads is never chosen.
+   */
+  | {
+      readonly _tag: "Pending";
+      readonly name: string;
+      readonly ast: unknown;
+      /** Whether the field may be left out. */
+      readonly optional: boolean;
+    }
   | {
       readonly _tag: "Fn";
       readonly node: Node;
       readonly env: Env;
       /** Wrapped by `Effect.fn`: calling it gives an effect. */
       readonly effectful: boolean;
+      /**
+       * The function as its file exports it. Where the prover cannot read the
+       * body, a call is a value it does not look inside, and this gives it.
+       */
+      readonly real?: {
+        readonly name: string;
+        readonly call: (...args: ReadonlyArray<unknown>) => unknown;
+      };
     }
   | {
       readonly _tag: "Native";
@@ -110,12 +181,40 @@ export type V =
       readonly call: (args: ReadonlyArray<V>, site: Site) => Eval<V>;
     }
   | { readonly _tag: "Optic"; readonly path: ReadonlyArray<OpticStep> }
-  | { readonly _tag: "Lib"; readonly module: string; readonly path: ReadonlyArray<string> }
+  | {
+      readonly _tag: "Lib";
+      readonly module: string;
+      readonly path: ReadonlyArray<string>;
+      /** What the package gives here as the runtime loads it, where the prover looked. */
+      readonly host?: unknown;
+    }
   | { readonly _tag: "Namespace"; readonly module: Module }
   | { readonly _tag: "Host"; readonly value: unknown; readonly name: string }
   | { readonly _tag: "Effect"; readonly run: Eval<V> }
+  /**
+   * An `effect/Stream`, as the library runs one: opening it gives a pull, and
+   * each pull gives the next chunk of items, or `undefined` at the end.
+   */
+  | { readonly _tag: "Stream"; readonly open: Eval<Pull> }
   | { readonly _tag: "Time"; readonly millis: Term }
-  | { readonly _tag: "Opaque"; readonly what: string };
+  | { readonly _tag: "Opaque"; readonly what: string }
+  /**
+   * What a function the prover does not read returned. The prover does not
+   * look inside it: it is passed along, kept and recorded, and it is the same
+   * value as another call of the function on the same arguments.
+   */
+  | {
+      readonly _tag: "Applied";
+      /** The function's name. */
+      readonly name: string;
+      /** The real function: it gives the value where the real code is run. */
+      readonly call: (...args: ReadonlyArray<unknown>) => unknown;
+      readonly args: ReadonlyArray<V>;
+      /** Why the prover does not read the function, as what follows its name in a message. */
+      readonly why: string;
+      /** Text two calls share only when they are the same function on the same arguments. */
+      readonly key: string;
+    };
 
 export const num = (value: number): V => ({ _tag: "Num", value });
 export const str = (value: string): V => ({ _tag: "Str", value });
@@ -125,6 +224,9 @@ export const undef: V = { _tag: "Undef" };
 export const term = (sort: Sort, text: string): V => ({ _tag: "Term", term: { sort, text } });
 export const obj = (fields: Readonly<Record<string, V>>, brand?: Brand): V =>
   brand ? { _tag: "Obj", fields, brand } : { _tag: "Obj", fields };
+
+/** What a run keeps for an optional field it chose to leave out. */
+export const absent: V = { _tag: "Undef" };
 
 const OPTION: Brand = { kind: "Option", cls: undefined };
 
@@ -144,6 +246,84 @@ export const optionOf = (
     : { _tag: "None" };
 };
 
+const identities = new WeakMap<object, number>();
+let identityCount = 0;
+
+/** A number an object keeps for as long as it lives: two objects never share one. */
+const identityOf = (object: object): number => {
+  const known = identities.get(object);
+  if (known !== undefined) return known;
+  const made = ++identityCount;
+  identities.set(object, made);
+  return made;
+};
+
+/** A value as text two values share only when they are known to be the same. */
+export const keyOf = (v: V): string => {
+  switch (v._tag) {
+    case "Num":
+      return `n${v.value}`;
+    case "Big":
+      return `${v.value}n`;
+    case "Str":
+      return JSON.stringify(v.value);
+    case "Bool":
+      return String(v.value);
+    case "Null":
+      return "null";
+    case "Undef":
+      return "undefined";
+    case "Term":
+      return `(${v.big ? "big " : ""}${v.term.text})`;
+    case "Time":
+      return `(time ${v.millis.text})`;
+    case "List":
+      return `(list ${JSON.stringify(v.name)})`;
+    case "Pending":
+      return `(pending ${JSON.stringify(v.name)})`;
+    case "Arr":
+      return `[${v.items.map(keyOf).join(",")}]`;
+    case "Obj":
+      return `{${Object.keys(v.fields)
+        .sort()
+        .map((key) => `${JSON.stringify(key)}:${keyOf(v.fields[key]!)}`)
+        .join(",")}}`;
+    case "Applied":
+      return v.key;
+    default:
+      return `#${identityOf(v)}`;
+  }
+};
+
+/** A call of an opaque function on these arguments. */
+export const applied = (
+  name: string,
+  call: (...args: ReadonlyArray<unknown>) => unknown,
+  args: ReadonlyArray<V>,
+  why: string,
+): V => ({
+  _tag: "Applied",
+  name,
+  call,
+  args,
+  why,
+  key: `(call #${identityOf(call)} ${args.map(keyOf).join(" ")})`,
+});
+
+/** A part of what an opaque function returned: the real function's result, read the same way. */
+export const derived = (
+  from: V & { readonly _tag: "Applied" },
+  what: string,
+  part: (value: unknown) => unknown,
+): V & { readonly _tag: "Applied" } => ({
+  _tag: "Applied",
+  name: from.name,
+  call: (...args) => part(from.call(...args)),
+  args: from.args,
+  why: from.why,
+  key: `(${what} ${from.key})`,
+});
+
 /** Whether a value is a `bigint`. */
 export const isBig = (v: V): boolean => v._tag === "Big" || (v._tag === "Term" && v.big === true);
 
@@ -153,14 +333,28 @@ export interface Site {
   readonly node: Node;
 }
 
+/** The next chunk of a stream's items, or `undefined` when it has ended. */
+export type Pull = Eval<ReadonlyArray<V> | undefined>;
+
 /** `decide` refused the command. */
-export class Rejected extends Data.TaggedError("Rejected")<{ readonly rejection: V }> {}
+export class Rejected extends Data.TaggedError("Rejected")<{
+  readonly rejection: V;
+  /** The effect died: nothing that handles a failure handles it. */
+  readonly defect?: boolean;
+}> {}
 
 /** The prover met code it cannot turn into a formula. */
 export class NotTranslated extends Data.TaggedError("NotTranslated")<{
   readonly file: string;
   readonly line: number;
   readonly reason: string;
+  /**
+   * Whether the code reaches outside what the prover reads: a global, a
+   * function it has no model for, a value it was given and changes. Nothing
+   * then says the function it is in gives the same result for the same
+   * arguments.
+   */
+  readonly reaches: boolean;
 }> {}
 
 /** The inputs this path assumes cannot occur. */
@@ -180,11 +374,12 @@ export const lineOf = (module: Module, offset: number): number => {
   return low + 1;
 };
 
-export const notTranslated = (site: Site, reason: string): NotTranslated =>
+export const notTranslated = (site: Site, reason: string, reaches = false): NotTranslated =>
   new NotTranslated({
     file: site.module.path,
     line: lineOf(site.module, site.node.start),
     reason,
+    reaches,
   });
 
 /** A function the prover does not look inside: its real implementation checks each answer. */
@@ -216,12 +411,42 @@ export class Run {
   readonly applications = new Map<string, Application>();
   /** The request contexts the code read, by key: each is an input, made once. */
   readonly contexts = new Map<string, { readonly tag: unknown; readonly value: V }>();
-  /** The lists the code looked at, by name, with the items this path gave each. */
+  /**
+   * The lists the code looked at, by name, with the items this path gave
+   * each; and under `?name`, the fields it looked at, with what this path
+   * chose for each.
+   */
   readonly lists = new Map<string, V>();
+  /** Each object an input holds with every field chosen, as this run settled it. */
+  readonly settled = new WeakMap<object, V>();
   /** The lists tried only up to a length, by name: longer ones were not looked at. */
   readonly bounds = new Map<string, number>();
   /** The constants that are a `bigint`: they have no largest value. */
   readonly bigs = new Set<string>();
+  /**
+   * Each hash set and hash map the code read in order, with the order this
+   * path gave its items. The real one gives them in the order of their
+   * hashes, which the prover does not know: every order is a path.
+   */
+  readonly orders: Array<{
+    readonly kind: "HashSet" | "HashMap";
+    /** What the set or the map holds, in no order: one that holds the same is read in the same order. */
+    readonly key: string;
+    readonly items: ReadonlyArray<V>;
+  }> = [];
+  /**
+   * Each result of an opaque function the code tested, by the call's key:
+   * whether it is truthy is an input, which the real function decides.
+   */
+  readonly tests = new Map<
+    string,
+    {
+      readonly term: Term;
+      readonly applied: V;
+      /** What the real result says of the term: `undefined` when it is not of the kind the code took it for. */
+      readonly read: (value: unknown) => number | bigint | string | boolean | undefined;
+    }
+  >();
   /**
    * The command being run, when a run has several: a prefix on the name of
    * each request context it reads, so every command reads its own.
@@ -242,12 +467,12 @@ export class Run {
   ) {}
 
   /** For each test of a condition, in order: how many choices the run had made once it was settled. */
-  readonly tests: Array<number> = [];
+  readonly checks: Array<number> = [];
 
   /** Note a test of a condition and what it came to, and say what the code is told. */
   test(truth: boolean): boolean {
-    const index = this.tests.length;
-    this.tests.push(this.taken.length);
+    const index = this.checks.length;
+    this.checks.push(this.taken.length);
     return index === this.unguarded ? !truth : truth;
   }
 
@@ -266,6 +491,8 @@ export class Run {
     for (const [name, list] of this.lists) next.lists.set(name, list);
     for (const [name, bound] of this.bounds) next.bounds.set(name, bound);
     for (const name of this.bigs) next.bigs.add(name);
+    next.orders.push(...this.orders);
+    for (const [key, test] of this.tests) next.tests.set(key, test);
     for (const [condition, taken] of this.decided) next.decided.set(condition, taken);
     next.label = this.label;
     return next;
@@ -304,6 +531,31 @@ export class Run {
     this.decided.set(condition, taken);
     this.conditions.push(taken ? condition : Smt.not(condition));
     return taken;
+  }
+
+  /** Whether what an opaque function returned is truthy: an input, the same for the same call. */
+  truthy(applied: V & { readonly _tag: "Applied" }): Term {
+    return this.observe(applied, "is truthy", "Bool", Boolean);
+  }
+
+  /**
+   * Something the code reads of what an opaque function returned: the text
+   * it is, how many items it has, whether it is a `Some`. It is an input,
+   * the same for the same call, and the real function says what it is on
+   * the arguments the solver picks.
+   */
+  observe(
+    applied: V & { readonly _tag: "Applied" },
+    what: string,
+    sort: Sort,
+    read: (value: unknown) => number | bigint | string | boolean | undefined,
+  ): Term {
+    const key = `${what} ${applied.key}`;
+    const known = this.tests.get(key);
+    if (known) return known.term;
+    const term = this.constant(`${applied.name} call ${this.tests.size + 1} ${what}`, sort);
+    this.tests.set(key, { term, applied, read });
+    return term;
   }
 
   /** `name(argument)`, for a function known only by its real implementation. */

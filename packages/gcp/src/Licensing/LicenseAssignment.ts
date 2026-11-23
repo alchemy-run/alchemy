@@ -264,7 +264,8 @@ export const LicenseAssignmentProvider = () =>
       if (!sameText(observedSku, skuId)) {
         current = yield* licensing.patchLicenseAssignments({
           productId,
-          skuId: observedSku,
+          currentSkuId: observedSku,
+          skuId,
           userId: current.userId ?? userId,
         });
       }

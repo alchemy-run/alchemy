@@ -1,26 +1,33 @@
 ---
 title: The session's sandbox
-description: Each OpenCode session runs in its own sandbox, which holds OpenCode, the bridge and the session's transcript. Suspend it to keep the session, remove it to delete both.
+description: OpenCode runs in the Durable Object. A sandbox is where a session's tools find files and a shell, opened on a tool's first use, and suspended or removed without touching the session.
 ---
 
-Each session has a sandbox of its own. It holds three things: OpenCode's server, the bridge, and OpenCode's data, which includes the session's transcript. The files OpenCode works on are there too. What happens to the sandbox happens to the session.
+OpenCode itself runs in the Durable Object, which has no files and no shell. A tool that needs either uses [`AI.Sandbox`](/ai/sandboxes), and the harness gives each session a sandbox of its own for those tools. The session's transcript is not in it: that is in the object's SQLite.
 
 ## Where sandboxes run
 
-An [`AI.Sandboxes`](/ai/sandboxes) Layer says where: E2B, Daytona, Modal, Boat or Archil. An OpenCode harness always requires one.
+An [`AI.Sandboxes`](/ai/sandboxes) Layer says where: E2B, Daytona, Modal, Boat or Archil. Provide it to the coding tools and the harness together:
 
 ```typescript
 const HarnessLive = Layer.mergeAll(
   FastLive,
-  Sandbox,
   OpenCode.CodingTools,
-  OpenCodeCloudflare.DurableObjectInstance,
-);
+  OpenCodeCloudflare.DurableObjectStorage,
+).pipe(Layer.provideMerge(Sandbox));
 ```
+
+A harness whose tools use neither files nor a shell takes no `AI.Sandboxes`, and its sessions never open a sandbox.
+
+## When a sandbox opens
+
+A session's sandbox opens the first time one of its tools uses `AI.Sandbox`. A prompt that calls only tools of yours, or none, opens nothing.
+
+A session's sandbox is found by a key made from the Durable Object's id and the session's name. `session.sandboxKey` is that key, for finding the sandbox on the platform yourself.
 
 ## The working directory
 
-Sessions work in the sandbox user's home directory. `cwd` sets another, such as a repository your image already has:
+Tools run commands in the sandbox's own working directory. `cwd` sets another, such as a repository your image already has. Relative paths start there too:
 
 ```typescript
 const harness = yield* OpenCode.Harness({
@@ -30,12 +37,6 @@ const harness = yield* OpenCode.Harness({
 });
 ```
 
-## What happens on first use
-
-The first call on a session opens its sandbox, downloads OpenCode from npm, checks it against a known hash, writes its configuration and starts it with the bridge. That can take a minute on a new sandbox. Every later call finds OpenCode running.
-
-A session's sandbox is found by a key made from the Durable Object's id and the session's name. `session.sandboxKey` is that key, for finding the sandbox on the platform yourself.
-
 ## Suspend
 
 `suspendSandbox` stops the sandbox and keeps its disk, where the platform can:
@@ -44,22 +45,18 @@ A session's sandbox is found by a key made from the Durable Object's id and the 
 yield* harness.session("pr-142").suspendSandbox;
 ```
 
-The transcript is on that disk. The session's next prompt resumes the sandbox, starts OpenCode again and continues the same session, with its files as they were.
+The session's next tool call resumes it, with its files as they were.
 
 ## Remove
 
-`removeSandbox` deletes the sandbox, and the session with it:
+`removeSandbox` deletes the sandbox:
 
 ```typescript
 yield* harness.session("pr-142").removeSandbox;
 ```
 
-The next prompt on that name starts a new sandbox and an empty session.
+The session keeps its transcript. Its next tool call that needs a sandbox starts a new one, empty.
 
 ## Platforms that delete idle sandboxes
 
-A platform that deletes a sandbox takes its session too. On Modal, which has no pause, a session lasts as long as its sandbox stays busy. Choose a platform that keeps a stopped sandbox's disk when sessions should last. See [Sandbox platforms](/ai/sandbox-platforms).
-
-## After a deploy
-
-A deploy that changes the harness's models, tools or skills changes OpenCode's configuration. A running session picks it up on its next call: the harness rewrites the configuration in the sandbox and restarts OpenCode there.
+A platform that deletes a sandbox takes the session's files, not the session. Choose a platform that keeps a stopped sandbox's disk when files should last. See [Sandbox platforms](/ai/sandbox-platforms).

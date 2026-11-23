@@ -6,6 +6,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { BindingsCache, DevBox } from "./resources.ts";
 import * as Toolbox from "./toolbox.ts";
@@ -151,7 +152,13 @@ export default class DaytonaWorker extends Cloudflare.Worker<DaytonaWorker>()(
                 times: 10,
               }),
             );
-          yield* sandbox.expireSignedPortPreviewUrl({ port: 8080, token: signed.token });
+          yield* sandbox.expireSignedPortPreviewUrl({
+            port: 8080,
+            token:
+              typeof signed.token === "string"
+                ? signed.token
+                : Redacted.value<string>(signed.token),
+          });
 
           const ssh = yield* sandbox.createSshAccess({ expiresInMinutes: 5 });
           yield* sandbox.revokeSshAccess({ token: ssh.token });

@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { frontApp } from "../app.ts";
-import { Database, FRONT_PORT } from "./cluster.ts";
+import { Database } from "./cluster.ts";
 import Echo from "./inline/echo.ts";
 import Shout from "./inline/shout.ts";
 import { Tally } from "./tally.ts";
@@ -18,7 +18,7 @@ export default class Front extends Docker.Service<Front>()(
     return {
       main: import.meta.url,
       port: 3000,
-      ports: [{ external: FRONT_PORT, internal: 3000 }],
+      ports: [{ internal: 3000 }],
       networks: database.network?.kind === "docker" ? [{ name: database.network.name }] : [],
     };
   }).pipe(Effect.provide(Database)),

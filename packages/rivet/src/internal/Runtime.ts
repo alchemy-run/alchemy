@@ -81,8 +81,6 @@ export interface NodeConnectionSettings {
   readonly pool: string;
   /** Further RivetKit registry settings, such as message size limits. */
   readonly registry?: Readonly<Record<string, unknown>>;
-  /** RivetKit actor options by actor name. */
-  readonly options?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
   /** Registry shutdown settings; signal handling stays with the process. */
   readonly shutdown?: { readonly gracePeriodMs?: number };
   /** Runs once the node is registered with the control plane. */
@@ -433,19 +431,20 @@ const durableObjectActors = (
   });
 
 /**
- * Host every Durable Object class as a RivetKit actor and connect this node
- * to the control plane. Runs for the life of the node. A node Alchemy built
- * reads its connection from the environment its pool set; any other process
- * passes `connection`.
+ * Host every Durable Object class as a RivetKit actor, with its actor
+ * `options` by name, and connect this node to the control plane. Runs for
+ * the life of the node. A node Alchemy built reads its connection from the
+ * environment its pool set; any other process passes `connection`.
  */
 export const runDurableObjects = (
   durableObjects: ReadonlyArray<HostedDurableObject>,
+  options: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {},
   connection?: NodeConnectionSettings,
 ) =>
   Effect.gen(function* () {
     if (durableObjects.length === 0) return yield* Effect.never;
     const { setup } = yield* Effect.promise(() => import("rivetkit"));
-    const use = yield* durableObjectActors(durableObjects, (name) => connection?.options?.[name]);
+    const use = yield* durableObjectActors(durableObjects, (name) => options[name]);
 
     // A node Alchemy built has its connection in the environment its pool set.
     const fromEnvironment = yield* Config.all({

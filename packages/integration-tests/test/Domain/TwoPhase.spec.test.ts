@@ -95,6 +95,8 @@ const world = (faults: Faults = {}) => {
     if (writers.has(id)) store.oVersion[id] = 1;
   };
   const drive = (driver: string): TwoPhase.Drive => ({
+    // `finish` and `deliver` answer no receipt: only `decide` reads one back.
+    receipt: Effect.succeed,
     primary: {
       read: () => Effect.succeed({ _tag: "Busy" }),
       hold: () => Effect.succeed({ _tag: "Busy" }),
