@@ -64,8 +64,10 @@ interface CloudState {
   visibility: RecordVisibility;
   /** The status the verify route reports. */
   verifiesAs: Status;
-  /** A row the list route does not show yet, as if it appeared mid-deploy. */
+  /** A row only the create returns, as if another stack created it the moment before. */
   unlisted: WireOwnership | undefined;
+  /** A row another stack creates while this deploy waits for the record at the nameservers. */
+  createdDuringDnsWait: WireOwnership | undefined;
   /** The options the record check was last called with. */
   checkedWith: CheckOptions | undefined;
   /**
@@ -83,6 +85,7 @@ const makeOwnershipCloud = () => {
     visibility: "absent",
     verifiesAs: "verified",
     unlisted: undefined,
+    createdDuringDnsWait: undefined,
     checkedWith: undefined,
     createFailures: [],
   };
@@ -136,6 +139,7 @@ const makeOwnershipCloud = () => {
       visibility: "absent",
       verifiesAs: "verified",
       unlisted: undefined,
+      createdDuringDnsWait: undefined,
       checkedWith: undefined,
       createFailures: [],
     });
@@ -160,6 +164,8 @@ const testFor = (cloud: OwnershipCloud, adopt = false) =>
         Layer.succeed(AuthoritativeRecordCheck, (_record, options) =>
           Effect.sync(() => {
             cloud.state.checkedWith = options;
+            const created = cloud.state.createdDuringDnsWait;
+            if (created) cloud.rows.set(created.id, created);
             return cloud.state.visibility;
           }),
         ),
@@ -168,7 +174,7 @@ const testFor = (cloud: OwnershipCloud, adopt = false) =>
         Layer.succeed(AlchemyContext, { dotAlchemy: ".alchemy-test", dev: false, adopt: false }),
       ),
       // The policy every deploy installs, which retries 5xx and transport
-      // failures; the create must still not be sent twice.
+      // failures.
       Layer.provideMerge(Layer.succeed(Retry.Retry, DeployRetry.policy)),
       Layer.provideMerge(cloud.fake.layer),
     ),
@@ -213,22 +219,20 @@ testFor(created).test.provider(
 
 const lostReply = makeOwnershipCloud();
 testFor(lostReply).test.provider(
-  "does not resend a create Prisma may have processed, and the next deploy finds the row",
+  "resends a create whose reply was lost, and owns the row the resend returns",
   (stack) =>
     Effect.gen(function* () {
       lostReply.reset({ visibility: "seen", createFailures: [503] });
       yield* stack.destroy();
 
-      const failure = yield* failureOf(stack.deploy(ownershipStack()));
-
-      expect(failure).toContain("ServiceUnavailable");
-      expect(lostReply.routes().filter((route) => route === CREATE)).toEqual([CREATE]);
-
       const proved = yield* stack.deploy(ownershipStack());
+
       expect(proved.domainOwnershipId).toBe("do-created");
       expect(proved.status).toBe("verified");
+      expect(lostReply.routes().filter((route) => route === CREATE)).toEqual([CREATE, CREATE]);
 
       yield* stack.destroy();
+      expect(lostReply.routes()).toContain("DELETE /v1/domain-ownerships/do-created");
     }),
   { tags },
 );
@@ -269,43 +273,66 @@ testFor(unknown).test.provider(
   { tags },
 );
 
-const racedUnverified = makeOwnershipCloud();
-testFor(racedUnverified).test.provider(
-  "accepts an unverified domain ownership the create returns with 200",
+const appeared = makeOwnershipCloud();
+testFor(appeared).test.provider(
+  "refuses a verified domain ownership that appears during the DNS wait, and sends no create",
   (stack) =>
     Effect.gen(function* () {
-      racedUnverified.reset({
+      appeared.reset({
         visibility: "seen",
-        unlisted: ownership("do-raced", "unverified"),
+        createdDuringDnsWait: ownership("do-raced", "verified"),
+      });
+      yield* stack.destroy();
+
+      const failure = yield* failureOf(stack.deploy(ownershipStack()));
+
+      expect(failure).toContain("--adopt");
+      expect(appeared.routes()).not.toContain(CREATE);
+      expect(appeared.deleted()).toBe(false);
+
+      appeared.reset();
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const appearedAdopted = makeOwnershipCloud();
+testFor(appearedAdopted, true).test.provider(
+  "with --adopt, takes over a verified domain ownership that appears during the DNS wait",
+  (stack) =>
+    Effect.gen(function* () {
+      appearedAdopted.reset({
+        visibility: "seen",
+        createdDuringDnsWait: ownership("do-raced", "verified"),
       });
       yield* stack.destroy();
 
       const proved = yield* stack.deploy(ownershipStack());
 
       expect(proved.domainOwnershipId).toBe("do-raced");
-      expect(proved.status).toBe("verified");
+      expect(appearedAdopted.routes()).not.toContain(CREATE);
 
       yield* stack.destroy();
+      expect(appearedAdopted.routes()).toContain("DELETE /v1/domain-ownerships/do-raced");
     }),
   { tags },
 );
 
-const racedVerified = makeOwnershipCloud();
-testFor(racedVerified).test.provider(
-  "refuses a verified domain ownership the create returns with 200",
+const returned = makeOwnershipCloud();
+testFor(returned).test.provider(
+  "owns a verified domain ownership the create returns",
   (stack) =>
     Effect.gen(function* () {
-      racedVerified.reset({ visibility: "seen", unlisted: ownership("do-raced", "verified") });
+      returned.reset({ visibility: "seen", unlisted: ownership("do-raced", "verified") });
       yield* stack.destroy();
 
-      const failure = yield* failureOf(stack.deploy(ownershipStack()));
+      const proved = yield* stack.deploy(ownershipStack());
 
-      expect(failure).toContain("--adopt");
-      expect(racedVerified.routes().some((route) => route.endsWith("/verify"))).toBe(false);
-      expect(racedVerified.deleted()).toBe(false);
+      expect(proved.domainOwnershipId).toBe("do-raced");
+      expect(returned.routes()).toContain(CREATE);
 
-      racedVerified.reset();
       yield* stack.destroy();
+      expect(returned.routes()).toContain("DELETE /v1/domain-ownerships/do-raced");
     }),
   { tags },
 );

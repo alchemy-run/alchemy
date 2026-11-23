@@ -17,6 +17,8 @@ import {
   data,
   failure,
   makeFakeManagementApi,
+  noContent,
+  notFound,
   page,
   routesOf,
   unhandled,
@@ -40,15 +42,29 @@ const raced = {
   dnsRecords: [],
 };
 
-// Another actor registers the hostname between the lookup and the create, so
-// the create answers 200 with that domain.
-let registered = false;
+// The domains Prisma has registered on service-1. The create answers 200, as
+// it does for a hostname another actor registered the moment before.
+const cloud = {
+  registered: [] as Array<typeof raced>,
+  registeredDuringDnsWait: undefined as typeof raced | undefined,
+};
 const fake = makeFakeManagementApi((request) => {
   if (request.pathname === "/v1/services/service-1/domains") {
-    if (request.method === "GET") return page(registered ? [raced] : []);
+    if (request.method === "GET") return page(cloud.registered);
     if (request.method === "POST") {
-      registered = true;
+      cloud.registered = [raced];
       return data(raced, { status: 200 });
+    }
+  }
+  if (request.pathname === "/v1/services/service-1/urls" && request.method === "GET") {
+    return page([]);
+  }
+  if (request.pathname === `/v1/domains/${raced.id}`) {
+    if (cloud.registered.length === 0) return notFound("Domain not found.");
+    if (request.method === "GET") return data(raced);
+    if (request.method === "DELETE") {
+      cloud.registered = [];
+      return noContent();
     }
   }
   return unhandled(request);
@@ -65,6 +81,7 @@ const { test } = Test.make({
       Layer.succeed(AuthoritativeRecordCheck, (record, options) =>
         Effect.sync(() => {
           checked.push([record, options]);
+          if (cloud.registeredDuringDnsWait) cloud.registered = [cloud.registeredDuringDnsWait];
           return "unknown" as const;
         }),
       ),
@@ -76,22 +93,49 @@ const { test } = Test.make({
   ),
 });
 
+const resetCloud = (registeredDuringDnsWait?: typeof raced) => {
+  cloud.registered = [];
+  cloud.registeredDuringDnsWait = registeredDuringDnsWait;
+  fake.captured.length = 0;
+  checked.length = 0;
+};
+
 test.provider(
-  "routes a 200 custom-domain create race through explicit adoption",
+  "refuses a custom domain registered during the DNS wait, and sends no create",
   (stack) =>
     Effect.gen(function* () {
-      registered = false;
-      fake.captured.length = 0;
-      checked.length = 0;
+      resetCloud(raced);
       yield* stack.destroy();
-      const domain = CustomDomain("Domain", { app: "service-1", hostname: raced.hostname });
 
-      const raceResult = yield* stack.deploy(domain).pipe(Effect.result);
-      expect(Result.isFailure(raceResult)).toBe(true);
-      if (Result.isFailure(raceResult)) {
-        expect(String(raceResult.failure)).toContain("explicit adoption");
+      const result = yield* stack
+        .deploy(CustomDomain("Domain", { app: "service-1", hostname: raced.hostname }))
+        .pipe(Effect.result);
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(String(result.failure)).toContain("already exists");
+        expect(String(result.failure)).toContain("explicit adoption");
       }
-      expect(routesOf(fake.captured)).toContain("POST /v1/services/service-1/domains");
+      expect(routesOf(fake.captured)).not.toContain("POST /v1/services/service-1/domains");
+
+      resetCloud();
+      yield* stack.destroy();
+    }),
+  { tags: ["local", "provider:prisma", "provider:prisma:customdomain"] },
+);
+
+test.provider(
+  "owns the custom domain the create returns",
+  (stack) =>
+    Effect.gen(function* () {
+      resetCloud();
+      yield* stack.destroy();
+
+      const domain = yield* stack.deploy(
+        CustomDomain("Domain", { app: "service-1", hostname: raced.hostname }),
+      );
+
+      expect(domain.customDomainId).toBe(raced.id);
       expect(checked).toEqual([
         [
           { type: "CNAME", name: raced.hostname },
@@ -99,14 +143,8 @@ test.provider(
         ],
       ]);
 
-      const redeploy = yield* stack.deploy(domain).pipe(Effect.result);
-      expect(Result.isFailure(redeploy)).toBe(true);
-      if (Result.isFailure(redeploy)) {
-        expect(String(redeploy.failure)).toContain("OwnedBySomeoneElse");
-      }
-
-      registered = false;
       yield* stack.destroy();
+      expect(routesOf(fake.captured)).toContain(`DELETE /v1/domains/${raced.id}`);
     }),
   { tags: ["local", "provider:prisma", "provider:prisma:customdomain"] },
 );

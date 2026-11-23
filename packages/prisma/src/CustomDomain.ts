@@ -1,3 +1,4 @@
+import { isThrottling } from "@distilled.cloud/core/category";
 import {
   type CreateServiceDomainResponseData,
   createDomainRetry,
@@ -8,6 +9,7 @@ import {
   getServiceUrls,
   getServices,
 } from "@distilled.cloud/prisma/management";
+import * as Retry from "@distilled.cloud/prisma/Retry";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
@@ -21,7 +23,7 @@ import type { Compute } from "./Compute.ts";
 import type { DomainOwnership } from "./DomainOwnership.ts";
 import { AuthoritativeRecordCheck } from "./internal/AuthoritativeDns.ts";
 import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevStub.ts";
-import { ownershipRequiredOf, withoutRetriedCreate } from "./internal/DomainOwnership.ts";
+import { ownershipRequiredOf } from "./internal/DomainOwnership.ts";
 import { normalizeHostname, sameHostname } from "./internal/Hostname.ts";
 import { PrismaPaginationError } from "./internal/Pagination.ts";
 import { concreteIdOf, concreteIdsChanged, isInputObject, isPrismaDevId } from "./internal/Refs.ts";
@@ -216,6 +218,15 @@ const findDomain = (appId: string, hostname: string) =>
     }),
   );
 
+/**
+ * Prisma's spec does not say a resent create is harmless, so only throttled
+ * requests, which Prisma did not process, are resent.
+ */
+const withoutRetriedCreate = Retry.policy({
+  while: isThrottling,
+  backoff: { baseMs: 1000, factor: 2, capMs: 5000, maxRetries: 8, jitterMs: 50, serverHint: true },
+});
+
 const getCustomDomain = (domainId: string) =>
   getDomain({ domainId }).pipe(
     Effect.map((response) => response.data),
@@ -325,6 +336,10 @@ const ProviderLive = () =>
               { type: "CNAME", name: hostname },
               { margin: "if-unseen", nameservers: "parent" },
             );
+            const registeredDuringDnsWait = yield* findDomain(appId, hostname);
+            if (registeredDuringDnsWait) {
+              return yield* adoptionRequiredError(hostname, appId, "already exists");
+            }
           }
           const reconciled = domain
             ? domain.status === "failed"
@@ -348,17 +363,7 @@ const ProviderLive = () =>
                       adoptionRequiredError(hostname, appId, "appeared after the adoption check"),
                     ),
                 }),
-                Effect.flatMap((response) =>
-                  response.httpStatus === 201
-                    ? Effect.succeed(response.data)
-                    : Effect.fail(
-                        adoptionRequiredError(
-                          hostname,
-                          appId,
-                          "was returned as already registered by the create request",
-                        ),
-                      ),
-                ),
+                Effect.map((response) => response.data),
               );
           if (!identityMatches(reconciled)) {
             return yield* new CustomDomainUnexpectedResponse({

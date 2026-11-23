@@ -24,7 +24,6 @@ import {
   PrismaDomainOwnershipRequired,
   type ProjectReference,
   resolveWorkspaceId,
-  withoutRetriedCreate,
 } from "./DomainOwnership.ts";
 import { normalizeHostname } from "./Hostname.ts";
 import { PrismaPaginationError } from "./Pagination.ts";
@@ -135,8 +134,9 @@ const adoptAllowed = Effect.gen(function* () {
 });
 
 /**
- * A domain ownership this resource did not record is taken only while it is
- * `unverified`, which grants nothing, or with `--adopt`.
+ * A domain ownership this resource finds before its create, and did not
+ * record, is taken only while it is `unverified`, which grants nothing, or
+ * with `--adopt`.
  */
 const claim = (ownership: ApiDomainOwnership) =>
   Effect.gen(function* () {
@@ -147,12 +147,9 @@ const claim = (ownership: ApiDomainOwnership) =>
   });
 
 const createOwnership = (workspaceId: string, domain: string) =>
-  Effect.gen(function* () {
-    const created = yield* withoutRetriedCreate(
-      createWorkspaceDomainOwnership({ workspaceId, domain }),
-    );
-    return created.httpStatus === 201 ? created.data : yield* claim(created.data);
-  });
+  createWorkspaceDomainOwnership({ workspaceId, domain }).pipe(
+    Effect.map((response) => response.data),
+  );
 
 /** Ask Prisma to look the record up again until it reports `verified`. */
 const verifyOwnership = (ownership: ApiDomainOwnership) =>
@@ -215,13 +212,16 @@ const ProviderLive = () =>
           const domainOwnershipId = isPrismaDevId(output?.domainOwnershipId)
             ? undefined
             : output?.domainOwnershipId;
+          const claimUnrecorded = (found: ApiDomainOwnership | undefined) =>
+            found === undefined || found.id === domainOwnershipId
+              ? Effect.succeed(found)
+              : claim(found);
           const recorded = domainOwnershipId ? yield* getOwnership(domainOwnershipId) : undefined;
-          const found =
+          const existing = yield* claimUnrecorded(
             recorded && normalizeHostname(recorded.domain) === domain
               ? recorded
-              : yield* findOwnership(workspaceId, domain);
-          const existing =
-            found === undefined || found.id === domainOwnershipId ? found : yield* claim(found);
+              : yield* findOwnership(workspaceId, domain),
+          );
           if (existing?.status === "verified") return attrsFrom(existing);
           const record =
             existing?.verification ??
@@ -243,7 +243,11 @@ const ProviderLive = () =>
               `The authoritative nameservers for '${domain}' do not return its verification record yet.`,
             );
           }
-          const ownership = existing ?? (yield* createOwnership(workspaceId, domain));
+          const createdDuringDnsWait = existing
+            ? undefined
+            : yield* claimUnrecorded(yield* findOwnership(workspaceId, domain));
+          const ownership =
+            existing ?? createdDuringDnsWait ?? (yield* createOwnership(workspaceId, domain));
           if (normalizeHostname(ownership.domain) !== domain) {
             return yield* new DomainOwnershipOperationFailed({
               message: `Prisma recorded ownership of '${ownership.domain}', not the requested '${domain}'.`,

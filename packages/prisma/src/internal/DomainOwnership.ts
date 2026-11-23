@@ -1,7 +1,5 @@
-import { isThrottling } from "@distilled.cloud/core/category";
 import type { DomainOwnershipRequired } from "@distilled.cloud/prisma/management";
 import { getProject } from "@distilled.cloud/prisma/management";
-import * as Retry from "@distilled.cloud/prisma/Retry";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -77,13 +75,3 @@ export const resolveWorkspaceId = (project: ProjectReference) =>
     const response = yield* getProject({ id: projectId });
     return response.data.workspace.id;
   });
-
-/**
- * A create whose response was lost and is retried answers 200 for the row
- * it made, which reads as someone else's. Retry only throttled requests,
- * which Prisma did not process.
- */
-export const withoutRetriedCreate = Retry.policy({
-  while: isThrottling,
-  backoff: { baseMs: 1000, factor: 2, capMs: 5000, maxRetries: 8, jitterMs: 50, serverHint: true },
-});
