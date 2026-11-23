@@ -154,6 +154,15 @@ Story.saga(EraseCustomer, customerId, { _tag: "Completed", result: undefined }),
 
 More: [Story: Rewrite, compact and start a saga](https://alchemy.run/domain/story#rewrite-compact-and-start-a-saga).
 
+A sealed field is expected as the test Vault seals it, and a subject's key is shredded by a step:
+
+```ts
+Story.then(contact, new AddressSet({ address: Domain.sealedInTest(Address, customerId, "1 Main St") })),
+Story.shred(customerId), // nothing sealed for them opens afterwards
+```
+
+More: [Story: Expect a sealed value, and shred a key](https://alchemy.run/domain/story#expect-a-sealed-value-and-shred-a-key).
+
 ### The declaration
 
 Building the model's Layer dies with a `Domain.DefinitionError` for every definition problem (missing `keyOf`, view `state` without `initial`, a policy or projection `on` an event no source emits, a stream with two writers, duplicate names, a schema with no JSON form such as `Schema.instanceOf(Foo)`, an `initial` that doesn't survive JSON). Every story builds it, so stories catch them; a model without stories keeps one test that builds it:
