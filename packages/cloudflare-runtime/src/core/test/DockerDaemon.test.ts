@@ -1,10 +1,12 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import { Docker, DockerLive } from "../Docker.ts";
-import { docker } from "./helpers/docker.ts";
+import { DOCKER_BIN, docker } from "./helpers/docker.ts";
 
 it.live(
   "pulls an unprepared image again after a failed container create",
@@ -67,4 +69,94 @@ it.live(
     );
   },
   60_000,
+);
+
+/**
+ * Runs DockerLive with `ALCHEMY_LOCAL_CONTAINER_PLATFORM` set and its docker
+ * CLI wrapped in a shim that logs every invocation, then returns the `build`
+ * and `pull` commands it ran.
+ */
+const withLocalPlatform = <A, E>(
+  platform: string,
+  body: Effect.Effect<A, E, Docker | FileSystem.FileSystem>,
+) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-platform-" });
+    const log = `${dir}/docker.log`;
+    const shim = `${dir}/docker`;
+    yield* fs.writeFileString(
+      shim,
+      `#!/bin/sh\necho "$*" >> ${JSON.stringify(log)}\nexec ${JSON.stringify(DOCKER_BIN)} "$@"\n`,
+    );
+    yield* fs.chmod(shim, 0o755);
+    const result = yield* body.pipe(
+      Effect.provide(
+        Layer.provideMerge(
+          DockerLive,
+          Layer.mergeAll(
+            NodeServices.layer,
+            SecureRandom.layerWebCrypto,
+            ConfigProvider.layer(
+              ConfigProvider.fromUnknown({
+                ALCHEMY_LOCAL_CONTAINER_PLATFORM: platform,
+                DOCKER_BIN: shim,
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+    const commands = (yield* fs.readFileString(log))
+      .split("\n")
+      .filter((line) => /^(build|pull) /.test(line));
+    return { result, commands };
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
+
+// A FROM-only Dockerfile has no RUN step, so a foreign platform builds
+// without emulation on any host.
+const buildAndPull = (built: string, pulled: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const docker = yield* Docker;
+    const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-platform-ctx-" });
+    const dockerfile = `${dir}/Dockerfile`;
+    yield* fs.writeFileString(dockerfile, "FROM alpine:3.21\n");
+    yield* docker.build(built, { dockerfile, context: dir });
+    yield* docker.pull(pulled, { imageUri: "alpine:3.21" });
+  }).pipe(Effect.scoped);
+
+const removeImages = (...tags: Array<string>) =>
+  Effect.forEach(tags, (tag) => Effect.ignore(docker("rmi", tag)), { discard: true });
+
+it.live(
+  "builds and pulls the platform set in ALCHEMY_LOCAL_CONTAINER_PLATFORM",
+  () => {
+    const built = `alchemy-platform-build-${crypto.randomUUID()}:latest`;
+    const pulled = `alchemy-platform-pull-${crypto.randomUUID()}:latest`;
+    return Effect.gen(function* () {
+      const { commands } = yield* withLocalPlatform("linux/arm64", buildAndPull(built, pulled));
+      expect(commands).toHaveLength(2);
+      expect(commands[0]).toContain("--platform linux/arm64");
+      expect(commands[1]).toBe("pull alpine:3.21 --platform linux/arm64");
+      const arch = yield* docker("image", "inspect", built, "--format", "{{.Architecture}}");
+      expect(arch.trim()).toBe("arm64");
+    }).pipe(Effect.ensuring(removeImages(built, pulled)));
+  },
+  120_000,
+);
+
+it.live(
+  "leaves the platform to Docker with ALCHEMY_LOCAL_CONTAINER_PLATFORM=host",
+  () => {
+    const built = `alchemy-platform-build-${crypto.randomUUID()}:latest`;
+    const pulled = `alchemy-platform-pull-${crypto.randomUUID()}:latest`;
+    return Effect.gen(function* () {
+      const { commands } = yield* withLocalPlatform("host", buildAndPull(built, pulled));
+      expect(commands).toHaveLength(2);
+      expect(commands[0]).not.toContain("--platform");
+      expect(commands[1]).toBe("pull alpine:3.21");
+    }).pipe(Effect.ensuring(removeImages(built, pulled)));
+  },
+  120_000,
 );

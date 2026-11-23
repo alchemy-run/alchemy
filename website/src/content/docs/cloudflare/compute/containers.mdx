@@ -255,6 +255,24 @@ image and the `docker login` or `docker build` command that fixes it.
 The tag is the image's identity, so give each build its own tag to
 redeploy it.
 
+## Run containers natively under `alchemy dev`
+
+`alchemy dev` builds and pulls `linux/amd64` images too, so local
+containers match what Cloudflare runs. On an arm64 host (Apple
+silicon, arm64 Linux CI) Docker then runs them under emulation. Set
+`ALCHEMY_LOCAL_CONTAINER_PLATFORM=host` to let Docker use its own
+architecture instead:
+
+```sh
+ALCHEMY_LOCAL_CONTAINER_PLATFORM=host alchemy dev
+```
+
+Any other value is passed to Docker as the platform, e.g.
+`linux/arm64`. Your Dockerfile then has to build for that
+architecture (use `ARG TARGETARCH` for per-architecture downloads).
+An image published only for amd64 still runs, emulated. Deploys
+always build `linux/amd64`.
+
 ## Cached builds by default
 
 Dockerfile builds, inline Dockerfiles, and Effect-native `main` builds reuse

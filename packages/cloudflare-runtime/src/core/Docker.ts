@@ -89,6 +89,17 @@ const ContainerEgressInterceptorImage = Config.String("CONTAINER_EGRESS_INTERCEP
     ),
   ),
 );
+/**
+ * The platform local dev builds and pulls user images for. Defaults to
+ * `linux/amd64`, the architecture Cloudflare's container runtime executes.
+ * `host` leaves `--platform` out so Docker uses its own architecture (native
+ * on arm64 hosts); any other value is passed through, e.g. `linux/arm64`.
+ * Deploys are unaffected.
+ */
+const LocalContainerPlatform = Config.String("ALCHEMY_LOCAL_CONTAINER_PLATFORM").pipe(
+  Config.orElse(() => Config.succeed("linux/amd64")),
+  Config.map((value) => (value.trim() === "host" ? undefined : value.trim())),
+);
 
 /**
  * The Docker privileges FUSE filesystems (s3fs, tigrisfs, …) need to mount
@@ -224,6 +235,7 @@ export const DockerLive = Layer.effect(
 
     const bin = yield* DockerBin;
     const containerEgressInterceptorImage = yield* ContainerEgressInterceptorImage;
+    const platform = yield* LocalContainerPlatform;
     const registeredImages = new Map<string, { tag: string; env: Record<string, string> }>();
     // Every container created through the proxy carries this runtime's label.
     // Native containers can start from images nobody prepared (snapshots,
@@ -450,8 +462,8 @@ export const DockerLive = Layer.effect(
      * host-native variant. Forcing `linux/amd64` there runs it under
      * emulation on arm64 hosts, where its transparent-proxy setup dies at
      * startup with `Fatal error: setsockoptint: protocol not available`.
-     * Deployable user images pass `linux/amd64` explicitly, because that is
-     * the architecture Cloudflare's container runtime executes.
+     * User images pass the local container platform, `linux/amd64` unless
+     * `ALCHEMY_LOCAL_CONTAINER_PLATFORM` says otherwise.
      */
     const pull = ({ imageUri, platform }: ContainerImage.Pull & { readonly platform?: string }) =>
       run(["pull", toPullRef(imageUri), ...(platform ? ["--platform", platform] : [])]).pipe(
@@ -499,13 +511,10 @@ export const DockerLive = Layer.effect(
       );
     // workerd may create a container from an image nobody prepared, such as a
     // managed `cloudflare/*` image. Failed pulls are forgotten and retried.
-    const ensuredImages = yield* Cache.makeWith(
-      (image: string) => pullIfMissing(image, "linux/amd64"),
-      {
-        capacity: Number.MAX_SAFE_INTEGER,
-        timeToLive: (exit) => (Exit.isFailure(exit) ? 0 : Infinity),
-      },
-    );
+    const ensuredImages = yield* Cache.makeWith((image: string) => pullIfMissing(image, platform), {
+      capacity: Number.MAX_SAFE_INTEGER,
+      timeToLive: (exit) => (Exit.isFailure(exit) ? 0 : Infinity),
+    });
 
     const list = (ancestor: string) =>
       run([
@@ -670,8 +679,7 @@ export const DockerLive = Layer.effect(
             "--load",
             "-t",
             tag,
-            "--platform",
-            "linux/amd64",
+            ...(platform ? ["--platform", platform] : []),
             "--provenance=false",
             ...Object.entries(image.buildArgs ?? {}).flatMap(([name, value]) => [
               "--build-arg",
@@ -716,12 +724,12 @@ export const DockerLive = Layer.effect(
           );
         }),
       // Pull every time so a mutable tag picks up a newly pushed image and
-      // the `linux/amd64` variant replaces any native build under the tag.
+      // the local platform's variant replaces any other build under the tag.
       // An image that exists only locally (built on the machine or
       // `docker load`ed) has nothing to pull from, so when the pull fails
       // and the image is present, use the local copy.
       pull: (tag, image) =>
-        pull({ ...image, platform: "linux/amd64" }).pipe(
+        pull({ ...image, platform }).pipe(
           Effect.catchTag("SystemError", (error) =>
             inspect(image.imageUri, "{{.Id}}").pipe(
               Effect.orElseSucceed(() => ""),
