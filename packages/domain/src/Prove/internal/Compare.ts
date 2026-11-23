@@ -182,6 +182,18 @@ export const equals = (a: V, b: V, force: (list: V) => V = (list) => list): Know
             ? false
             : `(= ${left} ${right})`;
       }
+      case "Rational": {
+        const l = Brands.rationalOf(x);
+        const r = Brands.rationalOf(y);
+        if (!l || !r) return undefined;
+        const left = Brands.realOfFraction(l).text;
+        const right = Brands.realOfFraction(r).text;
+        return left === right
+          ? true
+          : Brands.isFraction(l) && Brands.isFraction(r)
+            ? false
+            : `(= ${left} ${right})`;
+      }
       case "HashSet": {
         const l = force(Brands.setOf(x)!);
         const r = force(Brands.setOf(y)!);

@@ -1,4 +1,5 @@
 import * as BigDecimal from "effect/BigDecimal";
+import * as Rational from "effect/Rational";
 import type { Term } from "./Smt.ts";
 import type { Brand, V } from "./Value.ts";
 import * as Value from "./Value.ts";
@@ -84,6 +85,44 @@ export const realOf = (value: Decimal): Term => {
   return { sort: "Real", text: whole < 0n ? `(- ${size})` : size };
 };
 
+const RATIONAL: Brand = { kind: "Rational", cls: undefined };
+
+/** A fraction the prover knows, or a real number of the solver's that stands for one. */
+export type Fraction = Rational.Rational | Term;
+
+export const isFraction = (fraction: Fraction): fraction is Rational.Rational =>
+  Rational.isRational(fraction);
+
+/** A `Rational`. One the prover knows is kept as the library writes it, in lowest terms. */
+export const rational = (value: Fraction): V =>
+  Value.obj(
+    {
+      value: isFraction(value)
+        ? value.pipe(Rational.format, Value.str)
+        : { _tag: "Term", term: value },
+    },
+    RATIONAL,
+  );
+
+/** What a `Rational` is: `undefined` when the value is not one. */
+export const rationalOf = (v: V | undefined): Fraction | undefined => {
+  const value = branded(v, "Rational")?.value;
+  return value?._tag === "Str"
+    ? Rational.fromStringUnsafe(value.value)
+    : value?._tag === "Term" && value.term.sort === "Real"
+      ? value.term
+      : undefined;
+};
+
+/** A fraction as the solver's real number: one whole number over another. */
+export const realOfFraction = (value: Fraction): Term => {
+  if (!isFraction(value)) return value;
+  const { denominator, numerator } = value;
+  const size =
+    denominator === 1n ? digits(numerator) : `(/ ${digits(numerator)} ${digits(denominator)})`;
+  return { sort: "Real", text: numerator < 0n ? `(- ${size})` : size };
+};
+
 /** A hash set of these items: an array, or the list an input holds. */
 export const hashSet = (items: V): V => Value.obj({ items }, SET);
 
@@ -103,6 +142,8 @@ export const SEALED: ReadonlySet<Brand["kind"]> = new Set([
   "HashSet",
   "HashMap",
   "Ref",
+  "Rational",
+  "Redacted",
 ]);
 
 /** The brands whose values have the library's `.pipe`. */
@@ -116,4 +157,6 @@ export const PIPED: ReadonlySet<Brand["kind"]> = new Set([
   "HashMap",
   "Data",
   "Ref",
+  "Rational",
+  "Redacted",
 ]);

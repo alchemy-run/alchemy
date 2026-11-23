@@ -3,6 +3,7 @@ import * as Array from "effect/Array";
 import * as BigDecimal from "effect/BigDecimal";
 import * as BigInts from "effect/BigInt";
 import * as Boolean from "effect/Boolean";
+import * as Cause from "effect/Cause";
 import * as Chunk from "effect/Chunk";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
@@ -10,6 +11,8 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Equivalence from "effect/Equivalence";
+import * as Exit from "effect/Exit";
+import * as Filter from "effect/Filter";
 import {
   apply,
   compose,
@@ -25,12 +28,17 @@ import {
 } from "effect/Function";
 import * as HashMap from "effect/HashMap";
 import * as HashSet from "effect/HashSet";
+import * as MutableHashMap from "effect/MutableHashMap";
+import * as MutableHashSet from "effect/MutableHashSet";
+import * as MutableRef from "effect/MutableRef";
 import * as Number from "effect/Number";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import * as Ordering from "effect/Ordering";
 import * as Predicate from "effect/Predicate";
+import * as Rational from "effect/Rational";
 import * as Record from "effect/Record";
+import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -140,6 +148,8 @@ const add = dual<(b: number) => (a: number) => number, (a: number, b: number) =>
   2,
   (a, b) => a + b,
 );
+
+const third = Rational.makeUnsafe(1n, 3n);
 
 const byN = Order.mapInput(
   Order.Number,
@@ -790,6 +800,73 @@ const extra = (a: number, b: number) =>
           swapped: yield* Ref.getAndSet(total, 0),
         };
       }),
+      exit: yield* Effect.gen(function* () {
+        const ended = yield* Effect.exit(even(a));
+        const dead = yield* Effect.exit(Effect.orDie(positive(a)));
+        return {
+          isSuccess: Exit.isSuccess(ended),
+          matched: Exit.match(ended, {
+            onSuccess: (n) => n,
+            onFailure: (cause) => (Cause.hasFails(cause) ? -1 : -2),
+          }),
+          error: Exit.findErrorOption(ended),
+          value: Exit.getSuccess(Exit.map(ended, (n) => n + 1)),
+          mapped: Exit.findErrorOption(Exit.mapError(ended, (error) => error.n)),
+          died: Exit.hasDies(dead),
+          failed: Exit.hasFails(dead),
+          made: Exit.isFailure(Exit.fail("no")),
+          squashed: Cause.squash(Cause.fail(a)),
+          again: yield* Effect.failCause(Cause.fail(a)).pipe(Effect.flip),
+        };
+      }),
+      rational: {
+        sum: Rational.sum(third, Rational.fromBigInt(BigInt(a))),
+        multiply: Rational.multiply(third, Rational.fromBigInt(BigInt(a))),
+        divide: Rational.divide(Rational.fromBigInt(BigInt(a)), Rational.fromBigInt(BigInt(b))),
+        made: Rational.make(BigInt(a), BigInt(b)),
+        less: Rational.isLessThan(Rational.fromBigInt(BigInt(a)), third),
+        equals: Rational.equals(
+          Rational.multiply(Rational.fromBigInt(BigInt(a)), third),
+          Rational.makeUnsafe(BigInt(a), 3n),
+        ),
+        min: Rational.min(third, Rational.fromBigInt(BigInt(b))),
+        sign: Rational.sign(Rational.subtract(Rational.fromBigInt(BigInt(a)), third)),
+        isInteger: Rational.isInteger(Rational.makeUnsafe(BigInt(a), 2n)),
+        sumAll: Rational.sumAll([third, third, Rational.fromBigInt(BigInt(a))]),
+        format: Rational.format(Rational.sum(third, third)),
+        fromDecimal: Rational.fromBigDecimal(BigDecimal.fromStringUnsafe("0.25")),
+        order: Rational.Order(third, Rational.fromBigInt(BigInt(a))),
+      },
+      mutable: (() => {
+        const count = MutableRef.make(a);
+        MutableRef.update(count, (n) => n + b);
+        MutableRef.increment(count);
+        const before = MutableRef.getAndSet(count, MutableRef.get(count) * 2);
+        const seen = MutableHashSet.make(a);
+        MutableHashSet.add(seen, b);
+        const scores = MutableHashMap.make(["a", a]);
+        MutableHashMap.set(scores, "b", b);
+        MutableHashMap.modify(scores, "a", (n) => n + 1);
+        MutableHashMap.remove(scores, "missing");
+        return {
+          before,
+          after: MutableRef.get(count),
+          next: MutableRef.incrementAndGet(count),
+          seen: MutableHashSet.size(seen),
+          has: MutableHashSet.has(seen, a),
+          a: MutableHashMap.get(scores, "a"),
+          b: MutableHashMap.get(scores, "b"),
+          size: MutableHashMap.size(scores),
+        };
+      })(),
+      hidden: Redacted.value(Redacted.make(a)),
+      filters: {
+        fromPredicate: Filter.fromPredicate((n: number) => n > b)(a),
+        toOption: Filter.toOption(Filter.fromPredicate((n: number) => n > b))(a),
+        toPredicate: Filter.toPredicate(Filter.fromPredicate((n: number) => n > b))(a),
+        equals: Filter.equals(b)(a),
+        tagged: Filter.tagged("Dot")(Shape.Dot()),
+      },
       ordering: {
         reverse: Ordering.reverse(Order.Number(a, b)),
         match: Ordering.match(Order.Number(a, b), {

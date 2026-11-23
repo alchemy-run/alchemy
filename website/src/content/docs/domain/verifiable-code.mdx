@@ -106,7 +106,7 @@ The state, each command's input and each request context start as any value thei
 - `Schema.Option`, started as `none` and as `some`.
 - `Schema.Result`, started as a success and as a failure.
 - `Schema.DateTimeUtc`, and `Schema.Duration` as a whole number of milliseconds.
-- `Schema.BigDecimal`.
+- `Schema.BigDecimal`. A `Schema.Rational` is not started from: make a fraction from whole numbers with `Rational.make`.
 - `Schema.HashSet` and `Schema.HashMap`, tried as described under [Hash sets and hash maps](#hash-sets-and-hash-maps).
 - A branded schema, read as what it brands.
 
@@ -142,6 +142,7 @@ A call to a package is read when it is one of these. Each does to a value from t
 - **`effect/HashMap`:** `empty`, `make`, `fromIterable`, `isHashMap`, `size`, `isEmpty`, `has`, `get`, `getUnsafe`, `set`, `setMany`, `remove`, `removeMany`, `modify`, `modifyAt`, `union`, `map`, `filter`, `filterMap`, `compact`, `some`, `every`, `hasBy`, `reduce`, `forEach`, `findFirst`, `keys`, `values`, `entries`, `toValues`, `toEntries`.
 - **`effect/Number` and `effect/BigInt`:** `sum`, `subtract`, `multiply`, `divide`, `divideUnsafe`, `remainder`, `increment`, `decrement`, `min`, `max`, `clamp`, `between`, `sign`, `sumAll`, `multiplyAll`, the four comparisons, `isNumber` and `isBigInt`, `BigInt.abs`. On numbers the code writes: `Number.round`, `Number.parse`, `BigInt.gcd`, `lcm`, `sqrt`, `toNumber`, `fromNumber`, `fromString`.
 - **`effect/BigDecimal`:** `make`, `fromNumber`, `fromNumberUnsafe`, `fromBigInt`, `fromString`, `fromStringUnsafe`, `isBigDecimal`, `sum`, `subtract`, `multiply`, `sumAll`, `multiplyAll`, `negate`, `abs`, `min`, `max`, `clamp`, `between`, `sign`, `equals`, the four comparisons, `isZero`, `isPositive`, `isNegative`, `isInteger`, `floor`, `ceil`, `truncate`, `normalize`, `Order`. On decimals the code writes: `divide`, `divideUnsafe`, `format`, `scale`, `toNumberUnsafe`.
+- **`effect/Rational`:** `make`, `makeUnsafe`, `fromBigInt`, `fromNumber`, `fromNumberUnsafe`, `fromBigDecimal`, `fromString`, `fromStringUnsafe`, `isRational`, `sum`, `subtract`, `multiply`, `divide`, `divideUnsafe`, `sumAll`, `multiplyAll`, `negate`, `abs`, `min`, `max`, `clamp`, `between`, `sign`, `equals`, the four comparisons, `isZero`, `isPositive`, `isNegative`, `isInteger`, `Order`. A fraction is exact, so a division is read on any two of them. On fractions the code writes: `format`, `toNumberUnsafe`.
 - **`effect/String`:** `length`, `isEmpty`, `isNonEmpty`, `isString`, `concat`, `startsWith`, `endsWith`, `includes`, `indexOf`, `charAt`, `slice`, `substring`, `takeLeft`, `replace`, `replaceAll`. On strings the code writes: `at`, `lastIndexOf`, `takeRight`, `split`, `trim`, `trimStart`, `trimEnd`, `toUpperCase`, `toLowerCase`, `capitalize`, `uncapitalize`, `padStart`, `padEnd`, `repeat`.
 - **`effect/Boolean`:** `and`, `or`, `not`, `xor`, `nand`, `nor`, `eqv`, `implies`, `match`, `every`, `some`, `isBoolean`.
 - **`effect/Predicate`:** `and`, `or`, `not`, `xor`, `nand`, `nor`, `eqv`, `implies`, `mapInput`, `isString`, `isNumber`, `isBoolean`, `isBigInt`, `isFunction`, `isNull`, `isNotNull`, `isUndefined`, `isNotUndefined`, `isNullish`, `isNotNullish`, `isTruthy`, `isTagged`, `hasProperty`.
@@ -149,7 +150,12 @@ A call to a package is read when it is one of these. Each does to a value from t
 - **`effect/Equal`:** `equals`, which compares objects, arrays and the library's own data by what they hold.
 - **`effect/Data`:** `Class`, `TaggedClass`, `Error`, `TaggedError`, and `taggedEnum` with its constructors, `$is` and `$match`.
 - **`effect/Brand` and `effect/Newtype`:** `Brand.nominal`, `Newtype.value`.
-- **`effect/Ref`:** `make`, `makeUnsafe`, `get`, `getUnsafe`, `set`, `setAndGet`, `getAndSet`, `update`, `updateAndGet`, `getAndUpdate`, `modify`. A `Ref` a handler makes is read as a local variable is.
+- **`effect/Ref` and `effect/MutableRef`:** `make`, `makeUnsafe`, `get`, `getUnsafe`, `set`, `setAndGet`, `getAndSet`, `update`, `updateAndGet`, `getAndUpdate`, `modify`, and `MutableRef`'s `increment`, `decrement`, `incrementAndGet`, `decrementAndGet`, `getAndIncrement`, `getAndDecrement`, `toggle`. A cell a handler makes is read as a local variable is.
+- **`effect/MutableHashSet` and `effect/MutableHashMap`:** `empty`, `make`, `fromIterable`, `add`, `has`, `get`, `set`, `remove`, `modify`, `modifyAt`, `size`, `isEmpty`, `keys`, `values`, `clear`.
+- **`effect/Exit` and `effect/Cause`:** `Effect.exit` and `Effect.failCause`; `Exit.succeed`, `fail`, `die`, `isSuccess`, `isFailure`, `match`, `map`, `mapError`, `asVoid`, `getSuccess`, `getCause`, `findErrorOption`, `hasFails`, `hasDies`; `Cause.fail`, `die`, `hasFails`, `hasDies`, `findErrorOption`, `squash`.
+- **`effect/Filter`:** `make`, `fromPredicate`, `tagged`, `equals`, `toPredicate`, `toOption`, `toResult`.
+- **`effect/Redacted`:** `make`, `value`, `isRedacted`.
+- **`effect/Console`:** `log`, `error`, `warn`, `info`, `debug`, which a handler's result does not depend on.
 - **`effect/Ordering` and `effect/UndefinedOr`:** `Ordering.reverse`, `match`; `UndefinedOr.map`, `match`, `getOrThrow`.
 - **`effect/Function`:** `pipe`, `flow`, `compose`, `identity`, `constant`, `constTrue`, `constFalse`, `constNull`, `constUndefined`, `constVoid`, `apply`, `tupled`, `untupled`, `flip`, `dual`, `satisfies`, `cast`, and `.pipe` on a value of the library's.
 - **`effect/Stream`:** see [Streams](#streams).
@@ -160,7 +166,18 @@ A call to a package is read when it is one of these. Each does to a value from t
 - **`Math`:** `floor`, `ceil`, `trunc`, `abs`, `max`, `min`.
 - **`Object`:** `keys`, `values`, `entries`.
 
-A function that reads the outside world has no model, and is never read: `Random`, `Effect.promise`, `Effect.sleep`, a queue, a fiber, a schedule. A handler is a function of the state, the command and the time.
+## The rest of Effect
+
+Every other module of Effect is left unread on purpose. A call to one is reported with its name, and the rule is not proved.
+
+- **The outside world.** `Random`, `Config`, `ConfigProvider`, `FileSystem`, `Path`, `Terminal`, `Stdio`, `Effect.promise`, and the packages under `effect/http`, `effect/sql`, `effect/rpc`, `effect/ai`, `effect/cluster`, `effect/workflow` and the others. A handler is a function of the state, the command and the time. What it needs from outside comes in as a field of the command.
+- **Time passing and things running together.** `Effect.sleep`, `timeout`, `retry`, `repeat`, `race` and `fork`, `Schedule`, `Cron`, `Fiber`, `Deferred`, `Latch`, `Semaphore`, `Queue`, `PubSub`, `Pool`, `Cache`, `Request`, `Channel`, `Sink`, `SubscriptionRef`, `SynchronizedRef` and the `Tx` modules. Which of two things happens first is not something a handler decides, and a handler does not wait.
+- **Wiring.** `Layer`, `Context`, `Scope`, `Runtime`, `ManagedRuntime`, `Resource`, `Logger`, `Tracer`, `Metric`. They say how a program is put together and watched, not what it decides. A request context a handler yields is read, as above.
+- **Schemas as code.** `Schema.decode`, `encode`, `is` and the modules under `Schema`. A schema is read where it describes the state, a command or an event. Decoding with one inside a handler is not.
+- **Text formats and special structures.** `Trie`, `Graph`, `HashRing`, `MutableList`, `SemVer`, `ByteSize`, `Bytes`, `RegExp`, `Glob`, `TextDiff`, `JsonPatch`, `JsonPointer`, `Formatter`, `Hash`, `Combiner`, `Reducer`. None is what a business rule is written in, and each would need a model of its own. Put a call to one in an exported function, which is then [opaque](#opaque-functions).
+- **Types only.** `Types`, `HKT`, `Unify`, `Pipeable`, `Newtype` and `Brand` beyond the two functions above have nothing to run.
+
+In `Effect.gen`, `yield*` on an `Option` or a `Result` is not read: it fails where it runs. Use `Option.gen` and `Result.gen`, or `Effect.fromOption` and `Effect.fromResult`.
 
 ## Effects and failures
 

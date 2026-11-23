@@ -32,8 +32,10 @@ import * as Cells from "./Models/Cells.ts";
 import * as Collections from "./Models/Collections.ts";
 import * as Decimals from "./Models/Decimals.ts";
 import * as Effects from "./Models/Effects.ts";
+import * as Exits from "./Models/Exits.ts";
 import * as Hashes from "./Models/Hashes.ts";
 import * as Numbers from "./Models/Numbers.ts";
+import * as Rationals from "./Models/Rationals.ts";
 import * as Results from "./Models/Results.ts";
 import * as Streams from "./Models/Streams.ts";
 import * as Strings from "./Models/Strings.ts";
@@ -1291,7 +1293,9 @@ export const make = (host: Host) => {
   const decimals = Decimals.make(kit);
   const hashes = Hashes.make(kit);
   const streams = Streams.make(kit);
-  const cells = Cells.make(kit);
+  const cells = Cells.make(kit, (key, args, site) => models[key]!(args, site));
+  const exits = Exits.make(kit);
+  const rationals = Rationals.make(kit);
 
   const written: Record<string, Model> = {
     ...own,
@@ -1306,6 +1310,8 @@ export const make = (host: Host) => {
     ...hashes.models,
     ...streams.models,
     ...cells.models,
+    ...exits.models,
+    ...rationals.models,
   };
 
   // A `Chunk` and an `Iterable` are read as the array of their items: the
@@ -1356,6 +1362,7 @@ export const make = (host: Host) => {
     ...numbers.values,
     ...strings.values,
     ...decimals.values,
+    ...rationals.values,
     ...streams.values,
   };
 

@@ -69,6 +69,8 @@ export interface Brand {
    * `Data`: an instance of a class of `effect/Data` or `effect/Schema`,
    * whose `cls` is the class.
    * `Ref`: an `effect/Ref` the code made, with what it holds now in `value`.
+   * `Rational`: an `effect/Rational`, kept in `value` as a `BigDecimal` is.
+   * `Redacted`: an `effect/Redacted`, with what it hides in `value`.
    */
   readonly kind:
     | "Event"
@@ -83,7 +85,9 @@ export interface Brand {
     | "HashSet"
     | "HashMap"
     | "Data"
-    | "Ref";
+    | "Ref"
+    | "Rational"
+    | "Redacted";
   readonly cls: unknown;
 }
 

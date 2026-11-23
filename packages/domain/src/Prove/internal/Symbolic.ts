@@ -4,6 +4,8 @@ import * as Duration from "effect/Duration";
 import * as HashMap from "effect/HashMap";
 import * as HashSet from "effect/HashSet";
 import * as Option from "effect/Option";
+import * as Rational from "effect/Rational";
+import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as SchemaAST from "effect/SchemaAST";
@@ -697,7 +699,26 @@ export const concretize = (
           return isUnbuildable(millis) ? millis : Duration.millis(Number(millis));
         }
         if (v.brand?.kind === "BigDecimal") {
-          const value = build(v.fields.value ?? Value.num(0));
+          const held = v.fields.value;
+          const fraction =
+            held?._tag === "Term" ? Smt.exact.get(model)?.get(held.term.text) : undefined;
+          // The number the solver found, exactly, where a decimal can hold it.
+          const precise = fraction
+            ? BigDecimal.divide(
+                BigDecimal.fromBigInt(fraction.numerator),
+                BigDecimal.fromBigInt(fraction.denominator),
+              )
+            : Option.none();
+          if (
+            fraction &&
+            Option.isSome(precise) &&
+            BigDecimal.equals(
+              BigDecimal.multiply(precise.value, BigDecimal.fromBigInt(fraction.denominator)),
+              BigDecimal.fromBigInt(fraction.numerator),
+            )
+          )
+            return precise.value;
+          const value = build(held ?? Value.num(0));
           if (isUnbuildable(value)) return value;
           const decimal =
             typeof value === "string"
@@ -706,6 +727,29 @@ export const concretize = (
           return Option.isSome(decimal)
             ? decimal.value
             : ({ _tag: "Unbuildable", reason: `${String(value)} is not a decimal` } as Unbuildable);
+        }
+        if (v.brand?.kind === "Rational") {
+          const held = v.fields.value;
+          const exact =
+            held?._tag === "Term" ? Smt.exact.get(model)?.get(held.term.text) : undefined;
+          const precise = exact ? Rational.make(exact.numerator, exact.denominator) : Option.none();
+          if (Option.isSome(precise)) return precise.value;
+          const value = build(held ?? Value.num(0));
+          if (isUnbuildable(value)) return value;
+          const fraction =
+            typeof value === "string"
+              ? Rational.fromString(value)
+              : Rational.fromNumber(Number(value));
+          return Option.isSome(fraction)
+            ? fraction.value
+            : ({
+                _tag: "Unbuildable",
+                reason: `${String(value)} is not a fraction`,
+              } as Unbuildable);
+        }
+        if (v.brand?.kind === "Redacted") {
+          const value = build(v.fields.value ?? Value.undef);
+          return isUnbuildable(value) ? value : Redacted.make(value);
         }
         const result = Brands.resultOf(v);
         if (result) {
@@ -790,6 +834,8 @@ export const show = (value: unknown): string => {
       ? `Result.succeed(${show(value.success)})`
       : `Result.fail(${show(value.failure)})`;
   if (BigDecimal.isBigDecimal(value)) return `BigDecimal(${BigDecimal.format(value)})`;
+  if (Rational.isRational(value)) return `Rational(${Rational.format(value)})`;
+  if (Redacted.isRedacted(value)) return `Redacted(${value.pipe(Redacted.value, show)})`;
   if (HashSet.isHashSet(value)) return `HashSet(${[...value].map(show).sort().join(", ")})`;
   if (HashMap.isHashMap(value))
     return `HashMap(${[...value]

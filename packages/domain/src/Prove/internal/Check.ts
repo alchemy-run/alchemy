@@ -7,6 +7,8 @@ import * as Effect from "effect/Effect";
 import * as HashMap from "effect/HashMap";
 import * as HashSet from "effect/HashSet";
 import * as Option from "effect/Option";
+import * as Rational from "effect/Rational";
+import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "../../Aggregate.ts";
@@ -127,14 +129,20 @@ export const solve = Effect.fn(function* (
     });
     if (answer._tag !== "Sat") return answer;
     const model = new Map<string, number | bigint | string | boolean>();
+    const fractions = new Map<string, Smt.Fraction>();
     values.forEach((text, index) => {
       const value = answer.values[index];
       if (value !== undefined) model.set(text, value);
+      const fraction = answer.fractions[index];
+      if (fraction) fractions.set(text, fraction);
     });
+    Smt.exact.set(model, fractions);
     // A term read back is known by its own text, as an input is.
     for (const read of named) {
       const value = model.get(read.name);
       if (value !== undefined) model.set(read.term.text, value);
+      const fraction = fractions.get(read.name);
+      if (fraction) fractions.set(read.term.text, fraction);
     }
     return { _tag: "Sat", model } as const;
   });
@@ -404,6 +412,8 @@ const canon = (value: unknown): string => {
     return Result.isSuccess(value) ? `ok(${canon(value.success)})` : `err(${canon(value.failure)})`;
   if (BigDecimal.isBigDecimal(value))
     return `#${value.pipe(BigDecimal.normalize, BigDecimal.format)}`;
+  if (Rational.isRational(value)) return `%${Rational.format(value)}`;
+  if (Redacted.isRedacted(value)) return `hidden(${value.pipe(Redacted.value, canon)})`;
   // A hash set and a hash map are what they hold, in whatever order.
   if (HashSet.isHashSet(value)) return `set(${[...value].map(canon).sort().join(",")})`;
   if (HashMap.isHashMap(value))
