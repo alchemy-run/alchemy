@@ -236,11 +236,7 @@ export const DataStoresSchemaProvider = () =>
 
       if (current === undefined) {
         const created = yield* discoveryengine
-          .createProjectsLocationsDataStoresSchemas({
-            parent,
-            schemaId,
-            body,
-          })
+          .createProjectsLocationsDataStoresSchemas({ ...body, parent, schemaId })
           .pipe(
             Effect.retry({
               while: (error) => error._tag === "DataStoreNotReady",
@@ -271,11 +267,8 @@ export const DataStoresSchemaProvider = () =>
 
       if (schemaChanged) {
         const patched = yield* discoveryengine.patchProjectsLocationsDataStoresSchemas({
+          ...body,
           name: current.name ?? name,
-          body: {
-            ...body,
-            name: current.name ?? name,
-          },
         });
         yield* waitForOperation(patched);
         current = (yield* getByName(current.name ?? name)) ?? current;

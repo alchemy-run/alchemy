@@ -219,9 +219,16 @@ export const FlociFunctionProvider = () =>
             );
           } else {
             // The exact rolldown config the deploy used — incremental
-            // rebuilds produce the identical artifact shape.
+            // rebuilds produce the identical artifact shape. Source map paths
+            // are made stable as the deploy's are, so the first build of
+            // unchanged sources hashes as the deployed code and swaps nothing:
+            // a swap restarts the function under any request it is serving.
             const plan = yield* bundler.resolveBundlePlan(props);
-            yield* Bundle.watch(plan.inputOptions, plan.outputOptions, plan.extra).pipe(
+            yield* Bundle.watch(
+              plan.inputOptions,
+              Bundle.withStableSourcePaths(plan.inputOptions, plan.outputOptions),
+              plan.extra,
+            ).pipe(
               Stream.runForEach((event) =>
                 Effect.gen(function* () {
                   switch (event._tag) {

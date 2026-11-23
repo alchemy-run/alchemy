@@ -819,35 +819,37 @@ export const ApplicationProvider = () =>
           (body.domain === undefined || body.domain === observed.domain
             ? observed.destinations
             : undefined);
-        const updated = yield* zeroTrust
-          .updateAccessApplicationForAccount({
-            ...preservedSettings(observed),
-            accountId,
-            appId: observed.id,
-            domain: body.domain ?? observed.domain,
-            type: news.type,
-            name: resolvedName,
-            ...definedOnly({
-              sessionDuration: body.sessionDuration,
-              allowedIdps:
-                body.allowedIdps === undefined ? undefined : Array.from(body.allowedIdps),
-              autoRedirectToIdentity: body.autoRedirectToIdentity,
-              appLauncherVisible: body.appLauncherVisible,
-              tags: body.tags === undefined ? undefined : Array.from(body.tags),
-              policies: toRequestPolicies(
-                attachObservedPolicyIds(body.policies, observed.policies),
-              ),
-              destinations: destinations === undefined ? undefined : Array.from(destinations),
-              // Merge a partial managed OAuth configuration over the live one.
-              oauthConfiguration: toRequestOAuthConfiguration(
-                mergeOAuthConfiguration(observed.oauthConfiguration, body.oauthConfiguration),
-              ),
-            }),
-            ...mergeSettings(observed, settingsOf(body)),
-          })
-          // A just-added policy reference may still be propagating, or the
-          // call may be throttled (403) — ride out both.
-          .pipe(retryTransientAccessError);
+        const updated = yield* (
+          zeroTrust
+            .updateAccessApplicationForAccount({
+              ...preservedSettings(observed),
+              accountId,
+              appId: observed.id,
+              domain: body.domain ?? observed.domain,
+              type: news.type,
+              name: resolvedName,
+              ...definedOnly({
+                sessionDuration: body.sessionDuration,
+                allowedIdps:
+                  body.allowedIdps === undefined ? undefined : Array.from(body.allowedIdps),
+                autoRedirectToIdentity: body.autoRedirectToIdentity,
+                appLauncherVisible: body.appLauncherVisible,
+                tags: body.tags === undefined ? undefined : Array.from(body.tags),
+                policies: toRequestPolicies(
+                  attachObservedPolicyIds(body.policies, observed.policies),
+                ),
+                destinations: destinations === undefined ? undefined : Array.from(destinations),
+                // Merge a partial managed OAuth configuration over the live one.
+                oauthConfiguration: toRequestOAuthConfiguration(
+                  mergeOAuthConfiguration(observed.oauthConfiguration, body.oauthConfiguration),
+                ),
+              }),
+              ...mergeSettings(observed, settingsOf(body)),
+            })
+            // A just-added policy reference may still be propagating, or the
+            // call may be throttled (403) — ride out both.
+            .pipe(retryTransientAccessError)
+        );
         observed = narrowApp(updated as Parameters<typeof narrowApp>[0]);
       }
 
@@ -1054,9 +1056,7 @@ const toAttributes = (
 
 const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
-const undefArr = <T>(
-  v: ReadonlyArray<T | null> | null | undefined,
-): ReadonlyArray<T> | undefined =>
+const undefArr = <T>(v: ReadonlyArray<T | null> | null | undefined): ReadonlyArray<T> | undefined =>
   v == null ? undefined : (v.filter((x) => x != null) as ReadonlyArray<T>);
 
 interface RawOAuthConfiguration {

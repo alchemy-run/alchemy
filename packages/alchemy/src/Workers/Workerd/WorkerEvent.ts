@@ -23,6 +23,7 @@ export const isWorkerEvent = (value: any): value is WorkerEvent =>
 
 export const ExportedHandlerMethods = [
   "fetch",
+  "connect",
   "tail",
   "trace",
   "tailStream",

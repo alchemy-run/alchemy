@@ -34,8 +34,8 @@ let databases: {
 /** Write a document out of band, as the deployer. */
 const seed = (database: string, path: string, fields: Record<string, unknown>) =>
   firestore.patchProjectsDatabasesDocuments({
+    fields: encodeFields(fields),
     name: `${database}/documents/${path}`,
-    body: { fields: encodeFields(fields) },
   });
 
 /** Read a document's fields out of band, `undefined` when it is missing. */
@@ -53,8 +53,8 @@ const readOutOfBand = (database: string, path: string) =>
 const scopedRoles = (database: string) =>
   Effect.gen(function* () {
     const policy = yield* crm.getIamPolicyProjects({
+      options: { requestedPolicyVersion: 3 },
       resource: `projects/${project}`,
-      body: { options: { requestedPolicyVersion: 3 } },
     });
     const hostBindings = (policy.bindings ?? []).filter((binding) =>
       (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),

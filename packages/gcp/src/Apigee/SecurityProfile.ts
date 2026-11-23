@@ -377,9 +377,9 @@ export const SecurityProfileProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsSecurityProfiles({
+            ...toBody(news, desiredDescription),
             parent: orgParent(organization),
             securityProfileId,
-            body: toBody(news, desiredDescription),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -406,9 +406,9 @@ export const SecurityProfileProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* apigee.patchOrganizationsSecurityProfiles({
+          ...toBody(news, desiredDescription),
           name: current.name?.includes("/") ? current.name : name,
           updateMask: updateMask.join(","),
-          body: toBody(news, desiredDescription),
         });
       }
 

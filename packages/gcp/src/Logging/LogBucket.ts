@@ -482,9 +482,9 @@ export const LogBucketProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createProjectsLocationsBuckets({
+            ...toCreateBody(news, desiredDescription),
             parent: `projects/${env.project}/locations/${location}`,
             bucketId,
-            body: toCreateBody(news, desiredDescription),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -552,9 +552,9 @@ export const LogBucketProvider = () =>
           body.cmekSettings = { kmsKeyName: news.cmekSettings?.kmsKeyName };
         }
         current = yield* logging.patchProjectsLocationsBuckets({
+          ...body,
           name: current.name ?? name,
           updateMask: syncMask.join(","),
-          body,
         });
         if (isPending(current.lifecycleState)) {
           current = yield* waitUntilActive(current.name ?? name);
@@ -563,9 +563,9 @@ export const LogBucketProvider = () =>
 
       if (lockedChanged) {
         current = yield* logging.patchProjectsLocationsBuckets({
+          locked: true,
           name: current.name ?? name,
           updateMask: "locked",
-          body: { locked: true },
         });
         if (isPending(current.lifecycleState)) {
           current = yield* waitUntilActive(current.name ?? name);

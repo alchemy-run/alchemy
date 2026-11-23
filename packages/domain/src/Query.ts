@@ -28,6 +28,9 @@ export interface AtLeast {
 /** A receipt on the wire. */
 const Receipt = Schema.Struct({ stream: Schema.String, version: Schema.Number });
 
+/** `atLeast` on the wire: one receipt, or several. @internal */
+export const AtLeastJson = Schema.Union([Receipt, Schema.Array(Receipt)]);
+
 /** One receipt, or one per command a client sent before it asks. */
 export type AtLeastInput = AtLeast | ReadonlyArray<AtLeast>;
 
@@ -177,9 +180,9 @@ export interface Definition<
    * `atLeast`, before the handler runs: projections (whose store it reads),
    * views and streams. The caller passes only the receipt: the keys to wait
    * on come from that command's own events, routed through each read's
-   * `key`/`keyOf`, so they may be keyed differently. A view waits for an
-   * aggregate it reads directly; a stream, for the projections that write
-   * it. An aggregate is never listed: the handler reads its latest commit
+   * `key`/`keyOf`, so they may be keyed differently. Each read waits
+   * through the views between it and the command's aggregate; a stream
+   * waits for the projections that write it. An aggregate is never listed: the handler reads its latest commit
    * with `get`. Reads not listed here are not covered.
    */
   readonly waitsFor?: From;
@@ -272,7 +275,7 @@ export interface Definition<
  *
  * **Example:** Reading your own write
  * ```typescript
- * const receipt = yield* bank.DepositMoney(accountId, { amount: 100 });
+ * const receipt = yield* bank.DepositMoney({ accountId, amount: 100 });
  * const page = yield* bank.AccountLedger({ account: accountId }, { atLeast: receipt });
  * ```
  *
@@ -324,7 +327,7 @@ export const make = <
   const rpc = Rpc.make(name, {
     payload: {
       input: inputSchema(definition.input),
-      atLeast: Schema.optional(Schema.Union([Receipt, Schema.Array(Receipt)])),
+      atLeast: Schema.optional(AtLeastJson),
       ...(definition.paged
         ? { after: Schema.optional(Schema.String), take: Schema.optional(Schema.Number) }
         : {}),
@@ -409,7 +412,11 @@ export interface RunOptions {
 /** Wait until a read has handled a command's events. @internal */
 export type CaughtUp = (
   receipt: AtLeast,
-  options?: { readonly timeout?: Duration.Input },
+  options?: {
+    readonly timeout?: Duration.Input;
+    /** Wait for this key of a view only, not every key the command reaches. */
+    readonly key?: string;
+  },
 ) => Effect.Effect<void, View.ConsistencyTimeout>;
 
 /** What a query may wait on: a projection, a view, or a stream. */

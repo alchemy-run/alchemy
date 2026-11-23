@@ -474,17 +474,19 @@ inProcessTest.provider(
       const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
       const pidFile = pathe.join(tmp, "pid.json");
 
-      const result = yield* stack
-        .deploy(
-          Command.Dev("Dev", {
-            command: `node ${urlServerScript}`,
-            // URL_LINE intentionally unset — the process stays silent.
-            env: { PID_FILE: pidFile, MARKER: "wait-for-url-none" },
-            waitForUrl: true,
-          }),
-        )
-        // Well past the 5 seconds the resource waits by default.
-        .pipe(Effect.timeoutOption("8 seconds"));
+      const result = yield* (
+        stack
+          .deploy(
+            Command.Dev("Dev", {
+              command: `node ${urlServerScript}`,
+              // URL_LINE intentionally unset — the process stays silent.
+              env: { PID_FILE: pidFile, MARKER: "wait-for-url-none" },
+              waitForUrl: true,
+            }),
+          )
+          // Well past the 5 seconds the resource waits by default.
+          .pipe(Effect.timeoutOption("8 seconds"))
+      );
       expect(result._tag).toBe("None");
 
       // Interrupting the deploy (Ctrl+C) leaves no process behind.

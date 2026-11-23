@@ -528,9 +528,9 @@ export const CaPoolProvider = () =>
       if (current === undefined) {
         const created = yield* privateca
           .createProjectsLocationsCaPools({
+            ...toCreateBody(news, desiredLabels),
             parent: `projects/${env.project}/locations/${location}`,
             caPoolId,
-            body: toCreateBody(news, desiredLabels),
           })
           .pipe(
             Effect.retry({
@@ -573,14 +573,11 @@ export const CaPoolProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* privateca.patchProjectsLocationsCaPools({
+          labels: desiredLabels,
+          publishingOptions: desiredPublishing,
+          issuancePolicy: desiredIssuance,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            publishingOptions: desiredPublishing,
-            issuancePolicy: desiredIssuance,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(name);

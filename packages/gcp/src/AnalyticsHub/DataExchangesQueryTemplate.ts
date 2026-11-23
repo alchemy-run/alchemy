@@ -376,9 +376,9 @@ export const DataExchangesQueryTemplateProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           analyticshub.createProjectsLocationsDataExchangesQueryTemplates({
+            ...body,
             parent: dataExchange,
             queryTemplateId,
-            body,
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -402,6 +402,7 @@ export const DataExchangesQueryTemplateProvider = () =>
       if (descriptionChanged || contactChanged || proposerChanged || routineChanged) {
         current = yield* retryTransient(
           analyticshub.patchProjectsLocationsDataExchangesQueryTemplates({
+            ...body,
             name: currentName,
             updateMask: updateMaskOf(
               descriptionChanged ? "description" : undefined,
@@ -409,7 +410,6 @@ export const DataExchangesQueryTemplateProvider = () =>
               proposerChanged ? "proposer" : undefined,
               routineChanged ? "routine" : undefined,
             ),
-            body: { name: currentName, ...body },
           }),
         );
       }

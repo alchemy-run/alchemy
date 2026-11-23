@@ -303,14 +303,12 @@ export const InterceptDeploymentProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsInterceptDeployments({
+            interceptDeploymentGroup,
+            forwardingRule,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             interceptDeploymentId,
-            body: {
-              interceptDeploymentGroup,
-              forwardingRule,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -337,13 +335,10 @@ export const InterceptDeploymentProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networksecurity.patchProjectsLocationsInterceptDeployments({
+          labels: desiredLabels,
+          description: news.description,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(getByName(current.name ?? name), current.name ?? name);

@@ -269,6 +269,14 @@ const exercise = (
       const resumed = yield* (yield* post(writeBase, "mpu-resume", rk)).json;
       expect((resumed as { size: number }).size).toBe(expectedSize);
       expect((yield* headObject(readBase, rk)).size).toBe(expectedSize);
+
+      // a part for an upload that does not exist fails with R2's code on
+      // `R2Error.code`, parsed from the runtime's message
+      const missing = (yield* (yield* post(writeBase, "mpu-missing", `${prefix}mpu-missing`))
+        .json) as { failed: boolean; code: number | null; message: string };
+      expect(missing.failed).toBe(true);
+      expect(missing.message).toMatch(/\(\d+\)$/);
+      expect(missing.code).toBe(Number(/\((\d+)\)$/.exec(missing.message)![1]));
     }
   });
 

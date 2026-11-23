@@ -133,11 +133,10 @@ type Refinement<
   >,
   | Terminal
   | (Cardinality<Relation<C, Ns, M, Rel>> extends "1:1" | "N:1"
-      ?
-          | "combine"
-          | (string extends keyof AggregateBuilder<C, M, Ns>
-              ? never
-              : keyof AggregateBuilder<C, M, Ns>)
+      ? | "combine"
+        | (string extends keyof AggregateBuilder<C, M, Ns>
+            ? never
+            : keyof AggregateBuilder<C, M, Ns>)
       : never)
 >;
 type RefinedValue<Rel, T> = T extends {

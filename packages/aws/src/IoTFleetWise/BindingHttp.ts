@@ -1,3 +1,4 @@
+import type { Input } from "alchemy/Input";
 import type { Output as OutputType } from "alchemy/Output";
 import type { ResourceLike } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
@@ -96,7 +97,7 @@ export const makeFleetWiseAccountHttpBinding = <I, A, E, R>(options: {
    * ARN patterns the actions are granted on.
    * @default ["*"]
    */
-  resources?: readonly string[];
+  resources?: readonly Input<string>[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;

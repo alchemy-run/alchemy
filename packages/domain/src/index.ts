@@ -21,6 +21,7 @@
 import * as AggregateModule from "./Aggregate.ts";
 import * as ApiModule from "./Api.ts";
 import * as CommandModule from "./Command.ts";
+import * as DecisionModule from "./Decision.ts";
 import * as EventModule from "./Event.ts";
 import * as ExternalSystemModule from "./ExternalSystem.ts";
 import type * as KeyModule from "./Key.ts";
@@ -29,6 +30,7 @@ import * as PolicyModule from "./Policy.ts";
 import * as ProjectionModule from "./Projection.ts";
 import * as QueryModule from "./Query.ts";
 import * as RejectionModule from "./Rejection.ts";
+import * as RelationModule from "./Relation.ts";
 import * as RequestContextModule from "./RequestContext.ts";
 import * as SagaModule from "./Saga.ts";
 import * as StreamModule from "./Stream.ts";
@@ -58,6 +60,8 @@ export declare namespace Command {
 }
 /** A request to change one aggregate. See {@link CommandModule.make}. */
 export const Command = CommandModule.make;
+/** When the commands of a client answer, unless a call says otherwise. See {@link CommandModule.DefaultConsistency}. */
+export const DefaultConsistency = CommandModule.DefaultConsistency;
 
 export declare namespace Rejection {
   /** Any Rejection class. */
@@ -86,10 +90,14 @@ export declare namespace Aggregate {
   export type Envelope<Id = string> = AggregateModule.Envelope<Id>;
   export type SendOptions = AggregateModule.SendOptions;
   export type ScheduleOptions = AggregateModule.ScheduleOptions;
+  /** Options for `client.import`: the import's command id and the version it expects. */
+  export type ImportOptions = AggregateModule.ImportOptions;
+  /** One event for `client.import`: the event, or `{ event, at }` to keep its original commit time. */
+  export type Imported<Ev> = AggregateModule.Imported<Ev>;
   /** The instance type of a class: `InstanceOf<typeof NotOwner>` is `NotOwner`. */
   export type InstanceOf<C> = AggregateModule.InstanceOf<C>;
   /** Options for `MyAggregate.predict`. */
-  export type PredictOptions<Id = string, R = never> = AggregateModule.PredictOptions<Id, R>;
+  export type PredictOptions<R = never> = AggregateModule.PredictOptions<R>;
   /** What `MyAggregate.predict` gives: accepted with events and state, rejected, or unpredictable. */
   export type Prediction<State, Ev, Rej, Id = string> = AggregateModule.Prediction<
     State,
@@ -109,6 +117,27 @@ export type AlreadyCancelled = AggregateModule.AlreadyCancelled;
 /** No command was scheduled with that id. */
 export const NotScheduled = AggregateModule.NotScheduled;
 export type NotScheduled = AggregateModule.NotScheduled;
+/** An import found the instance at another version than it expected. */
+export const UnexpectedVersion = AggregateModule.UnexpectedVersion;
+export type UnexpectedVersion = AggregateModule.UnexpectedVersion;
+/** An import's commit times went back, or past the platform's clock. */
+export const ImportOutOfOrder = AggregateModule.ImportOutOfOrder;
+export type ImportOutOfOrder = AggregateModule.ImportOutOfOrder;
+
+export declare namespace Decision {
+  /** Any Decision class. */
+  export type Any = DecisionModule.Any;
+  /** One aggregate instance a decision read: its state, and `record`. */
+  export type Read<A extends AggregateModule.Any> = DecisionModule.Read<A>;
+  /** An event recorded on an instance a decision read. */
+  export type Recorded<E = unknown> = DecisionModule.Recorded<E>;
+  /** What an accepted command returns: every stream it committed to, its events and reply. */
+  export type Receipt<Ev = unknown, Reply = unknown> = DecisionModule.Receipt<Ev, Reply>;
+  /** One stream a decision committed to, and its version after. */
+  export type Commit = DecisionModule.Commit;
+}
+/** A command decided across several aggregates, atomically. See {@link DecisionModule.make}. */
+export const Decision = DecisionModule.make;
 
 /**
  * What keys a view, policy, projection or stream: an aggregate (one instance
@@ -191,6 +220,15 @@ export declare namespace Query {
   /** How a query's Layer runs it: page size limits. */
   export type LayerOptions = QueryModule.LayerOptions;
 }
+export declare namespace Relation {
+  /** Any relation. */
+  export type Any = RelationModule.Any;
+  /** One instance a relation is about: its id and its state. */
+  export type Instance<A extends AggregateModule.Any> = RelationModule.Instance<A>;
+}
+/** A rule that relates a few instances at all times. See {@link RelationModule.make}. */
+export const Relation = RelationModule.make;
+
 /** A question asked across keys, answered from a store a projection writes. See {@link QueryModule.make}. */
 export const Query = QueryModule.make;
 
@@ -281,14 +319,15 @@ export declare namespace Model {
 /** The aggregates, views, policies, projections, streams and queries hosted together. See {@link ModelModule.make}. */
 export const Model = ModelModule.make;
 
-/** Every definition problem in a Model, without hosting it. See {@link ModelModule.verify}. */
-export const verify = ModelModule.verify;
-/** A problem in a Model's definitions, found by {@link verify} or when its Layer is built. */
 export type { Annotations } from "./Annotations.ts";
+/** A problem in a Model's definitions. Building its Layer dies with every one. */
 export { DefinitionError } from "./Kernel.ts";
 
 /** A service middleware provides to a request, carried into the domain. See {@link RequestContextModule.make}. */
 export const RequestContext = RequestContextModule.make;
+
+/** When a middleware's verdict expires; a live read is judged again then. See {@link RequestContextModule.setExpiry}. */
+export const setExpiry = RequestContextModule.setExpiry;
 
 export type { Filter, OrderBy } from "./Filter.ts";
 export { InMemory } from "./InMemory.ts";

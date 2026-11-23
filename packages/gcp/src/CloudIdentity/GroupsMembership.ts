@@ -189,11 +189,9 @@ const syncRoles = (
     let next = current;
     if (addRoles.length > 0 || removeRoles.length > 0) {
       const modified = yield* cloudidentity.modifyMembershipRolesGroupsMemberships({
+        addRoles: addRoles.length > 0 ? addRoles : undefined,
+        removeRoles: removeRoles.length > 0 ? removeRoles : undefined,
         name,
-        body: {
-          addRoles: addRoles.length > 0 ? addRoles : undefined,
-          removeRoles: removeRoles.length > 0 ? removeRoles : undefined,
-        },
       });
       next = modified.membership ?? next;
     }
@@ -203,18 +201,16 @@ const syncRoles = (
       ?.expireTime;
     if (!sameText(memberExpiry, observedExpiry) && memberExpiry !== undefined) {
       const modified = yield* cloudidentity.modifyMembershipRolesGroupsMemberships({
-        name,
-        body: {
-          updateRolesParams: [
-            {
-              fieldMask: "expiry_detail.expire_time",
-              membershipRole: {
-                name: "MEMBER",
-                expiryDetail: { expireTime: memberExpiry },
-              },
+        updateRolesParams: [
+          {
+            fieldMask: "expiry_detail.expire_time",
+            membershipRole: {
+              name: "MEMBER",
+              expiryDetail: { expireTime: memberExpiry },
             },
-          ],
-        },
+          },
+        ],
+        name,
       });
       next = modified.membership ?? next;
     }
@@ -288,14 +284,12 @@ export const GroupsMembershipProvider = () =>
       if (current === undefined) {
         const created = yield* cloudidentity
           .createGroupsMemberships({
-            parent,
-            body: {
-              preferredMemberKey: {
-                id: memberKeyId,
-                namespace: memberKeyNamespace,
-              },
-              roles,
+            preferredMemberKey: {
+              id: memberKeyId,
+              namespace: memberKeyNamespace,
             },
+            roles,
+            parent,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

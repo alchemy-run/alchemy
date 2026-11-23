@@ -103,16 +103,18 @@ test.provider(
       // eager inline branch) but not declared on the inline-form class type.
       expect((InlineService as unknown as { LogicalId: string }).LogicalId).toBe("InlineService");
 
-      const deployed = yield* stack
-        .deploy(
-          Effect.gen(function* () {
-            yield* ProbeCluster;
-            return yield* InlineService;
-          }),
-        )
-        // Pre-fix, plan-time construction recursed inside serve; interrupt
-        // fast instead of exhausting the heap.
-        .pipe(Effect.timeout(30_000));
+      const deployed = yield* (
+        stack
+          .deploy(
+            Effect.gen(function* () {
+              yield* ProbeCluster;
+              return yield* InlineService;
+            }),
+          )
+          // Pre-fix, plan-time construction recursed inside serve; interrupt
+          // fast instead of exhausting the heap.
+          .pipe(Effect.timeout(30_000))
+      );
 
       expect(deployed).toEqual({ ok: true });
 

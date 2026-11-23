@@ -98,7 +98,8 @@ export type DatabaseProps = {
   encryptionConfig?: EncryptionConfig;
   /**
    * Drop protection. Alchemy defaults to disabled so `destroy` can drop
-   * the database. Delete disables protection first when it is on.
+   * the database. While it is on, `destroy` and replacement fail until it is
+   * turned off and deployed.
    * @default false
    */
   enableDropProtection?: boolean;
@@ -151,6 +152,16 @@ export type Database = Resource<
  * manage by its identifiers, in the ambient project unless `project` names
  * another.
  */
+/**
+ * Deletion was refused because the database has drop protection on, set
+ * through `enableDropProtection` or outside the stack. Turn it off and deploy
+ * (or turn it off in the console) before deleting it.
+ */
+export class DatabaseDropProtected extends Data.TaggedError("GCP.Spanner.DatabaseDropProtected")<{
+  readonly resourceName: string;
+  readonly message: string;
+}> {}
+
 export interface DatabaseLookup {
   /**
    * Database id (the `{database}` segment of
@@ -561,13 +572,11 @@ export const DatabaseProvider = () =>
       if (current === undefined) {
         const created = yield* spanner
           .createProjectsInstancesDatabases({
+            createStatement: createStatementOf(databaseId, dialect),
+            extraStatements: news.extraStatements,
+            encryptionConfig: news.encryptionConfig,
+            databaseDialect: dialect === DEFAULT_DIALECT ? undefined : dialect,
             parent: instanceName(env.project, instanceId),
-            body: {
-              createStatement: createStatementOf(databaseId, dialect),
-              extraStatements: news.extraStatements,
-              encryptionConfig: news.encryptionConfig,
-              databaseDialect: dialect === DEFAULT_DIALECT ? undefined : dialect,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -588,12 +597,9 @@ export const DatabaseProvider = () =>
       if (observedProtection !== desiredProtection) {
         const patched = yield* retryConcurrentChanges(
           spanner.patchProjectsInstancesDatabases({
+            enableDropProtection: desiredProtection,
             name,
             updateMask: "enableDropProtection",
-            body: {
-              name,
-              enableDropProtection: desiredProtection,
-            },
           }),
         );
         yield* waitForOperation(patched);
@@ -619,19 +625,24 @@ export const DatabaseProvider = () =>
       );
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getByName(output.name);
       if (current === undefined) return;
 
+      // Drop protection, set by this stack or outside it, refuses the delete.
+      // Only an account-wide nuke (`force`) lifts it.
       if (current.enableDropProtection === true) {
+        if (force !== true) {
+          return yield* new DatabaseDropProtected({
+            resourceName: output.name,
+            message: `Spanner database '${output.name}' has drop protection on. Set \`enableDropProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         const patched = yield* retryConcurrentChanges(
           spanner.patchProjectsInstancesDatabases({
+            enableDropProtection: false,
             name: output.name,
             updateMask: "enableDropProtection",
-            body: {
-              name: output.name,
-              enableDropProtection: false,
-            },
           }),
         );
         yield* waitForOperation(patched);

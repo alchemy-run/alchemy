@@ -259,10 +259,12 @@ export const CredentialProfileProvider = () =>
           // Ensure — a concurrent create of the same name is a race, not a failure.
           if (profile === undefined) {
             yield* session.note(`Creating credential profile ${name}...`);
-            const created = yield* boat
-              // Without an `org`, the profile is yours.
-              .createCredentialProfile({ name, ...inOrg(org) })
-              .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+            const created = yield* (
+              boat
+                // Without an `org`, the profile is yours.
+                .createCredentialProfile({ name, ...inOrg(org) })
+                .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)))
+            );
             profile = created?.profile ?? (yield* findProfile(org, { name }));
             if (profile === undefined) {
               return yield* new BoatUnexpectedResponse({

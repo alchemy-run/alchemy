@@ -419,20 +419,14 @@ export const RegionSslPolicyProvider = () =>
       let current = yield* getByName(env.project, region, sslPolicyName);
 
       if (current === undefined) {
-        yield* compute
-          .insertRegionSslPolicies({
-            project: env.project,
-            region,
-            body: desired,
-          })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitRegionOperation(env.project, region, operation, {
-                ignore: ["RESOURCE_ALREADY_EXISTS"],
-              }),
-            ),
-            Effect.catchTag("Conflict", () => Effect.undefined),
-          );
+        yield* compute.insertRegionSslPolicies({ ...desired, project: env.project, region }).pipe(
+          Effect.flatMap((operation) =>
+            waitRegionOperation(env.project, region, operation, {
+              ignore: ["RESOURCE_ALREADY_EXISTS"],
+            }),
+          ),
+          Effect.catchTag("Conflict", () => Effect.undefined),
+        );
         current = yield* awaitResource(env.project, region, sslPolicyName);
       }
 
@@ -446,10 +440,10 @@ export const RegionSslPolicyProvider = () =>
       if (needsUpdate(current, desired)) {
         yield* compute
           .patchRegionSslPolicies({
+            ...toBody(sslPolicyName, news, ownership, current.fingerprint),
             project: env.project,
             region,
             sslPolicy: sslPolicyName,
-            body: toBody(sslPolicyName, news, ownership, current.fingerprint),
           })
           .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
         current = yield* getByName(env.project, region, sslPolicyName);

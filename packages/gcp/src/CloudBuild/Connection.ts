@@ -1044,13 +1044,13 @@ export const ConnectionProvider = () =>
       if (current === undefined) {
         const created = yield* cloudbuild
           .createProjectsLocationsConnections({
-            parent,
-            connectionId,
-            body: compact({
+            ...compact({
               ...scmBody,
               disabled: desiredDisabled ? true : undefined,
               annotations: desiredAnnotations,
             }),
+            parent,
+            connectionId,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -1122,22 +1122,18 @@ export const ConnectionProvider = () =>
           annotations: desiredAnnotations,
         });
         const operation = yield* cloudbuild
-          .patchProjectsLocationsConnections({
-            name,
-            updateMask: updateMask.join(","),
-            body,
-          })
+          .patchProjectsLocationsConnections({ ...body, name, updateMask: updateMask.join(",") })
           .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (operation === undefined) {
           const created = yield* cloudbuild
             .createProjectsLocationsConnections({
-              parent,
-              connectionId,
-              body: compact({
+              ...compact({
                 ...scmBody,
                 disabled: desiredDisabled ? true : undefined,
                 annotations: desiredAnnotations,
               }),
+              parent,
+              connectionId,
             })
             .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
           if (created !== undefined) {

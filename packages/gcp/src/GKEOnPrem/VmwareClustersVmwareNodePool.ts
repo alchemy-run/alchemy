@@ -353,9 +353,9 @@ export const VmwareClustersVmwareNodePoolProvider = () =>
       if (current === undefined) {
         const created = yield* gkeonprem
           .createProjectsLocationsVmwareClustersVmwareNodePools({
+            ...body,
             parent: cluster,
             vmwareNodePoolId,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -378,12 +378,10 @@ export const VmwareClustersVmwareNodePoolProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* gkeonprem.patchProjectsLocationsVmwareClustersVmwareNodePools({
+          ...body,
+          etag: current.etag,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            ...body,
-            etag: current.etag,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

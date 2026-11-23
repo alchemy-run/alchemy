@@ -5,6 +5,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface AttributeGroupAssociationProps {
@@ -192,7 +193,7 @@ export const AttributeGroupAssociationProvider = () =>
                   applicationId: application.id,
                   applicationArn: application.arn!,
                   attributeGroupId,
-                  attributeGroupArn: `arn:aws:servicecatalog:${region}:${accountId}:/attribute-groups/${attributeGroupId}`,
+                  attributeGroupArn: `arn:${partitionOf(region)}:servicecatalog:${region}:${accountId}:/attribute-groups/${attributeGroupId}`,
                 });
               }
             }

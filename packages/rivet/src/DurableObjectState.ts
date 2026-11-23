@@ -1,5 +1,6 @@
 import { EventLifetime } from "alchemy/Workers/EventLifetime";
 import { gateExclusive, gateStorage } from "alchemy/Workers/InputGate";
+import type { Alarm, CallbackStorage } from "alchemy/Workers/StorageCallbacks";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -29,6 +30,10 @@ export interface ActorContextLike {
   waitUntil(promise: Promise<unknown>): void;
   /** Keep the actor awake until `promise` settles. */
   keepAwake<T>(promise: Promise<T>): Promise<T>;
+  /** Ask RivetKit to put the actor to sleep. */
+  sleep(): void;
+  /** Ask RivetKit to destroy the actor and its storage. */
+  destroy(): void;
 }
 
 /** An actor's raw SQLite database, or a transaction on it. @internal */
@@ -128,16 +133,31 @@ export interface DurableObjectStorage {
 
 /** The instance a Durable Object's methods run against. */
 export interface DurableObjectStateShape {
-  /** The name the instance was addressed by (`getByName(name)`). */
+  /** The name the instance was addressed by (`getByName(name)`): the first part of its key. */
   readonly id: { readonly name: string; toString(): string };
+  /** The whole key the instance was addressed by (`getByKey(key)`). */
+  readonly key: ReadonlyArray<string>;
   readonly storage: DurableObjectStorage;
   /** Keep the instance awake until `effect` completes. */
   waitUntil<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<void, never, R>;
+  /**
+   * Put the instance to sleep now rather than once it has been idle a
+   * while. `onSleep` runs first, its storage is kept, and its next call
+   * wakes it.
+   */
+  sleep(): Effect.Effect<void>;
+  /**
+   * Destroy the instance and its storage once its calls finish. `onDestroy`
+   * runs first. The next call to the same name starts an empty instance.
+   */
+  destroy(): Effect.Effect<void>;
   /**
    * The open WebSockets this instance accepted with `Rivet.upgrade()`; with
    * `tag`, only those accepted with it.
    */
   getWebSockets(tag?: string): Effect.Effect<ReadonlyArray<WebSocket>>;
+  /** @internal */
+  readonly [CallbackHostId]: CallbackHost;
 }
 
 /** The running Durable Object instance's state. */
@@ -149,26 +169,66 @@ export class DurableObjectState extends Context.Service<
 /** The action RivetKit calls when an object's alarm comes due. @internal */
 export const ALARM_ACTION = "__alchemy_alarm";
 
+/** The action RivetKit calls when an object's callbacks are due. @internal */
+export const CALLBACKS_ACTION = "__alchemy_callbacks";
+
+/**
+ * The key of an instance's {@link CallbackHost} on its state.
+ *
+ * @internal For `DurableObjectCallbacks`.
+ */
+export const CallbackHostId: unique symbol = Symbol.for("@alchemy.run/rivet/CallbackHost");
+
+/**
+ * Where an instance's durable callbacks keep their jobs, and how they wake
+ * it: a table of their own, and a RivetKit schedule of their own, apart from
+ * the instance's storage and its one alarm.
+ *
+ * @internal For `DurableObjectCallbacks`.
+ */
+export interface CallbackHost {
+  readonly storage: CallbackStorage;
+  readonly wake: Alarm;
+  /** Run `fire` when a wake comes due. */
+  readonly onWake: (fire: Effect.Effect<void>) => void;
+}
+
+/** What runs when an instance's callbacks are due. @internal */
+export interface CallbackWakeHandler {
+  fire: Effect.Effect<void> | undefined;
+}
+
 const KV_TABLE = "_alchemy_kv";
 const META_TABLE = "_alchemy_meta";
+const CALLBACKS_TABLE = "_alchemy_callbacks";
+const CALLBACKS_WAKE_KEY = "callbacks_wake";
 const ALARM_KEY = "alarm";
 
 /**
  * The alarm that's set: its RivetKit schedule (absent until a transaction
- * that set it commits), when, the token it fires with, and how many times
- * its handler has failed and been retried.
+ * that set it commits), when, the token it fires with, how many times its
+ * handler has failed and been retried, and the activation running its
+ * handler, if one is.
  */
 interface StoredAlarm {
   readonly id?: string;
   readonly at: number;
   readonly token: string;
   readonly retries?: number;
+  readonly running?: string;
 }
 
 /** A failed alarm is retried this many times, as on Cloudflare. */
 const ALARM_RETRIES = 6;
 /** The first retry's delay; each one after doubles it. */
 const ALARM_RETRY_DELAY = 2_000;
+/**
+ * RivetKit drops a schedule as it fires it, so an alarm whose handler is
+ * running keeps a schedule of its own due this long after: renewed while
+ * the handler runs, and firing on the next activation if the node dies
+ * before it finishes, which runs the handler again.
+ */
+const ALARM_LEASE = 30_000;
 
 const TRANSACTION_TIMEOUT: Duration.Input = "30 seconds";
 /** RivetKit's own transaction timeout trails ours, so ours ends it first. */
@@ -181,6 +241,9 @@ export const migrateStorage = async (db: ActorContextLike["db"]) => {
   );
   await db.execute(
     `CREATE TABLE IF NOT EXISTS ${META_TABLE} (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)`,
+  );
+  await db.execute(
+    `CREATE TABLE IF NOT EXISTS ${CALLBACKS_TABLE} (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)`,
   );
 };
 
@@ -220,6 +283,23 @@ const CurrentTransaction = Context.Reference<Transaction | undefined>(
  * outlives it (handed to `waitUntil`, or forked) runs in the one around it,
  * or outside any once all have finished.
  */
+/**
+ * The call storage runs for, marked `failed` once one of its storage
+ * operations fails. Absent outside a call. @internal
+ */
+export const CallStorage = Context.Reference<{ failed: boolean } | undefined>(
+  "Rivet/DurableObjectState/CallStorage",
+  { defaultValue: () => undefined },
+);
+
+/** `effect`, a storage operation, marking the call it runs for when it fails. */
+const watched = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.onError(effect, () =>
+    Effect.map(CallStorage, (call) => {
+      if (call !== undefined) call.failed = true;
+    }),
+  );
+
 const currentTransaction = Effect.map(CurrentTransaction, (transaction) => {
   let open = transaction;
   while (open !== undefined && !open.open) open = open.parent;
@@ -233,7 +313,7 @@ const query = <Row extends Record<string, unknown>>(
 ) =>
   Effect.gen(function* () {
     const db = (yield* currentTransaction)?.db ?? c.db;
-    return yield* Effect.promise(() => db.execute<Row>(sql, ...args));
+    return yield* watched(Effect.promise(() => db.execute<Row>(sql, ...args)));
   });
 
 /** Thrown inside a RivetKit transaction to roll it back. */
@@ -278,12 +358,35 @@ const beginTransaction = (db: ActorDatabase, timeout: number) =>
     });
   });
 
-const readAlarm = (c: ActorContextLike) =>
+/** The stored alarm, and the row it was read from. */
+const readAlarmRow = (c: ActorContextLike) =>
   query<{ value: string }>(c, `SELECT value FROM ${META_TABLE} WHERE key = ?`, ALARM_KEY).pipe(
     Effect.map((rows) =>
-      rows[0] === undefined ? undefined : (JSON.parse(rows[0].value) as StoredAlarm),
+      rows[0] === undefined
+        ? undefined
+        : { raw: rows[0].value, alarm: JSON.parse(rows[0].value) as StoredAlarm },
     ),
   );
+
+const readAlarm = (c: ActorContextLike) => Effect.map(readAlarmRow(c), (row) => row?.alarm);
+
+/** Replace the alarm stored as `raw` with `alarm`, or delete it; false if it changed since. */
+const swapAlarm = (c: ActorContextLike, raw: string, alarm: StoredAlarm | undefined) =>
+  (alarm === undefined
+    ? query(
+        c,
+        `DELETE FROM ${META_TABLE} WHERE key = ? AND value = ? RETURNING key`,
+        ALARM_KEY,
+        raw,
+      )
+    : query(
+        c,
+        `UPDATE ${META_TABLE} SET value = ? WHERE key = ? AND value = ? RETURNING key`,
+        JSON.stringify(alarm),
+        ALARM_KEY,
+        raw,
+      )
+  ).pipe(Effect.map((rows) => rows.length > 0));
 
 const writeAlarm = (c: ActorContextLike, alarm: StoredAlarm) =>
   query(
@@ -336,10 +439,82 @@ const setAlarm = (c: ActorContextLike, at: number, retries?: number) =>
   });
 
 /** Build the state for one actor activation. @internal */
+/**
+ * Forget the wake that came due, before its callbacks run: they set the next
+ * one, and a wake left set would hide it.
+ *
+ * @internal
+ */
+export const clearCallbackWake = (c: ActorContextLike) =>
+  Effect.asVoid(query(c, `DELETE FROM ${META_TABLE} WHERE key = ?`, CALLBACKS_WAKE_KEY));
+
+const makeCallbackHost = (c: ActorContextLike, handler: CallbackWakeHandler): CallbackHost => ({
+  storage: {
+    get: <T>(key: string) =>
+      query<{ value: string }>(c, `SELECT value FROM ${CALLBACKS_TABLE} WHERE key = ?`, key).pipe(
+        Effect.flatMap((rows) =>
+          rows[0] === undefined ? Effect.undefined : decode<T>(rows[0].value),
+        ),
+      ),
+    put: (key, value) =>
+      Effect.gen(function* () {
+        yield* query(
+          c,
+          `INSERT INTO ${CALLBACKS_TABLE} (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+          key,
+          yield* encode(value),
+        );
+      }),
+    delete: (key) =>
+      query(c, `DELETE FROM ${CALLBACKS_TABLE} WHERE key = ? RETURNING key`, key).pipe(
+        Effect.map((rows) => rows.length > 0),
+      ),
+    list: <T>({ prefix }: { readonly prefix: string }) =>
+      Effect.gen(function* () {
+        const rows = yield* query<{ key: string; value: string }>(
+          c,
+          `SELECT key, value FROM ${CALLBACKS_TABLE} WHERE substr(key, 1, ?) = ? ORDER BY key`,
+          prefix.length,
+          prefix,
+        );
+        const entries = new Map<string, T>();
+        for (const row of rows) entries.set(row.key, yield* decode<T>(row.value));
+        return entries;
+      }),
+  },
+  wake: {
+    // A wake set and then replaced still fires; it finds nothing due.
+    set: (at) =>
+      Effect.gen(function* () {
+        yield* query(
+          c,
+          `INSERT INTO ${META_TABLE} (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+          CALLBACKS_WAKE_KEY,
+          String(at),
+        );
+        const wake = Effect.asVoid(Effect.promise(() => c.schedule.at(at, CALLBACKS_ACTION)));
+        // RivetKit's scheduler waits on an open transaction, so inside one
+        // the wake is set once it commits, as `setAlarm` does.
+        const transaction = yield* currentTransaction;
+        if (transaction === undefined) yield* wake;
+        else transaction.afterCommit.push(wake);
+      }),
+    get: query<{ value: string }>(
+      c,
+      `SELECT value FROM ${META_TABLE} WHERE key = ?`,
+      CALLBACKS_WAKE_KEY,
+    ).pipe(Effect.map((rows) => (rows[0] === undefined ? null : Number(rows[0].value)))),
+  },
+  onWake: (fire) => {
+    handler.fire = fire;
+  },
+});
+
 export const makeDurableObjectState = (
   c: ActorContextLike,
   activation: Activation,
   sockets: SocketRegistry,
+  callbacks: CallbackWakeHandler = { fire: undefined },
 ): DurableObjectStateShape => {
   const name = c.key[0] ?? "";
 
@@ -413,7 +588,13 @@ export const makeDurableObjectState = (
     },
     setAlarm: (scheduledTime) =>
       setAlarm(c, typeof scheduledTime === "number" ? scheduledTime : scheduledTime.getTime()),
-    getAlarm: () => readAlarm(c).pipe(Effect.map((alarm) => alarm?.at ?? null)),
+    // A running alarm isn't set any more, as on Cloudflare.
+    getAlarm: () =>
+      readAlarm(c).pipe(
+        Effect.map((alarm) =>
+          alarm === undefined || alarm.running !== undefined ? null : alarm.at,
+        ),
+      ),
     deleteAlarm: () =>
       Effect.gen(function* () {
         const existing = yield* readAlarm(c);
@@ -458,9 +639,11 @@ export const makeDurableObjectState = (
             // comes back here fails instead of waiting on the transaction.
             const section = openSection(activation);
             const result = yield* Effect.acquireUseRelease(
-              beginTransaction(
-                parent?.db ?? c.db,
-                Duration.toMillis(timeout) + TRANSACTION_TIMEOUT_MARGIN,
+              watched(
+                beginTransaction(
+                  parent?.db ?? c.db,
+                  Duration.toMillis(timeout) + TRANSACTION_TIMEOUT_MARGIN,
+                ),
               ),
               ({ tx }) => {
                 const transaction: Transaction = { db: tx, afterCommit, parent, open: true };
@@ -484,7 +667,7 @@ export const makeDurableObjectState = (
                   ),
                 );
               },
-              ({ end }, exit) => Effect.promise(() => end(Exit.isSuccess(exit))),
+              ({ end }, exit) => watched(Effect.promise(() => end(Exit.isSuccess(exit)))),
             );
             // A nested transaction's scheduler work waits for the outermost.
             if (parent !== undefined) parent.afterCommit.push(...afterCommit);
@@ -497,8 +680,12 @@ export const makeDurableObjectState = (
 
   return {
     id: { name, toString: () => name },
+    key: c.key,
     storage,
+    sleep: () => Effect.sync(() => c.sleep()),
+    destroy: () => Effect.sync(() => c.destroy()),
     getWebSockets: (tag) => Effect.sync(() => sockets.all(tag)),
+    [CallbackHostId]: makeCallbackHost(c, callbacks),
     // As on Cloudflare: the work runs with the caller's context and a scope
     // of its own, and the call's scope stays open until it settles.
     waitUntil: (effect) =>
@@ -515,63 +702,91 @@ export const makeDurableObjectState = (
 };
 
 /**
- * Claim a fired alarm: clear it, so `getAlarm` reports `null` while the
- * handler runs (as on Cloudflare), and return it if it's still the alarm
- * that's set. One replaced or deleted after RivetKit started firing it
- * leaves the newer alarm alone and doesn't run the handler. Goes through
- * the input gate, so it can't land inside a call's `setAlarm`.
+ * Claim a fired alarm for `activation` and return it, or `undefined` when
+ * its handler shouldn't run here: it was replaced or deleted after RivetKit
+ * started firing it, or this is its lease coming due while the handler
+ * still runs, which renews the lease. A lease that comes due on a later
+ * activation means the handler never finished: it runs again, counted as a
+ * retry. The claimed alarm reads as `null` from `getAlarm` while its
+ * handler runs, as on Cloudflare. Goes through the input gate, so it can't
+ * land inside a call's `setAlarm`.
  */
-const claimFiredAlarm = (c: ActorContextLike, token: unknown) =>
+const claimFiredAlarm = (c: ActorContextLike, activation: Activation, token: unknown) =>
   gateStorage(
     Effect.gen(function* () {
-      const rows = yield* query<{ value: string }>(
-        c,
-        `SELECT value FROM ${META_TABLE} WHERE key = ?`,
-        ALARM_KEY,
+      const row = yield* readAlarmRow(c);
+      if (row === undefined || row.alarm.token !== token) return undefined;
+      const { alarm } = row;
+      const renewing = alarm.running === activation.id;
+      const retries =
+        alarm.running === undefined || renewing ? alarm.retries : (alarm.retries ?? 0) + 1;
+      if (retries !== undefined && retries > ALARM_RETRIES) {
+        yield* Effect.logError(
+          `Durable Object alarm did not finish ${ALARM_RETRIES + 1} times; giving up`,
+        );
+        yield* swapAlarm(c, row.raw, undefined);
+        return undefined;
+      }
+      const now = yield* Clock.currentTimeMillis;
+      const lease = yield* Effect.promise(() =>
+        c.schedule.at(now + ALARM_LEASE, ALARM_ACTION, token),
       );
-      const stored = rows[0];
-      if (stored === undefined) return undefined;
-      const alarm = JSON.parse(stored.value) as StoredAlarm;
-      if (alarm.token !== token) return undefined;
-      yield* query(
-        c,
-        `DELETE FROM ${META_TABLE} WHERE key = ? AND value = ?`,
-        ALARM_KEY,
-        stored.value,
-      );
-      return alarm;
+      const claimed: StoredAlarm = { ...alarm, id: lease, retries, running: activation.id };
+      if (!(yield* swapAlarm(c, row.raw, claimed))) {
+        yield* cancelSchedule(c, claimed);
+        return undefined;
+      }
+      return renewing ? undefined : claimed;
     }),
   );
 
 /**
  * Run the handler of the alarm that fired with `token`, if it's still the
- * one set. A handler that fails is retried, as on Cloudflare: up to six
- * times, two seconds after the first failure and twice as long after each
- * one since, unless it set a new alarm itself. @internal
+ * one set. A handler that fails, or whose node died while it ran, is
+ * retried, as on Cloudflare: up to six times, two seconds after the first
+ * failure and twice as long after each one since, unless it set a new
+ * alarm itself. @internal
  */
 export const runFiredAlarm = (
   c: ActorContextLike,
+  activation: Activation,
   token: unknown,
   handler: Effect.Effect<void, unknown> | undefined,
 ) =>
   Effect.gen(function* () {
-    const fired = yield* claimFiredAlarm(c, token);
-    if (fired === undefined || handler === undefined) return;
-    const exit = yield* Effect.exit(handler);
-    if (Exit.isSuccess(exit)) return;
+    const fired = yield* claimFiredAlarm(c, activation, token);
+    if (fired === undefined) return;
+    const exit = yield* Effect.exit(handler ?? Effect.void);
     const retries = fired.retries ?? 0;
-    yield* Effect.logError(
-      retries < ALARM_RETRIES
-        ? `Durable Object alarm failed; retry ${retries + 1} of ${ALARM_RETRIES}`
-        : `Durable Object alarm failed ${ALARM_RETRIES + 1} times; giving up`,
-      exit.cause,
-    );
-    if (retries >= ALARM_RETRIES) return;
+    if (Exit.isFailure(exit)) {
+      yield* Effect.logError(
+        retries < ALARM_RETRIES
+          ? `Durable Object alarm failed; retry ${retries + 1} of ${ALARM_RETRIES}`
+          : `Durable Object alarm failed ${ALARM_RETRIES + 1} times; giving up`,
+        exit.cause,
+      );
+    }
+    const retry = Exit.isFailure(exit) && retries < ALARM_RETRIES;
     yield* gateStorage(
       Effect.gen(function* () {
-        if ((yield* readAlarm(c)) !== undefined) return;
-        const now = yield* Clock.currentTimeMillis;
-        yield* setAlarm(c, now + ALARM_RETRY_DELAY * 2 ** retries, retries + 1);
+        // Until it's settled: a lease renewed meanwhile changes the row.
+        while (true) {
+          const row = yield* readAlarmRow(c);
+          // The handler set a new alarm, which stands.
+          if (
+            row !== undefined &&
+            (row.alarm.token !== fired.token || row.alarm.running !== activation.id)
+          ) {
+            return;
+          }
+          if (retry) {
+            const now = yield* Clock.currentTimeMillis;
+            // Replaces the claimed alarm and cancels its lease.
+            return yield* setAlarm(c, now + ALARM_RETRY_DELAY * 2 ** retries, retries + 1);
+          }
+          if (row === undefined) return;
+          if (yield* swapAlarm(c, row.raw, undefined)) return yield* cancelSchedule(c, row.alarm);
+        }
       }),
     );
   });
