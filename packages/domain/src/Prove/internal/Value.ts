@@ -58,8 +58,10 @@ export interface Brand {
    * `cls` is that instance's place among the ones read.
    * `Matcher`: an `effect/Match` matcher being built, whose `cls` is the
    * value it matches and the cases it has so far.
+   * `Duration`: an `effect/Duration` of a whole number of milliseconds, kept
+   * in its one field, `millis`.
    */
-  readonly kind: "Event" | "Rejection" | "Command" | "Option" | "Recorded" | "Matcher";
+  readonly kind: "Event" | "Rejection" | "Command" | "Option" | "Recorded" | "Matcher" | "Duration";
   readonly cls: unknown;
 }
 

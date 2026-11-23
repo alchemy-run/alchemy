@@ -87,8 +87,10 @@ A call to a package is read when it is one of these.
 - **`effect/Record`:** `get`, `has`, `set`, `remove`, `map`, `keys`, `values`, `size`, `isEmptyRecord`, `isEmptyReadonlyRecord`.
 - **`effect/Struct`:** `omit`, `pick`.
 - **`effect/Optic`:** `id`, `modify`, `replace`, and an optic's `key` and `tag`.
-- **`effect/DateTime`:** `toEpochMillis`, `formatIsoDate`, `formatIsoDateUtc`.
-- **`effect/Function`:** `pipe`, and `.pipe` on an effect, an option and a matcher.
+- **`effect/DateTime`:** `toEpochMillis`, `isLessThan`, `isLessThanOrEqualTo`, `isGreaterThan`, `isGreaterThanOrEqualTo`, `between`, `min`, `max`, `distance`, `addDuration`, `subtractDuration`, `add` and `subtract` (in milliseconds, seconds, minutes, hours, days and weeks), `now`, `isPast`, `isFuture`, `formatIsoDate`, `formatIsoDateUtc`.
+- **`effect/Duration`:** `millis`, `seconds`, `minutes`, `hours`, `days`, `weeks`, `zero`, `toMillis`, `toSeconds`, `toMinutes`, `toHours`, `toDays`, `toWeeks`, `sum`, `subtract`, `min`, `max`, `equals`, `isLessThan`, `isLessThanOrEqualTo`, `isGreaterThan`, `isGreaterThanOrEqualTo`. Where a function takes a duration, a number of milliseconds and text such as `"7 days"` are read too.
+- **`effect/Clock`:** `currentTimeMillis`.
+- **`effect/Function`:** `pipe`, and `.pipe` on an effect, an option, a matcher, a time and a duration.
 - **`Math`:** `floor`, `ceil`, `trunc`, `abs`, `max`, `min`.
 - **`Object`:** `keys`, `values`, `entries`.
 
@@ -152,6 +154,18 @@ Verify.aggregate(Ticket, { opaque: [DateTime.formatIso] });
 ## What a handler is given
 
 `decide` is read with its three arguments: the state, the command, and the context with `id`, `now`, `commandId`, `stream` and `version`. `now` is any time, so a rule that depends on the clock is proved for every time. `evolve` is read with the state, the event and its envelope.
+
+The clock inside `decide` is that same `now`. `yield* DateTime.now` and `yield* Clock.currentTimeMillis` give the time the command is handled at, in the proof and when the command runs:
+
+```ts
+Renew: Effect.fn(function* (lease) {
+  const now = yield* DateTime.now;
+  if (DateTime.isLessThanOrEqualTo(lease.until, now)) return yield* new Lapsed();
+  return [Renewed.make({ until: DateTime.addDuration(lease.until, "30 days") })];
+}),
+```
+
+A time is compared and moved in whole milliseconds. A month and a year are not one length, so `DateTime.add(time, { months: 1 })` is not read. The clock anywhere but `decide` is not the time of a command, and is not read.
 
 A request context a handler yields is any value its schema allows. Middleware is not run, so a rule is proved for every caller, including ones your middleware would turn away.
 
