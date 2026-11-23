@@ -35,13 +35,16 @@ Read the requirements as a story of facts, and name each kind of thing you find:
 - "Whenever X happens, do Y": a **Policy**.
 - A process with steps, waits and undo (move money: debit, credit, refund on failure): a **Saga**, started by a policy.
 - Events already recorded have to change (a person asks to be forgotten): a **Rewrite** per aggregate, run by a saga.
-- An instance's log grows without end (an account open for years): a **Compaction**.
+- A record with periods the business names (months, statements, matches): an instance per period, with the period in the id. No new block.
+- An instance's log grows without end and has no periods (a chat room, a device): a **Compaction**.
 - Something outside the model you call (fraud scoring, payments): an **External System**.
 - Writes to a store outside the model (a ledger table): a **Projection**. An ordered, readable log per key (account cards): a **Stream** that a projection appends to.
 - A question across keys, answered from that store (an account's ledger, paged; large withdrawals across all accounts, largest first): a **Query**. Never a hand-written route.
 - Who can do and see what: an **Api** listing commands and reads, with **middleware** (sessions, MFA) and each block authorizing itself: a command in `decide`, a view or stream in its Layer's `validate`, a query in its handler.
 
 A rule that spans aggregates needs an aggregate for each thing it's about. Give an invariant with no owner its own aggregate, keyed by what it protects (`UsernameClaim` keyed by username), and implement the command with a decision that reads every instance involved. A process that takes time, waits, or calls an external system is a saga, with a deadline for anything that waits.
+
+For history that grows or has to change, pick a pattern from [references/modeling.md](references/modeling.md#patterns-for-history-that-grows-or-has-to-change).
 
 More: [What is Domain-Driven Design?](https://alchemy.run/domain/what-is-ddd), [Domain Model](https://alchemy.run/domain/model), [Decision](https://alchemy.run/domain/decision).
 

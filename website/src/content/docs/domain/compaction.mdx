@@ -184,7 +184,11 @@ A roll-up event that carries the whole state always passes. One that carries onl
 
 A compaction tells views and projections nothing but the roll-up events. They keep what they built from the events it removed: a ledger table keeps every row. To change what was built, use a [rewrite](/domain/rewrite).
 
-A view key also keeps its own copy of the events it applied, so it can fold them again after a rewrite. A compaction doesn't shrink that copy.
+A view key also keeps its own copy of the events it applied, so it can fold them again after a rewrite. A compaction doesn't shrink that copy. A rewrite that runs after the compaction can't change it either, so keep personal data out of the events of an aggregate you compact.
+
+## Or give each period its own instance
+
+A record with periods the business already names, such as months or statements, doesn't need a compaction. Give each period its own instance and carry the balance forward: see [Closing the books](/domain/closing-the-books).
 
 ## Test it
 

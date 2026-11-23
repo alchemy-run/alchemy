@@ -1203,6 +1203,7 @@ const SECTIONS: Section[] = [
         "domain/unique-values",
         "domain/deadlines",
         "domain/erasing-personal-data",
+        "domain/closing-the-books",
         "domain/backfill",
         "domain/observability",
       ],

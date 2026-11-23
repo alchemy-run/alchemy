@@ -340,8 +340,30 @@ A rewrite reaches what the model stores. Look for the person's data in what left
 
 A command's reply is stored with its receipt and returned when the command is sent again. Keep personal data out of replies, or remove the instance.
 
+## Erase before you compact
+
+A rewrite changes the events an instance still holds. A [compaction](/domain/compaction) removes events from the instance, while each view keeps its own copy of the ones it applied. A rewrite that runs afterwards can't reach those copies.
+
+So don't compact an aggregate whose events hold personal data you may be asked to erase. Keep the data out of its events instead, as the next section shows, or give each period [its own instance](/domain/closing-the-books) and remove whole periods.
+
 ## Or keep the data out of the events
 
 A rewrite costs as much as the history it changes. Where you can choose, record an id in the event and keep what it identifies in a store of your own. Erasing a person is then one delete in that store, and no event changes.
 
 The bank records `owner: "sam"` in `AccountOpened`, so it needs the rewrite. Had it recorded only `customerId`, forgetting the customer's name would not have touched a single account.
+
+## Or encrypt it before it is recorded
+
+Some systems can't change a record at all, and erase by losing a key instead. Encrypt the personal fields in your server before it sends the command, with a key you keep per person in a store of your own. The events, and everything built from them, then hold only ciphertext.
+
+Reads decrypt where they are served: in a [query](/domain/query) handler, or in the client after it fetches the key. Deleting the person's key makes every copy unreadable at once, including the ones a rewrite can't reach.
+
+Domain has no field encryption of its own, so `decide`, `evolve` and views see the ciphertext and can't use the value. This fits data the model only carries, such as a name or an address, and not data its rules depend on.
+
+## Pick a way to erase
+
+Keep the data out of the events when you are still designing them. It is the cheapest to erase and leaves nothing behind.
+
+Rewrite when the data is already in the events, or the model's rules need it there. Remove the whole instance when nothing in it has to stay.
+
+Encrypt when the record must never change, or when copies leave the model for places you can't rewrite.

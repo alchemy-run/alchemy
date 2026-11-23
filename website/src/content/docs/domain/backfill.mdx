@@ -94,7 +94,7 @@ Every aggregate instance, view key and projection key is its own Durable Object,
 
 One object handles about 1,000 requests a second. A key that every instance feeds, like a global feed or a counter, tops out there, live as well as during a backfill. Partition it: key it by day, by region or by a hash of the source, and read the parts together.
 
-One object stores up to 10 GB. An aggregate instance keeps its whole event history unless a [compaction](/domain/compaction) replaces it with a roll-up. Without one, give long-lived streams of events their own instances (an account per period, a ledger per month) rather than one instance that grows forever.
+One object stores up to 10 GB. An aggregate instance keeps its whole event history unless a [compaction](/domain/compaction) replaces it with a roll-up. Without one, give long-lived streams of events their own instances (an account per period, a ledger per month) rather than one instance that grows forever. See [Closing the books](/domain/closing-the-books).
 
 One request runs at most 6 calls at a time. A request that fans out to many instances, say a command sent to every member of a group, runs 6 at a time however many there are. Spread wide fan-out over many requests, or hand it to a saga or a workflow. The backfill fans out through its relays for the same reason.
 

@@ -2099,6 +2099,7 @@ export default defineConfig({
                 { label: "Unique values", link: "/domain/unique-values" },
                 { label: "Deadlines", link: "/domain/deadlines" },
                 { label: "Erasing personal data", link: "/domain/erasing-personal-data" },
+                { label: "Closing the books", link: "/domain/closing-the-books" },
               ],
             },
             {
