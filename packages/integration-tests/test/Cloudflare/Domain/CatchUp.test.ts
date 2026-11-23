@@ -9,6 +9,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
+import WorkerFirstCall from "./fixtures/catch-up/first-call.ts";
 import WorkerV1 from "./fixtures/catch-up/v1.ts";
 import WorkerV2 from "./fixtures/catch-up/v2.ts";
 import WorkerV3 from "./fixtures/catch-up/v3.ts";
@@ -45,7 +46,7 @@ const call = (url: string, method: "GET" | "POST", path: string) =>
   );
 
 /** Wait until the Worker serves `version`: a redeploy takes a few seconds to roll out. */
-const serving = (url: string, version: "v1" | "v2" | "v3" | "v3b") =>
+const serving = (url: string, version: "v1" | "v2" | "v3" | "v3b" | "first-call") =>
   call(url, "GET", "/version").pipe(
     Effect.filterOrFail(
       (body) => body === version,
@@ -301,6 +302,38 @@ for (const dev of [true, false]) {
           }),
         { timeout: 600_000 },
       );
+
+      // Live only: locally there is no isolate to start fresh, and no object far away.
+      if (!dev)
+        test.provider(
+          "live: the first Domain call in a fresh isolate doesn't wait for the runs it starts",
+          (stack) =>
+            Effect.gen(function* () {
+              yield* stack.destroy();
+              const { worker } = yield* stack.deploy(
+                Effect.gen(function* () {
+                  return { worker: yield* WorkerFirstCall };
+                }),
+              );
+              const url = worker.url!.replace(/\/+$/, "");
+              yield* serving(url, "first-call");
+
+              // The deploy's first Domain call: the isolate's runs are not yet started.
+              // Each read is of a new account, so only the first call starts the runs.
+              const timing = JSON.parse(yield* call(url, "GET", "/first")) as {
+                fresh: boolean;
+                first: number;
+                second: number;
+              };
+              expect(timing.fresh).toBe(true);
+              // Starting ten far-away runs one after another takes seconds; the
+              // first read takes about as long as the second.
+              expect(timing.first - timing.second).toBeLessThan(1_000);
+
+              yield* stack.destroy();
+            }),
+          { timeout: 600_000 },
+        );
     },
   );
 }

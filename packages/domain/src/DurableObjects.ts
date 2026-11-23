@@ -205,6 +205,15 @@ export interface Host<R = never> {
     /** Every plan the model has for these targets. */
     plans: (targets: ReadonlyArray<string>) => Readonly<Record<string, Backfill.Plan>>,
   ) => Effect.Effect<(targets: ReadonlyArray<string>) => Effect.Effect<void, never, R>, never, R>;
+  /**
+   * Hand `effect` to the current invocation's lifetime (a Worker's or Durable
+   * Object's `waitUntil`), so it finishes after the call that started it
+   * returns. Succeeds with `false` when the current call has no lifetime to
+   * extend (a Workflow step): `effect` then runs before the call does.
+   * Without it, `effect` runs on a detached fiber, as a long-running process
+   * keeps it alive.
+   */
+  readonly background?: (effect: Effect.Effect<void>) => Effect.Effect<boolean>;
   /** Models whose names collide on the same key fail to host: one per Worker, pool or class. */
   readonly claimKey: Effect.Effect<object, never, R>;
 }
@@ -2472,21 +2481,29 @@ export const makePlatform = <R>(
 
           // The first Domain call in each isolate starts the runs of the model's
           // consumers (each starts once): where no deploy-time job runs them, that
-          // starts a catch-up.
+          // starts a catch-up. The call doesn't wait for it: the runs start in the
+          // background, kept alive by the invocation, and a later call starts them
+          // again if they didn't all start.
           let news: Effect.Effect<void> | undefined;
-          const announce = Effect.suspend(() => {
-            const pending = news;
-            if (pending === undefined) return Effect.void;
-            news = undefined;
-            return pending.pipe(
-              Effect.timeout("5 seconds"),
-              Effect.catchCause(() =>
-                Effect.sync(() => {
-                  news = pending;
-                }),
-              ),
-            );
-          });
+          const announce = Effect.uninterruptible(
+            Effect.suspend(() => {
+              const pending = news;
+              if (pending === undefined) return Effect.void;
+              news = undefined;
+              const retry = Effect.sync(() => {
+                news = pending;
+              });
+              const begin = pending.pipe(
+                Effect.timeout("5 seconds"),
+                Effect.catchCause(() => retry),
+              );
+              if (host.background === undefined)
+                return begin.pipe(Effect.forkDetach, Effect.asVoid);
+              return host
+                .background(begin)
+                .pipe(Effect.flatMap((handed) => (handed ? Effect.void : begin)));
+            }),
+          );
 
           const modelHost: ModelHost = {
             aggregate: (aggregate, kit) =>
@@ -2827,12 +2844,13 @@ export const makePlatform = <R>(
                     planOf = plansOfTarget;
                     if (backfilled.length === 0) return;
                     // Where no deploy-time job runs, the first call starts each run (once).
+                    // Each run's root is an object of its own: start them all at once.
                     news = Effect.suspend(() => {
                       const plans = plansOf(backfilled, planOf);
                       return Effect.forEach(
                         backfilled.filter((target) => plans[target] !== undefined),
                         (target) => net.run.begin(target, plans[target]!),
-                        { discard: true },
+                        { discard: true, concurrency: "unbounded" },
                       );
                     });
                   }),
