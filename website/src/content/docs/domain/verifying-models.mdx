@@ -617,7 +617,7 @@ A proof also covers two things you didn't write down. Every command leaves the s
 
 ## Write handlers the prover can read
 
-The prover reads `decide`, `evolve` and the rules as written, so they have to be plain functions of their inputs. Most ordinary TypeScript is read: conditions, `switch`, spreads, rest patterns, local variables that change, `+=` and `++`, array and string methods, and Effect's own library: effects and their failures, `Option`, `Result`, `Match`, arrays, records, decimals, hash sets and maps, times, and a stream run to a value. The whole list is in [What can be verified](/domain/verifiable-code).
+The prover reads `decide`, `evolve` and the rules as written, so what they return has to depend only on their inputs. They can return a value or an Effect, written with `Effect.gen` or `Effect.fn`. Most ordinary TypeScript is read: conditions, `switch`, spreads, rest patterns, local variables that change, `+=` and `++`, array and string methods, and Effect's own library: effects and their failures, `Option`, `Result`, `Match`, arrays, records, decimals, hash sets and maps, times, and a stream run to a value. The whole list is in [What can be verified](/domain/verifiable-code).
 
 A package of shared rules is read like your own files. An exported helper the prover cannot read, such as a hash, is [opaque](/domain/verifiable-code#opaque-functions): rules that do not depend on its result are still proved.
 

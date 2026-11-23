@@ -10,7 +10,7 @@ Not read
   Label.aggregate.ts:23  reads .localeCompare of a string
 ```
 
-A handler has to be a plain function of what it is given: the state, the command and the context. It can call other functions in your own files, which are read the same way. A function from Effect is read if it is listed under [Library functions](#library-functions), and one from [a package of your own](#your-own-packages) is read like your files. An exported function that cannot be read is [opaque](#opaque-functions).
+What a handler returns has to depend only on what it is given: the state, the command and the context. It can return a value or an Effect, written with `Effect.gen` or `Effect.fn`. It can call other functions in your own files, which are read the same way. A function from Effect is read if it is listed under [Library functions](#library-functions), and one from [a package of your own](#your-own-packages) is read like your files. An exported function that cannot be read is [opaque](#opaque-functions).
 
 ## Statements
 
