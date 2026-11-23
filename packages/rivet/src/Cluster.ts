@@ -80,15 +80,27 @@ export interface ClusterShape {
 export class Cluster extends Context.Service<Cluster, ClusterShape>()("Rivet.Cluster") {}
 
 export interface ControlPlaneProps {
-  /** The control plane's API URL. */
-  endpoint: string;
+  /** The control plane's API URL, used by deploys, callers and nodes off {@link network}. */
+  endpoint: Input<string>;
   /** The control plane's admin token (`auth.admin_token`). */
-  token: Redacted.Redacted<string> | Config.Config<Redacted.Redacted<string>>;
+  token: Input<Redacted.Redacted<string>> | Config.Config<Redacted.Redacted<string>>;
   /**
    * An existing namespace to use. Omit it to create a namespace for this
    * stage.
    */
-  namespace?: string;
+  namespace?: Input<string>;
+  /**
+   * A private address of the control plane that nodes on {@link network}
+   * connect to instead of `endpoint`.
+   * @default endpoint
+   */
+  nodeEndpoint?: Input<string>;
+  /**
+   * The private network {@link nodeEndpoint} is on. A pool that runs its
+   * nodes on this network, such as `RivetGCP.CloudRunPool` on a `gcp` one,
+   * joins it; pools anywhere else connect to `endpoint`.
+   */
+  network?: ClusterNetwork;
 }
 
 /**
@@ -105,6 +117,25 @@ export interface ControlPlaneProps {
  * });
  * ```
  *
+ * ### Reaching it at a private address
+ * **Example:** Nodes on its GCP network connect to its private address
+ * ```typescript
+ * export const Cluster = Rivet.ControlPlane("Rivet", {
+ *   endpoint: "https://rivet.example.com",
+ *   token: Config.Redacted("RIVET_TOKEN"),
+ *   nodeEndpoint: "http://10.0.0.2:6420",
+ *   network: {
+ *     kind: "gcp",
+ *     network: "rivet",
+ *     subnetwork: "rivet-us-central1",
+ *     region: "us-central1",
+ *   },
+ * });
+ *
+ * // Joins the "rivet" network and connects its nodes to nodeEndpoint.
+ * export const Default = RivetGCP.CloudRunPool("Default").pipe(Layer.provide(Cluster));
+ * ```
+ *
  * @primitive
  */
 export const ControlPlane = (
@@ -115,12 +146,19 @@ export const ControlPlane = (
     Cluster,
     Effect.gen(function* () {
       const token = Config.isConfig(props.token) ? yield* props.token : props.token;
+      const { endpoint, nodeEndpoint, network } = props;
       if (globalThis.__ALCHEMY_RUNTIME__ || props.namespace !== undefined) {
         // At runtime a node or client reads its endpoint and namespace from its own
         // environment; the cluster is only consulted while deploying.
-        return { endpoint: props.endpoint, token, namespace: props.namespace ?? "default" };
+        return {
+          endpoint,
+          nodeEndpoint,
+          network,
+          token,
+          namespace: props.namespace ?? "default",
+        };
       }
-      const namespace = yield* Namespace(`${id}Namespace`, { endpoint: props.endpoint, token });
-      return { endpoint: props.endpoint, token, namespace: namespace.name };
+      const namespace = yield* Namespace(`${id}Namespace`, { endpoint, token });
+      return { endpoint, nodeEndpoint, network, token, namespace: namespace.name };
     }),
   );

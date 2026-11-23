@@ -6,6 +6,7 @@ import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import type { ClusterNetwork, ClusterShape } from "../Cluster.ts";
 import {
   isImageProgram,
   makePoolLayer,
@@ -67,11 +68,18 @@ export interface CloudRunPoolOptions extends PoolSettings {
    * and the subnetwork can't be deleted until it lets them go: a destroy in
    * that window fails on the subnetwork, keeps it in state, and succeeds
    * when run again later.
+   *
+   * On a control plane with a `nodeEndpoint` on a `gcp` network (a
+   * `Rivet.ControlPlane` given both), the nodes join that network and
+   * connect to the private address. Name a network here to keep them off it:
+   * they connect to the control plane's `endpoint`.
+   * @default the control plane's network, when it has a private address on one
    */
   network?: Input<string>;
   /**
-   * Subnetwork of `network` the nodes take their addresses from.
-   * @default the subnetwork named like `network`
+   * Subnetwork the nodes take their addresses from, in `network` or the
+   * control plane's network.
+   * @default the control plane's subnetwork, or the one named like `network`
    */
   subnetwork?: Input<string>;
 }
@@ -120,27 +128,49 @@ export const nodeTemplate = (
     readonly serviceAccount?: Input<string>;
     readonly secretEnv?: Array<Input<Run.WorkerPoolEnvVar>>;
   } = {},
-) => ({
-  ...(identity.serviceAccount === undefined ? {} : { serviceAccount: identity.serviceAccount }),
-  ...(options.network === undefined && options.subnetwork === undefined
-    ? {}
-    : {
-        vpcAccess: {
-          egress: "PRIVATE_RANGES_ONLY",
-          networkInterfaces: [{ network: options.network, subnetwork: options.subnetwork }],
+  joined?: Extract<ClusterNetwork, { kind: "gcp" }>,
+) => {
+  // A pool that names its own network is on that one alone; one that names
+  // only a subnetwork takes it in the control plane's network.
+  const network = options.network ?? joined?.network;
+  const subnetwork =
+    options.subnetwork ?? (options.network === undefined ? joined?.subnetwork : undefined);
+  return {
+    ...(identity.serviceAccount === undefined ? {} : { serviceAccount: identity.serviceAccount }),
+    ...(network === undefined && subnetwork === undefined
+      ? {}
+      : {
+          vpcAccess: {
+            egress: "PRIVATE_RANGES_ONLY",
+            networkInterfaces: [{ network, subnetwork }],
+          },
+        }),
+    containers: [
+      {
+        resources: {
+          limits: { cpu: options.cpu ?? "1", memory: options.memory ?? "1Gi" },
         },
-      }),
-  containers: [
-    {
-      resources: {
-        limits: { cpu: options.cpu ?? "1", memory: options.memory ?? "1Gi" },
+        ...(identity.secretEnv === undefined || identity.secretEnv.length === 0
+          ? {}
+          : { env: identity.secretEnv }),
       },
-      ...(identity.secretEnv === undefined || identity.secretEnv.length === 0
-        ? {}
-        : { env: identity.secretEnv }),
-    },
-  ],
-});
+    ],
+  };
+};
+
+/**
+ * The control plane's network, when a pool's nodes join it: a GCP network
+ * with a private address on it, and no network of the pool's own. @internal
+ */
+export const joinedNetwork = (
+  options: Pick<CloudRunPoolOptions, "network">,
+  cluster: Pick<ClusterShape, "network" | "nodeEndpoint">,
+) =>
+  options.network === undefined &&
+  cluster.nodeEndpoint !== undefined &&
+  cluster.network?.kind === "gcp"
+    ? cluster.network
+    : undefined;
 
 /**
  * Run a pool's nodes on a Cloud Run worker pool: a pool on the control
@@ -193,13 +223,15 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
     id,
     settings: options,
     expected: "a reachable control plane",
-    // Worker pools reach the internet without a VPC of their own.
-    network: (cluster) => cluster.network ?? { kind: "none" as const },
+    // Worker pools reach the internet without a VPC of their own. They join
+    // the control plane's network only to reach its private address.
+    network: (cluster) => joinedNetwork(options, cluster) ?? { kind: "none" as const },
     nodes: (nodes) =>
       Effect.gen(function* () {
         const { project } = yield* GcpEnvironment.current.pipe(Effect.orDie);
         const location =
-          options.location ?? (nodes.network?.kind === "gcp" ? nodes.network.region : undefined);
+          options.location ??
+          (nodes.cluster.network?.kind === "gcp" ? nodes.cluster.network.region : undefined);
         const { program } = nodes;
         // The control plane's token reaches the nodes from Secret Manager,
         // never the worker pool's config, unless the pool names its own.
@@ -263,7 +295,11 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
               }),
           ...(location === undefined ? {} : { location }),
           scaling: { manualInstanceCount: options.replicas ?? 1 },
-          template: nodeTemplate(options, { serviceAccount, secretEnv }),
+          template: nodeTemplate(
+            options,
+            { serviceAccount, secretEnv },
+            nodes.network.kind === "gcp" ? nodes.network : undefined,
+          ),
           env: Output.all(split.pipe(Output.map(({ plain }) => plain)), own).pipe(
             Output.map(([env, extra]) => plainEnvironment({ ...env, ...extra }, secretMap)),
           ),
