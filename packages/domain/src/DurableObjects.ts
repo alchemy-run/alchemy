@@ -59,6 +59,8 @@ import {
   type PolicyKit,
   type ProjectionKit,
   type Push,
+  type QueryAnswer,
+  type QueryInput,
   REAUTHORIZE_CLOSE_CODE,
   type SeedResult,
   type SendResult,
@@ -1882,6 +1884,17 @@ const policyObject = (kit: PolicyKit) =>
     };
   });
 
+/**
+ * A query that runs on the model's host (`runs: "host"`): an object that
+ * stores nothing and answers each input by running the handler. It is
+ * addressed by the input's target, so the platform places and scales it as it
+ * does the model's own objects of that name.
+ */
+const queryObject = (run: (sent: QueryInput) => Effect.Effect<QueryAnswer>) =>
+  Effect.succeed({
+    ask: (sent: QueryInput) => reportDefects(run(sent)),
+  });
+
 /** The stored progress of one projection key. */
 interface ProjectionMeta {
   readonly key: string | null;
@@ -2855,6 +2868,14 @@ export const makePlatform = <R>(
                     });
                   }),
                 ),
+              ),
+            query: (name, run) =>
+              inInit(
+                Effect.gen(function* () {
+                  const namespace = yield* object(`${name}Query`, queryObject(run));
+                  return (key, sent) =>
+                    unwrapDefects<QueryAnswer>(namespace.getByName(key).ask(sent));
+                }),
               ),
             policy: (policy, kit) =>
               inInit(

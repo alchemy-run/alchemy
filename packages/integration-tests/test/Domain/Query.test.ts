@@ -1,9 +1,11 @@
 import * as Domain from "@alchemy.run/domain";
+import * as DurableObjects from "@alchemy.run/domain/DurableObjects";
 import * as Foldkit from "@alchemy.run/domain/Foldkit";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { Story } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Headers from "effect/http/Headers";
 import * as Layer from "effect/Layer";
@@ -17,6 +19,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import { definitionProblems } from "./definition-problems.ts";
+import { simHost } from "./sim-host.ts";
 
 // ---------------------------------------------------------------- a wallet domain
 
@@ -771,4 +774,166 @@ describe("Domain Query through Foldkit", { tags: ["unit", "local"] }, () => {
       ),
     ),
   );
+});
+
+// ---------------------------------------------------------------- a query that runs on its model's host
+
+/** A service only the host binds: the handler seals text with it. */
+class Sealer extends Context.Service<Sealer, { readonly seal: (text: string) => string }>()(
+  "Test/Sealer",
+) {
+  static readonly angled = Layer.succeed(Sealer, { seal: (text) => `<${text}>` });
+}
+class Unsealable extends Domain.Rejection("Unsealable", { text: Schema.String }) {}
+
+/** One input, one answer, or a rejection; addressed by its `target`. */
+class Seal extends Domain.Query("Seal", {
+  input: { target: Schema.String, text: Schema.String },
+  success: Schema.Struct({ sealed: Schema.String }),
+  rejects: [Unsealable],
+}) {}
+/** Several answers, a page at a time. */
+class SealedWords extends Domain.Query("SealedWords", {
+  input: { target: Schema.String, words: Schema.Array(Schema.String) },
+  success: Schema.String,
+  paged: true,
+}) {}
+
+class Sealing extends Domain.Model("Sealing", {
+  aggregates: [Wallet],
+  queries: [Seal, SealedWords],
+}) {}
+class SealApi extends Domain.Api("SealApi", {
+  model: Sealing,
+  commands: [],
+  views: [],
+  streams: [],
+  queries: ["Seal", "SealedWords"],
+}) {}
+
+const take = { default: 2, max: 3 };
+/** The handlers, for the process that hosts the model and binds the Sealer. */
+const sealingOnTheHost = Layer.mergeAll(
+  Seal.toLayer(
+    Effect.gen(function* () {
+      const sealer = yield* Sealer;
+      return ({ text }) =>
+        text === ""
+          ? Effect.fail(new Unsealable({ text }))
+          : Effect.succeed({ sealed: sealer.seal(text) });
+    }),
+    { runs: "host" },
+  ),
+  SealedWords.toLayer(
+    Effect.gen(function* () {
+      const sealer = yield* Sealer;
+      return ({ words }, page) => {
+        const start = page.after === undefined ? 0 : Number(page.after);
+        const next = start + page.take;
+        return Effect.succeed({
+          entries: words.slice(start, next).map(sealer.seal),
+          cursor: next < words.length ? String(next) : null,
+        });
+      };
+    }),
+    { runs: "host", take },
+  ),
+).pipe(Layer.provide(Sealer.angled));
+/** The same queries for a process that has no Sealer: it must never run them. */
+const sealingForACaller = Layer.mergeAll(
+  Seal.toLayer(
+    Effect.succeed(() => Effect.die("the caller ran the handler")),
+    { runs: "host" },
+  ),
+  SealedWords.toLayer(
+    Effect.succeed(() => Effect.die("the caller ran the handler")),
+    {
+      runs: "host",
+      take,
+    },
+  ),
+);
+
+const sealedAnswers = Effect.gen(function* () {
+  const api = yield* SealApi.clientInProcess;
+  expect(yield* api.Seal({ target: "vault-1", text: "hello" })).toEqual({ sealed: "<hello>" });
+  const rejected = yield* Effect.flip(api.Seal({ target: "vault-1", text: "" }));
+  expect(rejected).toBeInstanceOf(Unsealable);
+  expect(rejected).toMatchObject({ _tag: "Unsealable", text: "" });
+  const words = ["a", "b", "c", "d", "e"];
+  const pages = yield* api.SealedWords.pages({ target: "vault-1", words }).pipe(Stream.runCollect);
+  expect(Array.from(pages, (page) => page.entries)).toEqual([
+    ["<a>", "<b>"],
+    ["<c>", "<d>"],
+    ["<e>"],
+  ]);
+  // The query's own limits clamp the page at the caller.
+  const clamped = yield* api.SealedWords({ target: "vault-1", words }, { take: 10 });
+  expect(clamped.entries).toEqual(["<a>", "<b>", "<c>"]);
+});
+
+describe("Domain Query on its model's host", { tags: ["unit", "local"] }, () => {
+  it.live(
+    "is answered by the object of the host that binds its services, and a rejection fails typed",
+    () =>
+      Effect.gen(function* () {
+        const calls: Array<string> = [];
+        const sim = simHost(
+          { rowsRead: 0 },
+          {
+            intercept: ({ cls, method }, run) => {
+              calls.push(`${cls}.${method}`);
+              return run;
+            },
+          },
+        );
+        const process = (handlers: typeof sealingForACaller) =>
+          Sealing.layer(handlers).pipe(
+            Layer.provideMerge(DurableObjects.makePlatform(sim.host)),
+            Layer.provideMerge(SecureRandom.layerWebCrypto),
+          );
+        // Two processes over the same objects: the Api's, which has no Sealer, then the
+        // model's host, which declares the objects that run the handlers.
+        const caller = yield* Layer.build(process(sealingForACaller));
+        yield* Layer.build(process(sealingOnTheHost));
+        yield* sealedAnswers.pipe(Effect.provide(caller));
+        // Each answer is a call to the query's object, by its target.
+        const queried = calls.filter((call) => /Query\.ask$/.test(call));
+        expect(new Set(queried)).toEqual(
+          new Set(["Sealing.SealQuery.ask", "Sealing.SealedWordsQuery.ask"]),
+        );
+        expect(queried.filter((call) => call === "Sealing.SealQuery.ask")).toHaveLength(2);
+        expect(queried.filter((call) => call === "Sealing.SealedWordsQuery.ask")).toHaveLength(4);
+      }).pipe(Effect.scoped),
+  );
+
+  it.live("runs in place on a platform that hosts no queries", () =>
+    sealedAnswers.pipe(
+      Effect.provide(Sealing.layer(sealingOnTheHost).pipe(Layer.provideMerge(InMemory))),
+    ),
+  );
+
+  it("refuses a query that runs on the host and has no target in its input", () =>
+    Effect.gen(function* () {
+      class Untargeted extends Domain.Query("Untargeted", {
+        input: { text: Schema.String },
+        success: Schema.String,
+      }) {}
+      class Anywhere extends Domain.Model("SealingAnywhere", {
+        aggregates: [Wallet],
+        queries: [Untargeted],
+      }) {}
+      const layer = Anywhere.layer(
+        Untargeted.toLayer(
+          Effect.succeed(({ text }) => Effect.succeed(text)),
+          { runs: "host" },
+        ),
+      );
+      expect(yield* definitionProblems(layer)).toMatchObject([
+        {
+          reason: { _tag: "HostedQueryNeedsTarget", query: "Untargeted" },
+          message: expect.stringContaining("add a `target` field to its input"),
+        },
+      ]);
+    }).pipe(Effect.runPromise));
 });

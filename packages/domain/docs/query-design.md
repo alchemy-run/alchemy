@@ -276,11 +276,13 @@ The `domain.queries` counter counts runs by `domain.query` and `domain.outcome`.
 
 ## Hosting
 
-Nothing in `Platform` changes. A query runs wherever the Api's handlers run, and reads the app's store plus the platform's read paths.
+A query runs wherever the Api's handlers run, and reads the app's store plus the platform's read paths. Only a query whose Layer says `runs: "host"` is sent elsewhere (below); nothing else in `Platform` changes for queries.
 
 - **InMemory:** in the process. Stories and `clientInProcess` use it.
 - **Cloudflare:** in the Worker, inside the Api's RPC handler, like a view's `get` and `list`. It never runs in a Durable Object: it has no key, so no object owns it, and the app's store (D1, a search index) is bound to the Worker. `validate` reading a view calls that view's Durable Object. `atLeast` reads the aggregate's events from its Durable Object once, then polls the projection keys' Durable Objects for checkpoints every 25ms, as a view's `atLeast` does.
 - **A storage platform** (PR #2392): the same. A query only needs `AggregateStore.state` and `tail`, and `ProjectionStore.checkpoints`, which every platform provides.
+
+- **`runs: "host"`:** for a handler whose services only the model's host binds (a key service, a secret, a co-located store). On a platform that hosts queries (`ModelHost.query`: Durable Objects, so Cloudflare, Rivet and Effect Cluster) the caller encodes the input with the query's Schema and asks an object of the query's own class (`<Query>Query`), one per input `target`, which stores nothing. The object decodes the input, runs the handler under the model's members, and answers with the result or the rejection, each encoded with the query's Schemas. A rejection fails the caller's read typed; any other failure, and a call lost in transit, is a defect. Middleware still runs at the caller, so the handler gets nothing the middleware provides. The input must have a `target` field (`HostedQueryNeedsTarget` otherwise). `InMemory` hosts no queries and runs the handler in place.
 
 A query is a request-response RPC, so `Domain.protocolWebSocket` sends it over HTTP like a command or a view's `get`.
 
