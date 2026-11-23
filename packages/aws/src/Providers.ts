@@ -1437,11 +1437,14 @@ export const providers = () =>
           // Dual: glue onto the (dual) Lambda Function — a live addPermission
           // against a floci function ARN fails with ResourceNotFoundException.
           flociDual(Lambda.Permission, () => Lambda.PermissionProvider()),
-          Lambda.ResourcePolicyProvider(),
-          // Live-only: floci doesn't emulate customer-managed runtimes.
-          Lambda.RuntimeProvider(),
-          Lambda.RuntimeAliasProvider(),
-          Lambda.RuntimeVersionProvider(),
+          // Dual: floci stores a runtime's policy (and answers
+          // ResourceNotFoundException for other resources, like Permission).
+          flociDual(Lambda.ResourcePolicy, () => Lambda.ResourcePolicyProvider()),
+          // Dual: in dev the version's image is built and pushed to floci's
+          // ECR, and a dev Function on the alias runs in that image.
+          flociDual(Lambda.Runtime, () => Lambda.RuntimeProvider()),
+          flociDual(Lambda.RuntimeAlias, () => Lambda.RuntimeAliasProvider()),
+          flociDual(Lambda.RuntimeVersion, () => Lambda.RuntimeVersionProvider()),
           // Requires the alchemy floci fork ≥ 2.4.0-alchemy.1, which serves
           // the Web Function API (web functions, revisions, endpoints).
           flociDual(Lambda.WebFunction, () => Lambda.WebFunctionProvider()),
