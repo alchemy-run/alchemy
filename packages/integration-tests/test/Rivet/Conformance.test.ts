@@ -10,9 +10,8 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
 import { conformanceTests, waitForReady } from "../Cloudflare/Workers/conformance/spec.ts";
-import { ensureDockerSwarm } from "../Docker/Runtime.ts";
+import { ensureDockerSwarm, publishedUrl } from "../Docker/Runtime.ts";
 import Front from "./fixtures/front.ts";
-import { publishedUrl } from "./fixtures/published.ts";
 import { ReentrantLive } from "./fixtures/reentrant.ts";
 
 const testOptions = { providers: Layer.mergeAll(Docker.providers(), Rivet.providers()) };

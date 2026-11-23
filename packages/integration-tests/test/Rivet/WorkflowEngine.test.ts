@@ -9,9 +9,8 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import { ensureDockerSwarm } from "../Docker/Runtime.ts";
+import { ensureDockerSwarm, publishedUrl } from "../Docker/Runtime.ts";
 import { conformance } from "../Workflows/conformance/conformance.ts";
-import { publishedUrl } from "./fixtures/published.ts";
 import WorkflowFront from "./fixtures/workflow-front.ts";
 
 class NotReady extends Data.TaggedError("NotReady")<{ readonly message: string }> {}
