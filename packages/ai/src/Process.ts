@@ -207,9 +207,9 @@ type ToolRequires<T> =
 /** What running a process that mentions `M` requires. */
 export type Requires<M> = M extends AnyInput | Self | string | number
   ? never
-  : M extends ProcessTag<infer Service, any, any>
+  : M extends { readonly [ProcessTypeId]: "tag"; readonly "~process": infer Service }
     ? Service
-    : M extends InlineProcess<any, any, infer R>
+    : M extends { readonly [ProcessTypeId]: "inline"; readonly "~requires": infer R }
       ? R
       : M extends ModelClass<infer Service, any>
         ? Service
@@ -257,6 +257,8 @@ export interface InlineProcess<Name extends string, I, R> extends Effect.Effect<
   readonly processName: Name;
   /** @internal */
   readonly definition: Definition;
+  /** Phantom: what yielding the process requires. */
+  readonly "~requires": R;
 }
 
 type Declared<Inputs extends ReadonlyArray<AnyInput>> = Inputs[number];
@@ -284,6 +286,8 @@ export interface ProcessTag<
   readonly processName: Name;
   readonly inputs: Inputs;
   readonly description: string | undefined;
+  /** Phantom: the service a process that mentions this one requires. */
+  readonly "~process": Service;
   /**
    * Give the process its prose. Each Layer is one way to carry the process
    * out: its own words, tools, models and other processes. It requires

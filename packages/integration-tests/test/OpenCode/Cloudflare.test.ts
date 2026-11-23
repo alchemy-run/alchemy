@@ -285,7 +285,10 @@ test(
       }),
     );
     expect(outcomes).toEqual(["succeeded"]);
-    expect((yield* usedBy(name, "alchemy_stall")).length).toBeGreaterThan(0);
+    // The crash cut the tool call off, and the run still reached its end.
+    // Whether the model then calls the tool again is up to the model.
+    const calls = (yield* call(`/${name}/tools`)) as ReadonlyArray<ToolUse>;
+    expect(calls.some((use) => use.tool === "alchemy_stall")).toBe(true);
   }),
   { tags, timeout: 240_000 },
 );
