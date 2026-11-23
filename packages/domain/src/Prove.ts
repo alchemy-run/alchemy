@@ -14,8 +14,10 @@ import type * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type * as Aggregate from "./Aggregate.ts";
+import type * as Compaction from "./Compaction.ts";
 import type * as Decision from "./Decision.ts";
 import type { Verdict } from "./Prove/internal/Check.ts";
+import * as History from "./Prove/internal/History.ts";
 import * as Induction from "./Prove/internal/Induction.ts";
 import * as Interpreter from "./Prove/internal/Interpreter.ts";
 import * as Paths from "./Prove/internal/Paths.ts";
@@ -24,6 +26,7 @@ import * as Source from "./Prove/internal/Source.ts";
 import * as Suggest from "./Prove/internal/Suggest.ts";
 import * as Symbolic from "./Prove/internal/Symbolic.ts";
 import * as Value from "./Prove/internal/Value.ts";
+import type * as Rewrite from "./Rewrite.ts";
 
 export type { Counterexample, Verdict } from "./Prove/internal/Check.ts";
 export type { Suggestion } from "./Prove/internal/Suggest.ts";
@@ -384,7 +387,7 @@ const detail = (verdict: Verdict): ReadonlyArray<string> => {
         ["state", Symbolic.show(c.state)],
         ["command", Symbolic.show(c.command)],
         ...c.context.map((entry) => [entry.name, Symbolic.show(entry.value)] as const),
-        ["now", DateTime.formatIso(c.now)],
+        ...(c.now === undefined ? [] : [["now", DateTime.formatIso(c.now)] as const]),
         ["events", c.events.map(Symbolic.show).join(", ")],
         ["after", Symbolic.show(c.after)],
       ];
@@ -675,5 +678,421 @@ export const renderDecision = (report: DecisionReport): string => {
       `✗ ${report.decision} is never accepted: no states the invariants allow let it record an event`,
     );
   lines.push("", ...notes(report));
+  return lines.join("\n");
+};
+
+/** Where a compaction is declared. */
+export interface CompactionOptions extends Source.Reading {
+  /** The file the compaction is declared in: `new URL("../src/BringForward.compaction.ts", import.meta.url)`, or a path. */
+  readonly source: URL | string;
+}
+
+/** A roll-up is not proved to lose nothing. The message is the report. */
+export class CompactionNotProved extends Data.TaggedError("CompactionNotProved")<{
+  readonly message: string;
+  readonly report: CompactionReport;
+}> {}
+
+export interface CompactionReport {
+  readonly compaction: string;
+  /** The aggregate whose instances it compacts. */
+  readonly aggregate: string;
+  /** The paths through the roll-up that were checked. */
+  readonly paths: number;
+  /**
+   * Whether folding the roll-up from `initial` gives the state back, for
+   * every state the aggregate's rules allow: what a view or an instance read
+   * after the compaction is built from.
+   */
+  readonly lossless: Verdict;
+  /** Whether folding the roll-up onto the state it was made from leaves that state. */
+  readonly standing: Verdict;
+  /** The checks of the state's schema the prover does not read. */
+  readonly unread: ReadonlyArray<string>;
+  /** What the proof takes for granted. */
+  readonly assumptions: ReadonlyArray<string>;
+}
+
+/** The file a source names, as a path. */
+const fileOf = Effect.fn(function* (source: URL | string) {
+  const path = yield* Path.Path;
+  return typeof source === "string"
+    ? path.resolve(source)
+    : yield* path
+        .fromFileUrl(source)
+        .pipe(
+          Effect.mapError(
+            (error) => new Source.LoadError({ file: String(source), message: error.message }),
+          ),
+        );
+});
+
+/** An aggregate's definition among the files one file reaches. */
+const aggregateAt = Effect.fn(function* (
+  modules: ReadonlyArray<Value.Module>,
+  aggregate: Aggregate.Any,
+  file: string,
+) {
+  const definition = Paths.aggregateIn(modules, aggregate);
+  if (!definition)
+    return yield* new Source.LoadError({
+      file,
+      message: `${file} does not import the file that declares ${aggregate.aggregateName}`,
+    });
+  const missed = Paths.unread(definition, aggregate.definition);
+  if (missed.length > 0)
+    return yield* new Source.LoadError({
+      file,
+      message: `${aggregate.aggregateName} is declared without its invariants ${missed.join(", ")}: each must be written in its definition, as a property, under a name of its own`,
+    });
+  return definition;
+});
+
+/**
+ * Check that a compaction's roll-up loses nothing, for every state its
+ * aggregate's rules allow, and say what was proved and what was not. An
+ * instance refuses a roll-up that would change its own state when it runs;
+ * this says so before any instance meets one.
+ *
+ * **Example:** Printing the report
+ * ```typescript
+ * const report = yield* Prove.compactionReport(BringForward, {
+ *   source: new URL("../src/Wallet/BringForward.compaction.ts", import.meta.url),
+ * });
+ * console.log(Prove.renderCompaction(report));
+ * ```
+ */
+export const compactionReport = (
+  compaction: Compaction.Any,
+  options: CompactionOptions,
+): Effect.Effect<CompactionReport, ProveError, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function* () {
+    const aggregate = compaction.definition.of;
+    const loader = yield* Source.loader(options);
+    loader.adopt(aggregate);
+    loader.adopt(compaction);
+    const solver = yield* Smt.solver;
+    const interpreter = Interpreter.make(loader, new Value.Run([]));
+    const file = yield* fileOf(options.source);
+    const modules = yield* Paths.reach(loader, file);
+    const written = History.compactionIn(modules, compaction);
+    if (!written)
+      return yield* new Source.LoadError({
+        file,
+        message: `${file} does not declare the compaction ${compaction.compactionName}`,
+      });
+    const definition = yield* aggregateAt(modules, aggregate, file);
+    const row = yield* History.compaction(
+      solver,
+      interpreter,
+      aggregate,
+      definition,
+      compaction,
+      written,
+    );
+    const made: CompactionReport = {
+      compaction: compaction.compactionName,
+      aggregate: aggregate.aggregateName,
+      paths: row.paths,
+      lossless: row.lossless,
+      standing: row.standing,
+      unread: Symbolic.unread(aggregate.definition.state, "state").map(
+        (check) => `${check.at}: ${check.check}`,
+      ),
+      assumptions: [...ASSUMPTIONS.slice(0, 2), ...pure(loader.opaques())],
+    };
+    return made;
+  }).pipe(
+    Effect.scoped,
+    Effect.catchTag(["LoadError", "SolverError"], (error) =>
+      Effect.fail(new ProveError({ message: error.message })),
+    ),
+  );
+
+/** Whether a report proves a roll-up loses nothing, from `initial` and onto the state it is made from. */
+export const compactionProved = (report: CompactionReport): boolean =>
+  report.lossless._tag === "Proved" && report.standing._tag === "Proved";
+
+/**
+ * Prove that a compaction's roll-up loses nothing, or fail with the report.
+ *
+ * **Example:** In a test
+ * ```typescript
+ * it.effect("bringing a wallet forward loses nothing", () =>
+ *   Prove.compaction(BringForward, {
+ *     source: new URL("../src/Wallet/BringForward.compaction.ts", import.meta.url),
+ *   }).pipe(Effect.provide(NodeServices.layer)),
+ * );
+ * ```
+ */
+export const compaction = (
+  compaction: Compaction.Any,
+  options: CompactionOptions,
+): Effect.Effect<
+  CompactionReport,
+  ProveError | CompactionNotProved,
+  FileSystem.FileSystem | Path.Path
+> =>
+  compactionReport(compaction, options).pipe(
+    Effect.flatMap((made) =>
+      compactionProved(made)
+        ? Effect.succeed(made)
+        : Effect.fail(
+            new CompactionNotProved({ message: `\n${renderCompaction(made)}`, report: made }),
+          ),
+    ),
+  );
+
+/** A compaction's report as text. */
+export const renderCompaction = (report: CompactionReport): string => {
+  const lines: Array<string> = [
+    `${report.compaction}: rolls up ${report.aggregate}; ${report.paths} paths`,
+    "",
+  ];
+  const line = (title: string, verdict: Verdict) => {
+    lines.push(
+      `${verdict._tag === "Proved" ? "✓" : "✗"} ${title}${verdict._tag === "Proved" ? "" : `: ${LABEL[verdict._tag]}`}`,
+    );
+    for (const text of detail(verdict)) lines.push(`    ${text}`);
+  };
+  line("Folded from the initial state, the roll-up gives the state back", report.lossless);
+  line("Folded onto the state it was made from, the roll-up leaves it", report.standing);
+  lines.push("", ...notes({ ...report, unkept: [] }));
+  return lines.join("\n");
+};
+
+/** Where a rewrite is declared, and what else records on its aggregate. */
+export interface RewriteOptions extends Source.Reading {
+  /** The file the rewrite is declared in: `new URL("../src/ForgetOwner.rewrite.ts", import.meta.url)`, or a path. */
+  readonly source: URL | string;
+  /**
+   * The compactions of the rewrite's aggregate, each with the file it is
+   * declared in: a roll-up is an event an instance holds, so the rewrite is
+   * taken through it too.
+   */
+  readonly compactions?: ReadonlyArray<{
+    readonly compaction: Compaction.Any;
+    readonly source: URL | string;
+  }>;
+}
+
+/** A rewrite is not proved to keep its aggregate's invariants. The message is the report. */
+export class RewriteNotProved extends Data.TaggedError("RewriteNotProved")<{
+  readonly message: string;
+  readonly report: RewriteReport;
+}> {}
+
+export interface RewriteReport {
+  readonly rewrite: string;
+  /** The aggregate whose instances it rewrites. */
+  readonly aggregate: string;
+  /** Whether it removes the instance: nothing is left to break a rule. */
+  readonly deletes: boolean;
+  /**
+   * The parts of the state the rewrite can leave other than they were: the
+   * proof lets the rewritten history differ from the recorded one there, and
+   * nowhere else. `undefined` where the prover could not tell, and let it
+   * differ everywhere.
+   */
+  readonly differs: ReadonlyArray<string> | undefined;
+  /** Each invariant, after each command's events and each roll-up as the rewrite leaves them. */
+  readonly invariants: ReadonlyArray<{
+    readonly name: string;
+    readonly steps: ReadonlyArray<{
+      /** The command that records the events, or the compaction whose roll-up they are. */
+      readonly step: string;
+      readonly verdict: Verdict;
+      readonly paths: number;
+    }>;
+  }>;
+  /** Whether the state the rewritten events fold to stays in the state's schema, by step. */
+  readonly schema: ReadonlyArray<{ readonly step: string; readonly verdict: Verdict }>;
+  /**
+   * The events the aggregate folds that none of its commands records and no
+   * roll-up given is: a decision records them, and the rewrite is not taken
+   * through what a decision records.
+   */
+  readonly outside: ReadonlyArray<string>;
+  /** What the proof takes for granted. */
+  readonly assumptions: ReadonlyArray<string>;
+}
+
+/**
+ * Check that a rewrite keeps every invariant of its aggregate, whatever
+ * history an instance holds, and say what was proved and what was not. An
+ * instance refuses a rewrite that would break an invariant when it runs;
+ * this says so before any instance meets such a history.
+ *
+ * **Example:** Printing the report
+ * ```typescript
+ * const report = yield* Prove.rewriteReport(ForgetOwner, {
+ *   source: new URL("../src/Account/ForgetOwner.rewrite.ts", import.meta.url),
+ * });
+ * console.log(Prove.renderRewrite(report));
+ * ```
+ */
+export const rewriteReport = (
+  rewrite: Rewrite.Any,
+  options: RewriteOptions,
+): Effect.Effect<RewriteReport, ProveError, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function* () {
+    const aggregate = rewrite.definition.of;
+    const loader = yield* Source.loader(options);
+    loader.adopt(aggregate);
+    loader.adopt(rewrite);
+    const solver = yield* Smt.solver;
+    const interpreter = Interpreter.make(loader, new Value.Run([]));
+    const file = yield* fileOf(options.source);
+    const modules = yield* Paths.reach(loader, file);
+    const written = History.rewriteIn(modules, rewrite);
+    if (!written)
+      return yield* new Source.LoadError({
+        file,
+        message: `${file} does not declare the rewrite ${rewrite.rewriteName}`,
+      });
+    const definition = yield* aggregateAt(modules, aggregate, file);
+    const names = Paths.invariantNames(definition);
+    const sources: Array<History.Source> = aggregate.definition.commands.map((command) => ({
+      _tag: "Command",
+      command: command as unknown as Paths.CommandClass,
+    }));
+    const recorded = new Set<string>(
+      aggregate.definition.commands.flatMap((command) => command.events.map((event) => event.tag)),
+    );
+    for (const given of options.compactions ?? []) {
+      if (given.compaction.definition.of !== aggregate) continue;
+      loader.adopt(given.compaction);
+      const at = yield* fileOf(given.source);
+      const found = History.compactionIn(yield* Paths.reach(loader, at), given.compaction);
+      if (!found)
+        return yield* new Source.LoadError({
+          file: at,
+          message: `${at} does not declare the compaction ${given.compaction.compactionName}`,
+        });
+      sources.push({ _tag: "Rollup", cls: given.compaction, written: found });
+    }
+    const deletes = rewrite.definition.delete === true;
+    const { rows, differs } = deletes
+      ? { rows: [], differs: [] }
+      : yield* History.rewrite(
+          solver,
+          interpreter,
+          aggregate,
+          definition,
+          rewrite,
+          written,
+          sources,
+        );
+    // A roll-up's events are ones the instance holds: what tags they are is not read here,
+    // so an event only a roll-up gives is taken to be covered once a compaction is given.
+    const rolled = (options.compactions ?? []).some(
+      (given) => given.compaction.definition.of === aggregate,
+    );
+    const made: RewriteReport = {
+      rewrite: rewrite.rewriteName,
+      aggregate: aggregate.aggregateName,
+      deletes,
+      differs,
+      invariants: names.map((name) => ({
+        name,
+        steps: rows.map((row) => ({
+          step: row.step,
+          verdict: row.verdicts.get(name)!,
+          paths: row.paths,
+        })),
+      })),
+      schema: rows.map((row) => ({ step: row.step, verdict: row.fits })),
+      outside:
+        deletes || rolled
+          ? []
+          : aggregate.definition.events
+              .map((event) => event.tag)
+              .filter((tag) => !recorded.has(tag)),
+      assumptions: [
+        ...ASSUMPTIONS,
+        "every event an instance holds was recorded by one of its commands, or is a roll-up: one that was imported or seeded is not looked at",
+        ...pure(loader.opaques()),
+      ],
+    };
+    return made;
+  }).pipe(
+    Effect.scoped,
+    Effect.catchTag(["LoadError", "SolverError"], (error) =>
+      Effect.fail(new ProveError({ message: error.message })),
+    ),
+  );
+
+/** Whether a report proves a rewrite keeps every invariant and the state's schema, through every event. */
+export const rewriteProved = (report: RewriteReport): boolean =>
+  report.deletes ||
+  (report.outside.length === 0 &&
+    report.schema.every((step) => step.verdict._tag === "Proved") &&
+    report.invariants.every((invariant) =>
+      invariant.steps.every((step) => step.verdict._tag === "Proved"),
+    ));
+
+/**
+ * Prove that a rewrite keeps every invariant of its aggregate, or fail with
+ * the report.
+ *
+ * **Example:** In a test
+ * ```typescript
+ * it.effect("forgetting an owner keeps the account's rules", () =>
+ *   Prove.rewrite(ForgetOwner, {
+ *     source: new URL("../src/Account/ForgetOwner.rewrite.ts", import.meta.url),
+ *   }).pipe(Effect.provide(NodeServices.layer)),
+ * );
+ * ```
+ */
+export const rewrite = (
+  rewrite: Rewrite.Any,
+  options: RewriteOptions,
+): Effect.Effect<RewriteReport, ProveError | RewriteNotProved, FileSystem.FileSystem | Path.Path> =>
+  rewriteReport(rewrite, options).pipe(
+    Effect.flatMap((made) =>
+      rewriteProved(made)
+        ? Effect.succeed(made)
+        : Effect.fail(new RewriteNotProved({ message: `\n${renderRewrite(made)}`, report: made })),
+    ),
+  );
+
+/** A rewrite's report as text, one invariant after another. */
+export const renderRewrite = (report: RewriteReport): string => {
+  const lines: Array<string> = [`${report.rewrite}: rewrites ${report.aggregate}`, ""];
+  if (report.deletes) {
+    lines.push("✓ It removes the instance: no state is left to break a rule");
+    return lines.join("\n");
+  }
+  lines.push(
+    report.differs === undefined
+      ? "The prover could not tell what the rewrite leaves alone: the rewritten state may differ anywhere"
+      : report.differs.length === 0
+        ? "✓ It changes nothing the state keeps: the rewritten history folds to the same states"
+        : `It can change ${report.differs.join(", ")} of the state, and nothing else`,
+    "",
+  );
+  const section = (
+    title: string,
+    steps: ReadonlyArray<{ readonly step: string; readonly verdict: Verdict }>,
+  ) => {
+    const failed = steps.filter((step) => step.verdict._tag !== "Proved");
+    lines.push(`${failed.length === 0 ? "✓" : "✗"} ${title}`);
+    const passed = steps.filter((step) => step.verdict._tag === "Proved");
+    if (passed.length > 0)
+      lines.push(`    ✓ proved after ${passed.map((step) => step.step).join(", ")}`);
+    for (const step of failed) {
+      lines.push(`    ✗ after ${step.step}: ${LABEL[step.verdict._tag]}`);
+      for (const text of detail(step.verdict)) lines.push(`        ${text}`);
+    }
+    lines.push("");
+  };
+  section("The state stays in its schema", report.schema);
+  for (const invariant of report.invariants) section(invariant.name, invariant.steps);
+  if (report.outside.length > 0)
+    lines.push(
+      `✗ ${report.aggregate} folds ${report.outside.join(", ")}, which none of its commands records: the rewrite is not taken through them`,
+      "",
+    );
+  lines.push("Assuming:", ...report.assumptions.map((a) => `  - ${a}`));
   return lines.join("\n");
 };

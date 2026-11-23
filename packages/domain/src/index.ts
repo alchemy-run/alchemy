@@ -21,6 +21,7 @@
 import * as AggregateModule from "./Aggregate.ts";
 import * as ApiModule from "./Api.ts";
 import * as CommandModule from "./Command.ts";
+import * as CompactionModule from "./Compaction.ts";
 import * as DecisionModule from "./Decision.ts";
 import * as EventModule from "./Event.ts";
 import * as ExternalSystemModule from "./ExternalSystem.ts";
@@ -32,6 +33,7 @@ import * as QueryModule from "./Query.ts";
 import * as RejectionModule from "./Rejection.ts";
 import * as RelationModule from "./Relation.ts";
 import * as RequestContextModule from "./RequestContext.ts";
+import * as RewriteModule from "./Rewrite.ts";
 import * as SagaModule from "./Saga.ts";
 import * as StreamModule from "./Stream.ts";
 import * as ViewModule from "./View.ts";
@@ -204,9 +206,43 @@ export declare namespace Projection {
   export type Input<K extends KeyModule.Any, S, E> = ProjectionModule.Input<K, S, E>;
   /** How a projection's Layer tunes it. */
   export type Options = ProjectionModule.Options;
+  /** One event a projection's `rewrite` handler receives: what it was, and what it is now. */
+  export type Rewritten<K extends KeyModule.Any, S, E> = ProjectionModule.Rewritten<K, S, E>;
 }
 /** Consumes events into a store you own, in order per key; replayable, never sends commands. See {@link ProjectionModule.make}. */
 export const Projection = ProjectionModule.make;
+
+export declare namespace Rewrite {
+  /** Any Rewrite class. */
+  export type Any = RewriteModule.Any;
+  /** What accepting a rewrite returns: pass it to `rewritten` to wait for what is built from it. */
+  export type Receipt = RewriteModule.Receipt;
+  /** Options for `client.rewrite`: the id that names the run. */
+  export type Options = RewriteModule.Options;
+}
+/** A change to the events an instance has already recorded: keep, replace or remove each. See {@link RewriteModule.make}. */
+export const Rewrite = RewriteModule.make;
+/** The schema of a rewrite's receipt, for a saga step that returns one. */
+export const RewriteReceipt = RewriteModule.Receipt;
+export const InvariantBroken = RewriteModule.InvariantBroken;
+export type InvariantBroken = RewriteModule.InvariantBroken;
+
+export declare namespace Compaction {
+  /** Any Compaction class. */
+  export type Any = CompactionModule.Any;
+  /** One run of events a compaction's handler is given before they are removed. */
+  export type Batch<A extends AggregateModule.Any> = CompactionModule.Batch<A>;
+  /** What accepting a compaction returns. */
+  export type Receipt = CompactionModule.Receipt;
+  /** How a compaction's Layer tunes it: when an instance compacts by itself. */
+  export type Options = CompactionModule.Options;
+}
+/** Replaces an instance's history with a roll-up of its state; its Layer keeps what it removes. See {@link CompactionModule.make}. */
+export const Compaction = CompactionModule.make;
+/** The schema of a compaction's receipt, for a saga step that returns one. */
+export const CompactionReceipt = CompactionModule.Receipt;
+export const CompactionLossy = CompactionModule.CompactionLossy;
+export type CompactionLossy = CompactionModule.CompactionLossy;
 
 export declare namespace Query {
   /** Any Query class. */

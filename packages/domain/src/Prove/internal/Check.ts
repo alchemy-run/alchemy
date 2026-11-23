@@ -25,7 +25,8 @@ export interface Counterexample {
   readonly command: unknown;
   /** What each request context the command read held. */
   readonly context: ReadonlyArray<{ readonly name: string; readonly value: unknown }>;
-  readonly now: DateTime.Utc;
+  /** Absent where no command ran: a roll-up is made at no time. */
+  readonly now?: DateTime.Utc;
   readonly events: ReadonlyArray<unknown>;
   readonly after: unknown;
 }
@@ -405,7 +406,7 @@ const replay = Effect.fn(function* (
 });
 
 /** A value as text two values share only when they are the same data. */
-const canon = (value: unknown): string => {
+export const canon = (value: unknown): string => {
   if (typeof value === "bigint") return `${value}n`;
   if (typeof value === "string") return JSON.stringify(value);
   if (value === null || typeof value !== "object") return String(value);
