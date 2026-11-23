@@ -53,6 +53,7 @@ import {
   type Accepted,
   type AggregateKit,
   type Change,
+  type Reached,
   type DecideResult,
   type DecisionKit,
   type DecisionRead,
@@ -1445,6 +1446,69 @@ const build = (
           ),
         );
       },
+      reached: (rawId, events) => {
+        const id = decodeId(rawId) as string;
+        const stream = `${aggregate.aggregateName}/${id}`;
+        const sourceRef = Aggregate.makeRef(aggregate, id);
+        return Effect.map(
+          Effect.forEach(events, (row) =>
+            Effect.map(decodeEvent(row.event), (event) =>
+              fanOut(
+                {
+                  event,
+                  source: sourceRef,
+                  envelope: decodeEnvelope(row.envelope),
+                  state: undefined,
+                  stream,
+                },
+                {
+                  source: stream,
+                  seq: row.envelope.seq,
+                  origin: aggregate.aggregateName,
+                  tag: (row.event as { readonly _tag: string })._tag,
+                  event: row.event,
+                  envelope: row.envelope,
+                },
+              ),
+            ),
+          ),
+          (all) => {
+            const out = new Map<string, Reached>();
+            for (const { target, key } of all.flat()) {
+              if (target.kind !== "view") continue;
+              out.set(`${target.name}|${key}`, { name: target.name, key });
+            }
+            return [...out.values()];
+          },
+        );
+      },
+      recall: (rawId, root, recall, reached) => {
+        const id = decodeId(rawId) as string;
+        const stream = `${aggregate.aggregateName}/${id}`;
+        const definition = rewriteByName.get(recall.name)?.cls.definition as
+          | { readonly delete?: boolean; readonly events?: Record<string, unknown> }
+          | undefined;
+        // A rewrite with no handlers leaves every event as it is.
+        if (!definition?.delete && Object.keys(definition?.events ?? {}).length === 0) return [];
+        return reached.flatMap(({ name, key }): Array<Delivery> => {
+          // A view the model no longer has holds nothing to change.
+          if (!definitions.views.some((view) => view.viewName === name)) return [];
+          return [
+            {
+              target: targetOf({ kind: "view", name }),
+              key,
+              source: stream,
+              seq: 0,
+              origin: aggregate.aggregateName,
+              tag: "",
+              event: null,
+              envelope: { id, stream, seq: 0, at: 0, commandId: root, correlationId: root },
+              history: true,
+              revision: { root, n: 0, recall },
+            },
+          ];
+        });
+      },
       rollup: Effect.fnUntraced(function* (input) {
         const compaction = compactionByName.get(input.name);
         if (compaction === undefined || compaction.definition.of !== aggregate) {
@@ -1480,11 +1544,16 @@ const build = (
         // On the instance itself: what it folds now.
         const result = yield* commit(id, state, input.version, events, now, commandId, true);
         if (!same(result.next)) return undefined;
+        // Marked, so a view key that holds what it replaces keeps it unfolded.
+        const marked = <Row extends { readonly envelope: EnvelopeJson }>(row: Row): Row => ({
+          ...row,
+          envelope: { ...row.envelope, rollup: input.version },
+        });
         return {
           state: codecs.state.encode(result.next),
           version: input.version + events.length,
-          events: result.events,
-          deliveries: result.deliveries,
+          events: result.events.map(marked),
+          deliveries: result.deliveries.map(marked),
         };
       }),
       get compactions() {
@@ -1938,7 +2007,7 @@ const build = (
     const emit = handlers(def.emit);
     const encodeState = (state: unknown) =>
       codec && state !== null && state !== undefined ? codec.encode(state) : null;
-    const kit: Omit<ViewKit, "push" | "refold" | "revise"> = {
+    const kit: Omit<ViewKit, "push" | "refold" | "revise" | "recall"> = {
       name: view.viewName,
       deliver,
       consumerSingleSource: (target: string) => singleSource(target),
@@ -2019,13 +2088,26 @@ const build = (
           ),
         );
       },
-      apply: Effect.fnUntraced(function* (key, snapshot, batch) {
+      apply: (key, snapshot, batch) => applyBatch(key, snapshot, batch, false),
+    };
+    /**
+     * `kit.apply`. `stored` is set for inputs the key has applied before (a
+     * refold): each roll-up among them is folded, as it was the first time.
+     */
+    const applyBatch = Effect.fnUntraced(function* (
+      key: string,
+      snapshot: ViewSnapshot,
+      batch: ReadonlyArray<Delivery>,
+      stored: boolean,
+    ) {
+      {
         let current: unknown =
           codec && snapshot.state !== null ? codec.decode(snapshot.state) : null;
         let { version, seq } = snapshot;
         const checkpoints: Record<string, number> = { ...snapshot.checkpoints };
         // Written before this record existed: each source's fills in on its next delivery.
         const emitted: Record<string, EmittedRange> = { ...snapshot.emitted };
+        const folded: Record<string, number> = { ...snapshot.folded };
         let changed = false;
         const entries: Array<ViewEntry> = [];
         const downstream: Array<Delivery> = [];
@@ -2045,11 +2127,20 @@ const build = (
             );
           }
           if ((checkpoints[delivery.source] ?? 0) >= delivery.seq) continue;
+          // A roll-up of events the key already holds from this source: what
+          // it folded from them stands, so the roll-up is kept and not folded.
+          const rollup = delivery.envelope.rollup;
+          const covered =
+            !stored &&
+            rollup !== undefined &&
+            (checkpoints[delivery.source] ?? 0) > 0 &&
+            folded[delivery.source] !== rollup;
+          if (rollup !== undefined && !covered) folded[delivery.source] = rollup;
           checkpoints[delivery.source] = delivery.seq;
           changed = true;
           const emittedBefore = seq;
           const seqs: Array<number> = [];
-          inputs.push({ delivery, seqs });
+          inputs.push({ delivery, seqs, ...(covered ? { covered } : {}) });
           const origin = sources.get(delivery.origin)!;
           const event = (yield* decodeEvent(delivery.event)) as { readonly _tag: string };
           const envelope = decodeEnvelope(delivery.envelope);
@@ -2060,7 +2151,7 @@ const build = (
             envelope,
             at: envelope.at,
           };
-          for (const route of delivery.routes ?? [undefined]) {
+          for (const route of covered ? [] : (delivery.routes ?? [undefined])) {
             const before = stateful ? (current ?? def.initial) : null;
             const evolveFn = stateful
               ? pick(evolve, delivery.tag, delivery.origin, route)
@@ -2141,12 +2232,11 @@ const build = (
           seq,
           ...(generation > 0 ? { generation } : {}),
           emitted,
+          ...(Object.keys(folded).length > 0 ? { folded } : {}),
         };
         return { snapshot: next, changed, entries, downstream, inputs };
-      }),
-    };
-    /** `kit.apply`, which `refold` runs one input at a time. */
-    const applyOne = kit.apply;
+      }
+    });
     return Object.assign(kit, {
       refold: Effect.fnUntraced(function* (
         key: string,
@@ -2158,10 +2248,21 @@ const build = (
         const inputs: Array<ViewInput> = [];
         const entries: Array<ViewEntry> = [];
         for (const row of rows) {
-          const { delivery, seqs: had } = viewInputOf(row);
+          const { delivery, seqs: had, covered } = viewInputOf(row);
           for (const seq of had ?? []) top = Math.max(top, seq);
+          if (covered) {
+            // Kept, never folded: the key has read its source through it.
+            if ((snapshot.checkpoints[delivery.source] ?? 0) < delivery.seq) {
+              snapshot = {
+                ...snapshot,
+                checkpoints: { ...snapshot.checkpoints, [delivery.source]: delivery.seq },
+              };
+            }
+            inputs.push({ delivery, seqs: [], covered });
+            continue;
+          }
           const emitted = snapshot.emitted;
-          const step = yield* applyOne(key, snapshot, [delivery]);
+          const step = yield* applyBatch(key, snapshot, [delivery], true);
           if (!step.changed) continue;
           // Each entry keeps the seq its input's entry had; one more takes a new seq.
           const seqs: Array<number> = [];
@@ -2193,6 +2294,86 @@ const build = (
           inputs.push({ delivery, seqs });
         }
         return { snapshot, top, inputs, entries };
+      }),
+      recall: Effect.fnUntraced(function* (
+        key: string,
+        revised: Delivery,
+        rows: ReadonlyArray<ViewInput | Delivery>,
+      ) {
+        const recall = revised.revision?.recall;
+        const rewrite = recall === undefined ? undefined : rewriteByName.get(recall.name);
+        if (recall === undefined || rewrite === undefined) return { rows, changed: false };
+        const aggregate = rewrite.cls.definition.of as Aggregate.Any;
+        const definition = rewrite.cls.definition as {
+          readonly delete?: boolean;
+          readonly events?: Record<string, ((...args: any[]) => unknown) | undefined>;
+        };
+        const input = rewrite.codec.decode(recall.input);
+        const out: Array<ViewInput | Delivery> = [];
+        let changed = false;
+        for (const row of rows) {
+          const { delivery, seqs, covered } = viewInputOf(row);
+          if (
+            delivery.source !== revised.source ||
+            delivery.origin !== aggregate.aggregateName ||
+            delivery.seq > recall.through
+          ) {
+            out.push(row);
+            continue;
+          }
+          if (definition.delete) {
+            changed = true;
+            continue;
+          }
+          const handler = definition.events?.[delivery.tag];
+          if (handler === undefined) {
+            out.push(row);
+            continue;
+          }
+          const event = (yield* decodeEvent(delivery.event)) as { readonly _tag: string };
+          const envelope = decodeEnvelope(delivery.envelope);
+          const next = handler(event, input, envelope) as
+            | { readonly _tag: string }
+            | null
+            | undefined;
+          if (next === undefined) {
+            return yield* Effect.die(
+              new DefinitionError({
+                reason: new InvalidRewrite({ rewrite: recall.name, event: event._tag }),
+              }),
+            );
+          }
+          if (next === null) {
+            changed = true;
+            continue;
+          }
+          const encoded = next === event ? delivery.event : yield* encodeEvent(next);
+          if (sameJson(encoded, delivery.event)) {
+            out.push(row);
+            continue;
+          }
+          changed = true;
+          // The event as it is now, if the key is still given it.
+          const { target: _target, key: _key, routes: _routes, ...rest } = delivery;
+          const now = fanOut(
+            {
+              event: next,
+              source: Aggregate.makeRef(aggregate, envelope.id),
+              envelope,
+              state: undefined,
+              stream: delivery.source,
+            },
+            { ...rest, tag: next._tag, event: encoded },
+          ).find(
+            (routed) =>
+              routed.target.kind === "view" &&
+              routed.target.name === view.viewName &&
+              routed.key === key,
+          );
+          if (now === undefined) continue;
+          out.push({ delivery: now, seqs: seqs ?? [], ...(covered ? { covered } : {}) });
+        }
+        return { rows: out, changed };
       }),
       revise: (key: string, root: string, changes: ReadonlyArray<Change<ViewEntry>>) => {
         const keyRef = Key.refOf(def.key, key);

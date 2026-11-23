@@ -277,7 +277,7 @@ export const ArchiveClosedBookLive = ArchiveClosedBook.toLayer(
 
 The statement needs a handler for `BookArchived`, and the compaction's Layer says where the entries go: see [Compaction](/domain/compaction#teach-the-views-the-roll-up).
 
-Choose one of the two for a book. A rewrite changes the events an instance still holds, so removing a book after it was compacted leaves the statement as it was.
+The two work together. A compacted book can still be removed with `DropBook`, and its statement goes with it.
 
 ## When there are no periods
 

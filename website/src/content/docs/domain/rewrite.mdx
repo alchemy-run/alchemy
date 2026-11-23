@@ -211,7 +211,7 @@ export const forgetOwnerOnce = Effect.fn(function* (
 
 A rewrite changes what the model stores. It doesn't reach what left the model: a row a projection wrote before you gave it a `rewrite` handler, a message a policy sent to an [external system](/domain/external-system), the events a [compaction](/domain/compaction) handed to your archive, your logs and traces.
 
-It also doesn't reach events a compaction already removed from the instance. A view keeps its own copy of those, and a later rewrite leaves that copy as it was. See [Erase before you compact](/domain/erasing-personal-data#erase-before-you-compact).
+A rewrite does reach the copies views kept of events a compaction removed from the instance: it runs over them with the same handlers. Give it a handler for the roll-up event too, since that is what the instance holds now. See [Erase an aggregate you compact](/domain/erasing-personal-data#erase-an-aggregate-you-compact).
 
 A client that is reading a view's or a stream's events live keeps the events it already received. It sees the rewritten ones the next time it reads from the start.
 

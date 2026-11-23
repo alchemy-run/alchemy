@@ -376,12 +376,13 @@ export const BringForwardLive = BringForward.toLayer(
 ```
 
 - The roll-up is ordinary events of the aggregate: `evolve` handles them, and so does every view that reads the aggregate.
+- A view's roll-up handler says what the replaced events amount to (a total adds `e.state.balance`). A view key that already holds those events never folds the roll-up; only one added or rebuilt later does.
 - Folding the roll-up from `initial` must give the state back, or it is refused with `CompactionLossy`.
 - List it in the model's `compactions`, and its Layer in the model's handlers.
 - `after: { events }` makes each instance compact by itself after its own commits. Without it, call `accounts.compact(id, BringForward)`.
-- Views and projections keep what they built.
+- Views and projections keep what they built. A later rewrite still reaches the copies views kept.
 
-More: [Compaction](https://alchemy.run/domain/compaction).
+More: [Compaction](https://alchemy.run/domain/compaction), [Compaction: Teach the views the roll-up](https://alchemy.run/domain/compaction#teach-the-views-the-roll-up).
 
 ## External system
 

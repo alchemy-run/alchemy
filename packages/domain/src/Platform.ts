@@ -49,6 +49,12 @@ export const EnvelopeJson = Schema.Struct({
   correlationId: Schema.optionalKey(Schema.String),
   /** The span that committed the event, so its reactions continue or link to it. */
   trace: Schema.optionalKey(TraceJson),
+  /**
+   * Set on a compaction's roll-up: the instance's version before it. A view
+   * key that already holds events of the instance keeps the roll-up without
+   * folding it (see {@link ViewInput.covered}).
+   */
+  rollup: Schema.optionalKey(Schema.Number),
 });
 export type EnvelopeJson = typeof EnvelopeJson.Type;
 
@@ -129,6 +135,28 @@ export interface Revision {
   readonly gone?: true;
   /** No change: the source has sent every change of `root` it has for this key. */
   readonly done?: true;
+  /**
+   * The rewrite itself, for the events a compaction removed from the source:
+   * a view key runs it over the copies it kept (see {@link ViewKit.recall}).
+   * The delivery that carries it holds no event.
+   */
+  readonly recall?: Recall;
+}
+
+/** A rewrite as a view key runs it over the inputs it kept of events its source no longer holds. */
+export interface Recall {
+  /** The rewrite's name, as the model lists it. */
+  readonly name: string;
+  /** The rewrite's encoded input. */
+  readonly input: Json;
+  /** The last `seq` a compaction removed from the source: the key's inputs through it are its own. */
+  readonly through: number;
+}
+
+/** A view key that events a compaction removed had reached. */
+export interface Reached {
+  readonly name: string;
+  readonly key: string;
 }
 
 /** One stored row a rewrite changed: replaced (`after`), removed (no `after`) or new (no `before`). */
@@ -151,6 +179,11 @@ export interface Revised {
 export interface ViewInput {
   readonly delivery: Delivery;
   readonly seqs: ReadonlyArray<number>;
+  /**
+   * A roll-up of events the key already held when it arrived: kept, so a
+   * rewrite of it finds it, and never folded.
+   */
+  readonly covered?: true;
 }
 
 /** A stored view input: rows written before entries were tracked hold the delivery alone. */
@@ -159,8 +192,20 @@ export type StoredViewInput = ViewInput | Delivery;
 /** A stored view input with its entry seqs, when it has them. */
 export const viewInputOf = (
   row: StoredViewInput,
-): { readonly delivery: Delivery; readonly seqs: ReadonlyArray<number> | undefined } =>
-  "delivery" in row ? row : { delivery: row, seqs: undefined };
+): {
+  readonly delivery: Delivery;
+  readonly seqs: ReadonlyArray<number> | undefined;
+  readonly covered?: true;
+} => ("delivery" in row ? row : { delivery: row, seqs: undefined });
+
+/** The revision that carries a rewrite to a view key's own copies, when it holds one from `source`. */
+export const recallOf = (
+  pending: ReadonlyMap<string, Delivery>,
+  source: string,
+): Delivery | undefined => {
+  const held = pending.get(revisionKey(source, 0));
+  return held?.revision?.recall === undefined ? undefined : held;
+};
 
 /**
  * The aggregate event a delivery derives from, through any views: its stream
@@ -457,6 +502,22 @@ export interface AggregateKit {
     root: string,
     changes: ReadonlyArray<Change<StoredEvent>>,
   ) => Effect.Effect<ReadonlyArray<Delivery>>;
+  /** The view keys a run of an instance's stored events reaches, each once. */
+  readonly reached: (
+    id: string,
+    events: ReadonlyArray<StoredEvent>,
+  ) => Effect.Effect<ReadonlyArray<Reached>>;
+  /**
+   * A rewrite as a revision for each view key that kept events a compaction
+   * removed from the instance, without its `n`. None when the rewrite could
+   * change none of them.
+   */
+  readonly recall: (
+    id: string,
+    root: string,
+    recall: Recall,
+    reached: ReadonlyArray<Reached>,
+  ) => ReadonlyArray<Delivery>;
   /**
    * A compaction's roll-up of an instance, committed as history (policies
    * never react to it); `undefined` when folding it from `initial` does not
@@ -776,6 +837,12 @@ export interface ViewSnapshot {
    * for a source until the key next applies a delivery from it.
    */
   readonly emitted?: Readonly<Record<string, EmittedRange>>;
+  /**
+   * Per source, the roll-up the key last folded, by its `rollup`: every event
+   * of one roll-up is treated alike. Absent for a source whose roll-ups the
+   * key has only kept.
+   */
+  readonly folded?: Readonly<Record<string, number>>;
 }
 
 /**
@@ -915,7 +982,7 @@ export const reviseInputs = (
   const out: Array<StoredViewInput> = [];
   let changed = false;
   for (const row of rows) {
-    const { delivery, seqs } = viewInputOf(row);
+    const { delivery, seqs, covered } = viewInputOf(row);
     const id = revisionKey(delivery.source, delivery.seq);
     const revised = pending.get(id);
     if (revised === undefined) {
@@ -925,7 +992,11 @@ export const reviseInputs = (
     used.add(id);
     changed = true;
     if (revised.revision?.gone) continue;
-    out.push({ delivery: withoutRevision(revised), seqs: seqs ?? [] });
+    out.push({
+      delivery: withoutRevision(revised),
+      seqs: seqs ?? [],
+      ...(covered ? { covered } : {}),
+    });
   }
   const left = new Map<string, Delivery>();
   for (const [id, revised] of pending) {
@@ -1040,6 +1111,20 @@ export interface ViewKit {
     readonly top: number;
     readonly inputs: ReadonlyArray<ViewInput>;
     readonly entries: ReadonlyArray<ViewEntry>;
+  }>;
+  /**
+   * Run a rewrite over the inputs a key kept of events its source no longer
+   * holds (`revised` carries the rewrite, see {@link Revision.recall}): each
+   * is kept, replaced or removed as the rewrite's handlers say, and one the
+   * key is no longer given is removed.
+   */
+  readonly recall: (
+    key: string,
+    revised: Delivery,
+    rows: ReadonlyArray<StoredViewInput>,
+  ) => Effect.Effect<{
+    readonly rows: ReadonlyArray<StoredViewInput>;
+    readonly changed: boolean;
   }>;
   /**
    * What a refold's changes to the key's entries are to each view and

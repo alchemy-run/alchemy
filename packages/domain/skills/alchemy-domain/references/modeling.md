@@ -81,9 +81,9 @@ More: [Closing the books](https://alchemy.run/domain/closing-the-books), [Compac
 - **Remove the instance.** Nothing in it has to stay: a rewrite with `delete: true`.
 - **Encrypt before recording.** The record must never change, or copies leave the model: the server encrypts the field with a per-person key from its own store before sending the command, reads decrypt, and deleting the key erases. Only for data the model carries and never decides on.
 
-Don't compact an aggregate whose events hold personal data: a rewrite can't reach the copies views kept of events a compaction removed.
+A rewrite of an aggregate that compacts needs a handler for the roll-up event too. It also runs over the copies views kept of the removed events. Projection rows written from removed events, and the archive, are yours to change.
 
-More: [Erasing personal data](https://alchemy.run/domain/erasing-personal-data), [Erasing personal data: Erase before you compact](https://alchemy.run/domain/erasing-personal-data#erase-before-you-compact), [Rewrite](https://alchemy.run/domain/rewrite).
+More: [Erasing personal data](https://alchemy.run/domain/erasing-personal-data), [Erasing personal data: Erase an aggregate you compact](https://alchemy.run/domain/erasing-personal-data#erase-an-aggregate-you-compact), [Rewrite](https://alchemy.run/domain/rewrite).
 
 ## Smells
 

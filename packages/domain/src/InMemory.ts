@@ -29,8 +29,11 @@ import {
   outOfOrder,
   Platform,
   refolded,
+  type Reached,
+  recallOf,
   reviseEntries,
   reviseInputs,
+  type StoredViewInput,
   revisionKey,
   sendResultOf,
   stampRevisions,
@@ -699,6 +702,10 @@ export const make = (
                 compacted: number;
                 /** A compaction whose replaced events are still to be handed over and removed. */
                 compacting: { readonly name: string; readonly through: number } | undefined;
+                /** The last `seq` its compactions have removed. */
+                removed: number;
+                /** The view keys the events its compactions removed had reached. */
+                reached: ReadonlyArray<Reached>;
               }
             >(),
             lock: Semaphore.makeUnsafe(1),
@@ -734,6 +741,8 @@ export const make = (
                   revisions: 0,
                   compacted: 0,
                   compacting: undefined,
+                  removed: 0,
+                  reached: [],
                 }),
               );
             return found;
@@ -837,6 +846,13 @@ export const make = (
                   .slice(0, 256);
                 if (run.length === 0) break;
                 if (compaction !== undefined) yield* compaction.archive(id, run);
+                // A rewrite after this finds the copies view keys kept of them.
+                const reached = yield* kit.reached(id, run);
+                const known = new Set(current.reached.map(({ name, key }) => `${name}|${key}`));
+                current.reached = [
+                  ...current.reached,
+                  ...reached.filter(({ name, key }) => !known.has(`${name}|${key}`)),
+                ];
                 const gone = new Set(run.map((event) => event.envelope.seq));
                 current.events = current.events.filter((event) => !gone.has(event.envelope.seq));
                 removed += run.length;
@@ -869,9 +885,12 @@ export const make = (
               });
               if (result === undefined) return lossy;
               // Events a consumer still catching up has yet to read stay until the next one.
+              const routed = current.routed;
               const through = Math.min(
                 before,
-                ...kit.targets.map((target) => current.routed?.[target] ?? before),
+                ...kit.targets.map((target) =>
+                  routed === undefined ? before : (routed[target] ?? 0),
+                ),
               );
               const live = yield* Backfill.routeCommit(
                 sourceRole(id),
@@ -887,6 +906,7 @@ export const make = (
               current.events.push(...result.events);
               current.compacted = result.version;
               current.compacting = { name, through };
+              current.removed = Math.max(current.removed, through);
               yield* announce(id);
               yield* enqueue(live.send, kit.deliver);
               return compacted(result.version, left + (yield* handOver(id)));
@@ -931,7 +951,17 @@ export const make = (
                 current.rewrites.set(input.rewriteId, { result, status: { done: true, sent } });
                 return result;
               };
-              if (changes.length === 0) return record({ _tag: "Rewritten", changed: 0 }, []);
+              const root = `${kit.name}/${id}#${input.rewriteId}`;
+              // The copies view keys kept of the events a compaction removed.
+              const recalled = kit.recall(
+                id,
+                root,
+                { name: input.name, input: input.input, through: current.removed },
+                current.reached,
+              );
+              if (changes.length === 0 && recalled.length === 0) {
+                return record({ _tag: "Rewritten", changed: 0 }, []);
+              }
               const deletes = kit.deletes(input.name);
               if (!deletes) {
                 const invariant = kit.broken(state);
@@ -953,13 +983,13 @@ export const make = (
                   timers.delete(`${modelName}/${kit.name}/${id}/${name}`);
                 }
                 current.scheduled.clear();
+                current.reached = [];
               }
-              const root = `${kit.name}/${id}#${input.rewriteId}`;
               const stamped = stampRevisions(
                 { origin: kit.name, id },
                 root,
                 current.revisions,
-                yield* kit.revise(id, root, changes),
+                [...recalled, ...(yield* kit.revise(id, root, changes))],
                 now(),
               );
               current.revisions = stamped.last;
@@ -1328,7 +1358,14 @@ export const make = (
             Effect.gen(function* () {
               const current = yield* get(key);
               const before = yield* SubscriptionRef.get(current.snapshot);
-              const taken = reviseInputs(current.inputs, current.pending, before.checkpoints);
+              // The rewrite itself, for what the key kept of events its source no longer holds.
+              const recall = recallOf(current.pending, source);
+              if (recall !== undefined) current.pending.delete(revisionKey(source, 0));
+              const recalled =
+                recall === undefined
+                  ? { rows: current.inputs as ReadonlyArray<StoredViewInput>, changed: false }
+                  : yield* kit.recall(key, recall, current.inputs);
+              const taken = reviseInputs(recalled.rows, current.pending, before.checkpoints);
               current.pending = new Map(taken.left);
               const note = (sent: ReadonlyArray<Revised>) => {
                 const id = `${root}|${source}`;
@@ -1344,7 +1381,7 @@ export const make = (
                 current.waiting.delete(id);
                 current.revised.set(id, all);
               };
-              if (!taken.changed) return note([]);
+              if (!taken.changed && !recalled.changed) return note([]);
               const folded = yield* kit.refold(
                 key,
                 { snapshot: emptySnapshot, top: 0 },

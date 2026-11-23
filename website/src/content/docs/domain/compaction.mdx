@@ -66,7 +66,7 @@ export class BringForward extends Domain.Compaction("BringForward", {
 
 ## Teach the views the roll-up
 
-After a compaction, the roll-up is all that is left of the events before it. A view that is added or rebuilt later is built from the roll-up, so it needs a handler for it.
+After a compaction, the roll-up is all that is left of the events before it. A view that is added or rebuilt later is built from the roll-up, so it needs a handler for it. The handler says what the replaced events amount to.
 
 ```typescript title="src/WalletSummary.view.ts"
 import * as Domain from "@alchemy.run/domain";
@@ -86,7 +86,26 @@ export class WalletSummary extends Domain.View("WalletSummary", {
 }) {}
 ```
 
-A view that already applied the events keeps what it built. It receives the roll-up like any other event, and folds it into the same state.
+A view that already applied the events keeps what it built, and never folds the roll-up. So a view that adds up many wallets can add the roll-up's balance to its total: a key that counted the deposits doesn't count them twice.
+
+```typescript title="src/Holdings.view.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { Wallet } from "./Wallet.aggregate.ts";
+
+/** Every wallet's money, as one number. */
+export class Holdings extends Domain.View("Holdings", {
+  from: [Wallet],
+  key: Schema.String,
+  keyOf: { Wallet: () => "all" },
+  state: Schema.Struct({ total: Schema.Int }),
+  initial: { total: 0 },
+  evolve: {
+    Deposited: (holdings, e) => ({ total: holdings.total + e.amount }),
+    WalletBroughtForward: (holdings, e) => ({ total: holdings.total + e.state.balance }),
+  },
+}) {}
+```
 
 ## Say where the replaced events go
 
@@ -184,7 +203,7 @@ A roll-up event that carries the whole state always passes. One that carries onl
 
 A compaction tells views and projections nothing but the roll-up events. They keep what they built from the events it removed: a ledger table keeps every row. To change what was built, use a [rewrite](/domain/rewrite).
 
-A view key also keeps its own copy of the events it applied, so it can fold them again after a rewrite. A compaction doesn't shrink that copy. A rewrite that runs after the compaction can't change it either, so keep personal data out of the events of an aggregate you compact.
+A view key also keeps its own copy of the events it applied, so it can fold them again after a rewrite. A compaction doesn't shrink that copy. A rewrite that runs after the compaction changes it with the same handlers, and one with `delete: true` removes it: see [Erase an aggregate you compact](/domain/erasing-personal-data#erase-an-aggregate-you-compact).
 
 ## Or give each period its own instance
 

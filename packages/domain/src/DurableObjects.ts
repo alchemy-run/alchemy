@@ -70,6 +70,8 @@ import {
   reviseEntries,
   type Revised,
   revisedBy,
+  type Reached,
+  recallOf,
   reviseInputs,
   revisionKey,
   type RewriteInput,
@@ -1283,8 +1285,21 @@ const aggregateObject = (
               yield* state.storage.delete("rw-job");
               yield* rewriteWaker.cancel("rewrite").pipe(Effect.ignore);
             });
+          const root = `${kit.name}/${job.id}#${job.rewriteId}`;
           if (rows.length === 0 && job.phase === "check") {
-            if (job.changed === 0) {
+            // The copies view keys kept of the events a compaction removed.
+            const reached = (yield* state.storage.get<ReadonlyArray<Reached>>("reached")) ?? [];
+            const recalled = kit.recall(
+              job.id,
+              root,
+              {
+                name: job.name,
+                input: job.input,
+                through: (yield* state.storage.get<number>("removed")) ?? 0,
+              },
+              reached,
+            );
+            if (job.changed === 0 && recalled.length === 0) {
               yield* finish({ _tag: "Rewritten", changed: 0 }, []);
               return { more: false, kick: false };
             }
@@ -1293,16 +1308,23 @@ const aggregateObject = (
               yield* finish({ _tag: "InvariantBroken", invariant }, []);
               return { more: false, kick: false };
             }
+            const last = (yield* state.storage.get<number>("rev-n")) ?? 0;
+            const revisions = recalled.map((delivery, index) => ({
+              ...delivery,
+              revision: { ...delivery.revision!, n: last + index + 1 },
+            }));
+            yield* state.storage.put("rev-n", last + revisions.length);
+            yield* outbox.stage(revisions);
             yield* state.storage.put<RewriteJob>("rw-job", {
               ...job,
               phase: "apply",
               through: 0,
               state: null,
               changed: 0,
+              sent: revisions.map(({ target, key }) => ({ target, key })),
             });
-            return { more: true, kick: false };
+            return { more: true, kick: revisions.length > 0 };
           }
-          const root = `${kit.name}/${job.id}#${job.rewriteId}`;
           if (rows.length === 0) {
             // Every event is as the rewrite leaves it: tell each key it reached, and let go.
             const last = (yield* state.storage.get<number>("rev-n")) ?? 0;
@@ -1318,6 +1340,7 @@ const aggregateObject = (
                 yield* timers.cancel(name.slice("armed:".length)).pipe(Effect.ignore);
               }
               yield* clearPrefixes(["receipt:", "decided:", "armed:", "scheduled:"]);
+              yield* state.storage.delete("reached");
             } else {
               // A decision's receipt stored with a copy of its events keeps none of them.
               for (const [key, stored] of yield* state.storage.list<TwoPhase.Plan["receipt"]>({
@@ -1462,6 +1485,8 @@ const aggregateObject = (
     // ------------------------------------------------ compactions
     // `compacted`: the version at the last roll-up. `compacting`: the events
     // a roll-up replaced that are still to be handed over and removed.
+    // `removed`: the last `seq` a compaction removed. `reached`: the view keys
+    // the removed events had reached, which a later rewrite tells.
     /**
      * Hand the events a roll-up replaced to the compaction's handler, a page
      * at a time, and remove each page once the handler has it. The handler
@@ -1486,6 +1511,14 @@ const aggregateObject = (
           const compaction = kit.compactions.find((c) => c.name === compacting.name);
           if (compaction !== undefined)
             yield* compaction.archive(compacting.id, [...rows.values()]);
+          // A rewrite after this finds the copies view keys kept of them.
+          const reached = yield* kit.reached(compacting.id, [...rows.values()]);
+          if (reached.length > 0) {
+            const had = (yield* state.storage.get<ReadonlyArray<Reached>>("reached")) ?? [];
+            const known = new Set(had.map(({ name, key }) => `${name}|${key}`));
+            const news = reached.filter(({ name, key }) => !known.has(`${name}|${key}`));
+            if (news.length > 0) yield* state.storage.put("reached", [...had, ...news]);
+          }
           yield* state.storage.delete([...rows.keys()]);
           removed += rows.size;
         }
@@ -1526,12 +1559,17 @@ const aggregateObject = (
             const routed = yield* state.storage.get<Routed>("routed");
             const through = Math.min(
               before,
-              ...kit.targets.map((target) => routed?.[target] ?? before),
+              // No cursors: it predates catch-up, and every consumer is taken as caught up.
+              ...kit.targets.map((target) =>
+                routed === undefined ? before : (routed[target] ?? 0),
+              ),
             );
             const kick = yield* state.storage.transaction(
               Effect.gen(function* () {
                 yield* state.storage.put("compacted", rolled.version);
                 yield* state.storage.put<Compacting>("compacting", { id, name, through });
+                const removed = (yield* state.storage.get<number>("removed")) ?? 0;
+                yield* state.storage.put("removed", Math.max(removed, through));
                 return yield* persist(id, before, rolled);
               }),
             );
@@ -2223,7 +2261,14 @@ const viewObject = (
         if (inputs.some((row) => !("delivery" in row))) {
           inputs = (yield* kit.refold(key, { snapshot: emptySnapshot, top: 0 }, inputs)).inputs;
         }
-        const taken = reviseInputs(inputs, pending, before.checkpoints);
+        // The rewrite itself, for what the key kept of events its source no longer holds.
+        const recall = recallOf(pending, source);
+        if (recall !== undefined) pending.delete(revisionKey(source, 0));
+        const recalled =
+          recall === undefined
+            ? { rows: inputs, changed: false }
+            : yield* kit.recall(key, recall, inputs);
+        const taken = reviseInputs(recalled.rows, pending, before.checkpoints);
         // The revisions of events still to arrive stay.
         yield* clearPrefixes(["rev:"]);
         yield* putRows(
@@ -2232,7 +2277,7 @@ const viewObject = (
             (revised) => [revisionRow(revised.source, revised.seq), revised] as const,
           ),
         );
-        if (!taken.changed) {
+        if (!taken.changed && !recalled.changed) {
           yield* state.storage.put("revs", { ...held, pending: taken.left.size });
           return yield* note([]);
         }

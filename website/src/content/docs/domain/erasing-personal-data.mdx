@@ -336,15 +336,34 @@ it.effect("erasing a customer removes their name from everything built from it",
 
 ## Check what the model doesn't hold
 
-A rewrite reaches what the model stores. Look for the person's data in what left it: an email a policy sent through an [external system](/domain/external-system), rows a projection wrote before it had a `rewrite` handler, the events a [compaction](/domain/compaction) handed to your archive, and your logs and traces.
+A rewrite reaches what the model stores. Look for the person's data in what left it: an email a policy sent through an [external system](/domain/external-system), rows a projection wrote before it had a `rewrite` handler, the events a [compaction](/domain/compaction) handed to your archive, rows a projection wrote from them, and your logs and traces.
 
 A command's reply is stored with its receipt and returned when the command is sent again. Keep personal data out of replies, or remove the instance.
 
-## Erase before you compact
+## Erase an aggregate you compact
 
-A rewrite changes the events an instance still holds. A [compaction](/domain/compaction) removes events from the instance, while each view keeps its own copy of the ones it applied. A rewrite that runs afterwards can't reach those copies.
+A [compaction](/domain/compaction) replaces an instance's events with a roll-up. If the roll-up carries the name, the rewrite needs a handler for it as well.
 
-So don't compact an aggregate whose events hold personal data you may be asked to erase. Keep the data out of its events instead, as the next section shows, or give each period [its own instance](/domain/closing-the-books) and remove whole periods.
+```diff lang="typescript" title="packages/domain/src/Account/ForgetOwner.rewrite.ts"
++import { AccountBroughtForward } from "./Account.aggregate.ts";
++
+ export class ForgetOwner extends Domain.Rewrite("ForgetOwner", {
+   of: Account,
+   input: { customerId: CustomerId },
+   events: {
+     AccountOpened: (event, { customerId }) =>
+       event.customerId === customerId ? new AccountOpened({ ...event, owner: "" }) : event,
++    AccountBroughtForward: (event, { customerId }) =>
++      event.state.customerId === customerId
++        ? new AccountBroughtForward({ state: { ...event.state, owner: "" } })
++        : event,
+   },
+ }) {}
+```
+
+Each view keeps its own copy of the events a compaction removed. The rewrite runs over those copies with the same handlers, and the views are folded again.
+
+A projection is told only about the events the instance still holds, which after a compaction is the roll-up. Rows it wrote from the removed events are yours to change when the roll-up changes. The events handed to your archive are yours to change as well.
 
 ## Or keep the data out of the events
 

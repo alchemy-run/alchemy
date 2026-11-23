@@ -1,5 +1,6 @@
 import * as Domain from "@alchemy.run/domain";
 import * as DurableObjects from "@alchemy.run/domain/DurableObjects";
+import * as Memory from "@alchemy.run/domain/InMemory";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { Internals } from "@alchemy.run/domain/Model";
 import { Story } from "@alchemy.run/domain/Story";
@@ -124,6 +125,33 @@ class Dashboard extends Domain.View("Dashboard", {
       ...dashboard,
       owners: { ...dashboard.owners, [source.id]: state?.owner ?? "" },
       balances: { ...dashboard.balances, [source.id]: state?.balance ?? 0 },
+    }),
+  },
+}) {}
+
+/** Every account at once: one key, fed by many instances. */
+class Ledger extends Domain.View("Ledger", {
+  from: [Account],
+  key: Schema.String,
+  keyOf: { Account: () => "all" },
+  state: Schema.Struct({
+    total: Schema.Number,
+    notes: Schema.Number,
+    owners: Schema.Record(Schema.String, Schema.String),
+  }),
+  initial: { total: 0, notes: 0, owners: {} },
+  evolve: {
+    Opened: (ledger, e, { source }) => ({
+      ...ledger,
+      owners: { ...ledger.owners, [source.id]: e.owner },
+    }),
+    Deposited: (ledger, e) => ({ ...ledger, total: ledger.total + e.amount }),
+    Noted: (ledger) => ({ ...ledger, notes: ledger.notes + 1 }),
+    // What the events it replaces added: a key that holds them never folds it.
+    BroughtForward: (ledger, e, { source }) => ({
+      total: ledger.total + e.state.balance,
+      notes: ledger.notes + e.state.notes,
+      owners: { ...ledger.owners, [source.id]: e.state.owner },
     }),
   },
 }) {}
@@ -287,6 +315,17 @@ class ForgetOwner extends Domain.Rewrite("ForgetOwner", {
   },
 }) {}
 
+/** The same, for an account that has compacted: its roll-up holds the name and counts the notes. */
+class ForgetOwnerForGood extends Domain.Rewrite("ForgetOwnerForGood", {
+  of: Account,
+  events: {
+    Opened: (event) => new Opened({ ...event, owner: "" }),
+    Noted: () => null,
+    BroughtForward: (event) =>
+      new BroughtForward({ state: { ...event.state, owner: "", notes: 0 } }),
+  },
+}) {}
+
 class DeleteCustomer extends Domain.Rewrite("DeleteCustomer", { of: Customer, delete: true }) {}
 class DeleteAccount extends Domain.Rewrite("DeleteAccount", { of: Account, delete: true }) {}
 
@@ -330,10 +369,10 @@ const archive = (
 
 class Bank extends Domain.Model("Bank", {
   aggregates: [Customer, Account],
-  views: [Summary, Dashboard],
+  views: [Summary, Dashboard, Ledger],
   projections: [Directory, Owners, Cards],
   streams: [Card],
-  rewrites: [ForgetOwner, DeleteCustomer, DeleteAccount, Reassign, Overdraw],
+  rewrites: [ForgetOwner, ForgetOwnerForGood, DeleteCustomer, DeleteAccount, Reassign, Overdraw],
   compactions: [BringForward, Forget],
 }) {}
 
@@ -656,6 +695,94 @@ for (const platform of Object.keys(platforms) as ReadonlyArray<keyof typeof plat
     );
 
     it.live(
+      "a view fed by many instances keeps what it built when one of them compacts",
+      () =>
+        Effect.gen(function* () {
+          const { accounts } = yield* seeded;
+          const ledgers = yield* Ledger;
+          yield* accounts.send(new Open({ id: "a-2", customerId: "c-1", owner: "Sam" }));
+          yield* accounts.send(new Deposit({ id: "a-2", amount: 50 }));
+          yield* accounts.compact("a-1", BringForward);
+          const next = yield* accounts.send(new Deposit({ id: "a-1", amount: 1 }));
+          // The roll-up stands for events the key holds: it adds nothing to them.
+          const ledger = yield* ledgers.get("all", {
+            atLeast: { stream: next.stream, version: next.version },
+          });
+          expect(Option.getOrNull(ledger)).toEqual({
+            total: 151,
+            notes: 2,
+            owners: { "a-1": "Sam", "a-2": "Sam" },
+          });
+        }).pipe(Effect.scoped, Effect.provide(bankOn(platform))),
+      { timeout: 60_000 },
+    );
+
+    it.live(
+      "a rewrite after a compaction reaches the events a view kept",
+      () =>
+        Effect.gen(function* () {
+          const { accounts, dashboards } = yield* seeded;
+          yield* accounts.compact("a-1", BringForward);
+          const receipt = yield* accounts.rewrite("a-1", new ForgetOwnerForGood());
+          // The roll-up is all the instance holds.
+          expect(receipt.changed).toBe(1);
+          yield* accounts.rewritten(receipt);
+
+          expect(yield* accounts.get("a-1")).toEqual({
+            customerId: "c-1",
+            owner: "",
+            balance: 100,
+            notes: 0,
+          });
+          expect(Option.getOrNull(yield* (yield* Summary).get(Account.ref("a-1")))).toEqual({
+            customerId: "c-1",
+            owner: "",
+            balance: 100,
+          });
+          expect(Option.getOrNull(yield* (yield* Ledger).get("all"))).toEqual({
+            total: 100,
+            notes: 0,
+            owners: { "a-1": "" },
+          });
+          // Through the summary, into the view keyed by the customer.
+          expect(Option.getOrNull(yield* dashboards.get(Customer.ref("c-1")))).toEqual({
+            name: "Sam",
+            owners: { "a-1": "" },
+            balances: { "a-1": 100 },
+          });
+        }).pipe(Effect.scoped, Effect.provide(bankOn(platform))),
+      { timeout: 60_000 },
+    );
+
+    it.live(
+      "deleting an instance that has compacted empties the views built from it",
+      () =>
+        Effect.gen(function* () {
+          const { accounts, dashboards } = yield* seeded;
+          yield* accounts.send(new Open({ id: "a-2", customerId: "c-1", owner: "Sam" }));
+          const other = yield* accounts.send(new Deposit({ id: "a-2", amount: 50 }));
+          yield* (yield* Ledger).get("all", {
+            atLeast: { stream: other.stream, version: other.version },
+          });
+          yield* accounts.compact("a-1", BringForward);
+          const receipt = yield* accounts.rewrite("a-1", new DeleteAccount());
+          yield* accounts.rewritten(receipt);
+
+          expect(yield* stored("Account", "a-1")).toEqual([]);
+          expect(Option.isNone(yield* (yield* Summary).get(Account.ref("a-1")))).toBe(true);
+          // The other account's events stay where they were.
+          expect(Option.getOrNull(yield* (yield* Ledger).get("all"))).toEqual({
+            total: 50,
+            notes: 0,
+            owners: { "a-2": "Sam" },
+          });
+          const dashboard = Option.getOrNull(yield* dashboards.get(Customer.ref("c-1")));
+          expect(dashboard?.balances).toEqual({ "a-2": 50 });
+        }).pipe(Effect.scoped, Effect.provide(bankOn(platform))),
+      { timeout: 60_000 },
+    );
+
+    it.live(
       "an instance compacts by itself once it holds more events than its Layer allows",
       () =>
         Effect.gen(function* () {
@@ -812,6 +939,85 @@ describe("Domain rewrites, data stored before them", { tags: ["unit", "local"] }
       );
     },
     { timeout: 60_000 },
+  );
+});
+
+// ---------------------------------------------------------------- a compaction and a consumer behind it
+
+class OneView extends Domain.Model("Bank", {
+  aggregates: [Account],
+  views: [Summary],
+  compactions: [BringForward],
+}) {}
+class TwoViews extends Domain.Model("Bank", {
+  aggregates: [Account],
+  views: [Summary, Ledger],
+  compactions: [BringForward],
+}) {}
+
+const BringForwardLive = BringForward.toLayer(
+  Effect.succeed(Effect.fn(function* (_batch: Domain.Compaction.Batch<typeof Account>) {})),
+);
+
+/** An in-memory platform that outlives the models built on it, and delivers only when drained. */
+const outliving = () => {
+  const hosted = Memory.make({ manual: true });
+  const settle: Effect.Effect<void> = Effect.gen(function* () {
+    while (true) {
+      yield* hosted.control.drain;
+      if (yield* hosted.control.idle) return;
+      yield* Effect.sleep("1 millis");
+    }
+  });
+  return {
+    settle,
+    deploy: <A, E, R>(
+      model: { readonly layer: (handlers: any) => Layer.Layer<any, any, any> },
+      effect: Effect.Effect<A, E, R>,
+    ) =>
+      effect.pipe(
+        Effect.tap(() => settle),
+        Effect.provide(model.layer(BringForwardLive).pipe(Layer.provide(hosted.layer))),
+      ),
+  };
+};
+
+const ledger = Effect.gen(function* () {
+  return Option.getOrNull(yield* (yield* Ledger).get("all"));
+});
+
+describe("Domain compactions, a consumer behind", { tags: ["unit", "local"] }, () => {
+  it.live("the events a view added since has yet to read stay until it has read them", () =>
+    Effect.gen(function* () {
+      const bank = outliving();
+      yield* bank.deploy(
+        OneView,
+        Effect.gen(function* () {
+          const accounts = yield* Account;
+          yield* accounts.send(new Open({ id: "a-1", customerId: "c-1", owner: "Sam" }));
+          yield* accounts.send(new Note({ id: "a-1", text: "call Sam back" }));
+          yield* accounts.send(new Deposit({ id: "a-1", amount: 100 }));
+        }),
+      );
+      const read = yield* bank.deploy(
+        TwoViews,
+        Effect.gen(function* () {
+          // Before the ledger has read the account.
+          yield* (yield* Account).compact("a-1", BringForward);
+          const kept = yield* stored("Account", "a-1");
+          yield* bank.settle;
+          return { kept, ledger: yield* ledger };
+        }),
+      );
+      expect(read.kept).toEqual([
+        [1, "Opened"],
+        [2, "Noted"],
+        [3, "Deposited"],
+        [4, "BroughtForward"],
+      ]);
+      // It read the events, so the roll-up adds nothing to them.
+      expect(read.ledger).toEqual({ total: 100, notes: 1, owners: { "a-1": "Sam" } });
+    }),
   );
 });
 

@@ -130,6 +130,7 @@ class Books extends Domain.Model("Books", {
   views: [Statement],
   policies: [OpenNextBook, ArchiveClosedBook],
   compactions: [ArchiveBook],
+  rewrites: [DropBook],
 }) {}
 
 /** The same books, kept whole until they are removed. */
@@ -144,7 +145,7 @@ describe("Domain, a book per period", { tags: ["unit", "local"] }, () => {
   const january = Book.ref("a-1.2026-01");
   const february = Book.ref("a-1.2026-02");
 
-  it.effect("closing a book opens the next one with its balance, and archives it", () =>
+  it.effect("closing a book opens the next one, archives it, and it can still be removed", () =>
     Story.make(Books, {
       layer: Layer.mergeAll(OpenNextBookLive, ArchiveClosedBookLive, ArchiveBookLive),
     })(
@@ -162,6 +163,10 @@ describe("Domain, a book per period", { tags: ["unit", "local"] }, () => {
       Story.view(Statement, february, { balance: 400, entries: 1, closed: false }),
       Story.when(new Post({ bookId: "a-1.2026-01", amount: 1 })),
       Story.rejected(new BookIsClosed()),
+      // Removed once it no longer has to be kept: the statement goes with it.
+      Story.rewrite(january, new DropBook()),
+      Story.view(Statement, january, Story.none),
+      Story.view(Statement, february, { balance: 400, entries: 1, closed: false }),
     ),
   );
 
