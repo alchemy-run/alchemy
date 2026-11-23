@@ -253,6 +253,22 @@ export interface Host<R = never> {
   readonly background?: (effect: Effect.Effect<void>) => Effect.Effect<boolean>;
   /** Models whose names collide on the same key fail to host: one per Worker, pool or class. */
   readonly claimKey: Effect.Effect<object, never, R>;
+  /**
+   * The model's revision: one more on each deploy that changes its consumers.
+   * A backfill marks the directory nodes it reads with it, so an instance on
+   * code from before a deploy that lists itself after a run read its node
+   * waits until it runs the code that knows the run's consumer. Hosts that
+   * roll code out while older code keeps running supply it.
+   */
+  readonly revision?: {
+    /** Record the model's consumers while deploying: a change makes the next revision. */
+    readonly deploy: (
+      model: HostedModel,
+      consumers: ReadonlyArray<string>,
+    ) => Effect.Effect<void, never, R>;
+    /** The revision of the code running now, or `undefined` before one was deployed. */
+    readonly current: (model: HostedModel) => number | undefined;
+  };
 }
 
 const pad = (n: number) => n.toString().padStart(12, "0");
@@ -846,7 +862,8 @@ const directoryObject = (net: Backfill.Network, random: Random): ObjectImpl =>
     return {
       register: (path: string, ref: Backfill.SourceRef) => reportDefects(role.register(path, ref)),
       child: (path: string, child: string) => reportDefects(role.child(path, child)),
-      list: (path: string, after: string | undefined) => reportDefects(role.list(path, after)),
+      list: (path: string, after: string | undefined, mark?: Backfill.Mark) =>
+        reportDefects(role.list(path, after, mark)),
     };
   });
 
@@ -899,7 +916,11 @@ const runRpc = (relay: Backfill.Relay, run: () => Backfill.Run) => ({
   bfRunProgress: (target: string) => reportDefects(run().progress(target)),
 });
 
-/** How long before a key that couldn't list itself in the directory tries again. */
+/**
+ * The slow pace of a listing that failed: it tries again soon, then backs off,
+ * up to four times this (see `Backfill.makeRetry`), so a directory that is down
+ * for a while isn't called by every unlisted instance every few seconds.
+ */
 const REGISTER_RETRY_MS = 2_000;
 
 /** The id an instance was listed under, saved so jobs that fire later find it. */
@@ -915,9 +936,28 @@ const REGISTER_JOB = "bf-register";
 const ensureRegistered = (net: Backfill.Network, ref: Backfill.SourceRef) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
-    if (yield* state.storage.get<boolean>("registered")) return;
-    yield* net.node.register(Backfill.leafOf(ref), ref);
+    if (yield* state.storage.get<boolean>("registered")) return [];
+    const marks = yield* net.node.register(Backfill.leafOf(ref), ref);
     yield* state.storage.put({ registered: true, [ID_KEY]: ref.id });
+    return marks;
+  });
+
+/**
+ * List the instance in the directory, then ask for a reader for each consumer
+ * it is behind on (one whose run read its node before it was listed). While its
+ * node holds a run's mark from newer code than it runs, it tries again, until
+ * it runs that code.
+ */
+const listAndCatchUp = (
+  net: Backfill.Network,
+  ref: Backfill.SourceRef,
+  source: Backfill.Source,
+  jobs: Backfill.Jobs,
+) =>
+  Effect.gen(function* () {
+    const marks = yield* ensureRegistered(net, ref);
+    if (!(yield* source.catchUp(marks)))
+      yield* jobs.schedule(REGISTER_JOB, Backfill.defaultLimits.staleRetryMillis);
   });
 
 /**
@@ -941,17 +981,19 @@ const listAfterCommit = (jobs: Backfill.Jobs, id: string) =>
 /**
  * The register job: list the instance in the directory, then ask for a reader
  * for each consumer it is behind (one deployed between its commit and now, that
- * the run which listed the directory didn't find it for). A failure tries again.
+ * the run which listed the directory didn't find it for). A failure tries again,
+ * backing off.
  */
 const registerJob = (
   net: Backfill.Network,
   ref: Backfill.SourceRef,
   source: Backfill.Source,
   jobs: Backfill.Jobs,
+  retry: Backfill.Retry,
 ) =>
-  ensureRegistered(net, ref).pipe(
-    Effect.andThen(source.catchUp),
-    Effect.catchCause(() => jobs.schedule(REGISTER_JOB, REGISTER_RETRY_MS)),
+  listAndCatchUp(net, ref, source, jobs).pipe(
+    Effect.andThen(retry.clear(REGISTER_JOB)),
+    Effect.catchCause(() => retry.later(REGISTER_JOB, REGISTER_RETRY_MS)),
   );
 
 /**
@@ -1097,16 +1139,19 @@ const aggregateObject = (
                       { source: kit.name, id: stored },
                       sourceFor(stored),
                       runtime.jobs,
+                      retry,
                     )
                   : sourceFor(stored).flush,
             )
           : Effect.void,
     );
+    const retry = Backfill.makeRetry(runtime.storage, runtime.jobs, Backfill.defaultLimits);
     const sourceFor = (id: string): Backfill.Source =>
       (source ??= Backfill.makeSource(runtime.storage, runtime.jobs, net, {
         ref: { source: kit.name, id },
         singleSource: (target) => planOf(target)?.singleSource === true,
         model,
+        revision: () => net.revision?.(),
         targets: () => kit.targets,
         log: (after, limit) =>
           runtime.provide(
@@ -2417,17 +2462,30 @@ const viewObject = (
           if (key === undefined) return Effect.void;
           if (id === "bf-flush") return sourceFor(key).flush;
           if (id === REGISTER_JOB)
-            return registerJob(net, { source: kit.name, id: key }, sourceFor(key), runtime.jobs);
+            return registerJob(
+              net,
+              { source: kit.name, id: key },
+              sourceFor(key),
+              runtime.jobs,
+              retry,
+            );
           if (id.startsWith("bf-merge:"))
             // Listed before the merge writes its first entry, in the key's own job: its
             // sources' messages don't wait on the directory.
-            return ensureRegistered(net, { source: kit.name, id: key }).pipe(
+            return listAndCatchUp(
+              net,
+              { source: kit.name, id: key },
+              sourceFor(key),
+              runtime.jobs,
+            ).pipe(
               Effect.andThen(consumerFor(key).merge(id.slice("bf-merge:".length))),
-              Effect.catchCause(() => runtime.jobs.schedule(id, REGISTER_RETRY_MS)),
+              Effect.andThen(retry.clear(id)),
+              Effect.catchCause(() => retry.later(id, REGISTER_RETRY_MS)),
             );
           return Effect.void;
         }),
     );
+    const retry = Backfill.makeRetry(runtime.storage, runtime.jobs, Backfill.defaultLimits);
     const consumerFor = (key: string): Backfill.Consumer =>
       (consumer ??= Backfill.makeConsumer(runtime.storage, runtime.jobs, net, {
         key,
@@ -2461,6 +2519,7 @@ const viewObject = (
         },
         singleSource: (target) => planOf(target)?.singleSource === true,
         model,
+        revision: () => net.revision?.(),
         targets: () => kit.targets,
         log: (after, limit) =>
           runtime.provide(
@@ -3290,10 +3349,30 @@ export const makePlatform = <R>(
           /** Runs this isolate has seen complete: a key asks once per isolate, not on every first delivery. */
           const complete = new Set<string>();
           const net: Backfill.Network = {
+            revision: () => host.revision?.current(hosted),
             node: {
-              register: (path, ref) => unwrapDefects(nodeStub(path).register(path, ref)),
-              child: (path, child) => unwrapDefects(nodeStub(path).child(path, child)),
-              list: (path, after) => callOnce(nodeStub(path).list(path, after)),
+              // Older directory code answers no marks. Called once: every caller is a
+              // stored job that tries again itself, backing off (see `registerJob`).
+              register: (path, ref) =>
+                Effect.map(
+                  callOnce<ReadonlyArray<Backfill.Mark> | undefined>(
+                    nodeStub(path).register(path, ref),
+                  ),
+                  (marks) => marks ?? [],
+                ),
+              child: (path, child) =>
+                Effect.map(
+                  unwrapDefects<ReadonlyArray<Backfill.Mark> | undefined>(
+                    nodeStub(path).child(path, child),
+                  ),
+                  (marks) => marks ?? [],
+                ),
+              list: (path, after, mark) =>
+                callOnce(
+                  mark === undefined
+                    ? nodeStub(path).list(path, after)
+                    : nodeStub(path).list(path, after, mark),
+                ),
             },
             source: {
               // A source no longer in the model has nothing to give.
@@ -3780,6 +3859,9 @@ export const makePlatform = <R>(
                 .pipe(Effect.map((phase) => ({ complete: phase === "complete" }))),
             start: (targets, plansOfTarget, backfilled) =>
               Effect.gen(function* () {
+                // At deploy time: the model's consumers make its revision.
+                if (!globalThis.__ALCHEMY_RUNTIME__ && host.revision !== undefined)
+                  yield* inInit(host.revision.deploy(hosted, targets));
                 // At deploy time: the host runs the backfill of new consumers and waits.
                 if (
                   !globalThis.__ALCHEMY_RUNTIME__ &&

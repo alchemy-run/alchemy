@@ -52,6 +52,10 @@ import {
   SUBSCRIPTION_HEADER,
 } from "../DurableObjects.ts";
 import type { Platform, Subscription } from "../Platform.ts";
+import type { Providers as DomainProviders } from "../Providers.ts";
+import { classRevisions } from "../Revision.ts";
+
+export { providers, Providers } from "../Providers.ts";
 
 /** Built for one instance: an object's methods. */
 type InstanceBuild = Effect.Effect<
@@ -199,6 +203,7 @@ const multiplexed = (
   name: string,
   namespace: DurableObjectNamespace<any>,
   onDeclare: (className: string, build: InstanceBuild) => void,
+  revision: Host["revision"],
 ) => {
   const remote = (cls: string): Namespace => ({
     getByName: (key: string) => namespace.getByName(`${cls}/${key}`) as unknown as Stub,
@@ -212,6 +217,7 @@ const multiplexed = (
     lookup: ({ modelName }, cls) => remote(className(modelName, cls)),
     connect: connectTo,
     claimKey: runtimeClaim(name),
+    revision,
   };
   // Sagas run on the workflow engine over the same class: each execution
   // is the instance `<Workflow>/<executionId>`, its journal in that
@@ -256,8 +262,14 @@ export interface DurableObjectsOptions<PoolReq> {
  * object its name says (`Bank.AccountAggregate/a-1`) from the classes the
  * model declared on this node.
  */
-const hostClassPhase = (name: string, classes: ReadonlyMap<string, InstanceBuild>) =>
+const hostClassPhase = (
+  name: string,
+  classes: ReadonlyMap<string, InstanceBuild>,
+  revisions: Effect.Effect<void, never, any>,
+) =>
   Effect.gen(function* () {
+    // The models' revisions: counted while deploying, read back on a node.
+    yield* revisions;
     // Each instance gets Cloudflare's input gate: the objects' storage was
     // written for it.
     yield* Layer.buildWithScope(InputGate, yield* Scope.make());
@@ -351,16 +363,17 @@ export const layerDurableObjects = <PoolReq>(
 ): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
   never,
-  PoolReq | Providers
+  PoolReq | Providers | DomainProviders
 > =>
   // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the class is declared dynamically; its requirements are the pool's and the providers'
   Layer.unwrap(
     Effect.gen(function* () {
       const classes = new Map<string, InstanceBuild>();
+      const revisions = classRevisions(options.name);
       const Objects = (DurableObject as any)()(
         options.name,
         { main: options.main, handler: options.handler ?? "default" },
-        hostClassPhase(options.name, classes).pipe(Effect.provide(options.pool)),
+        hostClassPhase(options.name, classes, revisions.phase).pipe(Effect.provide(options.pool)),
       );
       const node = yield* Effect.serviceOption(NodeHost);
       if (Option.isSome(node)) {
@@ -382,14 +395,19 @@ export const layerDurableObjects = <PoolReq>(
             pool: Config.String("RIVET_POOL").pipe(Config.withDefault("")),
           }).pipe(Effect.orDie),
         );
-        return multiplexed(options.name, self, (cls, build) => classes.set(cls, build));
+        return multiplexed(
+          options.name,
+          self,
+          (cls, build) => classes.set(cls, build),
+          revisions.host,
+        );
       }
       // A caller: deploy the class, and reach it through the gateway.
       const namespace = (yield* Objects) as DurableObjectNamespace<any>;
-      return multiplexed(options.name, namespace, () => undefined);
+      return multiplexed(options.name, namespace, () => undefined, revisions.host);
     }),
   ) as Layer.Layer<
     Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
     never,
-    PoolReq | Providers
+    PoolReq | Providers | DomainProviders
   >;

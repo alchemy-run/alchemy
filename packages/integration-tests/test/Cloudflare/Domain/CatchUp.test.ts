@@ -1,7 +1,9 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -132,6 +134,19 @@ const historyNow = (url: string) =>
     }),
   );
 
+/** The model's revision, as the deployed Worker has it bound. */
+const revisionOf = (workerName: string) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const settings = yield* workers.getScriptScriptAndVersionSetting({
+      accountId,
+      scriptName: workerName,
+    });
+    return (settings.bindings ?? []).find(
+      (binding) => binding.name === "ALCHEMY_DOMAIN_REVISION_Ledger",
+    );
+  });
+
 /** How many new accounts open just before the deploy that adds the view. */
 const OPENED = 120;
 
@@ -256,6 +271,9 @@ for (const dev of [true, false]) {
             );
             const url = v1.url!.replace(/\/+$/, "");
             yield* serving(url, "v1");
+            // The first deploy is the model's first revision.
+            if (!dev)
+              expect(yield* revisionOf(v1.workerName)).toMatchObject({ type: "json", json: 1 });
 
             // A new account's first commit answers before the account is listed in the
             // directory: a stored job lists it afterwards. Open many at once, so their
@@ -285,6 +303,17 @@ for (const dev of [true, false]) {
             );
             yield* Fiber.join(writes);
             yield* serving(url, "v2");
+
+            // Adding the view makes the next revision; the same model again keeps it.
+            if (!dev) {
+              expect(yield* revisionOf(v1.workerName)).toMatchObject({ type: "json", json: 2 });
+              const plan = yield* stack.plan(
+                Effect.gen(function* () {
+                  return { worker: yield* WorkerV2 };
+                }),
+              );
+              expect(plan.resources["Ledger.DomainRevision"]?.action).toBe("noop");
+            }
 
             // Every account reached the view, with no further command to any of them.
             expect(yield* historyComplete(url)).toBe(true);

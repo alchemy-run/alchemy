@@ -68,6 +68,7 @@ The Worker provides `BankLive`, so deploying the Worker deploys the model's clas
 // alchemy.run.ts
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Docker from "@alchemy.run/docker";
+import * as DomainRivet from "@alchemy.run/domain/Rivet";
 import * as Rivet from "@alchemy.run/rivet";
 import BankWorker from "@bank/server/BankWorker";
 import * as Alchemy from "alchemy";
@@ -77,7 +78,12 @@ import * as Layer from "effect/Layer";
 export default Alchemy.Stack(
   "RivetDomainExample",
   {
-    providers: Layer.mergeAll(Cloudflare.providers(), Docker.providers(), Rivet.providers()),
+    providers: Layer.mergeAll(
+      Cloudflare.providers(),
+      Docker.providers(),
+      Rivet.providers(),
+      DomainRivet.providers(),
+    ),
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {

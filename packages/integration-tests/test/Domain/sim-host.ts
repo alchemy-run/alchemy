@@ -259,12 +259,13 @@ export const simHost = (
       );
     }
   });
-  const evict = Effect.gen(function* () {
+  /** Stop every object on this host: its code no longer runs them, and their storage and alarms stay. */
+  const stop = Effect.gen(function* () {
     for (const scope of scopes.values()) yield* Scope.close(scope, Exit.void);
     scopes.clear();
     instances.clear();
-    yield* wake;
   });
+  const evict = Effect.andThen(stop, wake);
   const host: DurableObjects.Host = {
     declare: (model, cls, impl) =>
       Effect.sync(() => {
@@ -275,5 +276,5 @@ export const simHost = (
     lookup: (model, cls) => namespace(DurableObjects.className(model.modelName, cls)),
     claimKey: Effect.sync(() => ({})),
   };
-  return { host, evict, wake, disk };
+  return { host, evict, stop, wake, disk };
 };

@@ -24,6 +24,7 @@ import {
   Workflow,
   type WorkflowImpl,
 } from "@alchemy.run/cloudflare/Workflows/Workflow";
+import * as Output from "alchemy/Output";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeDurableObjectEngine, provideCallbacks } from "alchemy/Workers/DurableObjectEngine";
 import { StorageName } from "alchemy/Workflows";
@@ -60,6 +61,7 @@ import {
   unwrapDefects,
 } from "../DurableObjects.ts";
 import { type Platform, type Subscription } from "../Platform.ts";
+import { Revision } from "../Revision.ts";
 import { Backfill as BackfillRun } from "./Backfill.ts";
 import type { Providers } from "./Providers.ts";
 import { DeployVersion } from "./Version.ts";
@@ -331,6 +333,26 @@ const cloudflareHost = (
         connect: connectTo,
         claimKey: CloudflareWorker,
         background: handToInvocation,
+        // Counted while deploying, and bound into the Worker: each deploy's code knows its own.
+        revision: {
+          deploy: ({ modelName }, consumers) =>
+            Effect.gen(function* () {
+              const worker = yield* CloudflareWorker;
+              const revision = yield* Revision(named(modelName, "DomainRevision"), {});
+              yield* revision.bind`${modelName}`({ model: modelName, consumers: [...consumers] });
+              yield* worker.bind`${revision}`({
+                env: {
+                  [revisionVariable(modelName)]: revision.models.pipe(
+                    Output.map((models) => models[modelName]?.revision),
+                  ),
+                },
+              });
+            }) as unknown as Effect.Effect<void, never, Worker>,
+          current: ({ modelName }) => {
+            const value: unknown = env?.[revisionVariable(modelName)];
+            return typeof value === "number" ? value : undefined;
+          },
+        },
         // A deploy's backfill: a Workflow starts each new consumer's run, then
         // waits until every one is complete. Reconciliation starts it and waits.
         backfill: ({ modelName }, plansOf) =>
@@ -433,6 +455,10 @@ const cloudflareHost = (
       return makePlatform(host);
     }),
   );
+
+/** The Worker variable that holds a model's revision (see {@link Revision}). */
+const revisionVariable = (modelName: string) =>
+  `ALCHEMY_DOMAIN_REVISION_${modelName.replace(/[^A-Za-z0-9_]/g, "_")}`;
 
 /**
  * Host a domain model on Cloudflare Durable Objects. Every aggregate, view

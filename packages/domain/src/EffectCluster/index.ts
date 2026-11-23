@@ -81,8 +81,11 @@ import {
   SUBSCRIPTION_HEADER,
 } from "../DurableObjects.ts";
 import type { Platform, Subscription } from "../Platform.ts";
+import type { Providers as DomainProviders } from "../Providers.ts";
+import { classRevisions } from "../Revision.ts";
 import { migrate, objectStorage, type Retention, sweep } from "./internal.ts";
 
+export { providers, Providers } from "../Providers.ts";
 export type { Retention } from "./internal.ts";
 
 /**
@@ -644,7 +647,7 @@ export const layerEntities = <PoolReq>(
 ): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
   never,
-  PoolReq | Providers
+  PoolReq | Providers | DomainProviders
 > =>
   // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the entity is declared dynamically; its requirements are the pool's and the providers'
   Layer.unwrap(
@@ -861,6 +864,7 @@ export const layerEntities = <PoolReq>(
         });
       });
 
+      const revisions = classRevisions(name);
       const Objects = (Entity as any)()(
         objects,
         {
@@ -871,7 +875,8 @@ export const layerEntities = <PoolReq>(
           // storage consistent.
           concurrency: "unbounded",
         },
-        Effect.succeed(instance).pipe(Effect.provide(options.pool)),
+        // The models' revisions: counted while deploying, read back on a runner.
+        revisions.phase.pipe(Effect.as(instance), Effect.provide(options.pool)),
       );
 
       const runner = yield* Effect.serviceOption(RunnerHost);
@@ -989,6 +994,7 @@ export const layerEntities = <PoolReq>(
               Effect.asVoid,
             ),
           claimKey: runtimeClaim(name),
+          revision: revisions.host,
         };
         return Layer.merge(
           makePlatform(host),
@@ -1003,6 +1009,7 @@ export const layerEntities = <PoolReq>(
         lookup: ({ modelName }, cls) => self(className(modelName, cls)),
         connect: connectTo,
         claimKey: runtimeClaim(name),
+        revision: revisions.host,
       };
       return Layer.merge(
         makePlatform(host),
@@ -1012,5 +1019,5 @@ export const layerEntities = <PoolReq>(
   ) as Layer.Layer<
     Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
     never,
-    PoolReq | Providers
+    PoolReq | Providers | DomainProviders
   >;
