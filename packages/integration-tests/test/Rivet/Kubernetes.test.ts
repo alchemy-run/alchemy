@@ -11,14 +11,13 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { conformanceTests, waitForReady } from "../Cloudflare/Workers/conformance/spec.ts";
-import { kubectlGet, type KindCluster } from "../Kubernetes/fixtures/kind.ts";
+import { kubectlGet, nodePortUrl, type KindCluster } from "../Kubernetes/fixtures/kind.ts";
 import { CLASS_SECRET, ClassSecretConfig } from "./fixtures/class-secret.ts";
 import { expectDurableStream } from "./fixtures/durable-stream-check.ts";
 import {
   Cluster,
-  CONTROL_PLANE_PORT,
+  CONTROL_PLANE_NODE_PORT,
   FRONT_NODE_PORT,
-  FRONT_PORT,
   Kind,
 } from "./fixtures/kubernetes/cluster.ts";
 import { CounterLive } from "./fixtures/kubernetes/counter-live.ts";
@@ -33,7 +32,8 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 // previous (interrupted or NO_DESTROY) run left behind.
 const sharedStack = Core.scratchStack(testOptions, "RivetKubernetesConformance", import.meta.url);
 
-const baseUrl = `http://localhost:${FRONT_PORT}`;
+// The front's node port is on a host port kind picks, read from the deploy.
+let baseUrl = "";
 let rust: RustTarget;
 let kind: KindCluster;
 
@@ -78,6 +78,7 @@ describe.skipIf(!!process.env.FAST)(
         expect(outputs.front).toBe(FRONT_NAME);
         rust = outputs.rust as RustTarget;
         kind = outputs.kind as KindCluster;
+        baseUrl = nodePortUrl(kind.ports, FRONT_NODE_PORT);
         yield* waitForReady(baseUrl, { attempts: 60, base: "3 seconds" });
       }),
       { timeout: 900_000 },
@@ -213,7 +214,7 @@ describe.skipIf(!!process.env.FAST)(
         // The attribute is the in-cluster address callers in the cluster use;
         // from this machine, the control plane is on kind's published port.
         yield* expectRustCounter(
-          { ...rust, endpoint: `http://localhost:${CONTROL_PLANE_PORT}` },
+          { ...rust, endpoint: nodePortUrl(kind.ports, CONTROL_PLANE_NODE_PORT) },
           "kubernetes-rust",
         );
       }),

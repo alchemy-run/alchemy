@@ -526,7 +526,7 @@ const syncRules = (
             project,
             region,
             securityPolicy: securityPolicyName,
-            priority,
+            rulePriority: priority,
           }),
         );
       }

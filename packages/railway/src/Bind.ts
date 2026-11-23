@@ -1,5 +1,6 @@
 import * as Binding from "alchemy/Binding";
 import type { Rpc } from "alchemy/Rpc";
+import { encodeRpcArgs } from "alchemy/RpcArgs";
 import { unpackEnvValue } from "alchemy/RuntimeContext";
 import { isYieldableEffectLike } from "alchemy/Util/effect";
 import * as Data from "effect/Data";
@@ -80,7 +81,7 @@ const makeStub = <Shape>(options: { readonly baseUrl: string; readonly token: st
                     "content-type": "application/json",
                     [RPC_TOKEN_HEADER]: token,
                   },
-                  body: JSON.stringify(args),
+                  body: encodeRpcArgs(args),
                   signal: AbortSignal.timeout(25_000),
                 }),
               catch: (cause) => new RpcCallError({ method: prop, cause }),

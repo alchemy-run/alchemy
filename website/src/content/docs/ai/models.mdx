@@ -34,7 +34,7 @@ export const FastLive = AICloudflare.Model(Fast, {
 });
 ```
 
-The model's key never leaves your runtime. A harness that runs its agent somewhere else, as OpenCode does in a sandbox, sends each model request back to this Layer.
+The model's key never leaves your runtime. Pi and OpenCode both run in your Durable Object, and each model request they make is answered by this Layer.
 
 ## Route through AI Gateway
 

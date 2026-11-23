@@ -11,7 +11,7 @@ import { ChangeOwner, NotPermitted, OwnerChanged } from "../src/Account/ChangeOw
 import { AccountClosed, CloseAccount } from "../src/Account/CloseAccount.command.ts";
 import { TransferCredited } from "../src/Account/CreditTransfer.command.ts";
 import { TransferDebited } from "../src/Account/DebitTransfer.command.ts";
-import { MoneyDeposited } from "../src/Account/DepositMoney.command.ts";
+import { DepositMoney, MoneyDeposited } from "../src/Account/DepositMoney.command.ts";
 import { AccountFrozen, FreezeAccount } from "../src/Account/FreezeAccount.command.ts";
 import { Frozen } from "../src/Account/Frozen.rejection.ts";
 import { InsufficientFunds } from "../src/Account/InsufficientFunds.rejection.ts";
@@ -34,6 +34,7 @@ import { CurrentActor } from "../src/CurrentActor.context.ts";
 import { Customer } from "../src/Customer/Customer.aggregate.ts";
 import { CustomerId } from "../src/Customer/Customer.id.ts";
 import { CustomerDashboard } from "../src/Customer/CustomerDashboard.view.ts";
+import { EraseCustomer } from "../src/Customer/EraseCustomer.saga.ts";
 import {
   CustomerRegistered,
   RegisterCustomer,
@@ -115,6 +116,45 @@ it.effect("registering claims the username with it, then opens a main account", 
     view(CustomerDashboard, c1, (d) => expect(d.balances).toEqual({ ["c-1-main"]: 0 } as any)),
   ),
 );
+
+it.effect("erasing a customer removes their name from everything built from it", () => {
+  const main = Account.ref("c-1-main");
+  return story(
+    as(sam),
+    when(new RegisterCustomer({ customerId: c1.id, name: "sam", username: samsName })),
+    when(new DepositMoney({ accountId: main.id, amount: 500 })),
+    streamed(
+      AccountCard,
+      main,
+      new CardChanged({ customerId: c1.id, owner: "sam", balance: 500, frozen: false }),
+    ),
+    // The operator who handles the customer's request starts the erasure.
+    Story.start(EraseCustomer, c1.id, {}),
+    Story.saga(EraseCustomer, c1.id, { _tag: "Completed", result: undefined }),
+    // The customer and the claim on their username are gone.
+    state(c1, { _tag: "New" }),
+    state(UsernameClaim.ref("sam"), { _tag: "Free" }),
+    // The account keeps what it did, without the name: its first event was rewritten.
+    then(
+      main,
+      new AccountOpened({ customerId: c1.id, owner: "" }),
+      new MoneyDeposited({ amount: 500, balanceAfter: 500 }),
+    ),
+    view(AccountSummary, main, { customerId: c1.id, owner: "", balance: 500 }),
+    view(CustomerDashboard, c1, (d) => {
+      expect(d.name).toBeNull();
+      expect(d.balances).toEqual({ ["c-1-main"]: 500 } as any);
+    }),
+    // The card that carried the name was removed from its stream.
+    streamed(AccountCard, main),
+    // Nothing leads to the customer by that username: someone else can take it.
+    as(alex),
+    when(new RegisterCustomer({ customerId: c2.id, name: "alex", username: samsName })),
+    then(c2, new CustomerRegistered({ name: "alex", username: samsName })),
+    then(UsernameClaim.ref("sam"), new UsernameClaimed({ customerId: c2.id })),
+    then(Account.ref("c-2-main"), new AccountOpened({ customerId: c2.id, owner: "alex" })),
+  );
+});
 
 it.effect("a taken username rejects the registration, and nothing is recorded", () =>
   story(

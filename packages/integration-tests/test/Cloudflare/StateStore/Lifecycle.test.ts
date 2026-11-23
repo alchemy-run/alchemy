@@ -1,6 +1,10 @@
+import crypto from "node:crypto";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import { readStoreCredentials } from "@alchemy.run/cloudflare/StateStore/CredentialsFile";
+import {
+  readStoreCredentials,
+  writeStoreCredentials,
+} from "@alchemy.run/cloudflare/StateStore/CredentialsFile";
 import {
   bootstrap,
   loginWithCloudflare,
@@ -332,6 +336,70 @@ test.provider(
       yield* teardownStateStore({ workerName });
       expect(yield* scriptExists(accountId, workerName)).toBe(false);
       expect(yield* attachedDomains(accountId, domain)).toEqual([]);
+    }),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:statestore", "live"],
+    timeout: 300_000,
+  },
+);
+
+test.provider(
+  "a state store re-derives its URL after the account's workers.dev subdomain changes",
+  () =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // A worktree's stage is longer than a store's 54-character Worker name.
+      const stage = yield* Effect.sync(() =>
+        crypto.createHash("sha256").update(Test.defaultStage()).digest("hex").slice(0, 12),
+      );
+      const workerName = `alchemy-state-store-subdomain-${stage}`;
+      const record = {
+        kind: "resource" as const,
+        resourceType: "Test.Resource",
+        namespace: undefined,
+        fqn: "subdomain/a",
+        logicalId: "a",
+        instanceId: "kept",
+        providerVersion: 1,
+        status: "created" as const,
+        downstream: [],
+        bindings: [],
+        props: { hello: "world" },
+        attr: { id: "kept" },
+      };
+      yield* teardownStateStore({ workerName });
+
+      const state = yield* State.pipe(
+        Effect.flatten,
+        Effect.provide(Cloudflare.state({ workerName })),
+      );
+      yield* state.set({ stack: "subdomain", stage: "test", fqn: "subdomain/a", value: record });
+
+      // Renaming the account's workers.dev subdomain in the dashboard leaves
+      // the cached URL on a hostname that no longer resolves.
+      const profile = yield* currentProfileName;
+      const credentialsStore = yield* CredentialsStore;
+      const cached = yield* readStoreCredentials(credentialsStore, profile, workerName);
+      const { subdomain } = yield* workers.getSubdomain({ accountId });
+      const url = `https://${workerName}.${subdomain}.workers.dev`;
+      expect(cached?.url).toBe(url);
+      yield* writeStoreCredentials(credentialsStore, profile, workerName, {
+        ...cached!,
+        url: `https://${workerName}.renamed-${stage}.workers.dev`,
+      });
+
+      // The next run serves from the store's current URL and caches it.
+      const renamed = yield* State.pipe(
+        Effect.flatten,
+        Effect.provide(Cloudflare.state({ workerName })),
+      );
+      expect(yield* renamed.get({ stack: "subdomain", stage: "test", fqn: "subdomain/a" })).toEqual(
+        record,
+      );
+      expect((yield* readStoreCredentials(credentialsStore, profile, workerName))?.url).toBe(url);
+
+      yield* teardownStateStore({ workerName });
+      expect(yield* scriptExists(accountId, workerName)).toBe(false);
     }),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:statestore", "live"],

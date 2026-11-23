@@ -267,32 +267,59 @@ export const scopedBuildx = Effect.fn(function* (version: string | undefined) {
 });
 
 /**
- * The Domain revisions bound into the swarm services' environments
- * (`DOMAIN_REVISIONS_<class>`, a model name to revision record), by class.
- * Out of band: read from the services as Docker runs them.
+ * The Domain revisions bound into the environments of the swarm services in
+ * `service`'s stack (`DOMAIN_REVISIONS_<class>`, a model name to revision
+ * record), by class. Out of band: read from the services as Docker runs them.
+ * Only the one stack's: the same suite may run beside it from another worktree.
  */
-export const domainRevisions = Effect.sync(() => {
-  const docker = (args: ReadonlyArray<string>) =>
-    String(
-      NodeChildProcess.spawnSync("docker", args, { stdio: ["ignore", "pipe", "ignore"] }).stdout,
-    );
-  const revisions: Record<string, Record<string, number>> = {};
-  for (const service of docker(["service", "ls", "-q"]).split("\n").filter(Boolean)) {
-    const env = JSON.parse(
-      docker([
-        "service",
-        "inspect",
-        service,
-        "--format",
-        "{{json .Spec.TaskTemplate.ContainerSpec.Env}}",
-      ]) || "null",
-    ) as ReadonlyArray<string> | null;
-    for (const entry of env ?? []) {
-      const match = /^DOMAIN_REVISIONS_([^=]+)=(.*)$/s.exec(entry);
-      if (match === null) continue;
-      // Bound values are JSON-packed.
-      revisions[match[1]!] = JSON.parse(match[2]!) as Record<string, number>;
+export const domainRevisions = (service: string) =>
+  Effect.sync(() => {
+    const docker = (args: ReadonlyArray<string>) =>
+      String(
+        NodeChildProcess.spawnSync("docker", args, { stdio: ["ignore", "pipe", "ignore"] }).stdout,
+      );
+    const stack = docker([
+      "service",
+      "inspect",
+      service,
+      "--format",
+      '{{index .Spec.Labels "alchemy::stack"}}',
+    ]).trim();
+    const revisions: Record<string, Record<string, number>> = {};
+    for (const service of docker([
+      "service",
+      "ls",
+      "-q",
+      "--filter",
+      `label=alchemy::stack=${stack}`,
+    ])
+      .split("\n")
+      .filter(Boolean)) {
+      const env = JSON.parse(
+        docker([
+          "service",
+          "inspect",
+          service,
+          "--format",
+          "{{json .Spec.TaskTemplate.ContainerSpec.Env}}",
+        ]) || "null",
+      ) as ReadonlyArray<string> | null;
+      for (const entry of env ?? []) {
+        const match = /^DOMAIN_REVISIONS_([^=]+)=(.*)$/s.exec(entry);
+        if (match === null) continue;
+        // Bound values are JSON-packed.
+        revisions[match[1]!] = JSON.parse(match[2]!) as Record<string, number>;
+      }
     }
-  }
-  return revisions;
-});
+    return revisions;
+  });
+
+/**
+ * The local URL of a Docker service's port. Test services publish their port
+ * on one Swarm picks, so a suite runs beside itself in other worktrees, and
+ * read it back from the service's `ports` after the deploy.
+ */
+export const publishedUrl = (
+  ports: ReadonlyArray<{ readonly external?: number; readonly internal: number }>,
+  internal = 3000,
+) => `http://localhost:${ports.find((port) => port.internal === internal)?.external}`;

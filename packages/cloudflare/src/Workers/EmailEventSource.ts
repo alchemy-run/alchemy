@@ -1,6 +1,7 @@
 import type * as cf from "@cloudflare/workers-types";
 import type { Input } from "alchemy/Input";
 import * as Namespace from "alchemy/Namespace";
+import { defaultProviderMode, ProviderModePolicy, type ProviderMode } from "alchemy/ProviderMode";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import type { FunctionContext } from "alchemy/Runtime/Function";
 import { RuntimeContext } from "alchemy/RuntimeContext";
@@ -126,6 +127,11 @@ export interface EmailSubscribeProps {
    * `{ zoneId, name? }` object (a `Cloudflare.Zone` resource works).
    * Required to auto-create routing resources; omit if you're managing
    * `Email.Routing` and `Email.Rule`/`Email.CatchAll` yourself.
+   *
+   * Under `alchemy dev` a local Worker creates none of them: nothing is
+   * uploaded for the zone's mail to reach. Drive the handler through the
+   * local `/cdn-cgi/handler/email` route instead. A Worker piped through
+   * `Alchemy.remote()` runs on Cloudflare and still gets its routing.
    */
   zone?: Input<Reference>;
   /**
@@ -175,7 +181,8 @@ export interface EmailSubscribeProps {
  *   resource whose `actions: [{ type: "worker", … }]` targets this
  *   Worker — `Cloudflare.Email.CatchAll` for a catch-all subscription,
  *   `Cloudflare.Email.Rule` for anything more specific. No manual
- *   wiring needed in `alchemy.run.ts`.
+ *   wiring needed in `alchemy.run.ts`. Skipped for a Worker running
+ *   locally under `alchemy dev`.
  *
  * Requires `EmailEventSourceLive` provided on the Worker's Effect.
  *
@@ -250,6 +257,16 @@ export class EmailEventSource extends Context.Service<EmailEventSource, EmailEve
   "Cloudflare.Workers.EmailEventSource",
 ) {}
 
+/**
+ * The mode the planner gives the host Worker: the one it was registered
+ * with, else the run default. A `remote()` around the subscription alone
+ * leaves the Worker local, so the ambient policy is cleared first.
+ */
+const hostMode = (host: { readonly Mode?: ProviderMode | undefined }) =>
+  host.Mode !== undefined
+    ? Effect.succeed(host.Mode)
+    : defaultProviderMode.pipe(Effect.provideService(ProviderModePolicy, undefined));
+
 export const EmailEventSourceLive = Layer.effect(
   EmailEventSource,
   Effect.gen(function* () {
@@ -260,10 +277,17 @@ export const EmailEventSourceLive = Layer.effect(
     ) {
       // Deploy-time: provision the Email.Routing toggle plus the routing
       // resource that hands matched mail to this Worker. Skipped once
-      // running inside the deployed Worker (the global guard) and when
-      // `zone` is omitted (bring-your-own routing). Namespaced under the
-      // host so logical identity is stable per Worker.
-      if (!globalThis.__ALCHEMY_RUNTIME__ && props.zone !== undefined) {
+      // running inside the deployed Worker (the global guard), when `zone`
+      // is omitted (bring-your-own routing), and when the Worker runs
+      // locally under `alchemy dev`: nothing is uploaded, so a live rule
+      // would send the zone's mail to a script that does not exist. Local
+      // mail arrives through the `/cdn-cgi/handler/email` route instead.
+      // Namespaced under the host so logical identity is stable per Worker.
+      if (
+        !globalThis.__ALCHEMY_RUNTIME__ &&
+        props.zone !== undefined &&
+        (yield* hostMode(host)) === "live"
+      ) {
         const zone = props.zone;
         const matchers = props.matchers;
         yield* Namespace.push(

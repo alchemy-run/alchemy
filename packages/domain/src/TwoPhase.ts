@@ -187,6 +187,11 @@ export interface Primary {
 export interface Drive {
   readonly primary: Primary;
   readonly participant: (address: Address) => Participant;
+  /**
+   * A stored receipt as `send` answers it: its events read back from the
+   * instances that hold them (see `decisionReceiptOf`).
+   */
+  readonly receipt: (stored: DecisionReceiptJson) => Effect.Effect<DecisionReceiptJson>;
 }
 
 /**
@@ -292,7 +297,10 @@ export const decide = ({
     ).pipe(Effect.catchTag("Unreachable", () => new Contended()));
     const [first, others] = yield* readAll;
     if (first._tag === "Decided") {
-      return { _tag: "Accepted", receipt: first.receipt } satisfies DecisionResult;
+      return {
+        _tag: "Accepted",
+        receipt: yield* drive.receipt(first.receipt),
+      } satisfies DecisionResult;
     }
     const states = [];
     for (const [index, result] of [first, ...others].entries()) {
@@ -341,7 +349,10 @@ export const decide = ({
     };
     const held = yield* drive.primary.hold(plan);
     if (held._tag === "Decided") {
-      return { _tag: "Accepted", receipt: held.receipt } satisfies DecisionResult;
+      return {
+        _tag: "Accepted",
+        receipt: yield* drive.receipt(held.receipt),
+      } satisfies DecisionResult;
     }
     if (held._tag !== "Held") return yield* new Contended();
     if ((yield* finish(drive, plan)) === "Aborted") return yield* new Contended();

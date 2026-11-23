@@ -12,9 +12,9 @@ import * as Schedule from "effect/Schedule";
 import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../Utils/Telemetry.ts";
 import TestServiceV2Scaled from "./fixtures/service-v2-scaled.ts";
 import TestServiceV2 from "./fixtures/service-v2.ts";
-import TestService, { SERVICE_EXTERNAL_PORT } from "./fixtures/service.ts";
-import TracedService, { TRACED_EXTERNAL_PORT } from "./fixtures/traced.ts";
-import { ensureDockerSwarm } from "./Runtime.ts";
+import TestService from "./fixtures/service.ts";
+import TracedService from "./fixtures/traced.ts";
+import { ensureDockerSwarm, publishedUrl } from "./Runtime.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(Docker.providers(), Cloudflare.providers()),
@@ -59,19 +59,20 @@ test.provider(
         ),
       );
       expect(bundled).toContain("/ticks");
+      // Swarm picks the published port, so suites run side by side.
       expect(service.ports).toEqual([
         {
-          external: SERVICE_EXTERNAL_PORT,
+          external: expect.any(Number),
           internal: 3000,
           protocol: "tcp",
           mode: "ingress",
         },
       ]);
 
-      // The swarm ingress publishes the fixed external port on the local
-      // node. Retry through task startup (image already local, so this is
-      // just container boot + routing-mesh programming).
-      const base = `http://localhost:${SERVICE_EXTERNAL_PORT}`;
+      // The swarm ingress publishes the port on the local node. Retry through
+      // task startup (image already local, so this is just container boot +
+      // routing-mesh programming).
+      const base = publishedUrl(service.ports);
       const health = yield* HttpClient.get(`${base}/health`).pipe(
         Effect.flatMap((res) =>
           res.status === 200
@@ -122,6 +123,8 @@ test.provider(
         }),
       );
       expect(updated.id).toBe(service.id);
+      // An update keeps the port Swarm picked.
+      expect(updated.ports).toEqual(service.ports);
       expect(updated.code?.hash).not.toBe(service.code?.hash);
       expect(updated.image).toContain(updated.code!.hash);
 
@@ -182,6 +185,67 @@ test.provider(
   },
 );
 
+// The image is content-addressed by the whole bundle, so a change to a module
+// `main` imports rolls the service onto a new image too, though `main` and
+// every prop stay the same.
+test.provider(
+  "rolls a change to a module the program imports onto the service",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* ensureDockerSwarm;
+      yield* stack.destroy();
+
+      // A copy of the fixture, so the test edits its own `message.ts`.
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const tempRoot = path.resolve(import.meta.dirname, "../../.tmp");
+      yield* fs.makeDirectory(tempRoot, { recursive: true });
+      const dir = yield* fs.makeTempDirectoryScoped({
+        directory: tempRoot,
+        prefix: "code-change-",
+      });
+      const fixtures = path.resolve(import.meta.dirname, "fixtures/code-change");
+      for (const file of ["service.ts", "message.ts"]) {
+        yield* fs.copyFile(path.join(fixtures, file), path.join(dir, file));
+      }
+      const { default: CodeChangeService } = yield* Effect.promise(
+        () =>
+          import(path.join(dir, "service.ts")) as Promise<
+            typeof import("./fixtures/code-change/service.ts")
+          >,
+      );
+      const program = Effect.gen(function* () {
+        return yield* CodeChangeService;
+      });
+      const message = (url: string, expected: string) =>
+        HttpClient.get(`${url}/`).pipe(
+          Effect.flatMap((res) => res.text),
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (text) => text === expected,
+            times: 30,
+          }),
+        );
+
+      const first = yield* stack.deploy(program);
+      expect(yield* message(publishedUrl(first.ports), "v1")).toBe("v1");
+
+      yield* fs.writeFileString(path.join(dir, "message.ts"), 'export const MESSAGE = "v2";\n');
+      const plan = yield* stack.plan(program);
+      expect(plan.resources.DockerCodeChangeService).toMatchObject({ action: "update" });
+      const second = yield* stack.deploy(program);
+      expect(second.id).toBe(first.id);
+      expect(second.code?.hash).not.toBe(first.code?.hash);
+      expect(yield* message(publishedUrl(second.ports), "v2")).toBe("v2");
+
+      yield* stack.destroy();
+    }).pipe(Effect.scoped),
+  {
+    tags: ["provider:docker", "provider:docker:service", "local"],
+    timeout: 300_000,
+  },
+);
+
 // The collector is a live Cloudflare Worker: the swarm task exports to it
 // over the internet, as a deployed service would.
 test.provider(
@@ -193,7 +257,7 @@ test.provider(
 
       // The traced program binds the collector url at deploy, so it deploys first.
       const collector = yield* stack.deploy(OtelCollector());
-      yield* stack
+      const traced = yield* stack
         .deploy(
           Effect.gen(function* () {
             yield* OtelCollector();
@@ -202,9 +266,7 @@ test.provider(
         )
         .pipe(withCollectorUrl(collector.url!));
 
-      expect(yield* doWork(`http://localhost:${TRACED_EXTERNAL_PORT}`, "docker")).toBe(
-        "did work docker",
-      );
+      expect(yield* doWork(publishedUrl(traced.ports), "docker")).toBe("did work docker");
       const traces = yield* waitForWorkSpan(collector.url!, "docker");
       expect(traces).toContain("work:docker");
       expect(traces).toContain("docker-service-e2e");

@@ -297,7 +297,8 @@ export const GlossariesTermProvider = () =>
             displayName: news.displayName,
             description: news.description,
             labels: desiredLabels,
-            parent: glossary,
+            glossary,
+            parent: immediateParent,
             termId,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));

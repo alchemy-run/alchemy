@@ -4,10 +4,10 @@ import * as StreamFormat from "@alchemy.run/rivet/StreamFormat";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { durableStreamFront } from "../durable-stream-front.ts";
-import { Services } from "./cluster.ts";
+import { SERVER_TYPE, Services } from "./cluster.ts";
 
 export const FrontServer = Hetzner.Server("RivetHetznerFrontServer", {
-  serverType: "cx23",
+  serverType: SERVER_TYPE,
   image: "ubuntu-24.04",
   location: "nbg1",
   // The suite reaches it over IPv4; skipping IPv6 keeps the project's

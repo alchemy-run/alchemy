@@ -9,9 +9,8 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import { ensureDockerSwarm } from "../Docker/Runtime.ts";
+import { ensureDockerSwarm, publishedUrl } from "../Docker/Runtime.ts";
 import { conformance } from "../Workflows/conformance/conformance.ts";
-import { WORKFLOW_FRONT_PORT } from "./fixtures/workflow-cluster.ts";
 import WorkflowFront from "./fixtures/workflow-front.ts";
 
 class NotReady extends Data.TaggedError("NotReady")<{ readonly message: string }> {}
@@ -22,7 +21,8 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 // previous (interrupted or NO_DESTROY) run left behind.
 const stack = Core.scratchStack(testOptions, "RivetWorkflows", import.meta.url);
 
-const url = `http://localhost:${WORKFLOW_FRONT_PORT}`;
+// The front's port is one Swarm picks, read from the deploy.
+let url = "";
 
 /** A front route's body, failing with `NotReady` until it answers 200. */
 const fetchText = (path: string, method: "GET" | "POST" = "GET") =>
@@ -54,10 +54,11 @@ describe.skipIf(!!process.env.FAST)(
         const outputs = yield* stack.deploy(
           Effect.gen(function* () {
             const front = yield* WorkflowFront;
-            return { front: front.name };
+            return { front: front.name, ports: front.ports };
           }),
         );
         expect(outputs.front).toBeTruthy();
+        url = publishedUrl(outputs.ports);
         // The pool's nodes take a while to start: wait until a run completes.
         const id = `probe-${crypto.randomUUID().slice(0, 8)}`;
         const { executionId } = JSON.parse(
@@ -81,7 +82,7 @@ describe.skipIf(!!process.env.FAST)(
 
     conformance({
       test,
-      url: Effect.succeed(url),
+      url: Effect.sync(() => url),
       napsWithinMillis: 20_000,
       // A failed run is retried with the callbacks' backoff: 2 then 4 seconds,
       // then the one-second sleep.

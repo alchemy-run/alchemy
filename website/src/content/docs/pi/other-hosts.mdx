@@ -33,10 +33,10 @@ yield* harness.createConversation({ name: "pr-142", cwd: "/workspace/pr-142" });
 
 ## Code mode on a worker thread
 
-`Pi.EvalQuickJS()` runs code mode scripts in QuickJS on a worker thread, so a long script doesn't block the process:
+`AI.EvalQuickJS()` runs [code mode](/pi/code-mode) programs in QuickJS on a worker thread, so a long script doesn't block the process:
 
 ```typescript
-const CodeModeLive = Pi.CodeModeAsync.pipe(Layer.provide(Pi.EvalQuickJS()));
+const CodeModeLive = AI.CodeModeAsync.pipe(Layer.provide(AI.EvalQuickJS()));
 ```
 
 ## All three together
@@ -44,6 +44,7 @@ const CodeModeLive = Pi.CodeModeAsync.pipe(Layer.provide(Pi.EvalQuickJS()));
 The Layers for a machine, composed once:
 
 ```typescript title="src/layers.ts"
+import * as AI from "@alchemy.run/ai";
 import * as Pi from "@alchemy.run/pi";
 import * as Layer from "effect/Layer";
 import { FastLive } from "./models.ts";
@@ -54,7 +55,7 @@ export const HarnessLive = Layer.mergeAll(
   AddLive,
   Pi.SqliteFile("/data/pi.sqlite"),
   Pi.CodingTools.pipe(Layer.provideMerge(Pi.LocalEnv({ cwd: "/workspace" }))),
-  Pi.CodeModeAsync.pipe(Layer.provide(Pi.EvalQuickJS())),
+  AI.CodeModeAsync.pipe(Layer.provide(AI.EvalQuickJS())),
 );
 ```
 

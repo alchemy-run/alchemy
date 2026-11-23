@@ -104,6 +104,6 @@ export const main = Effect.gen(function* () {
 }).pipe(Effect.scoped);
 ```
 
-Pass `endpoint`, `token`, `namespace` or `pool` to either one to set a field in code instead. Each class's outer Effect runs once, in `serve`, with the context it's given, so provide the services the classes yield. `serve` also takes RivetKit's `registry` settings, actor `options` by class, the `shutdown` grace period, and a `connected` Effect that runs once the node has registered. The process owns its signals: interrupt `serve` to stop the node. `connect` takes `headers`, computed for each call, such as the caller's trace.
+Pass `endpoint`, `token`, `namespace` or `pool` to either one to set a field in code instead. Each class's outer Effect runs once, in `serve`, with the context it's given, so provide the services the classes yield. `serve` also takes RivetKit's `registry` settings, actor `options` by class, which win over the [ones a class sets](/rivet/durable-objects#tune-when-it-sleeps), the `shutdown` grace period, and a `connected` Effect that runs once the node has registered. The process owns its signals: interrupt `serve` to stop the node. `connect` takes `headers`, computed for each call, such as the caller's trace.
 
 Next, choose a platform: [Docker](/rivet/docker), [AWS](/rivet/aws), [GCP](/rivet/gcp), [Kubernetes](/rivet/kubernetes), [Fly](/rivet/fly), [Hetzner](/rivet/hetzner), [Railway](/rivet/railway) or [Rivet Cloud](/rivet/rivet-cloud).

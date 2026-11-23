@@ -1,9 +1,9 @@
 ---
 title: Skills
-description: Give OpenCode sessions skills. Each AI.Skill becomes an OpenCode skill in the sandbox, which the model loads with OpenCode's own skill tool.
+description: Give OpenCode sessions skills. Each AI.Skill becomes an OpenCode skill, which the model loads with OpenCode's own skill tool.
 ---
 
-An OpenCode harness takes [`AI.Skill`](/ai/skills) declarations. OpenCode has skills of its own: it lists each skill's name and description to the model, and the model loads one with OpenCode's `skill` tool. The harness writes your skills into each session's sandbox where OpenCode looks for them.
+An OpenCode harness takes [`AI.Skill`](/ai/skills) declarations. OpenCode has skills of its own: it lists each skill's name and description to the model, and the model loads one with OpenCode's `skill` tool. The harness registers your skills with OpenCode when it starts.
 
 ## List a skill
 
@@ -34,6 +34,8 @@ A harness with skills switches on OpenCode's `skill` tool for every prompt, incl
 
 ## Skills change with a deploy
 
-Skills are written when a session's sandbox is set up, and again when the harness's configuration changes. A deploy that edits a skill reaches running sessions on their next prompt: the harness restarts OpenCode in the sandbox with the new skills, and the session's transcript stays.
+Skills are registered each time OpenCode starts in the Durable Object. A deploy that edits a skill reaches every session on its next prompt, and transcripts stay.
+
+A skill's `instructions` are what OpenCode loads. OpenCode has no file system in a Durable Object, so a skill's extra `files` are not available to it.
 
 Skills are for the whole harness. To give different sessions different skills, use two harnesses, each with its own `name`.

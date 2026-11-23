@@ -6,10 +6,9 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { domainRevisions, ensureDockerSwarm } from "../Docker/Runtime.ts";
+import { domainRevisions, ensureDockerSwarm, publishedUrl } from "../Docker/Runtime.ts";
 import { conformance, rebuild, waitForReady } from "../Domain/conformance/conformance.ts";
 import { latency } from "../Domain/conformance/latency.ts";
-import { DOMAIN_FRONT_PORT } from "./fixtures/domain-cluster.ts";
 import DomainFrontV1 from "./fixtures/domain-front-v1.ts";
 import DomainFront from "./fixtures/domain-front.ts";
 
@@ -21,7 +20,11 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 // previous (interrupted or NO_DESTROY) run left behind.
 const stack = Core.scratchStack(testOptions, "RivetDomain", import.meta.url);
 
-const url = `http://localhost:${DOMAIN_FRONT_PORT}`;
+// The front's port is one Swarm picks, read from each deploy.
+let url = "";
+const frontUrl = Effect.sync(() => url);
+// The front's service name: its stack's services hold the model's revisions.
+let front = "";
 
 /** Deploy the front over the model at `version`, and wait until it serves. */
 const deploy = (version: 0 | 1) =>
@@ -29,11 +32,17 @@ const deploy = (version: 0 | 1) =>
     .deploy(
       Effect.gen(function* () {
         const front = yield* version === 0 ? DomainFront : DomainFrontV1;
-        return { front: front.name };
+        return { front: front.name, ports: front.ports };
       }),
     )
     .pipe(
-      Effect.tap(() => waitForReady(url)),
+      Effect.tap(({ front: name, ports }) =>
+        Effect.suspend(() => {
+          front = name;
+          url = publishedUrl(ports);
+          return waitForReady(url);
+        }),
+      ),
       Effect.map(({ front }) => front),
     );
 
@@ -57,22 +66,22 @@ describe.skipIf(!!process.env.FAST)(
     test(
       "the nodes run with the model's revision",
       Effect.gen(function* () {
-        expect(yield* domainRevisions).toEqual({ DomainObjects: { Conformance: 1 } });
+        expect(yield* domainRevisions(front)).toEqual({ DomainObjects: { Conformance: 1 } });
       }),
     );
 
-    conformance({ test, url: Effect.succeed(url), kind: "local" });
+    conformance({ test, url: frontUrl, kind: "local" });
     latency({
       kind: "local",
       test,
       label: "Rivet (local Docker)",
-      url: Effect.succeed(url),
+      url: frontUrl,
     });
 
     // After the cases that read the model as deployed: it redeploys the front.
     rebuild({
       test,
-      url: Effect.succeed(url),
+      url: frontUrl,
       kind: "local",
       deploy: (v) => Effect.asVoid(deploy(v)),
     });
