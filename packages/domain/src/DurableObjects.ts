@@ -60,9 +60,14 @@ import {
   type ProjectionKit,
   type Push,
   REAUTHORIZE_CLOSE_CODE,
+  type ReceiptRow,
+  receiptRow,
+  resent,
   type SeedResult,
   type SendResult,
   type StoredEvent,
+  type StoredReceipt,
+  storedReceipt,
   type StreamEntry,
   type StreamHandled,
   type StreamKit,
@@ -1047,10 +1052,11 @@ const aggregateObject = (
     // Callers run it `exclusively`.
     const commit = (id: string, command: Json, meta: Aggregate.SendMeta) =>
       Effect.gen(function* () {
-        const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
+        // A rejected command runs again: only an accepted receipt answers a resend.
+        const duplicate = resent(yield* state.storage.get<ReceiptRow>(`receipt:${meta.commandId}`));
         // A resend may follow an instance that died before delivering what the
         // first commit staged: deliver it now rather than at the backstop.
-        if (duplicate) return { sent: duplicate, kick: duplicate._tag === "Accepted" };
+        if (duplicate) return { sent: duplicate, kick: true };
         const current = yield* storedMeta;
         if (current.held) return yield* new InstanceHeld();
         const result = yield* kit.handle({
@@ -1065,7 +1071,12 @@ const aggregateObject = (
           trace: meta.trace,
           link: meta.link,
         });
-        if (result._tag === "Rejected") return { sent: result as SendResult, kick: false };
+        if (result._tag === "Rejected") {
+          const sent: SendResult = { _tag: "Rejected", rejection: result.rejection };
+          // Kept like an accepted receipt, and readable (`receipt`) as long.
+          yield* state.storage.put(`receipt:${meta.commandId}`, receiptRow(sent, command));
+          return { sent, kick: false };
+        }
         const sent: SendResult = {
           _tag: "Accepted",
           receipt: {
@@ -1077,7 +1088,7 @@ const aggregateObject = (
         };
         const kick = yield* state.storage.transaction(
           Effect.gen(function* () {
-            yield* state.storage.put(`receipt:${meta.commandId}`, sent);
+            yield* state.storage.put(`receipt:${meta.commandId}`, receiptRow(sent, command));
             return yield* persist(id, current.version, result);
           }),
         );
@@ -1086,7 +1097,7 @@ const aggregateObject = (
     // Callers run it through `whenFree`: an import never lands under a decision's intent.
     const importEvents = (id: string, events: ReadonlyArray<Json>, meta: ImportMeta) =>
       Effect.gen(function* () {
-        const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
+        const duplicate = yield* state.storage.get<ReceiptRow>(`receipt:${meta.commandId}`);
         if (duplicate?._tag === "Accepted") {
           const imported: ImportResult = { _tag: "Imported", receipt: duplicate.receipt };
           // As a resent command: deliver what the first import may have left staged.
@@ -1420,10 +1431,11 @@ const aggregateObject = (
         if (kick) yield* outbox.kick;
         return sent;
       });
+    // A rejected command ran and committed nothing: only an accepted receipt means executed.
     const executed = (commandId: string) =>
       state.storage
-        .get<SendResult>(`receipt:${commandId}`)
-        .pipe(Effect.map((receipt) => receipt !== undefined));
+        .get<ReceiptRow>(`receipt:${commandId}`)
+        .pipe(Effect.map((receipt) => receipt?._tag === "Accepted"));
     // Scheduled commands: one durable callback job per name, run here when
     // due. `scheduled:<name>` holds the token of the job that may run, or
     // `CANCELLED` once it is cancelled, so a job cancelled or replaced after
@@ -1515,6 +1527,13 @@ const aggregateObject = (
           return imported;
         }).pipe(reportDefects),
       state: () => reportDefects(currentMeta),
+      // A command's stored receipt, read-only. An absent one is `null`: RPC carries no `undefined`.
+      receipt: (commandId: string) =>
+        reportDefects(
+          state.storage
+            .get<ReceiptRow>(`receipt:${commandId}`)
+            .pipe(Effect.map((row) => storedReceipt(row) ?? null)),
+        ),
       after: (after: number) => reportDefects(eventsAfter(after)),
       // A decision, with this instance as its primary: see `TwoPhase.decide`.
       txDecide: (id: string, name: string, command: Json, meta: Aggregate.SendMeta) =>
@@ -2571,6 +2590,10 @@ export const makePlatform = <R>(
                           ),
                         ),
                       ),
+                    receipt: (id, commandId) =>
+                      unwrapDefects<StoredReceipt | null>(
+                        namespace.getByName(id).receipt(commandId),
+                      ).pipe(Effect.map((receipt) => receipt ?? undefined)),
                     state: (id) =>
                       announce.pipe(
                         Effect.andThen(

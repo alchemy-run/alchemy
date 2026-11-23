@@ -1,6 +1,7 @@
 import * as Domain from "@alchemy.run/domain";
 import * as DurableObjects from "@alchemy.run/domain/DurableObjects";
 import { InMemory } from "@alchemy.run/domain/InMemory";
+import * as Model from "@alchemy.run/domain/Model";
 import { describe, expect, it } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Clock from "effect/Clock";
@@ -229,6 +230,50 @@ class Imports extends Domain.Model("Imports", {
 
 const importsOn = (platform: Layer.Layer<Domain.Platform, never, SecureRandom.SecureRandom>) =>
   Imports.layer(Layer.mergeAll(LinesWriterLive, AuditBookingsLive)).pipe(
+    Layer.provideMerge(platform),
+    Layer.provideMerge(SecureRandom.layerWebCrypto),
+  );
+
+// ---------------------------------------------------------------- a purse that rejects
+
+class Deposited extends Domain.Event("Deposited", { amount: Schema.Number }) {}
+class Withdrawn extends Domain.Event("Withdrawn", { amount: Schema.Number }) {}
+class Short extends Domain.Rejection("Short", {
+  balance: Schema.Number,
+  requested: Schema.Number,
+}) {}
+class Deposit extends Domain.Command("Deposit", {
+  input: { id: Schema.String, amount: Schema.Number },
+  events: [Deposited],
+}) {}
+class Withdraw extends Domain.Command("Withdraw", {
+  input: { id: Schema.String, amount: Schema.Number },
+  events: [Withdrawn],
+  rejects: [Short],
+}) {}
+class Purse extends Domain.Aggregate("Purse", {
+  id: Schema.String,
+  state: Schema.Struct({ balance: Schema.Number }),
+  initial: { balance: 0 },
+  commands: [Deposit, Withdraw],
+  keyOf: (command) => command.id,
+  decide: {
+    Deposit: (_, { amount }) => [new Deposited({ amount })],
+    Withdraw: (purse, { amount }) =>
+      amount > purse.balance
+        ? new Short({ balance: purse.balance, requested: amount })
+        : [new Withdrawn({ amount })],
+  },
+  evolve: {
+    Deposited: (purse, e) => ({ balance: purse.balance + e.amount }),
+    Withdrawn: (purse, e) => ({ balance: purse.balance - e.amount }),
+  },
+}) {}
+
+class Purses extends Domain.Model("Purses", { aggregates: [Purse] }) {}
+
+const pursesOn = (platform: Layer.Layer<Domain.Platform, never, SecureRandom.SecureRandom>) =>
+  Purses.layer(Layer.empty).pipe(
     Layer.provideMerge(platform),
     Layer.provideMerge(SecureRandom.layerWebCrypto),
   );
@@ -582,4 +627,91 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
     },
     { timeout: 30_000 },
   );
+
+  for (const [name, platform] of [
+    ["Durable Objects", () => DurableObjects.makePlatform(simHost({ rowsRead: 0 }).host)],
+    ["the in-memory platform", () => InMemory],
+  ] as const) {
+    it.live(
+      `a command's receipt reads back, accepted or rejected, on ${name}`,
+      () =>
+        Effect.gen(function* () {
+          const purses = yield* Purse;
+          const store = (yield* Model.Internals).aggregates.get("Purse")!;
+          expect(store.receipt).toBeDefined();
+
+          // Nothing was sent: no receipt, on an instance nobody has written.
+          expect(yield* store.receipt!("a", "never")).toBeUndefined();
+
+          const refused = yield* purses
+            .send(new Withdraw({ id: "a", amount: 5 }), { commandId: "w1" })
+            .pipe(Effect.flip);
+          expect(refused).toMatchObject({ _tag: "Short", balance: 0, requested: 5 });
+          expect(yield* store.receipt!("a", "w1")).toEqual({
+            result: { _tag: "Rejected", rejection: { _tag: "Short", balance: 0, requested: 5 } },
+            command: { tag: "Withdraw", input: { id: "a", amount: 5 } },
+          });
+
+          const paid = yield* purses.send(new Deposit({ id: "a", amount: 8 }), {
+            commandId: "d1",
+          });
+          const accepted = yield* store.receipt!("a", "d1");
+          expect(accepted?.command).toEqual({ tag: "Deposit", input: { id: "a", amount: 8 } });
+          expect(accepted?.result).toMatchObject({
+            _tag: "Accepted",
+            receipt: { stream: "Purse/a", version: paid.version },
+          });
+
+          // The receipts belong to their instance.
+          expect(yield* store.receipt!("b", "d1")).toBeUndefined();
+        }).pipe(Effect.scoped, Effect.provide(pursesOn(platform()))),
+      { timeout: 30_000 },
+    );
+
+    it.live(
+      `a rejected command runs again when it is resent, and an accepted one does not, on ${name}`,
+      () =>
+        Effect.gen(function* () {
+          const purses = yield* Purse;
+          const store = (yield* Model.Internals).aggregates.get("Purse")!;
+          const withdraw = new Withdraw({ id: "a", amount: 5 });
+
+          yield* purses.send(withdraw, { commandId: "w1" }).pipe(Effect.flip);
+          yield* purses.send(withdraw, { commandId: "w1" }).pipe(Effect.flip);
+
+          // The balance now covers it: the same command id decides again.
+          yield* purses.send(new Deposit({ id: "a", amount: 8 }));
+          const paid = yield* purses.send(withdraw, { commandId: "w1" });
+          expect(paid.version).toBe(2);
+          expect((yield* store.receipt!("a", "w1"))?.result._tag).toBe("Accepted");
+
+          // Now it is accepted: a resend answers that receipt and commits nothing.
+          const again = yield* purses.send(withdraw, { commandId: "w1" });
+          expect(again).toEqual(paid);
+          expect(yield* purses.get(Purse.ref("a"))).toEqual({ balance: 3 });
+        }).pipe(Effect.scoped, Effect.provide(pursesOn(platform()))),
+      { timeout: 30_000 },
+    );
+
+    it.live(
+      `a rejected command is not an executed one: its name can be armed and unscheduled, on ${name}`,
+      () =>
+        Effect.gen(function* () {
+          const store = (yield* Model.Internals).aggregates.get("Purse")!;
+          const meta = { commandId: "c1", context: {} };
+
+          const sent = yield* store.send("a", { _tag: "Withdraw", id: "a", amount: 5 }, meta);
+          expect(sent._tag).toBe("Rejected");
+
+          // The rejected command id names an arming too: it ran nothing.
+          yield* store.schedule("a", "c1", { _tag: "Deposit", id: "a", amount: 1 }, meta, {
+            afterMillis: 3_600_000,
+          });
+          yield* store.unschedule("a", "c1");
+          const again = yield* store.unschedule("a", "c1").pipe(Effect.flip);
+          expect(again._tag).toBe("AlreadyCancelled");
+        }).pipe(Effect.scoped, Effect.provide(pursesOn(platform()))),
+      { timeout: 30_000 },
+    );
+  }
 });

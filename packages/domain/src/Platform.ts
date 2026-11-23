@@ -217,6 +217,53 @@ export type SendResult =
   | { readonly _tag: "Accepted"; readonly receipt: ReceiptJson };
 
 /**
+ * A command's receipt as an aggregate keeps it, for both outcomes: the
+ * result, and the command it answered (its `_tag`, and its input: the encoded
+ * command without the tag).
+ */
+export interface StoredReceipt {
+  readonly result: SendResult;
+  readonly command: { readonly tag: string; readonly input: Json };
+}
+
+/**
+ * The stored form of a receipt: the result, with the command beside it. A
+ * receipt stored before commands were kept has none, and reads as absent.
+ * @internal
+ */
+export type ReceiptRow = SendResult & { readonly command?: StoredReceipt["command"] };
+
+/**
+ * The row to store for a command's result.
+ * @internal
+ */
+export const receiptRow = (result: SendResult, command: Json): ReceiptRow => {
+  const { _tag: tag, ...input } = command as { readonly _tag: string };
+  return { ...result, command: { tag, input } };
+};
+
+/**
+ * The receipt a stored row holds, when the row keeps its command.
+ * @internal
+ */
+export const storedReceipt = (row: ReceiptRow | undefined): StoredReceipt | undefined => {
+  if (row?.command === undefined) return undefined;
+  const result: SendResult =
+    row._tag === "Accepted"
+      ? { _tag: "Accepted", receipt: row.receipt }
+      : { _tag: "Rejected", rejection: row.rejection };
+  return { result, command: row.command };
+};
+
+/**
+ * The result a resend of a command answers: an accepted receipt, never a
+ * rejection (a rejected command runs again).
+ * @internal
+ */
+export const resent = (row: ReceiptRow | undefined): SendResult | undefined =>
+  row?._tag === "Accepted" ? { _tag: "Accepted", receipt: row.receipt } : undefined;
+
+/**
  * Result of {@link AggregateStore.import}: the receipt, or the version the
  * instance was at when it was not the one expected.
  */
@@ -448,6 +495,14 @@ export interface AggregateStore {
   readonly state: (id: string) => Effect.Effect<{ readonly state: Json; readonly version: number }>;
   /** Read the committed events of an instance (tests and diagnostics; optional). */
   readonly events?: (id: string) => Effect.Effect<ReadonlyArray<StoredEvent>>;
+  /**
+   * The stored receipt of the command `commandId` on an instance, accepted or
+   * rejected, with the command it answered; absent when the instance keeps
+   * none (never sent, or stored before commands were kept). Read-only. A
+   * resend answers only an accepted receipt; a rejected command runs again
+   * (optional).
+   */
+  readonly receipt?: (id: string, commandId: string) => Effect.Effect<StoredReceipt | undefined>;
   /** The stored state and version of an instance, then every new one. */
   readonly changes: (
     id: string,

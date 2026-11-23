@@ -25,9 +25,13 @@ import {
   Platform,
   type Json,
   type ModelHost,
+  type ReceiptRow,
+  receiptRow,
   type RecordInput,
+  resent,
   type SendResult,
   type StoredEvent,
+  storedReceipt,
   type StreamEntry,
   type StreamHandled,
   type StreamMeta,
@@ -658,7 +662,7 @@ export const make = (
               {
                 state: Json;
                 version: number;
-                readonly receipts: Map<string, SendResult>;
+                readonly receipts: Map<string, ReceiptRow>;
                 /** The latest arming of each scheduled command, by its name. */
                 readonly scheduled: Map<string, Armed>;
                 readonly events: Array<StoredEvent>;
@@ -733,7 +737,8 @@ export const make = (
           const commit = (id: string, command: Json, meta: Aggregate.SendMeta) =>
             Effect.gen(function* () {
               const current = instance(id);
-              const duplicate = current.receipts.get(meta.commandId);
+              // A rejected command runs again: only an accepted receipt answers a resend.
+              const duplicate = resent(current.receipts.get(meta.commandId));
               if (duplicate) return duplicate;
               const result = yield* kit.handle({
                 id,
@@ -747,7 +752,11 @@ export const make = (
                 trace: meta.trace,
                 link: meta.link,
               });
-              if (result._tag === "Rejected") return result satisfies SendResult;
+              if (result._tag === "Rejected") {
+                const sent: SendResult = { _tag: "Rejected", rejection: result.rejection };
+                current.receipts.set(meta.commandId, receiptRow(sent, command));
+                return sent;
+              }
               if (current.version === 0) yield* register({ source: kit.name, id });
               const live = yield* Backfill.routeCommit(
                 sourceRole(id),
@@ -772,7 +781,7 @@ export const make = (
                   reply: result.reply,
                 },
               };
-              current.receipts.set(meta.commandId, sent);
+              current.receipts.set(meta.commandId, receiptRow(sent, command));
               yield* announce(id);
               yield* enqueue(live.send, kit.deliver);
               return sent;
@@ -878,7 +887,7 @@ export const make = (
                     const current = instance(id);
                     const armed = current.scheduled.get(name);
                     if (!armed) return Effect.fail(new NotScheduled(fields));
-                    if (current.receipts.has(armed.commandId))
+                    if (current.receipts.get(armed.commandId)?._tag === "Accepted")
                       return Effect.fail(new AlreadyExecuted(fields));
                     if (armed.cancelled) return Effect.fail(new AlreadyCancelled(fields));
                     timers.delete(`${modelName}/${kit.name}/${id}/${name}`);
@@ -890,6 +899,9 @@ export const make = (
             state: (id) =>
               Effect.sync(() => ({ state: instance(id).state, version: instance(id).version })),
             events: (id) => Effect.sync(() => [...instance(id).events]),
+            // A command's stored receipt, creating no instance.
+            receipt: (id, commandId) =>
+              Effect.sync(() => storedReceipt(instances.get(id)?.receipts.get(commandId))),
             changes: (id) =>
               Stream.unwrap(
                 versionOf(id).pipe(
