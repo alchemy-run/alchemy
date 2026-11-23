@@ -62,6 +62,13 @@ export type VolumeService = { readonly serviceId: string };
 
 export interface VolumeProps {
   /**
+   * Volume name. Unique per project. If omitted, a unique name is
+   * generated from the stack, stage and logical ID. Changing it renames
+   * the volume in place via `volumeUpdate`; the volume, its instance and
+   * its data are kept. Removing it later keeps the current name.
+   */
+  name?: string;
+  /**
    * Parent Railway Project. Changing it replaces the Volume.
    */
   project: Ref<Project>;
@@ -181,8 +188,8 @@ const VolumeResource = Resource<Volume>("Railway.Volume");
  * to attach at create time.
  *
  * Railway has no labels. Ownership is stamped into the volume name via
- * `createPhysicalName`. `mountPath` updates in place. Changing `project`,
- * `environment`, or `region` replaces the Volume.
+ * `createPhysicalName`. `name` and `mountPath` update in place. Changing
+ * `project`, `environment`, or `region` replaces the Volume.
  *
  * @see https://docs.railway.com/guides/volumes
  * @see https://docs.railway.com/integrations/api/manage-volumes
@@ -203,6 +210,25 @@ const VolumeResource = Resource<Volume>("Railway.Volume");
  * :::caution[Changing `project` replaces the Volume]
  * The Volume is created in the new Project. The old Volume is deleted.
  * :::
+ *
+ * :::note
+ * Prefer omitting `name` in tests and CI so names stay unique and
+ * reclaimable.
+ * :::
+ *
+ * ### A stable name
+ * Pass `name` when you want a stable volume name. Changing it later
+ * renames the volume in place. The volume ID, its instance and its data
+ * are kept.
+ *
+ * **Example:** Explicit name
+ * ```typescript
+ * const data = yield* Railway.Volume("Data", {
+ *   project: site,
+ *   name: "uploads",
+ *   mountPath: "/data",
+ * });
+ * ```
  *
  * ### Mount path
  * `mountPath` is the path in the container. Updating it is in place.
@@ -404,8 +430,9 @@ const toAttrs = (instance: CloudInstance, fallback?: { name?: string }): Volume[
   createdAt: instance.createdAt,
 });
 
-const resolveName = (id: string, existing?: string) =>
+const resolveName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
+    if (name !== undefined) return name;
     if (existing !== undefined) return existing;
     return yield* createRailwayName(id);
   });
@@ -644,7 +671,7 @@ const readVolumeAttributes = Effect.fn(function* ({
     (olds !== undefined
       ? (environmentIdOf(olds.environment) ?? environmentIdOf(olds.project))
       : undefined);
-  const name = yield* resolveName(id, output?.name);
+  const name = yield* resolveName(id, olds?.name, output?.name);
 
   const byInstance =
     output?.volumeInstanceId !== undefined && output.volumeInstanceId.length > 0
@@ -751,7 +778,7 @@ export const VolumeProvider = () =>
             "Volume requires a Railway environment (pass environment or a Project with environmentId)",
         });
       }
-      const name = yield* resolveName(id, output?.name);
+      const name = yield* resolveName(id, props.name, output?.name);
       const desiredServiceId = props.service !== undefined ? serviceIdOf(props.service) : undefined;
 
       let current: CloudInstance | undefined =
