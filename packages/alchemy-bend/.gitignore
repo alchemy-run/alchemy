@@ -1,0 +1,5 @@
+build/
+*.journal
+.wrangler/
+examples/bank/durable-object/Server.mjs
+!examples/bank/clock.js

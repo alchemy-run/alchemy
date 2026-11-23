@@ -1,0 +1,11 @@
+name = "alchemy-bend-bank"
+main = "worker.mjs"
+compatibility_date = "2026-10-01"
+
+[[durable_objects.bindings]]
+name = "BANK"
+class_name = "BankObject"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BankObject"]

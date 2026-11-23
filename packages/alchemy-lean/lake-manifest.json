@@ -1,0 +1,14 @@
+{"version": "1.3.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"type": "path",
+   "scope": "",
+   "name": "distilled",
+   "manifestFile": "lake-manifest.json",
+   "inherited": false,
+   "dir": "../../submodules/distilled/lean",
+   "copy": false,
+   "configFile": "lakefile.lean"}],
+ "name": "alchemy",
+ "lakeDir": ".lake",
+ "fixedToolchain": false}

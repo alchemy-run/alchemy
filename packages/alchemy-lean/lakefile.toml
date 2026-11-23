@@ -1,0 +1,26 @@
+name = "alchemy"
+defaultTargets = ["Alchemy", "Bank", "Jobs", "Wallet"]
+
+[[lean_lib]]
+name = "Alchemy"
+
+[[lean_lib]]
+name = "Bank"
+srcDir = "examples"
+
+[[lean_lib]]
+name = "Jobs"
+srcDir = "examples"
+
+[[lean_lib]]
+name = "Wallet"
+srcDir = "examples"
+
+[[lean_exe]]
+name = "bank"
+root = "BankMain"
+srcDir = "examples"
+
+[[require]]
+name = "distilled"
+path = "../../submodules/distilled/lean"
