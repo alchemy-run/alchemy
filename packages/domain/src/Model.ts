@@ -403,19 +403,22 @@ export type Mentions<
   D extends ReadonlyArray<Decision.Any> = readonly [],
 > = {
   readonly [
-    C in A[number]["definition"]["commands"][number] | D[number]["command"] as C["tag"]
+    C in A[number]["definition"]["commands"][number] | D[number]["command"] as Named<C["tag"]>
   ]: MentionBehind<Provided, C["middleware"]>;
 } & {
-  readonly [K in A[number] as K["aggregateName"]]: MentionBehind<
+  readonly [K in A[number] as Named<K["aggregateName"]>]: MentionBehind<
     Provided,
     K["definition"]["commands"][number]["middleware"]
   >;
 } & {
-  readonly [K in V[number] as K["viewName"]]: MentionBehind<
+  readonly [K in V[number] as Named<K["viewName"]>]: MentionBehind<
     Provided,
     Read.MiddlewareOf<K["definition"]>
   >;
 };
+
+/** A name known as a literal: a model whose members were widened has no members to mention. */
+type Named<Name extends string> = string extends Name ? never : Name;
 
 /** How a model's `layer` hosts it: tuning that doesn't change what the model means. */
 export interface LayerOptions<Views extends string = string> {
