@@ -28,14 +28,17 @@ import * as HashSet from "effect/HashSet";
 import * as Number from "effect/Number";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
+import * as Ordering from "effect/Ordering";
 import * as Predicate from "effect/Predicate";
 import * as Record from "effect/Record";
+import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as String from "effect/String";
 import * as Struct from "effect/Struct";
 import * as Tuple from "effect/Tuple";
+import * as UndefinedOr from "effect/UndefinedOr";
 
 // One command for each part of the library. Each computes many values from
 // its inputs, and records them: the prover reads every one, and the real
@@ -774,6 +777,34 @@ const extra = (a: number, b: number) =>
       runSync: Effect.runSync(Effect.succeed(a + b)),
       fromNullishOr: yield* Effect.fromNullishOr(a > 0 ? a : null).pipe(Effect.option),
       isFailure: yield* Effect.isFailure(positive(a)),
+      ref: yield* Effect.gen(function* () {
+        const total = yield* Ref.make(a);
+        yield* Ref.update(total, (n) => n + b);
+        const before = yield* total.pipe(Ref.getAndUpdate((n) => n * 2));
+        const taken = yield* Ref.modify(total, (n) => [n - 1, n + 1] as const);
+        yield* Ref.set(total, (yield* Ref.get(total)) + 1);
+        return {
+          before,
+          taken,
+          after: yield* Ref.get(total),
+          swapped: yield* Ref.getAndSet(total, 0),
+        };
+      }),
+      ordering: {
+        reverse: Ordering.reverse(Order.Number(a, b)),
+        match: Ordering.match(Order.Number(a, b), {
+          onLessThan: () => "less",
+          onEqual: () => "equal",
+          onGreaterThan: () => "more",
+        }),
+      },
+      undefinedOr: {
+        map: UndefinedOr.map(a > 0 ? a : undefined, (n) => n + 1) ?? "nothing",
+        match: UndefinedOr.match(a > b ? a : undefined, {
+          onUndefined: () => 0,
+          onDefined: (n) => n * 2,
+        }),
+      },
       option: {
         as: Option.as(Option.some(a), b),
         asVoid: Option.asVoid(Option.some(a)),

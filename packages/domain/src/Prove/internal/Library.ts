@@ -28,6 +28,7 @@ import {
   wholeOf,
   wrongArguments,
 } from "./Kit.ts";
+import * as Cells from "./Models/Cells.ts";
 import * as Collections from "./Models/Collections.ts";
 import * as Decimals from "./Models/Decimals.ts";
 import * as Effects from "./Models/Effects.ts";
@@ -1290,6 +1291,7 @@ export const make = (host: Host) => {
   const decimals = Decimals.make(kit);
   const hashes = Hashes.make(kit);
   const streams = Streams.make(kit);
+  const cells = Cells.make(kit);
 
   const written: Record<string, Model> = {
     ...own,
@@ -1303,6 +1305,7 @@ export const make = (host: Host) => {
     ...decimals.models,
     ...hashes.models,
     ...streams.models,
+    ...cells.models,
   };
 
   // A `Chunk` and an `Iterable` are read as the array of their items: the

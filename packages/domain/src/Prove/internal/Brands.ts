@@ -102,6 +102,7 @@ export const SEALED: ReadonlySet<Brand["kind"]> = new Set([
   "BigDecimal",
   "HashSet",
   "HashMap",
+  "Ref",
 ]);
 
 /** The brands whose values have the library's `.pipe`. */
@@ -114,4 +115,5 @@ export const PIPED: ReadonlySet<Brand["kind"]> = new Set([
   "HashSet",
   "HashMap",
   "Data",
+  "Ref",
 ]);

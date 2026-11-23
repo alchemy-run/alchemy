@@ -148,7 +148,9 @@ A call to a package is read when it is one of these. Each does to a value from t
 - **`effect/Order` and `effect/Equivalence`:** `Order.Number`, `BigInt`, `Boolean`, `String`, and the `Order` of `Number`, `BigInt`, `BigDecimal`, `DateTime` and `Duration`; `make`, `flip`, `mapInput`, `combine`, `min`, `max`, `clamp`, `isBetween`, `isLessThan`, `isLessThanOrEqualTo`, `isGreaterThan`, `isGreaterThanOrEqualTo`. `Equivalence.make`, `strictEqual`, `mapInput`. A function you write as an order or an equivalence is read as one.
 - **`effect/Equal`:** `equals`, which compares objects, arrays and the library's own data by what they hold.
 - **`effect/Data`:** `Class`, `TaggedClass`, `Error`, `TaggedError`, and `taggedEnum` with its constructors, `$is` and `$match`.
-- **`effect/Brand`:** `nominal`.
+- **`effect/Brand` and `effect/Newtype`:** `Brand.nominal`, `Newtype.value`.
+- **`effect/Ref`:** `make`, `makeUnsafe`, `get`, `getUnsafe`, `set`, `setAndGet`, `getAndSet`, `update`, `updateAndGet`, `getAndUpdate`, `modify`. A `Ref` a handler makes is read as a local variable is.
+- **`effect/Ordering` and `effect/UndefinedOr`:** `Ordering.reverse`, `match`; `UndefinedOr.map`, `match`, `getOrThrow`.
 - **`effect/Function`:** `pipe`, `flow`, `compose`, `identity`, `constant`, `constTrue`, `constFalse`, `constNull`, `constUndefined`, `constVoid`, `apply`, `tupled`, `untupled`, `flip`, `dual`, `satisfies`, `cast`, and `.pipe` on a value of the library's.
 - **`effect/Stream`:** see [Streams](#streams).
 - **`effect/Optic`:** `id`, `modify`, `replace`, and an optic's `key` and `tag`.

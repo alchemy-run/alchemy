@@ -201,6 +201,7 @@ export const equals = (a: V, b: V, force: (list: V) => V = (list) => list): Know
       }
       case "Matcher":
       case "Recorded":
+      case "Ref":
         return x === y;
       default: {
         // Two instances of different classes are never equal.
