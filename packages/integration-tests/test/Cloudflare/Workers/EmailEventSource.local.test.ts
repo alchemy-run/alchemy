@@ -78,7 +78,12 @@ test.provider(
             ? Effect.void
             : Effect.fail(new WorkerNotReady({ status: res.status })),
         ),
-        Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 10 }),
+        Effect.retry({
+          schedule: Schedule.max([
+            Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
+            Schedule.recurs(10),
+          ]),
+        }),
       );
 
       const accepted = yield* send("hello");

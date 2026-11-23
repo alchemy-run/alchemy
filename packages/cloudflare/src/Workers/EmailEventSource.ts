@@ -1,7 +1,7 @@
 import type * as cf from "@cloudflare/workers-types";
 import type { Input } from "alchemy/Input";
 import * as Namespace from "alchemy/Namespace";
-import { defaultProviderMode, ProviderModePolicy } from "alchemy/ProviderMode";
+import { defaultProviderMode, ProviderModePolicy, type ProviderMode } from "alchemy/ProviderMode";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import type { FunctionContext } from "alchemy/Runtime/Function";
 import { RuntimeContext } from "alchemy/RuntimeContext";
@@ -257,6 +257,16 @@ export class EmailEventSource extends Context.Service<EmailEventSource, EmailEve
   "Cloudflare.Workers.EmailEventSource",
 ) {}
 
+/**
+ * The mode the planner gives the host Worker: the one it was registered
+ * with, else the run default. A `remote()` around the subscription alone
+ * leaves the Worker local, so the ambient policy is cleared first.
+ */
+const hostMode = (host: { readonly Mode?: ProviderMode | undefined }) =>
+  host.Mode !== undefined
+    ? Effect.succeed(host.Mode)
+    : defaultProviderMode.pipe(Effect.provideService(ProviderModePolicy, undefined));
+
 export const EmailEventSourceLive = Layer.effect(
   EmailEventSource,
   Effect.gen(function* () {
@@ -272,14 +282,12 @@ export const EmailEventSourceLive = Layer.effect(
       // locally under `alchemy dev`: nothing is uploaded, so a live rule
       // would send the zone's mail to a script that does not exist. Local
       // mail arrives through the `/cdn-cgi/handler/email` route instead.
-      // The Worker's mode is what it was registered with, else the run
-      // default the planner uses; a `remote()` around this call alone
-      // leaves the Worker local, so the ambient policy is cleared.
       // Namespaced under the host so logical identity is stable per Worker.
-      const hostMode =
-        host.Mode ??
-        (yield* defaultProviderMode.pipe(Effect.provideService(ProviderModePolicy, undefined)));
-      if (!globalThis.__ALCHEMY_RUNTIME__ && props.zone !== undefined && hostMode === "live") {
+      if (
+        !globalThis.__ALCHEMY_RUNTIME__ &&
+        props.zone !== undefined &&
+        (yield* hostMode(host)) === "live"
+      ) {
         const zone = props.zone;
         const matchers = props.matchers;
         yield* Namespace.push(
