@@ -1,7 +1,7 @@
 {
   "name": "@alchemy.run/opencode",
   "version": "2.0.0-beta.87",
-  "description": "OpenCode agent harnesses for Alchemy: OpenCode runs in a sandbox and uses the models, tools and skills of the harness that hosts it.",
+  "description": "OpenCode agent harnesses for Alchemy: OpenCode runs in your Durable Object and uses the models, tools and skills of the harness that hosts it.",
   "keywords": [
     "agents",
     "ai",
@@ -63,7 +63,9 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
-    "@alchemy.run/ai": "workspace:*"
+    "@alchemy.run/ai": "workspace:*",
+    "@opencode/plugin": "2.3.2",
+    "@opencode/sdk": "2.3.2"
   },
   "devDependencies": {
     "@alchemy.run/cloudflare": "workspace:*",
