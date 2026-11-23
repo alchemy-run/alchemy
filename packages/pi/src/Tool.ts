@@ -75,6 +75,15 @@ export interface NativeTool {
 const jsonSchemaOf = (schema: Schema.Top): object =>
   AiTool.getJsonSchemaFromSchema(schema) as object;
 
+/**
+ * The registration field holding the JSON Schema of a tool's declared
+ * `failure`, which code mode renders into the tool's declaration.
+ */
+export const FAILURE_SCHEMA = "~alchemy/failureSchema";
+
+const declaresFailure = (spec: ToolSpec): spec is ToolSpec & { failure: Schema.Top } =>
+  spec.failure !== undefined && spec.failure.ast._tag !== "Never";
+
 /** Runs a tool's Effect where the harness was yielded. */
 export type RunTool = <A, E>(
   effect: Effect.Effect<A, E, ToolServices>,
@@ -100,6 +109,7 @@ export const toRegistration = (
     description: spec.description,
     parameters: parametersJsonSchema(spec),
     ...(returns ? { structuredOutputSchema: jsonSchemaOf(spec.success) } : {}),
+    ...(declaresFailure(spec) ? { [FAILURE_SCHEMA]: jsonSchemaOf(spec.failure) } : {}),
     ...(spec.replay ? { replay: spec.replay } : {}),
     execute: async (args, api, context): Promise<ToolExecutionResult> => {
       const services = Context.make(ToolCall, {
@@ -110,11 +120,15 @@ export const toRegistration = (
       // A defect or interruption: Pi turns a throw into the model's error result.
       if (!Exit.isSuccess(exit)) throw new Error(messageOf(exit.cause.pipe(Cause.squash)));
       const result = exit.value;
-      return {
-        ...(result.isError ? { isError: true } : {}),
-        output: [{ type: "text", text: result.text }],
-        ...(returns ? { structuredOutput: result.structured as JsonValue } : {}),
-      };
+      // A declared failure has no structured value: a program would read its
+      // fields as the success type. Pi hands programs the failure's text (its
+      // encoded fields) as the error, and code mode rebuilds it by `_tag`.
+      return result.isError
+        ? { isError: true, output: [{ type: "text", text: result.text }] }
+        : {
+            output: [{ type: "text", text: result.text }],
+            ...(returns ? { structuredOutput: result.structured as JsonValue } : {}),
+          };
     },
   } as ToolRegistration;
 };

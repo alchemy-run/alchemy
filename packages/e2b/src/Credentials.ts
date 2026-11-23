@@ -6,7 +6,7 @@ import {
   credentials,
   type Config,
 } from "@distilled.cloud/e2b/Credentials";
-import { lazyCredentials } from "alchemy/Auth/Resolve";
+import { lazyCredentials, orDieCredentialsUnavailable } from "alchemy/Auth/Resolve";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -76,6 +76,10 @@ export const fromAuthProvider = () =>
         const withTeam = yield* withTeamId(config);
         teamId = withTeam.teamId;
         return withTeam;
-      });
+      }).pipe(
+        // `Credentials` has no error channel, so a failed resolution dies
+        // here; the engine reports it as `CredentialsRequired`.
+        orDieCredentialsUnavailable(E2B_AUTH_PROVIDER_NAME),
+      );
     }),
   );

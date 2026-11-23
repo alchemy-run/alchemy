@@ -151,6 +151,41 @@ export const valueOf = (sexp: Sexp): number | bigint | string | boolean | undefi
   return undefined;
 };
 
+/** One whole number over another: a number the solver found, exactly. */
+export interface Fraction {
+  readonly numerator: bigint;
+  readonly denominator: bigint;
+}
+
+/** A number the solver printed, exactly: `undefined` when it is not a number. */
+export const fractionOf = (sexp: Sexp): Fraction | undefined => {
+  if (sexp._tag === "Atom") {
+    const match = /^(\d+)(?:\.(\d+))?$/.exec(sexp.text);
+    if (!match) return undefined;
+    const decimals = match[2] ?? "";
+    return { numerator: BigInt(match[1]! + decimals), denominator: 10n ** BigInt(decimals.length) };
+  }
+  if (sexp._tag !== "List") return undefined;
+  const [head, ...rest] = sexp.items;
+  if (head?._tag !== "Atom") return undefined;
+  const [a, b] = rest.map(fractionOf);
+  if (!a) return undefined;
+  if (head.text === "-" && rest.length === 1)
+    return { numerator: -a.numerator, denominator: a.denominator };
+  if (head.text === "/" && b && b.numerator !== 0n)
+    return {
+      numerator: a.numerator * b.denominator,
+      denominator: a.denominator * b.numerator,
+    };
+  return undefined;
+};
+
+/**
+ * The numbers of a model, exactly. A model gives each as a `number`, which
+ * rounds a third; a decimal and a fraction are built from these instead.
+ */
+export const exact = new WeakMap<object, ReadonlyMap<string, Fraction>>();
+
 /** One question for the solver: can every assertion hold at once? */
 export interface Query {
   readonly declarations: ReadonlyArray<string>;
@@ -164,6 +199,8 @@ export type Answer =
   | {
       readonly _tag: "Sat";
       readonly values: ReadonlyArray<number | bigint | string | boolean | undefined>;
+      /** Each value that is a number, exactly. */
+      readonly fractions: ReadonlyArray<Fraction | undefined>;
     }
   | { readonly _tag: "Unknown"; readonly reason: string };
 
@@ -302,15 +339,19 @@ export const solver: Effect.Effect<Solver, SolverError, Scope.Scope> = Effect.ge
         return out;
       });
       const found = new Map<string, number | bigint | string | boolean | undefined>();
+      const fractions = new Map<string, Fraction | undefined>();
       for (const item of parse(printed)) {
         if (item._tag !== "List") continue;
         const [head, name, , , value] = item.items;
-        if (head?._tag === "Atom" && head.text === "define-fun" && name?._tag === "Atom" && value)
+        if (head?._tag === "Atom" && head.text === "define-fun" && name?._tag === "Atom" && value) {
           found.set(bare(name.text), valueOf(value));
+          fractions.set(bare(name.text), fractionOf(value));
+        }
       }
       return {
         _tag: "Sat",
         values: query.values.map((_, index) => found.get(`${READ}${index}`)),
+        fractions: query.values.map((_, index) => fractions.get(`${READ}${index}`)),
       } as const;
     });
 

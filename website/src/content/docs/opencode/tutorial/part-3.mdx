@@ -27,11 +27,10 @@ import { Sandbox } from "./Sandbox.ts";
 
 const HarnessLive = Layer.mergeAll(
   FastLive,
-  Sandbox,
   OpenCode.CodingTools,
-  OpenCodeCloudflare.DurableObjectInstance,
+  OpenCodeCloudflare.DurableObjectStorage,
 +  GitHub.CreateIssueCommentHttp,
-);
+).pipe(Layer.provideMerge(Sandbox));
 ```
 
 ```diff lang="typescript"
@@ -42,7 +41,7 @@ const HarnessLive = Layer.mergeAll(
 return Effect.gen(function* () {
 ```
 
-The token stays in the Durable Object. OpenCode, in the sandbox, never sees it. Comments are posted for the account you signed in to GitHub with, so they appear as yours.
+The token stays in the Durable Object, and nothing puts it in the sandbox. Comments are posted for the account you signed in to GitHub with, so they appear as yours.
 
 ## Run the prompt from the alarm
 
@@ -174,11 +173,13 @@ export default class Bot extends Cloudflare.Worker<Bot>()(
 +  toolCalls: Effect.fn(function* () {
 +    const messages = yield* session.messages;
 +    return messages.flatMap((message) =>
-+      message.parts.flatMap((part) =>
-+        part.type === "tool"
-+          ? [{ tool: part.tool, status: part.state?.status, output: part.state?.output }]
-+          : [],
-+      ),
++      message.type === "assistant"
++        ? (message as OpenCode.AssistantMessage).content.flatMap((content) =>
++            content.type === "tool"
++              ? [{ tool: content.name, status: content.state?.status, input: content.state?.input }]
++              : [],
++          )
++        : [],
 +    );
 +  }),
 };
