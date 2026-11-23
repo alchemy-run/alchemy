@@ -25,6 +25,11 @@ export interface ServicesPoolOptions extends ServicesPoolSettings {
  * out: callers reach every stream through the control plane's gateway, with
  * its token. Works with any control plane it can reach.
  *
+ * Railway's API has no way to keep a variable's value out of the
+ * Service's configuration: a variable can only be sealed in the dashboard.
+ * So the control plane's token is a service variable, readable by
+ * anyone who can read the project's variables.
+ *
  * ### Running Rivet Services on Railway
  * **Example:** Services for a control plane elsewhere
  * ```typescript

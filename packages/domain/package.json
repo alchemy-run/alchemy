@@ -58,6 +58,7 @@
       },
       "./Explore/internal/*": null,
       "./Prove/internal/*": null,
+      "./Verify/internal/*": null,
       "./internal": null,
       "./*/internal": null,
       "./*": {

@@ -40,8 +40,10 @@ env:
 
 concurrency:
   # Label events get a group per label so adding an unrelated label (such as
-  # `deploy-website`) never cancels the run for the latest push.
-  group: pkg-${{ github.event.pull_request.number || github.ref }}${{ github.event.action == 'labeled' && format('-{0}', github.event.label.name) || '' }}
+  # `deploy-website`) never cancels the run for the latest push. `force-ci`
+  # publishes, so it shares the pull request's group: two runs publishing the
+  # same `pr:N` tags at once could leave them on the older commit.
+  group: pkg-${{ github.event.pull_request.number || github.ref }}${{ github.event.action == 'labeled' && github.event.label.name != 'force-ci' && format('-{0}', github.event.label.name) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
