@@ -460,6 +460,13 @@ export class Redact extends Domain.Rewrite("Redact", {
   input: { word: Schema.String },
   events: {
     Written: (event, { word }) => (event.text.includes(word) ? new Written({ text: "" }) : event),
+    // What a compacted memo holds: the same lines, in its roll-up.
+    MemoBroughtForward: (event, { word }) =>
+      event.state.lines.some((line) => line.includes(word))
+        ? new MemoBroughtForward({
+            state: { lines: event.state.lines.map((line) => (line.includes(word) ? "" : line)) },
+          })
+        : event,
   },
 }) {}
 

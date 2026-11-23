@@ -138,10 +138,32 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
         lines: ["a", "b"],
       });
       expect(yield* call(`/write/${id}?text=c`)).toEqual({ version: 4 });
-      // The view kept what it built, folded the roll-up, and follows what comes after.
+      // The view kept what it built, without folding the roll-up, and follows what comes after.
       yield* eventually<{ readonly text: string | null }>(
         `/redact/${id}?word=nothing-has-this`,
         ({ text }) => text === "a|b|c",
+      );
+    }),
+    options,
+  );
+
+  test(
+    "a rewrite after a compaction reaches the events the view kept",
+    Effect.gen(function* () {
+      const id = fresh("compact-rewrite");
+      yield* call(`/write/${id}?text=${encodeURIComponent("sam was here")}`);
+      yield* call(`/write/${id}?text=hello`);
+      yield* call(`/squash/${id}`);
+      // The instance holds the roll-up alone; the view holds its copy of both lines.
+      expect(yield* call(`/redact/${id}?word=sam`)).toEqual({
+        changed: 1,
+        lines: ["", "hello"],
+        text: "hello",
+      });
+      expect(yield* call(`/write/${id}?text=again`)).toEqual({ version: 4 });
+      yield* eventually<{ readonly text: string | null }>(
+        `/redact/${id}?word=nothing-has-this`,
+        ({ text }) => text === "hello|again",
       );
     }),
     options,

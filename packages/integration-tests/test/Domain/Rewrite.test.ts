@@ -156,6 +156,24 @@ class Ledger extends Domain.View("Ledger", {
   },
 }) {}
 
+/** A customer's accounts, read from the accounts themselves: an event's own field picks the key. */
+class Holders extends Domain.View("Holders", {
+  from: [Account],
+  key: Customer,
+  keyOf: {
+    Opened: ({ event }) => Customer.ref(event.customerId),
+    BroughtForward: ({ event }) => Customer.ref(event.state.customerId),
+  },
+  state: Schema.Struct({ owners: Schema.Record(Schema.String, Schema.String) }),
+  initial: { owners: {} },
+  evolve: {
+    Opened: (holders, e, { source }) => ({ owners: { ...holders.owners, [source.id]: e.owner } }),
+    BroughtForward: (holders, e, { source }) => ({
+      owners: { ...holders.owners, [source.id]: e.state.owner },
+    }),
+  },
+}) {}
+
 // ---------------------------------------------------------------- stores outside the model
 
 interface Rewrote {
@@ -333,7 +351,11 @@ class DeleteAccount extends Domain.Rewrite("DeleteAccount", { of: Account, delet
 class Reassign extends Domain.Rewrite("Reassign", {
   of: Account,
   input: { to: Schema.String },
-  events: { Opened: (event, { to }) => new Opened({ ...event, customerId: to }) },
+  events: {
+    Opened: (event, { to }) => new Opened({ ...event, customerId: to }),
+    BroughtForward: (event, { to }) =>
+      new BroughtForward({ state: { ...event.state, customerId: to } }),
+  },
 }) {}
 
 /** Breaks the account's invariant: nothing may change. */
@@ -369,7 +391,7 @@ const archive = (
 
 class Bank extends Domain.Model("Bank", {
   aggregates: [Customer, Account],
-  views: [Summary, Dashboard, Ledger],
+  views: [Summary, Dashboard, Ledger, Holders],
   projections: [Directory, Owners, Cards],
   streams: [Card],
   rewrites: [ForgetOwner, ForgetOwnerForGood, DeleteCustomer, DeleteAccount, Reassign, Overdraw],
@@ -755,6 +777,67 @@ for (const platform of Object.keys(platforms) as ReadonlyArray<keyof typeof plat
     );
 
     it.live(
+      "a rewrite after a compaction that moves an event takes the kept copy from one key, and the roll-up reaches the other",
+      () =>
+        Effect.gen(function* () {
+          const { accounts } = yield* seeded;
+          const holders = yield* Holders;
+          yield* accounts.compact("a-1", BringForward);
+          yield* accounts.rewritten(yield* accounts.rewrite("a-1", new Reassign({ to: "c-2" })));
+
+          expect(Option.isNone(yield* holders.get(Customer.ref("c-1")))).toBe(true);
+          // It never held the account's events: the roll-up stands for them.
+          expect(Option.getOrNull(yield* holders.get(Customer.ref("c-2")))).toEqual({
+            owners: { "a-1": "Sam" },
+          });
+        }).pipe(Effect.scoped, Effect.provide(bankOn(platform))),
+      { timeout: 60_000 },
+    );
+
+    it.live(
+      "a rewrite of one instance folds a key fed by hundreds of them again",
+      () =>
+        Effect.gen(function* () {
+          const accounts = yield* Account;
+          const ledgers = yield* Ledger;
+          // Past a page of the key's stored inputs: 250 accounts, three events each.
+          const ids = Array.from({ length: 250 }, (_, i) => `w-${i}`);
+          const last = yield* Effect.forEach(
+            ids,
+            (id) =>
+              Effect.gen(function* () {
+                yield* accounts.send(new Open({ id, customerId: "c-9", owner: id }));
+                yield* accounts.send(new Note({ id, text: "hello" }));
+                return yield* accounts.send(new Deposit({ id, amount: 2 }));
+              }),
+            { concurrency: 10 },
+          );
+          for (const receipt of last) {
+            yield* ledgers.get("all", {
+              atLeast: { stream: receipt.stream, version: receipt.version },
+            });
+          }
+          const receipt = yield* accounts.rewrite("w-7", new ForgetOwner({ customerId: "c-9" }));
+          yield* accounts.rewritten(receipt, { timeout: "30 seconds" });
+
+          const ledger = Option.getOrNull(yield* ledgers.get("all"));
+          expect(ledger?.total).toBe(500);
+          expect(ledger?.notes).toBe(249);
+          expect(ledger?.owners["w-7"]).toBe("");
+          expect(Object.values(ledger?.owners ?? {}).filter((owner) => owner !== "")).toHaveLength(
+            249,
+          );
+          // The key goes on from there.
+          const next = yield* accounts.send(new Deposit({ id: "w-7", amount: 1 }));
+          const after = yield* ledgers.get("all", {
+            atLeast: { stream: next.stream, version: next.version },
+          });
+          expect(Option.getOrNull(after)?.total).toBe(501);
+        }).pipe(Effect.scoped, Effect.provide(bankOn(platform))),
+      { timeout: 120_000 },
+    );
+
+    it.live(
       "deleting an instance that has compacted empties the views built from it",
       () =>
         Effect.gen(function* () {
@@ -952,6 +1035,13 @@ class OneView extends Domain.Model("Bank", {
 class TwoViews extends Domain.Model("Bank", {
   aggregates: [Account],
   views: [Summary, Ledger],
+  rewrites: [ForgetOwner, Reassign],
+  compactions: [BringForward],
+}) {}
+class ThreeViews extends Domain.Model("Bank", {
+  aggregates: [Account],
+  views: [Summary, Ledger, Holders],
+  rewrites: [ForgetOwner, Reassign],
   compactions: [BringForward],
 }) {}
 
@@ -1018,6 +1108,58 @@ describe("Domain compactions, a consumer behind", { tags: ["unit", "local"] }, (
       // It read the events, so the roll-up adds nothing to them.
       expect(read.ledger).toEqual({ total: 100, notes: 1, owners: { "a-1": "Sam" } });
     }),
+  );
+});
+
+describe("Domain rewrites, a consumer behind", { tags: ["unit", "local"] }, () => {
+  const opened = Effect.gen(function* () {
+    const accounts = yield* Account;
+    yield* accounts.send(new Open({ id: "a-1", customerId: "c-1", owner: "Sam" }));
+    yield* accounts.send(new Note({ id: "a-1", text: "call Sam back" }));
+    yield* accounts.send(new Deposit({ id: "a-1", amount: 100 }));
+  });
+
+  it.live("a view still reading an instance's history gets its events as a rewrite left them", () =>
+    Effect.gen(function* () {
+      const bank = outliving();
+      yield* bank.deploy(OneView, opened);
+      const read = yield* bank.deploy(
+        TwoViews,
+        Effect.gen(function* () {
+          const accounts = yield* Account;
+          // Before the ledger has read the account.
+          const receipt = yield* accounts.rewrite("a-1", new ForgetOwner({ customerId: "c-1" }));
+          yield* bank.settle;
+          yield* accounts.rewritten(receipt, { timeout: "5 seconds" });
+          return yield* ledger;
+        }),
+      );
+      expect(read).toEqual({ total: 100, notes: 0, owners: { "a-1": "" } });
+    }),
+  );
+
+  it.live(
+    "a rewrite that moves an event while a view reads the history gives it to the new key alone",
+    () =>
+      Effect.gen(function* () {
+        const bank = outliving();
+        yield* bank.deploy(OneView, opened);
+        const read = yield* bank.deploy(
+          ThreeViews,
+          Effect.gen(function* () {
+            const accounts = yield* Account;
+            const holders = yield* Holders;
+            const receipt = yield* accounts.rewrite("a-1", new Reassign({ to: "c-2" }));
+            yield* bank.settle;
+            yield* accounts.rewritten(receipt, { timeout: "5 seconds" });
+            return {
+              was: Option.getOrNull(yield* holders.get(Customer.ref("c-1"))),
+              is: Option.getOrNull(yield* holders.get(Customer.ref("c-2"))),
+            };
+          }),
+        );
+        expect(read).toEqual({ was: null, is: { owners: { "a-1": "Sam" } } });
+      }),
   );
 });
 

@@ -951,6 +951,9 @@ export const awaitsRevision = (
   source: string,
 ): boolean => {
   for (const delivery of pending) {
+    // One the key is no longer given may never arrive: its source has removed
+    // it. Held, it is dropped if it does arrive, so the key has taken it already.
+    if (delivery.revision?.gone) continue;
     if (delivery.source === source && delivery.revision?.root === root) return true;
   }
   return false;
