@@ -60,6 +60,7 @@ More: [Project layout](https://alchemy.run/ai/project-layout).
 - A session picks its own commands, so state the rules it must not break as `invariants` and `transitions` on the aggregate, and verify them with `Verify.model` in a test.
 - For each middleware that checks something on a mentioned command (a second factor), provide a Layer that says what the check means for a session. Never provide your HTTP session middleware where a process runs.
 - Starting a key twice does nothing, and `requestId` makes a message exactly-once: use both from code that may run twice (a policy, a webhook).
+- A method that uses a session requires `RuntimeContext`: declare it on the interface (`Effect.Effect<void, never, RuntimeContext>`). Never capture the context and provide it by hand.
 - Yield processes where the runtime's dependencies are resolved (a Durable Object's outer Effect). Build one Layer and provide it once.
 - Never `throw`. A tool fails with its declared `failure` (`Schema.TaggedError`).
 

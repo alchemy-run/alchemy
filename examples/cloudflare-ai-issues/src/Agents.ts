@@ -4,7 +4,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
-import { RuntimeContext } from "alchemy/RuntimeContext";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Board } from "./Board/Board.model.ts";
@@ -19,8 +19,12 @@ import { Triage } from "./Triage.process.ts";
 
 /** What the object of one issue answers. */
 interface Agent {
-  readonly start: (issue: IssueId) => Effect.Effect<void>;
-  readonly tell: (issue: IssueId, text: string, id: string) => Effect.Effect<void>;
+  readonly start: (issue: IssueId) => Effect.Effect<void, never, RuntimeContext>;
+  readonly tell: (
+    issue: IssueId,
+    text: string,
+    id: string,
+  ) => Effect.Effect<void, never, RuntimeContext>;
 }
 
 /** The objects, one per issue. */
@@ -80,24 +84,18 @@ export default class IssueAgents extends Cloudflare.DurableObject<IssueAgents>()
   Effect.gen(function* () {
     const triage = yield* Triage;
 
-    return Effect.gen(function* () {
-      // The board's policy calls these from code that has no runtime context of its own.
-      const runtime = yield* RuntimeContext;
-      const here = Effect.provideService(RuntimeContext, runtime);
-      return {
-        start: (issue) => triage.start(issue, { issue }).pipe(Effect.orDie, here),
-        tell: (issue, text, id) =>
-          triage
-            .get(issue)
-            .send(text, { requestId: id })
-            .pipe(
-              // A reply on an issue that was never reported here has no session.
-              Effect.catchTag("NotStarted", () => Effect.void),
-              Effect.orDie,
-              here,
-            ),
-      } satisfies Agent;
-    });
+    return Effect.succeed({
+      start: (issue) => triage.start(issue, { issue }).pipe(Effect.orDie),
+      tell: (issue, text, id) =>
+        triage
+          .get(issue)
+          .send(text, { requestId: id })
+          .pipe(
+            // A reply on an issue that was never reported here has no session.
+            Effect.catchTag("NotStarted", () => Effect.void),
+            Effect.orDie,
+          ),
+    } satisfies Agent);
   }).pipe(Effect.provide(Live)),
 ) {}
 

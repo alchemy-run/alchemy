@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -1073,7 +1074,11 @@ const make =
   ): Effect.Effect<
     void,
     StoryFailure | LE,
-    Exclude<LR, Provided | ExternalSystem.Identifier<Systems> | WorkflowEngine.WorkflowEngine>
+    // A story is a runtime of its own, in memory: its handlers need no other.
+    Exclude<
+      LR,
+      Provided | ExternalSystem.Identifier<Systems> | WorkflowEngine.WorkflowEngine | RuntimeContext
+    >
   > =>
     explore(steps, (scheduler) =>
       Effect.gen(function* () {
@@ -1842,7 +1847,14 @@ const make =
     ) as Effect.Effect<
       void,
       StoryFailure | LE,
-      Exclude<LR, Provided | ExternalSystem.Identifier<Systems> | WorkflowEngine.WorkflowEngine>
+      // A story is a runtime of its own, in memory: its handlers need no other.
+      Exclude<
+        LR,
+        | Provided
+        | ExternalSystem.Identifier<Systems>
+        | WorkflowEngine.WorkflowEngine
+        | RuntimeContext
+      >
     >;
 
 /**

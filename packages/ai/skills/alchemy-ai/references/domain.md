@@ -112,13 +112,17 @@ More: [Let a policy ask for the work](https://alchemy.run/ai/domain#let-a-policy
 
 ## Wire the model and the sessions to each other
 
-The session's object hosts the model (so the session can send commands), and the model's policy calls the session's object. Host the model as a function of a handle on the objects.
+The session's object hosts the model (so the session can send commands), and the model's policy calls the session's object. Host the model as a function of a handle on the objects. A session's methods require `RuntimeContext`; so do a policy's handler and an external system's operations, so nothing has to pass it along.
 
 ```typescript
 // src/Agents.ts
 interface Agent {
-  readonly start: (issue: IssueId) => Effect.Effect<void>;
-  readonly tell: (issue: IssueId, text: string, id: string) => Effect.Effect<void>;
+  readonly start: (issue: IssueId) => Effect.Effect<void, never, RuntimeContext>;
+  readonly tell: (
+    issue: IssueId,
+    text: string,
+    id: string,
+  ) => Effect.Effect<void, never, RuntimeContext>;
 }
 interface Agents {
   readonly getByName: (issue: string) => Agent;
@@ -154,19 +158,14 @@ export default class IssueAgents extends Cloudflare.DurableObject<IssueAgents>()
   Effect.gen(function* () {
     const triage = yield* Triage;
 
-    return Effect.gen(function* () {
-      // A policy's code has no runtime context: give each method the object's own.
-      const runtime = yield* RuntimeContext;
-      const here = Effect.provideService(RuntimeContext, runtime);
-      return {
-        start: (issue) => triage.start(issue, { issue }).pipe(Effect.orDie, here),
-        tell: (issue, text, id) =>
-          triage
-            .get(issue)
-            .send(text, { requestId: id })
-            .pipe(Effect.catchTag("NotStarted", () => Effect.void), Effect.orDie, here),
-      } satisfies Agent;
-    });
+    return Effect.succeed({
+      start: (issue) => triage.start(issue, { issue }).pipe(Effect.orDie),
+      tell: (issue, text, id) =>
+        triage
+          .get(issue)
+          .send(text, { requestId: id })
+          .pipe(Effect.catchTag("NotStarted", () => Effect.void), Effect.orDie),
+    } satisfies Agent);
   }).pipe(Effect.provide(Live)),
 ) {}
 

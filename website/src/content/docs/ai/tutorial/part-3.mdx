@@ -151,11 +151,19 @@ import { IssueDetail } from "./IssueDetail.view.ts";
 The triager will be the Durable Object of each issue. Write down what one answers, and what the objects are, as plain types:
 
 ```diff lang="typescript" title="src/Agents.ts"
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
++import type { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Effect from "effect/Effect";
+
 import { Triage } from "./Triage.process.ts";
 +
 +interface Agent {
-+  readonly start: (issue: IssueId) => Effect.Effect<void>;
-+  readonly tell: (issue: IssueId, text: string, id: string) => Effect.Effect<void>;
++  readonly start: (issue: IssueId) => Effect.Effect<void, never, RuntimeContext>;
++  readonly tell: (
++    issue: IssueId,
++    text: string,
++    id: string,
++  ) => Effect.Effect<void, never, RuntimeContext>;
 +}
 +
 +interface Agents {
@@ -220,31 +228,25 @@ const HarnessLive = Pi.HarnessLive.pipe(Layer.provide(PiCloudflare.DurableObject
 
 ## Answer the board
 
-The object answers `start` and `tell`. The board's policy calls them from code that has no runtime context, so the object gives them its own:
+The object answers `start` and `tell`:
 
 ```diff lang="typescript" title="src/Agents.ts"
-import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
-+import { RuntimeContext } from "alchemy/RuntimeContext";
-import * as Effect from "effect/Effect";
-
--    return Effect.succeed({
+export default class IssueAgents extends Cloudflare.DurableObject<IssueAgents>()(
+    return Effect.succeed({
 -      start: (issue: IssueId) => triage.start(issue, { issue }).pipe(Effect.orDie),
 -    });
-+    return Effect.gen(function* () {
-+      const runtime = yield* RuntimeContext;
-+      const here = Effect.provideService(RuntimeContext, runtime);
-+      return {
-+        start: (issue) => triage.start(issue, { issue }).pipe(Effect.orDie, here),
-+        tell: (issue, text, id) =>
-+          triage
-+            .get(issue)
-+            .send(text, { requestId: id })
-+            .pipe(Effect.catchTag("NotStarted", () => Effect.void), Effect.orDie, here),
-+      } satisfies Agent;
-+    });
++      start: (issue) => triage.start(issue, { issue }).pipe(Effect.orDie),
++      tell: (issue, text, id) =>
++        triage
++          .get(issue)
++          .send(text, { requestId: id })
++          .pipe(Effect.catchTag("NotStarted", () => Effect.void), Effect.orDie),
++    } satisfies Agent);
 ```
 
 `send` returns once the message is stored, so the policy never waits for a model. `requestId` keeps a reply from reaching the session twice, and starting a key twice does nothing: a policy can run more than once for one event. A reply on an issue that was never reported has no session, which is `NotStarted`.
+
+Using a session requires the runtime context, which is why `Agent` says so. A policy's handler and an external system's operations carry the same requirement, so the call type-checks all the way from the board to the session.
 
 ## Export the board for the Worker
 

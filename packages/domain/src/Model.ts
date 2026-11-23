@@ -1002,10 +1002,11 @@ const build = <A, E, R>(
       );
     }
     for (const policy of definitions.policies) {
+      // Platforms run handlers inside their runtime (a Durable Object, or this process).
       const handler = Context.getUnsafe(
         implementations as Context.Context<unknown>,
         policy as Context.Key<unknown, Policy.Handler<unknown>>,
-      );
+      ) as (trigger: unknown) => Effect.Effect<void>;
       policyStores.set(
         policy.policyName,
         yield* platform.policy(policy, kernel.policyKit(policy, handler)),

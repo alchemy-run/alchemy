@@ -64,7 +64,7 @@ More: [Project layout](https://alchemy.run/domain/project-layout).
 - Clients never read an aggregate. Read through a view (one key, live), a stream, or a query; a query's handler may read an aggregate's latest state with `yield* Account` then `accounts.get(ref)`.
 - Policies and projections run at least once. Make their effects idempotent: commands sent from a handler get deterministic ids, and stores key rows by `stream:seq`.
 - Don't wait for a saga in a policy. `start` it, keyed by the aggregate it's about, and react to the events its steps record.
-- A handler resolves its dependencies once in `toLayer` and requires nothing per call.
+- A handler resolves its dependencies once in `toLayer`. Per call it requires nothing but the runtime it runs in (`RuntimeContext`), which the platform provides.
 - Build one Layer and provide it once (`Layer.mergeAll`, `Layer.provide`). Never chain `Effect.provide`.
 - Never `throw`. Fail with tagged errors (`Domain.Rejection`, `Schema.TaggedError`).
 - Tracing is automatic. Record payload values only with `Effect.annotateCurrentSpan` in a handler: it lands on the engine's span for that handler. Make secrets `Schema.Redacted`, so they never reach a trace or a log.
