@@ -180,8 +180,9 @@ export const state = (options: CloudflareStateOptions = {}) =>
                 `Cloudflare account; re-deriving for the current account.`,
             );
             yield* deleteStoreCredentials(credStore, profileName, scriptName).pipe(Effect.ignore);
-          } else if (!servesOn(credentials.url, domain)) {
-            // The store's `domain` changed since these were cached.
+          } else if (!(yield* servesAt(credentials.url, accountId, scriptName, domain))) {
+            // The store's `domain`, or the account's workers.dev subdomain,
+            // changed since these were cached.
             yield* deleteStoreCredentials(credStore, profileName, scriptName).pipe(Effect.ignore);
           } else {
             return yield* ensureLatest(credentials);
@@ -612,7 +613,7 @@ export const loginWithCloudflare = Effect.fn("state_store.login", {
       if (
         credentials &&
         !isStateStoreCredentialsStale(credentials, accountId) &&
-        servesOn(credentials.url, domain)
+        (yield* servesAt(credentials.url, accountId, scriptName, domain))
       ) {
         return credentials;
       }
@@ -708,12 +709,15 @@ const isStateStoreAvailable = (accountId: string, scriptName: string) =>
 
 /**
  * Whether cached credentials point at where the store serves now: its
- * custom `domain`, or workers.dev without one.
+ * custom `domain`, or its workers.dev URL under the account's current
+ * subdomain, which the dashboard can rename.
  */
-const servesOn = (url: string, domain: string | undefined) =>
-  domain === undefined
-    ? new URL(url).hostname.endsWith(".workers.dev")
-    : url === `https://${domain}`;
+const servesAt = (url: string, accountId: string, scriptName: string, domain: string | undefined) =>
+  stateStoreUrl({ accountId, scriptName, domain }).pipe(
+    Effect.map((current) => url === current),
+    // Without a workers.dev subdomain, nothing serves the cached URL.
+    Effect.catchTag("SubdomainNotFound", () => Effect.succeed(false)),
+  );
 
 /**
  * Does this account have a *functioning* state-store worker,
