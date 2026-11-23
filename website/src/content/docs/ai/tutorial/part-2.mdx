@@ -1,6 +1,6 @@
 ---
 title: "Part 2: A board to report to"
-description: Model the issue board with Domain, an aggregate, two commands and a view, and give the Triage process the calls it may make, so a session reports by sending a command.
+description: Model the issue board with Domain, an aggregate, two commands and a view, and mention the command and the view a Triage session may use, so it reports by sending a command.
 sidebar:
   order: 2
 ---
@@ -154,48 +154,26 @@ export class Board extends Domain.Model("Board", {
 }) {}
 ```
 
-## Say what a Triage session may do
-
-An Api is a list of calls. This one is for `Triage` sessions: they may read an issue and label it. They may not report one.
-
-```typescript title="src/Board/TriageApi.api.ts"
-import * as Domain from "@alchemy.run/domain";
-import { Board } from "./Board.model.ts";
-
-export class TriageApi extends Domain.Api("TriageApi", {
-  model: Board,
-  commands: ["LabelIssue"],
-  views: ["IssueDetail"],
-  streams: [],
-  queries: [],
-}) {}
-```
-
 ## Mention the board in the prose
 
-`DomainAi.tools` makes the Api something a process can mention. Each call it lists becomes a tool of the session.
+A model's commands and views are members of its class. Mention one, and a session may use it:
 
 ```diff lang="typescript" title="src/Triage.ts"
 import * as AI from "@alchemy.run/ai";
-+import * as DomainAi from "@alchemy.run/domain/Ai";
++import { Board } from "./Board/Board.model.ts";
 import { IssueId } from "./Board/Issue.id.ts";
-+import { TriageApi } from "./Board/TriageApi.api.ts";
-
-export const issue = AI.Input("issue", IssueId);
-+
-+const board = DomainAi.tools(TriageApi);
 
   You look after issue ${issue} of a GitHub repository.
 -  When you are told what the issue says, reply with one word:
 -  bug when something is broken, feature when something new is asked for,
 -  question otherwise.
 +
-+  Get the issue from ${board}: its key is the issue. Then send the label
-+  command to ${board}: bug when something is broken, feature when
-+  something new is asked for, question otherwise.
++  Get the issue with ${Board.IssueDetail}: its key is the issue. Then send
++  ${Board.LabelIssue}: bug when something is broken, feature when something
++  new is asked for, question otherwise.
 ```
 
-`Triage` now also requires the hosted `Board`.
+A `Triage` session can read an `IssueDetail` and send `LabelIssue`. `ReportIssue` is not mentioned, so it is out of the session's reach. `Triage` now also requires the hosted `Board`.
 
 ## Host the board
 
@@ -328,7 +306,7 @@ The label was put there by the session.
 ## What you have
 
 - A board: an `Issue` aggregate, two commands and a view.
-- An Api that lists what a `Triage` session may do, mentioned in its prose.
+- A process that mentions the one view and the one command it may use.
 - A session that reports by sending a command.
 
 The Worker still starts each session by hand. [Part 3](/ai/tutorial/part-3) lets the board do it, from GitHub's events.

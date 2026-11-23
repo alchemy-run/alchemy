@@ -260,10 +260,10 @@ Outside the objects, the handle on them is the class:
 ## Tell the session about replies
 
 ```diff lang="typescript" title="src/Triage.ts"
-  command to ${board}: bug when something is broken, feature when
-  something new is asked for, question otherwise.
+  ${Board.LabelIssue}: bug when something is broken, feature when something
+  new is asked for, question otherwise.
 +
-+  Later messages are replies on the issue. Send the label command again
++  Later messages are replies on the issue. Send ${Board.LabelIssue} again
 +  when a reply changes what kind of issue it is.
 ` {}
 ```

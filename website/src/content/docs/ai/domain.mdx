@@ -1,63 +1,85 @@
 ---
 title: Processes and Domain models
-description: Give a process the calls of a Domain Api with DomainAi.tools, and let a Domain policy ask for the work, so a model of your business drives the processes and they report back to it.
+description: Mention a Domain model's commands and views in a process, say who each session acts as, and let a Domain policy ask for the work, so a model of your business drives the processes and they report back to it.
 ---
 
 A process has no output, so it needs somewhere to report. A [Domain model](/domain) is a good place: a session issues commands and reads views like any other client, and the model's policies decide when there is work for one.
 
-## Say what a process may do
+## Mention a command or a view
 
-A Domain Api is a list of commands and views. Declare one for a kind of process, with exactly what it may do:
+A model's commands and views are members of its class. Mention one in a process's prose, and a session may use it:
 
-```typescript title="src/TriageApi.api.ts"
-import * as Domain from "@alchemy.run/domain";
-import { Board } from "./Board.model.ts";
-
-export class TriageApi extends Domain.Api("TriageApi", {
-  model: Board,
-  commands: ["LabelIssue"],
-  views: ["IssueDetail"],
-  streams: [],
-  queries: [],
-}) {}
-```
-
-## Mention the Api
-
-`DomainAi.tools` turns an Api into something a process can mention. Each call becomes a tool, with the call's own schemas:
-
-```typescript title="src/Triage.ts"
+```typescript title="src/Assistant.ts"
 import * as AI from "@alchemy.run/ai";
-import * as DomainAi from "@alchemy.run/domain/Ai";
-import { IssueId } from "./Issue.id.ts";
-import { TriageApi } from "./TriageApi.api.ts";
+import { Bank } from "./Bank.ts";
 
-export const issue = AI.Input("issue", IssueId);
-
-const board = DomainAi.tools(TriageApi);
-
-export class Triage extends AI.Process<Triage>()("Triage", {
-  description: "Say what kind of issue this is.",
+export class Assistant extends AI.Process<Assistant>()("Assistant", {
+  description: "Help one customer with their account.",
 })`
-  Get issue ${issue} from ${board}: its key is the issue.
-  Then send the label command: bug, feature or question.
+  Take a deposit with ${Bank.DepositMoney}. Pay money out with ${Bank.WithdrawMoney}.
+  Read the balance with ${Bank.AccountSummary}.
 ` {}
 ```
 
-A session of `Triage` can now get an `IssueDetail` and send `LabelIssue`. A command the Api does not list is out of its reach. A rejection comes back to the model as the tool's failure, so it can read why and try again.
+Each mention is a tool: `Bank_DepositMoney_send`, `Bank_WithdrawMoney_send` and `Bank_AccountSummary_get`, with the command's or the view's own schemas. Nothing else in the bank is within the session's reach. A rejection comes back to the model as the tool's failure, so it can read why and try again.
 
-`Triage` requires the hosted model, as the Api's own server does.
+`Assistant` requires the hosted `Bank`: provide `Bank.layer(...)` where the process runs.
 
-## Narrow it, or act as someone
+## Mention an aggregate
 
-`expose` gives fewer calls than the Api lists. `headers` is what each call carries to the Api's middleware: who the process acts as.
+An aggregate is every command it takes:
 
 ```typescript
-const board = DomainAi.tools(TriageApi, {
-  expose: ["LabelIssue", "IssueDetail.get"],
-  headers: Effect.succeed({ authorization: "Bearer triage" }),
-});
+`Do what the customer asks with ${Bank.Account}.`
 ```
+
+Mention a single command where you can. An aggregate grows, and what a session may do grows with it.
+
+## Say who a session acts as
+
+A command says which middleware guards it. `DepositMoney` is behind `Session`, which says who is calling by providing `CurrentActor`:
+
+```typescript
+export class DepositMoney extends Domain.Command("DepositMoney", {
+  middleware: [Session],
+  input: { accountId: AccountId, amount: Schema.Int },
+  events: [Deposited],
+  rejects: [NotOwner],
+}) {}
+```
+
+A session has no cookie to show. It is started as someone, and that answers every middleware which only says who is calling:
+
+```typescript
+yield* assistant.start(customer.customerId, {}, { as: CurrentActor.context(customer) });
+```
+
+`as` is required: `start` does not compile without a `CurrentActor`, because `Assistant` mentions a command that needs one. It is kept with the session and never shown to the model. Every command the session sends runs as that customer, so the model's own rules decide what happens: a session started as Ada cannot touch Bob's account, because `decide` rejects it.
+
+Authenticate the person where you already do, in your Worker, and start the session as them:
+
+```typescript
+const customer = actorOf(request.headers);
+if (customer === undefined) return HttpServerResponse.text("sign in", { status: 401 });
+const answer = yield* assistants.getByName(customer.customerId).chat(customer, yield* request.text);
+```
+
+## Answer a middleware that checks something
+
+`WithdrawMoney` is also behind `MfaChallenge`, which provides nothing: it checks a second factor on each call. What a session is started as cannot answer that. Say what the check means for a session, as a Layer where the process runs:
+
+```typescript
+/** A session can't pass a second factor, so it may not make a call that needs one. */
+const MfaForSessions = Layer.succeed(MfaChallenge, () => Effect.fail(new MfaRequired()));
+```
+
+`Assistant` does not compile without a Layer for `MfaChallenge`, because it mentions `WithdrawMoney`. With this one, the model is told `MfaRequired` when it tries to withdraw.
+
+A middleware that has a Layer where the process runs is run with it. So do not provide your HTTP `Session` Layer there: it would look for a cookie on a session's call and refuse it.
+
+## A command's id is not the model's
+
+A command sent by a session takes its id from the tool call that asked for it. A call that runs again after a crash sends its command once, and the model cannot make two commands look like one.
 
 ## Let a policy ask for the work
 

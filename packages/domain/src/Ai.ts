@@ -1,5 +1,4 @@
 import { McpServer, Tool, Toolkit } from "effect/ai";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Headers from "effect/http/Headers";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -8,8 +7,6 @@ import * as Option from "effect/Option";
 import type * as Rpc from "effect/rpc/Rpc";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
 import type * as RpcMiddleware from "effect/rpc/RpcMiddleware";
-import * as Schema from "effect/Schema";
-import * as SchemaAST from "effect/SchemaAST";
 import * as Scope from "effect/Scope";
 import type { Servable } from "./Api.ts";
 import { DefinitionError, DuplicateTool, ToolNameTooLong } from "./DefinitionError.ts";
