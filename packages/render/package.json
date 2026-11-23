@@ -83,5 +83,10 @@
     "pg": {
       "optional": true
     }
+  },
+  "alchemy": {
+    "contributes": [
+      "@alchemy.run/render/Contributions"
+    ]
   }
 }
