@@ -42,6 +42,7 @@ import {
   type ListOptions,
   makePlatform,
   type ModelReader,
+  type ModelRestorer,
   multiplexedName,
   type Namespace,
   type ObjectImpl,
@@ -50,6 +51,7 @@ import {
   type ObjectStorage,
   parseMultiplexedName,
   readModel,
+  restoreModel,
   runtimeClaim,
   type Stub,
   SUBSCRIPTION_HEADER,
@@ -409,5 +411,19 @@ export const modelReader = (
   modelName: string,
 ): ModelReader =>
   readModel(
+    (name, key) => namespace.getByName(multiplexedName(modelName, name, key)) as unknown as Stub,
+  );
+
+/**
+ * Restore aggregate instances of the model `modelName` hosted on the Rivet
+ * class that `namespace` reaches, from another host's stored rows (see
+ * `AggregateStore.restore`), by the names this platform gives its objects. The
+ * rows are what {@link modelReader}'s `log` reads. Sends no command.
+ */
+export const modelRestorer = (
+  namespace: DurableObjectNamespace<any>,
+  modelName: string,
+): ModelRestorer =>
+  restoreModel(
     (name, key) => namespace.getByName(multiplexedName(modelName, name, key)) as unknown as Stub,
   );
