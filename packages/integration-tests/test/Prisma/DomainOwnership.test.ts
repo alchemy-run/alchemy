@@ -296,6 +296,32 @@ testFor(appeared).test.provider(
   { tags },
 );
 
+const appearedUnverified = makeOwnershipCloud();
+testFor(appearedUnverified).test.provider(
+  "takes over an unverified domain ownership that appears during the DNS wait, and sends no create",
+  (stack) =>
+    Effect.gen(function* () {
+      appearedUnverified.reset({
+        visibility: "seen",
+        createdDuringDnsWait: ownership("do-raced", "unverified"),
+      });
+      yield* stack.destroy();
+
+      const proved = yield* stack.deploy(ownershipStack());
+
+      expect(proved.domainOwnershipId).toBe("do-raced");
+      expect(proved.status).toBe("verified");
+      expect(appearedUnverified.routes()).not.toContain(CREATE);
+      expect(appearedUnverified.routes().filter((route) => route.endsWith("/verify"))).toEqual([
+        "POST /v1/domain-ownerships/do-raced/verify",
+      ]);
+
+      yield* stack.destroy();
+      expect(appearedUnverified.routes()).toContain("DELETE /v1/domain-ownerships/do-raced");
+    }),
+  { tags },
+);
+
 const appearedAdopted = makeOwnershipCloud();
 testFor(appearedAdopted, true).test.provider(
   "with --adopt, takes over a verified domain ownership that appears during the DNS wait",

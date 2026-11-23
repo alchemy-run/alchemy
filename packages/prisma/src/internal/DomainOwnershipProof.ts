@@ -142,7 +142,7 @@ const claim = (ownership: ApiDomainOwnership) =>
   Effect.gen(function* () {
     if (ownership.status === "unverified" || (yield* adoptAllowed)) return ownership;
     return yield* new DomainOwnershipOperationFailed({
-      message: `Prisma domain ownership '${ownership.id}' for '${ownership.domain}' is '${ownership.status}' and was not created by this resource. Redeploy with --adopt to take it over.`,
+      message: `Prisma domain ownership '${ownership.id}' for '${ownership.domain}' is '${ownership.status}' and is not recorded by this resource. Redeploy with --adopt to take it over.`,
     });
   });
 
@@ -243,11 +243,11 @@ const ProviderLive = () =>
               `The authoritative nameservers for '${domain}' do not return its verification record yet.`,
             );
           }
-          const createdDuringDnsWait = existing
+          const foundAfterDnsWait = existing
             ? undefined
             : yield* claimUnrecorded(yield* findOwnership(workspaceId, domain));
           const ownership =
-            existing ?? createdDuringDnsWait ?? (yield* createOwnership(workspaceId, domain));
+            existing ?? foundAfterDnsWait ?? (yield* createOwnership(workspaceId, domain));
           if (normalizeHostname(ownership.domain) !== domain) {
             return yield* new DomainOwnershipOperationFailed({
               message: `Prisma recorded ownership of '${ownership.domain}', not the requested '${domain}'.`,

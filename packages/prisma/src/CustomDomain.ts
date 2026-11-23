@@ -219,10 +219,11 @@ const findDomain = (appId: string, hostname: string) =>
   );
 
 /**
- * Prisma's spec does not say a resent create is harmless, so only throttled
- * requests, which Prisma did not process, are resent.
+ * Alchemy's own client never resent this create, and Prisma's spec does not
+ * say a resend is harmless, so only a throttled request, which Prisma refused,
+ * is resent.
  */
-const withoutRetriedCreate = Retry.policy({
+const resendOnlyThrottled = Retry.policy({
   while: isThrottling,
   backoff: { baseMs: 1000, factor: 2, capMs: 5000, maxRetries: 8, jitterMs: 50, serverHint: true },
 });
@@ -336,16 +337,19 @@ const ProviderLive = () =>
               { type: "CNAME", name: hostname },
               { margin: "if-unseen", nameservers: "parent" },
             );
-            const registeredDuringDnsWait = yield* findDomain(appId, hostname);
-            if (registeredDuringDnsWait) {
+          }
+          const createUnlessFound = Effect.gen(function* () {
+            const foundAfterDnsWait = yield* findDomain(appId, hostname);
+            if (foundAfterDnsWait) {
               return yield* adoptionRequiredError(hostname, appId, "already exists");
             }
-          }
+            return yield* resendOnlyThrottled(createServiceDomain({ serviceId: appId, hostname }));
+          });
           const reconciled = domain
             ? domain.status === "failed"
               ? (yield* createDomainRetry({ domainId: domain.id })).data
               : domain
-            : yield* withoutRetriedCreate(createServiceDomain({ serviceId: appId, hostname })).pipe(
+            : yield* createUnlessFound.pipe(
                 // A CNAME or ownership TXT published moments earlier, e.g. in
                 // the same deploy, may not be visible to Prisma's resolver yet.
                 Effect.retry({

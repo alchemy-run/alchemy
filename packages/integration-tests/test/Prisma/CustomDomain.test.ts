@@ -47,11 +47,19 @@ const raced = {
 const cloud = {
   registered: [] as Array<typeof raced>,
   registeredDuringDnsWait: undefined as typeof raced | undefined,
+  /** Answers the next creates give, in order, before the row: `429` registers nothing; `400` registers nothing, while another actor registers the hostname. */
+  createFailures: [] as Array<429 | "dns-not-configured-while-registered">,
 };
 const fake = makeFakeManagementApi((request) => {
   if (request.pathname === "/v1/services/service-1/domains") {
     if (request.method === "GET") return page(cloud.registered);
     if (request.method === "POST") {
+      const injected = cloud.createFailures.shift();
+      if (injected === 429) return failure(429, "rate-limited", "Too many requests");
+      if (injected === "dns-not-configured-while-registered") {
+        cloud.registered = [raced];
+        return failure(400, "bad_request", "DNS is not configured for this hostname");
+      }
       cloud.registered = [raced];
       return data(raced, { status: 200 });
     }
@@ -93,9 +101,11 @@ const { test } = Test.make({
   ),
 });
 
-const resetCloud = (registeredDuringDnsWait?: typeof raced) => {
+const resetCloud = (options: Partial<typeof cloud> = {}) => {
   cloud.registered = [];
-  cloud.registeredDuringDnsWait = registeredDuringDnsWait;
+  cloud.registeredDuringDnsWait = undefined;
+  cloud.createFailures = [];
+  Object.assign(cloud, options);
   fake.captured.length = 0;
   checked.length = 0;
 };
@@ -104,7 +114,7 @@ test.provider(
   "refuses a custom domain registered during the DNS wait, and sends no create",
   (stack) =>
     Effect.gen(function* () {
-      resetCloud(raced);
+      resetCloud({ registeredDuringDnsWait: raced });
       yield* stack.destroy();
 
       const result = yield* stack
@@ -147,6 +157,76 @@ test.provider(
       expect(routesOf(fake.captured)).toContain(`DELETE /v1/domains/${raced.id}`);
     }),
   { tags: ["local", "provider:prisma", "provider:prisma:customdomain"] },
+);
+
+const CREATE = "POST /v1/services/service-1/domains";
+const tags = ["local", "provider:prisma", "provider:prisma:customdomain"];
+
+test.provider(
+  "refuses a custom domain registered before the deploy, without --adopt, and sends no create",
+  (stack) =>
+    Effect.gen(function* () {
+      resetCloud();
+      yield* stack.destroy();
+      cloud.registered = [raced];
+
+      const result = yield* stack
+        .deploy(CustomDomain("Domain", { app: "service-1", hostname: raced.hostname }))
+        .pipe(Effect.result);
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(String(result.failure)).toContain("Cannot adopt resource");
+      }
+      expect(routesOf(fake.captured)).not.toContain(CREATE);
+
+      resetCloud();
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+test.provider(
+  "looks again before each create Prisma refused for DNS, and refuses a custom domain registered in between",
+  (stack) =>
+    Effect.gen(function* () {
+      resetCloud({ createFailures: ["dns-not-configured-while-registered"] });
+      yield* stack.destroy();
+
+      const result = yield* stack
+        .deploy(CustomDomain("Domain", { app: "service-1", hostname: raced.hostname }))
+        .pipe(Effect.result);
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(String(result.failure)).toContain("already exists");
+      }
+      expect(routesOf(fake.captured).filter((route) => route === CREATE)).toEqual([CREATE]);
+
+      resetCloud();
+      yield* stack.destroy();
+    }),
+  { tags, timeout: 60_000 },
+);
+
+test.provider(
+  "resends a create Prisma throttled, and owns the custom domain it then returns",
+  (stack) =>
+    Effect.gen(function* () {
+      resetCloud({ createFailures: [429] });
+      yield* stack.destroy();
+
+      const domain = yield* stack.deploy(
+        CustomDomain("Domain", { app: "service-1", hostname: raced.hostname }),
+      );
+
+      expect(domain.customDomainId).toBe(raced.id);
+      expect(routesOf(fake.captured).filter((route) => route === CREATE)).toEqual([CREATE, CREATE]);
+
+      yield* stack.destroy();
+      expect(routesOf(fake.captured)).toContain(`DELETE /v1/domains/${raced.id}`);
+    }),
+  { tags, timeout: 60_000 },
 );
 
 // Prisma processes the create but the reply is lost behind a 503.
