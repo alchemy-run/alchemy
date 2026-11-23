@@ -89,9 +89,8 @@ export type ProjectProps = {
   databaseName?: string;
   /**
    * Number of seconds of WAL history retained on the project for
-   * point-in-time branching/restore.
-   *
-   * @default 86400
+   * point-in-time branching/restore. When unset, Neon's plan default is
+   * kept (e.g. 21600 on the free plan, 86400 on paid plans).
    */
   historyRetentionSeconds?: number;
   /**
@@ -304,7 +303,8 @@ export const ProjectProvider = () =>
       }
       if (
         oldName !== name ||
-        (news.historyRetentionSeconds ?? 86400) !== (output?.historyRetentionSeconds ?? 86400)
+        (news.historyRetentionSeconds !== undefined &&
+          news.historyRetentionSeconds !== output?.historyRetentionSeconds)
       ) {
         return { action: "update" } as const;
       }
@@ -428,18 +428,19 @@ export const ProjectProvider = () =>
           reason: "Neon logical replication cannot be disabled once enabled",
         });
       }
-      const retention = news.historyRetentionSeconds ?? 86400;
+      const retention = news.historyRetentionSeconds;
+      const syncRetention =
+        retention !== undefined && observed.history_retention_seconds !== retention;
       if (
         observed.name !== name ||
-        observed.history_retention_seconds !== retention ||
+        syncRetention ||
         (news.enableLogicalReplication === true && !replication)
       ) {
         const updated = yield* updateProject({
           project_id: observed.id,
           project: {
             name: observed.name !== name ? name : undefined,
-            history_retention_seconds:
-              observed.history_retention_seconds !== retention ? retention : undefined,
+            history_retention_seconds: syncRetention ? retention : undefined,
             settings:
               news.enableLogicalReplication === true && !replication
                 ? { enable_logical_replication: true }

@@ -4,7 +4,7 @@ import {
   bundleNodes,
   isImageProgram,
   makePoolLayer,
-  nodeEnvironment,
+  secretNodeEnvironment,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 
@@ -37,6 +37,13 @@ export interface ServerPoolOptions extends PoolSettings {
  *
  * Every Durable Object given the same pool shares its nodes: declare the
  * pool once and provide it to each class.
+ *
+ * Hetzner Cloud has no secret store and no instance identity a node could
+ * read one with, so the control plane's token, and every secret a class
+ * reads as config, are copied over SSH into an env file on each Server
+ * that only root can read. They never go into the Server's user data,
+ * which any process on it can read from the metadata service. Root on the
+ * Server can still read them.
  *
  * ### Running Durable Objects on Hetzner
  * **Example:** Two nodes
@@ -79,7 +86,8 @@ export const ServerPool = (id: string, options: ServerPoolOptions = {}) =>
           },
         ],
       });
-      const env = nodeEnvironment(nodes);
+      // Copied over SSH into a file only root can read: never user data.
+      const env = secretNodeEnvironment(nodes);
       for (let i = 0; i < (options.replicas ?? 1); i++) {
         const server = yield* Hetzner.Server(`${id}Node${i}`, {
           serverType: options.serverType ?? "cx23",

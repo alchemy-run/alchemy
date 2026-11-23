@@ -36,7 +36,7 @@ import {
   payloadCodec,
 } from "alchemy/WorkflowEncoding";
 import type * as Cause from "effect/Cause";
-import { ClusterSchema, DeliverAt, Entity as EffectEntity } from "effect/cluster";
+import { ClusterSchema, DeliverAt, Entity as EffectEntity, Sharding } from "effect/cluster";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -887,6 +887,11 @@ export const layerEntities = <PoolReq>(
             new HasNoPool({ message: `${name} did not finish its Construction phase.` }),
           );
         }
+        // The runner's Sharding, once it has joined the cluster: a call the model
+        // makes on its own (not inside an entity's handler) routes through it.
+        const joined = yield* Deferred.make<Sharding.Sharding["Service"]>();
+        // The runner's scope: the runs it begins live as long as it does.
+        const scope = yield* Effect.scope;
         const registrations = yield* Ref.make<
           ReadonlyArray<
             readonly [Workflow.Any, (payload: any, id: string) => Effect.Effect<any, any, any>]
@@ -902,6 +907,7 @@ export const layerEntities = <PoolReq>(
             for (const [workflow, execute] of yield* Ref.get(registrations))
               yield* sagas.register(workflow as never, execute as never);
             yield* Deferred.succeed(engine, clusterEngine);
+            yield* Deferred.succeed(joined, yield* Sharding.Sharding);
             // Retention sweeps the rows of the cluster's database. A pool with
             // none (the Durable Object pool) keeps them in each instance's own
             // storage, and its runners have nothing to sweep.
@@ -967,6 +973,21 @@ export const layerEntities = <PoolReq>(
             }),
           lookup: ({ modelName }, cls) => self(className(modelName, cls)),
           connect: connectTo,
+          // A deploy's new runs begin once the runner has joined, not on the
+          // first call a caller makes: a model that nothing calls still catches up.
+          begin: (runs) =>
+            Deferred.await(joined).pipe(
+              Effect.flatMap((sharding) =>
+                runs.pipe(
+                  Effect.provideService(Sharding.Sharding, sharding),
+                  Effect.retry({ schedule: Schedule.spaced("1 second"), times: 60 }),
+                ),
+              ),
+              // Still pending: the next call begins them.
+              Effect.ignore,
+              Effect.forkIn(scope),
+              Effect.asVoid,
+            ),
           claimKey: runtimeClaim(name),
         };
         return Layer.merge(

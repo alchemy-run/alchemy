@@ -143,6 +143,17 @@ The statuses are `NotStarted`, `Running`, `Completed`, `Rejected`, `Interrupted`
 
 More: [Saga: Test it](https://alchemy.run/domain/saga#test-it).
 
+A rewrite and a compaction are steps, and a saga no event starts is started by one:
+
+```ts
+Story.rewrite(account, new ForgetOwner({ customerId })), // waits for views, projections and streams
+Story.compact(account, BringForward),                    // the next `then` sees the roll-up
+Story.start(EraseCustomer, customerId, {}),
+Story.saga(EraseCustomer, customerId, { _tag: "Completed", result: undefined }),
+```
+
+More: [Story: Rewrite, compact and start a saga](https://alchemy.run/domain/story#rewrite-compact-and-start-a-saga).
+
 ### The declaration
 
 Building the model's Layer dies with a `Domain.DefinitionError` for every definition problem (missing `keyOf`, view `state` without `initial`, a policy or projection `on` an event no source emits, a stream with two writers, duplicate names, a schema with no JSON form such as `Schema.instanceOf(Foo)`, an `initial` that doesn't survive JSON). Every story builds it, so stories catch them; a model without stories keeps one test that builds it:
@@ -235,9 +246,10 @@ Rules of thumb:
 - Where a proof fails from a state no sequence reaches, the report may print the invariant to add (`Add it to the invariants:`). Add it as written.
 - Never widen `allow` to get a pass. It names what the check may skip, and each entry is something no longer verified.
 - A rule that is true but not proved needs a second invariant that rules out the state the prover started from.
+- The model's rewrites and compactions are verified with it. A compaction is proved to lose nothing, a rewrite to keep every invariant. With `story`, each is also put into every sequence: `View.Compaction` breaks when a view's roll-up handler says less than the events did, `Rewrite.Compaction` when the rewrite has no matching handler for the roll-up. Fix the handler; name a view that keeps less on purpose in `allow: { lossy: ["Statement.ArchiveBook"] }`. `Prove.compaction(C, { source })` and `Prove.rewrite(R, { source, compactions })` do one alone.
 - An external call listed under "called again" must be safe to repeat: give the vendor an idempotency key made from the event.
 
-More: [Verifying a model](https://alchemy.run/domain/verifying-models).
+More: [Verifying a model](https://alchemy.run/domain/verifying-models), [Verifying a model: Rewrites and compactions are verified too](https://alchemy.run/domain/verifying-models#rewrites-and-compactions-are-verified-too).
 
 ## Api tests: the client's view
 

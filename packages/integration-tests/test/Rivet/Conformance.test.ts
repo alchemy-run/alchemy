@@ -11,8 +11,8 @@ import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
 import { conformanceTests, waitForReady } from "../Cloudflare/Workers/conformance/spec.ts";
 import { ensureDockerSwarm } from "../Docker/Runtime.ts";
-import { FRONT_PORT } from "./fixtures/cluster.ts";
 import Front from "./fixtures/front.ts";
+import { publishedUrl } from "./fixtures/published.ts";
 import { ReentrantLive } from "./fixtures/reentrant.ts";
 
 const testOptions = { providers: Layer.mergeAll(Docker.providers(), Rivet.providers()) };
@@ -21,7 +21,8 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 // previous (interrupted or NO_DESTROY) run left behind.
 const sharedStack = Core.scratchStack(testOptions, "RivetConformance", import.meta.url);
 
-const baseUrl = `http://localhost:${FRONT_PORT}`;
+// The front's port is one Swarm picks, read from the deploy.
+let baseUrl = "";
 
 // The engine conformance spec, run against Rivet Durable Objects on a local
 // Docker control plane, called from a Docker service through the gateway.
@@ -37,10 +38,11 @@ describe.skipIf(!!process.env.FAST)(
         const outputs = yield* sharedStack.deploy(
           Effect.gen(function* () {
             const front = yield* Front;
-            return { front: front.name };
+            return { front: front.name, ports: front.ports };
           }).pipe(Effect.provide(ReentrantLive)),
         );
         expect(outputs.front).toBeTruthy();
+        baseUrl = publishedUrl(outputs.ports);
         yield* waitForReady(baseUrl, { attempts: 40, base: "3 seconds" });
       }),
       { timeout: 400_000 },
@@ -687,7 +689,7 @@ describe.skipIf(!!process.env.FAST)(
       /** A WebSocket to `path` on the front, read one JSON frame at a time. */
       const connect = (path: string) =>
         Effect.gen(function* () {
-          const socket = yield* Socket.makeWebSocket(`ws://localhost:${FRONT_PORT}${path}`);
+          const socket = yield* Socket.makeWebSocket(`${baseUrl.replace(/^http/, "ws")}${path}`);
           const { pull } = yield* socket.reader;
           const writer = yield* socket.writer;
           const frames: Array<unknown> = [];
