@@ -185,7 +185,8 @@ const make = Effect.gen(function* () {
         );
         const now = yield* Clock.currentTimeMillis;
         return {
-          value: typeof access.token === "string" ? access.token : Redacted.value(access.token),
+          value:
+            typeof access.token === "string" ? access.token : Redacted.value<string>(access.token),
           ttl: Duration.subtract(
             Duration.millis(Math.max(0, Date.parse(access.expires_at) - now)),
             TOKEN_MARGIN,
