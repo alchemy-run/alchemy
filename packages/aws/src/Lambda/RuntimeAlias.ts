@@ -244,85 +244,110 @@ export const RuntimeAliasProvider = () =>
 
       // Observe. An alias pending deletion keeps its name reserved, so
       // restore it; the sync below points it at the desired version.
-      let alias = yield* getAlias(runtime.runtimeArn, name);
-      // Lambda restores an alias only while its version is live, so a
-      // version that was deleted with it is restored first and scheduled
-      // for deletion again once the alias has moved off it.
+      const observed = yield* getAlias(runtime.runtimeArn, name);
+
+      // Lambda restores an alias only once its version is live again, so a
+      // version deleted with the alias is restored first. It is scheduled for
+      // deletion again when reconcile ends, so it never outlives the alias's
+      // move off it, even when the restore fails.
       let staleVersion: string | undefined;
-      if (alias?.State === "PENDING_DELETION") {
+      if (observed?.State === "PENDING_DELETION") {
         const pointedAt = yield* lambdacore
-          .getRuntimeVersion({ RuntimeName: runtime.runtimeArn, Name: alias.RuntimeVersion })
+          .getRuntimeVersion({ RuntimeName: runtime.runtimeArn, Name: observed.RuntimeVersion })
           .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
-        if (pointedAt?.State === "PENDING_DELETION") {
+        if (
+          pointedAt?.State === "PENDING_DELETION" &&
+          observed.RuntimeVersion !== n.version.versionName
+        ) {
           yield* lambdacore.restoreRuntime({
             RuntimeName: runtime.runtimeArn,
-            RuntimeVersion: alias.RuntimeVersion,
+            RuntimeVersion: observed.RuntimeVersion,
           });
-          if (alias.RuntimeVersion !== n.version.versionName) {
-            staleVersion = alias.RuntimeVersion;
-          }
+          staleVersion = observed.RuntimeVersion;
         }
-        yield* session.note(`Restoring runtime alias ${name} from pending deletion...`);
-        yield* lambdacore.restoreRuntime({
-          RuntimeName: runtime.runtimeArn,
-          RuntimeAlias: name,
-        });
+      }
+
+      const converge = Effect.gen(function* () {
+        let alias = observed;
+        if (alias?.State === "PENDING_DELETION") {
+          yield* session.note(`Restoring runtime alias ${name} from pending deletion...`);
+          // The version restore above settles a moment after it returns.
+          yield* lambdacore
+            .restoreRuntime({ RuntimeName: runtime.runtimeArn, RuntimeAlias: name })
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "ResourceConflictException",
+                schedule: Schedule.spaced("2 seconds"),
+                times: 15,
+              }),
+            );
+          alias = yield* waitForActive(runtime.runtimeArn, name, session);
+        }
+
+        // Ensure.
+        if (alias === undefined) {
+          yield* session.note(`Creating runtime alias ${name} -> ${n.version.versionName}...`);
+          yield* lambdacore
+            .createRuntimeAlias({
+              RuntimeName: runtime.runtimeArn,
+              Name: name,
+              RuntimeVersion: n.version.versionName,
+              Description: n.description,
+              ReleaseLifecycle: toLifecycle(n.releaseLifecycle),
+            })
+            .pipe(Effect.catchTag("ResourceConflictException", () => Effect.void));
+        }
         alias = yield* waitForActive(runtime.runtimeArn, name, session);
-      }
 
-      // Ensure.
-      if (alias === undefined) {
-        yield* session.note(`Creating runtime alias ${name} -> ${n.version.versionName}...`);
-        yield* lambdacore
-          .createRuntimeAlias({
-            RuntimeName: runtime.runtimeArn,
-            Name: name,
-            RuntimeVersion: n.version.versionName,
-            Description: n.description,
-            ReleaseLifecycle: toLifecycle(n.releaseLifecycle),
-          })
-          .pipe(Effect.catchTag("ResourceConflictException", () => Effect.void));
-      }
-      alias = yield* waitForActive(runtime.runtimeArn, name, session);
+        // Sync the version, description and lifecycle. Lifecycle is compared
+        // only when set: an alias without its own reports the runtime's.
+        if (
+          alias.RuntimeVersion !== n.version.versionName ||
+          (alias.Description || undefined) !== n.description ||
+          (desiredLifecycle !== undefined &&
+            !lifecycleEqual(fromLifecycle(alias.ReleaseLifecycle), desiredLifecycle))
+        ) {
+          yield* session.note(`Pointing runtime alias ${name} at ${n.version.versionName}...`);
+          yield* lambdacore
+            .updateRuntimeAlias({
+              RuntimeName: runtime.runtimeArn,
+              Name: name,
+              RuntimeVersion: n.version.versionName,
+              Description: n.description ?? "",
+              ReleaseLifecycle: toLifecycle(n.releaseLifecycle),
+            })
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "ResourceConflictException",
+                schedule: Schedule.spaced("2 seconds"),
+                times: 10,
+              }),
+            );
+          alias = yield* waitForActive(runtime.runtimeArn, name, session);
+        }
+        return toAttrs(alias, runtime);
+      });
 
-      // Sync the version, description and lifecycle. Lifecycle is compared
-      // only when set: an alias without its own reports the runtime's.
-      if (
-        alias.RuntimeVersion !== n.version.versionName ||
-        (alias.Description || undefined) !== n.description ||
-        (desiredLifecycle !== undefined &&
-          !lifecycleEqual(fromLifecycle(alias.ReleaseLifecycle), desiredLifecycle))
-      ) {
-        yield* session.note(`Pointing runtime alias ${name} at ${n.version.versionName}...`);
-        yield* lambdacore
-          .updateRuntimeAlias({
+      const deleteStale = (version: string) =>
+        lambdacore
+          .deleteRuntimeVersion({
             RuntimeName: runtime.runtimeArn,
-            Name: name,
-            RuntimeVersion: n.version.versionName,
-            Description: n.description ?? "",
-            ReleaseLifecycle: toLifecycle(n.releaseLifecycle),
+            Name: version,
+            RecoveryWindowInDays: 7,
           })
           .pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             Effect.retry({
               while: (e) => e._tag === "ResourceConflictException",
               schedule: Schedule.spaced("2 seconds"),
               times: 10,
             }),
+            Effect.ignore,
           );
-        alias = yield* waitForActive(runtime.runtimeArn, name, session);
-      }
 
-      if (staleVersion !== undefined) {
-        yield* lambdacore
-          .deleteRuntimeVersion({
-            RuntimeName: runtime.runtimeArn,
-            Name: staleVersion,
-            RecoveryWindowInDays: 7,
-          })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
-      }
-
-      return toAttrs(alias, runtime);
+      return yield* staleVersion === undefined
+        ? converge
+        : converge.pipe(Effect.ensuring(deleteStale(staleVersion)));
     }),
 
     delete: Effect.fn(function* ({ olds, output, session, force }) {
