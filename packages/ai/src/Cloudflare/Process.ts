@@ -1,6 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import type { DurableObjectServices } from "@alchemy.run/cloudflare/Workers/DurableObject";
-import type { Worker } from "@alchemy.run/cloudflare/Workers/Worker";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -54,13 +53,18 @@ const outcomeOf = <A, R>(
 ): Effect.Effect<Outcome<A>, never, R> =>
   effect.pipe(
     Effect.map((value): Outcome<A> => ({ outcome: "ok", value })),
-    Effect.catchTag("NotStarted", ({ process, key }) =>
-      Effect.succeed<Outcome<A>>({ outcome: "not-started", process, key }),
-    ),
-    Effect.catchTag("HarnessError", ({ message }) =>
-      Effect.succeed<Outcome<A>>({ outcome: "failed", message }),
-    ),
+    Effect.catchTags({
+      NotStarted: ({ process, key }) =>
+        Effect.succeed<Outcome<A>>({ outcome: "not-started", process, key }),
+      HarnessError: ({ message }) => Effect.succeed<Outcome<A>>({ outcome: "failed", message }),
+    }),
   );
+
+/** A host's Layer with what it is given: the hosted processes it asked for are among them. */
+const closed = <A, R>(
+  layer: Layer.Layer<A, never, any>,
+  given: [Layer.Layer<any, never, any>, ...Array<Layer.Layer<any, never, any>>],
+): Layer.Layer<A, never, R> => Layer.provide(layer, given) as Layer.Layer<A, never, R>;
 
 /** The Durable Object namespace of a process host, with the processes it runs. */
 export interface ProcessHostClass<Processes extends ReadonlyArray<HostedProcess>> {
@@ -184,7 +188,12 @@ export const ProcessHost =
       });
     }).pipe(
       Effect.provide(
-        Layer.provide(layer, [
+        closed<
+          ServicesOf<Processes>,
+          | Exclude<R, ServicesOf<Processes>>
+          | Cloudflare.DurableObjectScope
+          | Cloudflare.DurableObjectState
+        >(layer, [
           // What asks for a hosted process without its prose reaches the session's own object.
           Layer.effectContext(
             Effect.map(Cloudflare.DurableObjectScope, (namespace) =>
@@ -214,13 +223,7 @@ export const ProcessHost =
               };
             }),
           ),
-        ]) as Layer.Layer<
-          ServicesOf<Processes>,
-          never,
-          | Exclude<R, ServicesOf<Processes>>
-          | Cloudflare.DurableObjectScope
-          | Cloudflare.DurableObjectState
-        >,
+        ]),
       ),
     );
     return Object.assign(Cloudflare.DurableObject<Self>()(name, impl), {
@@ -268,6 +271,7 @@ const objectName = (process: string, key: string) => `${process}/${key}`;
 const result = <A>(
   call: Effect.Effect<Outcome<A>, unknown, unknown>,
 ): Effect.Effect<A, NotStarted | HarnessError> =>
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- a stub's call needs nothing the caller has not got
   (call as Effect.Effect<Outcome<A>, unknown>).pipe(
     Effect.mapError(
       (cause) => new HarnessError({ message: "The call to the process host failed", cause }),
@@ -306,15 +310,15 @@ const remoteClient = (
             }),
         ),
         Effect.flatMap((encoded) =>
-          started(result(stub(key).start(name, key, encoded, sentOf(options)))),
+          stub(key).start(name, key, encoded, sentOf(options)).pipe(result, started),
         ),
       ),
     get: (key) => ({
       send: (text, options) => result(stub(key).send(name, key, text, sentOf(options))),
       prompt: (text, options) => result(stub(key).prompt(name, key, text, sentOf(options))),
-      wait: started(result(stub(key).wait(name, key))),
-      abort: started(result(stub(key).abort(name, key))),
-      messages: started(result(stub(key).messages(name, key))),
+      wait: stub(key).wait(name, key).pipe(result, started),
+      abort: stub(key).abort(name, key).pipe(result, started),
+      messages: stub(key).messages(name, key).pipe(result, started),
     }),
   };
 };

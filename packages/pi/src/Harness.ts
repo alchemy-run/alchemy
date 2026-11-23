@@ -571,12 +571,10 @@ export const Harness = <
 
         const baseExtension: PiExtension = {
           name: BASE_EXTENSION,
-          tools: [
-            ...tools.map((entry) => ({
-              ...compile(entry),
-              ...callersOf("tools", entry.tool.toolName),
-            })),
-          ],
+          tools: tools.map((entry) => ({
+            ...compile(entry),
+            ...callersOf("tools", entry.tool.toolName),
+          })),
         };
         const piExtensions: PiExtension[] = extensions.map(({ extension, impl, tools }) => {
           const sections: PromptSection[] = [

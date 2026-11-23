@@ -413,11 +413,10 @@ export const tools = <A extends Toolable, R = never>(
       let client: Promise<Client> | undefined;
       const clientOf = Effect.promise(
         () =>
-          (client ??= Effect.runPromise(
+          (client ??= Effect.runPromiseWith(context)(
             Effect.flatMap(Scope.make(), (scope) =>
-              (outsideClient(api) as Effect.Effect<Client, never, Scope.Scope>).pipe(
+              (outsideClient(api) as Effect.Effect<Client, never, Services<A> | Scope.Scope>).pipe(
                 Effect.provideService(Scope.Scope, scope),
-                Effect.provideContext(context),
               ),
             ),
           )),

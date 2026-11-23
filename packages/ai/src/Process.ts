@@ -222,6 +222,7 @@ export interface DefaultModel {
   readonly _: unique symbol;
 }
 
+// oxlint-disable-next-line effecttsgo/service-not-as-class -- the tag is also the function that makes its Layer
 const DefaultModelKey = Context.Service<DefaultModel, { readonly model: AnyModel }>(
   "AI.DefaultModel",
 );
@@ -579,6 +580,7 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
           } else if (isMentionable(ref)) {
             const mention = ref[MentionTypeId];
             names.set(ref, mention.name);
+            // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- what the mention requires is a requirement of the process
             tools.push(...(yield* mention.tools as Effect.Effect<ReadonlyArray<AnyTool>>));
           } else {
             // A group stands for its tools: a harness is given each one.
@@ -779,6 +781,7 @@ export const Process = (() =>
       readonly description?: string;
     },
   ) => {
+    // oxlint-disable-next-line effecttsgo/service-not-as-class -- one tag per declared process, extended by the user's class
     const key = Context.Service<unknown, ProcessService<any>>(`AI.Process/${name}`);
     /** Called as a template tag, it is the inline form; extended, it is the tag. */
     function Declared(strings: TemplateStringsArray, ...refs: ReadonlyArray<unknown>) {

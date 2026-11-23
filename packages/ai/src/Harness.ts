@@ -161,7 +161,7 @@ export const makeHarness = <R>(
         if (opened !== undefined) return opened;
         if (opening === undefined) {
           const context = yield* Effect.context<RuntimeContext>();
-          opening = Effect.runPromise(Effect.provideContext(start, context));
+          opening = Effect.runPromiseWith(context)(start);
         }
         return yield* Effect.tryPromise({
           try: () => opening!,
