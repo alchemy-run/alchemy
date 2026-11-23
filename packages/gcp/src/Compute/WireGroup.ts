@@ -417,11 +417,7 @@ export const WireGroupProvider = () =>
 
       if (current === undefined) {
         const inserted = yield* compute
-          .insertWireGroups({
-            project: env.project,
-            crossSiteNetwork,
-            body: desired,
-          })
+          .insertWireGroups({ ...desired, project: env.project, crossSiteNetwork })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitGlobalOperation(env.project, inserted, {
@@ -459,6 +455,7 @@ export const WireGroupProvider = () =>
 
       if (descriptionChanged || adminChanged || propertiesChanged || endpointsChanged) {
         const patched = yield* compute.patchWireGroups({
+          ...desired,
           project: env.project,
           crossSiteNetwork,
           wireGroup: wireGroupName,
@@ -470,7 +467,6 @@ export const WireGroupProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: desired,
         });
         yield* waitGlobalOperation(env.project, patched);
         current = (yield* getByName(env.project, crossSiteNetwork, wireGroupName)) ?? current;

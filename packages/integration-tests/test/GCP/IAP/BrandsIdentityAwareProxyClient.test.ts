@@ -56,11 +56,9 @@ test.provider.skipIf(!!brandName)(
 
       const error = yield* Effect.flip(
         iap.createProjectsBrands({
+          applicationTitle: "Alchemy IAP probe",
+          supportEmail: "iap@example.com",
           parent: `projects/${project}`,
-          body: {
-            applicationTitle: "Alchemy IAP probe",
-            supportEmail: "iap@example.com",
-          },
         }),
       );
       expect(error._tag).toEqual("BadRequest");
@@ -80,8 +78,8 @@ test.provider.skipIf(!!brandName)(
 
       const error = yield* Effect.flip(
         iap.createProjectsBrandsIdentityAwareProxyClients({
+          displayName: "Alchemy IAP client probe",
           parent: `projects/${project}/brands/missing`,
-          body: { displayName: "Alchemy IAP client probe" },
         }),
       );
       expect(error._tag).toEqual("BadRequest");

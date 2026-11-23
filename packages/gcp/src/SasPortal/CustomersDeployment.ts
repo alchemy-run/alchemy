@@ -220,10 +220,7 @@ export const CustomersDeploymentProvider = () =>
 
       if (current === undefined) {
         const created = yield* sasportal
-          .createCustomersDeployments({
-            parent,
-            body: desired,
-          })
+          .createCustomersDeployments({ ...desired, parent })
           .pipe(
             Effect.catchTag("Conflict", () =>
               findOwnedCustomerDeployment(id, parent).pipe(Effect.map((found) => found?.row)),
@@ -245,12 +242,12 @@ export const CustomersDeploymentProvider = () =>
         news.sasUserIds !== undefined && !sameStringList(current.sasUserIds, news.sasUserIds);
       if (nameChanged || usersChanged) {
         current = yield* sasportal.patchCustomersDeployments({
+          ...desired,
           name,
           updateMask: updateMaskOf(
             "displayName",
             news.sasUserIds !== undefined ? "sasUserIds" : undefined,
           ),
-          body: desired,
         });
       }
 

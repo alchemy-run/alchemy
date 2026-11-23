@@ -56,7 +56,10 @@
         "bun": "./src/Rivet/index.ts",
         "default": "./lib/Rivet/index.js"
       },
+      "./Explore/internal/*": null,
+      "./Prove/internal/*": null,
       "./internal": null,
+      "./*/internal": null,
       "./*": {
         "types": "./lib/*.d.ts",
         "bun": "./src/*.ts",
@@ -69,6 +72,10 @@
   "scripts": {
     "build": "pnpm -r --filter \"{.}...\" run build:package",
     "build:package": "node scripts/build.ts"
+  },
+  "dependencies": {
+    "oxc-parser": "catalog:",
+    "z3-solver": "catalog:"
   },
   "devDependencies": {
     "@alchemy.run/cloudflare": "workspace:*",

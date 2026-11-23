@@ -263,8 +263,8 @@ export const ConversationsAssessmentProvider = () =>
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsConversationsAssessments({
+            agentInfo: desiredAgent,
             parent: news.parent,
-            body: { agentInfo: desiredAgent },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? (yield* findOwned(news.parent, displayName));

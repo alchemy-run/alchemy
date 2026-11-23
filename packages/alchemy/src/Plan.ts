@@ -1296,7 +1296,7 @@ const makePlan = <A>(
           return attrs;
         } else if (Output.isEffectExpr(expr)) {
           const upstream = yield* resolveOutput(expr.expr, peers);
-          return Output.hasOutputs(upstream) ? expr : yield* expr.f(upstream);
+          return Output.hasOutputs(upstream) ? expr : yield* Output.runEffectExpr(expr, upstream);
         } else if (Output.isFlatMapExpr(expr)) {
           const upstream = yield* resolveOutput(expr.expr, peers);
           // Source still unresolved -> keep the flatMap intact for a later pass.

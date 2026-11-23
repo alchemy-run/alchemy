@@ -64,14 +64,12 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         appengine.createAppsAuthorizedCertificates({
-          appsId: project,
-          body: {
-            displayName: "Alchemy Appengine Probe",
-            certificateRawData: {
-              publicCertificate: CERT_A,
-              privateKey: KEY_A,
-            },
+          displayName: "Alchemy Appengine Probe",
+          certificateRawData: {
+            publicCertificate: CERT_A,
+            privateKey: KEY_A,
           },
+          appsId: project,
         }),
       );
       expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);

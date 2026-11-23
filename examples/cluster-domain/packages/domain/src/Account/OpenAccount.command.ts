@@ -17,9 +17,8 @@ export class AccountOpened extends Domain.Event("AccountOpened", {
 
 /** Open an account for the signed-in customer. The client picks its id. */
 export class OpenAccount extends Domain.Command("OpenAccount", {
-  target: AccountId,
   middleware: [Session],
-  input: { name: Schema.String },
+  input: { accountId: AccountId, name: Schema.String },
   events: [AccountOpened],
   rejects: [AlreadyOpen, NotACustomer],
 }) {}

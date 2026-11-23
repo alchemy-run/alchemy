@@ -28,6 +28,9 @@ export class Object extends Cloudflare.DurableObject<Object>()(
         put: (key: string, value: string) => bucket.put(key, value).pipe(Effect.asVoid),
         get: (key: string) => bucket.get(key),
         ping: () => start.pipe(Effect.andThen(container.ping())),
+        // Durable Object storage, which outlives the container application.
+        remember: (value: string) => state.storage.put("marker", value),
+        recall: () => state.storage.get<string>("marker"),
         // The env var a `Binding.Service` injected into the container.
         boundEnv: () => start.pipe(Effect.andThen(container.boundEnv())),
         // Read the object from inside the container over RPC.

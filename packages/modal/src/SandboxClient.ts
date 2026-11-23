@@ -13,6 +13,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import type * as HttpServerRequest from "effect/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import type * as Socket from "effect/socket/Socket";
@@ -1101,7 +1102,12 @@ export const sandboxHandle = (
       if (!response.url || !response.token) {
         return yield* new SandboxUnexpectedResponse({ message: "Modal returned no connect token" });
       }
-      return { url: response.url, token: response.token };
+      // distilled returns the token as Redacted once it marks it sensitive.
+      const token =
+        typeof response.token === "string"
+          ? response.token
+          : Redacted.value<string>(response.token);
+      return { url: response.url, token };
     }),
     snapshotFilesystem: (_timeout) =>
       viaRouter(routerOps.snapshotFilesystem, (op, task) =>

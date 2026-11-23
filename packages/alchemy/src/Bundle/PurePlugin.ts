@@ -79,6 +79,16 @@ const PURE_COMMENT = "/*#__PURE__*/ ";
 const SUPPORTED_FILE_RE = /\.(?:m?[jt]sx?|cjs|cts)$/;
 
 /**
+ * Modules `experimental.lazyBarrel` emits broken: one that re-exports a
+ * CommonJS package with `export *` and also runs code of its own loses the
+ * bindings that code imports. effect's `NodeWS` (`export * from "ws"`) is
+ * bundled with `Layer` and `Socket` unbound, and fails where it first runs
+ * ("Layer is not defined"). A module with side effects is not treated as a
+ * barrel. Rolldown 1.3 reports this case as its own bug.
+ */
+const LAZY_BARREL_BROKEN = /[\\/]@effect[\\/]platform-node(?:-shared)?[\\/]dist[\\/]NodeWS\.js$/;
+
+/**
  * Rolldown plugin that injects `/*#__PURE__*\/` annotations on top-level
  * call/new expressions of modules belonging to the configured packages,
  * enabling tree-shaking of `effect`, `@effect/*`, and any user-listed
@@ -133,6 +143,7 @@ export const purePlugin = (options: PurePluginOptions = {}): rolldown.Plugin => 
         const isEntry = entryPaths.has(cleanId);
         const sideEffectFreePkg = isSideEffectFree(info?.sideEffects);
         const markSideEffectFree = markSideEffectFreeOpt && !isEntry && sideEffectFreePkg;
+        if (LAZY_BARREL_BROKEN.test(cleanId)) return { moduleSideEffects: true };
 
         const anchors = await collectPureAnchorsCached(code, cleanId);
         // Annotating a call whose result is BOUND (variable initializer,

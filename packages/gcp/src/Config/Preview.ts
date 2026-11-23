@@ -404,20 +404,18 @@ export const PreviewProvider = () =>
       if (current === undefined) {
         const created = yield* config
           .createProjectsLocationsPreviews({
+            terraformBlueprint: news.terraformBlueprint,
+            deployment,
+            previewMode: news.previewMode,
+            serviceAccount,
+            artifactsGcsBucket: news.artifactsGcsBucket,
+            workerPool: news.workerPool,
+            tfVersionConstraint: news.tfVersionConstraint,
+            providerConfig: news.providerConfig,
+            annotations: desiredAnnotations,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             previewId,
-            body: {
-              terraformBlueprint: news.terraformBlueprint,
-              deployment,
-              previewMode: news.previewMode,
-              serviceAccount,
-              artifactsGcsBucket: news.artifactsGcsBucket,
-              workerPool: news.workerPool,
-              tfVersionConstraint: news.tfVersionConstraint,
-              providerConfig: news.providerConfig,
-              annotations: desiredAnnotations,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

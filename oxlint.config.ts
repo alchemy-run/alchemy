@@ -224,6 +224,12 @@ export default defineConfig({
         "packages/cloudflare/src/Workers/Rpc.ts",
         "packages/cloudflare/src/Workers/RpcDurableObject.ts",
         "packages/cloudflare/src/Workflows/WorkflowBridge.ts",
+        // Agent harnesses hold tools, models and platform sandbox handles
+        // whose error and requirement types are erased by the registry
+        // (`AI.Sandboxes` takes any platform's handle).
+        "packages/ai/src/**",
+        "packages/opencode/src/**",
+        "packages/pi/src/**",
         "packages/domain/src/**",
         "packages/effect-cluster/src/**",
         "packages/gcp/src/GCPBindings.ts",
@@ -232,6 +238,17 @@ export default defineConfig({
         "packages/rivet/src/**",
       ],
       rules: { "effecttsgo/any-unknown-in-error-context": "off" },
+    },
+    {
+      // MCP servers are reached through Effect AI's `McpClient`, which Effect
+      // still marks experimental. There is no stable client to use instead.
+      files: [
+        "packages/ai/src/McpServer.ts",
+        "packages/opencode/src/Harness.ts",
+        "packages/pi/src/Harness.ts",
+        "packages/pi/src/internal/mcp.ts",
+      ],
+      rules: { "effecttsgo/experimental-api-usage": "off" },
     },
   ],
 } satisfies OxlintConfig);

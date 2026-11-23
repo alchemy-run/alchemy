@@ -60,6 +60,16 @@ export default Cloudflare.Worker(
           return yield* HttpServerResponse.json(result);
         }
 
+        // Durable Object storage, kept across container application changes.
+        if (request.method === "PUT" && url.pathname === "/remember") {
+          yield* object.remember(yield* request.text).pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ ok: true });
+        }
+        if (url.pathname === "/recall") {
+          const value = yield* object.recall().pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ value: value ?? null });
+        }
+
         if (url.pathname === "/hello") {
           const text = yield* object.hello().pipe(Effect.orDie);
           return HttpServerResponse.text(text);

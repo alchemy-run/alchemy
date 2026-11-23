@@ -170,6 +170,7 @@ describe("workerd/Config", () => {
                 localDocker: {
                   socketPath: "unix:///var/run/docker.sock",
                   containerEgressInterceptorImage: "cloudflare/proxy-everything:test",
+                  sessionId: "0123456789abcdef",
                 },
               },
             },
@@ -185,6 +186,7 @@ describe("workerd/Config", () => {
       expect(worker.containerEngine.localDocker.containerEgressInterceptorImage).toBe(
         "cloudflare/proxy-everything:test",
       );
+      expect(worker.containerEngine.localDocker.sessionId).toBe("0123456789abcdef");
 
       const namespace = worker.durableObjectNamespaces.get(0);
       expect(namespace.className).toBe("MyContainer");

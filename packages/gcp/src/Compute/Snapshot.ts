@@ -436,18 +436,16 @@ export const SnapshotProvider = () =>
       if (current === undefined) {
         const inserted = yield* compute
           .insertSnapshots({
+            name: snapshotName,
+            sourceDisk: news.sourceDisk,
+            sourceInstantSnapshot: news.sourceInstantSnapshot,
+            description: news.description,
+            labels: desiredLabels,
+            snapshotType: news.snapshotType,
+            storageLocations: news.storageLocations,
+            chainName: news.chainName,
+            guestFlush: news.guestFlush,
             project: env.project,
-            body: {
-              name: snapshotName,
-              sourceDisk: news.sourceDisk,
-              sourceInstantSnapshot: news.sourceInstantSnapshot,
-              description: news.description,
-              labels: desiredLabels,
-              snapshotType: news.snapshotType,
-              storageLocations: news.storageLocations,
-              chainName: news.chainName,
-              guestFlush: news.guestFlush,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
@@ -474,12 +472,10 @@ export const SnapshotProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       if (upsert.length > 0 || removed.length > 0) {
         const labeled = yield* compute.setLabelsSnapshots({
+          labels: desiredLabels,
+          labelFingerprint: current.labelFingerprint,
           project: env.project,
           resource: snapshotName,
-          body: {
-            labels: desiredLabels,
-            labelFingerprint: current.labelFingerprint,
-          },
         });
         yield* waitSnapshotOperation(env.project, labeled);
         current = yield* getByName(env.project, snapshotName);

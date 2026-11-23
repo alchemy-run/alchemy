@@ -330,15 +330,13 @@ export const FirewallEndpointAssociationProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsFirewallEndpointAssociations({
+            firewallEndpoint,
+            network,
+            tlsInspectionPolicy,
+            disabled,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             firewallEndpointAssociationId,
-            body: {
-              firewallEndpoint,
-              network,
-              tlsInspectionPolicy,
-              disabled,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -369,14 +367,11 @@ export const FirewallEndpointAssociationProvider = () =>
       if (updateMask.length > 0) {
         const operation = yield* networksecurity.patchProjectsLocationsFirewallEndpointAssociations(
           {
+            labels: desiredLabels,
+            disabled,
+            tlsInspectionPolicy,
             name: current.name ?? name,
             updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              disabled,
-              tlsInspectionPolicy,
-            },
           },
         );
         yield* waitForOperation(operation);

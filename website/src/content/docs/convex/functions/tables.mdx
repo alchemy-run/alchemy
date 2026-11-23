@@ -1,0 +1,114 @@
+---
+title: Tables
+description: Declare Convex tables with Effect Schema, index them with Convex's own builder, and read and write documents from your functions.
+---
+
+import Records from "../../../../components/diagrams/Records.astro";
+
+A Convex deployment stores **documents** in **tables**. A document is an object of Convex values: strings, numbers, booleans, `null`, 64-bit integers, bytes, arrays and nested objects. Convex adds two fields to every document: `_id`, its ID, and `_creationTime`.
+
+A table has a **schema**, which Convex checks every write against, and **indexes**. An index keeps the table's documents sorted by the fields you list, then by creation time, so a query that looks documents up by those fields reads only the ones it returns.
+
+<Records
+  title="messages · by_channel index"
+  columns={["channel", "_creationTime", "_id", "body"]}
+  keys={2}
+  group={0}
+  rows={[
+    ["general", "1764000000100", "j57a…", "hello"],
+    ["general", "1764000000200", "j57b…", "hi there"],
+    ["random", "1764000000150", "j57c…", "lunch?"],
+    ["support", "1764000000300", "j57d…", "help"],
+  ]}
+  query={{ label: 'withIndex("by_channel", (r) => r.eq("channel", "general"))', rows: [0, 1] }}
+  caption="The by_channel index sorts messages by channel, then by creation time. A query for one channel reads one run of the index, oldest first."
+/>
+
+## Declare a table
+
+Describe the documents with an Effect Schema, and the indexes with Convex's own builder:
+
+```typescript title="src/messages.ts"
+import * as Convex from "@alchemy.run/convex/Server";
+import * as Schema from "effect/Schema";
+
+export const Messages = Convex.Table(
+  "messages",
+  Schema.Struct({
+    channel: Schema.String,
+    body: Schema.NonEmptyString,
+    sentAt: Schema.DateFromMillis,
+  }),
+  (table) => table.index("by_channel", ["channel"]),
+);
+```
+
+`table` is Convex's `defineTable` result, so search indexes, vector indexes and staged indexes work the same way.
+
+Code that Convex bundles imports `@alchemy.run/convex/Server`, which leaves out everything that only runs at deploy.
+
+## Put it in the schema
+
+`convex/schema.ts` exports the schema Convex pushes:
+
+```typescript title="convex/schema.ts"
+import * as Convex from "@alchemy.run/convex/Server";
+import { Messages } from "../src/messages.ts";
+
+export default Convex.schema(Messages);
+```
+
+To mix in a table defined with Convex's `v` validators, call `defineSchema` yourself and pass `Messages.definition` for this one.
+
+## Stored values and decoded values
+
+Convex stores a schema's **encoded** form, and your code sees the **decoded** one. `sentAt` above is a number in the database and a `Date` in your functions. Checks such as `NonEmptyString` aren't part of what Convex validates. They run when a document is written, and again when it's read.
+
+A field that points at another document uses `Convex.Id`:
+
+```typescript
+const Reply = Schema.Struct({
+  message: Convex.Id("messages"),
+  body: Schema.String,
+});
+```
+
+`Convex.Bytes` stores binary data, and `Convex.Int64` a `bigint`.
+
+## Read documents
+
+A table's methods run on the database of the function that calls them. Get one document by its ID:
+
+```typescript
+const message = yield* Messages.get(id);
+```
+
+It is an `Option`: `None` when no document has that ID.
+
+Query with Convex's query builder, typed by the table's indexes, and finish with `collect`, `first`, `unique`, `take` or `paginate`:
+
+```typescript
+const recent = yield* Messages.query((q) =>
+  q.withIndex("by_channel", (r) => r.eq("channel", channel)).order("desc"),
+).take(10);
+```
+
+An index name the table doesn't have doesn't type-check.
+
+## Write documents
+
+```typescript
+const id = yield* Messages.insert({ channel, body, sentAt: new Date() });
+yield* Messages.patch(id, { body: "edited" });
+yield* Messages.delete(id);
+```
+
+`patch` changes some fields, and `replace` the whole document. A value that fails the schema's checks fails with `SchemaError`, and nothing is written. Writing needs a mutation: in a query, `insert` doesn't type-check.
+
+See [Queries, mutations and actions](/convex/functions/queries-mutations-actions).
+
+## Limits
+
+A schema must encode to Convex values. Tuples, recursive schemas, and classes with no encoding fail with `UnsupportedSchema` when the module loads. Field names must be strings.
+
+When you push a new schema, Convex checks the documents already in the table against it, and refuses the push if any don't match. Add a field as optional first, fill it in, then make it required.

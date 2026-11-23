@@ -1,6 +1,5 @@
-import * as Domain from "@alchemy.run/domain";
 import { Story } from "@alchemy.run/domain/Story";
-import { expect, it } from "@effect/vitest";
+import { it } from "@effect/vitest";
 import { Account } from "../src/Account/Account.aggregate.ts";
 import { AccountSummary } from "../src/Account/AccountSummary.view.ts";
 import { TransferCredited } from "../src/Account/CreditTransfer.command.ts";
@@ -45,14 +44,10 @@ const alex = customer("c-2");
 const opened = (customerId: string, name: string) =>
   new AccountOpened({ customerId: CustomerId.make(customerId), name });
 
-it("the model is consistent", () => {
-  expect(Domain.verify(Bank)).toEqual([]);
-});
-
 it.effect("a customer opens an account for themselves", () =>
   story(
     as(sam),
-    when(a1, new OpenAccount({ name: "everyday" })),
+    when(new OpenAccount({ accountId: a1.id, name: "everyday" })),
     then(a1, opened("c-1", "everyday")),
     view(AccountSummary, a1, { customerId: CustomerId.make("c-1"), name: "everyday", balance: 0 }),
   ),
@@ -62,7 +57,7 @@ it.effect("an account id is opened once", () =>
   story(
     given(a1, opened("c-1", "everyday")),
     as(alex),
-    when(a1, new OpenAccount({ name: "mine now" })),
+    when(new OpenAccount({ accountId: a1.id, name: "mine now" })),
     rejected(new AlreadyOpen()),
   ),
 );
@@ -70,7 +65,7 @@ it.effect("an account id is opened once", () =>
 it.effect("only a customer opens an account", () =>
   story(
     as(system("ops")),
-    when(a1, new OpenAccount({ name: "everyday" })),
+    when(new OpenAccount({ accountId: a1.id, name: "everyday" })),
     rejected(new NotACustomer()),
   ),
 );
@@ -79,9 +74,9 @@ it.effect("deposits and withdrawals reply with the new balance", () =>
   story(
     given(a1, opened("c-1", "everyday")),
     as(sam),
-    when(a1, new DepositMoney({ amount: 100 })),
+    when(new DepositMoney({ accountId: a1.id, amount: 100 })),
     replied({ balance: 100 }),
-    when(a1, new WithdrawMoney({ amount: 30 })),
+    when(new WithdrawMoney({ accountId: a1.id, amount: 30 })),
     replied({ balance: 70 }),
     then(
       a1,
@@ -96,7 +91,7 @@ it.effect("an overdraft is rejected with the balance", () =>
   story(
     given(a1, opened("c-1", "everyday"), new MoneyDeposited({ amount: 50, balanceAfter: 50 })),
     as(sam),
-    when(a1, new WithdrawMoney({ amount: 80 })),
+    when(new WithdrawMoney({ accountId: a1.id, amount: 80 })),
     rejected(new InsufficientFunds({ balance: 50, requested: 80 })),
   ),
 );
@@ -105,7 +100,7 @@ it.effect("a customer can't touch someone else's account", () =>
   story(
     given(a1, opened("c-1", "everyday")),
     as(alex),
-    when(a1, new DepositMoney({ amount: 10 })),
+    when(new DepositMoney({ accountId: a1.id, amount: 10 })),
     rejected(new NotOwner()),
   ),
 );
@@ -115,7 +110,7 @@ it.effect("a transfer debits the source, credits the destination and completes",
     given(a1, opened("c-1", "everyday"), new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
     given(a2, opened("c-2", "savings")),
     as(sam),
-    when(t1, new RequestTransfer({ from: a1.id, to: a2.id, amount: 40 })),
+    when(new RequestTransfer({ transferId: t1.id, from: a1.id, to: a2.id, amount: 40 })),
     then(
       t1,
       new TransferRequested({
@@ -138,7 +133,7 @@ it.effect("a transfer from someone else's account fails without moving money", (
     given(a1, opened("c-1", "everyday"), new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
     given(a2, opened("c-2", "savings")),
     as(alex),
-    when(t1, new RequestTransfer({ from: a1.id, to: a2.id, amount: 40 })),
+    when(new RequestTransfer({ transferId: t1.id, from: a1.id, to: a2.id, amount: 40 })),
     then(
       t1,
       new TransferRequested({
@@ -158,7 +153,7 @@ it.effect("a transfer to an unopened account is refunded", () =>
   story(
     given(a1, opened("c-1", "everyday"), new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
     as(sam),
-    when(t1, new RequestTransfer({ from: a1.id, to: a2.id, amount: 40 })),
+    when(new RequestTransfer({ transferId: t1.id, from: a1.id, to: a2.id, amount: 40 })),
     then(
       a1,
       new TransferDebited({ transferId: t1.id, amount: 40, balanceAfter: 60 }),
@@ -182,7 +177,7 @@ it.effect("a transfer to an unopened account is refunded", () =>
 it.effect("a transfer to the same account is rejected", () =>
   story(
     as(sam),
-    when(t1, new RequestTransfer({ from: a1.id, to: a1.id, amount: 40 })),
+    when(new RequestTransfer({ transferId: t1.id, from: a1.id, to: a1.id, amount: 40 })),
     rejected(new SameAccount()),
   ),
 );

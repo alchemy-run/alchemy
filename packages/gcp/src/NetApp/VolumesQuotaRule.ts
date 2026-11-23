@@ -323,15 +323,13 @@ export const VolumesQuotaRuleProvider = () =>
       if (current === undefined) {
         const created = yield* netapp
           .createProjectsLocationsVolumesQuotaRules({
+            type,
+            diskLimitMib,
+            target: news.target,
+            description: news.description,
+            labels: desiredLabels,
             parent: volume,
             quotaRuleId,
-            body: {
-              type,
-              diskLimitMib,
-              target: news.target,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -361,14 +359,11 @@ export const VolumesQuotaRuleProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* netapp.patchProjectsLocationsVolumesQuotaRules({
+          labels: desiredLabels,
+          description: news.description,
+          diskLimitMib,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            diskLimitMib,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

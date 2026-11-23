@@ -1,0 +1,174 @@
+---
+title: Accept TCP connections
+description: Serve raw TCP from a Worker's connect handler, expose it on a public port with Spectrum, and open TCP connections to it from other Workers.
+---
+import Sequence from "../../../../components/diagrams/Sequence.astro";
+
+A Worker can serve raw TCP as well as HTTP. Its `connect` handler gets
+one socket per connection and reads and writes bytes on it. Connections
+arrive from two places: a Spectrum application whose origin is the
+Worker, for clients on the public Internet, and another Worker's
+`connect()` over a service binding.
+
+<Sequence
+  actors={[
+    { id: "client", label: "TCP client" },
+    { id: "spectrum", label: "Spectrum", type: "edge port" },
+    { id: "worker", label: "Echo", type: "Worker", tone: "accent" },
+  ]}
+  steps={[
+    { from: "client", to: "spectrum", label: "connect tcp.example.com:9000" },
+    { from: "spectrum", to: "worker", label: "connect(socket)" },
+    { from: "worker", to: "client", label: "hello", dashed: true },
+    { from: "client", to: "worker", label: "ping" },
+    { from: "worker", to: "client", label: "PING", dashed: true },
+  ]}
+  caption="Spectrum hands each TCP connection to the Worker's connect handler. The connection stays open until the handler finishes."
+/>
+
+## Accept a connection
+
+Return a `connect` handler from the Worker. It receives an Effect
+`Socket`: read batches with `reader`, write with `writer`.
+
+```typescript
+// src/echo.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+
+const decoder = new TextDecoder();
+
+export default class Echo extends Cloudflare.Worker<Echo>()(
+  "Echo",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return {
+      connect: (socket) =>
+        Effect.gen(function* () {
+          const { pull } = yield* socket.reader;
+          const writer = yield* socket.writer;
+          yield* writer.write("hello\n");
+          while (true) {
+            for (const chunk of yield* pull) {
+              const text = typeof chunk === "string" ? chunk : decoder.decode(chunk);
+              yield* writer.write(text.toUpperCase());
+            }
+          }
+        }).pipe(Effect.catch(() => Effect.void)),
+    };
+  }),
+) {}
+```
+
+`pull` fails once the client closes, a clean close included, so the
+handler catches it and ends. The connection closes when the handler's
+Effect settles.
+
+`socket.raw` is the native workerd `Socket`. Pipe its `readable` and
+`writable` into another socket, such as one from a Container's
+`getTcpPort(port).connect(address)`, to forward the connection with TCP
+half-closes intact.
+
+## Accept a connection in an async Worker
+
+A plain async Worker exports `connect` next to `fetch`. Nothing else
+changes.
+
+```typescript
+// src/echo.ts
+export default {
+  async connect(socket: Socket): Promise<void> {
+    const writer = socket.writable.getWriter();
+    for await (const chunk of socket.readable as ReadableStream<Uint8Array>) {
+      await writer.write(chunk);
+    }
+    await writer.close();
+  },
+};
+```
+
+## Put the Worker on a public port
+
+A Spectrum application with `trafficType: "worker"` sends every TCP
+connection on its port to the Worker named by `originWorkerId`.
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import Echo from "./src/echo.ts";
+
+export default Alchemy.Stack(
+  "TcpEcho",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const zone = Cloudflare.Zone.Zone.lookup({ name: "example.com" });
+    const echo = yield* Echo;
+    const app = yield* Cloudflare.Spectrum.Application("EchoTcp", {
+      zoneId: zone.zoneId,
+      dns: { type: "CNAME", name: "tcp.example.com" },
+      protocol: "tcp/9000",
+      trafficType: "worker",
+      originWorkerId: echo.workerId,
+    });
+    return { host: app.dnsName };
+  }),
+);
+```
+
+After the deploy, `nc tcp.example.com 9000` prints `hello` and echoes
+each line back in capitals.
+
+A zone gets one Worker-origin application on one port, unless it has
+Spectrum Enterprise. The application takes TCP only, and `tls` may be
+`off` or `flexible`.
+
+## Connect from another Worker
+
+`Cloudflare.Workers.Connect` binds the target Worker and returns a
+function that opens one TCP connection per call. The address arrives at
+the target as the socket's `localAddress`.
+
+```typescript
+// src/client.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import Echo from "./echo.ts";
+
+const decoder = new TextDecoder();
+
+export default class Client extends Cloudflare.Worker<Client>()(
+  "Client",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const echo = yield* Cloudflare.Workers.Connect(Echo);
+    return {
+      fetch: Effect.gen(function* () {
+        const socket = yield* echo("echo.internal:7");
+        const { pull } = yield* socket.reader;
+        const writer = yield* socket.writer;
+        yield* writer.write("ping\n");
+        let received = "";
+        while (!received.includes("PING\n")) {
+          for (const chunk of yield* pull) {
+            received += typeof chunk === "string" ? chunk : decoder.decode(chunk);
+          }
+        }
+        return HttpServerResponse.text(received);
+      }).pipe(Effect.scoped, Effect.orDie),
+    };
+  }).pipe(Effect.provide(Cloudflare.Workers.ConnectBinding)),
+) {}
+```
+
+An async Worker calls `connect()` on the service binding in its `env`:
+`env.ECHO.connect("echo.internal:7")` returns a native `Socket`.
+
+## Develop locally
+
+Under `alchemy dev`, `connect()` between two Workers works the same
+way: the connection crosses the local registry proxy to the target's
+`connect` handler. Spectrum has no local emulator, so test the public
+port against a deployed stack.

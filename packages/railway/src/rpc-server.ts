@@ -1,4 +1,5 @@
 import type { HttpEffect } from "alchemy/Http";
+import { decodeRpcArgs } from "alchemy/RpcArgs";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -101,16 +102,13 @@ export const serveRailwayRpc = <Req = never>(
     }
 
     const text = yield* request.text;
-    let args: unknown[] = [];
-    if (text.length > 0) {
-      const parsed = yield* Effect.result(Effect.try(() => JSON.parse(text) as unknown[]));
-      if (Result.isFailure(parsed)) {
-        return HttpServerResponse.text(`Invalid RPC arguments for "${name}"`, {
-          status: 400,
-        });
-      }
-      args = parsed.success;
+    const parsed = yield* Effect.result(decodeRpcArgs(text));
+    if (Result.isFailure(parsed)) {
+      return HttpServerResponse.text(`Invalid RPC arguments for "${name}"`, {
+        status: 400,
+      });
     }
+    const args = parsed.success;
 
     const invoked = (method as (...a: unknown[]) => unknown)(...args);
     if (!Effect.isEffect(invoked)) {

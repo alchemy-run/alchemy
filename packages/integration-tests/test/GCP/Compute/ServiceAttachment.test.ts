@@ -76,14 +76,12 @@ const ensureProducer = () =>
       existingCheck ??
       (yield* compute
         .insertHealthChecks({
+          name: healthCheckName,
+          type: "TCP",
+          tcpHealthCheck: { port: 80 },
+          checkIntervalSec: 5,
+          timeoutSec: 5,
           project,
-          body: {
-            name: healthCheckName,
-            type: "TCP",
-            tcpHealthCheck: { port: 80 },
-            checkIntervalSec: 5,
-            timeoutSec: 5,
-          },
         })
         .pipe(
           Effect.flatMap(waitGlobalOp),
@@ -104,14 +102,12 @@ const ensureProducer = () =>
       existingBackend ??
       (yield* compute
         .insertRegionBackendServices({
+          name: backendName,
+          protocol: "TCP",
+          loadBalancingScheme: "INTERNAL",
+          healthChecks: healthCheck.selfLink ? [healthCheck.selfLink] : [],
           project,
           region,
-          body: {
-            name: backendName,
-            protocol: "TCP",
-            loadBalancingScheme: "INTERNAL",
-            healthChecks: healthCheck.selfLink ? [healthCheck.selfLink] : [],
-          },
         })
         .pipe(
           Effect.flatMap(waitRegionOp),

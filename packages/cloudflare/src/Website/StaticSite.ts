@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import { cast } from "effect/Function";
 import * as Redacted from "effect/Redacted";
 import type { Providers } from "../Providers.ts";
+import { isS3Credentials } from "../R2/S3CredentialsBinding.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
   Worker,
@@ -383,9 +384,9 @@ const makeStaticSite = <const Bindings extends WorkerBindingProps = {}, Req = ne
  * - `Output` references resolve at reconcile; the resolved value is
  *   serialized the same way inline values are (an `Output<object>` must
  *   reach the subprocess as JSON, not `[object Object]`)
- * - binding Effects (`~alchemy/Kind`-marked, e.g. a `WorkerLoader`) and
- *   `Cloudflare.Container` declarations have no env-var representation and
- *   are dropped
+ * - binding Effects (`~alchemy/Kind`-marked, e.g. a `WorkerLoader`),
+ *   `Cloudflare.Container` declarations and `Cloudflare.R2.S3Credentials`
+ *   have no env-var representation and are dropped
  * - remaining plain values (`null`, numbers, JSON objects) are stringified
  */
 const serializeEnv = Effect.fn(function* (
@@ -404,6 +405,11 @@ const serializeEnv = Effect.fn(function* (
       // resolve the started-instance tag, which only exists inside a
       // Durable Object (#997). Deploy-time only, nothing to expose to the
       // build subprocess.
+      continue;
+    } else if (isS3Credentials(v)) {
+      // Effect-shaped, but its runtime form needs the host's
+      // `WorkerEnvironment` (#2219). The deployed value is a Worker secret,
+      // never a build env var.
       continue;
     } else if (isYieldableEffectLike(v)) {
       const resolved = serializeEnvValue(

@@ -217,7 +217,7 @@ export interface Definition<
  * ### Reading your own write
  * **Example:** Wait for the projection before querying the store
  * ```typescript
- * const receipt = yield* accounts.send(accountId, new DepositMoney({ amount: 100 }));
+ * const receipt = yield* accounts.send(new DepositMoney({ accountId, amount: 100 }));
  * yield* Ledger.caughtUp(receipt);
  * ```
  *

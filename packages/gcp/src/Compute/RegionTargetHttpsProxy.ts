@@ -415,11 +415,7 @@ export const RegionTargetHttpsProxyProvider = () =>
           body.serverTlsPolicy = news.serverTlsPolicy;
         }
         yield* compute
-          .insertRegionTargetHttpsProxies({
-            project: env.project,
-            region,
-            body,
-          })
+          .insertRegionTargetHttpsProxies({ ...body, project: env.project, region })
           .pipe(
             Effect.flatMap((operation) =>
               waitRegionOperation(env.project, region, operation, {
@@ -441,10 +437,10 @@ export const RegionTargetHttpsProxyProvider = () =>
       if (resourceTail(current.urlMap) !== resourceTail(desiredUrlMap)) {
         yield* compute
           .setUrlMapRegionTargetHttpsProxies({
+            urlMap: desiredUrlMap,
             project: env.project,
             region,
             targetHttpsProxy: targetHttpsProxyName,
-            body: { urlMap: desiredUrlMap },
           })
           .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
         current = yield* getByName(env.project, region, targetHttpsProxyName);
@@ -462,10 +458,10 @@ export const RegionTargetHttpsProxyProvider = () =>
       ) {
         yield* compute
           .setSslCertificatesRegionTargetHttpsProxies({
+            sslCertificates: desiredCerts,
             project: env.project,
             region,
             targetHttpsProxy: targetHttpsProxyName,
-            body: { sslCertificates: desiredCerts },
           })
           .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
         current = yield* getByName(env.project, region, targetHttpsProxyName);
@@ -515,10 +511,10 @@ export const RegionTargetHttpsProxyProvider = () =>
         }
         yield* compute
           .patchRegionTargetHttpsProxies({
+            ...body,
             project: env.project,
             region,
             targetHttpsProxy: targetHttpsProxyName,
-            body,
           })
           .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
         current = yield* getByName(env.project, region, targetHttpsProxyName);
