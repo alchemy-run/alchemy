@@ -294,6 +294,8 @@ export const known = (value: unknown, name: string): V | undefined => {
   }
   if (value === null) return Value.nil;
   const object = value as object;
+  // An error is a value the library made, whatever else it can be used as.
+  if ("stack" in object && "message" in object) return { _tag: "Host", value, name };
   if (
     Effect.isEffect(object) ||
     Stream.isStream(object) ||

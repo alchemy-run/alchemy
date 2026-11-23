@@ -6,6 +6,7 @@ import * as Boolean from "effect/Boolean";
 import * as ByteSize from "effect/ByteSize";
 import * as Cause from "effect/Cause";
 import * as Chunk from "effect/Chunk";
+import * as Cron from "effect/Cron";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -874,6 +875,23 @@ const extra = (a: number, b: number) =>
           Trie.keysWithPrefix(Trie.make(["sell", 1], ["sells", 2], ["she", 3]), "sel"),
         ),
         escaped: RegExp.escape("a.b"),
+        trie: {
+          size: Trie.size(Trie.insert(Trie.make(["sell", 1]), "she", 2)),
+          get: Trie.get(Trie.make(["sell", 1]), "sell"),
+          longest: Trie.longestPrefixOf(Trie.make(["sell", 1], ["sells", 2]), "sellsword"),
+          removed: Trie.has(Trie.remove(Trie.make(["sell", 1]), "sell"), "sell"),
+        },
+        cron: {
+          midnight: Cron.match(
+            Cron.parseUnsafe("0 0 * * *"),
+            DateTime.makeUnsafe("2026-01-02T00:00:00Z"),
+          ),
+          noon: Cron.match(
+            Cron.parseUnsafe("0 0 * * *"),
+            DateTime.makeUnsafe("2026-01-02T12:00:00Z"),
+          ),
+          bad: Result.isFailure(Cron.parse("not a cron")),
+        },
         rotated: Array.rotate([1, 2, 3], 1),
         padded: Array.pad([1], 3, 0),
         snake: String.camelToSnake("camelCase"),

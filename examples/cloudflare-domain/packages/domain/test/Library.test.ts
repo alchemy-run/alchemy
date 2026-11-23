@@ -240,6 +240,14 @@ it.effect(
         Roll: "calls Random.nextIntBetween, which the prover has no model for",
         Spin: "runs a stream that has not ended after 10000 items",
         Turn: "calls Array.rotate, which the prover has no model for",
+        // Each of these was checked against the package: none is a function of the command alone.
+        Remember: "calls Cache.make, which the prover has no model for",
+        Borrow: "calls Effect.scoped, which the prover has no model for",
+        Guard: "calls Semaphore.make, which the prover has no model for",
+        Configure: "calls Config.Int, which the prover has no model for",
+        Link: "calls Graph.directed, which the prover has no model for",
+        Tick: "calls Cron.next, which the prover has no model for",
+        Index: "calls Trie.insert, which the prover has no model for",
       });
       expect(report.agreement.differs).toEqual([]);
     }).pipe(Effect.provide(NodeServices.layer)),

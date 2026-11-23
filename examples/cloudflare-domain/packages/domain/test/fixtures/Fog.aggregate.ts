@@ -1,13 +1,20 @@
 import * as Domain from "@alchemy.run/domain";
 import * as Array from "effect/Array";
 import * as BigDecimal from "effect/BigDecimal";
+import * as Cache from "effect/Cache";
+import * as Config from "effect/Config";
+import * as Cron from "effect/Cron";
 import * as Effect from "effect/Effect";
+import * as Graph from "effect/Graph";
 import * as HashSet from "effect/HashSet";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
+import * as Pool from "effect/Pool";
 import * as Random from "effect/Random";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
+import * as Trie from "effect/Trie";
 
 export class Seen extends Domain.Event("Seen", { n: Schema.Int }) {}
 
@@ -21,6 +28,13 @@ export class Unwrap extends Domain.Command("Unwrap", { input, events: [Seen] }) 
 export class Roll extends Domain.Command("Roll", { input, events: [Seen] }) {}
 export class Spin extends Domain.Command("Spin", { input, events: [Seen] }) {}
 export class Turn extends Domain.Command("Turn", { input, events: [Seen] }) {}
+export class Remember extends Domain.Command("Remember", { input, events: [Seen] }) {}
+export class Borrow extends Domain.Command("Borrow", { input, events: [Seen] }) {}
+export class Guard extends Domain.Command("Guard", { input, events: [Seen] }) {}
+export class Configure extends Domain.Command("Configure", { input, events: [Seen] }) {}
+export class Link extends Domain.Command("Link", { input, events: [Seen] }) {}
+export class Tick extends Domain.Command("Tick", { input, events: [Seen] }) {}
+export class Index extends Domain.Command("Index", { input, events: [Seen] }) {}
 
 /**
  * What the prover does not read of the library, each in a command of its
@@ -31,7 +45,23 @@ export class Fog extends Domain.Aggregate("Fog", {
   state: Schema.Struct({ n: Schema.Int }),
   initial: { n: 0 },
   invariants: { NeverBelowZero: (fog) => fog.n >= 0 },
-  commands: [Race, Share, Walk, Rank, Unwrap, Roll, Spin, Turn],
+  commands: [
+    Race,
+    Share,
+    Walk,
+    Rank,
+    Unwrap,
+    Roll,
+    Spin,
+    Turn,
+    Remember,
+    Borrow,
+    Guard,
+    Configure,
+    Link,
+    Tick,
+    Index,
+  ],
   keyOf: (command) => command.id,
   decide: {
     // Several items at a time: which finishes first is not a thing the code decides.
@@ -74,6 +104,39 @@ export class Fog extends Domain.Aggregate("Fog", {
     }),
     // A function the prover has no model for is run as it is, but only on values the code writes.
     Turn: (_fog, command) => [new Seen({ n: Array.rotate([command.n, 2, 3], 1)[0] ?? 0 })],
+    // A cache remembers across calls: what it gives depends on what was asked before.
+    Remember: Effect.fn(function* (_fog, command) {
+      const cache = yield* Cache.make({ capacity: 8, lookup: (n: number) => Effect.succeed(n) });
+      return [new Seen({ n: yield* Cache.get(cache, command.n) })];
+    }),
+    // A pool hands out what others may hold.
+    Borrow: Effect.fn(function* (_fog, command) {
+      const pool = yield* Pool.make({ acquire: Effect.succeed(command.n), size: 1 });
+      return [new Seen({ n: yield* Pool.get(pool) })];
+    }, Effect.scoped),
+    // A semaphore is for things running together, and nothing in a handler does.
+    Guard: Effect.fn(function* (_fog, command) {
+      const permits = yield* Semaphore.make(1);
+      return [new Seen({ n: yield* Semaphore.withPermit(permits)(Effect.succeed(command.n)) })];
+    }),
+    // A config is read from the environment.
+    Configure: Effect.fn(function* () {
+      return [new Seen({ n: yield* Config.Int("N").pipe(Effect.orDie) })];
+    }),
+    // A graph is built by changing one inside a function.
+    Link: (_fog, command) => [
+      new Seen({
+        n: Graph.nodeCount(
+          Graph.directed<number, string>((graph) => void Graph.addNode(graph, command.n)),
+        ),
+      }),
+    ],
+    // The next time of a schedule after now: the time is not the command's.
+    Tick: () => [new Seen({ n: Cron.next(Cron.parseUnsafe("0 0 * * *")).getTime() })],
+    // A trie's own functions are run on values the code writes, not on one a command gives.
+    Index: (_fog, command) => [
+      new Seen({ n: Trie.size(Trie.insert(Trie.empty<number>(), command.text, 1)) }),
+    ],
   },
   evolve: { Seen: (_fog, event) => ({ n: event.n }) },
 }) {}
