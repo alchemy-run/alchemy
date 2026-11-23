@@ -254,49 +254,80 @@ export const make = (
    */
   const pollsWait = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     options.manual ? Effect.provideService(effect, RunWait, poll) : effect;
-  /** Run `effect` holding `lock`, counted as waiting while another run holds it. */
+  /**
+   * Run `effect` holding `lock`, counted as waiting while another run holds it.
+   * Not `counted`: the wait counts for nothing (backfill's storage, which shares
+   * a projection's lock), but takes its place in the lock's queue all the same.
+   */
   const exclusively =
-    (lock: Semaphore.Semaphore) =>
+    (lock: Semaphore.Semaphore, counted = true) =>
     <A, E, R>(effect: Effect.Effect<A, E, R>) =>
       Effect.acquireUseRelease(
-        acquire(lock),
+        acquire(lock, counted),
         () => effect,
         () => release(lock),
       );
-  // The ends of the runs' waits for each lock, in the order the lock wakes them.
-  const lockWaits = new WeakMap<Semaphore.Semaphore, Array<() => void>>();
+  /** One wait for a lock: its end, and whether `release` has handed it the lock. */
+  interface LockWait {
+    end: () => void;
+    handed: boolean;
+  }
+  // The waits for each lock, in the order the lock wakes them, and how many
+  // were handed the lock but have not taken it yet.
+  const lockWaits = new WeakMap<
+    Semaphore.Semaphore,
+    { readonly queue: Array<LockWait>; handed: number }
+  >();
   const waitsFor = (lock: Semaphore.Semaphore) => {
     let found = lockWaits.get(lock);
-    if (!found) lockWaits.set(lock, (found = []));
+    if (!found) lockWaits.set(lock, (found = { queue: [], handed: 0 }));
     return found;
   };
-  /** Take `lock`, counted as waiting only when it is held. */
-  const acquire = (lock: Semaphore.Semaphore): Effect.Effect<void> =>
-    lock.takeIfAvailable(1).pipe(
-      Effect.flatMap((taken) =>
-        taken
-          ? Effect.void
-          : Effect.flatMap(
-              begin("waits", (end) => waitsFor(lock).push(end)),
-              (end) =>
-                lock.take(1).pipe(
-                  Effect.ensuring(
-                    Effect.sync(() => {
-                      const waits = waitsFor(lock);
-                      const at = waits.indexOf(end);
-                      if (at >= 0) waits.splice(at, 1);
-                      end();
-                    }),
-                  ),
-                  Effect.asVoid,
+  /**
+   * Take `lock`, counted as waiting only when it is held. While a wait is
+   * queued or handed the lock, a new taker queues behind it: `takeIfAvailable`
+   * would take the lock first, leaving the run handed it waiting again while it
+   * counts as running.
+   */
+  const acquire = (lock: Semaphore.Semaphore, counted = true): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      const waits = waitsFor(lock);
+      const first = waits.queue.length === 0 && waits.handed === 0;
+      return (first ? lock.takeIfAvailable(1) : Effect.succeed(false)).pipe(
+        Effect.flatMap((taken) => {
+          if (taken) return Effect.void;
+          const wait: LockWait = { end: () => {}, handed: false };
+          const register = (end: () => void) => {
+            wait.end = end;
+            waits.queue.push(wait);
+          };
+          return Effect.flatMap(
+            counted ? begin("waits", register) : Effect.sync(() => (register(() => {}), () => {})),
+            (end) =>
+              lock.take(1).pipe(
+                Effect.ensuring(
+                  Effect.sync(() => {
+                    if (wait.handed) waits.handed--;
+                    else waits.queue.splice(waits.queue.indexOf(wait), 1);
+                    end();
+                  }),
                 ),
-            ),
-      ),
-    );
+                Effect.asVoid,
+              ),
+          );
+        }),
+      );
+    });
   /** Give `lock` back. The run it wakes (the first waiting) is running from now. */
   const release = (lock: Semaphore.Semaphore): Effect.Effect<void> =>
     Effect.suspend(() => {
-      waitsFor(lock).shift()?.();
+      const waits = waitsFor(lock);
+      const next = waits.queue.shift();
+      if (next) {
+        next.handed = true;
+        waits.handed++;
+        next.end();
+      }
       return Effect.asVoid(lock.release(1));
     });
   /** Wait until every forked run is finished or waiting. */
@@ -529,7 +560,7 @@ export const make = (
             }
             return out;
           }),
-        exclusive: (effect) => lock.withPermits(1)(effect),
+        exclusive: exclusively(lock, false),
       };
     };
     // Queued jobs, by object and id: scheduling one already queued is a no-op.

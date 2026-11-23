@@ -10,6 +10,7 @@ import { Activity } from "effect/workflow";
 // A run another run wakes (its saga turn given, or a lock handed over) counts
 // as running from the moment it is woken. Until its fiber resumes, it must not
 // count as waiting: `drain` would return, and `idle` say `true`, before it runs.
+// Nor may another run take the lock handed to it in the meantime.
 
 class Started extends Domain.Event("Started") {}
 class Stepped extends Domain.Event("Stepped", { step: Schema.String }) {}
@@ -70,7 +71,7 @@ class Sagas extends Domain.Model("DrainSagas", {
   sagas: [TwoSteps],
 }) {}
 
-/** Two knocks on one door: the policy runs for each under the door's lock. */
+/** Knocks on one door: the policy runs for each under the door's lock. */
 class Knocked extends Domain.Event("Knocked", { step: Schema.String }) {}
 class Knock extends Domain.Command("Knock", {
   input: { id: Schema.String, step: Schema.String },
@@ -86,13 +87,17 @@ class Door extends Domain.Aggregate("Door", {
   evolve: { Knocked: (s) => ({ knocks: s.knocks + 1 }) },
 }) {}
 class Answer extends Domain.Policy("Answer", { from: Door, on: [Knocked] }) {}
-/** The first knock's run waits on `gate` holding the lock; the second waits for the lock. */
-const answer = (hosted: ReturnType<typeof InMemory.make>, gate: Deferred.Deferred<void>) =>
+/** A knock whose step has a gate waits on it, holding the lock. */
+const answer = (
+  hosted: ReturnType<typeof InMemory.make>,
+  gates: Record<string, Deferred.Deferred<void>>,
+) =>
   Answer.toLayer(
     Effect.gen(function* () {
       const counters = yield* Counter;
       return Effect.fn(function* ({ source, event }) {
-        if (event.step === "first") yield* hosted.control.suspended(Deferred.await(gate));
+        const gate = gates[event.step];
+        if (gate) yield* hosted.control.suspended(Deferred.await(gate));
         yield* counters.send(new Step({ id: source.id, step: event.step })).pipe(Effect.orDie);
       });
     }),
@@ -121,33 +126,53 @@ describe("Domain InMemory: drain", { tags: ["unit", "local"] }, () => {
     ),
   );
 
-  it.live("a run handed a lock is not idle until it has run", () => {
-    const hosted = InMemory.make({ manual: true });
-    const gate = Deferred.makeUnsafe<void>();
-    return Effect.gen(function* () {
-      const doors = yield* Door;
-      const counters = yield* Counter;
-      yield* doors.send(new Knock({ id: "d-1", step: "first" }));
-      yield* doors.send(new Knock({ id: "d-1", step: "second" }));
-      // Both runs start: the first waits on the gate holding the door's lock,
-      // the second waits for the lock.
-      yield* hosted.control.drain;
-      expect(yield* hosted.control.idle).toBe(true);
-      expect((yield* counters.get("d-1")).steps).toEqual([]);
-      // Open the gate, and wait until the first run has resumed and committed:
-      // it is running now, and hands the lock to the second when it finishes.
-      const before = hosted.control.commits.length;
-      yield* Deferred.succeed(gate, undefined);
-      for (let tries = 0; hosted.control.commits.length === before; tries++) {
-        expect(tries).toBeLessThan(10_000);
-        yield* Effect.yieldNow;
-      }
-      for (let tries = 0; !(yield* hosted.control.idle); tries++) {
-        expect(tries).toBeLessThan(10_000);
-        yield* hosted.control.drain;
-        yield* Effect.yieldNow;
-      }
-      expect((yield* counters.get("d-1")).steps).toEqual(["first", "second"]);
-    }).pipe(Effect.provide(Doors.layer(answer(hosted, gate)).pipe(Layer.provide(hosted.layer))));
-  });
+  it.live("a run handed a lock runs before a later one, and is not idle until it has run", () =>
+    Effect.forEach(
+      // The third knock's run asks for the lock about when the first run hands
+      // it to the second; how close depends on `wait`, so try a few, in both modes.
+      [true, false].flatMap((manual) => Array.from({ length: 5 }, (_, wait) => ({ manual, wait }))),
+      ({ manual, wait }) => {
+        const hosted = InMemory.make({ manual });
+        const first = Deferred.makeUnsafe<void>();
+        const third = Deferred.makeUnsafe<void>();
+        const until = (done: Effect.Effect<boolean>) =>
+          Effect.gen(function* () {
+            for (let tries = 0; !(yield* done); tries++) {
+              expect(tries).toBeLessThan(10_000);
+              yield* hosted.control.drain;
+              yield* Effect.yieldNow;
+            }
+          });
+        const committed = (count: number) =>
+          until(Effect.sync(() => hosted.control.commits.length >= count));
+        return Effect.gen(function* () {
+          const doors = yield* Door;
+          const counters = yield* Counter;
+          // The first run waits on its gate holding the door's lock; the second
+          // waits for the lock.
+          yield* doors.send(new Knock({ id: "d-1", step: "first" }));
+          yield* doors.send(new Knock({ id: "d-1", step: "second" }));
+          yield* until(hosted.control.idle);
+          expect((yield* counters.get("d-1")).steps).toEqual([]);
+          yield* doors.send(new Knock({ id: "d-1", step: "third" }));
+          const before = hosted.control.commits.length;
+          for (let i = 0; i < wait; i++) yield* Effect.yieldNow;
+          // Once the first run has committed, it hands the lock to the second,
+          // which runs before the third, and counts as running until it has.
+          yield* Deferred.succeed(first, undefined);
+          yield* committed(before + 1);
+          yield* until(hosted.control.idle);
+          expect((yield* counters.get("d-1")).steps).toEqual(["first", "second"]);
+          yield* Deferred.succeed(third, undefined);
+          yield* committed(before + 3);
+          expect((yield* counters.get("d-1")).steps).toEqual(["first", "second", "third"]);
+        }).pipe(
+          Effect.provide(
+            Doors.layer(answer(hosted, { first, third })).pipe(Layer.provide(hosted.layer)),
+          ),
+        );
+      },
+      { discard: true },
+    ),
+  );
 });
