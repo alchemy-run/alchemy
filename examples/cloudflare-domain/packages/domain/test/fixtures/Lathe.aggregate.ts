@@ -7,6 +7,7 @@ import * as Brand from "effect/Brand";
 import * as Cause from "effect/Cause";
 import * as Chunk from "effect/Chunk";
 import * as Clock from "effect/Clock";
+import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -21,6 +22,7 @@ import {
   constNull,
   constUndefined,
   constVoid,
+  memoize,
   satisfies,
 } from "effect/Function";
 import * as HashMap from "effect/HashMap";
@@ -442,6 +444,24 @@ const acted = (a: number, b: number) =>
         Effect.provideService(Counter, { start: a }),
         Effect.map((counter) => counter.start),
       ),
+      // Output and notes: nothing a handler decides depends on them.
+      noted: yield* Effect.gen(function* () {
+        yield* Effect.logTrace("t");
+        yield* Effect.logDebug("d");
+        yield* Effect.logInfo("i");
+        yield* Effect.logWarning("w");
+        yield* Effect.logError("e");
+        yield* Effect.logFatal("f");
+        yield* Effect.annotateCurrentSpan("a", a);
+        yield* Console.debug("d");
+        yield* Console.info("i");
+        yield* Console.warn("w");
+        return a;
+      }),
+      // The clock in `decide` is the command's time: 1970 is behind it, and 2970 ahead.
+      past: yield* DateTime.isPast(DateTime.makeUnsafe(-1)),
+      future: yield* DateTime.isFuture(DateTime.makeUnsafe("2970-01-01T00:00:00Z")),
+      memoized: memoize((pair: { readonly n: number }) => pair.n + 1)({ n: a }),
       setAndGet: yield* Ref.setAndGet(cell, b),
       updateAndGet: yield* Ref.updateAndGet(cell, (n) => n + 1),
       died: Exit.hasDies(ended),
