@@ -1,3 +1,4 @@
+import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import { exec } from "alchemy/Util/exec";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
@@ -53,6 +54,7 @@ const generateCommand = Command.make(
     );
     yield* run;
     yield* Effect.logInfo(`Watching ${loaded.directory}; each generation uses a fresh process.`);
+    const dotAlchemy = path.resolve(yield* dotAlchemyDirectory);
     yield* fs.watch(loaded.directory, { recursive: true }).pipe(
       Stream.filter((event) => {
         const file = path.resolve(loaded.directory, event.path);
@@ -63,6 +65,7 @@ const generateCommand = Command.make(
             .split(path.sep)
             .some((part) => part === "node_modules" || part === ".git" || part === ".alchemy") &&
           !(file === output || file.startsWith(output + path.sep)) &&
+          !(file === dotAlchemy || file.startsWith(dotAlchemy + path.sep)) &&
           /\.(?:ts|mts|cts|js|mjs|cjs|prisma|psl)$/.test(file)
         );
       }),
