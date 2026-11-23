@@ -4,7 +4,7 @@ import * as Option from "effect/Option";
 import * as Brands from "../Brands.ts";
 import type { Decimal } from "../Brands.ts";
 import type { Kit, Model, Models } from "../Kit.ts";
-import { counted, dual, wrongArguments } from "../Kit.ts";
+import { counted, dual, dualBy, wrongArguments } from "../Kit.ts";
 import type { Eval, Site, V } from "../Value.ts";
 import * as Value from "../Value.ts";
 
@@ -15,6 +15,8 @@ const known = (
   Brands.isKnown(a) && Brands.isKnown(b) ? [a, b] : undefined;
 
 const real = (text: string): Decimal => ({ sort: "Real", text });
+
+const isDecimal = (v: V): boolean => Brands.decimalOf(v) !== undefined;
 
 /** The decimal the library gives, as the prover holds one. */
 const decimalFrom = (made: () => BigDecimal.BigDecimal): V => Brands.decimal(made());
@@ -82,7 +84,7 @@ export const make = (kit: Kit) => {
     name: string,
     run: (a: BigDecimal.BigDecimal, rest: ReadonlyArray<V>) => V | undefined,
   ): Model =>
-    dual(name, 1, ([self, ...rest], site) =>
+    dualBy(name, isDecimal, ([self, ...rest], site) =>
       Effect.flatMap(decimalOf(name, self, site), (a) => {
         const made = Brands.isKnown(a) ? run(a, rest) : undefined;
         return made
@@ -126,7 +128,7 @@ export const make = (kit: Kit) => {
     fold: (a: BigDecimal.BigDecimal, scale: number) => BigDecimal.BigDecimal,
     whole: (text: string) => string,
   ): Model =>
-    dual(name, 1, ([self, scale], site) =>
+    dualBy(name, isDecimal, ([self, scale], site) =>
       Effect.gen(function* () {
         const a = yield* decimalOf(name, self, site);
         const places =

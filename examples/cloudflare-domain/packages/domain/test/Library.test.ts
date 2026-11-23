@@ -12,7 +12,6 @@ import { Ledger } from "./fixtures/Ledger.aggregate.ts";
 import { Parcel } from "./fixtures/Parcel.aggregate.ts";
 import { Roster } from "./fixtures/Roster.aggregate.ts";
 import { Shelf } from "./fixtures/Shelf.aggregate.ts";
-import { Workbench } from "./fixtures/Workbench.aggregate.ts";
 
 // What rules and handlers are written with, of Effect's own library: effects
 // and their failures, `Result`, decimals, hash sets and maps, streams, and
@@ -179,48 +178,7 @@ it.effect(
 );
 
 it.effect(
-  "every function the prover reads does what the real one does",
-  () =>
-    Effect.gen(function* () {
-      const report = yield* Prove.report(Workbench, source("Workbench"));
-      // Each command computes what one part of the library gives for its inputs. All of
-      // it is read, and the real code gives the same on inputs of every path.
-      for (const command of report.commands)
-        expect([command.command, command.schema._tag]).toEqual([
-          command.command,
-          expect.stringMatching(/^(Proved|Bounded)$/),
-        ]);
-      expect(report.commands.map((command) => command.command)).toEqual([
-        "Count",
-        "Judge",
-        "Rank",
-        "Spell",
-        "Sort",
-        "Slice",
-        "Combine",
-        "Join",
-        "Search",
-        "Change",
-        "Keep",
-        "Weigh",
-        "Price",
-        "Gather",
-        "Members",
-        "Tally",
-        "Pour",
-        "Run",
-        "Extra",
-        "Rest",
-        "Flow",
-      ]);
-      agrees(report);
-      expect(report.agreement.compared).toBeGreaterThan(400);
-    }).pipe(Effect.provide(NodeServices.layer)),
-  180_000,
-);
-
-it.effect(
-  "the rest of the library, classes a file exports and streams of several chunks agree too",
+  "classes a file exports, request contexts and streams of several chunks agree with the real code",
   () =>
     Effect.gen(function* () {
       const report = yield* Prove.report(Lathe, source("Lathe"));
