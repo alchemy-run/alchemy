@@ -44,7 +44,7 @@ export const ledgerWorker = (
           return yield* HttpServerResponse.json(yield* view.history);
         }
         if (path[1] !== "deposit") return HttpServerResponse.text("Not Found", { status: 404 });
-        yield* accounts.send(path[2]!, new Deposit({ amount: Number(path[3]) }));
+        yield* accounts.send(new Deposit({ id: path[2]!, amount: Number(path[3]) }));
         return yield* HttpServerResponse.json(yield* accounts.get(path[2]!));
       }).pipe(
         Effect.catchTag("ConsistencyTimeout", () =>

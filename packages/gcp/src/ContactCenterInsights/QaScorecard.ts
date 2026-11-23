@@ -258,13 +258,11 @@ export const QaScorecardProvider = () =>
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsQaScorecards({
+            displayName,
+            description,
+            isDefault,
             parent,
             qaScorecardId,
-            body: {
-              displayName,
-              description,
-              isDefault,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -280,16 +278,13 @@ export const QaScorecardProvider = () =>
 
       if (displayChanged || descriptionChanged) {
         current = yield* cci.patchProjectsLocationsQaScorecards({
+          displayName,
+          description,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
             descriptionChanged ? "description" : undefined,
           ),
-          body: {
-            name: currentName,
-            displayName,
-            description,
-          },
         });
       }
 

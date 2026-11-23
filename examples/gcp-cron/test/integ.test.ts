@@ -175,13 +175,11 @@ describe("gcp-cron", () => {
       // The rows are real BigQuery rows, not just what the service answers.
       const result = yield* bigquery
         .queryJobs({
+          query: `SELECT kind, COUNT(*) AS n FROM \`${project}.${datasetId}.${tableId}\` GROUP BY kind`,
+          useLegacySql: false,
+          location,
+          timeoutMs: 30_000,
           projectId: project,
-          body: {
-            query: `SELECT kind, COUNT(*) AS n FROM \`${project}.${datasetId}.${tableId}\` GROUP BY kind`,
-            useLegacySql: false,
-            location,
-            timeoutMs: 30_000,
-          },
         })
         .pipe(Effect.orDie, Effect.provide(GcpHttp));
       expect(result.jobComplete).toBe(true);

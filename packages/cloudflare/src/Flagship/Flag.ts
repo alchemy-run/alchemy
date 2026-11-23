@@ -412,15 +412,17 @@ export const FlagProviderLive = () =>
       return toAttributes(updated, accountId, appId);
     }),
     delete: Effect.fn(function* ({ output }) {
-      yield* flagship
-        .deleteAppFlag({
-          accountId: output.accountId,
-          appId: output.appId,
-          flagKey: output.key,
-        })
-        // A missing flag or a missing parent app both mean it's already
-        // gone.
-        .pipe(Effect.catchTag(["FlagshipFlagNotFound", "FlagshipAppNotFound"], () => Effect.void));
+      yield* (
+        flagship
+          .deleteAppFlag({
+            accountId: output.accountId,
+            appId: output.appId,
+            flagKey: output.key,
+          })
+          // A missing flag or a missing parent app both mean it's already
+          // gone.
+          .pipe(Effect.catchTag(["FlagshipFlagNotFound", "FlagshipAppNotFound"], () => Effect.void))
+      );
     }),
     // Flags are sub-resources keyed by (accountId, appId, key). There is no
     // account-wide flag enumeration, so enumerate every Flagship app first,

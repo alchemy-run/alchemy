@@ -5,6 +5,7 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
@@ -47,6 +48,7 @@ import {
   BindingTarget,
   Bucket,
   capturedConfigHost,
+  HookHost,
   Function,
   inDev,
   KindStablesResource,
@@ -5635,6 +5637,79 @@ describe("renamed resources (renamedFrom)", { tags: ["unit", "local"] }, () => {
       }
     }),
   );
+
+  test(
+    "resources declared by a renamed resource's props do not inherit its former ids (#2219)",
+    Effect.gen(function* () {
+      yield* seed({ "Site/Worker": bucketRow("Site/Worker") });
+
+      // A Website's Worker is `renamedFrom(`${id}/Worker`)`, and its props
+      // can declare resources of their own (the API token behind
+      // `R2.S3Credentials`). Only the Worker claims the former FQN.
+      const plan = yield* Effect.gen(function* () {
+        yield* Bucket(
+          "Site",
+          Effect.gen(function* () {
+            yield* Bucket("SiteToken", { name: "t" });
+            return { name: "b" };
+          }),
+        ).pipe(renamedFrom("Site/Worker"));
+        return {};
+      }).pipe(makePlan);
+
+      expect(plan.resources.Site?.renamedFrom).toEqual(["Site/Worker"]);
+      expect(plan.resources.SiteToken?.action).toEqual("create");
+      expect(plan.resources.SiteToken?.renamedFrom).toBeUndefined();
+    }),
+  );
+
+  const hostRow = (fqn: string): ResourceState => ({
+    ...bucketRow(fqn),
+    resourceType: "Test.HookHost",
+    props: { main: "index.ts" },
+    attr: { ok: true },
+  });
+
+  test(
+    "resources a renamed Platform's onCreate hook declares do not inherit its former ids (#2219)",
+    Effect.gen(function* () {
+      yield* seed({ "Site/Worker": hostRow("Site/Worker") });
+
+      const plan = yield* Effect.gen(function* () {
+        yield* HookHost("Site", { main: "index.ts" }).pipe(renamedFrom("Site/Worker"));
+        return {};
+      }).pipe(makePlan);
+
+      expect(plan.resources.Site?.renamedFrom).toEqual(["Site/Worker"]);
+      expect(plan.resources.SiteToken?.action).toEqual("create");
+      expect(plan.resources.SiteToken?.renamedFrom).toBeUndefined();
+    }),
+  );
+
+  test(
+    "resources a renamed Platform's hook and init declare do not inherit its former ids (#2219)",
+    Effect.gen(function* () {
+      yield* seed({ "Site/Worker": hostRow("Site/Worker") });
+
+      const plan = yield* Effect.gen(function* () {
+        yield* HookHost(
+          "Site",
+          { main: "index.ts" },
+          Effect.gen(function* () {
+            yield* Bucket("SiteInit", { name: "init" });
+            return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+          }),
+        ).pipe(renamedFrom("Site/Worker"));
+        return {};
+      }).pipe(makePlan);
+
+      expect(plan.resources.Site?.renamedFrom).toEqual(["Site/Worker"]);
+      expect(plan.resources.SiteToken?.action).toEqual("create");
+      expect(plan.resources.SiteToken?.renamedFrom).toBeUndefined();
+      expect(plan.resources.SiteInit?.action).toEqual("create");
+      expect(plan.resources.SiteInit?.renamedFrom).toBeUndefined();
+    }),
+  );
 });
 
 describe("filtered planning", { tags: ["unit", "local"] }, () => {
@@ -6352,6 +6427,88 @@ describe("RemovalPolicy.protect()", { tags: ["unit", "local"] }, () => {
       });
       const error = yield* refusalOf(makePlan(declare({ replaceString: "v3" })));
       expect(error).toMatchObject({ resources: [{ fqn: "A", action: "replace" }] });
+    }),
+  );
+
+  // A failed update that drops protect() leaves an `updating` row with the
+  // declared policy on top and the last successful row on `old`.
+  const failedUnprotect = (old: ResourceState | undefined) =>
+    ({
+      ...createTestResourceState({
+        logicalId: "A",
+        status: "updating",
+        props: { replaceString: "v1", string: "b" },
+      }),
+      removalPolicy: "destroy",
+      ...(old ? { old } : {}),
+    }) as ResourceState;
+
+  test(
+    "a failed unprotect update still refuses a replacement",
+    Effect.gen(function* () {
+      yield* seed({
+        A: failedUnprotect(protectedRow(created({ replaceString: "v1", string: "a" }))),
+      });
+      const error = yield* refusalOf(
+        makePlan(declare({ replaceString: "v2", string: "b" }, false)),
+      );
+      expect(error).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "replace" }],
+      });
+    }),
+  );
+
+  test(
+    "a failed unprotect update still refuses an orphan delete",
+    Effect.gen(function* () {
+      yield* seed({
+        A: failedUnprotect(protectedRow(created({ replaceString: "v1", string: "a" }))),
+      });
+      const error = yield* refusalOf(makePlan(Effect.void));
+      expect(error).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "delete" }],
+      });
+    }),
+  );
+
+  test(
+    "a failed unprotect update still refuses an Action taking over its FQN",
+    Effect.gen(function* () {
+      yield* seed({
+        A: failedUnprotect(protectedRow(created({ replaceString: "v1", string: "a" }))),
+      });
+      const A = Action("A", (input: { value: string }) => Effect.succeed(input));
+      const error = yield* refusalOf(
+        makePlan(
+          Effect.gen(function* () {
+            yield* A({ value: "x" });
+          }),
+        ),
+      );
+      expect(error).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "delete" }],
+      });
+    }),
+  );
+
+  test(
+    "an updating row that was never protected can be replaced",
+    Effect.gen(function* () {
+      yield* seed({ A: failedUnprotect(created({ replaceString: "v1", string: "a" })) });
+      const plan = yield* makePlan(declare({ replaceString: "v2", string: "b" }, false));
+      expect(plan.resources.A.action).toBe("replace");
+    }),
+  );
+
+  test(
+    "an updating row without old can be replaced",
+    Effect.gen(function* () {
+      yield* seed({ A: failedUnprotect(undefined) });
+      const plan = yield* makePlan(declare({ replaceString: "v2", string: "b" }, false));
+      expect(plan.resources.A.action).toBe("replace");
     }),
   );
 

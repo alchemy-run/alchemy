@@ -6,6 +6,7 @@ import type {
   AppServiceSpecInstanceSizeSlug,
   AppsDeployment,
 } from "@distilled.cloud/digitalocean";
+import { envString } from "alchemy/RuntimeContext";
 
 /** An App Platform instance size slug, for example `"apps-s-1vcpu-0.5gb"`. */
 export type AppInstanceSize = AppServiceSpecInstanceSizeSlug;
@@ -381,12 +382,10 @@ createServer(async (req, res) => {
 // are encrypted and hidden in the control panel.
 const isPackedRedacted = (value: string) => value.startsWith('{"_tag":"Redacted"');
 
-const toEnvValue = (value: unknown): { value: string; secret: boolean } =>
-  Redacted.isRedacted(value)
-    ? { value: String(Redacted.value(value)), secret: true }
-    : typeof value === "string"
-      ? { value, secret: isPackedRedacted(value) }
-      : { value: JSON.stringify(value), secret: false };
+const toEnvValue = (value: unknown): { value: string; secret: boolean } => {
+  const text = envString(value) ?? "";
+  return { value: text, secret: Redacted.isRedacted(value) || isPackedRedacted(text) };
+};
 
 const activeBindings = (bindings: ReadonlyArray<ResourceBinding<AppBinding>>) =>
   bindings.filter(

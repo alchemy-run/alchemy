@@ -10,7 +10,10 @@
  *   primary key runs once, a duplicate waits for the first run's reply, and
  *   a message cut short by a restart runs again when the object next wakes.
  * - A message with `DeliverAt` waits in storage until its time, which the
- *   object's alarm wakes it for.
+ *   object's alarm wakes it for. One already due runs from the alarm too, as
+ *   an event of its own: run inside the call that sent it, a chain of such
+ *   messages would nest one call deeper each time, until the host refuses
+ *   the call (Cloudflare limits how deep a chain of calls may go).
  * - An instance holds `mailboxCapacity` messages. A volatile message past
  *   that fails with `MailboxFull`; a persisted one waits in storage and runs
  *   as the instance finishes others, in the order they were stored.
@@ -733,9 +736,9 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
           if (Exit.isFailure(stored))
             return rejected("PersistenceError", Cause.pretty(stored.cause));
           pending++;
-          if (deliverAt !== null && deliverAt > at) {
-            // Its time is the alarm's to keep.
-            yield* arm(deliverAt);
+          if (deliverAt !== null) {
+            // Its time is the alarm's to keep, even once it is due.
+            yield* arm(Math.max(deliverAt, at));
             return mode === "tell" ? accepted : waitFor(key);
           }
           // A full instance doesn't turn a stored message away: it runs once

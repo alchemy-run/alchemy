@@ -1,0 +1,125 @@
+---
+title: Coding tools
+description: AI.Bash, AI.Read, AI.Edit, AI.Write, AI.Grep and AI.Glob are names every harness implements its own way. Use a harness's own tools, or replace any of them with yours.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Every coding agent has the same few tools for working in a codebase: run a shell command, read a file, edit a file, write a file, search file contents, find files. `@alchemy.run/ai` declares them by name only: `AI.Bash`, `AI.Read`, `AI.Edit`, `AI.Write`, `AI.Grep` and `AI.Glob`. `AI.CodingTools` lists all six.
+
+A name says nothing about how the tool works. Each harness ships its own `bash`, with its own description and parameters, so the implementation is a Layer you provide.
+
+<Tree
+  nodes={[
+    { id: "bash", label: "AI.Bash", type: "a name, listed on a harness", tone: "accent", icon: "square-terminal" },
+    { id: "pi", label: "Pi.Bash", type: "Layer", icon: "layers", specs: [["runs", "in the harness"], ["takes", "command, timeout"]] },
+    { id: "oc", label: "OpenCode.Bash", type: "Layer", icon: "layers", specs: [["runs", "in the harness"], ["takes", "command, timeout"]] },
+    { id: "own", label: "AuditedBash", type: "your Layer", icon: "layers", specs: [["runs", "your handler"], ["takes", "your schema"]] },
+  ]}
+  areas={["bash bash bash", "pi oc own"]}
+  phoneAreas={["bash", "pi", "oc", "own"]}
+  links={[
+    { from: "pi", to: "bash", label: "provides" },
+    { from: "oc", to: "bash", label: "provides" },
+    { from: "own", to: "bash", label: "provides" },
+  ]}
+  caption="AI.Bash is a name. Pi.Bash, OpenCode.Bash and a Layer of your own each provide it, with their own description, parameters and place to run. A harness uses whichever one it is given."
+/>
+
+## List them on a harness
+
+List the group, or the tools you want one at a time:
+
+```typescript
+const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools] });
+```
+
+```typescript
+const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.Bash, AI.Read] });
+```
+
+Listing a name requires a Layer for it, so the harness does not compile until each one is provided.
+
+## Use the harness's own tools
+
+Each harness package has a Layer for every name, and one for all six:
+
+```typescript title="src/Coder.ts"
+import * as OpenCode from "@alchemy.run/opencode";
+import * as OpenCodeCloudflare from "@alchemy.run/opencode/Cloudflare";
+import * as Layer from "effect/Layer";
+import { FastLive } from "./models.ts";
+import { Sandbox } from "./Sandbox.ts";
+
+export const HarnessLive = Layer.mergeAll(
+  FastLive,
+  Sandbox,
+  OpenCode.CodingTools,
+  OpenCodeCloudflare.DurableObjectInstance,
+);
+```
+
+`OpenCode.CodingTools` and `Pi.CodingTools` each provide six tools that run in the harness and reach the sandbox from there, so both need your sandboxes:
+
+```typescript
+const CodingToolsLive = Pi.CodingTools.pipe(Layer.provideMerge(Sandbox));
+```
+
+Moving a harness from one to the other changes the Layer and nothing in its `tools`.
+
+## What the model sees
+
+The model reads the description and parameters of whichever implementation is provided, and they differ. OpenCode's `edit` takes `path`, `oldText` and `newText`; Pi's takes a `path` and a list of `edits`. A prompt that names a tool's parameters is written for one harness.
+
+## Pick tools for one conversation
+
+The names are also how a conversation or a prompt says which tools it may use:
+
+```typescript
+const reply = yield* harness.session("pr-142").prompt("Why does the login test fail?", {
+  tools: [AI.Read, AI.Grep],
+});
+```
+
+## Replace one with your own
+
+`make` on a name takes the description, the schema and the handler together. Here `bash` logs every command before it runs:
+
+```typescript title="src/AuditedBash.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+export const AuditedBash = AI.Bash.make(
+  {
+    description: "Run a shell command in the workspace. Every command is logged.",
+    parameters: Schema.Struct({ command: Schema.String }),
+    success: Schema.Struct({ exitCode: Schema.Number, output: Schema.String }),
+  },
+  Effect.fn(function* ({ command }) {
+    const sandbox = yield* AI.Sandbox;
+    yield* Effect.log(command);
+    const result = yield* sandbox.exec(["sh", "-c", command]).pipe(Effect.orDie);
+    return { exitCode: result.exitCode, output: result.stdout };
+  }),
+);
+```
+
+Provide it in place of the harness's own, beside the others:
+
+```typescript
+const CodingToolsLive = Layer.mergeAll(
+  OpenCode.Read,
+  OpenCode.Edit,
+  OpenCode.Write,
+  OpenCode.Grep,
+  OpenCode.Glob,
+  AuditedBash,
+);
+```
+
+## One harness's tool on another
+
+A harness's Layer only works on that harness: `OpenCode.Read` is a reference to a tool inside OpenCode, with nothing Pi could run. Both Layers provide `AI.Read`, so the mix-up compiles. It fails when the harness is yielded, which on Cloudflare is at deploy, with a message naming the Layer to use.
+
+See [Tools on Pi](/pi/tools) and [Tools on OpenCode](/opencode/tools).

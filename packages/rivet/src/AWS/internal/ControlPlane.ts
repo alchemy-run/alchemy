@@ -21,7 +21,7 @@ import { adminToken } from "../../internal/AdminToken.ts";
 import { Namespace } from "../../Namespace.ts";
 
 /** The engine release AWS control planes run by default. */
-export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0";
+export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.1.1";
 
 /** Where each instance mounts its disk, and where the engine stores its log. */
 export const DATA_PATH = "/var/lib/rivet";
@@ -52,7 +52,7 @@ export interface ControlPlaneProps {
   diskSize?: number;
   /**
    * Engine image.
-   * @default "rivetdev/engine:3.0.0"
+   * @default "rivetdev/engine:3.1.1"
    */
   image?: string;
   /**
@@ -71,6 +71,7 @@ export const engineEnvironment = (options: {
 }) => ({
   RIVET__AUTH__ADMIN_TOKEN: options.token,
   RIVET__STORAGE__LOG_DIRECTORY: DATA_PATH,
+  RIVET__STORAGE__AUTO_PROVISION_PARTITIONS: "true",
   RIVET__OBJECT_STORAGE__PRIMARY__S3__BUCKET: options.bucket,
   RIVET__OBJECT_STORAGE__PRIMARY__S3__REGION: options.region,
   RIVET__API_PEER__ADVERTISE_ADDRESS: options.advertiseAddress,

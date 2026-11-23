@@ -16,19 +16,18 @@ import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
+import { definitionProblems } from "./definition-problems.ts";
 
 // ---------------------------------------------------------------- a wallet domain
 
 class Opened extends Domain.Event("Opened", { owner: Schema.String }) {}
 class Deposited extends Domain.Event("Deposited", { amount: Schema.Number }) {}
 class Open extends Domain.Command("Open", {
-  target: Schema.String,
-  input: { owner: Schema.String },
+  input: { id: Schema.String, owner: Schema.String },
   events: [Opened],
 }) {}
 class Deposit extends Domain.Command("Deposit", {
-  target: Schema.String,
-  input: { amounts: Schema.Array(Schema.Number) },
+  input: { id: Schema.String, amounts: Schema.Array(Schema.Number) },
   events: [Deposited],
 }) {}
 class Wallet extends Domain.Aggregate("Wallet", {
@@ -36,6 +35,7 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ owner: Schema.NullOr(Schema.String) }),
   initial: { owner: null },
   commands: [Open, Deposit],
+  keyOf: (command) => command.id,
   decide: {
     Open: (_, { owner }) => [new Opened({ owner })],
     // One deposit per amount: a command can record many events.
@@ -291,7 +291,7 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
   it.effect("reads rows a projection wrote, and refuses who the handler refuses", () =>
     story(
       Story.given(sam, new Opened({ owner: "sam" })),
-      Story.when(sam, new Deposit({ amounts: [10, 20] })),
+      Story.when(new Deposit({ id: sam.id, amounts: [10, 20] })),
       Story.then(sam, new Deposited({ amount: 10 }), new Deposited({ amount: 20 })),
       asSam,
       Story.query(WalletMovements, { wallet: "sam-1" }, [{ amount: 10 }, { amount: 20 }]),
@@ -304,7 +304,7 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
   it.effect("pages by cursor, and clamps take to the declared maximum", () =>
     story(
       Story.given(sam, new Opened({ owner: "sam" })),
-      Story.when(sam, new Deposit({ amounts: [1, 2, 3, 4, 5] })),
+      Story.when(new Deposit({ id: sam.id, amounts: [1, 2, 3, 4, 5] })),
       Story.then(
         sam,
         new Deposited({ amount: 1 }),
@@ -339,9 +339,9 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const { tracer, named } = recording();
       yield* story(
-        Story.when(sam, new Deposit({ amounts: [500, 5] })),
+        Story.when(new Deposit({ id: sam.id, amounts: [500, 5] })),
         Story.then(sam, new Deposited({ amount: 500 }), new Deposited({ amount: 5 })),
-        Story.when(kim, new Deposit({ amounts: [700] })),
+        Story.when(new Deposit({ id: kim.id, amounts: [700] })),
         Story.then(kim, new Deposited({ amount: 700 })),
         asSam,
         Story.query(LargeMovements, { min: 100, note: Redacted.make("audit") }, [
@@ -360,7 +360,7 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
 
   it.effect("answers a single result", () =>
     story(
-      Story.when(sam, new Deposit({ amounts: [10, 32] })),
+      Story.when(new Deposit({ id: sam.id, amounts: [10, 32] })),
       Story.then(sam, new Deposited({ amount: 10 }), new Deposited({ amount: 32 })),
       Story.query(Total, { wallet: "sam-1" }, { total: 42, movements: 2 }),
     ).pipe(Effect.provide(Movements.memory)),
@@ -384,7 +384,7 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
 
   it.effect("a story shows the rows it expected and the rows it got", () =>
     story(
-      Story.when(sam, new Deposit({ amounts: [10] })),
+      Story.when(new Deposit({ id: sam.id, amounts: [10] })),
       asSam,
       Story.query(WalletMovements, { wallet: "sam-1" }, [{ amount: 11 }]),
     ).pipe(
@@ -401,13 +401,13 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
   it.live("serves queries through an Api: typed results, rejections and read-your-writes", () =>
     Effect.gen(function* () {
       const wallets = yield* Wallet;
-      yield* wallets.send(sam, new Open({ owner: "sam" }));
+      yield* wallets.send(new Open({ id: sam.id, owner: "sam" }));
       const api = yield* WalletApi.clientInProcess;
       const asSam = { headers: { "x-viewer": "sam" } };
       // The projection batches for 200ms; `atLeast` waits for it, through a
       // command with more events than the first window reads.
       const amounts = Array.from({ length: 20 }, (_, i) => i + 1);
-      const receipt = yield* api.Deposit("sam-1", { amounts });
+      const receipt = yield* api.Deposit({ id: "sam-1", amounts });
       const total = yield* api.Total({ wallet: "sam-1" }, { ...asSam, atLeast: receipt });
       expect(total).toEqual({ total: 210, movements: 20 });
 
@@ -467,8 +467,8 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
   it.live("waits for every receipt it is given: one per command, on different keys", () =>
     Effect.gen(function* () {
       const api = yield* WalletApi.clientInProcess;
-      const first = yield* api.Deposit("sam-1", { amounts: [10, 20] });
-      const second = yield* api.Deposit("kim-1", { amounts: [12] });
+      const first = yield* api.Deposit({ id: "sam-1", amounts: [10, 20] });
+      const second = yield* api.Deposit({ id: "kim-1", amounts: [12] });
       // The projection batches for 200ms, so without the receipts this reads 0.
       const combined = yield* api.Combined(
         { wallets: ["sam-1", "kim-1"] },
@@ -490,7 +490,7 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
       const { tracer, named } = recording();
       const wallets = yield* Wallet;
       const api = yield* WalletApi.clientInProcess;
-      const receipt = yield* wallets.send(kim, new Open({ owner: "kim" }));
+      const receipt = yield* wallets.send(new Open({ id: kim.id, owner: "kim" }));
       const owner = yield* api
         .OwnerOf({ wallet: "kim-1" }, { atLeast: receipt })
         .pipe(Effect.withTracer(tracer));
@@ -510,7 +510,7 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
   it.live("a projection catches up to a client's receipt, which carries no events", () =>
     Effect.gen(function* () {
       const wallets = yield* Wallet;
-      const receipt = yield* wallets.send(kim, new Deposit({ amounts: [1, 2, 3] }));
+      const receipt = yield* wallets.send(new Deposit({ id: kim.id, amounts: [1, 2, 3] }));
       yield* Ledger.caughtUp({ stream: receipt.stream, version: receipt.version });
       const movements = yield* Movements;
       const { entries } = yield* movements.page(() => true, { after: undefined, take: 10 });
@@ -587,31 +587,43 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
     expect(String(exit)).toContain("Two entities are named 'Deposit'");
   });
 
-  it("verify reports every query problem without hosting the model", () => {
-    class Pages extends Domain.Query("Pages", { paged: true }) {}
-    class Named extends Domain.Query("WalletOwner", { success: Schema.Number }) {}
-    // A view the model does not hold: there is nothing to wait for.
-    class Elsewhere extends Domain.View("Elsewhere", {
-      from: [Wallet],
-      key: Wallet,
-      state: Schema.Struct({ owner: Schema.String }),
-      initial: { owner: "" },
-      evolve: { Opened: (_, e) => ({ owner: e.owner }) },
-    }) {}
-    class Unheld extends Domain.Query("Unheld", { waitsFor: [Elsewhere] }) {}
-    class Broken extends Domain.Model("QueryBroken", {
-      aggregates: [Wallet],
-      views: [WalletOwner],
-      queries: [Pages, Named, Total, Unheld, Total],
-    }) {}
-    expect(Domain.verify(Broken).map((problem) => problem.message)).toEqual([
-      "Query 'Pages' is `paged` but declares no `success`: name the schema of one entry",
-      "Two entities are named 'WalletOwner'",
-      "Total waits for Ledger, which is not in the Domain",
-      "Unheld waits for Elsewhere, which is not in the Domain",
-      "Duplicate query 'Total'",
-    ]);
-  });
+  it("refuses a model with every query problem at once", () =>
+    Effect.gen(function* () {
+      class Pages extends Domain.Query("Pages", { paged: true }) {}
+      class Named extends Domain.Query("WalletOwner", { success: Schema.Number }) {}
+      // A view the model does not hold: there is nothing to wait for.
+      class Elsewhere extends Domain.View("Elsewhere", {
+        from: [Wallet],
+        key: Wallet,
+        state: Schema.Struct({ owner: Schema.String }),
+        initial: { owner: "" },
+        evolve: { Opened: (_, e) => ({ owner: e.owner }) },
+      }) {}
+      class Unheld extends Domain.Query("Unheld", { waitsFor: [Elsewhere] }) {}
+      class Broken extends Domain.Model("QueryBroken", {
+        aggregates: [Wallet],
+        views: [WalletOwner],
+        queries: [Pages, Named, Total, Unheld, Total],
+      }) {}
+      const layer = Broken.layer(
+        Layer.mergeAll(
+          Pages.toLayer(Effect.succeed(() => Effect.succeed([]))),
+          Named.toLayer(Effect.succeed(() => Effect.succeed(0))),
+          Unheld.toLayer(Effect.succeed(() => Effect.void)),
+          Layer.provide(TotalLive, Movements.memory),
+        ),
+      );
+      expect(yield* definitionProblems(layer)).toMatchObject([
+        {
+          message:
+            "Query 'Pages' is `paged` but declares no `success`: name the schema of one entry",
+        },
+        { message: "Two entities are named 'WalletOwner'" },
+        { message: "Total waits for Ledger, which is not in the Domain" },
+        { message: "Unheld waits for Elsewhere, which is not in the Domain" },
+        { message: "Duplicate query 'Total'" },
+      ]);
+    }).pipe(Effect.runPromise));
 });
 
 // ---------------------------------------------------------------- Foldkit Commands for queries
@@ -626,9 +638,9 @@ describe("Domain Query through Foldkit", { tags: ["unit", "local"] }, () => {
   it.live("answers a query with its result and the caller's request id, after atLeast", () =>
     Effect.gen(function* () {
       const wallets = yield* Wallet;
-      yield* wallets.send(sam, new Open({ owner: "sam" }));
+      yield* wallets.send(new Open({ id: sam.id, owner: "sam" }));
       const api = yield* WalletApi.clientInProcess;
-      const receipt = yield* api.Deposit("sam-1", { amounts: [1, 2, 3, 4] });
+      const receipt = yield* api.Deposit({ id: "sam-1", amounts: [1, 2, 3, 4] });
       const page = yield* Wallets$.WalletMovements({
         input: { wallet: "sam-1" },
         requestId: "q:0",
@@ -714,7 +726,7 @@ describe("Domain Query through Foldkit", { tags: ["unit", "local"] }, () => {
   it.live("classifies a rejection, a middleware refusal and a defect", () =>
     Effect.gen(function* () {
       const wallets = yield* Wallet;
-      const opened = yield* wallets.send(sam, new Open({ owner: "sam" }));
+      const opened = yield* wallets.send(new Open({ id: sam.id, owner: "sam" }));
       // The handler reads this view: wait for it so the refusal is certain.
       const owners = yield* WalletOwner;
       yield* owners.get(sam, { atLeast: opened }).pipe(Effect.orDie);

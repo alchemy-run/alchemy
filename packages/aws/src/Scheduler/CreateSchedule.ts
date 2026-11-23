@@ -1,30 +1,23 @@
 import type * as scheduler from "@distilled.cloud/aws/scheduler";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
-import type { Role } from "../IAM/Role.ts";
-import type { ScheduleGroup } from "./ScheduleGroup.ts";
-
-/**
- * The schedule target passed at runtime. `RoleArn` defaults to the execution
- * role the binding was constructed with, so callers normally omit it.
- */
-export interface CreateScheduleTarget extends Omit<scheduler.Target, "RoleArn"> {
-  /**
-   * Execution role EventBridge Scheduler assumes to invoke the target.
-   * @default the execution role bound via `CreateSchedule(role)`
-   */
-  RoleArn?: string;
-}
+import type {
+  ScheduleTarget,
+  ScheduleTargetRequest,
+  ScheduleWriteClient,
+  ScheduleWriteOptions,
+} from "./ScheduleWriteTypes.ts";
 
 export interface CreateScheduleRequest extends Omit<
   scheduler.CreateScheduleInput,
   "GroupName" | "Target" | "FlexibleTimeWindow"
 > {
   /**
-   * Target the schedule invokes when it fires. The bound execution role is
-   * injected as `RoleArn` unless the request overrides it.
+   * Target the schedule delivers to. `Arn` and `RoleArn` default to the
+   * bound target and its execution role.
+   * @default the bound target
    */
-  Target: CreateScheduleTarget;
+  Target?: ScheduleTargetRequest;
   /**
    * Flexible time window configuration.
    * @default { Mode: "OFF" }
@@ -33,64 +26,95 @@ export interface CreateScheduleRequest extends Omit<
 }
 
 /**
- * Runtime binding for `scheduler:CreateSchedule` — THE dynamic-scheduling
- * pattern (per-user reminders, delayed callbacks): a deployed Lambda mints
- * one-shot `at(...)` or recurring schedules at runtime.
+ * The runtime client `CreateSchedule(target)` returns.
+ */
+export type CreateScheduleClient = ScheduleWriteClient<
+  CreateScheduleRequest,
+  scheduler.CreateScheduleOutput,
+  scheduler.CreateScheduleError
+>;
+
+/**
+ * Runtime binding for `scheduler:CreateSchedule`, for schedules a deployed
+ * runtime creates while it runs: per-user reminders, delayed callbacks,
+ * recurring jobs a user turns on.
  *
- * The binding is constructed with the schedule **execution role** (the IAM
- * role EventBridge Scheduler assumes to invoke the target) and, optionally, a
- * `ScheduleGroup` that scopes which schedules the host may create. At deploy
- * time it contributes BOTH `scheduler:CreateSchedule` on the group's schedule
- * ARN pattern AND `iam:PassRole` on the execution role — without the PassRole
- * statement schedule creation fails only at runtime.
+ * Bind it to the Queue or Function the schedules deliver to. At deploy time
+ * the binding declares the execution role EventBridge Scheduler assumes
+ * (allowed to send to that Queue or invoke that Function) and grants the
+ * host `scheduler:CreateSchedule` on the group's schedules plus
+ * `iam:PassRole` on that role.
+ *
+ * The client's `at`, `every` and `cron` match the deploy-time
+ * `at(date).toQueue(queue, payload)` builders.
  * ### Creating Schedules At Runtime
- * **Example:** Mint A One-Shot Schedule From A Lambda
+ * **Example:** Send A Reminder To A Queue In 15 Minutes
  * ```typescript
- * // deploy time: pre-create the execution role Scheduler will assume
- * const role = yield* AWS.IAM.Role("ReminderRole", {
- *   assumeRolePolicyDocument: {
- *     Version: "2012-10-17",
- *     Statement: [
- *       {
- *         Effect: "Allow",
- *         Principal: { Service: "scheduler.amazonaws.com" },
- *         Action: ["sts:AssumeRole"],
- *       },
- *     ],
- *   },
- *   inlinePolicies: {
- *     SendReminder: {
- *       Version: "2012-10-17",
- *       Statement: [
- *         {
- *           Effect: "Allow",
- *           Action: ["sqs:SendMessage"],
- *           Resource: [queue.queueArn],
- *         },
- *       ],
- *     },
- *   },
- * });
- * const createSchedule = yield* AWS.Scheduler.CreateSchedule(role);
+ * const queue = yield* AWS.SQS.Queue("Reminders");
+ * const schedule = yield* AWS.Scheduler.CreateSchedule(queue);
  *
- * // runtime: schedule a one-shot delivery in 15 minutes
- * const queueArn = yield* queue.queueArn;
- * yield* createSchedule({
- *   Name: `reminder-${userId}`,
- *   ScheduleExpression: "at(2026-01-01T00:00:00)",
- *   ActionAfterCompletion: "DELETE",
- *   Target: {
- *     Arn: yield* queueArn,
- *     Input: JSON.stringify({ userId }),
- *   },
+ * // runtime
+ * yield* schedule.at(new Date(Date.now() + 15 * 60_000), {
+ *   name: `reminder-${userId}`,
+ *   payload: { userId },
  * });
  * ```
  *
- * **Example:** Scope Creation To A Schedule Group
+ * **Example:** Invoke A Function Every Day
+ * ```typescript
+ * const schedule = yield* AWS.Scheduler.CreateSchedule(digestFunction);
+ *
+ * // runtime
+ * yield* schedule.every("1 day", {
+ *   name: `digest-${userId}`,
+ *   payload: { userId },
+ * });
+ * ```
+ *
+ * To call the Function the binding runs in back later, use
+ * `Alchemy.makeCallback` with `AWS.Scheduler.SchedulerCallbacks` instead: the
+ * Function routes each job to the handler registered under its name.
+ *
+ * **Example:** Run On A Cron Expression In A Timezone
+ * ```typescript
+ * yield* schedule.cron("cron(0 9 * * ? *)", {
+ *   name: `standup-${teamId}`,
+ *   timezone: "America/New_York",
+ *   payload: { teamId },
+ * });
+ * ```
+ *
+ * ### Scoping And Roles
+ * **Example:** Create Schedules In A Schedule Group
  * ```typescript
  * const group = yield* AWS.Scheduler.ScheduleGroup("Reminders", {});
- * const createSchedule = yield* AWS.Scheduler.CreateSchedule(role, group);
- * // runtime calls create schedules inside the group only
+ * const schedule = yield* AWS.Scheduler.CreateSchedule(queue, { group });
+ * ```
+ *
+ * **Example:** Send Undeliverable Reminders To A Dead-Letter Queue
+ * ```typescript
+ * const failed = yield* AWS.SQS.Queue("FailedReminders");
+ * const schedule = yield* AWS.Scheduler.CreateSchedule(queue, { deadLetterQueue: failed });
+ * ```
+ *
+ * The generated role may send to the dead-letter queue, and every schedule
+ * the client writes uses it. `kmsKey` works the same way for a customer
+ * managed key that encrypts the target input.
+ *
+ * **Example:** Use An Existing Execution Role
+ * ```typescript
+ * const schedule = yield* AWS.Scheduler.CreateSchedule(queue, { role });
+ * ```
+ *
+ * **Example:** Send A Raw CreateSchedule Request
+ * ```typescript
+ * // Target.Arn and Target.RoleArn default to the bound target and role
+ * yield* schedule({
+ *   Name: `reminder-${userId}`,
+ *   ScheduleExpression: "at(2026-01-01T00:00:00)",
+ *   ActionAfterCompletion: "DELETE",
+ *   Target: { Input: JSON.stringify({ userId }) },
+ * });
  * ```
  *
  * @binding
@@ -98,13 +122,9 @@ export interface CreateScheduleRequest extends Omit<
 export interface CreateSchedule extends Binding.Service<
   CreateSchedule,
   "AWS.Scheduler.CreateSchedule",
-  <R extends Role>(
-    executionRole: R,
-    group?: ScheduleGroup,
-  ) => Effect.Effect<
-    (
-      request: CreateScheduleRequest,
-    ) => Effect.Effect<scheduler.CreateScheduleOutput, scheduler.CreateScheduleError>
-  >
+  <T extends ScheduleTarget>(
+    target: T,
+    options?: ScheduleWriteOptions,
+  ) => Effect.Effect<CreateScheduleClient>
 > {}
 export const CreateSchedule = Binding.Service<CreateSchedule>("AWS.Scheduler.CreateSchedule");

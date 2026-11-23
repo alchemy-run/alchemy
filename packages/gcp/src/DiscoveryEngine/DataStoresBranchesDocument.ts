@@ -274,9 +274,9 @@ export const DataStoresBranchesDocumentProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsDataStoresBranchesDocuments({
+            ...body,
             parent: branchParent(parent, branch),
             documentId,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -299,6 +299,7 @@ export const DataStoresBranchesDocumentProvider = () =>
 
       if (jsonChanged || structChanged || contentChanged || parentChanged || schemaChanged) {
         current = yield* discoveryengine.patchProjectsLocationsDataStoresBranchesDocuments({
+          ...body,
           name: current.name ?? name,
           allowMissing: true,
           updateMask: [
@@ -310,7 +311,6 @@ export const DataStoresBranchesDocumentProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: { ...body, name: current.name ?? name },
         });
       }
 

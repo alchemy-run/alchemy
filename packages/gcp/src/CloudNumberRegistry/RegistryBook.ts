@@ -284,12 +284,10 @@ export const RegistryBookProvider = () =>
       if (current === undefined) {
         const created = yield* cnr
           .createProjectsLocationsRegistryBooks({
+            labels: desiredLabels,
+            claimedScopes: claimedScopes.length > 0 ? claimedScopes : undefined,
             parent: parentOf(env.project, location),
             registryBookId,
-            body: {
-              labels: desiredLabels,
-              claimedScopes: claimedScopes.length > 0 ? claimedScopes : undefined,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -313,13 +311,10 @@ export const RegistryBookProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* cnr.patchProjectsLocationsRegistryBooks({
+          labels: desiredLabels,
+          claimedScopes,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            claimedScopes,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

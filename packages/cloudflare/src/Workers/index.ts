@@ -1,4 +1,5 @@
 export * from "./AccountSetting.ts";
+export { DurableObjectCallbacks } from "./AlarmCallback.ts";
 export { UnsupportedAlarmSchemaVersion } from "./DurableObjectAlarmStorage.ts";
 export * from "./AI.ts";
 export * from "./AIBinding.ts";
@@ -8,6 +9,7 @@ export * from "./BrowserBinding.ts";
 export * from "./BrowserLocal.ts";
 export * from "./Cache.ts";
 export * from "./ConfigProvider.ts";
+export * from "./Connect.ts";
 export * from "./CronEventSource.ts";
 export * from "./DurableObject.ts";
 export * from "./DurableObjectBridge.ts";

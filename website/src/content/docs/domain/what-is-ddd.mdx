@@ -13,7 +13,7 @@ DDD has a handful of concepts for doing that, and two techniques are often paire
 
 The **domain** is the area of activity your software serves. For a bank, that's customers, accounts, deposits, withdrawals, transfers and fraud. The domain exists whether or not there's any software; it's the business as the people in it understand it.
 
-A **domain model** is a deliberate simplification of the domain, written as code. It keeps what matters for the decisions the software has to make and leaves the rest out. A bank's model needs to know an account's balance, because withdrawals depend on it. It doesn't need to know the colour of the customer's card.
+A **domain model** is a deliberate simplification of the domain, written as code. It keeps what matters for the rules the software has to enforce and leaves the rest out. A bank's model needs to know an account's balance, because withdrawals depend on it. It doesn't need to know the colour of the customer's card.
 
 The model is about behaviour, not storage. It says what can happen in the domain, which rules govern it, and what's remembered as a result. How that's stored is a separate concern.
 
@@ -57,8 +57,7 @@ A command is only a request. It can be refused: a withdrawal from an account tha
 
 ```typescript title="src/WithdrawMoney.command.ts"
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
-  target: AccountId,
-  input: { amount: Schema.Int },
+  input: { accountId: AccountId, amount: Schema.Int },
   events: [MoneyWithdrawn],
   rejects: [NotOpen, InsufficientFunds],
   reply: { balance: Schema.Int },
@@ -84,11 +83,11 @@ Commands and events are the two halves of every change. Someone asks with a comm
 
 See [Event](/domain/event).
 
-## Aggregates: where decisions are made
+## Aggregates: state and the rules that guard it
 
-Something has to decide whether a command is accepted. In DDD, that's an **aggregate**: a cluster of related state together with the rules that govern it. A bank account is an aggregate. It holds a balance, and it enforces the rules about that balance, such as "a withdrawal can't exceed the balance".
+Every command is **decided** once: checked against the current state, then accepted, with events, or refused. Deciding needs state to check against, and something has to own that state. In DDD, that's an **aggregate**: a cluster of related state together with the rules that govern it. A bank account is an aggregate. It holds a balance, and it enforces the rules about that balance, such as "a withdrawal can't exceed the balance".
 
-Rules like that are called **invariants**: conditions that must be true at every moment, with no exceptions. An aggregate exists to protect its invariants. Every command that could affect them goes through the aggregate, which checks it against its current state and either refuses it or records events.
+Rules like that are called **invariants**: conditions that must be true at every moment, with no exceptions. An aggregate exists to protect its invariants. Every command that could affect them is decided by the aggregate, against its current state.
 
 <DAG
   nodes={[
@@ -102,12 +101,12 @@ Rules like that are called **invariants**: conditions that must be true at every
     { from: "account", to: "event" },
     { from: "account", to: "rejection" },
   ]}
-  caption="An aggregate turns a command into events, or refuses it."
+  caption="The account decides a withdrawal: it records an event, or refuses."
 />
 
 Each aggregate is also a **consistency boundary**. It handles one command at a time, so two withdrawals arriving together are decided one after the other, and the second sees the balance the first left behind. Everything inside the boundary is always consistent. Nothing outside it changes in the same step.
 
-That makes the size of an aggregate a design decision. It should contain exactly the state its invariants need. A customer and their accounts are separate aggregates, because no rule requires a customer's details and an account's balance to change together.
+That makes the size of an aggregate a design choice. It should contain exactly the state its invariants need. A customer and their accounts are separate aggregates, because no rule requires a customer's details and an account's balance to change together.
 
 Here is the whole account: how it decides each command, and how each event changes its state.
 
@@ -117,6 +116,7 @@ export class Account extends Domain.Aggregate("Account", {
   state: State,
   initial: { _tag: "Unopened" },
   commands: [OpenAccount, DepositMoney, WithdrawMoney],
+  keyOf: (cmd) => cmd.accountId,
   decide: {
     OpenAccount: (account, cmd) =>
       account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
@@ -144,6 +144,57 @@ export class Account extends Domain.Aggregate("Account", {
 ```
 
 See [Aggregate](/domain/aggregate).
+
+## Decisions: a command that spans aggregates
+
+An aggregate decides the commands that concern it alone. Some commands concern more than one. A transfer moves money from one account to another: the first must have the funds, and both must change, or neither.
+
+No single account can decide that. Each one sees only its own balance, and nothing outside its boundary changes in the same step. Splitting the transfer into two commands, a withdrawal and then a deposit, leaves a moment where the money has left one account and not reached the other.
+
+A **decision** decides such a command. It reads every aggregate the command names, decides against all of their states together, and records events on each of them. Every event commits, or none does.
+
+So a command is decided in one of two places: by the aggregate it concerns, or by a decision over the several it concerns.
+
+<DAG
+  nodes={[
+    { id: "command", label: "TransferMoney", type: "command", kind: "command", col: 0, row: 0 },
+    { id: "decision", label: "Transfer", type: "decision", kind: "decision", col: 1, row: 0 },
+    { id: "from", label: "Account a-1", type: "TransferSent", kind: "aggregate", col: 2, row: 0 },
+    { id: "to", label: "Account a-2", type: "TransferReceived", kind: "aggregate", col: 2, row: 1 },
+  ]}
+  edges={[
+    { from: "command", to: "decision" },
+    { from: "decision", to: "from" },
+    { from: "decision", to: "to" },
+  ]}
+  caption="One command, decided once, recorded on both accounts or on neither."
+/>
+
+The command names both accounts in its input. The decision says which instances that means, and what to record on each:
+
+```typescript title="src/Transfer.decision.ts"
+export class Transfer extends Domain.Decision(TransferMoney, {
+  reads: { from: Account, to: Account },
+  keyOf: (cmd) => ({ from: cmd.from, to: cmd.to }),
+  decide: ({ from, to }, cmd) =>
+    from.state._tag !== "Open" || to.state._tag !== "Open"
+      ? new NotOpen()
+      : cmd.amount > from.state.balance
+        ? new InsufficientFunds({ balance: from.state.balance, requested: cmd.amount })
+        : [
+            from.record(new TransferSent({ to: to.id, amount: cmd.amount })),
+            to.record(new TransferReceived({ from: from.id, amount: cmd.amount })),
+          ],
+}) {}
+```
+
+A decision keeps no state of its own. Each account applies what was recorded on it, the same way it applies its own events, so its balance is still the account's to hold.
+
+The caller gets one answer, at once: the transfer happened, or it was refused and nothing changed. That's the difference from a process that takes time, which comes later as a saga.
+
+Reach for a decision only when a command really spans aggregates. Most concern one, and an aggregate that decides alone never waits for another.
+
+See [Decision](/domain/decision).
 
 ## Event sourcing: the events are the record
 
@@ -262,7 +313,7 @@ A client calls a query like a command, and usually gets what the store holds now
 ```typescript
 const page = yield* bank.AccountLedger({ account: accountId }); // what the store holds now
 
-const receipt = yield* bank.DepositMoney(accountId, { amount: 100 });
+const receipt = yield* bank.DepositMoney({ accountId, amount: 100 });
 const fresh = yield* bank.AccountLedger({ account: accountId }, { atLeast: receipt }); // includes the deposit
 ```
 
@@ -300,7 +351,7 @@ export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
     const accounts = yield* Account;
     return Effect.fn(function* ({ source }) {
       yield* accounts
-        .send(AccountId.make(`${source.id}-main`), new OpenAccount({ owner: source.id }))
+        .send(new OpenAccount({ accountId: AccountId.make(`${source.id}-main`), owner: source.id }))
         .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
     });
   }),
@@ -309,7 +360,9 @@ export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
 
 Policies and aggregates both apply rules, but different kinds. An aggregate enforces invariants: rules that must hold the instant a command commits, inside one boundary, and that can refuse the command. A policy applies a procedure: what the business does next, often across aggregates or outside the model. It runs after the event, and it can't refuse what already happened. It can only decide what happens next, through commands that the receiving aggregates can still refuse.
 
-When a process takes several steps across aggregates and can fail partway, like a transfer that debits one account and then credits another, a **saga** drives it step by step, and undoes earlier steps if a later one fails. A policy usually starts it. See [Saga](/domain/saga).
+A command that spans several aggregates and can be answered at once belongs to a [decision](#decisions-a-command-that-spans-aggregates), not a policy: it can still be refused.
+
+When a process takes several steps across aggregates and can fail partway, like a transfer that waits for an approval before it debits one account and credits another, a **saga** drives it step by step, and undoes earlier steps if a later one fails. A policy usually starts it. See [Saga](/domain/saga).
 
 ## Testing: given, when, then
 
@@ -341,7 +394,7 @@ it.effect("refuses to withdraw more than the balance", () =>
       new AccountOpened({ owner: "sam" }),
       new MoneyDeposited({ amount: 100, balanceAfter: 100 }),
     ),
-    Story.when(account, new WithdrawMoney({ amount: 150 })),
+    Story.when(new WithdrawMoney({ accountId: account.id, amount: 150 })),
     Story.rejected(new InsufficientFunds({ balance: 100, requested: 150 })),
   ),
 );
@@ -350,6 +403,73 @@ it.effect("refuses to withdraw more than the balance", () =>
 The same shape covers the rest of the model. A view is tested by giving it events and checking its state. A policy is tested by checking the commands it sends, and calls to external systems wait for the test to answer them, so every outcome of an outside call can be tried. Because the whole model runs in memory, a test of a process spanning several aggregates still runs in milliseconds.
 
 See [Story](/domain/story).
+
+## Verify: rules proved for every case
+
+A test checks one example: this history, this command, this outcome. A rule like "an account is never overdrawn" claims more. It is about every history and every command, including the ones nobody wrote a test for.
+
+Such a rule is written next to the aggregate, as an **invariant**:
+
+```diff lang="typescript" title="src/Account.aggregate.ts"
+export class Account extends Domain.Aggregate("Account", {
+  id: AccountId,
+  state: State,
+  initial: { _tag: "Unopened" },
++  invariants: {
++    NeverOverdrawn: (account) => account._tag !== "Open" || account.balance >= 0,
++  },
+```
+
+Nothing runs an invariant when a command arrives. It says what `decide` and `evolve` must never let happen, and one test checks that they don't:
+
+```typescript title="test/Bank.verify.test.ts"
+it.effect(
+  "the bank keeps its promises",
+  () => Verify.model(Bank, { apis: [CustomerApi, SupportApi] }).pipe(Effect.provide(NodeServices.layer)),
+  120_000,
+);
+```
+
+The test runs no examples. Because an aggregate's behaviour is a function of its state and a command, `decide`, `evolve` and each rule can be read as logic, and a solver asked whether any state and any input lead to a state that breaks one. This is **formal verification**. Run on the example bank, which also has customers, usernames and transfers, the test prints what it found:
+
+```text
+Bank: 46 outcomes, 1 decision, 5 policies, 1 saga, 1 view, 1 projection, 1 external system
+
+Proved: for every state and every input, after any number of commands
+  ✓ UsernameClaim.AClaimedNameStaysWithItsHolder
+  ✓ Account.NeverOverdrawn
+  ✓ Account.WithinDailyLimit
+  ✓ Account.AClosedAccountStaysClosed
+  ✓ Account.MoneyLeavesOnlyByWithdrawalOrTransfer
+  ✓ Account.OnlyAnAgentChangesTheOwner
+```
+
+**Proved** means no account can be overdrawn, whatever commands it is sent and however many. Now take the balance check out of the withdrawal:
+
+```diff lang="typescript" title="src/Account.aggregate.ts"
+WithdrawMoney: (account, cmd) =>
+  account._tag !== "Open"
+    ? new NotOpen()
+-    : cmd.amount > account.balance
+-      ? new InsufficientFunds({ balance: account.balance, requested: cmd.amount })
+-      : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: account.balance - cmd.amount })],
++    : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: account.balance - cmd.amount })],
+```
+
+The same test fails, with the shortest sequence of commands that overdraws an account:
+
+```text
+✗ Account.NeverOverdrawn breaks
+    1. RegisterCustomer { customerId: "A", name: "B", username: "C" } as { _tag: "Customer", customerId: "A" }  → CustomerRegistered, UsernameClaimed
+       ↳ MainAccountProvisioning: Account "A-main" OpenAccount { accountId: "A-main", customerId: "A", owner: "B" }  → AccountOpened
+    2. Account "A-main" WithdrawMoney { accountId: "A-main", amount: 50000 } as { _tag: "Customer", customerId: "A" }  → MoneyWithdrawn
+```
+
+A customer registers, a policy opens their main account, and they withdraw 50000 from a balance of 0. Under it the report prints the same sequence as a [story](/domain/story), ready to keep as a test.
+
+Some rules span several aggregates, or depend on what policies and sagas do over time, such as "a transfer loses no money". Those are checked by trying every sequence of commands up to a length, with events delivered twice and reactions arriving late.
+
+See [Verifying a model](/domain/verifying-models).
 
 ## Bounded contexts: one language per model
 
@@ -372,13 +492,14 @@ DDD splits the business into **bounded contexts**: areas in which one model and 
 
 ## How @alchemy.run/domain models these concepts
 
-Each of these concepts is a building block in `@alchemy.run/domain`. A bounded context is a [`Domain.Model`](/domain/model), and its published interface is an [`Api`](/domain/api). Inside it, you declare [commands](/domain/command), [events](/domain/event), [aggregates](/domain/aggregate) with `decide` and `evolve`, [views](/domain/view), [projections](/domain/projection), [queries](/domain/query) and [policies](/domain/policy). The platform you run the model on provides the guarantees described here: one command at a time per aggregate, events and state committed together, and every event delivered to every view and policy that consumes it, in order.
+Each of these concepts is a building block in `@alchemy.run/domain`. A bounded context is a [`Domain.Model`](/domain/model), and its published interface is an [`Api`](/domain/api). Inside it, you declare [commands](/domain/command), [events](/domain/event), [aggregates](/domain/aggregate) with `decide` and `evolve`, [decisions](/domain/decision) for commands that involve several of them, [views](/domain/view), [projections](/domain/projection), [queries](/domain/query) and [policies](/domain/policy). The platform you run the model on provides the guarantees described here: one command at a time per aggregate, events and state committed together, and every event delivered to every view and policy that consumes it, in order.
 
 A model lists its building blocks:
 
 ```typescript title="src/Bank.model.ts"
 export class Bank extends Domain.Model("Bank", {
   aggregates: [Account, Customer],
+  decisions: [Transfer],
   views: [AccountSummary, Statement],
   policies: [MainAccountProvisioning],
   projections: [Ledger],

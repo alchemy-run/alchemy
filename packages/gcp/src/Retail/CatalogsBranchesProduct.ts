@@ -437,11 +437,7 @@ export const CatalogsBranchesProductProvider = () =>
 
       if (current === undefined) {
         const created = yield* retail
-          .createProjectsLocationsCatalogsBranchesProducts({
-            parent,
-            productId,
-            body,
-          })
+          .createProjectsLocationsCatalogsBranchesProducts({ ...body, parent, productId })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -472,9 +468,9 @@ export const CatalogsBranchesProductProvider = () =>
 
       if (mask.length > 0) {
         current = yield* retail.patchProjectsLocationsCatalogsBranchesProducts({
+          ...body,
           name: resource,
           updateMask: mask,
-          body: { ...body, name: resource },
         });
       }
 

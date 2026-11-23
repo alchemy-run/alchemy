@@ -11,9 +11,8 @@ export class NoteWritten extends Domain.Event("NoteWritten", {
 
 /** Write a note in your own notebook. */
 export class WriteNote extends Domain.Command("WriteNote", {
-  target: UserId,
   middleware: [Session],
-  input: { text: Schema.NonEmptyString },
+  input: { userId: UserId, text: Schema.NonEmptyString },
   events: [NoteWritten],
   rejects: [NotYours],
 }) {}

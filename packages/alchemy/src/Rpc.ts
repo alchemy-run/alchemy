@@ -13,6 +13,9 @@ import * as Sink from "effect/Sink";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import type { HttpEffect } from "./Http.ts";
+import { decodeRpcArgs, encodeRpcArgs, RpcDecodeError } from "./RpcArgs.ts";
+
+export { decodeRpcArgs, encodeRpcArgs, RpcDecodeError };
 
 export type Rpc<Shape> = {
   "~alchemy/rpc": Shape;
@@ -65,14 +68,6 @@ export type RpcStreamErrorMarker = {
   _tag: typeof StreamErrorTag;
   error: unknown;
 };
-
-export class RpcDecodeError extends Data.TaggedError("RpcDecodeError")<{
-  readonly cause: unknown;
-}> {
-  override get message() {
-    return this.cause instanceof Error ? this.cause.message : String(this.cause);
-  }
-}
 
 export class RpcCallError extends Data.TaggedError("RpcCallError")<{
   readonly method: string;
@@ -568,7 +563,7 @@ export const makeFetchRpcStub = <Shape>(options: {
           Effect.gen(function* () {
             const request = HttpClientRequest.post(
               `${baseUrl}${RPC_PATH_PREFIX}${encodeURIComponent(prop)}`,
-            ).pipe(HttpClientRequest.bodyText(JSON.stringify(args), "application/json"));
+            ).pipe(HttpClientRequest.bodyText(encodeRpcArgs(args), "application/json"));
             const response = yield* options
               .fetch(request)
               .pipe(Effect.mapError((cause) => new RpcCallError({ method: prop, cause })));
@@ -626,12 +621,7 @@ export const serveRpc = <Req = never>(
     const text = yield* request.text;
     // Keep arg-decode failures out of the handler's error channel — a
     // malformed argument payload is a client error, so answer 400.
-    const argsResult = yield* Effect.result(
-      Effect.try({
-        try: () => (text.length > 0 ? (JSON.parse(text) as unknown[]) : []),
-        catch: (cause) => new RpcDecodeError({ cause }),
-      }),
-    );
+    const argsResult = yield* Effect.result(decodeRpcArgs(text));
     if (Result.isFailure(argsResult)) {
       return HttpServerResponse.text(
         `Invalid RPC arguments for "${name}": ${argsResult.failure.message}`,

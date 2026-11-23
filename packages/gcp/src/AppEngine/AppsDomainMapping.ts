@@ -287,12 +287,10 @@ export const AppsDomainMappingProvider = () =>
       if (current === undefined) {
         const operation = yield* appengine
           .createAppsDomainMappings({
+            id: domain,
+            sslSettings,
             appsId,
             overrideStrategy: news.overrideStrategy,
-            body: {
-              id: domain,
-              sslSettings,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -330,10 +328,10 @@ export const AppsDomainMappingProvider = () =>
       const updateMask = updateMaskOf(typeChanged || certChanged ? "sslSettings" : undefined);
       if (updateMask.length > 0 && !jsonEqual(observedSsl, sslSettings)) {
         const operation = yield* appengine.patchAppsDomainMappings({
+          sslSettings,
           appsId,
           domainMappingsId: domain,
           updateMask,
-          body: { sslSettings },
         });
         yield* waitForOperation(operation, { appsId });
         current = (yield* getByDomain(appsId, domain)) ?? current;

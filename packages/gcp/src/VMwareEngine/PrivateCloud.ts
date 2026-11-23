@@ -487,15 +487,13 @@ export const PrivateCloudProvider = () =>
       if (current === undefined) {
         const created = yield* vmwareengine
           .createProjectsLocationsPrivateClouds({
+            type,
+            description: desiredDescription,
+            managementCluster,
+            networkConfig,
+            encryptionConfig: news.encryptionConfig,
             parent: parentOf(env.project, location),
             privateCloudId,
-            body: {
-              type,
-              description: desiredDescription,
-              managementCluster,
-              networkConfig,
-              encryptionConfig: news.encryptionConfig,
-            },
           })
           .pipe(
             Effect.retry({
@@ -526,12 +524,9 @@ export const PrivateCloudProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* vmwareengine.patchProjectsLocationsPrivateClouds({
+          description: desiredDescription,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            description: desiredDescription,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

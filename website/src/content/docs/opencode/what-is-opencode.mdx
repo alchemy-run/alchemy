@@ -1,0 +1,95 @@
+---
+title: What is OpenCode?
+description: The concepts behind OpenCode on Alchemy — OpenCode in a Durable Object, sessions and prompts, model requests, tools, skills, the sandbox tools work in — and how @alchemy.run/opencode models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+OpenCode is a coding agent. It keeps **sessions**, each a transcript in its database. For each answer it asks a model, runs the tools the model calls, and asks again until the model is done. OpenCode 2 is built to run inside a Cloudflare Durable Object: its database is the object's SQLite, and it needs no machine of its own.
+
+Take one small app: a `Coder` Durable Object with a session `pr-142`. OpenCode runs in the object. Its model requests are answered by the `Fast` model's Layer, and its call to your `deploy` tool runs the tool's handler, both in the same isolate. The `bash` tool needs a shell, which a Durable Object does not have, so it runs its command in the session's sandbox on Boat.
+
+<Tree
+  nodes={[
+    {
+      id: "coder", label: "Coder", type: "Durable Object", icon: "box",
+      areas: ["opencode fast", "opencode deploy", "opencode bash"], phoneAreas: ["opencode opencode opencode", "fast deploy bash"], colGap: 4.5,
+    },
+    {
+      id: "opencode", label: "OpenCode", type: "sessions in SQLite", parent: "coder", tone: "accent", icon: "brand:opencode",
+    },
+    { id: "fast", label: "Fast", type: "model Layer", parent: "coder", icon: "sparkles" },
+    { id: "deploy", label: "deploy", type: "your tool", parent: "coder", icon: "wrench" },
+    { id: "bash", label: "bash", type: "coding tool", parent: "coder", icon: "terminal" },
+    {
+      id: "sandbox", label: "pr-142", type: "sandbox · Boat", icon: "box",
+      specs: [["holds", "files · shell"]],
+    },
+  ]}
+  areas={["coder sandbox"]}
+  phoneAreas={["coder", "sandbox"]}
+  colGap={4.5}
+  links={[
+    { from: "opencode", to: "fast", label: "asks" },
+    { from: "opencode", to: "deploy", label: "calls" },
+    { from: "opencode", to: "bash", label: "calls" },
+    { from: "bash", to: "sandbox", label: "exec" },
+  ]}
+  caption="OpenCode runs in the Coder Durable Object and keeps the session pr-142 in the object's SQLite. It asks the Fast model and calls deploy in the same isolate. Only bash leaves it, to run a command in the session's sandbox."
+/>
+
+## The harness
+
+The **harness** is OpenCode with what you give it: the models sessions may run on, and the tools and skills they may use. You yield it in a Durable Object's outer Effect, and OpenCode starts in that object when a session is first used.
+
+```typescript
+const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools, Deploy] });
+```
+
+## Sessions
+
+A **session** is one OpenCode session. You name it, and the harness finds it by that name in the object's storage.
+
+```typescript
+const session = harness.session("pr-142");
+```
+
+See [Sessions & prompts](/opencode/sessions).
+
+## Prompts
+
+A **prompt** is one message to a session. It returns when OpenCode has answered, through every tool call that took.
+
+```typescript
+const reply = yield* session.prompt("Fix the failing test.", { requestId: "msg-81" });
+```
+
+## Model requests
+
+OpenCode is configured with one model provider, and the harness answers it: each request is handed to the `AI.Model` Layer of the model the session runs on. No request for a model leaves the isolate through OpenCode, and it holds no API key.
+
+See [Model requests](/opencode/model-requests).
+
+## Tools
+
+Your tools are registered with OpenCode and run in the Durable Object, where their bindings are. The model sees each as `alchemy_<name>`.
+
+See [Tools](/opencode/tools).
+
+## Skills
+
+An `AI.Skill` becomes an OpenCode skill, which the model loads with OpenCode's own `skill` tool.
+
+See [Skills](/opencode/skills).
+
+## The sandbox
+
+A Durable Object has no files and no shell. A tool that needs either uses [`AI.Sandbox`](/ai/sandboxes), and the harness opens one sandbox per session for those tools. A session whose tools need neither never has one.
+
+See [The session's sandbox](/opencode/sandbox).
+
+## How @alchemy.run/opencode models these concepts
+
+`OpenCode.Harness` is an Effect you yield where its Layers are provided. Models, tools, MCP servers, skills and sandboxes are the [`@alchemy.run/ai`](/ai) declarations, unchanged. `OpenCodeCloudflare.DurableObjectStorage` runs OpenCode on the Durable Object's SQLite and keeps its alarm armed while a prompt runs, so an evicted object wakes up and the prompt resumes. `OpenCode.CodingTools` provides the shared coding tools, each working in the session's sandbox.
+
+Next: [Setup](/opencode/setup), then the [tutorial](/opencode/tutorial/part-1).

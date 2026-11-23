@@ -250,14 +250,12 @@ export const NasJobProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsNasJobs({
+            displayName,
+            labels: desiredLabels,
+            nasJobSpec: news.nasJobSpec,
+            enableRestrictedImageTraining: news.enableRestrictedImageTraining === true,
+            encryptionSpec: news.encryptionSpec,
             parent: `projects/${env.project}/locations/${location}`,
-            body: {
-              displayName,
-              labels: desiredLabels,
-              nasJobSpec: news.nasJobSpec,
-              enableRestrictedImageTraining: news.enableRestrictedImageTraining === true,
-              encryptionSpec: news.encryptionSpec,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? (yield* findOwned(env.project, location, desiredLabels));

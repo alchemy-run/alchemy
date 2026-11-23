@@ -4,7 +4,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import type { CallbackFactory } from "./Callback.ts";
 import type { HttpEffect } from "./Http.ts";
 import type { Output } from "./Output.ts";
 
@@ -23,8 +22,6 @@ export interface BaseRuntimeContext {
    */
   set(id: string, output: Output): Effect.Effect<string>;
   exports?: Effect.Effect<Record<string, any>>;
-  /** Register a durable callback in the current host instance, when supported. */
-  makeCallback?: CallbackFactory;
   serve?<Req = never>(
     handler: HttpEffect<Req>,
     options?: { shape?: Record<string, unknown> },
@@ -116,8 +113,10 @@ export interface RedactedMarker {
 export const isRedactedMarker = (value: unknown): value is RedactedMarker =>
   typeof value === "object" &&
   value !== null &&
+  !Array.isArray(value) &&
   (value as { _tag?: unknown })._tag === "Redacted" &&
-  "value" in value;
+  "value" in value &&
+  Object.keys(value).length === 2;
 
 /**
  * Returns true when {@link unpackEnvValue}'s `JSON.parse` would reinterpret
@@ -160,6 +159,30 @@ export const packEnvValue = (value: unknown): string =>
       : JSON.stringify(value);
 
 /**
+ * The string a deployed process reads for a value in a user's `env` prop: a
+ * string as-is (`""` included), a `Redacted` unwrapped, anything else as
+ * JSON. `undefined` and `null` mean unset.
+ *
+ * Every host writes `env` through this, so `process.env` and `Config` read
+ * the same string on all of them. A string the runtime context packed when
+ * it bound a value is already an env string, so it passes through unchanged.
+ */
+export const envString = (value: unknown): string | undefined => {
+  const plain = Redacted.isRedacted(value) ? Redacted.value(value) : value;
+  if (plain === undefined || plain === null) return undefined;
+  return typeof plain === "string" ? plain : JSON.stringify(plain);
+};
+
+/** {@link envString} over a whole `env` record, dropping unset entries. */
+export const envStrings = (env: Record<string, unknown> | undefined): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(env ?? {}).flatMap(([key, value]) => {
+      const text = envString(value);
+      return text === undefined ? [] : [[key, text]];
+    }),
+  );
+
+/**
  * Like {@link packEnvValue}, but a `Redacted` input keeps its `Redacted`
  * wrapper on the *outside* of the packed string, so deploy-time code can
  * route secrets through a dedicated channel (Cloudflare `secret_text`,
@@ -179,14 +202,11 @@ const possibleJson = /^[\x20\t\r\n]*["{[0-9tfn-]/;
  * string from `packEnvValue`, or an env var the user set directly).
  * `undefined` passes through.
  *
- * Runtime `get` accessors MUST feed this from the raw environment
- * (`process.env[key]` / the platform env object) — never through
- * `Config.String`: the ambient runtime `ConfigProvider` reifies bound
- * values (unwrapping the marker before it could be detected here), and
- * during init the ambient provider is the interceptor installed in
- * `Platform.ts`, whose runtime branch calls back into `ctx.get(key)` —
- * resolving through `Config` would re-enter it for the same key and
- * recurse forever.
+ * Only call this on a key Alchemy wrote with {@link packEnvValue}, read from
+ * the raw environment (`process.env[key]` / the platform env object): a string
+ * someone else set may parse as JSON and come back changed (`"false"` →
+ * `false`), and `Config` reads have already unwrapped the marker. `Config`
+ * reads use {@link unwrapRedactedMarker} instead.
  */
 export const unpackEnvValue = <T>(raw: string | undefined): T | undefined => {
   if (raw === undefined) {
@@ -204,6 +224,30 @@ export const unpackEnvValue = <T>(raw: string | undefined): T | undefined => {
   } catch {
     return raw as unknown as T; // assume it's just a string
   }
+};
+
+/**
+ * If `raw` is a `{"_tag":"Redacted","value":...}` marker, return its value as
+ * a string; otherwise return `raw` unchanged, even when it parses as JSON.
+ *
+ * `Config` reads use this (through `runtimeConfigProvider`): the marker is the
+ * only encoding Alchemy puts on a value a `Config` reads. Any other string was
+ * set by someone else (a Worker `env` entry, a dashboard, the host), so only
+ * they know whether `"false"` meant a string (#2269, #2847, #3497).
+ */
+export const unwrapRedactedMarker = (raw: string): string => {
+  if (!raw.startsWith("{")) {
+    return raw;
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (isRedactedMarker(parsed)) {
+      return typeof parsed.value === "string" ? parsed.value : JSON.stringify(parsed.value);
+    }
+  } catch {
+    // not JSON — a plain value
+  }
+  return raw;
 };
 
 /**

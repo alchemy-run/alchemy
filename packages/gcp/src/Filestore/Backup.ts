@@ -439,16 +439,14 @@ export const BackupProvider = () =>
       if (current === undefined) {
         const created = yield* file
           .createProjectsLocationsBackups({
+            sourceInstance: instance.instanceName,
+            sourceFileShare,
+            description: news.description,
+            labels: desiredLabels,
+            kmsKey: news.kmsKey,
+            tags: news.tags,
             parent: `projects/${env.project}/locations/${location}`,
             backupId,
-            body: {
-              sourceInstance: instance.instanceName,
-              sourceFileShare,
-              description: news.description,
-              labels: desiredLabels,
-              kmsKey: news.kmsKey,
-              tags: news.tags,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -479,13 +477,10 @@ export const BackupProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* file.patchProjectsLocationsBackups({
+          labels: desiredLabels,
+          description: news.description,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

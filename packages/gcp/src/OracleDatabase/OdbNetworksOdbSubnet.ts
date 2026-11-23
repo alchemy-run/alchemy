@@ -334,13 +334,11 @@ export const OdbNetworksOdbSubnetProvider = () =>
       if (current === undefined) {
         const created = yield* oracle
           .createProjectsLocationsOdbNetworksOdbSubnets({
+            cidrRange: news.cidrRange,
+            purpose,
+            labels: desiredLabels,
             parent: odbNetwork,
             odbSubnetId,
-            body: {
-              cidrRange: news.cidrRange,
-              purpose,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

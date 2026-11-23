@@ -8,6 +8,6 @@ import { TransferId } from "./Transfer.id.ts";
  * was approved in time.
  */
 export class ExpireTransfer extends Domain.Command("ExpireTransfer", {
-  target: TransferId,
+  input: { transferId: TransferId },
   events: [TransferFailed],
 }) {}

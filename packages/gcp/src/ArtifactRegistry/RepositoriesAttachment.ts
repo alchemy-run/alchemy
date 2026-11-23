@@ -352,15 +352,13 @@ export const RepositoriesAttachmentProvider = () =>
       if (current === undefined) {
         const created = yield* artifactregistry
           .createProjectsLocationsRepositoriesAttachments({
+            target,
+            files,
+            type,
+            attachmentNamespace,
+            annotations,
             parent: repository,
             attachmentId,
-            body: {
-              target,
-              files,
-              type,
-              attachmentNamespace,
-              annotations,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

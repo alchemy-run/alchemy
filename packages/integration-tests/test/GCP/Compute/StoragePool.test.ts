@@ -62,13 +62,11 @@ test.provider.skipIf(!!process.env.GCP_TEST_STORAGE_POOL)(
 
       const error = yield* Effect.flip(
         compute.insertStoragePools({
+          name: "alchemy-storage-pool-probe",
+          storagePoolType: `projects/${project}/zones/${zone}/storagePoolTypes/hyperdisk-balanced`,
+          poolProvisionedCapacityGb: "10",
           project,
           zone,
-          body: {
-            name: "alchemy-storage-pool-probe",
-            storagePoolType: `projects/${project}/zones/${zone}/storagePoolTypes/hyperdisk-balanced`,
-            poolProvisionedCapacityGb: "10",
-          },
         }),
       );
       expect(error._tag).toBe("BadRequest");
