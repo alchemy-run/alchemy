@@ -748,8 +748,10 @@ describe("Domain Ai: tools", { tags: ["unit", "local"] }, () => {
         const teller = yield* Teller;
         yield* teller.get("ada").send("Here is 30.");
 
+        // A strong write answers once the views have it, so the read below sees it.
         const deposited = yield* harness.call("WalletApi_Deposit_send", {
           input: { walletId: "ada-wallet", amount: 30 },
+          consistency: "strong",
         });
         expect(deposited).toMatchObject({
           isError: false,
