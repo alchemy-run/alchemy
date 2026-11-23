@@ -340,7 +340,8 @@ export const DockerLive = Layer.effect(
             const image = registeredImages.get(original.Image);
             // A native `start({ image })` can name an image that was never
             // prepared (e.g. a managed `cloudflare/*` image): pull it on demand.
-            // Prepared images were built or pulled for the platform already.
+            // Images registered with env were built or pulled for the
+            // platform already.
             const pulled = yield* Effect.exit(
               image ? Effect.void : Cache.get(ensuredImages, original.Image),
             );
@@ -763,22 +764,35 @@ export const DockerLive = Layer.effect(
       pull: (tag, image) =>
         pullUserImage(image.imageUri).pipe(
           Effect.catchTag("SystemError", (error) =>
-            inspect(image.imageUri, "{{.Id}}").pipe(
+            inspect(image.imageUri, "{{.Id}} {{.Os}}/{{.Architecture}}").pipe(
               Effect.orElseSucceed(() => ""),
-              Effect.flatMap((id) =>
-                id.trim()
-                  ? Effect.logDebug(
-                      `docker: pull ${image.imageUri} failed, using the local image ${id.trim()}`,
-                    )
-                  : Effect.fail(
+              Effect.map((out) => out.trim().split(" ")),
+              Effect.flatMap(([id, local]) =>
+                // Containers are created pinned to the platform, which a
+                // local image built for another one cannot provide.
+                id && platform && local && local !== platform
+                  ? Effect.fail(
                       SystemError.make({
                         subtag: "DockerPullFailed",
-                        message: `Image "${image.imageUri}" could not be pulled and is not in the local Docker.`,
-                        hint: imageUnavailableHint(image.imageUri),
+                        message: `Image "${image.imageUri}" could not be pulled, and the local copy is ${local}, not ${platform}.`,
+                        hint: `Build it with \`docker build --platform ${platform} -t ${image.imageUri} .\`, or run local containers on Docker's own architecture with ALCHEMY_LOCAL_CONTAINER_PLATFORM=host.`,
                         detail: error.detail,
                         cause: error,
                       }),
-                    ),
+                    )
+                  : id
+                    ? Effect.logDebug(
+                        `docker: pull ${image.imageUri} failed, using the local image ${id}`,
+                      )
+                    : Effect.fail(
+                        SystemError.make({
+                          subtag: "DockerPullFailed",
+                          message: `Image "${image.imageUri}" could not be pulled and is not in the local Docker.`,
+                          hint: imageUnavailableHint(image.imageUri),
+                          detail: error.detail,
+                          cause: error,
+                        }),
+                      ),
               ),
             ),
           ),

@@ -218,9 +218,32 @@ it.live(
   60_000,
 );
 
+it.live(
+  "rejects a local-only image built for another platform than linux/amd64",
+  () => {
+    // Unpullable, so the local arm64 copy is all there is.
+    const image = "alchemy-test.invalid/local-arm64:dev";
+    const tag = `alchemy-local-arm64-${crypto.randomUUID()}:latest`;
+    return Effect.gen(function* () {
+      yield* docker("pull", "--platform", "linux/arm64", "arm64v8/alpine:3.21");
+      yield* docker("tag", "arm64v8/alpine:3.21", image);
+      const { result } = yield* withLocalPlatform(
+        undefined,
+        Effect.flip(
+          Effect.gen(function* () {
+            yield* (yield* Docker).pull(tag, { imageUri: image });
+          }),
+        ),
+      );
+      expect(result.message).toContain("the local copy is linux/arm64, not linux/amd64");
+      expect(result.hint).toContain("ALCHEMY_LOCAL_CONTAINER_PLATFORM=host");
+    }).pipe(Effect.ensuring(removeImages(tag, image, "arm64v8/alpine:3.21")));
+  },
+  60_000,
+);
+
 it.live("rejects an unknown ALCHEMY_LOCAL_CONTAINER_PLATFORM", () =>
   Effect.gen(function* () {
-    // A blank value counts as unset and keeps the default.
     for (const value of ["linux/arm64", " host", "HOST"]) {
       const exit = yield* Effect.exit(withLocalPlatform(value, Effect.void));
       expect(exit._tag, `value ${JSON.stringify(value)}`).toBe("Failure");
