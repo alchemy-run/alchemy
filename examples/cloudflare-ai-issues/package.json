@@ -1,0 +1,28 @@
+{
+  "name": "cloudflare-ai-issues",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/cloudflare-ai-issues"
+  },
+  "type": "module",
+  "scripts": {
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy"
+  },
+  "dependencies": {
+    "@alchemy.run/ai": "workspace:*",
+    "@alchemy.run/boat": "workspace:*",
+    "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/domain": "workspace:*",
+    "@alchemy.run/github": "workspace:*",
+    "@alchemy.run/opencode": "workspace:*",
+    "@alchemy.run/pi": "workspace:*",
+    "@cloudflare/workers-types": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  }
+}

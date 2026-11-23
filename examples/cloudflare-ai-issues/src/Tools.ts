@@ -1,0 +1,59 @@
+import * as AI from "@alchemy.run/ai";
+import * as GitHub from "@alchemy.run/github";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import { Repo } from "./Repo.ts";
+
+/** Hidden in every comment a session posts, so its own comments are never sent back to it. */
+export const MARKER = "<!-- ai-issues -->";
+
+/** Find issues and pull requests on the repository that mention some words. */
+export class SearchIssues extends AI.Tool<SearchIssues>()("search_issues", {
+  description:
+    "Search this repository's issues and pull requests. Use it to find duplicates or related work.",
+  parameters: Schema.Struct({ query: Schema.String }),
+  success: Schema.Struct({
+    issues: Schema.Array(
+      Schema.Struct({ number: Schema.Number, title: Schema.String, state: Schema.String }),
+    ),
+  }),
+}) {}
+
+export const SearchIssuesLive = SearchIssues.make(
+  Effect.gen(function* () {
+    const search = yield* GitHub.SearchIssues(yield* Repo);
+
+    return Effect.fn(function* ({ query }) {
+      const found = yield* search({ q: query, per_page: 10 }).pipe(Effect.orDie);
+      return {
+        issues: found.items.map((issue) => ({
+          number: issue.number,
+          title: issue.title,
+          state: issue.state,
+        })),
+      };
+    });
+  }),
+).pipe(Layer.provide(GitHub.SearchIssuesHttp));
+
+/** Post a comment on an issue. */
+export class PostAnswer extends AI.Tool<PostAnswer>()("post_answer", {
+  description: "Post your answer on the issue as a comment, in Markdown.",
+  parameters: Schema.Struct({ issue: Schema.String, markdown: Schema.String }),
+  success: Schema.Struct({ url: Schema.String }),
+}) {}
+
+export const PostAnswerLive = PostAnswer.make(
+  Effect.gen(function* () {
+    const comment = yield* GitHub.CreateIssueComment(yield* Repo);
+
+    return Effect.fn(function* ({ issue, markdown }) {
+      const posted = yield* comment({
+        issue_number: Number(issue),
+        body: `${markdown}\n\n${MARKER}`,
+      }).pipe(Effect.orDie);
+      return { url: posted.html_url };
+    });
+  }),
+).pipe(Layer.provide(GitHub.CreateIssueCommentHttp));
