@@ -750,6 +750,13 @@ export const make = (loader: Loader, run: Run): Interpreter => {
             name: `${value.name}.make`,
             call: (args: ReadonlyArray<V>, at: Site) => construct(value, args, at),
           };
+        // `Receipt.make(fields)`, for a class of `effect/Schema`: the instance `new` makes.
+        if (key === "make" && isDataClass(value.value))
+          return {
+            _tag: "Native",
+            name: `${value.name}.make`,
+            call: (args: ReadonlyArray<V>, at: Site) => constructData(value, args, at),
+          };
         // `AccountId.make(text)`: the text, when the schema allows it.
         if (key === "make" && Symbolic.typeOf(value.value) !== undefined) {
           const ast = Symbolic.typeOf(value.value)!;
@@ -1362,6 +1369,8 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           );
         if (node.operator === "+" && Compare.numeric(argument) && !Value.isBig(argument))
           return argument;
+        // `void x`: `x` is run, and nothing is given.
+        if (node.operator === "void") return Value.undef;
         if (node.operator === "typeof") {
           const kind = kindOf(argument);
           if (kind !== undefined) return Value.str(kind);

@@ -476,6 +476,9 @@ export const make = (kit: Kit) => {
       Effect.fail(
         Value.notTranslated(site, "reaches absurd, which the code says cannot be reached"),
       ),
+    // A brand is a name for a type: the value is what it was.
+    "effect/Brand:nominal": () =>
+      Effect.succeed(native("Brand.nominal", ([value]) => Effect.succeed(value ?? Value.undef))),
     "effect/Equal:equals": dual("Equal.equals", 2, ([a, b], site) =>
       a && b ? kit.equals(a, b, site) : wrongArguments(site, "Equal.equals"),
     ),

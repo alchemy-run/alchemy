@@ -208,6 +208,9 @@ it.effect(
         "Tally",
         "Pour",
         "Run",
+        "Extra",
+        "Rest",
+        "Flow",
       ]);
       agrees(report);
       expect(report.agreement.compared).toBeGreaterThan(400);

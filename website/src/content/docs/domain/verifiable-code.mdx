@@ -7,7 +7,7 @@ description: The TypeScript, the Effect helpers and the schemas that Verify read
 
 ```text
 Not read
-  Label.aggregate.ts:23  reads .startsWith of a string
+  Label.aggregate.ts:23  reads .localeCompare of a string
 ```
 
 A handler has to be a plain function of what it is given: the state, the command and the context. It can call other functions in your own files, which are read the same way. A function from Effect is read if it is listed under [Library functions](#library-functions), and one from [a package of your own](#your-own-packages) is read like your files. An exported function that cannot be read is [opaque](#opaque-functions).
@@ -18,7 +18,7 @@ Read: `const` and `let`, assignment to a local variable, `+=` and the other comp
 
 Loops are read: `for`, `for…of`, `for…in`, `while` and `do…while`, with `break` and `continue`. A loop has to end after a number of turns the prover can count, so a loop over a list from the state or a command is tried for short lists only (see [Lists](#lists)).
 
-Not read: `try`, `catch` and `throw`, `class`, `async` and `await`, `for await`, labels, and generators other than `Effect.gen` and `Effect.fn`.
+Not read: `try`, `catch` and `throw`, `async` and `await`, `for await`, labels, and generators other than `Effect.gen`, `Effect.fn`, `Option.gen` and `Result.gen`. A `class` is read only where it extends one of `effect/Data`'s and adds nothing: `class Overweight extends Data.TaggedError("Overweight")<{ over: number }> {}`.
 
 ## Expressions
 
@@ -27,12 +27,13 @@ Read:
 - Arithmetic on whole numbers: `+`, `-`, `*`, `/`, `%`, and the comparisons `<`, `<=`, `>`, `>=`.
 - `===` and `!==`. `==` and `!=` are read only against `null`.
 - `&&`, `||`, `??`, `!`, the conditional `a ? b : c`, and optional chaining `a?.b`.
-- `typeof` and `in`.
+- `typeof`, `void` and `in`.
 - Object and array literals, spread in both, and property access by a name or by a key the prover can see.
 - Destructuring of objects and arrays, with defaults and rest patterns.
 - Arrow functions and function expressions, and calls to them.
 - Template literals, and `+` on strings.
 - `new` on an event, a rejection or a command, and the class's `make`: `Started.make({})` is `new Started({})`.
+- `new` on a class of `effect/Data` (`Data.Class`, `Data.TaggedClass`, `Data.Error`, `Data.TaggedError`) or of `effect/Schema` (`Schema.Class`, `Schema.TaggedClass`, `Schema.TaggedError`). The instance is its fields and its `_tag`.
 - TypeScript's `as`, `satisfies` and `!`, which change nothing at run time.
 
 Not read: bitwise operators, `instanceof`, regular expressions, `delete`, and a property read by a key that depends on an input.
@@ -43,19 +44,55 @@ A whole number is exact, and a `bigint` is exact with no limit. A number is assu
 
 A division is read where its result is exact: through `Math.floor`, `Math.ceil` or `Math.trunc`, or compared with a whole number. `Math.abs`, `Math.max` and `Math.min` are read too.
 
-Arithmetic on numbers that may not be whole is not proved. A solver counts exactly and JavaScript rounds, so `0.1 + 0.2 === 0.3` is true to one and false to the other. Keep money in whole cents.
+Arithmetic on numbers that may not be whole is not proved. A solver counts exactly and JavaScript rounds, so `0.1 + 0.2 === 0.3` is true to one and false to the other. Keep money in whole cents, or in a [decimal](#decimals).
+
+`effect/Number` and `effect/BigInt` are the same operators as functions, and are read the same way: `Number.sum`, `Number.clamp`, `BigInt.max`.
+
+## Decimals
+
+A `BigDecimal` is exact, and so is the solver's arithmetic, so a rule about money written in decimals is proved as written:
+
+```typescript
+invariants: {
+  NeverRefundedMoreThanCharged: (ledger) =>
+    BigDecimal.isLessThanOrEqualTo(ledger.refunded, ledger.charged),
+  TheFeesAreATenthOfTheCharges: (ledger) =>
+    BigDecimal.equals(ledger.fees, BigDecimal.multiply(ledger.charged, FEE)),
+},
+```
+
+A sum, a difference, a product, a comparison, `min`, `max`, `clamp`, `abs`, `negate`, `floor`, `ceil` and `truncate` are read on any decimal. A division is read only between decimals the code writes: the library rounds one that does not end, and the solver does not.
 
 ## Strings
 
-A string is compared with `===`, joined with `+` or a template literal, and has a `length`. That is all: `startsWith`, `includes`, `slice`, `toLowerCase` and the other string methods are not read.
+A string is compared with `===`, joined with `+` or a template literal, and has a `length`.
+
+On a string from the state or a command, these methods are read: `startsWith`, `endsWith`, `includes`, `indexOf`, `charAt`, `concat`, `slice` and `substring` between places the code writes, and `replace` and `replaceAll` of one string by another. `effect/String` has the same as functions.
+
+A method that changes letters is read only on a string the code writes: `toUpperCase`, `toLowerCase`, `trim`, `padStart`, `repeat`, `split`. `localeCompare`, `normalize` and regular expressions are not read at all. Two strings from an input are not put in order: `Order.String` is read on strings the code writes.
 
 ## Lists
 
-An array the code builds has a known length, and everything is read on it: an index, `length`, `at`, `slice`, `concat`, `includes`, and the methods that take a function, `map`, `filter`, `flatMap`, `find`, `findIndex`, `some`, `every`, `forEach` and `reduce`. `push` is read on an array the code made, not on one it was given.
+An array the code builds has a known length, and everything is read on it: an index, `length`, `at`, `slice`, `concat`, `includes`, `indexOf`, `join`, `flat`, `toReversed`, and the methods that take a function, `map`, `filter`, `flatMap`, `find`, `findIndex`, `findLast`, `findLastIndex`, `some`, `every`, `forEach` and `reduce`. `push` is read on an array the code made, not on one it was given.
 
 A list that comes from the state or a command has no known length, so it is tried with every length up to two items more than its schema asks for. A rule that passes that way is `Checked`, not `Proved`, and the report says how long the lists were.
 
 `Object.keys`, `Object.values` and `Object.entries` are read on an object whose keys are known.
+
+## Hash sets and hash maps
+
+A `HashSet` and a `HashMap` from the state or a command are tried like a list: with up to two items, no two of them equal. Whether a value is in one is read as it is, for every value:
+
+```typescript
+invariants: {
+  OnlyAMemberHasPoints: (roster) =>
+    HashMap.every(roster.points, (_points, person) => HashSet.has(roster.members, person)),
+  TheTotalIsTheSumOfThePoints: (roster) =>
+    roster.total === HashMap.reduce(roster.points, 0, (sum, points) => sum + points),
+},
+```
+
+The library gives the items of a set and the pairs of a map in the order of their hashes, which is not an order the code chose. So code that reads them in order (`reduce`, `forEach`, `findFirst`, `HashMap.keys`, a `for…of` loop, a spread) is read once for every order, and a rule is proved only if it holds in each. Up to four items are read that way. `Equal.equals` compares two sets, two maps, two decimals and two objects by what they hold.
 
 ## Schemas
 
@@ -67,10 +104,13 @@ The state, each command's input and each request context start as any value thei
 - `Schema.Union`, `Schema.NullOr` and the others built on it. A proof starts from each member in turn.
 - `Schema.Array`, tried as described under [Lists](#lists).
 - `Schema.Option`, started as `none` and as `some`.
-- `Schema.DateTimeUtc`.
+- `Schema.Result`, started as a success and as a failure.
+- `Schema.DateTimeUtc`, and `Schema.Duration` as a whole number of milliseconds.
+- `Schema.BigDecimal`.
+- `Schema.HashSet` and `Schema.HashMap`, tried as described under [Hash sets and hash maps](#hash-sets-and-hash-maps).
 - A branded schema, read as what it brands.
 
-Checks on a number are read: `isInt`, `isFinite`, `isGreaterThan`, `isGreaterThanOrEqualTo`, `isLessThan`, `isLessThanOrEqualTo`, `isBetween`, and `isMultipleOf` a whole number. On a string or a list, `isMinLength` and `isMaxLength` are read.
+Checks on a number are read: `isInt`, `isFinite`, `isGreaterThan`, `isGreaterThanOrEqualTo`, `isLessThan`, `isLessThanOrEqualTo`, `isBetween`, and `isMultipleOf` a whole number. On a string or a list, `isMinLength` and `isMaxLength` are read. On a decimal, `isGreaterThanBigDecimal`, `isGreaterThanOrEqualToBigDecimal`, `isLessThanBigDecimal`, `isLessThanOrEqualToBigDecimal` and `isBetweenBigDecimal` are read.
 
 A check the prover does not read is not assumed and not dropped in silence. The report lists it under "Schema checks not proved kept", with the command that writes the field.
 
@@ -78,23 +118,95 @@ A `Schema.Record`, and any other schema not listed, is a value the prover cannot
 
 ## Library functions
 
-A call to a package is read when it is one of these.
+A call to a package is read when it is one of these. Each does to a value from the state or a command what the real function does: every path the prover reads is then run on the real code, and the two have to agree.
 
-- **`effect/Effect`:** `gen`, `fn`, `fnUntraced`, `succeed`, `fail`, `sync`, `void`, `map`, `flatMap`, `andThen`, `tap`, `asVoid`, `orDie`, `catchTag`, `provideService`, `annotateCurrentSpan`, `log` and the other log levels.
+- **`effect/Effect`:**
+  - Making one: `gen`, `fn`, `fnUntraced`, `succeed`, `succeedNone`, `succeedSome`, `fail`, `failSync`, `die`, `sync`, `suspend`, `void`, `yieldNow`, `fromOption`, `fromNullishOr`, `fromResult`, `service`, `Do`, `bind`, `bindTo`, `let`.
+  - Going on: `map`, `flatMap`, `andThen`, `tap`, `as`, `asSome`, `asVoid`, `flatten`, `flip`, `zip`, `zipWith`, `when`, `filterOrFail`, `filterOrElse`, `ensuring`.
+  - Many at once, one after another: `all` (an array or an object of effects), `forEach`, `reduce`, `filter`, `findFirst`, `partition`.
+  - Failures: `catch`, `catchTag`, `catchTags`, `catchIf`, `catchNoSuchElement`, `mapError`, `mapBoth`, `orElseSucceed`, `tapError`, `tapErrorTag`, `ignore`, `match`, `matchEffect`, `result`, `option`, `isSuccess`, `isFailure`, `orDie`.
+  - Left as they are: `provideService`, `withSpan`, `annotateSpans`, `annotateLogs`, `withLogSpan`, `annotateCurrentSpan`, `log` and the other log levels. `runSync` gives what the effect gives.
+- **`effect/Result`:** `succeed`, `fail`, `succeedNone`, `succeedSome`, `failVoid`, `isResult`, `isSuccess`, `isFailure`, `match`, `map`, `mapError`, `mapBoth`, `flatMap`, `andThen`, `tap`, `flip`, `merge`, `getOrElse`, `getOrNull`, `getOrUndefined`, `getOrThrow`, `getOrThrowWith`, `orElse`, `getSuccess`, `getFailure`, `fromOption`, `fromNullishOr`, `filterOrFail`, `liftPredicate`, `all`, `gen`.
+- **`effect/Option`:** `some`, `none`, `fromNullishOr`, `fromNullOr`, `fromUndefinedOr`, `isOption`, `isSome`, `isNone`, `match`, `map`, `flatMap`, `flatMapNullishOr`, `andThen`, `tap`, `as`, `asVoid`, `flatten`, `filter`, `exists`, `contains`, `getOrElse`, `getOrUndefined`, `getOrNull`, `getOrThrow`, `getOrThrowWith`, `orElse`, `orElseSome`, `toArray`, `zipWith`, `zipLeft`, `zipRight`, `product`, `all`, `firstSomeOf`, `liftPredicate`, `getSuccess`, `getFailure`, `gen`.
 - **`effect/Match`:** `value`, `type`, `when`, `not`, `whenOr`, `whenAnd`, `tag`, `tags`, `tagsExhaustive`, `discriminator`, `discriminators`, `discriminatorsExhaustive`, `valueTags`, `typeTags`, `withReturnType`, `orElse`, `orElseAbsurd`, `exhaustive`, `option`, and the patterns `any` and `defined`.
-- **`effect/Option`:** `some`, `none`, `fromNullishOr`, `fromNullOr`, `fromUndefinedOr`, `isSome`, `isNone`, `match`, `map`, `flatMap`, `filter`, `exists`, `getOrElse`, `getOrUndefined`, `getOrNull`, `orElse`.
-- **`effect/Array`:** `map`, `filter`, `flatMap`, `some`, `every`, `findFirst`, `reduce`, `append`, `prepend`, `appendAll`, `length`, `head`, `last`, `get`, `isArrayEmpty`, `isArrayNonEmpty` and their readonly forms.
-- **`effect/Record`:** `get`, `has`, `set`, `remove`, `map`, `keys`, `values`, `size`, `isEmptyRecord`, `isEmptyReadonlyRecord`.
-- **`effect/Struct`:** `omit`, `pick`.
+- **`effect/Array`:**
+  - Making one: `make`, `of`, `empty`, `range`, `makeBy`, `replicate`, `fromIterable`, `fromOption`, `fromNullishOr`, `fromRecord`, `ensure`, `copy`.
+  - Reading one: `length`, `head`, `last`, `get`, `getUnsafe`, `tail`, `init`, `headNonEmpty`, `lastNonEmpty`, `tailNonEmpty`, `initNonEmpty`, `unprepend`, `unappend`, `contains`, `some`, `every`, `countBy`, `findFirst`, `findLast`, `findFirstIndex`, `findLastIndex`, `min`, `max`, `match`, `matchLeft`, `matchRight`, `isArray`, `isArrayEmpty`, `isArrayNonEmpty` and their readonly forms.
+  - Changing one: `map`, `filter`, `filterMap`, `flatMap`, `flatMapNullishOr`, `flatten`, `append`, `prepend`, `appendAll`, `prependAll`, `insertAt`, `modify`, `replace`, `remove`, `take`, `takeRight`, `takeWhile`, `drop`, `dropRight`, `dropWhile`, `span`, `splitAt`, `chunksOf`, `reverse`, `intersperse`, `dedupe`, `dedupeWith`, `sort`, `sortBy`, `sortWith`.
+  - Two of them: `zip`, `zipWith`, `unzip`, `cartesian`, `cartesianWith`, `union`, `intersection`, `difference`.
+  - To a value: `reduce`, `reduceRight`, `scan`, `mapAccum`, `join`, `forEach`, `groupBy`, `partition`, `separate`, `getSomes`, `getSuccesses`, `getFailures`.
+- **`effect/Chunk` and `effect/Iterable`:** read as the array of their items, through the functions they share with `effect/Array`.
+- **`effect/Record`:** `empty`, `singleton`, `get`, `has`, `set`, `remove`, `modify`, `replace`, `pop`, `map`, `mapKeys`, `mapEntries`, `filter`, `filterMap`, `partition`, `getSomes`, `reduce`, `collect`, `some`, `every`, `findFirst`, `union`, `intersection`, `difference`, `keys`, `values`, `toEntries`, `fromEntries`, `fromIterableWith`, `fromIterableBy`, `size`, `isEmptyRecord`, `isEmptyReadonlyRecord`.
+- **`effect/Struct` and `effect/Tuple`:** `omit`, `pick`, `get`, `keys`, `assign`, `evolve`, `renameKeys`, and `Tuple.make`, `get`, `appendElement`, `appendElements`.
+- **`effect/HashSet`:** `empty`, `make`, `fromIterable`, `isHashSet`, `size`, `isEmpty`, `has`, `add`, `remove`, `union`, `intersection`, `difference`, `isSubset`, `map`, `filter`, `some`, `every`, `reduce`.
+- **`effect/HashMap`:** `empty`, `make`, `fromIterable`, `isHashMap`, `size`, `isEmpty`, `has`, `get`, `getUnsafe`, `set`, `setMany`, `remove`, `removeMany`, `modify`, `modifyAt`, `union`, `map`, `filter`, `filterMap`, `compact`, `some`, `every`, `hasBy`, `reduce`, `forEach`, `findFirst`, `keys`, `values`, `entries`, `toValues`, `toEntries`.
+- **`effect/Number` and `effect/BigInt`:** `sum`, `subtract`, `multiply`, `divide`, `divideUnsafe`, `remainder`, `increment`, `decrement`, `min`, `max`, `clamp`, `between`, `sign`, `sumAll`, `multiplyAll`, the four comparisons, `isNumber` and `isBigInt`, `BigInt.abs`. On numbers the code writes: `Number.round`, `Number.parse`, `BigInt.gcd`, `lcm`, `sqrt`, `toNumber`, `fromNumber`, `fromString`.
+- **`effect/BigDecimal`:** `make`, `fromNumber`, `fromNumberUnsafe`, `fromBigInt`, `fromString`, `fromStringUnsafe`, `isBigDecimal`, `sum`, `subtract`, `multiply`, `sumAll`, `multiplyAll`, `negate`, `abs`, `min`, `max`, `clamp`, `between`, `sign`, `equals`, the four comparisons, `isZero`, `isPositive`, `isNegative`, `isInteger`, `floor`, `ceil`, `truncate`, `normalize`, `Order`. On decimals the code writes: `divide`, `divideUnsafe`, `format`, `scale`, `toNumberUnsafe`.
+- **`effect/String`:** `length`, `isEmpty`, `isNonEmpty`, `isString`, `concat`, `startsWith`, `endsWith`, `includes`, `indexOf`, `charAt`, `slice`, `substring`, `takeLeft`, `replace`, `replaceAll`. On strings the code writes: `at`, `lastIndexOf`, `takeRight`, `split`, `trim`, `trimStart`, `trimEnd`, `toUpperCase`, `toLowerCase`, `capitalize`, `uncapitalize`, `padStart`, `padEnd`, `repeat`.
+- **`effect/Boolean`:** `and`, `or`, `not`, `xor`, `nand`, `nor`, `eqv`, `implies`, `match`, `every`, `some`, `isBoolean`.
+- **`effect/Predicate`:** `and`, `or`, `not`, `xor`, `nand`, `nor`, `eqv`, `implies`, `mapInput`, `isString`, `isNumber`, `isBoolean`, `isBigInt`, `isFunction`, `isNull`, `isNotNull`, `isUndefined`, `isNotUndefined`, `isNullish`, `isNotNullish`, `isTruthy`, `isTagged`, `hasProperty`.
+- **`effect/Order` and `effect/Equivalence`:** `Order.Number`, `BigInt`, `Boolean`, `String`, and the `Order` of `Number`, `BigInt`, `BigDecimal`, `DateTime` and `Duration`; `make`, `flip`, `mapInput`, `combine`, `min`, `max`, `clamp`, `isBetween`, `isLessThan`, `isLessThanOrEqualTo`, `isGreaterThan`, `isGreaterThanOrEqualTo`. `Equivalence.make`, `strictEqual`, `mapInput`. A function you write as an order or an equivalence is read as one.
+- **`effect/Equal`:** `equals`, which compares objects, arrays and the library's own data by what they hold.
+- **`effect/Data`:** `Class`, `TaggedClass`, `Error`, `TaggedError`, and `taggedEnum` with its constructors, `$is` and `$match`.
+- **`effect/Brand`:** `nominal`.
+- **`effect/Function`:** `pipe`, `flow`, `compose`, `identity`, `constant`, `constTrue`, `constFalse`, `constNull`, `constUndefined`, `constVoid`, `apply`, `tupled`, `untupled`, `flip`, `dual`, `satisfies`, `cast`, and `.pipe` on a value of the library's.
+- **`effect/Stream`:** see [Streams](#streams).
 - **`effect/Optic`:** `id`, `modify`, `replace`, and an optic's `key` and `tag`.
-- **`effect/DateTime`:** `toEpochMillis`, `isLessThan`, `isLessThanOrEqualTo`, `isGreaterThan`, `isGreaterThanOrEqualTo`, `between`, `min`, `max`, `distance`, `addDuration`, `subtractDuration`, `add` and `subtract` (in milliseconds, seconds, minutes, hours, days and weeks), `now`, `isPast`, `isFuture`, `formatIsoDate`, `formatIsoDateUtc`.
-- **`effect/Duration`:** `millis`, `seconds`, `minutes`, `hours`, `days`, `weeks`, `zero`, `toMillis`, `toSeconds`, `toMinutes`, `toHours`, `toDays`, `toWeeks`, `sum`, `subtract`, `min`, `max`, `equals`, `isLessThan`, `isLessThanOrEqualTo`, `isGreaterThan`, `isGreaterThanOrEqualTo`. Where a function takes a duration, a number of milliseconds and text such as `"7 days"` are read too.
-- **`effect/Clock`:** `currentTimeMillis`.
-- **`effect/Function`:** `pipe`, and `.pipe` on an effect, an option, a matcher, a time and a duration.
+- **`effect/DateTime`:** `make`, `makeUnsafe`, `toEpochMillis`, `isLessThan`, `isLessThanOrEqualTo`, `isGreaterThan`, `isGreaterThanOrEqualTo`, `between`, `min`, `max`, `distance`, `addDuration`, `subtractDuration`, `add` and `subtract` (in milliseconds, seconds, minutes, hours, days and weeks), `now`, `isPast`, `isFuture`, `formatIsoDate`, `formatIsoDateUtc`, `Order`.
+- **`effect/Duration`:** `millis`, `seconds`, `minutes`, `hours`, `days`, `weeks`, `zero`, `toMillis`, `toSeconds`, `toMinutes`, `toHours`, `toDays`, `toWeeks`, `sum`, `subtract`, `times`, `negate`, `abs`, `min`, `max`, `clamp`, `between`, `equals`, `isZero`, `isNegative`, `isPositive`, `isLessThan`, `isLessThanOrEqualTo`, `isGreaterThan`, `isGreaterThanOrEqualTo`, `Order`. Where a function takes a duration, a number of milliseconds and text such as `"7 days"` are read too.
+- **`effect/Clock`:** `currentTimeMillis`, `currentTimeNanos`.
 - **`Math`:** `floor`, `ceil`, `trunc`, `abs`, `max`, `min`.
 - **`Object`:** `keys`, `values`, `entries`.
 
-Inside `Effect.gen` and `Effect.fn`, `yield*` is read on an effect, on a rejection (which rejects the command) and on a request context (which gives any value its schema allows).
+A function that reads the outside world has no model, and is never read: `Random`, `Effect.promise`, `Effect.sleep`, a queue, a fiber, a schedule. A handler is a function of the state, the command and the time.
+
+## Effects and failures
+
+Inside `Effect.gen` and `Effect.fn`, `yield*` is read on an effect, on a rejection (which rejects the command), on an error of `Data.TaggedError` or `Schema.TaggedError` (which fails with it) and on a request context (which gives any value its schema allows).
+
+A helper's failure is handled the way the code handles it, and becomes a rejection only where the code makes it one:
+
+```typescript
+class Overweight extends Data.TaggedError("Overweight")<{ readonly over: number }> {}
+
+decide: {
+  Pack: Effect.fn(function* (parcel, command) {
+    const weights = yield* Effect.forEach(command.items, weigh);
+    const total = yield* Effect.fromResult(fits(parcel.grams, Number.sumAll(weights))).pipe(
+      Effect.mapError((error) => new TooHeavy({ over: error.over })),
+    );
+    return [new Packed({ grams: total - parcel.grams })];
+  }),
+},
+```
+
+A defect is not a failure. After `Effect.die`, `Effect.orDie` or a `getOrThrow` on nothing, the command fails and records nothing, and no `catch` after it handles it.
+
+`Effect.all`, `forEach` and the others run one effect after another. Their `concurrency` option changes nothing a handler can see, since nothing in a handler waits.
+
+## Streams
+
+A stream is read where it is a list worked through in order: made from values the code has, changed one item at a time, and run to a value.
+
+```typescript
+const kept = yield* Stream.fromIterable(command.readings).pipe(
+  Stream.filter((reading) => reading >= 0),
+  Stream.mapEffect(checked),
+  Stream.take(2),
+  Stream.runCollect,
+);
+```
+
+It is read as the library runs it. A step that runs an effect for each item takes the items one at a time, so a stream that stops early runs the effects the real one runs and no others: above, a reading after the second is never checked, and a failure it would have given never happens.
+
+- **Made with:** `make`, `succeed`, `empty`, `fromIterable`, `fromArray`, `fromEffect`, `fromArrayEffect`, `fromIterableEffect`, `sync`, `suspend`, `unwrap`, `fail`, `die`, `range`, `iterate`, `unfold`, `paginate`.
+- **Changed with:** `map`, `as`, `filter`, `filterMap`, `filterEffect`, `mapEffect`, `tap`, `flatMap`, `take`, `takeWhile`, `takeUntil`, `takeRight`, `drop`, `dropWhile`, `scan`, `mapAccum`, `concat`, `prepend`, `zip`, `zipWith`, `zipWithIndex`, `changes`, `changesWith`, `rechunk`, `grouped`, `drain`.
+- **Failures:** `catch`, `catchTag`, `catchTags`, `catchIf`, `orElseSucceed`, `mapError`, `orDie`.
+- **Run with:** `runCollect`, `runFold`, `runFoldEffect`, `runForEach`, `runForEachWhile`, `runHead`, `runLast`, `runCount`, `runSum`, `runDrain`, `mkString`.
+
+`Stream.iterate`, `unfold` and `paginate` may never end. One that is cut with `take` is read; one run to its end is not, and the report says so. A `take` of a count that comes from an input is not read, since how many items that is, is not a thing the prover sees.
+
+Not read: a stream of time (`tick`, `debounce`, `throttle`, a schedule), of a queue or a pub-sub, a `merge` of two streams, and `mapEffect` or `flatMap` with a `concurrency` above one. Which item comes first there is not something the code decides.
 
 ## Your own packages
 
@@ -175,7 +287,7 @@ A rule whose command meets unread code is not proved, and the verification fails
 
 ```text
 Not read
-  Label.aggregate.ts:23  reads .startsWith of a string
+  Label.aggregate.ts:23  reads .localeCompare of a string
 ```
 
 Rewrite the line with what is read, or put it in an exported function, which is then [opaque](#opaque-functions). You can also move it out of the handler: compute it where the command is built and pass the result in as a field. What `decide` then checks is the field, which the prover reads.

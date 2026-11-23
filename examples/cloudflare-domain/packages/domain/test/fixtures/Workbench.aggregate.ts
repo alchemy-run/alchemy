@@ -9,7 +9,20 @@ import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
-import { constant, constTrue, dual, flow, identity, pipe, tupled } from "effect/Function";
+import * as Equivalence from "effect/Equivalence";
+import {
+  apply,
+  compose,
+  constant,
+  constTrue,
+  dual,
+  flip,
+  flow,
+  identity,
+  pipe,
+  tupled,
+  untupled,
+} from "effect/Function";
 import * as HashMap from "effect/HashMap";
 import * as HashSet from "effect/HashSet";
 import * as Number from "effect/Number";
@@ -99,19 +112,35 @@ export class Run extends Domain.Command("Run", {
   events: [Worked],
 }) {}
 
+export class Extra extends Domain.Command("Extra", {
+  input: { id: Schema.String, a: Small, b: Small },
+  events: [Worked],
+}) {}
+
+export class Rest extends Domain.Command("Rest", { input: Items, events: [Worked] }) {}
+
+export class Flow extends Domain.Command("Flow", { input: Items, events: [Worked] }) {}
+
 class Odd extends Data.TaggedError("Odd")<{ readonly n: number }> {}
 class Negative extends Data.TaggedError("Negative")<{ readonly n: number }> {}
 
 type Shape = Data.TaggedEnum<{ Dot: {}; Line: { readonly length: number } }>;
 const Shape = Data.taggedEnum<Shape>();
 
-const even = (n: number) => (n % 2 === 0 ? Effect.succeed(n) : Effect.fail(new Odd({ n })));
-const positive = (n: number) => (n >= 0 ? Effect.succeed(n) : Effect.fail(new Negative({ n })));
+const even = (n: number): Effect.Effect<number, Odd> =>
+  n % 2 === 0 ? Effect.succeed(n) : Effect.fail(new Odd({ n }));
+const positive = (n: number): Effect.Effect<number, Negative> =>
+  n >= 0 ? Effect.succeed(n) : Effect.fail(new Negative({ n }));
 const halved = (n: number): Result.Result<number, string> =>
   n % 2 === 0 ? Result.succeed(n * 3) : Result.fail("odd");
 const add = dual<(b: number) => (a: number) => number, (a: number, b: number) => number>(
   2,
   (a, b) => a + b,
+);
+
+const byN = Order.mapInput(
+  Order.Number,
+  (pair: { readonly n: number; readonly from: string }) => pair.n,
 );
 
 const counted = (a: number, b: number, flag: boolean) => ({
@@ -204,6 +233,13 @@ const ranked = (a: number, b: number, flag: boolean) => ({
     Order.Number,
   )(a, b),
   orderBoolean: Order.Boolean(flag, a > 0),
+  // Two values an order says nothing between: which of them is given is the library's choice.
+  minOfEqual: Order.min(byN)({ n: a, from: "self" }, { n: b, from: "that" }),
+  maxOfEqual: Order.max(byN)({ n: a, from: "self" }, { n: b, from: "that" }),
+  clampOfEqual: Order.clamp(byN)(
+    { n: a, from: "self" },
+    { minimum: { n: 0, from: "least" }, maximum: { n: 3, from: "most" } },
+  ),
   orderString: Order.String("a", "b"),
   equal: Equal.equals({ a, list: [b] }, { a: b, list: [a] }),
   shape: Shape.$match(a > 0 ? Shape.Line({ length: a }) : Shape.Dot(), {
@@ -292,6 +328,8 @@ const combined = (items: ReadonlyArray<number>, a: number) => ({
 });
 
 const joined = (items: ReadonlyArray<number>, a: number) => ({
+  // The function is given the item, then one already kept.
+  dedupeWith: Array.dedupeWith(items, (item, kept) => item > kept),
   union: Array.union(items, [a, 1]),
   intersection: Array.intersection(items, [a, 1]),
   difference: Array.difference(items, [a]),
@@ -707,6 +745,194 @@ const ran = (a: number, b: number) =>
     };
   });
 
+const extra = (a: number, b: number) =>
+  Effect.gen(function* () {
+    const twice = Effect.fn(
+      function* (n: number) {
+        return yield* even(n);
+      },
+      Effect.map((n) => n * 2),
+      Effect.orElseSucceed(() => -1),
+    );
+    return {
+      fnWithSteps: yield* twice(a),
+      tapErrorTag: yield* even(a).pipe(
+        Effect.tapErrorTag("Odd", () => Effect.void),
+        Effect.option,
+      ),
+      filterOrElse: yield* Effect.succeed(a).pipe(
+        Effect.filterOrElse(
+          (n) => n > b,
+          (n) => Effect.succeed(-n),
+        ),
+      ),
+      succeedNone: yield* Effect.succeedNone,
+      succeedSome: yield* Effect.succeedSome(a),
+      failSync: yield* Effect.failSync(() => a).pipe(Effect.flip),
+      flatten: yield* Effect.flatten(Effect.succeed(Effect.succeed(a))),
+      bindTo: yield* Effect.succeed(a).pipe(Effect.bindTo("a")),
+      runSync: Effect.runSync(Effect.succeed(a + b)),
+      fromNullishOr: yield* Effect.fromNullishOr(a > 0 ? a : null).pipe(Effect.option),
+      isFailure: yield* Effect.isFailure(positive(a)),
+      option: {
+        as: Option.as(Option.some(a), b),
+        asVoid: Option.asVoid(Option.some(a)),
+        zipLeft: Option.zipLeft(Option.some(a), a > b ? Option.some(b) : Option.none()),
+        zipRight: Option.zipRight(Option.some(a), Option.some(b)),
+        flatMapNullishOr: Option.flatMapNullishOr(Option.some(a), (n) => (n > 0 ? n : null)),
+        isOption: Option.isOption(a),
+        getSuccess: Option.getSuccess(halved(a)),
+        getFailure: Option.getFailure(halved(a)),
+      },
+      result: {
+        tap: Result.tap(halved(a), () => undefined),
+        mapBoth: Result.mapBoth(halved(a), {
+          onFailure: (error) => error.length,
+          onSuccess: (n) => `${n}`,
+        }),
+        getOrNull: Result.getOrNull(halved(a)),
+        getOrUndefined: Result.getOrUndefined(halved(a)) ?? "nothing",
+        fromNullishOr: Result.fromNullishOr(a > 0 ? a : null, () => "nothing"),
+        isResult: Result.isResult(halved(a)),
+        succeedSome: Result.succeedSome(a),
+      },
+      functions: {
+        compose: pipe(
+          (n: number) => n + 1,
+          compose((n: number) => n * 2),
+        )(a),
+        apply: apply(a)((n: number) => n - 1),
+        untupled: untupled((pair: readonly [number, number]) => pair[0] - pair[1])(a, b),
+        flip: flip((x: number) => (y: number) => x - y)(a)(b),
+        strict: Equivalence.strictEqual<number>()(a, b),
+        mappedSame: Equivalence.mapInput(Equivalence.strictEqual<number>(), (n: number) => n % 2)(
+          a,
+          b,
+        ),
+        isTruthy: Predicate.isTruthy(a),
+        xor: Predicate.xor(
+          (n: number) => n > 0,
+          (n: number) => n > 5,
+        )(a),
+        bigClamp: BigInts.clamp(BigInt(a), { minimum: -2n, maximum: 2n }),
+        bigBetween: BigInts.between(BigInt(a), { minimum: -2n, maximum: 2n }),
+        bigMin: BigInts.min(BigInt(a), BigInt(b)),
+        bigIncrement: BigInts.increment(BigInt(a)),
+        bigRemainder: BigInts.remainder(BigInt(a), 3n),
+      },
+    };
+  });
+
+const rest = (items: ReadonlyArray<number>, a: number) => ({
+  findLastIndex: Array.findLastIndex(items, (n) => n > a),
+  cartesianWith: Array.cartesianWith(items, [a, 1], (x, y) => x - y),
+  getSuccesses: Array.getSuccesses(Array.map(items, halved)),
+  getFailures: Array.getFailures(Array.map(items, halved)),
+  flatMapNullishOr: Array.flatMapNullishOr(items, (n) => (n > a ? n : null)),
+  matchRight: Array.matchRight(items, { onEmpty: () => a, onNonEmpty: (_init, last) => last }),
+  unprepend: Array.isReadonlyArrayNonEmpty(items) ? Array.unprepend(items) : null,
+  unappend: Array.isReadonlyArrayNonEmpty(items) ? Array.unappend(items) : null,
+  headNonEmpty: Array.isReadonlyArrayNonEmpty(items) ? Array.headNonEmpty(items) : a,
+  lastNonEmpty: Array.isReadonlyArrayNonEmpty(items) ? Array.lastNonEmpty(items) : a,
+  tailNonEmpty: Array.isReadonlyArrayNonEmpty(items) ? Array.tailNonEmpty(items) : [],
+  copy: Array.copy(items),
+  fromNullishOr: Array.fromNullishOr(a > 0 ? a : null),
+  fromRecord: Array.fromRecord({ a }),
+  isArray: Array.isArray(items),
+  getUnsafe: Array.getUnsafe(Array.append(items, a), 0),
+  record: {
+    mapEntries: Record.mapEntries({ a }, (n, key) => [`${key}2`, n + 1]),
+    difference: Record.difference({ a, b: 1 }, { b: 2, c: 3 }),
+    replace: Record.replace({ a }, "a", 0),
+    partition: Record.partition({ a, b: 2 }, halved),
+    filterMap: Record.filterMap({ a, b: 2 }, halved),
+    fromIterableWith: Record.fromIterableWith(["x", "y"], (key) => [key, a]),
+    renameKeys: Struct.renameKeys({ a, b: 1 }, { a: "c" }),
+    appendElements: Tuple.appendElements(Tuple.make(a), ["x", true]),
+  },
+  map: {
+    setMany: HashMap.setMany(HashMap.make(["a", 1]), [
+      ["a", a],
+      ["b", 2],
+    ]),
+    removeMany: HashMap.removeMany(HashMap.make(["a", 1], ["b", a]), ["a"]),
+    filterMap: HashMap.filterMap(HashMap.make(["a", a]), halved),
+    compact: HashMap.compact(HashMap.make(["a", Option.some(a)], ["b", Option.none()])),
+    findFirst: HashMap.findFirst(HashMap.make(["a", a]), (n) => n > 0),
+    keys: Array.fromIterable(HashMap.keys(HashMap.make(["a", a]))),
+    entries: Array.fromIterable(HashMap.entries(HashMap.make(["a", a]))),
+    getUnsafe: HashMap.getUnsafe(HashMap.make(["a", a]), "a"),
+    hasBy: HashMap.hasBy(HashMap.make(["a", a]), (n) => n > 0),
+    spread: [...HashSet.make(a)],
+  },
+});
+
+const flowed = (items: ReadonlyArray<number>, a: number) =>
+  Effect.gen(function* () {
+    const stream = Stream.fromArray(items);
+    const seen: Array<number> = [];
+    yield* stream.pipe(Stream.runForEach((n) => Effect.sync(() => void seen.push(n))));
+    const some: Array<number> = [];
+    yield* stream.pipe(
+      Stream.runForEachWhile((n) =>
+        Effect.sync(() => {
+          some.push(n);
+          return n > a;
+        }),
+      ),
+    );
+    return {
+      seen,
+      some,
+      changesWith: yield* Stream.make(a, a + 2, 1, 3).pipe(
+        Stream.changesWith((x, y) => x % 2 === y % 2),
+        Stream.runCollect,
+      ),
+      rechunk: yield* stream.pipe(Stream.rechunk(1), Stream.runCollect),
+      caught: yield* stream.pipe(
+        Stream.mapEffect(even),
+        Stream.catch((error) => Stream.make(error.n, 0)),
+        Stream.runCollect,
+      ),
+      catchTags: yield* stream.pipe(
+        Stream.mapEffect((n) => Effect.flatMap(even(n), positive)),
+        Stream.catchTags({
+          Odd: () => Stream.make(1),
+          Negative: (error) => Stream.make(error.n),
+        }),
+        Stream.runCollect,
+      ),
+      catchIf: yield* stream.pipe(
+        Stream.mapEffect(even),
+        Stream.catchIf(
+          (error) => error.n > a,
+          () => Stream.make(0),
+        ),
+        Stream.runCollect,
+        Effect.result,
+      ),
+      groupedThenFails: yield* stream.pipe(
+        Stream.mapEffect(positive),
+        Stream.grouped(2),
+        Stream.runCollect,
+        Effect.result,
+      ),
+      drained: yield* stream.pipe(Stream.runDrain),
+      as: yield* stream.pipe(Stream.as(a), Stream.runCollect),
+      filterMap: yield* stream.pipe(Stream.filterMap(halved), Stream.runCollect),
+      sync: yield* Stream.sync(() => a).pipe(Stream.runCollect),
+      unwrap: yield* Stream.unwrap(Effect.succeed(Stream.make(a))).pipe(Stream.runCollect),
+      fromArrayEffect: yield* Stream.fromArrayEffect(Effect.succeed([a, 1])).pipe(
+        Stream.runCollect,
+      ),
+      takeUntilExcluded: yield* stream.pipe(
+        Stream.takeUntil((n) => n > a, { excludeLast: true }),
+        Stream.runCollect,
+      ),
+      failed: yield* Stream.fail("no").pipe(Stream.runCollect, Effect.result),
+    };
+  });
+
 /** The parts of the library the prover reads, each run on what a command gives. */
 export class Workbench extends Domain.Aggregate("Workbench", {
   id: Schema.String,
@@ -732,6 +958,9 @@ export class Workbench extends Domain.Aggregate("Workbench", {
     Tally,
     Pour,
     Run,
+    Extra,
+    Rest,
+    Flow,
   ],
   keyOf: (command) => command.id,
   decide: {
@@ -764,6 +993,13 @@ export class Workbench extends Domain.Aggregate("Workbench", {
     }),
     Run: Effect.fn(function* (_bench, command) {
       return [new Worked({ results: yield* ran(command.a, command.b) })];
+    }),
+    Extra: Effect.fn(function* (_bench, command) {
+      return [new Worked({ results: yield* extra(command.a, command.b) })];
+    }),
+    Rest: (_bench, command) => [new Worked({ results: rest(command.items, command.a) })],
+    Flow: Effect.fn(function* (_bench, command) {
+      return [new Worked({ results: yield* flowed(command.items, command.a) })];
     }),
   },
   evolve: { Worked: (bench) => ({ runs: bench.runs + 1 }) },

@@ -49,7 +49,7 @@ export class Pad extends Domain.Command("Pad", {
 class OutOfRange extends Data.TaggedError("OutOfRange")<{ readonly reading: number }> {}
 
 /** A reading, once it is checked: one at freezing is a sensor that has stopped. */
-const checked = (reading: number) =>
+const checked = (reading: number): Effect.Effect<number, OutOfRange> =>
   reading === 0 ? Effect.fail(new OutOfRange({ reading })) : Effect.succeed(reading);
 
 /**

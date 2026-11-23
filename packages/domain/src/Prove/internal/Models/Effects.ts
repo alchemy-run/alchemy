@@ -166,7 +166,6 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
       Effect.as(self, value ?? Value.undef),
     ),
     "effect/Effect:asSome": onEffect("Effect.asSome", 0, (self) => Effect.map(self, Value.some)),
-    "effect/Effect:succeedNone": () => Effect.succeed(lazy(() => Effect.succeed(Value.none))),
     "effect/Effect:succeedSome": ([value]) =>
       Effect.succeed(lazy(() => Effect.succeed(Value.some(value ?? Value.undef)))),
     "effect/Effect:failSync": ([thunk], site) =>
@@ -524,6 +523,7 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
   const values: Record<string, V> = {
     "effect/Effect:Do": lazy(() => Effect.sync(() => Value.obj({}))),
     "effect/Effect:yieldNow": done,
+    "effect/Effect:succeedNone": lazy(() => Effect.succeed(Value.none)),
   };
 
   return { models, values };
