@@ -35,6 +35,8 @@ export class Configure extends Domain.Command("Configure", { input, events: [See
 export class Link extends Domain.Command("Link", { input, events: [Seen] }) {}
 export class Tick extends Domain.Command("Tick", { input, events: [Seen] }) {}
 export class Index extends Domain.Command("Index", { input, events: [Seen] }) {}
+export class Before extends Domain.Command("Before", { input, events: [Seen] }) {}
+export class Often extends Domain.Command("Often", { input, events: [Seen] }) {}
 export class Stretch extends Domain.Command("Stretch", { input, events: [Seen] }) {}
 export class Shape extends Domain.Command("Shape", { input, events: [Seen] }) {}
 export class Plain extends Domain.Command("Plain", { input, events: [Seen] }) {}
@@ -64,6 +66,8 @@ export class Fog extends Domain.Aggregate("Fog", {
     Link,
     Tick,
     Index,
+    Before,
+    Often,
     Stretch,
     Shape,
     Plain,
@@ -139,6 +143,11 @@ export class Fog extends Domain.Aggregate("Fog", {
     ],
     // The next time of a schedule after now: the time is not the command's.
     Tick: () => [new Seen({ n: Cron.next(Cron.parseUnsafe("0 0 * * *")).getTime() })],
+    // The time before now, and the times after it: neither is the command's.
+    Before: () => [new Seen({ n: Cron.prev(Cron.parseUnsafe("0 0 * * *")).getTime() })],
+    Often: () => [
+      new Seen({ n: Cron.sequence(Cron.parseUnsafe("0 0 * * *")).next().value.getTime() }),
+    ],
     // A trie's own functions are run on values the code writes, not on one a command gives.
     Index: (_fog, command) => [
       new Seen({ n: Trie.size(Trie.insert(Trie.empty<number>(), command.text, 1)) }),

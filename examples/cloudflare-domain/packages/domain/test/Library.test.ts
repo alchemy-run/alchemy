@@ -276,6 +276,8 @@ it.effect(
         Configure: "calls Config.Int, which the prover has no model for",
         Link: "calls Graph.directed, which the prover has no model for",
         Tick: "calls Cron.next, which the prover has no model for",
+        Before: "calls Cron.prev, which the prover has no model for",
+        Often: "calls Cron.sequence, which the prover has no model for",
         Index: "calls Trie.insert, which the prover has no model for",
         Stretch: "calls repeat, which throws: RangeError: Invalid count value: -1",
         // Read, but not as the real code does it: nothing is proved of it.
