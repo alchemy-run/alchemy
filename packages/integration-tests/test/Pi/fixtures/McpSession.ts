@@ -12,7 +12,7 @@ import * as Layer from "effect/Layer";
 import { Gateway } from "./infra.ts";
 import PiMcpWorker from "./McpWorker.ts";
 import { Fast } from "./models.ts";
-import { Add, AddLive } from "./tools.ts";
+import { Add, AddLive, codemodeSection } from "./tools.ts";
 
 const ModelsLive = AICloudflare.Model(Fast, {
   gateway: Gateway,
@@ -62,21 +62,25 @@ const HarnessLive = Layer.mergeAll(
   ModelsLive,
   AddLive,
   CodesLive,
+  AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalQuickJSWorkerLoader())),
   PiCloudflare.DurableObjectStorage,
 ).pipe(Layer.provideMerge(Cloudflare.Workers.FetchBinding));
+
+/** The server's tools, as a program reaches them. */
+const Programs = AI.CodeMode(Codes);
 
 export default class PiMcpSession extends Cloudflare.DurableObject<PiMcpSession>()(
   "PiMcpSession",
   Effect.gen(function* () {
-    const harness = yield* Pi.Harness({ models: [Fast], tools: [Add, Codes] });
+    const harness = yield* Pi.Harness({ models: [Fast], tools: [Add, Codes, Programs] });
 
     return Effect.gen(function* () {
       return {
-        /** A conversation with every tool, or with only the `add` tool. */
-        create: Effect.fn(function* (name: string, withServer: boolean) {
+        /** A conversation with every tool, with only the `add` tool, or with the server's tools from programs. */
+        create: Effect.fn(function* (name: string, withServer: boolean, programs?: boolean) {
           const conversation = yield* harness.createConversation({
             name,
-            tools: withServer ? [Add, Codes] : [Add],
+            tools: programs ? [Programs] : withServer ? [Add, Codes] : [Add],
           });
           return conversation.id;
         }),
@@ -84,6 +88,10 @@ export default class PiMcpSession extends Cloudflare.DurableObject<PiMcpSession>
         tools: Effect.fn(function* (name: string) {
           const conversation = yield* harness.conversationByName(name);
           return (yield* conversation.agent).tools.map((tool) => tool.name).sort();
+        }),
+        section: Effect.fn(function* (name: string) {
+          const conversation = yield* harness.conversationByName(name);
+          return codemodeSection((yield* conversation.context).messages) ?? null;
         }),
         addServer: (name: string) => harness.configure(name, { tools: { add: [Codes] } }),
         removeServer: (name: string) => harness.configure(name, { tools: { remove: [Codes] } }),
