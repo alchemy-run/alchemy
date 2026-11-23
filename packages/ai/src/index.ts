@@ -61,7 +61,6 @@ export {
   type ExecResult,
   type SandboxHandle,
 } from "./Sandbox.ts";
-export { isSkill, Skill, type AnySkill, type SkillClass, type SkillSpec } from "./Skill.ts";
 export {
   isMcpServer,
   McpServer,

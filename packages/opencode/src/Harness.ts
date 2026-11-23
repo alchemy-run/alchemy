@@ -10,7 +10,6 @@ import type { DeclaredNamespace, DeclaredTool, JsonSchema } from "@alchemy.run/a
 import { isMcpServer, type AnyMcpServer, type McpServerService } from "@alchemy.run/ai/McpServer";
 import type { AnyModel, ModelService } from "@alchemy.run/ai/Model";
 import { Sandbox, SandboxError, Sandboxes, sandboxOf } from "@alchemy.run/ai/Sandbox";
-import type { AnySkill } from "@alchemy.run/ai/Skill";
 import {
   callTool,
   parametersJsonSchema,
@@ -53,7 +52,6 @@ import {
 export interface HarnessOptions<
   Models extends ReadonlyArray<AnyModel>,
   Tools extends ReadonlyArray<Listed>,
-  Skills extends ReadonlyArray<AnySkill> = readonly [],
 > {
   /**
    * What OpenCode calls this harness: the provider its models belong to,
@@ -74,8 +72,6 @@ export interface HarnessOptions<
    * writes; the others are direct calls.
    */
   readonly tools?: Tools;
-  /** Skills every session can load when a task calls for one. */
-  readonly skills?: Skills;
   /**
    * The directory sessions work in: where a tool's `AI.Sandbox` runs
    * commands and resolves relative paths, and the directory OpenCode files
@@ -196,7 +192,7 @@ export interface Session {
   readonly removeSandbox: Effect.Effect<void, OpenCodeError, RuntimeContext>;
 }
 
-/** A harness: sessions, and the models, tools and skills they may use. */
+/** A harness: sessions, and the models and tools they may use. */
 export interface Harness {
   /**
    * The session with this name. Nothing runs until it is used. `defaults`
@@ -427,9 +423,8 @@ interface Resolved {
 export const Harness = <
   const Models extends ReadonlyArray<AnyModel>,
   const Tools extends ReadonlyArray<Listed> = readonly [],
-  const Skills extends ReadonlyArray<AnySkill> = readonly [],
 >(
-  options: HarnessOptions<Models, Tools, Skills>,
+  options: HarnessOptions<Models, Tools>,
 ): Effect.Effect<
   Harness,
   never,
@@ -532,7 +527,6 @@ export const Harness = <
           ({ client }) => ({ server, client }),
         ),
     );
-    const skills = options.skills ?? [];
     const captured = yield* Effect.context<never>();
 
     /** What the model may call a tool of ours. */
@@ -790,7 +784,7 @@ export const Harness = <
     const sessionIds = new Map<string, Promise<string>>();
     const namesById = new Map<string, string>();
 
-    /** Our tools, skills and models, as the plugin OpenCode loads them from. */
+    /** Our tools and models, as the plugin OpenCode loads them from. */
     const pluginOf = (state: Built, client: () => Promise<Host>): Plugin.Plugin => ({
       id: `alchemy.${name}`,
       setup: async (ctx) => {
@@ -860,19 +854,7 @@ export const Harness = <
             }
           }
         });
-        const loaded = await ctx.skill.transform((editor) => {
-          for (const skill of skills) {
-            editor.add({
-              id: skill.skillName,
-              name: skill.skillName,
-              description: skill.skill.description,
-              path: `${directory}/.alchemy/skills/${skill.skillName}/SKILL.md`,
-              content: skill.skill.instructions,
-            } as never);
-          }
-        });
         return async () => {
-          await loaded.dispose();
           await tools.dispose();
         };
       },
@@ -1176,7 +1158,6 @@ export const Harness = <
           programmed = [...new Set(programs.flatMap((entry) => entry.names))];
           on.add(nameOf(name, CODEMODE_TOOL));
         }
-        if (skills.length > 0) on.add("skill");
         // What the model is told about programs: the tools one may call.
         const section =
           programmed.length === 0 || state.convention === undefined

@@ -6,7 +6,7 @@ import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import { Greeting, Guard } from "./extensions.ts";
+import { Guard } from "./extensions.ts";
 import { Fast, FastLive } from "./models.ts";
 import { Notes } from "./Notes.ts";
 import { Add, AddLive } from "./tools.ts";
@@ -46,7 +46,7 @@ export default class Session extends Cloudflare.DurableObject<Session>()(
       models: [Fast],
       // `add` is offered both ways: as a direct call, and from programs.
       tools: [Add, SaveNote, AI.CodeMode(Add)],
-      extensions: [Guard, Greeting],
+      extensions: [Guard],
     });
 
     const toolOf = (name: ToolName) => (name === "add" ? Add : SaveNote);
@@ -99,11 +99,6 @@ export default class Session extends Cloudflare.DurableObject<Session>()(
         enableCodeMode: Effect.fn(function* (name: string) {
           const conversation = yield* harness.conversationByName(name);
           yield* conversation.configure({ tools: { add: [AI.CodeMode(Add)] } });
-        }),
-        /** Offer the conversation the greeting skill. */
-        addSkill: Effect.fn(function* (name: string) {
-          const conversation = yield* harness.conversationByName(name);
-          yield* conversation.configure({ extensions: { add: [Greeting] } });
         }),
         /** The names of the tools the conversation may call now. */
         tools: Effect.fn(function* (name: string) {

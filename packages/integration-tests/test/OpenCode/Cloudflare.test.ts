@@ -241,23 +241,6 @@ test(
 );
 
 test(
-  "a skill is loaded when the task calls for it",
-  Effect.gen(function* () {
-    const name = `oc-skill-${Date.now()}`;
-    const reply = yield* call(`/${name}/prompt`, {
-      text: "Load the releasing skill with the skill tool, then tell me the release codeword it gives.",
-      tools: [],
-      requestId: "skill",
-    });
-    // The codeword is only in the skill's instructions.
-    expect(
-      `${reply.text}\n${(yield* usedBy(name, "skill")).map((use) => use.output).join("\n")}`,
-    ).toContain("PLUM-4417");
-  }),
-  { tags, timeout: 180_000 },
-);
-
-test(
   "aborting stops the prompt that is running",
   Effect.gen(function* () {
     const name = `oc-abort-${Date.now()}`;
