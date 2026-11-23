@@ -1,6 +1,7 @@
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as Brands from "./Brands.ts";
 import * as Compare from "./Compare.ts";
 import { numeric, promote } from "./Compare.ts";
@@ -43,6 +44,7 @@ import * as Streams from "./Models/Streams.ts";
 import * as Strings from "./Models/Strings.ts";
 import type { Term } from "./Smt.ts";
 import * as Smt from "./Smt.ts";
+import * as Symbolic from "./Symbolic.ts";
 import type { Eval, OpticStep, Site, V } from "./Value.ts";
 
 export type { Host, Model } from "./Kit.ts";
@@ -1371,8 +1373,141 @@ export const make = (host: Host) => {
   const keyOf = (lib: V & { readonly _tag: "Lib" }): string =>
     `${lib.module}:${lib.path.join(".")}`;
 
+  /**
+   * What a function of `effect/Schema` makes. A schema built from values the
+   * prover knows is the schema itself, as the file would have made it; any
+   * other is one the prover does not look inside.
+   */
+  const schemaOf = (lib: V & { readonly _tag: "Lib" }, args: ReadonlyArray<V>): V => {
+    const unseen: V = { _tag: "Opaque", what: "a schema" };
+    const fn = lib.host ?? Known.schemaOf(lib.module, lib.path);
+    if (typeof fn !== "function") return unseen;
+    const given: Array<unknown> = [];
+    for (const arg of args) {
+      const made = Known.real(arg);
+      if (!made) return unseen;
+      given.push(made.value);
+    }
+    try {
+      const made: unknown = (fn as (...args: ReadonlyArray<unknown>) => unknown)(...given);
+      return Schema.isSchema(made)
+        ? { _tag: "Host", value: made, name: `Schema.${lib.path.join(".")}` }
+        : unseen;
+    } catch {
+      return unseen;
+    }
+  };
+
+  /** A tagged union of `effect/Schema`: its tag's name, and the schema of each case. */
+  const unionOf = (
+    schema: unknown,
+  ): { readonly tag: string; readonly cases: Readonly<Record<string, unknown>> } | undefined => {
+    const union = schema as { readonly tag?: unknown; readonly cases?: unknown; guards?: unknown };
+    return Schema.isSchema(schema) &&
+      typeof union.tag === "string" &&
+      typeof union.cases === "object" &&
+      union.cases !== null &&
+      typeof union.guards === "object"
+      ? { tag: union.tag, cases: union.cases as Readonly<Record<string, unknown>> }
+      : undefined;
+  };
+
+  /**
+   * `Status.guards`, `Status.isAnyOf`, `Status.match` and `Status.matchOrElse`
+   * of a tagged union: each reads the value's tag, and a guard also asks that
+   * the value is one its case allows.
+   */
+  const unionMember = (schema: unknown, key: string, name: string): V | undefined => {
+    const union = unionOf(schema);
+    if (!union) return undefined;
+    const seen = (value: V | undefined): value is V =>
+      value !== undefined && value._tag !== "Opaque" && value._tag !== "Applied";
+    /** Whether the value's tag is the one named, known or as a formula. */
+    const tagged = (value: V, tag: string, site: Site): Eval<boolean | string> =>
+      value._tag !== "Obj" || (value.brand !== undefined && Brands.SEALED.has(value.brand.kind))
+        ? Effect.succeed(false)
+        : host
+            .equal(value.fields[union.tag] ?? Value.undef, Value.str(tag), site)
+            .pipe(Effect.flatMap((equal) => host.truth(equal, site)));
+    /** The case's handler, called with the value: the first case whose tag the value has. */
+    const matching = (
+      value: V | undefined,
+      cases: V | undefined,
+      orElse: V | undefined,
+      what: string,
+      site: Site,
+    ): Eval<V> =>
+      Effect.gen(function* () {
+        if (!seen(value) || cases?._tag !== "Obj") return yield* wrongArguments(site, what);
+        for (const tag of Object.keys(union.cases)) {
+          const is = yield* tagged(value, tag, site);
+          if (typeof is === "boolean" ? !is : !host.current.run.branch(is)) continue;
+          const handler = cases.fields[tag] ?? orElse;
+          return handler
+            ? yield* host.call(handler, [value], site)
+            : yield* wrongArguments(site, what);
+        }
+        return orElse ? yield* host.call(orElse, [value], site) : yield* wrongArguments(site, what);
+      });
+    switch (key) {
+      case "guards":
+        return Value.obj(
+          Object.fromEntries(
+            Object.entries(union.cases).map(([tag, member]) => [
+              tag,
+              native(`${name}.guards.${tag}`, ([value], site) => {
+                const ast = Symbolic.typeOf(member);
+                return seen(value) && ast
+                  ? Effect.succeed(Compare.fromTruth(Symbolic.fits(value, ast, host.current.run)))
+                  : wrongArguments(site, `${name}.guards.${tag}`);
+              }),
+            ]),
+          ),
+        );
+      case "isAnyOf":
+        return native(`${name}.isAnyOf`, ([tags], site) => {
+          const names = Kit.tagsOf(tags);
+          return names === undefined
+            ? wrongArguments(site, `${name}.isAnyOf`)
+            : Effect.succeed(
+                native(`${name}.isAnyOf`, ([value], at) =>
+                  seen(value)
+                    ? Effect.forEach(names, (tag) => tagged(value, tag, at)).pipe(
+                        Effect.map((parts) => Compare.fromTruth(Compare.any(parts) ?? false)),
+                      )
+                    : wrongArguments(at, `${name}.isAnyOf`),
+                ),
+              );
+        });
+      case "match":
+        return native(`${name}.match`, (args, site) =>
+          args.length >= 2
+            ? matching(args[0], args[1], undefined, `${name}.match`, site)
+            : Effect.succeed(
+                native(`${name}.match`, ([value], at) =>
+                  matching(value, args[0], undefined, `${name}.match`, at),
+                ),
+              ),
+        );
+      case "matchOrElse":
+        return native(`${name}.matchOrElse`, (args, site) =>
+          args.length >= 3
+            ? matching(args[0], args[1], args[2], `${name}.matchOrElse`, site)
+            : Effect.succeed(
+                native(`${name}.matchOrElse`, ([value], at) =>
+                  matching(value, args[0], args[1], `${name}.matchOrElse`, at),
+                ),
+              ),
+        );
+      default:
+        return undefined;
+    }
+  };
+
   return {
     opticMember,
+    /** A helper of a tagged union of `effect/Schema`, as a value the code calls. */
+    unionMember,
     /** A method of a string, as a value the code calls. */
     stringMember: strings.member,
     /** What `yield*` gives inside `Option.gen` and `Result.gen`. */
@@ -1423,8 +1558,7 @@ export const make = (host: Host) => {
       const made = computed();
       if (made) return Effect.succeed(made);
       // A schema is built, never run: what it describes is read where it is used.
-      if (lib.module === "effect/Schema")
-        return Effect.succeed<V>({ _tag: "Opaque", what: "a schema" });
+      if (lib.module === "effect/Schema") return Effect.succeed(schemaOf(lib, args));
       return Effect.fail(
         Value.notTranslated(
           site,

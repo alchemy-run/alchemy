@@ -37,6 +37,7 @@ import * as Redacted from "effect/Redacted";
 import * as Reducer_ from "effect/Reducer";
 import * as RegExp_ from "effect/RegExp";
 import * as Result from "effect/Result";
+import * as Schema_ from "effect/Schema";
 import * as SemVer_ from "effect/SemVer";
 import * as SemVerRange_ from "effect/SemVerRange";
 import * as Stream from "effect/Stream";
@@ -128,6 +129,22 @@ export const hostOf = (module: string, path: ReadonlyArray<string>): unknown => 
   return found;
 };
 
+/**
+ * What `effect/Schema` gives under a name. A schema is built, never run: the
+ * prover calls none of these on an input, and builds a schema from them only
+ * where it knows every part.
+ */
+export const schemaOf = (module: string, path: ReadonlyArray<string>): unknown => {
+  if (module !== "effect/Schema") return undefined;
+  let found: unknown = Schema_;
+  for (const key of path) {
+    if ((typeof found !== "object" && typeof found !== "function") || found === null)
+      return undefined;
+    found = (found as Readonly<Record<string, unknown>>)[key];
+  }
+  return found;
+};
+
 // A function the library gave back, as the value the prover calls, and the other way.
 const functions = new WeakMap<object, (...args: ReadonlyArray<unknown>) => unknown>();
 
@@ -168,7 +185,7 @@ export const real = (v: V): { readonly value: unknown } | undefined => {
     case "Host":
       return { value: v.value };
     case "Lib": {
-      const host = v.host ?? hostOf(v.module, v.path);
+      const host = v.host ?? hostOf(v.module, v.path) ?? schemaOf(v.module, v.path);
       return host === undefined ? undefined : { value: host };
     }
     case "Native": {

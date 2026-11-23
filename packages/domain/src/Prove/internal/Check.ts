@@ -177,7 +177,10 @@ export const solve = Effect.fn(function* (
     ...tests.flatMap((test) => {
       const built = Symbolic.concretize(test.applied, model, run.lists);
       if (!("value" in built)) return [];
-      const truthy = Smt.bool(Boolean(built.value)).text;
+      const observed = test.read(built.value);
+      // The result is not of the kind the code took it for: the real code is what says so.
+      if (observed === undefined) return [];
+      const truthy = literalOf(test.term.sort, observed);
       const at = test.terms.flatMap((term) => {
         const value = model.get(term.text);
         return value === undefined ? [] : [`(= ${term.text} ${literalOf(term.sort, value)})`];
@@ -186,7 +189,7 @@ export const solve = Effect.fn(function* (
       const result = `(= ${test.term.text} ${truthy})`;
       return [
         {
-          agrees: model.get(test.term.text) === Boolean(built.value),
+          agrees: model.get(test.term.text) === observed,
           pin: [...at, result],
           fact:
             at.length === 0

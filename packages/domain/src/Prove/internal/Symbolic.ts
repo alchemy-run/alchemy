@@ -305,6 +305,11 @@ export const MAX_ITEMS = 2;
 export const force = (list: V & { readonly _tag: "List" }, run: Run): V => {
   const known = run.lists.get(list.name);
   if (known) return known;
+  if (list.split) {
+    const parts = list.split.parts(run);
+    run.lists.set(list.name, parts);
+    return parts;
+  }
   const ast = list.ast as SchemaAST.Arrays;
   const checks = checksOf(ast);
   const least = Math.max(ast.elements.length, checks.minLength);
@@ -655,6 +660,11 @@ export const concretize = (
       case "List": {
         const items = lists?.get(v.name);
         if (items) return build(items);
+        if (v.split) {
+          // The parts no code counted are the ones the real `split` gives.
+          const self = build(v.split.self);
+          return isUnbuildable(self) ? self : String(self).split(v.split.separator);
+        }
         // No code looked at it: the shortest list its schema allows will do.
         const ast = v.ast as SchemaAST.Arrays;
         return Math.max(ast.elements.length, checksOf(ast).minLength) === 0

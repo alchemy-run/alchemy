@@ -1,5 +1,6 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Brands from "./Brands.ts";
 import * as Compare from "./Compare.ts";
 import { fromTruth, isQuotient, same, textual, truth } from "./Compare.ts";
@@ -114,6 +115,8 @@ export interface Interpreter {
   /** The formula for "this value is truthy", without splitting the path. */
   readonly truth: (value: V, site: Site) => Eval<boolean | string>;
   readonly moduleEnv: (module: Module) => Env;
+  /** A value used as an id: what an opaque function returned is the text it gives. */
+  readonly id: (value: V) => V;
   /** What a model explorer plugs in. */
   readonly hooks: Hooks;
 }
@@ -241,6 +244,108 @@ export const make = (loader: Loader, run: Run): Interpreter => {
   const mine = (value: V): boolean => {
     const frame = makers.get(value);
     return frame !== undefined && frames.includes(frame);
+  };
+
+  /** What an opaque function returned, as the text it is: an input the real function decides. */
+  const textOf = (applied: V & { readonly _tag: "Applied" }): V => ({
+    _tag: "Term",
+    term: current.run.observe(applied, "as text", "String", (value) =>
+      typeof value === "string" ? value : undefined,
+    ),
+  });
+
+  /**
+   * What an opaque function returned, next to a value the solver has: the
+   * result is taken to be of the same kind, text next to text and a number
+   * next to a number. A result of another kind is equal to nothing, which is
+   * one of the values the input can take.
+   */
+  const alike = (value: V, other: V): V => {
+    if (value._tag !== "Applied") return value;
+    if (textual(other)) return textOf(value);
+    if (other._tag === "Bool" || (other._tag === "Term" && other.term.sort === "Bool"))
+      return {
+        _tag: "Term",
+        term: current.run.observe(value, "as a boolean", "Bool", (real) =>
+          typeof real === "boolean" ? real : undefined,
+        ),
+      };
+    // A number, which may be any: nothing says the function gives a whole one.
+    return Value.isBig(other) || !Compare.numeric(other)
+      ? value
+      : {
+          _tag: "Term",
+          term: current.run.observe(value, "as a number", "Real", (real) =>
+            typeof real === "number" && Number.isFinite(real) ? real : undefined,
+          ),
+        };
+  };
+
+  /** `a === b`, where either may be what an opaque function returned. */
+  const sameAs = (a: V, b: V): Compare.Known => same(alike(a, b), alike(b, a));
+
+  /** What an opaque function returned, as the `Option` it is: a `Some` of what it holds, or nothing. */
+  const optionOf = (applied: V & { readonly _tag: "Applied" }): V => {
+    const some = current.run.observe(applied, "is a Some", "Bool", (value) =>
+      Option.isOption(value) ? Option.isSome(value) : undefined,
+    );
+    return current.run.branch(some.text)
+      ? Value.some(
+          Value.derived(applied, "the value of", (value) =>
+            Option.isOption(value) && Option.isSome(value) ? value.value : undefined,
+          ),
+        )
+      : Value.none;
+  };
+
+  /**
+   * What an opaque function returned, as the list it is: a number of items
+   * the run chooses, each a value the prover does not look inside. A list
+   * longer than `MAX_ITEMS` is not tried, and the run says so.
+   */
+  const listOf = (applied: V & { readonly _tag: "Applied" }): V => {
+    const run = current.run;
+    const key = `list ${applied.key}`;
+    const known = run.lists.get(key);
+    if (known) return known;
+    const length = run.observe(applied, "has a number of items", "Int", (value) =>
+      Array.isArray(value) ? value.length : undefined,
+    );
+    run.bounds.set(`what ${applied.name} returned`, Symbolic.MAX_ITEMS);
+    const count = run.choose(Symbolic.MAX_ITEMS + 1);
+    run.assume(`(= ${length.text} ${count})`);
+    const list: V = {
+      _tag: "Arr",
+      items: Array.from({ length: count }, (_, index) =>
+        Value.derived(applied, `item ${index} of`, (value) =>
+          Array.isArray(value) ? (value as ReadonlyArray<unknown>)[index] : undefined,
+        ),
+      ),
+    };
+    run.lists.set(key, list);
+    return list;
+  };
+
+  /**
+   * What a library function is given, where it was given what an opaque
+   * function returned and has no reading of that: the result as what the
+   * function works on, an `Option` for `effect/Option` and a list for
+   * `effect/Array`. `undefined` when there is nothing to take another way.
+   */
+  const reshaped = (fn: V, args: ReadonlyArray<V>): ReadonlyArray<V> | undefined => {
+    const [self, ...rest] = args;
+    if (self?._tag !== "Applied") return undefined;
+    const family =
+      fn._tag === "Lib"
+        ? fn.module.replace(/^effect\//, "")
+        : fn._tag === "Native"
+          ? fn.name.slice(0, Math.max(0, fn.name.indexOf(".")))
+          : "";
+    return family === "Option"
+      ? [optionOf(self), ...rest]
+      : family === "Array"
+        ? [listOf(self), ...rest]
+        : undefined;
   };
 
   /** A list with its items, on this path. */
@@ -441,7 +546,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     member: (value, key, site) => member(value, key, site),
     kind: (value) => kindOf(value),
     equal: (a, b, site) => {
-      const equal = same(a, b);
+      const equal = sameAs(a, b);
       return equal === undefined
         ? fail(site, inside("compares", a, b) ?? "compares values the prover does not model")
         : Effect.succeed(fromTruth(equal));
@@ -546,7 +651,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     includes: (self, [wanted], at) => {
       const parts: Array<string> = [];
       for (const item of self.items) {
-        const equal = same(item, wanted ?? Value.undef);
+        const equal = sameAs(item, wanted ?? Value.undef);
         if (equal === undefined)
           return fail(
             at,
@@ -616,7 +721,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     }),
     indexOf: Effect.fnUntraced(function* (self, [wanted], at) {
       for (const [index, item] of self.items.entries()) {
-        const equal = same(item, wanted ?? Value.undef);
+        const equal = sameAs(item, wanted ?? Value.undef);
         if (equal === undefined)
           return yield* fail(
             at,
@@ -685,6 +790,21 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           return piping(value);
         return value.fields[key] ?? Value.undef;
       case "List":
+        // The first and the last part of a split string are known, however many parts there are.
+        if (value.split && key === "0") return value.split.first;
+        if (value.split && key === "at") {
+          const { first, last } = value.split;
+          return {
+            _tag: "Native",
+            name: "at",
+            call: Effect.fnUntraced(function* (args: ReadonlyArray<V>, at: Site) {
+              const index = args[0];
+              if (index === undefined || (index._tag === "Num" && index.value === 0)) return first;
+              if (index._tag === "Num" && index.value === -1 && last) return last;
+              return yield* call(yield* member(forced(value), "at", at), args, at);
+            }),
+          };
+        }
         return yield* member(forced(value), key, site);
       case "Arr":
         if (key === "length") return Value.num(value.items.length);
@@ -769,7 +889,10 @@ export const make = (loader: Loader, run: Run): Interpreter => {
                 : Effect.fail(new Value.Infeasible()),
           };
         }
-        return fromHost((value.value as Record<string, unknown>)[key], `${value.name}.${key}`);
+        return (
+          library.unionMember(value.value, key, value.name) ??
+          fromHost((value.value as Record<string, unknown>)[key], `${value.name}.${key}`)
+        );
       case "Time":
       case "Effect":
       case "Stream":
@@ -782,7 +905,14 @@ export const make = (loader: Loader, run: Run): Interpreter => {
       case "Opaque":
         return yield* fail(site, `reads .${key} of ${value.what}, which the prover does not model`);
       case "Applied":
-        return yield* fail(site, inside(`reads .${key} of`, value)!);
+        // `result.pipe(Option.map(f))`: each function applied to what the one before gave.
+        if (key === "pipe") return piping(value);
+        // Read as only an array is read: the result is a list of what the function gives.
+        // Its length, and what a string has too, do not say which it is.
+        return (Object.hasOwn(arrayOwn, key) || Object.hasOwn(arrayMethods, key)) &&
+          !["includes", "indexOf", "slice", "concat", "at"].includes(key)
+          ? yield* member(listOf(value), key, site)
+          : yield* fail(site, inside(`reads .${key} of`, value)!);
       default:
         return yield* fail(
           site,
@@ -859,7 +989,11 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           return;
         }
         case "ArrayPattern": {
-          const list = forced(value);
+          // `const [name] = ref.split("@")`: the first part, however many there are.
+          const list =
+            value._tag === "List" && value.split && pattern.elements.length === 1
+              ? value
+              : forced(value);
           for (const [index, element] of (
             pattern.elements as ReadonlyArray<Node | null>
           ).entries()) {
@@ -963,6 +1097,23 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     },
   );
 
+  /** What a loop or a spread goes over: what an opaque function returned is a list of what it gives. */
+  const iterate = (value: V, site: Site) =>
+    library.iterate(value._tag === "Applied" ? listOf(value) : value, site);
+
+  /** A call that has no reading of an opaque function's result is tried again with the result as what it works on. */
+  const retaken =
+    (fn: V, args: ReadonlyArray<V>, site: Site) =>
+    (made: Eval<V>): Eval<V> =>
+      args[0]?._tag === "Applied"
+        ? made.pipe(
+            Effect.catchTag("NotTranslated", (stop) => {
+              const again = stop.reaches ? undefined : reshaped(fn, args);
+              return again ? call(fn, again, site) : Effect.fail(stop);
+            }),
+          )
+        : made;
+
   const call: Interpreter["call"] = (fn, args, site) => {
     switch (fn._tag) {
       case "Fn":
@@ -981,9 +1132,9 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           ),
         );
       case "Native":
-        return fn.call(args, site);
+        return fn.call(args, site).pipe(retaken(fn, args, site));
       case "Lib": {
-        if (library.models(fn)) return library.call(fn, args, site);
+        if (library.models(fn)) return library.call(fn, args, site).pipe(retaken(fn, args, site));
         const given = loader.opaque(fn.host, fn.path.at(-1));
         if (given) return Effect.succeed(applied(given, args, "is opaque"));
         // A function of Node's that gives the same result for the same arguments.
@@ -1117,6 +1268,11 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     b,
     site,
   ) => {
+    if (a._tag === "Applied" || b._tag === "Applied") {
+      // What an opaque function returned, next to a number or text, is one too.
+      const [l, r] = [alike(a, b), alike(b, a)];
+      if (l !== a || r !== b) return arithmetic(operator, l, r, site);
+    }
     const x = Compare.numeric(a);
     const y = Compare.numeric(b);
     if (x && y) {
@@ -1320,7 +1476,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         const args: Array<V> = [];
         for (const argument of node.arguments as ReadonlyArray<Node>) {
           if (argument.type === "SpreadElement") {
-            const spread = yield* library.iterate(yield* evaluate(argument.argument, env), site);
+            const spread = yield* iterate(yield* evaluate(argument.argument, env), site);
             if (!spread) return yield* fail(site, "spreads arguments that are not a known array");
             args.push(...spread);
           } else args.push(yield* evaluate(argument, env));
@@ -1382,7 +1538,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         const left = yield* evaluate(node.left, env);
         const right = yield* evaluate(node.right, env);
         if (node.operator === "===" || node.operator === "!==") {
-          const equal = same(left, right);
+          const equal = sameAs(left, right);
           if (equal === undefined)
             return yield* fail(
               site,
@@ -1444,7 +1600,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         for (const element of node.elements as ReadonlyArray<Node | null>) {
           if (!element) items.push(Value.undef);
           else if (element.type === "SpreadElement") {
-            const spread = yield* library.iterate(yield* evaluate(element.argument, env), site);
+            const spread = yield* iterate(yield* evaluate(element.argument, env), site);
             if (!spread) return yield* fail(site, "spreads a value that is not a known array");
             items.push(...spread);
           } else items.push(yield* evaluate(element, env));
@@ -1543,7 +1699,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
             let at = -1;
             for (const [index, entry] of cases.entries()) {
               if (!entry.test) continue;
-              const equal = same(subject, yield* evaluate(entry.test, env));
+              const equal = sameAs(subject, yield* evaluate(entry.test, env));
               if (equal === undefined)
                 return yield* fail(
                   site,
@@ -1574,7 +1730,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
             const subject = forced(yield* evaluate(statement.right, env));
             const over =
               statement.type === "ForOfStatement"
-                ? yield* library.iterate(subject, site)
+                ? yield* iterate(subject, site)
                 : subject._tag === "Obj" && !subject.brand
                   ? Object.keys(subject.fields).map(Value.str)
                   : undefined;
@@ -1640,5 +1796,16 @@ export const make = (loader: Loader, run: Run): Interpreter => {
       return undefined;
     });
 
-  return { current, evaluate, call, settle, member, decide, truth: truthOf, moduleEnv, hooks };
+  return {
+    current,
+    evaluate,
+    call,
+    settle,
+    member,
+    decide,
+    truth: truthOf,
+    moduleEnv,
+    id: (value) => (value._tag === "Applied" ? textOf(value) : value),
+    hooks,
+  };
 };

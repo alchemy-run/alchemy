@@ -1637,4 +1637,117 @@ const larger: ReadonlyArray<Group> = [
   },
 ];
 
-export const groups: ReadonlyArray<Group> = [...base, ...larger];
+const PIECES = ["", "a", ",", "::", "b", ":", ",,", "ab", "@"];
+const pieces = (next: ReturnType<typeof seeded>, parts: number): string =>
+  Array.from({ length: next(0, parts) }, () => PIECES[next(1, PIECES.length - 1)]).join("");
+
+// The parts of a string an input holds: before and after a separator, and what `split` gives.
+const cut: ReadonlyArray<Group> = [
+  {
+    name: "Cut",
+    input: `text: Schema.String, a: Small, b: Small`,
+    pins: pinned(
+      [
+        { text: "", a: 0, b: 0 },
+        { text: "a", a: 1, b: -1 },
+        { text: ",", a: -1, b: 2 },
+        { text: "a,b", a: 1, b: 2 },
+        { text: "a,b,c", a: 2, b: -2 },
+        { text: ",,", a: -3, b: 1 },
+        { text: "a,", a: 0, b: 9 },
+        { text: ",b", a: 5, b: 1 },
+        { text: "ab::cd", a: 2, b: 4 },
+        { text: "x:y::z::w", a: -4, b: -1 },
+        { text: ":::", a: 1, b: 3 },
+        { text: "a,b::c,d", a: 3, b: -9 },
+      ],
+      10,
+      (next) => ({ text: pieces(next, 5), a: next(-6, 8), b: next(-6, 8) }),
+      211,
+    ),
+    differs: `command.text !== pin.text || command.a !== pin.a || command.b !== pin.b`,
+    bind: (known) =>
+      known
+        ? `const text = pin.text; const a = pin.a; const b = pin.b;`
+        : `const text = command.text; const a = command.a; const b = command.b;`,
+    chunk: 4,
+    both: [
+      `text.indexOf(",")`,
+      `text.lastIndexOf(",")`,
+      `text.indexOf("::")`,
+      `text.lastIndexOf("::")`,
+      `text.lastIndexOf("")`,
+      `text.indexOf(",") === text.lastIndexOf(",")`,
+      `text.slice(0, text.indexOf(","))`,
+      `text.slice(text.indexOf(",") + 1)`,
+      `text.slice(0, text.lastIndexOf(","))`,
+      `text.slice(text.lastIndexOf(",") + 1)`,
+      `text.slice(0, text.indexOf("::"))`,
+      `text.slice(text.indexOf("::") + 2)`,
+      `text.slice(0, text.lastIndexOf("::"))`,
+      `text.slice(text.lastIndexOf("::") + 2)`,
+      `text.slice(text.indexOf(","), text.lastIndexOf(","))`,
+      `text.slice(text.indexOf(",") + 1, text.lastIndexOf(","))`,
+      `text.includes(",") ? text.slice(0, text.indexOf(",")) : text`,
+      `text.includes("::") ? text.slice(text.indexOf("::") + 2) : "none"`,
+      `text.substring(0, text.indexOf(","))`,
+      `text.substring(text.indexOf(",") + 1)`,
+      `text.substring(text.lastIndexOf(","), text.indexOf(","))`,
+      `text.slice(a)`,
+      `text.slice(a, b)`,
+      `text.slice(0, a)`,
+      `text.slice(-2)`,
+      `text.slice(1, -1)`,
+      `text.slice(-3, -1)`,
+      `text.substring(a, b)`,
+      `text.substring(a)`,
+      `text.substring(2, 1)`,
+      `text.split(",")[0]`,
+      `text.split(",").at(0)`,
+      `text.split(",").at(-1)`,
+      `text.split("::")[0]`,
+      `text.split("::").at(-1)`,
+      `(([head]) => head)(text.split(","))`,
+      `text.split(",")[0] === text.slice(0, text.indexOf(","))`,
+      `String.split(text, ",")[0]`,
+      `pipe(text, String.split("::")).at(-1)`,
+      `String.lastIndexOf(",")(text)`,
+      `String.indexOf("::")(text)`,
+    ],
+    known: [`text.split(",")`, `text.split("::").length`, `text.split(",")[1] ?? "none"`],
+  },
+  {
+    // What `split` gives when the code counts the parts: read for up to two separators.
+    name: "Split",
+    input: `text: Schema.String`,
+    pins: pinned(
+      [
+        { text: "" },
+        { text: "a" },
+        { text: "a,b" },
+        { text: "," },
+        { text: "a,b,c" },
+        { text: ",," },
+      ],
+      3,
+      (next) => ({ text: ["a", "b,", ",a", "ab,b"][next(0, 3)]! }),
+      223,
+    ),
+    differs: `command.text !== pin.text`,
+    bind: (known) => (known ? `const text = pin.text;` : `const text = command.text;`),
+    chunk: 2,
+    both: [
+      `text.split(",")`,
+      `text.split(",").length`,
+      `text.split(",")[1] ?? "none"`,
+      `text.split(",").at(-2) ?? "none"`,
+      `text.split(",").map((part) => part.length)`,
+      `text.split(",").join("+")`,
+      `(([head, next]) => [head, next ?? "none"])(text.split(","))`,
+      `[...text.split(",")].length`,
+      `String.split(text, ",").length`,
+    ],
+  },
+];
+
+export const groups: ReadonlyArray<Group> = [...base, ...larger, ...cut];

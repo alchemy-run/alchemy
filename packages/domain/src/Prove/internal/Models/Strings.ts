@@ -1,7 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Compare from "../Compare.ts";
 import type { Kit, Model, Models } from "../Kit.ts";
-import { arr, dual, native, wrongArguments } from "../Kit.ts";
+import { arr, dual, native, wholeOf, wrongArguments } from "../Kit.ts";
+import type { Term } from "../Smt.ts";
 import * as Smt from "../Smt.ts";
 import type { Eval, Site, V } from "../Value.ts";
 import * as Value from "../Value.ts";
@@ -97,6 +98,169 @@ export const make = (kit: Kit) => {
     return Effect.succeed(Value.term("String", `(str.substr ${text.text} ${from} ${length})`));
   };
 
+  /** A string an input holds, cut at the first or the last place a separator the code writes is. */
+  interface Cut {
+    readonly self: string;
+    readonly separator: string;
+    /** Whether the separator is there. */
+    readonly found: string;
+    /** What is before it and what is after it, when it is there. */
+    readonly before: string;
+    readonly after: string;
+    /** Where it is, as `indexOf` and `lastIndexOf` give it: `-1` when it is not there. */
+    readonly index: string;
+  }
+
+  // Each cut by the formula for where it is: `slice` at that place is the part before, or after.
+  const cuts = new Map<string, Cut>();
+
+  /**
+   * Cut a string at a separator. The solver is told what the cut means, a
+   * string before, the separator and a string after, with no separator
+   * sooner (or later), which it does not work out from a position alone.
+   */
+  const cut = (self: string, separator: string, which: "first" | "last"): Cut => {
+    const run = host.current.run;
+    const sep = Smt.string(separator).text;
+    const name = (part: string) =>
+      Smt.symbol(`${part} the ${which} ${JSON.stringify(separator)} of ${self}`);
+    const before = name("before");
+    const after = name("after");
+    const found = `(str.contains ${self} ${sep})`;
+    if (!run.declarations.has(before)) {
+      run.declarations.set(before, `(declare-const ${before} String)`);
+      run.declarations.set(after, `(declare-const ${after} String)`);
+      const only =
+        which === "first"
+          ? `(not (str.contains (str.++ ${before} ${Smt.string(separator.slice(0, -1)).text}) ${sep}))`
+          : `(not (str.contains (str.++ ${Smt.string(separator.slice(1)).text} ${after}) ${sep}))`;
+      run.assume(`(=> ${found} (and (= ${self} (str.++ ${before} ${sep} ${after})) ${only}))`);
+      // The first is never after the last, and where they are one place, the separator is there once.
+      const other = (part: string) =>
+        Smt.symbol(
+          `${part} the ${which === "first" ? "last" : "first"} ${JSON.stringify(separator)} of ${self}`,
+        );
+      if (run.declarations.has(other("before"))) {
+        const [firstBefore, lastBefore] =
+          which === "first" ? [before, other("before")] : [other("before"), before];
+        run.assume(
+          `(=> ${found} (and (<= (str.len ${firstBefore}) (str.len ${lastBefore})) (=> (= (str.len ${firstBefore}) (str.len ${lastBefore})) (and (= ${after} ${other("after")}) (not (str.contains ${after} ${sep})) (not (str.contains ${before} ${sep}))))))`,
+        );
+      }
+    }
+    const index = `(ite ${found} (str.len ${before}) (- 1))`;
+    const made: Cut = { self, separator, found, before, after, index };
+    cuts.set(index, made);
+    return made;
+  };
+
+  /** Where a separator the code writes is in a string an input holds: `undefined` for any other call. */
+  const place = (
+    self: V,
+    wanted: V | undefined,
+    position: V | undefined,
+    which: "first" | "last",
+  ): V | undefined => {
+    const separator = known(wanted);
+    if (self._tag !== "Term" || self.term.sort !== "String" || !absent(position)) return undefined;
+    if (separator === undefined) return undefined;
+    // An empty string is found at once: at the start, or at the end.
+    if (separator === "")
+      return which === "first" ? Value.num(0) : Value.term("Int", `(str.len ${self.term.text})`);
+    return Value.term("Int", cut(self.term.text, separator, which).index);
+  };
+
+  /** A place in a string as `slice` reads it: counted from the end when negative, and never past either end. */
+  const clamped = (text: string, at: number | Term): string => {
+    const length = `(str.len ${text})`;
+    if (typeof at === "number")
+      return at >= 0
+        ? `(ite (< ${at} ${length}) ${at} ${length})`
+        : `(ite (< (+ ${length} ${Smt.int(at).text}) 0) 0 (+ ${length} ${Smt.int(at).text}))`;
+    return `(ite (< ${at.text} 0) (ite (< (+ ${length} ${at.text}) 0) 0 (+ ${length} ${at.text})) (ite (< ${at.text} ${length}) ${at.text} ${length}))`;
+  };
+
+  /** `slice` of a string an input holds, at places that may depend on an input. */
+  const sliced = (self: Term, from: number | Term, to: number | Term | undefined): V => {
+    const text = self.text;
+    // `s.slice(0, s.indexOf(sep))`: what is before the separator. With none, `-1` drops the last character.
+    const upTo = from === 0 && typeof to === "object" ? cuts.get(to.text) : undefined;
+    if (upTo && upTo.self === text)
+      return Value.term(
+        "String",
+        `(ite ${upTo.found} ${upTo.before} (str.substr ${text} 0 (- (str.len ${text}) 1)))`,
+      );
+    // `s.slice(s.indexOf(sep) + sep.length)`: what is after the separator.
+    if (typeof from === "object" && to === undefined)
+      for (const found of cuts.values()) {
+        const size = found.separator.length;
+        if (
+          found.self === text &&
+          (from.text === `(+ ${found.index} ${size})` || from.text === `(+ ${size} ${found.index})`)
+        )
+          return Value.term(
+            "String",
+            `(ite ${found.found} ${found.after} (str.substr ${text} ${size - 1} (str.len ${text})))`,
+          );
+      }
+    const start = from === 0 ? "0" : clamped(text, from);
+    const end = to === undefined ? `(str.len ${text})` : clamped(text, to);
+    return Value.term("String", `(str.substr ${text} ${start} (- ${end} ${start}))`);
+  };
+
+  /** Whether a separator can start again before it ends: `::` in `:::`, `aba` in `ababa`. */
+  const overlaps = (separator: string): boolean =>
+    Array.from({ length: separator.length - 1 }, (_, index) => index + 1).some(
+      (size) => separator.slice(0, size) === separator.slice(-size),
+    );
+
+  /** The most separators the prover gives a split string whose parts the code counts. */
+  const MAX_CUTS = 2;
+
+  /** `split` of a string an input holds, by a separator the code writes. */
+  const splitting = (self: V & { readonly _tag: "Term" }, separator: string): V => {
+    const text = self.term.text;
+    const sep = Smt.string(separator).text;
+    const first = cut(text, separator, "first");
+    const last = cut(text, separator, "last");
+    const name = `${text.replace(/^\|(.*)\|$/, "$1")}.split(${JSON.stringify(separator)})`;
+    return {
+      _tag: "List",
+      name,
+      ast: undefined,
+      split: {
+        self,
+        separator,
+        first: Value.term("String", `(ite ${first.found} ${first.before} ${text})`),
+        // A separator that overlaps itself, as `::` does in `:::`, is cut from the left: the last part is counted.
+        ...(overlaps(separator)
+          ? {}
+          : { last: Value.term("String", `(ite ${last.found} ${last.after} ${text})`) }),
+        parts: (run) => {
+          // The parts are counted: the run takes each number of separators in turn, up to a few.
+          run.bounds.set(name, MAX_CUTS + 1);
+          const count = run.choose(MAX_CUTS + 1);
+          const parts: Array<string> = [];
+          for (let index = 0; index <= count; index++) {
+            parts.push(run.constant(`part ${index + 1} of ${count + 1} of ${name}`, "String").text);
+          }
+          const head = Smt.string(separator.slice(0, -1)).text;
+          run.assume(
+            `(= ${text} ${parts.length === 1 ? parts[0]! : `(str.++ ${parts.join(` ${sep} `)})`})`,
+          );
+          // No part holds the separator, and none ends where one starts sooner than the one that cut it.
+          for (const [index, part] of parts.entries())
+            run.assume(
+              index < count
+                ? `(not (str.contains (str.++ ${part} ${head}) ${sep}))`
+                : `(not (str.contains ${part} ${sep}))`,
+            );
+          return arr(parts.map((part) => Value.term("String", part)));
+        },
+      },
+    };
+  };
+
   const methods: Readonly<Record<string, Method>> = {
     startsWith: test(
       "startsWith",
@@ -125,21 +289,50 @@ export const make = (kit: Kit) => {
       const text = known(self);
       const a = absent(from) ? 0 : index(from);
       const b = absent(to) ? undefined : index(to);
-      if (a === undefined || (!absent(to) && b === undefined)) return unread(site, "slice");
-      return text !== undefined
-        ? Effect.succeed(Value.str(text.slice(a, b)))
-        : part(self, a, b, "slice", site);
+      if (a !== undefined && (absent(to) || b !== undefined)) {
+        if (text !== undefined) return Effect.succeed(Value.str(text.slice(a, b)));
+        if (a >= 0 && (b === undefined || b >= 0)) return part(self, a, b, "slice", site);
+      }
+      // A place an input decides: where a separator is, or a number the command holds.
+      const start = absent(from) ? 0 : wholeOf(from);
+      const end = absent(to) ? undefined : wholeOf(to);
+      const term = Compare.textual(self);
+      return term && start !== undefined && (absent(to) || end !== undefined)
+        ? Effect.succeed(sliced(term, start, end))
+        : unread(site, "slice");
     },
     substring: (self, [from, to], site) => {
       const text = known(self);
       const a = absent(from) ? 0 : index(from);
       const b = absent(to) ? undefined : index(to);
-      if (a === undefined || (!absent(to) && b === undefined)) return unread(site, "substring");
-      if (text !== undefined) return Effect.succeed(Value.str(text.substring(a, b)));
-      // `substring` swaps its bounds when the first is the larger.
-      return b !== undefined && b < a
-        ? unread(site, "substring")
-        : part(self, a, b, "substring", site);
+      if (a !== undefined && (absent(to) || b !== undefined)) {
+        if (text !== undefined) return Effect.succeed(Value.str(text.substring(a, b)));
+        // `substring` swaps its bounds when the first is the larger.
+        if (a >= 0 && (b === undefined || b >= a)) return part(self, a, b, "substring", site);
+      }
+      const start = absent(from) ? 0 : wholeOf(from);
+      const end = absent(to) ? undefined : wholeOf(to);
+      const term = Compare.textual(self);
+      if (!term || start === undefined || (!absent(to) && end === undefined))
+        return unread(site, "substring");
+      // `s.substring(0, s.indexOf(sep))`: what is before the separator, and nothing with none.
+      const upTo = start === 0 && typeof end === "object" ? cuts.get(end.text) : undefined;
+      if (upTo && upTo.self === term.text)
+        return Effect.succeed(Value.term("String", `(ite ${upTo.found} ${upTo.before} "")`));
+      // A place below zero is the start, one past the end is the end, and the smaller of the two comes first.
+      const length = `(str.len ${term.text})`;
+      const within = (at: number | Term): string => {
+        const n = typeof at === "number" ? Smt.int(at).text : at.text;
+        return `(ite (< ${n} 0) 0 (ite (< ${n} ${length}) ${n} ${length}))`;
+      };
+      const low = within(start);
+      const high = end === undefined ? length : within(end);
+      return Effect.succeed(
+        Value.term(
+          "String",
+          `(ite (<= ${low} ${high}) (str.substr ${term.text} ${low} (- ${high} ${low})) (str.substr ${term.text} ${high} (- ${low} ${high})))`,
+        ),
+      );
     },
     charAt: (self, [at], site) => {
       const text = known(self);
@@ -152,6 +345,8 @@ export const make = (kit: Kit) => {
         : unread(site, "charAt");
     },
     indexOf: (self, [wanted, position], site) => {
+      const placed = place(self, wanted, position, "first");
+      if (placed) return Effect.succeed(placed);
       const a = Compare.textual(self);
       const b = wanted ? Compare.textual(wanted) : undefined;
       if (!a || !b || !absent(position)) return unread(site, "indexOf");
@@ -206,12 +401,29 @@ export const make = (kit: Kit) => {
       self.padEnd(Number(n), fill as string | undefined),
     ),
     repeat: computed("repeat", (self, [n]) => self.repeat(Number(n))),
-    split: computed("split", (self, [separator]) =>
-      typeof separator === "string" ? self.split(separator) : [self],
-    ),
-    lastIndexOf: computed("lastIndexOf", (self, [wanted]) => self.lastIndexOf(String(wanted))),
+    split: (self, args, site) => {
+      const separator = known(args[0]);
+      return self._tag === "Term" &&
+        self.term.sort === "String" &&
+        separator !== undefined &&
+        separator !== "" &&
+        absent(args[1])
+        ? Effect.succeed(splitting(self, separator))
+        : splitKnown(self, args, site);
+    },
+    lastIndexOf: (self, args, site) => {
+      const placed = place(self, args[0], args[1], "last");
+      return placed ? Effect.succeed(placed) : lastIndexKnown(self, args, site);
+    },
     charCodeAt: computed("charCodeAt", (self, [i]) => self.charCodeAt(Number(i ?? 0))),
   };
+
+  const splitKnown = computed("split", (self, [separator]) =>
+    typeof separator === "string" ? self.split(separator) : [self],
+  );
+  const lastIndexKnown = computed("lastIndexOf", (self, [wanted]) =>
+    self.lastIndexOf(String(wanted)),
+  );
 
   /** A method of a string, as a value the code calls: `undefined` when the prover has none by that name. */
   const member = (self: V, key: string): V | undefined => {

@@ -133,6 +133,19 @@ export type V =
        * items, or no two keys, are equal.
        */
       readonly distinct?: "items" | "keys";
+      /**
+       * The list is what `split` gave of a string an input holds. Its first
+       * and last parts are known without counting the parts; looking at the
+       * rest gives it a number of parts, which the run chooses.
+       */
+      readonly split?: {
+        readonly self: V;
+        readonly separator: string;
+        readonly first: V;
+        /** `undefined` where the last part is not what follows the last separator. */
+        readonly last?: V;
+        readonly parts: (run: Run) => V;
+      };
     }
   | {
       readonly _tag: "Fn";
@@ -279,6 +292,20 @@ export const applied = (
   key: `(call #${identityOf(call)} ${args.map(keyOf).join(" ")})`,
 });
 
+/** A part of what an opaque function returned: the real function's result, read the same way. */
+export const derived = (
+  from: V & { readonly _tag: "Applied" },
+  what: string,
+  part: (value: unknown) => unknown,
+): V & { readonly _tag: "Applied" } => ({
+  _tag: "Applied",
+  name: from.name,
+  call: (...args) => part(from.call(...args)),
+  args: from.args,
+  why: from.why,
+  key: `(${what} ${from.key})`,
+});
+
 /** Whether a value is a `bigint`. */
 export const isBig = (v: V): boolean => v._tag === "Big" || (v._tag === "Term" && v.big === true);
 
@@ -387,7 +414,15 @@ export class Run {
    * Each result of an opaque function the code tested, by the call's key:
    * whether it is truthy is an input, which the real function decides.
    */
-  readonly tests = new Map<string, { readonly term: Term; readonly applied: V }>();
+  readonly tests = new Map<
+    string,
+    {
+      readonly term: Term;
+      readonly applied: V;
+      /** What the real result says of the term: `undefined` when it is not of the kind the code took it for. */
+      readonly read: (value: unknown) => number | bigint | string | boolean | undefined;
+    }
+  >();
   /**
    * The command being run, when a run has several: a prefix on the name of
    * each request context it reads, so every command reads its own.
@@ -460,10 +495,26 @@ export class Run {
 
   /** Whether what an opaque function returned is truthy: an input, the same for the same call. */
   truthy(applied: V & { readonly _tag: "Applied" }): Term {
-    const known = this.tests.get(applied.key);
+    return this.observe(applied, "is truthy", "Bool", Boolean);
+  }
+
+  /**
+   * Something the code reads of what an opaque function returned: the text
+   * it is, how many items it has, whether it is a `Some`. It is an input,
+   * the same for the same call, and the real function says what it is on
+   * the arguments the solver picks.
+   */
+  observe(
+    applied: V & { readonly _tag: "Applied" },
+    what: string,
+    sort: Sort,
+    read: (value: unknown) => number | bigint | string | boolean | undefined,
+  ): Term {
+    const key = `${what} ${applied.key}`;
+    const known = this.tests.get(key);
     if (known) return known.term;
-    const term = this.constant(`${applied.name} call ${this.tests.size + 1} is truthy`, "Bool");
-    this.tests.set(applied.key, { term, applied });
+    const term = this.constant(`${applied.name} call ${this.tests.size + 1} ${what}`, sort);
+    this.tests.set(key, { term, applied, read });
     return term;
   }
 
