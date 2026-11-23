@@ -53,7 +53,7 @@ export const PrivateCluster = Layer.unwrap(
     // A network tag of this stage's own: `default` is shared by every stage.
     const tag = `rivet-private-${stage.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`.slice(0, 63);
     const token = yield* Random("PrivateEngineToken", { bytes: 32 });
-    const secret = yield* SecretManager.Secret("PrivateEngineToken", { value: token.text });
+    const secret = yield* SecretManager.Secret("PrivateEngineTokenSecret", { value: token.text });
     const account = yield* IAM.ServiceAccount("PrivateEngineAccount", {
       displayName: "Rivet private engine",
     });
