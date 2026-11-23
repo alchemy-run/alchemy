@@ -507,7 +507,7 @@ export interface FunctionZipProps extends FunctionCommonProps {
    * @default "nodejs24.x"
    */
   // TODO(sam): use a Layer instead so we can manage Effect platform?
-  runtime?: "nodejs22.x" | "nodejs24.x" | RuntimeAlias;
+  runtime?: "nodejs22.x" | "nodejs24.x" | "nodejs26.x" | RuntimeAlias;
   /**
    * Lambda layers to attach — pass an `AWS.Lambda.LayerVersion` resource
    * directly, or a raw layer version ARN (e.g. an AWS-managed layer). Layers
