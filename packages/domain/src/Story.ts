@@ -23,6 +23,7 @@ import * as Model from "./Model.ts";
 import type * as Query from "./Query.ts";
 import type * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
+import { Vault, VaultTest } from "./Vault.ts";
 import type * as View from "./View.ts";
 
 /** How far a story got with one step. */
@@ -170,6 +171,7 @@ export type Step =
     }
   | { readonly _tag: "Clock"; readonly at: string | number | DateTime.DateTime }
   | { readonly _tag: "Advance"; readonly by: Duration.Input }
+  | { readonly _tag: "Shred"; readonly subject: string }
   | {
       readonly _tag: "Signal";
       readonly saga: Saga.Any;
@@ -647,6 +649,12 @@ const clock = (at: string | number | DateTime.DateTime): StepOf<"Clock"> => ({ _
 /** Move the clock forward by a duration, like `"1 day"`: the same as `clock` at the current time plus `by`. */
 const advance = (by: Duration.Input): StepOf<"Advance"> => ({ _tag: "Advance", by });
 
+/**
+ * Shred a subject's key in the story's Vault: nothing sealed for them opens
+ * afterwards. A story runs with `Domain.VaultTest`.
+ */
+const shred = (subject: string): StepOf<"Shred"> => ({ _tag: "Shred", subject });
+
 type SagaClientOf<S> = S extends Context.Key<any, infer C> ? C : never;
 type SagaKeyOf<S> =
   SagaClientOf<S> extends Saga.Client<infer K, any, any, any> ? K | { readonly id: K } : never;
@@ -810,6 +818,8 @@ const describeStep = (s: Step): string => {
       const at = clockMillis(s.at);
       return Number.isNaN(at) ? String(s.at) : new Date(at).toISOString();
     }
+    case "Shred":
+      return s.subject;
     case "Provide":
       return `${s.service.key} = ${summarize(s.value)}`;
     case "Given":
@@ -1176,7 +1186,10 @@ const make =
   ): Effect.Effect<
     void,
     StoryFailure | LE,
-    Exclude<LR, Provided | ExternalSystem.Identifier<Systems> | WorkflowEngine.WorkflowEngine>
+    Exclude<
+      LR,
+      Provided | ExternalSystem.Identifier<Systems> | WorkflowEngine.WorkflowEngine | Vault
+    >
   > =>
     explore(steps, (scheduler) =>
       Effect.gen(function* () {
@@ -1247,16 +1260,21 @@ const make =
         const systems = Layer.mergeAll(Layer.empty, ...systemLayers);
         const policies = (
           options.layer ?? (Layer.empty as unknown as Layer.Layer<Policies, LE, LR>)
-        ).pipe(Layer.provide(systems));
-        const hosted = domain
-          .layer(policies)
-          .pipe(Layer.provide(Layer.mergeAll(platform.layer, systems)));
+        ).pipe(Layer.provide(Layer.mergeAll(systems, VaultTest)));
+        // A story seals with the test Vault, so what it seals can be expected.
+        const hosted = Layer.mergeAll(
+          domain
+            .layer(policies)
+            .pipe(Layer.provide(Layer.mergeAll(platform.layer, systems, VaultTest))),
+          VaultTest,
+        );
 
         // The aggregates the story touched, for the report's "events so far".
         const touched = new Map<string, Aggregate.Ref>();
 
         const run = Effect.gen(function* () {
           const internals = yield* Model.Internals;
+          const vault = yield* Vault;
           const cursors = new Map<string, number>();
           // The step that committed each event, by `Aggregate/id#index`.
           const committedAt = new Map<string, number>();
@@ -1373,6 +1391,11 @@ const make =
                   return yield* fail(`the clock only moves forward, not by ${Duration.format(by)}`);
                 }
                 clockState.now += Duration.toMillis(by);
+                yield* settle(step);
+                break;
+              }
+              case "Shred": {
+                yield* vault.shred(s.subject).pipe(Effect.orDie);
                 yield* settle(step);
                 break;
               }
@@ -2004,7 +2027,10 @@ const make =
     ) as Effect.Effect<
       void,
       StoryFailure | LE,
-      Exclude<LR, Provided | ExternalSystem.Identifier<Systems> | WorkflowEngine.WorkflowEngine>
+      Exclude<
+        LR,
+        Provided | ExternalSystem.Identifier<Systems> | WorkflowEngine.WorkflowEngine | Vault
+      >
     >;
 
 /**
@@ -2148,6 +2174,7 @@ export const Story = {
   died,
   clock,
   advance,
+  shred,
   provide,
   signal,
   start,

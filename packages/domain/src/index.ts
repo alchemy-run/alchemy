@@ -36,6 +36,7 @@ import * as RequestContextModule from "./RequestContext.ts";
 import * as RewriteModule from "./Rewrite.ts";
 import * as SagaModule from "./Saga.ts";
 import * as StreamModule from "./Stream.ts";
+import * as VaultModule from "./Vault.ts";
 import * as ViewModule from "./View.ts";
 
 export declare namespace Event {
@@ -358,6 +359,32 @@ export const Model = ModelModule.make;
 export type { Annotations } from "./Annotations.ts";
 /** A problem in a Model's definitions. Building its Layer dies with every one. */
 export { DefinitionError } from "./Kernel.ts";
+
+export declare namespace Sealed {
+  /** A value encrypted under one subject's key. */
+  export type Value<A> = VaultModule.Sealed<A>;
+  /** Any sealed field. */
+  export type Any = VaultModule.AnySealed;
+}
+/** A field encrypted under a key kept per subject. See {@link VaultModule.make}. */
+export const Sealed = VaultModule.make;
+/** Seals, opens and shreds. See {@link VaultModule.Vault}. */
+export const Vault = VaultModule.Vault;
+export type Vault = VaultModule.Vault;
+/** Where a Vault keeps its keys. See {@link VaultModule.VaultKeys}. */
+export const VaultKeys = VaultModule.VaultKeys;
+export type VaultKeys = VaultModule.VaultKeys;
+/** A Vault that encrypts with AES-256-GCM. See {@link VaultModule.VaultLive}. */
+export const VaultLive = VaultModule.VaultLive;
+/** Keys kept in memory. See {@link VaultModule.VaultKeysMemory}. */
+export const VaultKeysMemory = VaultModule.VaultKeysMemory;
+/** A Vault for stories. See {@link VaultModule.VaultTest}. */
+export const VaultTest = VaultModule.VaultTest;
+/** A sealed value as the test Vault seals it. See {@link VaultModule.sealedInTest}. */
+export const sealedInTest = VaultModule.sealedInTest;
+/** The Vault or its key store failed. See {@link VaultModule.VaultError}. */
+export const VaultError = VaultModule.VaultError;
+export type VaultError = VaultModule.VaultError;
 
 /** A service middleware provides to a request, carried into the domain. See {@link RequestContextModule.make}. */
 export const RequestContext = RequestContextModule.make;
