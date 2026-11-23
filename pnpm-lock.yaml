@@ -12402,22 +12402,6 @@ importers:
         specifier: 'catalog:'
         version: 26.6.5
 
-  submodules/distilled/packages/bitbucket:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.1.4
-        version: 4.1.4
-    devDependencies:
-      '@distilled.cloud/dev':
-        specifier: workspace:*
-        version: link:../dev
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-
   submodules/distilled/packages/boat-dev:
     dependencies:
       '@distilled.cloud/core':
@@ -13247,25 +13231,6 @@ importers:
         specifier: 'catalog:'
         version: 26.6.5
 
-  submodules/distilled/packages/microsoft-graph:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.1.4
-        version: 4.1.4
-    devDependencies:
-      '@distilled.cloud/dev':
-        specifier: workspace:*
-        version: link:../dev
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      yaml:
-        specifier: 'catalog:'
-        version: 2.9.1
-
   submodules/distilled/packages/modal:
     dependencies:
       '@distilled.cloud/core':
@@ -13297,25 +13262,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
-
-  submodules/distilled/packages/mollie:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.1.4
-        version: 4.1.4
-    devDependencies:
-      '@distilled.cloud/dev':
-        specifier: workspace:*
-        version: link:../dev
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      yaml:
-        specifier: 'catalog:'
-        version: 2.9.1
 
   submodules/distilled/packages/mongodb-atlas:
     dependencies:
@@ -13904,25 +13850,6 @@ importers:
         specifier: 'catalog:'
         version: 26.6.5
 
-  submodules/distilled/packages/sproutboat:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.1.4
-        version: 4.1.4
-    devDependencies:
-      '@distilled.cloud/dev':
-        specifier: workspace:*
-        version: link:../dev
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      yaml:
-        specifier: 'catalog:'
-        version: 2.9.1
-
   submodules/distilled/packages/squarespace:
     dependencies:
       '@distilled.cloud/core':
@@ -14197,22 +14124,6 @@ importers:
       yaml:
         specifier: 'catalog:'
         version: 2.9.1
-
-  submodules/distilled/packages/unifi:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.1.4
-        version: 4.1.4
-    devDependencies:
-      '@distilled.cloud/dev':
-        specifier: workspace:*
-        version: link:../dev
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
 
   submodules/distilled/packages/unkey:
     dependencies:
