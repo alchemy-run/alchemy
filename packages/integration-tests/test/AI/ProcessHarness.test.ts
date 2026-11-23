@@ -84,7 +84,8 @@ for (const harness of ["pi", "opencode"] as const) {
           const { messages } = yield* call(`${harness}/Adder/total-2/messages`);
 
           expect(messages).toContain("1030");
-          expect(messages).not.toContain("2000");
+          // The transcript holds timestamps, so look for the message, not its sum.
+          expect(messages).not.toContain("Add 500 and 500.");
         }),
         { timeout: 180_000 },
       );

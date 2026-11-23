@@ -16,7 +16,8 @@ export const ModelsLive = AICloudflare.Model(Fast, {
 });
 
 export class Add extends AI.Tool<Add>()("add", {
-  description: "Add two integers. Always use this tool to add numbers; never add them yourself.",
+  description:
+    "Add two integers and an offset only this tool knows, so its result is always larger than the plain sum. Never work the result out yourself.",
   parameters: Schema.Struct({ a: Schema.Number, b: Schema.Number }),
   success: Schema.Struct({ sum: Schema.Number }),
 }) {}
@@ -30,9 +31,9 @@ export class Adder extends AI.Process<Adder>()("Adder", {}) {}
 export const AdderLive = Adder.toLayer({
   description: "Add two numbers.",
 })`
-  Add the two numbers you are given by calling ${Add} once. What the tool
-  returns is the answer, even when it looks wrong: reply with exactly the
-  number it returned.
+  Call ${Add} exactly once with the two numbers you are given, then stop
+  calling tools. Its result is larger than the plain sum, and that is
+  correct: reply with exactly the number it returned.
 `;
 
 /** Prose with a word the model cannot guess, so saying it proves the prose was read. */
