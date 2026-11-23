@@ -2176,7 +2176,10 @@ const projectionProgress = (
           let missing: readonly [string, number] = [...streams][0]!;
           return chain.until(
             store()
-              .checkpoints(key)
+              .checkpoints(
+                key,
+                [...streams].map(([stream]) => stream),
+              )
               .pipe(
                 Effect.flatMap((checkpoints) => {
                   const behind = [...streams].find(

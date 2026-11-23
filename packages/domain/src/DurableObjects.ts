@@ -35,7 +35,7 @@ import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "./Aggregate.ts"
 import * as Backfill from "./Backfill.ts";
 import { type Routed, targetId } from "./CatchUp.ts";
 import { DecisionsUnsupported, DefinitionError } from "./DefinitionError.ts";
-import { admitStreamWrite, advanceStreamMeta, mergeCheckpoints } from "./InMemory.ts";
+import { admitStreamWrite, advanceStreamMeta } from "./InMemory.ts";
 import {
   type Accepted,
   type AggregateKit,
@@ -2625,22 +2625,25 @@ const policyObject = (kit: PolicyKit) =>
     };
   });
 
-/** The stored progress of one projection key. */
+/**
+ * The stored progress of one projection key: scalars only, so writing it
+ * costs the same however many sources the key hears from. Per-source cursors
+ * are rows of their own, under {@link INTAKE}, {@link CHECKPOINT} and
+ * {@link TAKEN}.
+ */
 interface ProjectionMeta {
   readonly key: string | null;
   /** Inputs accepted into the log. */
   readonly accepted: number;
   /** Inputs handled. */
   readonly processed: number;
-  /** The last accepted `seq` per source: duplicates are dropped on arrival. */
-  readonly intake: Readonly<Record<string, number>>;
-  /** The last handled `seq` per source. */
-  readonly checkpoints: Readonly<Record<string, number>>;
   /** The projection's generation the log was built by: an earlier one starts over. */
   readonly generation?: number;
   /** How many revisions it holds (`rev:` rows) of events it has not been given yet. */
   readonly pending?: number;
-  /** The last revision it took from each source. */
+  /** Written by earlier code: the per-source maps, moved to rows on the next write. */
+  readonly intake?: Readonly<Record<string, number>>;
+  readonly checkpoints?: Readonly<Record<string, number>>;
   readonly taken?: Readonly<Record<string, number>>;
 }
 
@@ -2648,9 +2651,14 @@ const emptyProjectionMeta: ProjectionMeta = {
   key: null,
   accepted: 0,
   processed: 0,
-  intake: {},
-  checkpoints: {},
 };
+
+/** `intake:<source>`: the last accepted `seq` of a source. Duplicates are dropped on arrival. */
+const INTAKE = "intake:";
+/** `ckpt:<source>`: the last handled `seq` of a source. */
+const CHECKPOINT = "ckpt:";
+/** `taken:<source>`: the last revision taken from a source. */
+const TAKEN = "taken:";
 
 /** How long a failed or interrupted run waits before it is retried. */
 const PROJECTION_RETRY_MS = 10_000;
@@ -2677,9 +2685,64 @@ const projectionObject = (
     const reset = Effect.gen(function* () {
       const meta = yield* state.storage.get<ProjectionMeta>("meta");
       if (meta === undefined || (meta.generation ?? 0) >= kit.generation) return;
-      yield* clearPrefixes(["in:", "rev:", "rev-wait:", "settled:"]);
+      yield* clearPrefixes(["in:", "rev:", "rev-wait:", "settled:", INTAKE, CHECKPOINT, TAKEN]);
       yield* state.storage.delete("meta");
     });
+    /**
+     * Move the per-source maps an earlier version kept in `meta` to rows,
+     * once. Callers hold the exclusive section and its transaction.
+     */
+    const upgrade = (meta: ProjectionMeta) =>
+      Effect.gen(function* () {
+        if (
+          meta.intake === undefined &&
+          meta.checkpoints === undefined &&
+          meta.taken === undefined
+        ) {
+          return meta;
+        }
+        const { intake = {}, checkpoints = {}, taken = {}, ...scalars } = meta;
+        const rows: Array<readonly [string, number]> = [];
+        for (const [source, seq] of Object.entries(intake)) rows.push([INTAKE + source, seq]);
+        for (const [source, seq] of Object.entries(checkpoints)) {
+          rows.push([CHECKPOINT + source, seq]);
+        }
+        for (const [source, n] of Object.entries(taken)) rows.push([TAKEN + source, n]);
+        yield* putRows(state.storage, rows);
+        yield* state.storage.put("meta", scalars);
+        return scalars;
+      });
+    /** A per-source cursor, or 0. Read after `upgrade`, so the rows are all there is. */
+    const cursor = (prefix: string, source: string) =>
+      Effect.map(state.storage.get<number>(prefix + source), (n) => n ?? 0);
+    /** The last handled `seq` per source: every source's, or only `sources`'. */
+    const checkpointsOf = (sources?: ReadonlyArray<string>) =>
+      Effect.gen(function* () {
+        const meta = yield* readMeta;
+        const out: Record<string, number> = {};
+        // Nothing accepted in this generation (an earlier one's rows read as empty).
+        if (meta.key === null) return out;
+        if (sources !== undefined) {
+          for (const source of sources) {
+            const seq =
+              (yield* state.storage.get<number>(CHECKPOINT + source)) ?? meta.checkpoints?.[source];
+            if (seq !== undefined) out[source] = seq;
+          }
+          return out;
+        }
+        Object.assign(out, meta.checkpoints);
+        let after: string | undefined;
+        while (true) {
+          const page = yield* state.storage.list<number>({
+            prefix: CHECKPOINT,
+            ...(after === undefined ? {} : { startAfter: after }),
+            limit: 1_000,
+          });
+          for (const [row, seq] of page) out[row.slice(CHECKPOINT.length)] = seq;
+          if (page.size < 1_000) return out;
+          after = [...page.keys()].at(-1);
+        }
+      });
     const size = kit.options.batch?.size ?? 1;
     const waitMillis = kit.options.batch?.waitMillis ?? 0;
     const lease = "drain-lease";
@@ -2722,7 +2785,7 @@ const projectionObject = (
             yield* exclusively(
               state.storage.transaction(
                 Effect.gen(function* () {
-                  const current = yield* readMeta;
+                  const current = yield* upgrade(yield* readMeta);
                   const handled: Record<string, number> = {};
                   for (const { delivery } of run) {
                     handled[delivery.source] = Math.max(
@@ -2737,10 +2800,18 @@ const projectionObject = (
                       );
                     }
                   }
+                  // A source's row moves forward only: a rewrite's revisions
+                  // carry the `seq` of events handled before, and its `done` 0.
+                  const ahead: Array<readonly [string, number]> = [];
+                  for (const [source, seq] of Object.entries(handled)) {
+                    if (seq > (yield* cursor(CHECKPOINT, source))) {
+                      ahead.push([CHECKPOINT + source, seq]);
+                    }
+                  }
+                  yield* putRows(state.storage, ahead);
                   yield* state.storage.put("meta", {
                     ...current,
                     processed: run[run.length - 1]!.position,
-                    checkpoints: mergeCheckpoints(current.checkpoints, handled),
                   } satisfies ProjectionMeta);
                   // A handled input is not kept: the store the handler wrote has it.
                   yield* state.storage.delete(rows.size === 0 ? [] : [...rows.keys()]);
@@ -2798,38 +2869,35 @@ const projectionObject = (
         if ((delivery.target.generation ?? 0) < kit.generation) return false;
         yield* reset;
         const revision = delivery.revision!;
-        const meta = yield* readMeta;
-        if (revision.n <= (meta.taken?.[delivery.source] ?? 0)) return false;
-        const taken = { ...meta.taken, [delivery.source]: revision.n };
+        const meta = yield* upgrade(yield* readMeta);
+        if (revision.n <= (yield* cursor(TAKEN, delivery.source))) return false;
+        /** Write `meta` with the source's taken revision (and any other rows) in one put. */
+        const save = (next: ProjectionMeta, rows: Record<string, number> = {}) =>
+          state.storage.put({ meta: next, [TAKEN + delivery.source]: revision.n, ...rows });
         if (revision.done) {
           // Held while a revision of it waits for its event: handled after that.
           if (yield* awaits(revision.root, delivery.source)) {
             yield* state.storage.put(`rev-wait:${revision.root}|${delivery.source}`, delivery);
-            yield* state.storage.put("meta", { ...meta, key, taken } satisfies ProjectionMeta);
+            yield* save({ ...meta, key } satisfies ProjectionMeta);
             return false;
           }
-          yield* state.storage.put("meta", yield* append(key, { ...meta, taken }, delivery));
+          yield* save(yield* append(key, meta, delivery));
           return true;
         }
+        const accepted = yield* cursor(INTAKE, delivery.source);
         // Newly given to this key: an ordinary input, late.
         if (revision.before === undefined) {
-          const intake = {
-            ...meta.intake,
-            [delivery.source]: Math.max(meta.intake[delivery.source] ?? 0, delivery.seq),
-          };
-          yield* state.storage.put(
-            "meta",
-            yield* append(key, { ...meta, taken, intake }, withoutRevision(delivery)),
-          );
+          yield* save(yield* append(key, meta, withoutRevision(delivery)), {
+            [INTAKE + delivery.source]: Math.max(accepted, delivery.seq),
+          });
           return true;
         }
         // Given to the key, and yet to arrive: taken when it does.
-        if (delivery.seq > (meta.intake[delivery.source] ?? 0)) {
+        if (delivery.seq > accepted) {
           yield* state.storage.put(revisionRow(delivery.source, delivery.seq), delivery);
-          yield* state.storage.put("meta", {
+          yield* save({
             ...meta,
             key,
-            taken,
             pending: (meta.pending ?? 0) + 1,
           } satisfies ProjectionMeta);
           return false;
@@ -2857,11 +2925,11 @@ const projectionObject = (
                 ? { ...delivery, revision: { root: revision.root, n: revision.n, gone: true } }
                 : withoutRevision(delivery),
             } satisfies Accepted);
-            yield* state.storage.put("meta", { ...meta, key, taken } satisfies ProjectionMeta);
+            yield* save({ ...meta, key } satisfies ProjectionMeta);
             return false;
           }
         }
-        yield* state.storage.put("meta", yield* append(key, { ...meta, taken }, delivery));
+        yield* save(yield* append(key, meta, delivery));
         return true;
       });
     const intake = (key: string, arrived: Delivery) =>
@@ -2878,9 +2946,12 @@ const projectionObject = (
           );
         }
         yield* reset;
-        let meta = yield* readMeta;
-        if ((meta.intake[delivery.source] ?? 0) >= delivery.seq) return false;
-        meta = { ...meta, key, intake: { ...meta.intake, [delivery.source]: delivery.seq } };
+        let meta = yield* upgrade(yield* readMeta);
+        if ((yield* cursor(INTAKE, delivery.source)) >= delivery.seq) return false;
+        meta = { ...meta, key };
+        /** Write `meta` with the source's intake row in one put. */
+        const save = (next: ProjectionMeta) =>
+          state.storage.put({ meta: next, [INTAKE + delivery.source]: delivery.seq });
         // An event a rewrite changed before it got here arrives as it is now.
         if ((meta.pending ?? 0) > 0) {
           const row = revisionRow(delivery.source, delivery.seq);
@@ -2897,11 +2968,11 @@ const projectionObject = (
               yield* state.storage.delete(waiting);
               meta = yield* append(key, meta, done);
             }
-            yield* state.storage.put("meta", meta);
+            yield* save(meta);
             return true;
           }
         }
-        yield* state.storage.put("meta", yield* append(key, meta, delivery));
+        yield* save(yield* append(key, meta, delivery));
         return true;
       });
     const target = targetId({
@@ -2966,7 +3037,7 @@ const projectionObject = (
             if (accepted) yield* state.waitUntil(drain.pipe(Effect.ignoreCause));
           }),
         ),
-      checkpoints: () => reportDefects(readMeta.pipe(Effect.map((meta) => meta.checkpoints))),
+      checkpoints: (sources?: ReadonlyArray<string>) => reportDefects(checkpointsOf(sources)),
       revised: (root: string, source: string) =>
         reportDefects(
           state.storage
@@ -3727,9 +3798,9 @@ export const makePlatform = <R>(
                       unwrapDefects(
                         namespace.getByName(delivery.key).receive(delivery.key, delivery),
                       ),
-                    checkpoints: (key) =>
+                    checkpoints: (key, sources) =>
                       unwrapDefects<Readonly<Record<string, number>>>(
-                        namespace.getByName(key).checkpoints(),
+                        namespace.getByName(key).checkpoints(sources),
                       ),
                     revised: (key, root, source) =>
                       unwrapDefects<boolean>(namespace.getByName(key).revised(root, source)),
