@@ -46,8 +46,14 @@ const loadSecretEnv = Effect.sync(() => {
   }
 });
 
-/** Build each entrypoint's class phase, then run the node until it is stopped. */
-export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> => {
+/**
+ * Build each entrypoint's class phase, then run the node until it is
+ * stopped, each class with the actor options its pool recorded.
+ */
+export const bootstrap = (
+  entrypoints: ReadonlyArray<unknown>,
+  options: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {},
+): Promise<void> => {
   const platform = Layer.mergeAll(
     // Node services run under both Node (Fly) and Bun (every other host).
     NodeServices.layer,
@@ -85,7 +91,7 @@ export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> =>
       }
       yield* host(built);
     }
-    return yield* runDurableObjects(yield* Ref.get(hosted));
+    return yield* runDurableObjects(yield* Ref.get(hosted), options);
   }).pipe(Effect.provide(platform), Effect.scoped);
 
   // Before the platform's Layers read the environment.

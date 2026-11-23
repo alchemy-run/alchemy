@@ -1,3 +1,4 @@
+import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import { exec } from "alchemy/Util/exec";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
@@ -32,17 +33,15 @@ const generateCommand = Command.make(
       "bin",
       "cli.js",
     );
+    const dotAlchemy = path.resolve(yield* dotAlchemyDirectory);
     const run = Effect.gen(function* () {
       const result = yield* exec(
-        ChildProcess.make(process.execPath, [
-          bin,
-          "provider",
-          "prisma",
-          "generate",
-          "--config",
-          loaded.absolute,
-          "--no-input",
-        ]),
+        ChildProcess.make(
+          process.execPath,
+          [bin, "provider", "prisma", "generate", "--config", loaded.absolute, "--no-input"],
+          // The child doesn't see this run's --env-file, so pass the resolved directory.
+          { env: { ALCHEMY_DIR: dotAlchemy }, extendEnv: true },
+        ),
       );
       if (result.exitCode !== 0)
         return yield* new CliError({ message: `${result.stdout}\n${result.stderr}` });
@@ -63,6 +62,7 @@ const generateCommand = Command.make(
             .split(path.sep)
             .some((part) => part === "node_modules" || part === ".git" || part === ".alchemy") &&
           !(file === output || file.startsWith(output + path.sep)) &&
+          !(file === dotAlchemy || file.startsWith(dotAlchemy + path.sep)) &&
           /\.(?:ts|mts|cts|js|mjs|cjs|prisma|psl)$/.test(file)
         );
       }),

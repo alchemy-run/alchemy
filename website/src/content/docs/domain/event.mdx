@@ -96,7 +96,7 @@ export class AccountFrozen extends Domain.Event("AccountFrozen", {
 
 ## Keep old events readable
 
-Events are kept for good, so every event you've ever recorded will be read again: each time an aggregate rebuilds its state, and each time a view is built from history. Treat an event's shape as a promise to your future self.
+Events are kept until you say otherwise, so every event you've recorded will be read again: each time a view or projection is built from history. Treat an event's shape as a promise to your future self.
 
 Add a new field as optional, so events recorded before it existed still decode. When the meaning of something changes, add a new event rather than changing what an old one means. A history in which `MoneyWithdrawn` meant one thing in March and another in May is a history nobody can read.
 

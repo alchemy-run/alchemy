@@ -145,12 +145,30 @@ export const state = (options: CloudflareStateOptions = {}) =>
             return yield* Provisioning.upgradeOutdated({ ...store, observed, expected }, upgrade);
           });
 
+        // Whether the cached credentials are accepted at their URL. Renaming
+        // the account's workers.dev subdomain leaves the cached URL on a host
+        // that no longer resolves, so a first failed attempt checks where the
+        // store serves now before spending the retry budget on the old host.
+        const authorized = (credentials: HttpStateStoreCredentials) =>
+          checkHttpStateStoreAuth(credentials, { retry: false }).pipe(
+            Effect.catch(() =>
+              Effect.gen(function* () {
+                const current = yield* stateStoreUrl({ accountId, scriptName, domain }).pipe(
+                  Effect.catchTag("SubdomainNotFound", () => Effect.undefined),
+                );
+                // A moved store needs its credentials minted again.
+                if (current !== undefined && current !== credentials.url) return false;
+                return yield* checkHttpStateStoreAuth(credentials);
+              }),
+            ),
+          );
+
         const ensureAccess = (credentials: HttpStateStoreCredentials) =>
           Effect.gen(function* () {
-            if (yield* checkHttpStateStoreAuth(credentials)) {
+            if (yield* authorized(credentials)) {
               return yield* makeCloudflareStateStore(credentials);
             }
-            // our token is wrong, force a refresh
+            // our token is wrong, or the store moved: force a refresh
             const refreshed = yield* loginWithCloudflare(
               profileName,
               true,

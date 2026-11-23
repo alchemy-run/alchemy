@@ -1,8 +1,9 @@
 import * as Fly from "@alchemy.run/fly";
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import {
   makeServicesLayer,
-  servicesEnvironment,
+  secretServicesEnvironment,
   type ServicesPoolSettings,
 } from "../internal/ServicesHost.ts";
 
@@ -30,7 +31,8 @@ export interface ServicesPoolOptions extends ServicesPoolSettings {
  * Durable Streams and agentOS. The Machines take no traffic from Fly's
  * proxy and only connect out: callers reach every stream through the
  * control plane's gateway, with its token. Works with any control plane it
- * can reach.
+ * can reach. The control plane's token reaches the Machines as a secret of
+ * the pool's App, never in their config.
  *
  * ### Running Rivet Services on Fly
  * **Example:** Services next to a Fly control plane
@@ -50,13 +52,22 @@ export const ServicesPool = (id: string, options: ServicesPoolOptions = {}) =>
     network: (cluster) => cluster.network ?? { kind: "none" as const },
     nodes: Effect.fn(function* (nodes) {
       const app = yield* Fly.App(`${id}App`, {});
+      // Fly gives every App secret to the App's Machines as env: the token
+      // stays out of the Machine config.
+      const token = yield* Fly.Secret(`${id}Token`, {
+        app,
+        name: "RIVET_TOKEN",
+        value: nodes.environment.RIVET_TOKEN,
+      });
       yield* Fly.Machine(`${id}Nodes`, {
         app,
         image: nodes.image,
         region: options.region ?? "iad",
         count: options.replicas ?? 1,
         guest: options.guest ?? { cpus: 1, memoryMb: 2048 },
-        env: servicesEnvironment(nodes),
+        env: secretServicesEnvironment(nodes).pipe(Output.map(({ RIVET_TOKEN: _, ...env }) => env)),
+        // Machines start once they see the token, and restart with a new one.
+        minSecretsVersion: token.version,
         restart: { policy: "always" },
         // Services nodes only dial out: nothing listens for the proxy.
         services: [],

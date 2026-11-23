@@ -69,12 +69,16 @@ describe.concurrent("Secret", () => {
         yield* expectFound(
           Fly.Secret.lookup({ appName: created.secret.appName, name: created.secret.name }),
           created.secret,
+          // Only a write learns the App's secrets version.
+          { ignore: ["version"] },
         );
 
         expect(created.secret.appName).toEqual(created.app.appName);
         expect(created.secret.name).toEqual(expect.any(String));
         expect(created.secret.name.length).toBeGreaterThan(0);
         expect(created.secret.digest).toEqual(expect.any(String));
+        // The version Machines wait for to see this value.
+        expect(created.secret.version).toEqual(expect.any(Number));
 
         const fetched = yield* machines.getSecret({
           app_name: created.secret.appName,
@@ -100,6 +104,7 @@ describe.concurrent("Secret", () => {
         expect(updated.secret.name).toEqual(created.secret.name);
         expect(updated.secret.digest).toEqual(expect.any(String));
         expect(updated.secret.digest).not.toEqual(created.secret.digest);
+        expect(updated.secret.version).toBeGreaterThan(created.secret.version!);
 
         const refetched = yield* machines.getSecret({
           app_name: updated.secret.appName,

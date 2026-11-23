@@ -81,3 +81,10 @@ export const parseEntityObjectName = (name: string) => {
     id: name.slice(colon + 1 + length),
   };
 };
+
+/**
+ * The header a WebSocket upgrade forwarded to an entity's object carries
+ * its call in: `{ tag, payload, headers }`, as JSON. The caller sets it,
+ * overwriting any a client sent.
+ */
+export const OBJECT_CALL_HEADER = "x-cluster-call";

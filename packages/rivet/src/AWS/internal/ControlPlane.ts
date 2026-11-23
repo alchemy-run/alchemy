@@ -11,6 +11,7 @@ import * as EC2 from "@alchemy.run/aws/EC2";
 import * as ELBv2 from "@alchemy.run/aws/ELBv2";
 import * as IAM from "@alchemy.run/aws/IAM";
 import * as S3 from "@alchemy.run/aws/S3";
+import * as SecretsManager from "@alchemy.run/aws/SecretsManager";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
@@ -62,14 +63,18 @@ export interface ControlPlaneProps {
   cidrBlock?: string;
 }
 
-/** The engine's configuration, as environment variables. */
+/** The env var the engine reads its admin token from. */
+export const ADMIN_TOKEN_ENV = "RIVET__AUTH__ADMIN_TOKEN";
+
+/**
+ * The engine's configuration, as environment variables, but for its admin
+ * token ({@link ADMIN_TOKEN_ENV}), which it reads from Secrets Manager.
+ */
 export const engineEnvironment = (options: {
-  readonly token: string;
   readonly bucket: string;
   readonly region: string;
   readonly advertiseAddress: string;
 }) => ({
-  RIVET__AUTH__ADMIN_TOKEN: options.token,
   RIVET__STORAGE__LOG_DIRECTORY: DATA_PATH,
   RIVET__STORAGE__AUTO_PROVISION_PARTITIONS: "true",
   RIVET__OBJECT_STORAGE__PRIMARY__S3__BUCKET: options.bucket,
@@ -92,11 +97,28 @@ mount "$DEVICE" ${DATA_PATH}
 echo "$DEVICE ${DATA_PATH} xfs defaults,nofail 0 2" >> /etc/fstab
 `;
 
+/**
+ * Read the admin token from Secrets Manager into {@link ADMIN_TOKEN_ENV},
+ * with the instance role, retrying while the role's grant propagates.
+ */
+export const readAdminToken = (boot: {
+  readonly tokenSecretArn: string;
+  readonly region: string;
+}) => `
+for attempt in $(seq 1 60); do
+  ${ADMIN_TOKEN_ENV}="$(aws secretsmanager get-secret-value --region ${boot.region} --secret-id '${boot.tokenSecretArn}' --query SecretString --output text 2>/dev/null)" && break
+  sleep 5
+done
+[ -n "\${${ADMIN_TOKEN_ENV}:-}" ] || { echo "could not read the admin token" >&2; exit 1; }
+export ${ADMIN_TOKEN_ENV}
+`;
+
 /** What a host knows about one instance while booting it. */
 export interface EngineBoot {
   readonly index: number;
   readonly image: string;
-  readonly token: string;
+  /** The ARN of the Secrets Manager secret holding the admin token. */
+  readonly tokenSecretArn: string;
   readonly volumeId: string;
   readonly bucket: string;
   readonly region: string;
@@ -135,7 +157,8 @@ export type SetupResult = Record<string, string>;
 /** The cluster-wide values an engine needs. */
 export interface EngineContext {
   readonly image: string;
-  readonly token: Output.Output<Redacted.Redacted<string>>;
+  /** The admin token's secret, for an engine that reads it as ECS `secrets`. */
+  readonly tokenSecret: SecretsManager.Secret;
   readonly bucket: Output.Output<string>;
   readonly region: Output.Output<string>;
   /** Grants on the bucket, for an engine that runs under a role of its own. */
@@ -178,6 +201,11 @@ export const makeControlPlane = <Req>(
           Resource: [Output.interpolate`${bucket.bucketArn}/*`],
         },
       ];
+      // The token lives in Secrets Manager: instance user data and task
+      // definitions are readable by anyone who can describe them.
+      const tokenSecret = yield* SecretsManager.Secret(`${id}AdminTokenSecret`, {
+        secretString: token.text,
+      });
       const role = yield* IAM.Role(`${id}InstanceRole`, {
         assumeRolePolicyDocument: {
           Version: "2012-10-17",
@@ -190,7 +218,19 @@ export const makeControlPlane = <Req>(
           ],
         },
         managedPolicyArns: host.managedPolicyArns,
-        inlinePolicies: { Storage: { Version: "2012-10-17", Statement: storagePolicy } },
+        inlinePolicies: {
+          Storage: { Version: "2012-10-17", Statement: storagePolicy },
+          AdminToken: {
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Allow",
+                Action: ["secretsmanager:GetSecretValue"],
+                Resource: [tokenSecret.secretArn],
+              },
+            ],
+          },
+        },
       });
       const profile = yield* IAM.InstanceProfile(`${id}InstanceProfile`, {
         roleName: role.roleName,
@@ -268,7 +308,7 @@ export const makeControlPlane = <Req>(
         host.setup === undefined ? Output.literal({}) : yield* host.setup();
       const context: EngineContext = {
         image,
-        token: token.text,
+        tokenSecret,
         bucket: bucket.bucketName,
         region: bucket.region,
         storagePolicy,
@@ -293,25 +333,16 @@ export const makeControlPlane = <Req>(
           instanceProfileName: profile.instanceProfileName,
           associatePublicIpAddress: true,
           userData: Output.all(
-            token.text,
+            tokenSecret.secretArn,
             disk.volumeId,
             bucket.bucketName,
             bucket.region,
             setup,
           ).pipe(
-            Output.map(([text, volumeId, bucketName, region, values]) =>
-              Redacted.make(
-                host.userData(
-                  {
-                    index: i,
-                    image,
-                    token: Redacted.value(text),
-                    volumeId,
-                    bucket: bucketName,
-                    region,
-                  },
-                  values,
-                ),
+            Output.map(([tokenSecretArn, volumeId, bucketName, region, values]) =>
+              host.userData(
+                { index: i, image, tokenSecretArn, volumeId, bucket: bucketName, region },
+                values,
               ),
             ),
           ),

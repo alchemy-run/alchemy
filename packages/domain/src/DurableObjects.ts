@@ -39,17 +39,22 @@ import { admitStreamWrite, advanceStreamMeta, mergeCheckpoints } from "./InMemor
 import {
   type Accepted,
   type AggregateKit,
+  awaitsRevision,
+  type CompactResult,
   type DecisionKit,
+  decisionReceiptOf,
   type DecisionResult,
   captureContext,
   type Delivery,
   emptySnapshot,
   emptyStreamMeta,
+  entryChanges,
   type HostedModel,
   hostedModels,
   type ImportMeta,
   type ImportResult,
   inRange,
+  mergeRevised,
   outOfOrder,
   type Json,
   type ListRange,
@@ -60,18 +65,41 @@ import {
   type ProjectionKit,
   type Push,
   REAUTHORIZE_CLOSE_CODE,
+  doneDelivery as doneOf,
+  refolded,
+  reviseEntries,
+  type Revised,
+  revisedBy,
+  keptRecalls,
+  type Reached,
+  recallOf,
+  reviseInputs,
+  revisionKey,
+  type RewriteInput,
+  type RewriteResult,
+  type RewriteStatus,
   type SeedResult,
   type SendResult,
+  sendResultOf,
+  stampRevisions,
   type StoredEvent,
+  storedDecisionReceipt,
+  type StoredResult,
+  storedResult,
+  viewInputOf,
+  type StoredViewInput,
   type StreamEntry,
   type StreamHandled,
   type StreamKit,
   type StreamMeta,
+  type StreamRevision,
   type StreamWrite,
   Subscription,
   type ViewEntry,
+  type ViewInput,
   type ViewKit,
   type ViewSnapshot,
+  withoutRevision,
 } from "./Platform.ts";
 import * as TwoPhase from "./TwoPhase.ts";
 
@@ -205,6 +233,24 @@ export interface Host<R = never> {
     /** Every plan the model has for these targets. */
     plans: (targets: ReadonlyArray<string>) => Readonly<Record<string, Backfill.Plan>>,
   ) => Effect.Effect<(targets: ReadonlyArray<string>) => Effect.Effect<void, never, R>, never, R>;
+  /**
+   * Begin the runs of the model's new consumers without waiting for a call.
+   * Called at runtime, once the model is built, with the effect that begins
+   * each run (each begins once). It fails, and keeps them pending, when a run
+   * can't be reached. A host whose runtime can reach the model's objects on
+   * its own (a runner that has joined its cluster) runs it in the background.
+   * Without it, each run begins on the first Domain call after the deploy.
+   */
+  readonly begin?: (runs: Effect.Effect<void, unknown>) => Effect.Effect<void, never, R>;
+  /**
+   * Hand `effect` to the current invocation's lifetime (a Worker's or Durable
+   * Object's `waitUntil`), so it finishes after the call that started it
+   * returns. Succeeds with `false` when the current call has no lifetime to
+   * extend (a Workflow step): `effect` then runs before the call does.
+   * Without it, `effect` runs on a detached fiber, as a long-running process
+   * keeps it alive.
+   */
+  readonly background?: (effect: Effect.Effect<void>) => Effect.Effect<boolean>;
   /** Models whose names collide on the same key fail to host: one per Worker, pool or class. */
   readonly claimKey: Effect.Effect<object, never, R>;
 }
@@ -363,8 +409,18 @@ const acquireLease = (state: ObjectStateShape, lease: string) =>
  * right after the commit (`kick`), and again by a durable callback if the
  * instance dies first. One drain runs at a time (a storage lease), rows are
  * processed in order, and a row is deleted only after its work succeeds.
+ *
+ * A `detached` queue never drains inside the call that staged its rows: its
+ * callback runs them at once, as an event of its own. A drain's calls nest
+ * inside the call it runs in, so an aggregate → policy → aggregate chain that
+ * drained each hop inline would nest one level deeper per hop until the host
+ * refuses the call (Cloudflare limits how deep a chain of calls may go).
  */
-const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
+const queue = <Row>(
+  name: string,
+  process: (row: Row) => Effect.Effect<void>,
+  options: { readonly detached?: boolean } = {},
+) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
     const prefix = `${name}:`;
@@ -372,6 +428,8 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
     const acquire = exclusively(acquireLease(state, lease));
     // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides its state and RuntimeContext on every event
     const drain: Effect.Effect<void> = Effect.gen(function* () {
+      // Nothing staged: nothing to do, and no lease to take.
+      if ((yield* state.storage.list({ prefix, limit: 1 })).size === 0) return;
       const held = yield* acquire;
       if (held !== undefined) {
         // Another drain holds the lease, or held it when its instance died
@@ -405,11 +463,26 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
           yield* state.storage.put(`${name}-seq`, last);
           // The backstop: delivered even if this instance dies before `kick` runs.
           // Its rows are progress, so a callback staging them doesn't hand it
-          // its retry budget.
-          yield* callback.schedule("drain", { after: "10 seconds", payload: {}, progress: last });
+          // its retry budget. A detached queue's only drain.
+          yield* callback.schedule("drain", {
+            after: options.detached ? 0 : "10 seconds",
+            payload: {},
+            progress: last,
+          });
         }),
-      /** Process staged rows now, in the background, keeping the instance alive until done. */
-      kick: state.waitUntil(drain.pipe(Effect.ignoreCause)),
+      /**
+       * Process staged rows now, in the background, keeping the instance alive
+       * until done. A detached queue leaves them to its callback.
+       */
+      kick: options.detached
+        ? Effect.void
+        : state.waitUntil(
+            drain.pipe(
+              Effect.catchCause((cause) =>
+                Effect.logError(`domain ${name} drain failed; its callback retries`, cause),
+              ),
+            ),
+          ),
       /** Process staged rows now, and wait (unless another drain holds the lease). */
       flush: drain,
     };
@@ -897,6 +970,45 @@ type Intent = (TwoPhase.Plan | TwoPhase.Prepare) & {
 const isPlan = (intent: Intent): intent is TwoPhase.Plan & { readonly at: number } =>
   "others" in intent;
 
+/** How many stored events one step of a rewrite or a compaction takes. */
+const REWRITE_PAGE = 128;
+
+/** Where an object keeps the revision a source sent for one of its events. */
+const revisionRow = (source: string, seq: number) => `rev:${source}|${pad(seq)}`;
+
+/**
+ * A rewrite under way on an instance, which holds it (`meta.held`). It first
+ * reads the whole log to learn what the rewrite leaves (`check`), so nothing
+ * changes when that breaks an invariant; then it changes the log a page at a
+ * time (`apply`). Each step is one exclusive section, and the job is stored,
+ * so a rewrite goes on after the call driving it dies.
+ */
+interface RewriteJob extends RewriteInput {
+  readonly id: string;
+  readonly phase: "check" | "apply";
+  /** The last `seq` this phase has read. */
+  readonly through: number;
+  /** The state folded from the rewritten events read so far. */
+  readonly state: Json;
+  /** How many events it changes. */
+  readonly changed: number;
+  /** The keys it has sent revisions to, with where each is delivered. */
+  readonly sent: ReadonlyArray<{ readonly target: Delivery["target"]; readonly key: string }>;
+}
+
+/** What an instance keeps of a rewrite it has run. */
+interface RewriteRecord {
+  readonly result: RewriteResult;
+  readonly status: RewriteStatus;
+}
+
+/** A compaction whose replaced events are still to be handed over and removed. */
+interface Compacting {
+  readonly id: string;
+  readonly name: string;
+  readonly through: number;
+}
+
 /** What the primary keeps of an attempt's outcome, until each of `waiting` has it. */
 interface Recorded {
   readonly outcome: TwoPhase.Outcome;
@@ -963,6 +1075,12 @@ const aggregateObject = (
       state.storage
         .list<StoredEvent>({ prefix: "event:", start: `event:${pad(after + 1)}` })
         .pipe(Effect.map((rows) => [...rows.values()]));
+    /** The stored events at these `seq`s: those that are still there. */
+    const eventsAt = (seqs: ReadonlyArray<number>) =>
+      Effect.map(
+        Effect.forEach(seqs, (seq) => state.storage.get<StoredEvent>(`event:${pad(seq)}`)),
+        (rows) => rows.filter((row): row is StoredEvent => row !== undefined),
+      );
 
     // This instance as a backfill source: consumers added later pull its events.
     let source: Backfill.Source | undefined;
@@ -1011,8 +1129,11 @@ const aggregateObject = (
     // Callers run it `exclusively`.
     const commit = (id: string, command: Json, meta: Aggregate.SendMeta) =>
       Effect.gen(function* () {
-        const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
-        if (duplicate) return { sent: duplicate, kick: false };
+        const duplicate = yield* state.storage.get<StoredResult>(`receipt:${meta.commandId}`);
+        // A resend may follow an instance that died before delivering what the
+        // first commit staged: deliver it now rather than at the backstop.
+        if (duplicate)
+          return { sent: yield* resent(id, duplicate), kick: duplicate._tag === "Accepted" };
         const current = yield* storedMeta;
         if (current.held) return yield* new InstanceHeld();
         const result = yield* kit.handle({
@@ -1039,19 +1160,43 @@ const aggregateObject = (
         };
         const kick = yield* state.storage.transaction(
           Effect.gen(function* () {
-            yield* state.storage.put(`receipt:${meta.commandId}`, sent);
+            yield* state.storage.put<StoredResult>(
+              `receipt:${meta.commandId}`,
+              storedResult(result.version, result.events.length, result.reply),
+            );
             return yield* persist(id, current.version, result);
           }),
         );
         return { sent, kick };
       });
+    /** A stored result as `send` answers it: its events are read back from the log. */
+    const resent = (id: string, result: StoredResult) =>
+      Effect.gen(function* () {
+        const stream = `${kit.name}/${id}`;
+        if (result._tag === "Rejected" || "receipt" in result)
+          return sendResultOf(stream, result, []);
+        const { version, count } = result.stored;
+        const rows =
+          count === 0
+            ? new Map<string, StoredEvent>()
+            : yield* state.storage.list<StoredEvent>({
+                prefix: "event:",
+                start: `event:${pad(version - count + 1)}`,
+                end: `event:${pad(version + 1)}`,
+              });
+        return sendResultOf(stream, result, [...rows.values()]);
+      });
     // Callers run it through `whenFree`: an import never lands under a decision's intent.
     const importEvents = (id: string, events: ReadonlyArray<Json>, meta: ImportMeta) =>
       Effect.gen(function* () {
-        const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
+        const duplicate = yield* state.storage.get<StoredResult>(`receipt:${meta.commandId}`);
         if (duplicate?._tag === "Accepted") {
-          const imported: ImportResult = { _tag: "Imported", receipt: duplicate.receipt };
-          return { imported, kick: false };
+          const again = yield* resent(id, duplicate);
+          if (again._tag === "Accepted") {
+            const imported: ImportResult = { _tag: "Imported", receipt: again.receipt };
+            // As a resent command: deliver what the first import may have left staged.
+            return { imported, kick: true };
+          }
         }
         const current = yield* storedMeta;
         if (current.held) return yield* new InstanceHeld();
@@ -1084,10 +1229,10 @@ const aggregateObject = (
         };
         const kick = yield* state.storage.transaction(
           Effect.gen(function* () {
-            yield* state.storage.put<SendResult>(`receipt:${meta.commandId}`, {
-              _tag: "Accepted",
-              receipt,
-            });
+            yield* state.storage.put<StoredResult>(
+              `receipt:${meta.commandId}`,
+              storedResult(receipt.version, receipt.events.length, null),
+            );
             return yield* persist(id, current.version, result);
           }),
         );
@@ -1120,6 +1265,365 @@ const aggregateObject = (
         yield* state.storage.put("routed", live.routed);
         yield* outbox.stage(live.send);
         return live.send.length > 0;
+      });
+
+    // ------------------------------------------------ rewrites
+    // `rw-job`: the rewrite under way, with `meta.held` set. `rw:<rewriteId>`:
+    // what became of each rewrite. `rev-n`: the revisions sent so far.
+    const rewriteJob = state.storage.get<RewriteJob>("rw-job");
+    const rewriteRecord = (rewriteId: string) =>
+      state.storage.get<RewriteRecord>(`rw:${rewriteId}`);
+    /**
+     * One step of the rewrite under way: a page of the log, in one exclusive
+     * section. `false` once no rewrite is under way.
+     */
+    const rewriteStep = exclusively(
+      state.storage.transaction(
+        Effect.gen(function* () {
+          const job = yield* rewriteJob;
+          if (job === undefined) return { more: false, kick: false };
+          const rows = [
+            ...(yield* state.storage.list<StoredEvent>({
+              prefix: "event:",
+              start: `event:${pad(job.through + 1)}`,
+              limit: REWRITE_PAGE,
+            })).values(),
+          ];
+          const deletes = kit.deletes(job.name);
+          /** End the rewrite: the instance takes commands again. */
+          const finish = (result: RewriteResult, sent: ReadonlyArray<Revised>, meta?: Json) =>
+            Effect.gen(function* () {
+              const current = yield* currentMeta;
+              yield* state.storage.put("meta", {
+                state: meta === undefined ? current.state : meta,
+                version: current.version,
+              });
+              yield* state.storage.put<RewriteRecord>(`rw:${job.rewriteId}`, {
+                result,
+                status: { done: true, sent },
+              });
+              yield* state.storage.delete("rw-job");
+              yield* rewriteWaker.cancel("rewrite").pipe(Effect.ignore);
+            });
+          const root = `${kit.name}/${job.id}#${job.rewriteId}`;
+          if (rows.length === 0 && job.phase === "check") {
+            // The copies view keys kept of the events a compaction removed.
+            const reached = (yield* state.storage.get<ReadonlyArray<Reached>>("reached")) ?? [];
+            const recalled = kit.recall(
+              job.id,
+              root,
+              {
+                name: job.name,
+                input: job.input,
+                through: (yield* state.storage.get<number>("removed")) ?? 0,
+              },
+              reached,
+            );
+            if (job.changed === 0 && recalled.length === 0) {
+              yield* finish({ _tag: "Rewritten", changed: 0 }, []);
+              return { more: false, kick: false };
+            }
+            const invariant = deletes ? undefined : kit.broken(job.state);
+            if (invariant !== undefined) {
+              yield* finish({ _tag: "InvariantBroken", invariant }, []);
+              return { more: false, kick: false };
+            }
+            const last = (yield* state.storage.get<number>("rev-n")) ?? 0;
+            const revisions = recalled.map((delivery, index) => ({
+              ...delivery,
+              revision: { ...delivery.revision!, n: last + index + 1 },
+            }));
+            yield* state.storage.put("rev-n", last + revisions.length);
+            yield* outbox.stage(revisions);
+            yield* state.storage.put<RewriteJob>("rw-job", {
+              ...job,
+              phase: "apply",
+              through: 0,
+              state: null,
+              changed: 0,
+              sent: revisions.map(({ target, key }) => ({ target, key })),
+            });
+            return { more: true, kick: revisions.length > 0 };
+          }
+          if (rows.length === 0) {
+            // Every event is as the rewrite leaves it: tell each key it reached, and let go.
+            const last = (yield* state.storage.get<number>("rev-n")) ?? 0;
+            const at = yield* Clock.currentTimeMillis;
+            const done = job.sent.map(({ target, key }, index) =>
+              doneOf({ origin: kit.name, id: job.id }, root, last + index + 1, target, key, at),
+            );
+            yield* state.storage.put("rev-n", last + done.length);
+            yield* outbox.stage(done);
+            if (deletes) {
+              // What it kept of the commands it handled and scheduled goes with it.
+              for (const name of (yield* state.storage.list({ prefix: "armed:" })).keys()) {
+                yield* timers.cancel(name.slice("armed:".length)).pipe(Effect.ignore);
+              }
+              yield* clearPrefixes(["receipt:", "decided:", "armed:", "scheduled:"]);
+              yield* state.storage.delete("reached");
+            } else {
+              // A decision's receipt stored with a copy of its events keeps none of them.
+              for (const [key, stored] of yield* state.storage.list<TwoPhase.Plan["receipt"]>({
+                prefix: "decided:",
+              })) {
+                if (stored.at !== undefined || stored.events.length === 0) continue;
+                yield* state.storage.put(key, { ...stored, events: [] });
+              }
+              // A receipt stored with a copy of its events keeps their count instead.
+              for (const [key, stored] of yield* state.storage.list<StoredResult>({
+                prefix: "receipt:",
+              })) {
+                if (stored._tag !== "Accepted" || !("receipt" in stored)) continue;
+                yield* state.storage.put<StoredResult>(
+                  key,
+                  storedResult(
+                    stored.receipt.version,
+                    stored.receipt.events.length,
+                    stored.receipt.reply,
+                  ),
+                );
+              }
+            }
+            yield* finish(
+              { _tag: "Rewritten", changed: job.changed },
+              revisedBy(done),
+              deletes ? null : job.state,
+            );
+            return { more: false, kick: done.length > 0 };
+          }
+          const { state: folded, changes } = yield* kit.rewrite({
+            id: job.id,
+            name: job.name,
+            input: job.input,
+            state: job.state,
+            events: rows,
+          });
+          const through = rows[rows.length - 1]!.envelope.seq;
+          if (job.phase === "check") {
+            yield* state.storage.put<RewriteJob>("rw-job", {
+              ...job,
+              through,
+              state: folded,
+              changed: job.changed + changes.length,
+            });
+            return { more: true, kick: false };
+          }
+          const gone = changes.filter((change) => change.after === undefined);
+          if (gone.length > 0) {
+            yield* state.storage.delete(gone.map((change) => `event:${pad(change.seq)}`));
+          }
+          yield* putRows(
+            state.storage,
+            changes.flatMap((change) =>
+              change.after === undefined
+                ? []
+                : [[`event:${pad(change.seq)}`, change.after] as const],
+            ),
+          );
+          const last = (yield* state.storage.get<number>("rev-n")) ?? 0;
+          const revisions = (yield* kit.revise(job.id, root, changes)).map((delivery, index) => ({
+            ...delivery,
+            revision: { ...delivery.revision!, n: last + index + 1 },
+          }));
+          yield* state.storage.put("rev-n", last + revisions.length);
+          yield* outbox.stage(revisions);
+          const sent = new Map(
+            job.sent.map((to) => [`${targetId(to.target)}|${to.key}`, to] as const),
+          );
+          for (const { target, key } of revisions) {
+            sent.set(`${targetId(target)}|${key}`, { target, key });
+          }
+          yield* state.storage.put<RewriteJob>("rw-job", {
+            ...job,
+            through,
+            state: folded,
+            changed: job.changed + changes.length,
+            sent: [...sent.values()],
+          });
+          return { more: true, kick: revisions.length > 0 };
+        }),
+      ),
+    ).pipe(Effect.orDie);
+    /** Carry the rewrite under way to its end. Calls no other object, but runs outside `exclusively`. */
+    const driveRewrite: Effect.Effect<void, never, ObjectState | RuntimeContext> = Effect.gen(
+      function* () {
+        while (true) {
+          const { more, kick } = yield* rewriteStep;
+          if (kick) yield* outbox.kick;
+          if (!more) return;
+        }
+      },
+    );
+    // Should the call driving a rewrite die, this carries it on.
+    const rewriteWaker = yield* makeCallback("domain:rewrite", (_: unknown) =>
+      driveRewrite.pipe(Effect.orDie),
+    );
+    const rewrite = (id: string, input: RewriteInput) =>
+      Effect.gen(function* () {
+        const started = yield* whenFree(
+          id,
+          Effect.gen(function* () {
+            const seen = yield* rewriteRecord(input.rewriteId);
+            if (seen !== undefined) return seen.result;
+            const current = yield* storedMeta;
+            if (current.held) return yield* new InstanceHeld();
+            yield* state.storage.transaction(
+              Effect.gen(function* () {
+                yield* state.storage.put<RewriteJob>("rw-job", {
+                  ...input,
+                  id,
+                  phase: "check",
+                  through: 0,
+                  state: null,
+                  changed: 0,
+                  sent: [],
+                });
+                yield* state.storage.put("meta", { ...(yield* currentMeta), held: true });
+              }),
+            );
+            yield* rewriteWaker
+              .schedule("rewrite", { after: "10 seconds", payload: {} })
+              .pipe(Effect.orDie);
+            return undefined;
+          }),
+        );
+        if (started !== undefined) return started;
+        yield* driveRewrite;
+        const record = yield* rewriteRecord(input.rewriteId);
+        return record === undefined
+          ? yield* Effect.die(new Error(`the rewrite ${input.rewriteId} left no result`))
+          : record.result;
+      });
+    const rewriteStatus = (rewriteId: string) =>
+      Effect.gen(function* (): Generator<any, RewriteStatus | undefined> {
+        const record = yield* rewriteRecord(rewriteId);
+        if (record !== undefined) return record.status;
+        const job = yield* rewriteJob;
+        return job?.rewriteId === rewriteId ? { done: false, sent: [] } : undefined;
+      });
+
+    // ------------------------------------------------ compactions
+    // `compacted`: the version at the last roll-up. `compacting`: the events
+    // a roll-up replaced that are still to be handed over and removed.
+    // `removed`: the last `seq` a compaction removed. `reached`: the view keys
+    // the removed events had reached, which a later rewrite tells.
+    /**
+     * Hand the events a roll-up replaced to the compaction's handler, a page
+     * at a time, and remove each page once the handler has it. The handler
+     * runs outside `exclusively`: commands keep committing meanwhile.
+     */
+    const handOver: Effect.Effect<number, never, ObjectState | RuntimeContext> = Effect.gen(
+      function* () {
+        let removed = 0;
+        while (true) {
+          const compacting = yield* state.storage.get<Compacting>("compacting");
+          if (compacting === undefined) return removed;
+          const rows = yield* state.storage.list<StoredEvent>({
+            prefix: "event:",
+            end: `event:${pad(compacting.through + 1)}`,
+            limit: REWRITE_PAGE,
+          });
+          if (rows.size === 0) {
+            yield* state.storage.delete("compacting");
+            yield* compactionWaker.cancel("compact").pipe(Effect.ignore);
+            return removed;
+          }
+          const compaction = kit.compactions.find((c) => c.name === compacting.name);
+          if (compaction !== undefined)
+            yield* compaction.archive(compacting.id, [...rows.values()]);
+          // A rewrite after this finds the copies view keys kept of them.
+          const reached = yield* kit.reached(compacting.id, [...rows.values()]);
+          if (reached.length > 0) {
+            const had = (yield* state.storage.get<ReadonlyArray<Reached>>("reached")) ?? [];
+            const known = new Set(had.map(({ name, key }) => `${name}|${key}`));
+            const news = reached.filter(({ name, key }) => !known.has(`${name}|${key}`));
+            if (news.length > 0) yield* state.storage.put("reached", [...had, ...news]);
+          }
+          yield* state.storage.delete([...rows.keys()]);
+          removed += rows.size;
+        }
+      },
+    );
+    // Should the call handing events over die, or its handler fail, this tries again.
+    const compactionWaker = yield* makeCallback("domain:compact", (_: unknown) =>
+      handOver.pipe(Effect.asVoid, Effect.orDie),
+    );
+    const compact = (id: string, name: string) =>
+      Effect.gen(function* () {
+        // What an earlier compaction left to hand over goes first.
+        const left = yield* handOver;
+        const done = (version: number, compacted: number): CompactResult => ({
+          _tag: "Compacted",
+          version,
+          compacted,
+        });
+        const outcome = yield* whenFree(
+          id,
+          Effect.gen(function* () {
+            const current = yield* storedMeta;
+            if (current.held) return yield* new InstanceHeld();
+            const before = current.version;
+            if (before === 0 || (yield* state.storage.get<number>("compacted")) === before) {
+              return { result: done(before, left), kick: false };
+            }
+            const rolled = yield* kit.rollup({
+              id,
+              name,
+              state: current.state,
+              version: before,
+              now: yield* Clock.currentTimeMillis,
+            });
+            const lossy: CompactResult = { _tag: "Lossy" };
+            if (rolled === undefined) return { result: lossy, kick: false };
+            // Events a consumer still catching up has yet to read stay until the next one.
+            const routed = yield* state.storage.get<Routed>("routed");
+            const through = Math.min(
+              before,
+              // No cursors: it predates catch-up, and every consumer is taken as caught up.
+              ...kit.targets.map((target) =>
+                routed === undefined ? before : (routed[target] ?? 0),
+              ),
+            );
+            const kick = yield* state.storage.transaction(
+              Effect.gen(function* () {
+                yield* state.storage.put("compacted", rolled.version);
+                yield* state.storage.put<Compacting>("compacting", { id, name, through });
+                const removed = (yield* state.storage.get<number>("removed")) ?? 0;
+                yield* state.storage.put("removed", Math.max(removed, through));
+                return yield* persist(id, before, rolled);
+              }),
+            );
+            yield* compactionWaker
+              .schedule("compact", { after: "10 seconds", payload: {} })
+              .pipe(Effect.orDie);
+            return { result: done(rolled.version, left), kick };
+          }),
+        );
+        if (outcome.kick) yield* outbox.kick;
+        if (outcome.result._tag === "Lossy") return outcome.result;
+        return done(outcome.result.version, outcome.result.compacted + (yield* handOver));
+      });
+    /** Compact, in the background, an instance that holds more events than a compaction's Layer allows. */
+    const compactWhenDue = (id: string, version: number) =>
+      Effect.gen(function* () {
+        const limits = kit.compactions.filter((c) => c.afterEvents !== undefined);
+        if (limits.length === 0) return;
+        const since = version - ((yield* state.storage.get<number>("compacted")) ?? 0);
+        const due = limits.find((c) => since > c.afterEvents!);
+        if (due === undefined) return;
+        const services = yield* Effect.context<ObjectState | RuntimeContext>();
+        yield* state.waitUntil(
+          compact(id, due.name).pipe(
+            Effect.flatMap((result) =>
+              result._tag === "Lossy"
+                ? Effect.logWarning(`${due.name} would lose state on ${kit.name}/${id}`)
+                : Effect.void,
+            ),
+            // A handler that fails leaves the events: its wake-up tries again.
+            Effect.catchCause((cause) => Effect.logError(`compaction ${due.name} failed`, cause)),
+            Effect.provide(services),
+          ),
+        );
       });
 
     // ------------------------------------------------ decisions (see `TwoPhase`)
@@ -1164,7 +1668,10 @@ const aggregateObject = (
           Effect.gen(function* () {
             yield* release;
             if (isPlan(intent)) {
-              yield* state.storage.put(`decided:${intent.commandId}`, intent.receipt);
+              yield* state.storage.put(
+                `decided:${intent.commandId}`,
+                storedDecisionReceipt(intent.receipt),
+              );
               if (intent.others.length > 0) {
                 yield* state.storage.put<Recorded>(outcomeKey(txId), {
                   outcome: "Committed",
@@ -1213,6 +1720,7 @@ const aggregateObject = (
               const receipt = yield* decidedOf(commandId);
               if (receipt !== undefined) return { _tag: "Decided", receipt } as const;
               if ((yield* intentOf) !== undefined) return { _tag: "Busy" } as const;
+              if ((yield* rewriteJob) !== undefined) return { _tag: "Busy" } as const;
               return { _tag: "Read", ...(yield* currentMeta) } as const;
             }),
           );
@@ -1223,6 +1731,7 @@ const aggregateObject = (
             const receipt = yield* decidedOf(plan.commandId);
             if (receipt !== undefined) return { _tag: "Decided", receipt } as const;
             if ((yield* intentOf) !== undefined) return { _tag: "Busy" } as const;
+            if ((yield* rewriteJob) !== undefined) return { _tag: "Busy" } as const;
             if ((yield* currentMeta).version !== plan.version) return { _tag: "Conflict" } as const;
             yield* state.storage.transaction(
               Effect.gen(function* () {
@@ -1295,6 +1804,21 @@ const aggregateObject = (
       Effect.map(Effect.context<ObjectState | RuntimeContext>(), (services): TwoPhase.Drive => ({
         primary: primaryOf(id, (effect) => Effect.provide(effect, services)),
         participant,
+        receipt: (stored) =>
+          decisionReceiptOf(stored, (stream, seqs) => {
+            const [aggregate = "", ...rest] = stream.split("/");
+            const address = { aggregate, id: rest.join("/") };
+            if (address.aggregate === kit.name && address.id === id) {
+              return Effect.provide(eventsAt(seqs), services);
+            }
+            const stub = peer(address);
+            // An instance that can't be reached gives none: the receipt is still its commits and reply.
+            return stub === undefined
+              ? Effect.succeed([])
+              : callOnce<ReadonlyArray<StoredEvent>>(stub.eventsAt(seqs)).pipe(
+                  Effect.catchCause(() => Effect.succeed([])),
+                );
+          }),
       }));
     /** As the primary: what became of an attempt, for an instance that holds its intent and asks. */
     const outcomeOf = (txId: string) =>
@@ -1310,6 +1834,11 @@ const aggregateObject = (
      */
     const settle = (id: string): Effect.Effect<boolean, never, ObjectState | RuntimeContext> =>
       Effect.gen(function* () {
+        // A rewrite holds the instance too: carry it on, and the instance is free.
+        if ((yield* rewriteJob) !== undefined) {
+          yield* driveRewrite;
+          return true;
+        }
         const intent = yield* intentOf;
         if (intent === undefined) return true;
         if (isPlan(intent)) {
@@ -1379,11 +1908,12 @@ const aggregateObject = (
       Effect.gen(function* () {
         const { sent, kick } = yield* whenFree(id, commit(id, command, meta));
         if (kick) yield* outbox.kick;
+        if (sent._tag === "Accepted") yield* compactWhenDue(id, sent.receipt.version);
         return sent;
       });
     const executed = (commandId: string) =>
       state.storage
-        .get<SendResult>(`receipt:${commandId}`)
+        .get<StoredResult>(`receipt:${commandId}`)
         .pipe(Effect.map((receipt) => receipt !== undefined));
     // Scheduled commands: one durable callback job per name, run here when
     // due. `scheduled:<name>` holds the token of the job that may run, or
@@ -1477,6 +2007,10 @@ const aggregateObject = (
         }).pipe(reportDefects),
       state: () => reportDefects(currentMeta),
       after: (after: number) => reportDefects(eventsAfter(after)),
+      eventsAt: (seqs: ReadonlyArray<number>) => reportDefects(eventsAt(seqs)),
+      rewrite: (id: string, input: RewriteInput) => reportDefects(rewrite(id, input)),
+      rewriteStatus: (rewriteId: string) => reportDefects(rewriteStatus(rewriteId)),
+      compact: (id: string, name: string) => reportDefects(compact(id, name)),
       // A decision, with this instance as its primary: see `TwoPhase.decide`.
       txDecide: (id: string, name: string, command: Json, meta: Aggregate.SendMeta) =>
         Effect.gen(function* () {
@@ -1503,6 +2037,7 @@ const aggregateObject = (
           return yield* exclusively(
             Effect.gen(function* (): Generator<any, TwoPhase.ReadResult> {
               if ((yield* intentOf) !== undefined) return { _tag: "Busy" };
+              if ((yield* rewriteJob) !== undefined) return { _tag: "Busy" };
               return { _tag: "Read", ...(yield* currentMeta) };
             }),
           );
@@ -1516,6 +2051,7 @@ const aggregateObject = (
               if (held !== undefined) {
                 return held.txId === prepare.txId ? { _tag: "Prepared" } : { _tag: "Busy" };
               }
+              if ((yield* rewriteJob) !== undefined) return { _tag: "Busy" };
               if ((yield* currentMeta).version !== prepare.version) return { _tag: "Conflict" };
               yield* state.storage.transaction(
                 Effect.gen(function* () {
@@ -1570,9 +2106,36 @@ const viewObject = (
     const read = stored.pipe(Effect.map((s) => (stale(s) ? emptySnapshot : s)));
     const reset = Effect.gen(function* () {
       if (!stale(yield* stored)) return;
-      yield* clearPrefixes(["entry:", "in:"]);
-      yield* state.storage.delete(["snapshot", "routed", "in-seq"]);
+      yield* clearPrefixes(["entry:", "in:", "rev:", "rev-wait:", "revised:"]);
+      yield* state.storage.delete(["snapshot", "routed", "in-seq", "revs"]);
     });
+    // `revs`: the revisions this key holds (`rev:<source>|<seq>` rows) until
+    // their source says it has sent them all, the last it took from each
+    // source, and how many it has sent its own consumers.
+    const revs = state.storage
+      .get<ViewRevisions>("revs")
+      .pipe(Effect.map((found) => found ?? { pending: 0, taken: {}, n: 0 }));
+    /** Whether the key still holds a revision of `root` from `source`, for an event yet to arrive. */
+    const awaits = (root: string, source: string) =>
+      Effect.map(state.storage.list<Delivery>({ prefix: `rev:${source}|` }), (rows) =>
+        awaitsRevision(rows.values(), root, source),
+      );
+    /** Every row under a prefix, read a page at a time. */
+    const allRows = <T>(prefix: string) =>
+      Effect.gen(function* () {
+        const out: Array<readonly [string, T]> = [];
+        let after: string | undefined;
+        while (true) {
+          const page = yield* state.storage.list<T>({
+            prefix,
+            limit: 512,
+            ...(after === undefined ? {} : { startAfter: after }),
+          });
+          out.push(...page.entries());
+          if (page.size < 512) return out;
+          after = out[out.length - 1]![0];
+        }
+      });
     const entriesAfter = (after: number) =>
       stored.pipe(
         Effect.flatMap((snapshot) =>
@@ -1601,20 +2164,66 @@ const viewObject = (
      * Apply deliveries to the key and route what it emits. Callers hold the
      * exclusive section and its transaction.
      */
-    const apply = (key: string, deliveries: ReadonlyArray<Delivery>) =>
+    const apply = (key: string, arrived: ReadonlyArray<Delivery>) =>
       Effect.gen(function* () {
         yield* reset;
         const before = yield* read;
+        // An event a rewrite changed before it got here arrives as it is now.
+        const held = yield* revs;
+        let deliveries = arrived;
+        if (held.pending > 0) {
+          const taken: Array<Delivery> = [];
+          const used: Array<Delivery> = [];
+          for (const delivery of arrived) {
+            const row = revisionRow(delivery.source, delivery.seq);
+            const revised = yield* state.storage.get<Delivery>(row);
+            if (revised === undefined) {
+              taken.push(delivery);
+              continue;
+            }
+            yield* state.storage.delete(row);
+            used.push(revised);
+            if (!revised.revision?.gone) taken.push(withoutRevision(revised));
+          }
+          if (used.length > 0) {
+            yield* state.storage.put("revs", { ...held, pending: held.pending - used.length });
+          }
+          // The last event a rewrite was waiting for: the key has now taken all of it.
+          for (const revised of used) {
+            const root = revised.revision!.root;
+            const waiting = `rev-wait:${root}|${revised.source}`;
+            const sent = yield* state.storage.get<ReadonlyArray<Revised>>(waiting);
+            if (sent === undefined) continue;
+            if (yield* awaits(root, revised.source)) continue;
+            const row = `revised:${root}|${revised.source}`;
+            const had = (yield* state.storage.get<ReadonlyArray<Revised>>(row)) ?? [];
+            yield* state.storage.put(row, mergeRevised(had, sent));
+            yield* state.storage.delete(waiting);
+          }
+          deliveries = taken;
+        }
+        // An event its source removed, rewritten since: it arrives as the rewrite leaves it.
+        const recalls = held.recalls ?? [];
+        for (const recall of recalls) {
+          const { rows } = yield* kit.recall(key, recall, deliveries);
+          deliveries = rows.map((row) => viewInputOf(row).delivery);
+        }
         const result = yield* kit.apply(key, before, deliveries);
+        if (recalls.length > 0) {
+          const kept = keptRecalls(recalls, result.snapshot.checkpoints);
+          if (kept.length < recalls.length) {
+            yield* state.storage.put("revs", { ...(yield* revs), recalls: kept });
+          }
+        }
         if (!result.changed) return;
         const rows: Record<string, ViewEntry> = {};
         for (const entry of result.entries) rows[`entry:${pad(entry.seq)}`] = entry;
-        // The key's immutable input log: every delivery it applied, in order.
-        const accepted = deliveries.filter((d) => (before.checkpoints[d.source] ?? 0) < d.seq);
+        // The key's input log: every delivery it applied, in order, with what it emitted.
+        const accepted = result.inputs;
         const inputs = (yield* state.storage.get<number>("in-seq")) ?? 0;
-        const log: Record<string, Delivery> = {};
-        accepted.forEach((delivery, index) => {
-          log[`in:${pad(inputs + index + 1)}`] = delivery;
+        const log: Record<string, ViewInput> = {};
+        accepted.forEach((input, index) => {
+          log[`in:${pad(inputs + index + 1)}`] = input;
         });
         if (accepted.length > 0) yield* state.storage.put(log);
         yield* state.storage.put("in-seq", inputs + accepted.length);
@@ -1644,7 +2253,152 @@ const viewObject = (
           ),
         );
         if (live.send.length > 0) after.push(outbox.kick);
-      }).pipe(kit.observe(key, deliveries));
+      }).pipe(kit.observe(key, arrived));
+    /**
+     * Take the revisions a source has sent for one rewrite: fold the key's
+     * inputs again with them, and tell its own consumers what changed among
+     * its entries. Callers hold the exclusive section and its transaction.
+     */
+    const settle = (key: string, root: string, source: string) =>
+      Effect.gen(function* () {
+        yield* reset;
+        const before = yield* read;
+        const held = yield* revs;
+        const pending = new Map(
+          (yield* allRows<Delivery>("rev:")).map(
+            ([, revised]) => [revisionKey(revised.source, revised.seq), revised] as const,
+          ),
+        );
+        // Called once the revisions still held are stored again.
+        const note = (sent: ReadonlyArray<Revised>) =>
+          Effect.gen(function* () {
+            const row = `revised:${root}|${source}`;
+            const waiting = `rev-wait:${root}|${source}`;
+            const all = mergeRevised(
+              mergeRevised(
+                (yield* state.storage.get<ReadonlyArray<Revised>>(row)) ?? [],
+                (yield* state.storage.get<ReadonlyArray<Revised>>(waiting)) ?? [],
+              ),
+              sent,
+            );
+            // A revision still held, for an event yet to arrive: not all taken yet.
+            if (yield* awaits(root, source)) return yield* state.storage.put(waiting, all);
+            yield* state.storage.delete(waiting);
+            yield* state.storage.put(row, all);
+          });
+        let inputs: ReadonlyArray<StoredViewInput> = (yield* allRows<StoredViewInput>("in:")).map(
+          ([, row]) => row,
+        );
+        // Rows stored before entries were tracked: fold them as they are, to learn each one's entries.
+        if (inputs.some((row) => !("delivery" in row))) {
+          inputs = (yield* kit.refold(key, { snapshot: emptySnapshot, top: 0 }, inputs)).inputs;
+        }
+        // The rewrite itself, for what the key kept of events its source no longer holds.
+        const recall = recallOf(pending, source);
+        if (recall !== undefined) pending.delete(revisionKey(source, 0));
+        const recalls =
+          recall === undefined
+            ? held.recalls
+            : keptRecalls([...(held.recalls ?? []), recall], before.checkpoints);
+        const recalled =
+          recall === undefined
+            ? { rows: inputs, changed: false }
+            : yield* kit.recall(key, recall, inputs);
+        const taken = reviseInputs(recalled.rows, pending, before.checkpoints);
+        // The revisions of events still to arrive stay.
+        yield* clearPrefixes(["rev:"]);
+        yield* putRows(
+          state.storage,
+          [...taken.left.values()].map(
+            (revised) => [revisionRow(revised.source, revised.seq), revised] as const,
+          ),
+        );
+        if (!taken.changed && !recalled.changed) {
+          yield* state.storage.put("revs", { ...held, pending: taken.left.size, recalls });
+          return yield* note([]);
+        }
+        const folded = yield* kit.refold(key, { snapshot: emptySnapshot, top: 0 }, taken.rows);
+        const entries = (yield* allRows<ViewEntry>("entry:")).map(([, entry]) => entry);
+        const changes = entryChanges(entries, folded.entries);
+        const snapshot = refolded(before, folded.snapshot, folded.top);
+        yield* clearPrefixes(["in:"]);
+        yield* putRows(
+          state.storage,
+          folded.inputs.map((input, index) => [`in:${pad(index + 1)}`, input] as const),
+        );
+        yield* state.storage.put("in-seq", folded.inputs.length);
+        const removed = changes.filter((change) => change.after === undefined);
+        if (removed.length > 0) {
+          for (const batch of Arr.chunksOf(removed, 128)) {
+            yield* state.storage.delete(batch.map((change) => `entry:${pad(change.seq)}`));
+          }
+        }
+        yield* putRows(
+          state.storage,
+          changes.flatMap((change) =>
+            change.after === undefined ? [] : [[`entry:${pad(change.seq)}`, change.after] as const],
+          ),
+        );
+        yield* state.storage.put("snapshot", snapshot);
+        // An entry it had is revised; one it now emits besides is new to its consumers.
+        const stamped = stampRevisions(
+          { origin: kit.name, id: key },
+          root,
+          held.n,
+          yield* kit.revise(
+            key,
+            root,
+            changes.filter((change) => change.seq <= before.seq),
+          ),
+          yield* Clock.currentTimeMillis,
+        );
+        const added = (yield* kit.revise(
+          key,
+          root,
+          changes.filter((change) => change.seq > before.seq),
+        )).map(withoutRevision);
+        const live = yield* Backfill.routeCommit(
+          sourceFor(key),
+          kit.targets,
+          yield* state.storage.get<Routed>("routed"),
+          before.seq,
+          snapshot.seq,
+          added,
+        );
+        yield* state.storage.put("routed", live.routed);
+        yield* state.storage.put("revs", {
+          ...held,
+          pending: taken.left.size,
+          n: stamped.last,
+          recalls,
+        } satisfies ViewRevisions);
+        yield* outbox.stage([...stamped.deliveries, ...live.send]);
+        yield* note(stamped.sent);
+        after.push(broadcast(({ key, subscription }) => kit.push(key, subscription, snapshot, [])));
+        after.push(outbox.kick);
+      });
+    /**
+     * Take revisions from a source: hold each until its source's `done`.
+     * Callers hold the exclusive section and its transaction.
+     */
+    const revise = (key: string, revisions: ReadonlyArray<Delivery>) =>
+      Effect.gen(function* () {
+        for (const delivery of revisions) {
+          // For an earlier generation: sent by an instance still on older code.
+          if ((delivery.target.generation ?? 0) < kit.generation) continue;
+          const revision = delivery.revision!;
+          const held = yield* revs;
+          if (revision.n <= (held.taken[delivery.source] ?? 0)) continue;
+          const taken = { ...held.taken, [delivery.source]: revision.n };
+          if (revision.done) {
+            yield* state.storage.put("revs", { ...held, taken });
+            yield* settle(key, revision.root, delivery.source);
+            continue;
+          }
+          yield* state.storage.put(revisionRow(delivery.source, delivery.seq), delivery);
+          yield* state.storage.put("revs", { ...held, taken, pending: held.pending + 1 });
+        }
+      });
     const flushAfter = Effect.suspend(() => {
       const pending = after;
       after = [];
@@ -1742,12 +2496,20 @@ const viewObject = (
         });
       });
     return {
-      receive: (key: string, deliveries: ReadonlyArray<Delivery>) =>
+      receive: (key: string, arrived: ReadonlyArray<Delivery>) =>
         reportDefects(
           Effect.gen(function* () {
             // Saved before anything else: the key's backfill jobs find it by this id.
             if ((yield* state.storage.get<string>(ID_KEY)) === undefined)
               yield* state.storage.put({ [ID_KEY]: key });
+            // A rewrite's revisions are taken apart from the key's other inputs.
+            const revisions = arrived.filter((delivery) => delivery.revision !== undefined);
+            if (revisions.length > 0) {
+              yield* exclusively(state.storage.transaction(revise(key, revisions)));
+              yield* flushAfter;
+            }
+            const deliveries = arrived.filter((delivery) => delivery.revision === undefined);
+            if (deliveries.length === 0) return;
             // While a backfill runs, the key buffers deliveries and merges them in order.
             if (!(yield* consumerFor(key).admit(target, deliveries))) return;
             // Listed in the directory after the call returns, not before its first entry.
@@ -1762,6 +2524,12 @@ const viewObject = (
       read: () => reportDefects(read),
       after: (after: number) => reportDefects(entriesAfter(after)),
       page: (range: ListRange | undefined) => reportDefects(entriesIn(range)),
+      revised: (root: string, source: string) =>
+        reportDefects(
+          state.storage
+            .get<ReadonlyArray<Revised>>(`revised:${root}|${source}`)
+            .pipe(Effect.map((sent) => sent ?? null)),
+        ),
       // The backfill protocol, as a source, a consumer and a scanner.
       ...scannerRpc(() => scannerFor()),
       ...runRpc(relay, runFor),
@@ -1816,14 +2584,30 @@ const viewObject = (
     };
   });
 
+/** The revisions a view key holds and has taken. */
+interface ViewRevisions {
+  /** How many `rev:` rows it holds. */
+  readonly pending: number;
+  /** The last revision it took from each source. */
+  readonly taken: Readonly<Record<string, number>>;
+  /** The revisions it has sent its own consumers. */
+  readonly n: number;
+  /** Rewrites of events its sources removed, held for those yet to arrive (see `keptRecalls`). */
+  readonly recalls?: ReadonlyArray<Delivery>;
+}
+
 const policyObject = (kit: PolicyKit) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
-    const inbox = yield* queue<Delivery>("inbox", kit.run);
+    // Detached: a delivery arrives inside the sender's drain, so draining it
+    // here would run the policy's commands one call deeper than the sender.
+    const inbox = yield* queue<Delivery>("inbox", kit.run, { detached: true });
     return {
       receive: (delivery: Delivery) =>
         reportDefects(
           Effect.gen(function* () {
+            // A rewrite's revision is the past changed: what a policy did has happened.
+            if (delivery.revision !== undefined) return;
             const id = `${delivery.source}:${delivery.seq}`;
             const accepted = yield* exclusively(
               state.storage.transaction(
@@ -1854,6 +2638,10 @@ interface ProjectionMeta {
   readonly checkpoints: Readonly<Record<string, number>>;
   /** The projection's generation the log was built by: an earlier one starts over. */
   readonly generation?: number;
+  /** How many revisions it holds (`rev:` rows) of events it has not been given yet. */
+  readonly pending?: number;
+  /** The last revision it took from each source. */
+  readonly taken?: Readonly<Record<string, number>>;
 }
 
 const emptyProjectionMeta: ProjectionMeta = {
@@ -1889,7 +2677,7 @@ const projectionObject = (
     const reset = Effect.gen(function* () {
       const meta = yield* state.storage.get<ProjectionMeta>("meta");
       if (meta === undefined || (meta.generation ?? 0) >= kit.generation) return;
-      yield* clearPrefixes(["in:"]);
+      yield* clearPrefixes(["in:", "rev:", "rev-wait:", "settled:"]);
       yield* state.storage.delete("meta");
     });
     const size = kit.options.batch?.size ?? 1;
@@ -1932,18 +2720,32 @@ const projectionObject = (
             }
             yield* kit.run(meta.key, run);
             yield* exclusively(
-              Effect.gen(function* () {
-                const current = yield* readMeta;
-                const handled: Record<string, number> = {};
-                for (const { delivery } of run) {
-                  handled[delivery.source] = Math.max(handled[delivery.source] ?? 0, delivery.seq);
-                }
-                yield* state.storage.put("meta", {
-                  ...current,
-                  processed: run[run.length - 1]!.position,
-                  checkpoints: mergeCheckpoints(current.checkpoints, handled),
-                } satisfies ProjectionMeta);
-              }),
+              state.storage.transaction(
+                Effect.gen(function* () {
+                  const current = yield* readMeta;
+                  const handled: Record<string, number> = {};
+                  for (const { delivery } of run) {
+                    handled[delivery.source] = Math.max(
+                      handled[delivery.source] ?? 0,
+                      delivery.seq,
+                    );
+                    // Every revision of a rewrite from this source is handled.
+                    if (delivery.revision?.done) {
+                      yield* state.storage.put(
+                        `settled:${delivery.revision.root}|${delivery.source}`,
+                        true,
+                      );
+                    }
+                  }
+                  yield* state.storage.put("meta", {
+                    ...current,
+                    processed: run[run.length - 1]!.position,
+                    checkpoints: mergeCheckpoints(current.checkpoints, handled),
+                  } satisfies ProjectionMeta);
+                  // A handled input is not kept: the store the handler wrote has it.
+                  yield* state.storage.delete(rows.size === 0 ? [] : [...rows.keys()]);
+                }),
+              ),
             );
           }
         }),
@@ -1962,8 +2764,110 @@ const projectionObject = (
      * Accept a delivery into the key's log, once. Callers hold the exclusive
      * section and its transaction; `true` when it was new.
      */
-    const intake = (key: string, delivery: Delivery) =>
+    /** Whether the key still holds a revision of `root` from `source`, for an event yet to arrive. */
+    const awaits = (root: string, source: string) =>
+      Effect.map(state.storage.list<Delivery>({ prefix: `rev:${source}|` }), (rows) =>
+        awaitsRevision(rows.values(), root, source),
+      );
+    /** Append a row to the key's log. Callers hold the exclusive section and its transaction. */
+    const append = (key: string, meta: ProjectionMeta, delivery: Delivery) =>
       Effect.gen(function* () {
+        const position = meta.accepted + 1;
+        yield* state.storage.put(`in:${pad(position)}`, {
+          position,
+          delivery,
+          at: yield* Clock.currentTimeMillis,
+        } satisfies Accepted);
+        // The backstop: handled even if this instance dies before the drain runs.
+        yield* callback.schedule("drain", {
+          after: `${Math.max(waitMillis, PROJECTION_RETRY_MS)} millis`,
+          payload: {},
+          progress: yield* advance,
+        });
+        return { ...meta, key, accepted: position } satisfies ProjectionMeta;
+      });
+    /**
+     * Take a rewrite's revision of an event. One the key has not been given
+     * yet is held until it arrives; one still waiting in the log is swapped
+     * there, unless a drain may be handling it; one already handled goes
+     * into the log as a revision, for the `rewrite` handler. Callers hold the
+     * exclusive section and its transaction; `true` when the log grew.
+     */
+    const reviseIntake = (key: string, delivery: Delivery) =>
+      Effect.gen(function* () {
+        if ((delivery.target.generation ?? 0) < kit.generation) return false;
+        yield* reset;
+        const revision = delivery.revision!;
+        const meta = yield* readMeta;
+        if (revision.n <= (meta.taken?.[delivery.source] ?? 0)) return false;
+        const taken = { ...meta.taken, [delivery.source]: revision.n };
+        if (revision.done) {
+          // Held while a revision of it waits for its event: handled after that.
+          if (yield* awaits(revision.root, delivery.source)) {
+            yield* state.storage.put(`rev-wait:${revision.root}|${delivery.source}`, delivery);
+            yield* state.storage.put("meta", { ...meta, key, taken } satisfies ProjectionMeta);
+            return false;
+          }
+          yield* state.storage.put("meta", yield* append(key, { ...meta, taken }, delivery));
+          return true;
+        }
+        // Newly given to this key: an ordinary input, late.
+        if (revision.before === undefined) {
+          const intake = {
+            ...meta.intake,
+            [delivery.source]: Math.max(meta.intake[delivery.source] ?? 0, delivery.seq),
+          };
+          yield* state.storage.put(
+            "meta",
+            yield* append(key, { ...meta, taken, intake }, withoutRevision(delivery)),
+          );
+          return true;
+        }
+        // Given to the key, and yet to arrive: taken when it does.
+        if (delivery.seq > (meta.intake[delivery.source] ?? 0)) {
+          yield* state.storage.put(revisionRow(delivery.source, delivery.seq), delivery);
+          yield* state.storage.put("meta", {
+            ...meta,
+            key,
+            taken,
+            pending: (meta.pending ?? 0) + 1,
+          } satisfies ProjectionMeta);
+          return false;
+        }
+        // A drain under way may be handling a waiting input: it is then left as it is.
+        const leased = yield* state.storage.get<number>(lease);
+        const idle = leased === undefined || leased <= (yield* Clock.currentTimeMillis);
+        if (idle) {
+          const waiting = yield* state.storage.list<Accepted>({
+            prefix: "in:",
+            start: `in:${pad(meta.processed + 1)}`,
+          });
+          for (const [row, accepted] of waiting) {
+            const input = accepted.delivery;
+            if (
+              input.revision !== undefined ||
+              input.source !== delivery.source ||
+              input.seq !== delivery.seq
+            ) {
+              continue;
+            }
+            yield* state.storage.put(row, {
+              ...accepted,
+              delivery: revision.gone
+                ? { ...delivery, revision: { root: revision.root, n: revision.n, gone: true } }
+                : withoutRevision(delivery),
+            } satisfies Accepted);
+            yield* state.storage.put("meta", { ...meta, key, taken } satisfies ProjectionMeta);
+            return false;
+          }
+        }
+        yield* state.storage.put("meta", yield* append(key, { ...meta, taken }, delivery));
+        return true;
+      });
+    const intake = (key: string, arrived: Delivery) =>
+      Effect.gen(function* () {
+        if (arrived.revision !== undefined) return yield* reviseIntake(key, arrived);
+        let delivery = arrived;
         const sent = delivery.target.generation ?? 0;
         // For an earlier generation: sent by an instance still on older code.
         if (sent < kit.generation) return false;
@@ -1974,26 +2878,30 @@ const projectionObject = (
           );
         }
         yield* reset;
-        const meta = yield* readMeta;
+        let meta = yield* readMeta;
         if ((meta.intake[delivery.source] ?? 0) >= delivery.seq) return false;
-        const position = meta.accepted + 1;
-        yield* state.storage.put(`in:${pad(position)}`, {
-          position,
-          delivery,
-          at: yield* Clock.currentTimeMillis,
-        } satisfies Accepted);
-        yield* state.storage.put("meta", {
-          ...meta,
-          key,
-          accepted: position,
-          intake: { ...meta.intake, [delivery.source]: delivery.seq },
-        } satisfies ProjectionMeta);
-        // The backstop: handled even if this instance dies before the drain runs.
-        yield* callback.schedule("drain", {
-          after: `${Math.max(waitMillis, PROJECTION_RETRY_MS)} millis`,
-          payload: {},
-          progress: yield* advance,
-        });
+        meta = { ...meta, key, intake: { ...meta.intake, [delivery.source]: delivery.seq } };
+        // An event a rewrite changed before it got here arrives as it is now.
+        if ((meta.pending ?? 0) > 0) {
+          const row = revisionRow(delivery.source, delivery.seq);
+          const revised = yield* state.storage.get<Delivery>(row);
+          if (revised !== undefined) {
+            yield* state.storage.delete(row);
+            meta = { ...meta, pending: (meta.pending ?? 1) - 1 };
+            if (!revised.revision?.gone) meta = yield* append(key, meta, withoutRevision(revised));
+            // The last event a rewrite was waiting for: its `done` follows it in the log.
+            const root = revised.revision!.root;
+            const waiting = `rev-wait:${root}|${delivery.source}`;
+            const done = yield* state.storage.get<Delivery>(waiting);
+            if (done !== undefined && !(yield* awaits(root, delivery.source))) {
+              yield* state.storage.delete(waiting);
+              meta = yield* append(key, meta, done);
+            }
+            yield* state.storage.put("meta", meta);
+            return true;
+          }
+        }
+        yield* state.storage.put("meta", yield* append(key, meta, delivery));
         return true;
       });
     const target = targetId({
@@ -2047,12 +2955,24 @@ const projectionObject = (
         reportDefects(
           Effect.gen(function* () {
             yield* keep(key);
-            if (!(yield* consumerFor(key).admit(target, [delivery]))) return;
+            // A rewrite's revisions are taken apart from the key's other inputs.
+            if (
+              delivery.revision === undefined &&
+              !(yield* consumerFor(key).admit(target, [delivery]))
+            ) {
+              return;
+            }
             const accepted = yield* exclusively(state.storage.transaction(intake(key, delivery)));
             if (accepted) yield* state.waitUntil(drain.pipe(Effect.ignoreCause));
           }),
         ),
       checkpoints: () => reportDefects(readMeta.pipe(Effect.map((meta) => meta.checkpoints))),
+      revised: (root: string, source: string) =>
+        reportDefects(
+          state.storage
+            .get<boolean>(`settled:${root}|${source}`)
+            .pipe(Effect.map((settled) => settled === true)),
+        ),
       // The backfill protocol, as a consumer and a scanner.
       ...scannerRpc(() => scannerFor()),
       ...runRpc(relay, runFor),
@@ -2066,6 +2986,9 @@ const projectionObject = (
         ),
     };
   });
+
+/** Where a stream key indexes the entries it appended for one source event. */
+const fromPrefix = (source: string, seq: number) => `from:${source}|${pad(seq)}:`;
 
 const streamObject = (kit: StreamKit) =>
   Effect.gen(function* () {
@@ -2106,14 +3029,19 @@ const streamObject = (kit: StreamKit) =>
                 at: write.at,
                 commandId: write.commandId,
               },
+              from: { source: write.source, seq: write.sourceSeq },
             };
           });
           const next: StreamMeta = { ...meta, seq: meta.seq + added.length };
           yield* state.storage.transaction(
             Effect.gen(function* () {
-              const rows: Record<string, StreamEntry> = {};
-              for (const entry of added) rows[`entry:${pad(entry.seq)}`] = entry;
-              if (added.length > 0) yield* state.storage.put(rows);
+              const rows: Record<string, StreamEntry | number> = {};
+              for (const entry of added) {
+                rows[`entry:${pad(entry.seq)}`] = entry;
+                // Found again by the source event it was appended for, should that be rewritten.
+                rows[`${fromPrefix(write.source, write.sourceSeq)}${pad(entry.seq)}`] = entry.seq;
+              }
+              if (added.length > 0) yield* putRows(state.storage, Object.entries(rows));
               yield* state.storage.put("meta", next);
             }),
           );
@@ -2133,6 +3061,36 @@ const streamObject = (kit: StreamKit) =>
         Effect.gen(function* () {
           yield* state.storage.put("meta", advanceStreamMeta(yield* readMeta, handled));
         }).pipe(exclusively, reportDefects),
+      revise: (key: string, revision: StreamRevision) =>
+        state.storage
+          .transaction(
+            Effect.gen(function* () {
+              const meta = yield* readMeta;
+              const prefix = fromPrefix(revision.source, revision.sourceSeq);
+              const seqs = [...(yield* state.storage.list<number>({ prefix })).values()];
+              const matching = (yield* Effect.forEach(seqs, (seq) =>
+                state.storage.get<StreamEntry>(`entry:${pad(seq)}`),
+              )).filter((entry): entry is StreamEntry => entry !== undefined);
+              const revised = reviseEntries(kit.name, key, meta.seq, matching, revision);
+              if (revised.put.length === 0 && revised.removed.length === 0) return;
+              if (revised.removed.length > 0) {
+                yield* state.storage.delete(
+                  revised.removed.flatMap((seq) => [`entry:${pad(seq)}`, `${prefix}${pad(seq)}`]),
+                );
+              }
+              yield* putRows(
+                state.storage,
+                revised.put.flatMap(
+                  (entry): ReadonlyArray<readonly [string, StreamEntry | number]> => [
+                    [`entry:${pad(entry.seq)}`, entry],
+                    [`${prefix}${pad(entry.seq)}`, entry.seq],
+                  ],
+                ),
+              );
+              yield* state.storage.put("meta", { ...meta, seq: revised.top });
+            }),
+          )
+          .pipe(exclusively, reportDefects),
       read: () => reportDefects(readMeta),
       after: (after: number) => reportDefects(entriesAfter(after)),
       page: (range: ListRange | undefined) => reportDefects(entriesIn(range)),
@@ -2440,21 +3398,38 @@ export const makePlatform = <R>(
 
           // The first Domain call in each isolate starts the runs of the model's
           // consumers (each starts once): where no deploy-time job runs them, that
-          // starts a catch-up.
+          // starts a catch-up. The call doesn't wait for it: the runs start in the
+          // background, kept alive by the invocation, and a later call starts them
+          // again if they didn't all start.
           let news: Effect.Effect<void> | undefined;
-          const announce = Effect.suspend(() => {
+          // Begin the pending runs; on failure they stay pending, for the next try.
+          const beginPending: Effect.Effect<void, unknown> = Effect.suspend(() => {
             const pending = news;
             if (pending === undefined) return Effect.void;
             news = undefined;
             return pending.pipe(
               Effect.timeout("5 seconds"),
-              Effect.catchCause(() =>
-                Effect.sync(() => {
-                  news = pending;
-                }),
+              Effect.catchCause((cause) =>
+                Effect.andThen(
+                  Effect.sync(() => {
+                    news ??= pending;
+                  }),
+                  Effect.fail(cause),
+                ),
               ),
             );
           });
+          const announce = Effect.uninterruptible(
+            Effect.suspend(() => {
+              if (news === undefined) return Effect.void;
+              const begin = Effect.ignoreCause(beginPending);
+              if (host.background === undefined)
+                return begin.pipe(Effect.forkDetach, Effect.asVoid);
+              return host
+                .background(begin)
+                .pipe(Effect.flatMap((handed) => (handed ? Effect.void : begin)));
+            }),
+          );
 
           const modelHost: ModelHost = {
             aggregate: (aggregate, kit) =>
@@ -2528,6 +3503,24 @@ export const makePlatform = <R>(
                           unwrapDefects<{ state: Json; version: number }>(
                             namespace.getByName(id).state(),
                           ),
+                        ),
+                      ),
+                    events: (id) =>
+                      unwrapDefects<ReadonlyArray<StoredEvent>>(namespace.getByName(id).after(0)),
+                    rewrite: (id, input) =>
+                      announce.pipe(
+                        Effect.andThen(
+                          unwrapDefects<RewriteResult>(namespace.getByName(id).rewrite(id, input)),
+                        ),
+                      ),
+                    rewriteStatus: (id, rewriteId) =>
+                      unwrapDefects<RewriteStatus | null>(
+                        namespace.getByName(id).rewriteStatus(rewriteId),
+                      ).pipe(Effect.map((status) => status ?? undefined)),
+                    compact: (id, name) =>
+                      announce.pipe(
+                        Effect.andThen(
+                          unwrapDefects<CompactResult>(namespace.getByName(id).compact(id, name)),
                         ),
                       ),
                     changes: (id) =>
@@ -2679,6 +3672,10 @@ export const makePlatform = <R>(
                   return {
                     receive: (key, deliveries) =>
                       unwrapDefects(namespace.getByName(key).receive(key, deliveries)),
+                    revised: (key, root, source) =>
+                      unwrapDefects<ReadonlyArray<Revised> | null>(
+                        namespace.getByName(key).revised(root, source),
+                      ).pipe(Effect.map((sent) => sent ?? undefined)),
                     read,
                     // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
                     changes: (key) =>
@@ -2734,6 +3731,8 @@ export const makePlatform = <R>(
                       unwrapDefects<Readonly<Record<string, number>>>(
                         namespace.getByName(key).checkpoints(),
                       ),
+                    revised: (key, root, source) =>
+                      unwrapDefects<boolean>(namespace.getByName(key).revised(root, source)),
                   };
                 }),
               ),
@@ -2753,6 +3752,8 @@ export const makePlatform = <R>(
                       unwrapDefects(namespace.getByName(key).append(key, write)),
                     advance: (key, handled) =>
                       unwrapDefects(namespace.getByName(key).advance(handled)),
+                    revise: (key, revision) =>
+                      unwrapDefects(namespace.getByName(key).revise(key, revision)),
                     read,
                     // Streamed responses poll; WebSocket reads (`connect`) are pushed on append.
                     changes: (key) =>
@@ -2790,19 +3791,24 @@ export const makePlatform = <R>(
                 }
               }).pipe(
                 Effect.andThen(
-                  Effect.sync(() => {
+                  Effect.suspend(() => {
                     model = targets;
                     planOf = plansOfTarget;
-                    if (backfilled.length === 0) return;
+                    if (backfilled.length === 0) return Effect.void;
                     // Where no deploy-time job runs, the first call starts each run (once).
+                    // Each run's root is an object of its own: start them all at once.
                     news = Effect.suspend(() => {
                       const plans = plansOf(backfilled, planOf);
                       return Effect.forEach(
                         backfilled.filter((target) => plans[target] !== undefined),
                         (target) => net.run.begin(target, plans[target]!),
-                        { discard: true },
+                        { discard: true, concurrency: "unbounded" },
                       );
                     });
+                    // A host that can reach the runs on its own begins them now.
+                    return host.begin === undefined
+                      ? Effect.void
+                      : inInit(host.begin(beginPending));
                   }),
                 ),
               ),

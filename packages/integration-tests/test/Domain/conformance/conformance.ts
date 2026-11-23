@@ -105,6 +105,71 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
     );
 
   test(
+    "a rewrite changes an instance's events, its state and its view, once per id",
+    Effect.gen(function* () {
+      const id = fresh("rewrite");
+      yield* call(`/write/${id}?text=${encodeURIComponent("sam was here")}`);
+      expect(yield* call(`/write/${id}?text=hello`)).toEqual({ version: 2 });
+      expect(yield* call(`/redact/${id}?word=sam&id=r-1`)).toEqual({
+        changed: 1,
+        lines: ["", "hello"],
+        // The view folded its inputs again: a blank first line joins as none.
+        text: "hello",
+      });
+      // The same run again answers as it did, and a new one finds nothing left to change.
+      expect(yield* call(`/redact/${id}?word=sam&id=r-1`)).toMatchObject({ changed: 1 });
+      expect(yield* call(`/redact/${id}?word=sam&id=r-2`)).toMatchObject({ changed: 0 });
+      // The instance takes commands again, at the version it had.
+      expect(yield* call(`/write/${id}?text=again`)).toEqual({ version: 3 });
+    }),
+    options,
+  );
+
+  test(
+    "a compaction leaves the roll-up, the same state, and an instance that goes on",
+    Effect.gen(function* () {
+      const id = fresh("compact");
+      yield* call(`/write/${id}?text=a`);
+      yield* call(`/write/${id}?text=b`);
+      expect(yield* call(`/squash/${id}`)).toMatchObject({
+        version: 3,
+        compacted: 2,
+        events: ["MemoBroughtForward"],
+        lines: ["a", "b"],
+      });
+      expect(yield* call(`/write/${id}?text=c`)).toEqual({ version: 4 });
+      // The view kept what it built, without folding the roll-up, and follows what comes after.
+      yield* eventually<{ readonly text: string | null }>(
+        `/redact/${id}?word=nothing-has-this`,
+        ({ text }) => text === "a|b|c",
+      );
+    }),
+    options,
+  );
+
+  test(
+    "a rewrite after a compaction reaches the events the view kept",
+    Effect.gen(function* () {
+      const id = fresh("compact-rewrite");
+      yield* call(`/write/${id}?text=${encodeURIComponent("sam was here")}`);
+      yield* call(`/write/${id}?text=hello`);
+      yield* call(`/squash/${id}`);
+      // The instance holds the roll-up alone; the view holds its copy of both lines.
+      expect(yield* call(`/redact/${id}?word=sam`)).toEqual({
+        changed: 1,
+        lines: ["", "hello"],
+        text: "hello",
+      });
+      expect(yield* call(`/write/${id}?text=again`)).toEqual({ version: 4 });
+      yield* eventually<{ readonly text: string | null }>(
+        `/redact/${id}?word=nothing-has-this`,
+        ({ text }) => text === "hello|again",
+      );
+    }),
+    options,
+  );
+
+  test(
     "a command commits and replies with the new state",
     Effect.gen(function* () {
       const id = fresh("commit");
@@ -537,6 +602,20 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
     }),
     options,
   );
+
+  test(
+    "a policy relays a command through 20 aggregate instances",
+    Effect.gen(function* () {
+      // Each hop's event makes a policy send a command to the next instance.
+      // A platform that runs each hop inside the call that delivered the last
+      // one nests deeper every hop, until the host refuses the call (#3627).
+      const chain = fresh("relay");
+      expect(yield* call(`/relay/${chain}?hops=20`)).toEqual({ passed: true });
+      const last = yield* eventually<{ passed: boolean }>(`/hop/${chain}-0`, (hop) => hop.passed);
+      expect(last).toEqual({ passed: true });
+    }),
+    options,
+  );
 };
 
 export interface RebuildOptions extends Omit<ConformanceOptions, "within"> {
@@ -550,7 +629,9 @@ export interface RebuildOptions extends Omit<ConformanceOptions, "within"> {
 /**
  * A projection rebuilt by a version bump, writing a stream it wrote before:
  * every entry is kept, none is appended twice, and what happens after the
- * bump is appended. The case redeploys the front, so it runs alone and last.
+ * bump is appended. A view the bump adds is backfilled from every counter
+ * that recorded events before it. The case redeploys the front, so it runs
+ * alone and last.
  */
 export const rebuild = ({ test, url, kind, deploy }: RebuildOptions) => {
   const call = <T>(path: string) => Effect.flatMap(url, (base) => get<T>(base, path));
@@ -558,8 +639,19 @@ export const rebuild = ({ test, url, kind, deploy }: RebuildOptions) => {
   const tally = (counter: string, by: number) =>
     call<ReadonlyArray<number>>(`/tally/${counter}?by=${by}`);
 
+  type Replay = { readonly total: number; readonly increments: number };
+  /** Read the view version 1 adds for a counter, until it holds `expected` or time is up. */
+  const replay = (counter: string, expected: Replay) =>
+    call<Replay>(`/replay/${counter}`).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (view) => view.total === expected.total && view.increments === expected.increments,
+        times: 90,
+      }),
+    );
+
   test(
-    "a projection rebuilt by a version bump keeps its stream and appends what follows",
+    "a version bump rebuilds a projection, keeping its stream, and backfills a view it adds",
     Effect.gen(function* () {
       yield* deploy(0);
       const run = fresh("rebuild");
@@ -583,6 +675,20 @@ export const rebuild = ({ test, url, kind, deploy }: RebuildOptions) => {
       expect(yield* tally(`${run}~c`, 3)).toEqual([5, -2, 1, 3]);
       // The replay appends nothing again; the increments after the bump are appended.
       expect(yield* tally(`${run}~c`, 4)).toEqual([5, -2, 1, 3, 4]);
+
+      // The view version 1 adds holds what the counters recorded under version 0.
+      expect(yield* replay(`${run}~a`, { total: 4, increments: 2 })).toEqual({
+        total: 4,
+        increments: 2,
+      });
+      expect(yield* replay(`${run}~b`, { total: 2, increments: 0 })).toEqual({
+        total: 2,
+        increments: 0,
+      });
+      expect(yield* replay(`${run}~c`, { total: 7, increments: 2 })).toEqual({
+        total: 7,
+        increments: 2,
+      });
     }),
     { timeout: 900_000, tags: [kind], exclusive: true },
   );

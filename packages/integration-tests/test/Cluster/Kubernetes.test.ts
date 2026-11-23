@@ -6,8 +6,9 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { nodePortUrl } from "../Kubernetes/fixtures/kind.ts";
 import { conformanceTests, waitForReady } from "./conformance.ts";
-import { FRONT_NODE_PORT, FRONT_PORT, Kind } from "./fixtures/kubernetes/cluster.ts";
+import { FRONT_NODE_PORT, Kind } from "./fixtures/kubernetes/cluster.ts";
 import Front, { FRONT_NAME } from "./fixtures/kubernetes/front.ts";
 import { Lives } from "./fixtures/kubernetes/index.ts";
 import { scheduledConformanceTests } from "./scheduled-conformance.ts";
@@ -19,7 +20,8 @@ const testOptions = {
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "ClusterKubernetes", import.meta.url);
 
-const baseUrl = `http://localhost:${FRONT_PORT}`;
+// The front's node port is on a host port kind picks, read from the deploy.
+let baseUrl = "";
 
 // The Effect Cluster conformance cases, against Postgres and runners on a
 // local kind cluster, called from a Deployment on the same cluster.
@@ -48,10 +50,11 @@ describe.skipIf(!!process.env.FAST)(
                 },
               },
             });
-            return { front: front.deploymentName };
+            return { front: front.deploymentName, ports: cluster.ports };
           }).pipe(Effect.provide(Lives)),
         );
         expect(outputs.front).toBe(FRONT_NAME);
+        baseUrl = nodePortUrl(outputs.ports, FRONT_NODE_PORT);
         yield* waitForReady(baseUrl);
       }),
       { timeout: 900_000 },

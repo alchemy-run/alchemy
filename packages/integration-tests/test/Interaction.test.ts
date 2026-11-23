@@ -26,7 +26,7 @@ class CaptureStream extends PassThrough {
 const nonInteractive = (stderr: CaptureStream) =>
   layerNonInteractive({ stderr: stderr as unknown as NodeJS.WriteStream });
 
-it(
+it.effect(
   "prints plain status lines and fails prompts typed",
   () => {
     const stderr = new CaptureStream();
@@ -47,7 +47,7 @@ it(
   { tags: ["unit", "local"] },
 );
 
-it(
+it.effect(
   "task prints a start line and settles with a status line",
   () => {
     const stderr = new CaptureStream();
