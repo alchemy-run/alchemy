@@ -1031,13 +1031,14 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     if (value._tag === "Host" && isContextTag(value.value)) {
       const tag = value.value;
       const key = `${current.run.label}${tag.key}`;
-      const known = current.run.contexts.get(key);
-      if (known) return Effect.succeed(known.value);
+      // What the code provides around an effect is what the effect reads, whatever was read outside it.
       const given = hooks.provided.get(tag);
       if (given) {
-        current.run.contexts.set(key, { tag, value: given });
+        if (!current.run.contexts.has(key)) current.run.contexts.set(key, { tag, value: given });
         return Effect.succeed(given);
       }
+      const known = current.run.contexts.get(key);
+      if (known) return Effect.succeed(known.value);
       const made = Symbolic.symbolic(
         Symbolic.typeOf(tag.schema)!,
         `${current.run.label}${tag.key.slice(tag.key.lastIndexOf("/") + 1)}`,

@@ -251,20 +251,32 @@ export const MAX_ORDERED = 4;
 
 /** The helpers that need the interpreter. */
 export const make = (host: Host) => {
-  /** What a step after an effect gives: a function of its value, another effect, or a plain value. */
+  /**
+   * What the library does when it is given something that is not an effect
+   * where it runs one: it dies, and nothing that handles a failure handles it.
+   */
+  const invalid: Eval<never> = Effect.suspend(() =>
+    Effect.fail(new Value.Rejected({ rejection: Value.str("Not a valid effect"), defect: true })),
+  );
+
+  /** What a step after an effect gives: an effect, or a function of its value that gives one. */
   const after = (next: V, value: V, site: Site): Eval<V> =>
     next._tag === "Effect"
       ? next.run
       : callable(next)
         ? host
             .call(next, [value], site)
-            .pipe(
-              Effect.flatMap((made) => (made._tag === "Effect" ? made.run : Effect.succeed(made))),
-            )
-        : Effect.succeed(next);
+            .pipe(Effect.flatMap((made) => (made._tag === "Effect" ? made.run : invalid)))
+        : invalid;
 
-  /** What a function gives, where it may give an effect: the effect's result, or the value. */
+  /** What the effect a function gives, gives. A function that gives anything else is not one the library runs. */
   const ran = (fn: V, args: ReadonlyArray<V>, site: Site): Eval<V> =>
+    host
+      .call(fn, args, site)
+      .pipe(Effect.flatMap((made) => (made._tag === "Effect" ? made.run : invalid)));
+
+  /** What a function gives, where the library takes an effect or a plain value. */
+  const either = (fn: V, args: ReadonlyArray<V>, site: Site): Eval<V> =>
     host
       .call(fn, args, site)
       .pipe(Effect.flatMap((made) => (made._tag === "Effect" ? made.run : Effect.succeed(made))));
@@ -438,6 +450,7 @@ export const make = (host: Host) => {
     sorted,
     after,
     ran,
+    either,
     itemsOf,
     onArray,
     known,

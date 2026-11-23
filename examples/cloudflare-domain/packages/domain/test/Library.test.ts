@@ -7,6 +7,7 @@ import * as HashMap from "effect/HashMap";
 import * as HashSet from "effect/HashSet";
 import { Feed } from "./fixtures/Feed.aggregate.ts";
 import { Fog } from "./fixtures/Fog.aggregate.ts";
+import { Lathe } from "./fixtures/Lathe.aggregate.ts";
 import { Ledger } from "./fixtures/Ledger.aggregate.ts";
 import { Parcel } from "./fixtures/Parcel.aggregate.ts";
 import { Roster } from "./fixtures/Roster.aggregate.ts";
@@ -219,6 +220,34 @@ it.effect(
 );
 
 it.effect(
+  "the rest of the library, classes a file exports and streams of several chunks agree too",
+  () =>
+    Effect.gen(function* () {
+      const report = yield* Prove.report(Lathe, source("Lathe"));
+      for (const command of report.commands)
+        expect([command.command, command.schema._tag]).toEqual([
+          command.command,
+          expect.stringMatching(/^(Proved|Bounded)$/),
+        ]);
+      expect(report.commands.map((command) => command.command)).toEqual([
+        "Figure",
+        "Letter",
+        "Choose",
+        "Gather",
+        "Time",
+        "Cell",
+        "Act",
+        "Flow",
+        "Build",
+        "Long",
+      ]);
+      agrees(report);
+      expect(report.agreement.compared).toBeGreaterThan(60);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  180_000,
+);
+
+it.effect(
   "what is not read says why",
   () =>
     Effect.gen(function* () {
@@ -251,6 +280,9 @@ it.effect(
         Stretch: "calls repeat, which throws: RangeError: Invalid count value: -1",
         // Read, but not as the real code does it: nothing is proved of it.
         Shape: "Misread",
+        // The library dies on a step that gives a plain value, and no `catch` handles that:
+        // the command records nothing, so the rule holds of it.
+        Plain: "Proved",
       });
       // The real code threw where the prover read on. That is reported, and does not stop the report.
       expect(report.agreement.differs).toEqual([

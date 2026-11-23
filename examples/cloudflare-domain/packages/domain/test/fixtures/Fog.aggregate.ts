@@ -37,6 +37,7 @@ export class Tick extends Domain.Command("Tick", { input, events: [Seen] }) {}
 export class Index extends Domain.Command("Index", { input, events: [Seen] }) {}
 export class Stretch extends Domain.Command("Stretch", { input, events: [Seen] }) {}
 export class Shape extends Domain.Command("Shape", { input, events: [Seen] }) {}
+export class Plain extends Domain.Command("Plain", { input, events: [Seen] }) {}
 
 /**
  * What the prover does not read of the library, each in a command of its
@@ -65,6 +66,7 @@ export class Fog extends Domain.Aggregate("Fog", {
     Index,
     Stretch,
     Shape,
+    Plain,
   ],
   keyOf: (command) => command.id,
   decide: {
@@ -145,6 +147,15 @@ export class Fog extends Domain.Aggregate("Fog", {
     Stretch: () => [new Seen({ n: "ab".repeat(-1).length })],
     // A schema is built, never run, so this line is passed over. The real code throws on it,
     // and the report says the two differ.
+    // A step that gives a plain value where the library runs an effect: the library dies on it,
+    // so the command records nothing, whatever the types were told.
+    Plain: Effect.fn(function* (_fog, command) {
+      const n = yield* Effect.succeed(command.n).pipe(
+        Effect.flatMap(((n: number) => n + 1) as never as (n: number) => Effect.Effect<number>),
+        Effect.catch(() => Effect.succeed(0)),
+      );
+      return [new Seen({ n })];
+    }),
     Shape: (_fog, command) => {
       Schema.Struct(command.text as never);
       return [new Seen({ n: 1 })];

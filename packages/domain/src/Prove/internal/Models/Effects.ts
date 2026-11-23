@@ -230,7 +230,12 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
         ? Effect.gen(function* () {
             const kept: Array<V> = [];
             for (const [index, item] of items.entries())
-              if (yield* host.decide(yield* ran(predicate, [item, Value.num(index)], site), site))
+              if (
+                yield* host.decide(
+                  yield* kit.either(predicate, [item, Value.num(index)], site),
+                  site,
+                )
+              )
                 kept.push(item);
             return arr(kept);
           })
@@ -423,7 +428,7 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
             condition._tag === "Effect"
               ? condition.run
               : callable(condition)
-                ? ran(condition, [], site)
+                ? kit.either(condition, [], site)
                 : Effect.succeed(condition),
             (held) =>
               Effect.flatMap(host.decide(held, site), (runs) =>

@@ -101,8 +101,11 @@ export const make = (kit: Kit) => {
         : Brands.rational(real(`(/ ${textOf(a)} ${textOf(b)})`));
     });
 
-  const thrown = (site: Site, name: string): Eval<never> =>
-    Effect.fail(Value.notTranslated(site, `${name} divides by zero`));
+  /** A division by zero throws: the code stops there, and nothing after handles it. */
+  const thrown = (_site: Site, name: string): Eval<never> =>
+    Effect.fail(
+      new Value.Rejected({ rejection: Value.str(`${name} divides by zero`), defect: true }),
+    );
 
   const made =
     (name: string): Model =>
