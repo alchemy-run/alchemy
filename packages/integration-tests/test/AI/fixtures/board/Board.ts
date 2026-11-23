@@ -1,13 +1,30 @@
 import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as Match from "effect/Match";
+import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import { IssueId } from "./Issue.id.ts";
 
 export const Label = Schema.Literals(["bug", "feature", "question"]);
 
 export class IssueReported extends Domain.Event("IssueReported", { title: Schema.String }) {}
-export class IssueLabeled extends Domain.Event("IssueLabeled", { label: Label }) {}
+export class IssueLabeled extends Domain.Event("IssueLabeled", {
+  label: Label,
+  by: Schema.String,
+}) {}
+
+/** Who a command is sent as. */
+export class Labeler extends Domain.RequestContext<Labeler>()(
+  "Board/Labeler",
+  Schema.Struct({ name: Schema.String }),
+) {}
+
+export class Unsigned extends Domain.Rejection("Unsigned") {}
+
+/** Says who is labeling. Nothing here provides it: a session answers it with what it acts as. */
+export class Signed extends RpcMiddleware.Service<Signed, { provides: Labeler }>()("Board/Signed", {
+  error: Unsigned,
+}) {}
 export class IssueCommented extends Domain.Event("IssueCommented", {
   commentId: Schema.String,
   body: Schema.String,
@@ -24,6 +41,7 @@ export class LabelIssue extends Domain.Command(
   "LabelIssue",
   {
     input: { issueId: IssueId, label: Label },
+    middleware: [Signed],
     events: [IssueLabeled],
     rejects: [],
   },
@@ -46,7 +64,10 @@ export class Issue extends Domain.Aggregate("Issue", {
     // A redelivered report changes nothing.
     ReportIssue: (issue, command) =>
       issue.reported ? [] : [new IssueReported({ title: command.title })],
-    LabelIssue: (_, command) => [new IssueLabeled({ label: command.label })],
+    LabelIssue: Effect.fn(function* (_, command) {
+      const labeler = yield* Labeler;
+      return [new IssueLabeled({ label: command.label, by: labeler.name })];
+    }),
     CommentOnIssue: (_, command) => [
       new IssueCommented({ commentId: command.commentId, body: command.body }),
     ],
@@ -67,12 +88,13 @@ export class IssueDetail extends Domain.View(
     state: Schema.Struct({
       title: Schema.String,
       label: Schema.NullOr(Label),
+      labeledBy: Schema.NullOr(Schema.String),
       comments: Schema.Array(Schema.String),
     }),
-    initial: { title: "", label: null, comments: [] },
+    initial: { title: "", label: null, labeledBy: null, comments: [] },
     evolve: {
       IssueReported: (detail, event) => ({ ...detail, title: event.title }),
-      IssueLabeled: (detail, event) => ({ ...detail, label: event.label }),
+      IssueLabeled: (detail, event) => ({ ...detail, label: event.label, labeledBy: event.by }),
       IssueCommented: (detail, event) => ({
         ...detail,
         comments: [...detail.comments, event.body],
@@ -118,13 +140,4 @@ export class Board extends Domain.Model("Board", {
   aggregates: [Issue],
   views: [IssueDetail],
   policies: [IssueWork],
-}) {}
-
-/** What a Triage session may do to the board: read an issue, and label it. */
-export class TriageApi extends Domain.Api("TriageApi", {
-  model: Board,
-  commands: ["LabelIssue"],
-  views: ["IssueDetail"],
-  streams: [],
-  queries: [],
 }) {}

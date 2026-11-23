@@ -1,6 +1,7 @@
 import {
   HarnessError,
   makeHarness,
+  memoryValues,
   type Engine,
   type EngineSession,
   type Harness as AiHarness,
@@ -11,7 +12,7 @@ import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import type { ConversationNotFound, NotOnHarness, PiError } from "./Errors.ts";
 import { Harness, type Conversation, type Enabled, type Listed } from "./Harness.ts";
-import type { Storage } from "./Storage.ts";
+import { Storage } from "./Storage.ts";
 
 const failed = (error: PiError | NotOnHarness | ConversationNotFound) =>
   new HarnessError({
@@ -51,11 +52,15 @@ export const HarnessLive: Layer.Layer<AiHarness, never, Storage> = makeHarness<S
   "pi",
   (options) =>
     Effect.map(
-      Harness({
-        models: options.models as ReadonlyArray<AnyModel>,
-        tools: options.tools as ReadonlyArray<Listed>,
-      }),
-      (harness): Engine => ({
+      Effect.all([
+        Harness({
+          models: options.models as ReadonlyArray<AnyModel>,
+          tools: options.tools as ReadonlyArray<Listed>,
+        }),
+        Effect.flatMap(Storage, (storage) => storage.instance),
+      ]),
+      ([harness, storage]): Engine => ({
+        values: storage.values ?? memoryValues(),
         toolName: (tool) => (tool as { readonly toolName: string }).toolName,
         session: (name, session): EngineSession => {
           const found = harness.conversationByName(name).pipe(
@@ -110,6 +115,9 @@ export const HarnessLive: Layer.Layer<AiHarness, never, Storage> = makeHarness<S
             );
           return {
             exists: Effect.map(found, (conversation) => conversation !== undefined),
+            // A tool call carries the conversation's id.
+            open: (opened) =>
+              Effect.map(conversationFor(opened), (conversation) => String(conversation.id)),
             submit: (text, sent) => Effect.asVoid(submit(text, sent)),
             prompt: (text, sent) =>
               Effect.gen(function* () {

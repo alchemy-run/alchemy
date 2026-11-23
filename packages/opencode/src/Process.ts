@@ -1,6 +1,7 @@
 import {
   HarnessError,
   makeHarness,
+  memoryValues,
   type Engine,
   type EngineSession,
   type Harness as AiHarness,
@@ -11,7 +12,7 @@ import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import type { NotOnHarness, OpenCodeError } from "./Errors.ts";
 import { Harness } from "./Harness.ts";
-import type { Storage } from "./Storage.ts";
+import { Storage } from "./Storage.ts";
 import type { Enabled, Listed, ToolRef } from "./Tool.ts";
 
 const failed = (error: OpenCodeError | NotOnHarness) =>
@@ -50,11 +51,15 @@ export const HarnessLive: Layer.Layer<AiHarness, never, Storage> = makeHarness<S
   "opencode",
   (options) =>
     Effect.map(
-      Harness({
-        models: options.models as ReadonlyArray<AnyModel>,
-        tools: options.tools as ReadonlyArray<Listed>,
-      }),
-      (harness): Engine => ({
+      Effect.all([
+        Harness({
+          models: options.models as ReadonlyArray<AnyModel>,
+          tools: options.tools as ReadonlyArray<Listed>,
+        }),
+        Effect.flatMap(Storage, (storage) => storage.instance),
+      ]),
+      ([harness, storage]): Engine => ({
+        values: storage.values ?? memoryValues(),
         toolName: (tool) => harness.toolName(tool as ToolRef),
         session: (name, session): EngineSession => {
           const opencode = harness.session(name);
@@ -80,6 +85,8 @@ export const HarnessLive: Layer.Layer<AiHarness, never, Storage> = makeHarness<S
             );
           return {
             exists,
+            open: (opened) =>
+              Effect.mapError(opencode.open(opened?.model ?? session.model), failed),
             submit: (text, sent) =>
               Effect.flatMap(optionsOf(sent), (options) =>
                 Effect.mapError(opencode.submit(text, options), failed),

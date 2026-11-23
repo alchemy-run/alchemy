@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import type * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { WorkflowEngine } from "effect/workflow";
@@ -22,11 +23,14 @@ import {
   ForeignAppend,
   LazyViewNeedsOneSource,
   MissingWorkflowEngine,
+  ReservedMember,
   UnvalidatedRead,
 } from "./DefinitionError.ts";
 import { type Filter, matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
 import * as Key from "./Key.ts";
+import * as Mention from "./Mention.ts";
+import type * as Middleware from "./Middleware.ts";
 import {
   type Accepted,
   type AggregateStore,
@@ -367,6 +371,52 @@ type ProvidedBy<
   | Saga.Identifier<G[number]>
   | Projection.ProgressIdentifier<J[number]>;
 
+/** The middleware among `Ms` that checks something, where one that provides request context only says who is calling. */
+type Checks<Ms extends Middleware.List> = Ms[number] extends infer M
+  ? M extends RpcMiddleware.AnyService
+    ? [RpcMiddleware.Provides<M["Identifier"]>] extends [never]
+      ? M["Identifier"]
+      : never
+    : never
+  : never;
+
+/**
+ * A mention of something behind the middleware `Ms`: running the process
+ * requires the hosted model and a Layer for each middleware that checks
+ * something, and a session is started as the request context the others
+ * provide.
+ */
+type MentionBehind<Provided, Ms extends Middleware.List> = Mention.Mention<
+  Provided | Checks<Ms>,
+  Middleware.Provides<Ms>
+>;
+
+/**
+ * What an `AI.Process` mentions of a model, as members of its class: each
+ * command by its tag, each aggregate by its name (every command it takes),
+ * and each view by its name (its state for a key).
+ */
+export type Mentions<
+  Provided,
+  A extends ReadonlyArray<Aggregate.Any>,
+  V extends ReadonlyArray<View.Any>,
+  D extends ReadonlyArray<Decision.Any> = readonly [],
+> = {
+  readonly [
+    C in A[number]["definition"]["commands"][number] | D[number]["command"] as C["tag"]
+  ]: MentionBehind<Provided, C["middleware"]>;
+} & {
+  readonly [K in A[number] as K["aggregateName"]]: MentionBehind<
+    Provided,
+    K["definition"]["commands"][number]["middleware"]
+  >;
+} & {
+  readonly [K in V[number] as K["viewName"]]: MentionBehind<
+    Provided,
+    Read.MiddlewareOf<K["definition"]>
+  >;
+};
+
 /** How a model's `layer` hosts it: tuning that doesn't change what the model means. */
 export interface LayerOptions<Views extends string = string> {
   /** What the hosted model records in traces. See {@link Telemetry.Options}. */
@@ -519,7 +569,8 @@ export const make = <
   ProvidedBy<A, V, J, S, G, D>,
   HandledBy<P, J, G, Q, V, S>,
   ServableBy<A, V, S, Q, D>
-> => {
+> &
+  Mentions<ProvidedBy<A, V, J, S, G, D>, A, V, D> => {
   const decisions = (members.decisions ?? []) as ReadonlyArray<Decision.Any>;
   const definitions: Kernel.Definitions = {
     aggregates: members.aggregates,
@@ -530,7 +581,7 @@ export const make = <
     streams: members.streams ?? [],
     queries: members.queries ?? [],
   };
-  return class {
+  const model = class {
     static readonly kind = "Model" as const;
     static readonly annotations: Annotations = annotations;
     static readonly modelName: Name = name;
@@ -579,7 +630,41 @@ export const make = <
     ProvidedBy<A, V, J, S, G, D>,
     HandledBy<P, J, G, Q, V, S>,
     ServableBy<A, V, S, Q, D>
-  >;
+  > &
+    Mentions<ProvidedBy<A, V, J, S, G, D>, A, V, D>;
+  // What a process mentions: each command, each aggregate (every command it
+  // takes) and each view, by name, on the model that hosts it.
+  const mentioned: ReadonlyArray<readonly [string, Mention.Entries]> = [
+    ...model.commands.map((command) => [command.tag, { commands: [command.tag] }] as const),
+    ...definitions.aggregates.map(
+      (aggregate) =>
+        [
+          aggregate.aggregateName,
+          { commands: aggregate.definition.commands.map((command) => command.tag) },
+        ] as const,
+    ),
+    ...definitions.views.map((view) => [view.viewName, { views: [view.viewName] }] as const),
+  ];
+  // A command, an aggregate or a view may share a name: one member gives them all.
+  const merged = new Map<string, Mention.Entries>();
+  for (const [member, entries] of mentioned) {
+    const before = merged.get(member);
+    merged.set(member, {
+      commands: [...(before?.commands ?? []), ...(entries.commands ?? [])],
+      views: [...(before?.views ?? []), ...(entries.views ?? [])],
+    });
+  }
+  for (const [member, entries] of merged) {
+    if (member in model) {
+      throw new DefinitionError({ reason: new ReservedMember({ model: name, member }) });
+    }
+    let mention: Mention.Mention<unknown, unknown> | undefined;
+    Object.defineProperty(model, member, {
+      enumerable: true,
+      get: () => (mention ??= Mention.of(model as unknown as Any, entries)),
+    });
+  }
+  return model;
 };
 
 /**

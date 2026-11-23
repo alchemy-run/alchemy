@@ -283,6 +283,16 @@ export class ReservedOperation extends Data.TaggedError("ReservedOperation")<{
   }
 }
 
+/** A model's command, aggregate or view is named after a static of the model's class. */
+export class ReservedMember extends Data.TaggedError("ReservedMember")<{
+  readonly model: string;
+  readonly member: string;
+}> {
+  override get message() {
+    return `Model '${this.model}' cannot have a command, aggregate or view named '${this.member}': the name is a member of the model's class`;
+  }
+}
+
 /** The Domain has sagas, but the platform runs no workflows. */
 export class MissingWorkflowEngine extends Data.TaggedError("MissingWorkflowEngine")<{
   readonly sagas: ReadonlyArray<string>;
@@ -462,6 +472,7 @@ export type Reason =
   | UnknownEvent
   | UnknownRequestContext
   | ReservedOperation
+  | ReservedMember
   | MissingWorkflowEngine
   | ForeignAppend
   | NotInModel

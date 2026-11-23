@@ -43,8 +43,16 @@ export interface EngineSessionOptions {
 
 /** One session, as a harness runs it. */
 export interface EngineSession {
-  /** Whether the session was ever given a message. */
+  /** Whether the harness has the session. */
   readonly exists: Effect.Effect<boolean, HarnessError, RuntimeContext>;
+  /**
+   * Make the session if the harness does not have it, without giving it a
+   * message. Gives the id its tool calls carry (`AI.ToolCall`'s
+   * `conversationId`).
+   */
+  readonly open: (options?: {
+    readonly model?: AnyModel;
+  }) => Effect.Effect<string, HarnessError, RuntimeContext>;
   /** Store a message and return without waiting for the answer. */
   readonly submit: (
     text: string,
@@ -63,9 +71,17 @@ export interface EngineSession {
   readonly messages: Effect.Effect<ReadonlyArray<unknown>, HarnessError, RuntimeContext>;
 }
 
+/** Small values kept beside the sessions, in the same storage. */
+export interface EngineValues {
+  readonly get: (key: string) => Effect.Effect<string | undefined, HarnessError, RuntimeContext>;
+  readonly put: (key: string, value: string) => Effect.Effect<void, HarnessError, RuntimeContext>;
+}
+
 /** A harness that is open: the sessions it runs. */
 export interface Engine {
   readonly session: (name: string, options: EngineSessionOptions) => EngineSession;
+  /** Where a session's own values are kept: who it acts as. The model never reads them. */
+  readonly values: EngineValues;
   /** What the model calls a tool on this harness. */
   readonly toolName: (tool: unknown) => string;
 }
@@ -194,3 +210,17 @@ export const makeHarness = <R>(
       };
     }),
   ) as Layer.Layer<Harness, never, R>;
+
+/**
+ * Values kept for the life of the instance: what a harness falls back to
+ * on storage that has nowhere to keep them.
+ *
+ * @internal
+ */
+export const memoryValues = (): EngineValues => {
+  const values = new Map<string, string>();
+  return {
+    get: (key) => Effect.sync(() => values.get(key)),
+    put: (key, value) => Effect.sync(() => void values.set(key, value)),
+  };
+};

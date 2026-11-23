@@ -7,7 +7,7 @@ import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Fast, ModelsLive } from "../Processes.ts";
-import { Board, IssueWorkLive, Triager } from "./Board.ts";
+import { Board, IssueWorkLive, Labeler, Triager } from "./Board.ts";
 import type { IssueId } from "./Issue.id.ts";
 import { Triage } from "./Triage.ts";
 
@@ -65,7 +65,11 @@ export default class BoardAgents extends Cloudflare.DurableObject<BoardAgents>()
       const runtime = yield* RuntimeContext;
       const here = Effect.provideService(RuntimeContext, runtime);
       return {
-        start: (issue) => triage.start(issue, { issue }).pipe(Effect.orDie, here),
+        // Every command the session sends is sent as this labeler.
+        start: (issue) =>
+          triage
+            .start(issue, { issue }, { as: Labeler.context({ name: "triage-bot" }) })
+            .pipe(Effect.orDie, here),
         tell: (issue, text, id) =>
           triage
             .get(issue)

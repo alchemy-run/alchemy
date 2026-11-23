@@ -31,6 +31,7 @@ const tags = ["provider:cloudflare", "provider:pi", "live"];
 interface Detail {
   readonly title: string;
   readonly label: "bug" | "feature" | "question" | null;
+  readonly labeledBy: string | null;
   readonly comments: ReadonlyArray<string>;
 }
 
@@ -72,6 +73,9 @@ test(
     expect(detail).toMatchObject({
       title: "The app crashes when I open the settings page",
       label: "bug",
+      // The label command is behind a middleware that says who is calling:
+      // what the session was started as answered it.
+      labeledBy: "triage-bot",
     });
   }),
   { tags, timeout: 180_000 },

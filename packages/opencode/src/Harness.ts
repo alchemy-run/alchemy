@@ -157,8 +157,14 @@ export interface Session {
   readonly sandboxKey: string;
   /** OpenCode's id for the session. */
   readonly id: Effect.Effect<string, OpenCodeError, RuntimeContext>;
-  /** Whether OpenCode has this session: whether it was ever given a prompt. */
+  /** Whether OpenCode has this session. */
   readonly exists: Effect.Effect<boolean, OpenCodeError, RuntimeContext>;
+  /**
+   * Make the session if OpenCode does not have it, on `model` or the
+   * harness's first, without giving it a prompt. Gives the name its tool
+   * calls carry as `AI.ToolCall`'s `conversationId`.
+   */
+  readonly open: (model?: AnyModel) => Effect.Effect<string, OpenCodeError, RuntimeContext>;
   /** Send a prompt and wait for the answer, through every tool call it takes. */
   readonly prompt: (
     text: string,
@@ -1327,6 +1333,18 @@ export const Harness = <
             ),
           "session",
         ),
+        open: (model) =>
+          Effect.gen(function* () {
+            const sessionID = yield* sessionIdOf(sessionName);
+            if (fresh.has(sessionID)) {
+              const chosen = { id: (model ?? models[0]!.model).modelName, providerID: name };
+              yield* apply(sessionID, "model", chosen, (client) =>
+                client.session.switchModel({ sessionID, model: chosen }),
+              );
+              fresh.delete(sessionID);
+            }
+            return sessionName;
+          }),
         prompt: (text, promptOptions = {}) => run(text, { ...defaults, ...promptOptions }, true),
         submit: (text, promptOptions = {}) =>
           Effect.asVoid(run(text, { ...defaults, ...promptOptions }, false)),

@@ -18,6 +18,7 @@ interface Recorded {
 export const recording = () => {
   const sessions = new Map<string, Recorded>();
   const tools = new Map<string, { spec: ToolSpec; handler: ToolHandler<ToolSpec> }>();
+  const values = new Map<string, string>();
   const opened: Array<{ models: ReadonlyArray<string>; tools: ReadonlyArray<string> }> = [];
   const toolName = (tool: unknown) => (tool as { toolName: string }).toolName;
   const layer = makeHarness<never>("recording", (options) =>
@@ -32,6 +33,10 @@ export const recording = () => {
           tools.set(toolName(tool), { spec, handler });
       }
       return {
+        values: {
+          get: (key) => Effect.sync(() => values.get(key)),
+          put: (key, value) => Effect.sync(() => void values.set(key, value)),
+        },
         toolName: (tool) => `rec_${toolName(tool)}`,
         session: (name, options) => {
           const record = () => {
@@ -62,6 +67,8 @@ export const recording = () => {
             });
           return {
             exists: Effect.sync(() => sessions.has(name)),
+            // A tool call of this harness carries the session's name.
+            open: () => Effect.sync(() => (record(), name)),
             submit,
             prompt: (text, sent) => Effect.as(submit(text, sent), { text: `echo: ${text}` }),
             wait: Effect.void,
@@ -76,14 +83,14 @@ export const recording = () => {
    * Call a tool the way a harness does: JSON arguments in, and what the
    * model would read out (`structured` is the value, `isError` a declared failure).
    */
-  const call = (name: string, parameters: unknown, callId = "call-1") =>
+  const call = (name: string, parameters: unknown, callId = "call-1", conversationId = "c") =>
     Effect.suspend(() => {
       const tool = tools.get(name)!;
       return callTool(tool.spec, tool.handler, parameters);
     }).pipe(
-      Effect.provideService(AI.ToolCall, { conversationId: "c", callId }),
+      Effect.provideService(AI.ToolCall, { conversationId, callId }),
       // The recording harness never opens a sandbox.
       Effect.provideService(AI.Sandbox, undefined as never),
     );
-  return { layer, sessions, opened, call };
+  return { layer, sessions, opened, values, call };
 };

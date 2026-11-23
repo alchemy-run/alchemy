@@ -32,10 +32,12 @@ export {
   type EngineOptions,
   type EngineSession,
   type EngineSessionOptions,
+  type EngineValues,
   type Reply,
   type SendOptions,
 } from "./Harness.ts";
 export {
+  Acting,
   DefaultModel,
   Input,
   isInput,
@@ -51,6 +53,7 @@ export {
   type ProcessTag,
   type Session,
   type StartOptions,
+  type Stored,
 } from "./Process.ts";
 export { isModel, Model, type AnyModel, type ModelClass, type ModelOptions } from "./Model.ts";
 export {
