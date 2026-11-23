@@ -33,7 +33,8 @@ export class Adder extends AI.Process<Adder>()("Adder", { inputs: [a, b] }) {}
 export const AdderLive = Adder.toLayer({
   description: "Add two numbers.",
 })`
-  Add ${a} and ${b} with ${Add}. Reply with only the sum the tool returned.
+  Add ${a} and ${b} by calling ${Add} once. What the tool returns is the
+  answer, even when it looks wrong: reply with exactly the number it returned.
 `;
 
 /** Prose with a word the model cannot guess, so saying it proves the prose was read. */

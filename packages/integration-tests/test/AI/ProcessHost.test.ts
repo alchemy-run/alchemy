@@ -57,9 +57,9 @@ for (const harness of ["pi", "opencode"] as const) {
       test(
         "a started session works on its inputs",
         Effect.gen(function* () {
-          yield* call(`${harness}/Adder/sum-1/start`, { input: { a: 2, b: 3 } });
-          yield* call(`${harness}/Adder/sum-1/wait`);
-          const { messages } = yield* call(`${harness}/Adder/sum-1/messages`);
+          yield* call(`${harness}/Adder/total-1/start`, { input: { a: 2, b: 3 } });
+          yield* call(`${harness}/Adder/total-1/wait`);
+          const { messages } = yield* call(`${harness}/Adder/total-1/messages`);
 
           // The tool is off by a thousand: 1005 can only have come from it.
           expect(messages).toContain("1005");
@@ -70,10 +70,10 @@ for (const harness of ["pi", "opencode"] as const) {
       test(
         "starting a key twice starts it once",
         Effect.gen(function* () {
-          yield* call(`${harness}/Adder/sum-2/start`, { input: { a: 10, b: 20 } });
-          yield* call(`${harness}/Adder/sum-2/start`, { input: { a: 500, b: 500 } });
-          yield* call(`${harness}/Adder/sum-2/wait`);
-          const { messages } = yield* call(`${harness}/Adder/sum-2/messages`);
+          yield* call(`${harness}/Adder/total-2/start`, { input: { a: 10, b: 20 } });
+          yield* call(`${harness}/Adder/total-2/start`, { input: { a: 500, b: 500 } });
+          yield* call(`${harness}/Adder/total-2/wait`);
+          const { messages } = yield* call(`${harness}/Adder/total-2/messages`);
 
           expect(messages).toContain("1030");
           expect(messages).not.toContain("2000");
@@ -84,10 +84,10 @@ for (const harness of ["pi", "opencode"] as const) {
       test(
         "a started session answers later messages",
         Effect.gen(function* () {
-          yield* call(`${harness}/Adder/sum-3/start`, { input: { a: 1, b: 1 } });
-          yield* call(`${harness}/Adder/sum-3/wait`);
-          const reply = yield* call(`${harness}/Adder/sum-3/prompt`, {
-            text: "Now add 7 to that sum with the tool. Reply with only the number.",
+          yield* call(`${harness}/Adder/total-3/start`, { input: { a: 1, b: 1 } });
+          yield* call(`${harness}/Adder/total-3/wait`);
+          const reply = yield* call(`${harness}/Adder/total-3/prompt`, {
+            text: "Now call the tool once more to add 7 to the number it returned. Reply with exactly what it returns.",
             requestId: "again",
           });
 

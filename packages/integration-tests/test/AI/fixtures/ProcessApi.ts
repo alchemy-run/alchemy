@@ -50,6 +50,7 @@ export default class ProcessApi extends Cloudflare.Worker<ProcessApi>()(
           Match.when("send", () => Effect.as(session.send(body.text ?? "", sent), { ok: true })),
           Match.when("prompt", () => session.prompt(body.text ?? "", sent)),
           Match.when("wait", () => Effect.as(session.wait, { ok: true })),
+          Match.when("abort", () => Effect.as(session.abort, { ok: true })),
           Match.when("messages", () =>
             Effect.map(session.messages, (messages) => ({ messages: JSON.stringify(messages) })),
           ),
