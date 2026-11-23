@@ -435,3 +435,63 @@ describe("Domain schedule, armed again under the same id", { tags: ["unit", "loc
     ),
   );
 });
+
+// A fact that records the time `decide` read.
+class Stamped extends Domain.Event("Stamped", { at: Schema.DateTimeUtc }) {}
+class Stamp extends Domain.Command("Stamp", {
+  input: { id: Schema.String },
+  events: [Stamped],
+}) {}
+
+class Stamper extends Domain.Aggregate("Stamper", {
+  id: Schema.String,
+  state: Schema.Struct({ at: Schema.DateTimeUtc }),
+  initial: { at: DateTime.makeUnsafe(0) },
+  commands: [Stamp],
+  keyOf: (command) => command.id,
+  decide: {
+    Stamp: Effect.fn(function* () {
+      return [Stamped.make({ at: yield* DateTime.now })];
+    }),
+  },
+  evolve: {
+    Stamped: (_state, event) => ({ at: event.at }),
+  },
+}) {}
+
+class Stampers extends Domain.Model("Stampers", {
+  aggregates: [Stamper],
+}) {}
+
+describe("Domain schedule, on the Clock of the fiber", { tags: ["unit", "local"] }, () => {
+  // `make()` is given no `now`: the platform follows the fiber's Clock, which a
+  // TestClock drives, for commit times, due times and the clock in `decide`.
+  it.effect("a scheduled command fires when the TestClock reaches its due time", () => {
+    const live = Holds.layer(HoldDeadlineLive).pipe(
+      Layer.provide(Layer.suspend(() => makeInMemory().layer)),
+    );
+    return Effect.gen(function* () {
+      const holds = yield* Hold;
+      yield* holds.schedule(new ExpireHold({ id: "h-14" }), {
+        after: "1 second",
+        commandId: "x",
+      });
+      yield* TestClock.adjust("999 millis");
+      expect((yield* holds.get("h-14")).status).toBe("none");
+      yield* TestClock.adjust("1 millis");
+      expect((yield* holds.get("h-14")).status).toBe("expired");
+    }).pipe(Effect.provide(live));
+  });
+
+  it.effect("decide reads the TestClock time", () => {
+    const live = Stampers.layer(Layer.empty).pipe(
+      Layer.provide(Layer.suspend(() => makeInMemory().layer)),
+    );
+    return Effect.gen(function* () {
+      const stampers = yield* Stamper;
+      yield* TestClock.adjust("1 hour");
+      yield* stampers.send(new Stamp({ id: "s-1" }), { commandId: "stamp-1" });
+      expect(DateTime.toEpochMillis((yield* stampers.get("s-1")).at)).toBe(3_600_000);
+    }).pipe(Effect.provide(live));
+  });
+});

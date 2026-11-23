@@ -3,6 +3,7 @@ import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
@@ -48,7 +49,13 @@ export interface Options {
    * story runner. Defaults to `false` (deliver in the background).
    */
   readonly manual?: boolean;
-  /** Clock used to time-stamp commands. Defaults to `Date.now`. */
+  /**
+   * Clock used to time-stamp commands and to tell when a scheduled command is
+   * due. Defaults to the `Clock` of the fiber that reads it, the clock the
+   * platform's timers sleep on, so a run under a `TestClock` commits, fires its
+   * timers and runs `decide` in the same model time. Outside a fiber it is
+   * `Date.now`.
+   */
   readonly now?: () => number;
   /**
    * With `manual`: pick which ready writer (a policy delivery, a saga run or a
@@ -143,6 +150,15 @@ const memo = <A>(make: (key: string) => A) => {
 };
 
 /**
+ * The time on the `Clock` of the running fiber, or the system time outside one.
+ * The platform's timers wait with `Effect.sleep`, which reads that same clock.
+ */
+const fiberNow = (): number => {
+  const fiber = Fiber.getCurrent();
+  return fiber === undefined ? Date.now() : fiber.getRef(Clock.Clock).currentTimeMillisUnsafe();
+};
+
+/**
  * Build an in-memory platform and its control surface.
  */
 export const make = (
@@ -151,7 +167,7 @@ export const make = (
   readonly layer: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom>;
   readonly control: Control;
 } => {
-  const now = options.now ?? (() => Date.now());
+  const now = options.now ?? fiberNow;
   // Deliveries and saga runs, in the order they were queued.
   const pending: Array<Work> = [];
   let draining = false;
