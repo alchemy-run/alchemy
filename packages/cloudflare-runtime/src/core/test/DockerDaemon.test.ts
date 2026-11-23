@@ -180,6 +180,44 @@ it.live.skipIf(process.arch !== "arm64")(
   120_000,
 );
 
+it.live(
+  "retries the pull of an unprepared image cached for another architecture",
+  () => {
+    // Unpullable, and cached only as arm64 while creates are pinned to amd64.
+    const image = "alchemy-test.invalid/foreign:arch";
+    const name = `alchemy-arch-retry-${crypto.randomUUID()}`;
+    return Effect.gen(function* () {
+      yield* docker("pull", "--platform", "linux/arm64", "arm64v8/alpine:3.21");
+      yield* docker("tag", "arm64v8/alpine:3.21", image);
+      const { commands } = yield* withLocalPlatform(
+        undefined,
+        Effect.gen(function* () {
+          const config = yield* (yield* Docker).getWorkerdDockerConfiguration;
+          const create = Effect.promise(() =>
+            fetch(`http://${config.localDocker!.socketPath}/containers/create?name=${name}`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ Image: image, Env: [] }),
+            }).then((response) => response.status),
+          );
+          // Docker refuses the arm64 image for a linux/amd64 create.
+          expect(yield* create).not.toBe(201);
+          expect(yield* create).not.toBe(201);
+        }),
+      );
+      // The failed pull is not cached: each create tries it again.
+      expect(commands.filter((line) => line.startsWith(`pull ${image}`))).toHaveLength(2);
+    }).pipe(
+      Effect.ensuring(
+        Effect.ignore(docker("rm", "--force", name)).pipe(
+          Effect.andThen(removeImages(image, "arm64v8/alpine:3.21")),
+        ),
+      ),
+    );
+  },
+  60_000,
+);
+
 it.live("rejects an unknown ALCHEMY_LOCAL_CONTAINER_PLATFORM", () =>
   Effect.gen(function* () {
     // A blank value counts as unset and keeps the default.

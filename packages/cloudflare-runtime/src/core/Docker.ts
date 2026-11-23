@@ -528,21 +528,22 @@ export const DockerLive = Layer.effect(
     // managed `cloudflare/*` image. Pull it when it is missing, or when it is
     // cached for another architecture than the one containers are pinned to
     // (e.g. left by an earlier `host` session); if that pull fails, the
-    // cached image is used. Failed pulls are forgotten and retried.
+    // cached image is used. Failed pulls are forgotten and retried, also
+    // when the cached image stood in for them.
     const ensuredImages = yield* Cache.makeWith(
       (imageUri: string) =>
         inspect(imageUri, "{{.Os}}/{{.Architecture}}").pipe(
           Effect.orElseSucceed(() => ""),
           Effect.flatMap((cached) => {
             const present = cached.trim() !== "";
-            if (present && (!platform || cached.trim() === platform)) return Effect.void;
-            const pulled = Effect.asVoid(pullUserImage(imageUri));
-            return present ? Effect.ignore(pulled) : pulled;
+            if (present && (!platform || cached.trim() === platform)) return Effect.succeed(true);
+            const pulled = Effect.as(pullUserImage(imageUri), true);
+            return present ? Effect.orElseSucceed(pulled, () => false) : pulled;
           }),
         ),
       {
         capacity: Number.MAX_SAFE_INTEGER,
-        timeToLive: (exit) => (Exit.isFailure(exit) ? 0 : Infinity),
+        timeToLive: (exit) => (Exit.isSuccess(exit) && exit.value ? Infinity : 0),
       },
     );
 
