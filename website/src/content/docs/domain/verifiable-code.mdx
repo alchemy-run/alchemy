@@ -168,14 +168,25 @@ A call to a package is read when it is one of these. Each does to a value from t
 
 ## The rest of Effect
 
-Every other module of Effect is left unread on purpose. A call to one is reported with its name, and the rule is not proved.
+Every module of Effect is either read as above, run as it is, or left unread on purpose.
+
+**Run as it is, on values the code writes.** A pure function the prover has no reading of its own for is computed by the library itself when every argument is known: a constant, or something made from constants. That covers `SemVer`, `SemVerRange`, `ByteSize`, `Bytes`, `Trie`, `TextDiff`, `JsonPatch`, `JsonPointer`, `Glob`, `RegExp.escape`, `Formatter`, `LogLevel`, `Cron.parse` and `Cron.match`, and the functions of the modules above that are not listed, such as `Array.rotate`, `String.camelToSnake` and `Duration.format`.
+
+```typescript
+const MINIMUM = SemVer.parseUnsafe("1.9.3");
+const LIMIT = ByteSize.mebibytes(5);
+```
+
+Called on a value from the state or a command, or given a function of yours, such a function is not read, and the report names it. `Combiner` and `Reducer` are made from functions, so they are not read: write the fold.
+
+**Left unread.** A call to one of these is reported with its name, and the rule is not proved.
 
 - **The outside world.** `Random`, `Config`, `ConfigProvider`, `FileSystem`, `Path`, `Terminal`, `Stdio`, `Effect.promise`, and the packages under `effect/http`, `effect/sql`, `effect/rpc`, `effect/ai`, `effect/cluster`, `effect/workflow` and the others. A handler is a function of the state, the command and the time. What it needs from outside comes in as a field of the command.
-- **Time passing and things running together.** `Effect.sleep`, `timeout`, `retry`, `repeat`, `race` and `fork`, `Schedule`, `Cron`, `Fiber`, `Deferred`, `Latch`, `Semaphore`, `Queue`, `PubSub`, `Pool`, `Cache`, `Request`, `Channel`, `Sink`, `SubscriptionRef`, `SynchronizedRef` and the `Tx` modules. Which of two things happens first is not something a handler decides, and a handler does not wait.
-- **Wiring.** `Layer`, `Context`, `Scope`, `Runtime`, `ManagedRuntime`, `Resource`, `Logger`, `Tracer`, `Metric`. They say how a program is put together and watched, not what it decides. A request context a handler yields is read, as above.
-- **Schemas as code.** `Schema.decode`, `encode`, `is` and the modules under `Schema`. A schema is read where it describes the state, a command or an event. Decoding with one inside a handler is not.
-- **Text formats and special structures.** `Trie`, `Graph`, `HashRing`, `MutableList`, `SemVer`, `ByteSize`, `Bytes`, `RegExp`, `Glob`, `TextDiff`, `JsonPatch`, `JsonPointer`, `Formatter`, `Hash`, `Combiner`, `Reducer`. None is what a business rule is written in, and each would need a model of its own. Put a call to one in an exported function, which is then [opaque](#opaque-functions).
-- **Types only.** `Types`, `HKT`, `Unify`, `Pipeable`, `Newtype` and `Brand` beyond the two functions above have nothing to run.
+- **Time passing and things running together.** `Effect.sleep`, `timeout`, `retry`, `repeat`, `race` and `fork`, `Schedule`, `Scheduler`, `Fiber`, `FiberHandle`, `FiberMap`, `FiberSet`, `Deferred`, `Latch`, `Semaphore`, `PartitionedSemaphore`, `Queue`, `PubSub`, `Pool`, `Cache`, `ScopedCache`, `Request`, `RequestResolver`, `Channel`, `Sink`, `Pull`, `Take`, `SubscriptionRef`, `SynchronizedRef`, `ExecutionPlan` and the `Tx` modules. Which of two things happens first is not something a handler decides, and a handler does not wait. `Cron.next`, `prev` and `sequence` read the clock when they are given no time.
+- **Wiring.** `Layer`, `LayerMap`, `LayerRef`, `Context`, `References`, `Scope`, `ScopedRef`, `RcMap`, `RcRef`, `Resource`, `Runtime`, `ManagedRuntime`, `Logger`, `Tracer`, `Metric`, `ErrorReporter`. They say how a program is put together and watched, not what it decides. A request context a handler yields is read, as above.
+- **Schemas as code.** `Schema.decode`, `encode`, `is`, and `SchemaAST`, `SchemaGetter`, `SchemaIssue`, `SchemaParser`, `SchemaRepresentation`, `SchemaTransformation`, `ChannelSchema`, `JsonSchema`, `StandardSchema`, `Arbitrary`. A schema is read where it describes the state, a command or an event. Decoding with one inside a handler is not.
+- **Values changed in place, or known by where they are.** `Graph`, `HashRing`, `MutableList`, and `Hash`. A graph and a ring are built by changing one, and a hash of an object is where it sits in memory. Put a call to one in an exported function, which is then [opaque](#opaque-functions).
+- **Nothing to run.** `Types`, `HKT`, `Unify`, `Utils`, `Pipeable`, `Effectable`, `Differ`, `PlatformError`, `Redactable`, `Version`, and `Newtype` and `Brand` beyond the two functions above.
 
 In `Effect.gen`, `yield*` on an `Option` or a `Result` is not read: it fails where it runs. Use `Option.gen` and `Result.gen`, or `Effect.fromOption` and `Effect.fromResult`.
 

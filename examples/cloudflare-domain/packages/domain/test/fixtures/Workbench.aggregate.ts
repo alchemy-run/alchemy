@@ -3,6 +3,7 @@ import * as Array from "effect/Array";
 import * as BigDecimal from "effect/BigDecimal";
 import * as BigInts from "effect/BigInt";
 import * as Boolean from "effect/Boolean";
+import * as ByteSize from "effect/ByteSize";
 import * as Cause from "effect/Cause";
 import * as Chunk from "effect/Chunk";
 import * as Data from "effect/Data";
@@ -40,11 +41,14 @@ import * as Rational from "effect/Rational";
 import * as Record from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
+import * as RegExp from "effect/RegExp";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as SemVer from "effect/SemVer";
 import * as Stream from "effect/Stream";
 import * as String from "effect/String";
 import * as Struct from "effect/Struct";
+import * as Trie from "effect/Trie";
 import * as Tuple from "effect/Tuple";
 import * as UndefinedOr from "effect/UndefinedOr";
 
@@ -860,6 +864,21 @@ const extra = (a: number, b: number) =>
         };
       })(),
       hidden: Redacted.value(Redacted.make(a)),
+      // Functions the prover has no model of its own for: run as they are, on values the code writes.
+      computed: {
+        newer: SemVer.isGreaterThan(SemVer.parseUnsafe("1.10.0"), SemVer.parseUnsafe("1.9.3")),
+        bumped: SemVer.format(SemVer.bumpMinor(SemVer.parseUnsafe("1.9.3"))),
+        bytes: ByteSize.format(ByteSize.sum(ByteSize.kibibytes(1), ByteSize.bytes(512))),
+        larger: ByteSize.isGreaterThan(ByteSize.megabytes(1), ByteSize.kilobytes(999)),
+        prefixed: Array.fromIterable(
+          Trie.keysWithPrefix(Trie.make(["sell", 1], ["sells", 2], ["she", 3]), "sel"),
+        ),
+        escaped: RegExp.escape("a.b"),
+        rotated: Array.rotate([1, 2, 3], 1),
+        padded: Array.pad([1], 3, 0),
+        snake: String.camelToSnake("camelCase"),
+        formatted: Duration.format(Duration.seconds(90)),
+      },
       filters: {
         fromPredicate: Filter.fromPredicate((n: number) => n > b)(a),
         toOption: Filter.toOption(Filter.fromPredicate((n: number) => n > b))(a),

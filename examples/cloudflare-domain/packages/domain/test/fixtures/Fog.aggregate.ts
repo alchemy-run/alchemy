@@ -1,4 +1,5 @@
 import * as Domain from "@alchemy.run/domain";
+import * as Array from "effect/Array";
 import * as BigDecimal from "effect/BigDecimal";
 import * as Effect from "effect/Effect";
 import * as HashSet from "effect/HashSet";
@@ -19,6 +20,7 @@ export class Rank extends Domain.Command("Rank", { input, events: [Seen] }) {}
 export class Unwrap extends Domain.Command("Unwrap", { input, events: [Seen] }) {}
 export class Roll extends Domain.Command("Roll", { input, events: [Seen] }) {}
 export class Spin extends Domain.Command("Spin", { input, events: [Seen] }) {}
+export class Turn extends Domain.Command("Turn", { input, events: [Seen] }) {}
 
 /**
  * What the prover does not read of the library, each in a command of its
@@ -29,7 +31,7 @@ export class Fog extends Domain.Aggregate("Fog", {
   state: Schema.Struct({ n: Schema.Int }),
   initial: { n: 0 },
   invariants: { NeverBelowZero: (fog) => fog.n >= 0 },
-  commands: [Race, Share, Walk, Rank, Unwrap, Roll, Spin],
+  commands: [Race, Share, Walk, Rank, Unwrap, Roll, Spin, Turn],
   keyOf: (command) => command.id,
   decide: {
     // Several items at a time: which finishes first is not a thing the code decides.
@@ -70,6 +72,8 @@ export class Fog extends Domain.Aggregate("Fog", {
       const n = yield* Stream.iterate(command.n, (n) => n + 1).pipe(Stream.runCount);
       return [new Seen({ n })];
     }),
+    // A function the prover has no model for is run as it is, but only on values the code writes.
+    Turn: (_fog, command) => [new Seen({ n: Array.rotate([command.n, 2, 3], 1)[0] ?? 0 })],
   },
   evolve: { Seen: (_fog, event) => ({ n: event.n }) },
 }) {}

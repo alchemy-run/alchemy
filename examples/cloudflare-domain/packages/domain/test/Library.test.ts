@@ -239,6 +239,7 @@ it.effect(
         Unwrap: "yields a value the prover has no model for",
         Roll: "calls Random.nextIntBetween, which the prover has no model for",
         Spin: "runs a stream that has not ended after 10000 items",
+        Turn: "calls Array.rotate, which the prover has no model for",
       });
       expect(report.agreement.differs).toEqual([]);
     }).pipe(Effect.provide(NodeServices.layer)),

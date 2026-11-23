@@ -28,6 +28,8 @@ import {
   wholeOf,
   wrongArguments,
 } from "./Kit.ts";
+import * as Known from "./Known.ts";
+import { hostOf } from "./Known.ts";
 import * as Cells from "./Models/Cells.ts";
 import * as Collections from "./Models/Collections.ts";
 import * as Decimals from "./Models/Decimals.ts";
@@ -1397,9 +1399,29 @@ export const make = (host: Host) => {
     models: (lib: V & { readonly _tag: "Lib" }): boolean =>
       host.extra.has(keyOf(lib)) || Object.hasOwn(models, keyOf(lib)) || isEnum(lib),
     call: (lib: V & { readonly _tag: "Lib" }, args: ReadonlyArray<V>, site: Site): Eval<V> => {
+      // A pure function is run as it is, where the prover knows every argument.
+      const computed = () => {
+        const fn = hostOf(lib.module, lib.path);
+        return typeof fn === "function"
+          ? Known.applied(
+              fn as (...args: ReadonlyArray<unknown>) => unknown,
+              args,
+              `${lib.module.replace(/^effect\//, "")}.${lib.path.join(".")}`,
+            )
+          : undefined;
+      };
       const model = host.extra.get(keyOf(lib)) ?? models[keyOf(lib)];
-      if (model) return model(args, site);
+      // A model that has no reading of a call gives way to the function itself.
+      if (model)
+        return model(args, site).pipe(
+          Effect.catchTag("NotTranslated", (stop) => {
+            const made = stop.reaches ? undefined : computed();
+            return made ? Effect.succeed(made) : Effect.fail(stop);
+          }),
+        );
       if (isEnum(lib)) return taggedEnum(lib, args, site);
+      const made = computed();
+      if (made) return Effect.succeed(made);
       // A schema is built, never run: what it describes is read where it is used.
       if (lib.module === "effect/Schema")
         return Effect.succeed<V>({ _tag: "Opaque", what: "a schema" });
