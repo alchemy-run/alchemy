@@ -2164,6 +2164,7 @@ const syntax: ReadonlyArray<Group> = [
       [body(`items.reverse(); return items.length;`), reported],
       [body(`const made = { n: a }; delete made.n; return made;`), reported],
       [body(`debugger; return a;`), reported],
+      [`(async () => { for await (const n of items) {} return a; })()`, reported],
       [body(`let x = a; x **= 2; return x;`), reported],
       [body(`let x = a; x <<= 1; return x;`), reported],
       [body(`let x = a; x >>= 1; return x;`), reported],

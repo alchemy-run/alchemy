@@ -30,6 +30,8 @@ export interface Module {
 
 export type Declaration =
   | { readonly _tag: "Const"; readonly init: Node | undefined }
+  /** A name a pattern binds: `const { a, b: [c] } = made` declares `a` and `c`. */
+  | { readonly _tag: "Pattern"; readonly pattern: Node; readonly init: Node }
   | { readonly _tag: "Function"; readonly node: Node }
   | { readonly _tag: "Class"; readonly node: Node };
 

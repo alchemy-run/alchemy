@@ -197,7 +197,7 @@ const LIMIT = ByteSize.mebibytes(5);
 
 Called on a value from the state or a command, or given a function of yours, such a function is not read, and the report names it. `Combiner` and `Reducer` are made from functions, and `Bytes` works on byte arrays, so they are not read: write the fold.
 
-Every name on these lists has a line in a table the tests run: each call is read on values the prover knows and on values the solver holds, and both have to be what the real code gives. A test fails when the prover reads a function, a method or a kind of syntax that no table has.
+Every name on these lists has a line in a table the tests run: each call is read on values the prover knows and on values the solver holds, and both have to be what the real code gives. The language is a list of the same kind, one entry for each way a piece of it is written, marked as read or not. A test fails when a function, a method or a form of the language has no line in a table, and when a table is written with a form the list does not have.
 
 **Left unread.** A call to one of these is reported with its name, and the rule is not proved.
 
@@ -258,6 +258,24 @@ It is read as the library runs it. A step that runs an effect for each item take
 `Stream.iterate`, `unfold` and `paginate` may never end. One that is cut with `take` is read; one run to its end is not, and the report says so. A `take` of a count that comes from an input is not read, since how many items that is, is not a thing the prover sees.
 
 Not read: a stream of time (`tick`, `debounce`, `throttle`, a schedule), of a queue or a pub-sub, a `merge` of two streams, and `mapEffect` or `flatMap` with a `concurrency` above one. Which item comes first there is not something the code decides.
+
+## Your own files
+
+A name a handler uses is found where its file declares or imports it, and the file it comes from is read the same way.
+
+```typescript
+import { canClose, limit as LIMIT } from "./rules.ts";
+import * as Rules from "./rules.ts";
+import byDefault from "./rules.ts";
+
+const { step, bounds: [low, high] } = SETTINGS;
+```
+
+Read: named, renamed, namespace and default imports, and a file re-exporting another's names with `export { a as b } from`, `export * from` and `export * as rules from`. At the top of a file, `const`, `let` and `var` are read, a pattern on the left of one too, with function declarations and anything a file exports by default. A function can use a constant declared below it, and two files can import each other.
+
+A namespace has what its file exports: `Rules.hidden` is `undefined` for a name the file keeps to itself.
+
+An exported `enum` or `namespace` is the value the loaded file holds. One a file keeps to itself is not read, and neither is a `class` with a body: a class is read where it extends one of `effect/Data`'s or `effect/Schema`'s and adds nothing.
 
 ## Your own packages
 
