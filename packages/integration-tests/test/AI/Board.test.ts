@@ -64,8 +64,7 @@ const labeled = (issue: string, label: Detail["label"]) =>
 test(
   "a reported issue is labeled by the process its policy starts",
   Effect.gen(function* () {
-    const { stage } = yield* Alchemy.Stack;
-    const issue = `crash-${stage}`;
+    const issue = "crash";
     // Nothing here names a session: the board's policy starts one for the issue.
     yield* call(`report/${issue}`, { title: "The app crashes when I open the settings page" });
 
@@ -81,8 +80,7 @@ test(
 test(
   "a comment reaches the issue's session through the policy",
   Effect.gen(function* () {
-    const { stage } = yield* Alchemy.Stack;
-    const issue = `dark-mode-${stage}`;
+    const issue = "dark-mode";
     yield* call(`report/${issue}`, { title: "Please add a dark mode" });
     yield* labeled(issue, "feature");
 
