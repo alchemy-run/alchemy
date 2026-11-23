@@ -179,15 +179,23 @@ export const make = (host: Host) => {
       pick: (a: string, b: string) => string,
     ): Model =>
     (args, site) => {
-      const [a, b] = args;
-      if (args.length !== 2 || !a || !b) return wrongArguments(site, name);
-      if (a._tag === "Num" && b._tag === "Num")
-        return Effect.succeed(Value.num(fold(a.value, b.value)));
-      const left = numeric(a);
-      const right = numeric(b);
-      if (!left || !right) return wrongArguments(site, name);
-      const [x, y] = promote(left, right);
-      return Effect.succeed(Value.term(x.sort, pick(x.text, y.text)));
+      // Of any number of numbers, taken two at a time. Of none it is an infinity, which is not read.
+      const [first, ...rest] = args;
+      if (!first || !numeric(first)) return wrongArguments(site, name);
+      let made: V = first;
+      for (const next of rest) {
+        const left = numeric(made);
+        const right = numeric(next);
+        if (!left || !right || Value.isBig(next) || Value.isBig(made))
+          return wrongArguments(site, name);
+        if (made._tag === "Num" && next._tag === "Num") {
+          made = Value.num(fold(made.value, next.value));
+          continue;
+        }
+        const [x, y] = promote(left, right);
+        made = Value.term(x.sort, pick(x.text, y.text));
+      }
+      return Effect.succeed(made);
     };
 
   // The date of a UTC time, as text: `formatIsoDate` and `formatIsoDateUtc` give the same.
@@ -1329,6 +1337,21 @@ export const make = (host: Host) => {
     if (CHUNK.has(name)) models[`effect/Chunk:${name}`] = model;
     if (ITERABLE.has(name)) models[`effect/Iterable:${name}`] = model;
   }
+  // `Iterable.makeBy(f, { length })` takes the function first, and gives as many items as it is told to.
+  models["effect/Iterable:makeBy"] = ([f, options], site) => {
+    const length = options?._tag === "Obj" ? options.fields.length : undefined;
+    return f && length?._tag === "Num" && Number.isInteger(length.value)
+      ? Effect.forEach(
+          Array.from({ length: Math.max(0, length.value) }, (_, i) => i),
+          (i) => host.call(f, [Value.num(i)], site),
+        ).pipe(Effect.map(arr))
+      : Effect.fail(
+          Value.notTranslated(
+            site,
+            "Iterable.makeBy is given no length the prover can see: it then gives items without end",
+          ),
+        );
+  };
   const identity: Model = ([self], site) =>
     kit.itemsOf(self) ? Effect.succeed(arr(kit.itemsOf(self)!)) : wrongArguments(site, "Chunk");
   for (const name of ["toArray", "toReadonlyArray", "fromArrayUnsafe", "fromNonEmptyArrayUnsafe"])
@@ -1508,6 +1531,14 @@ export const make = (host: Host) => {
   };
 
   return {
+    /**
+     * Every library function and value the prover has a model for, as
+     * `module:path`, and every method of a string it reads.
+     */
+    surface: {
+      library: [...Object.keys(models), ...Object.keys(values), ...Object.keys(clocks)].sort(),
+      strings: [...strings.names].sort(),
+    },
     opticMember,
     /** A helper of a tagged union of `effect/Schema`, as a value the code calls. */
     unionMember,

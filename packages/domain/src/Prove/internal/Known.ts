@@ -106,6 +106,9 @@ const PURE: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   "effect/UndefinedOr": UndefinedOr_,
 };
 
+/** The modules whose functions are run as they are, where the prover knows every argument. */
+export const modules: ReadonlyArray<string> = Object.keys(PURE).sort();
+
 /** The functions of those modules that read the clock when they are not given a time. */
 const CLOCKED: ReadonlySet<string> = new Set([
   "effect/Cron:next",

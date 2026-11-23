@@ -117,6 +117,12 @@ export interface Interpreter {
   readonly moduleEnv: (module: Module) => Env;
   /** A value used as an id: what an opaque function returned is the text it gives. */
   readonly id: (value: V) => V;
+  /** What the interpreter reads, by name: the tests hold a case for each. */
+  readonly surface: {
+    readonly library: ReadonlyArray<string>;
+    readonly strings: ReadonlyArray<string>;
+    readonly arrays: ReadonlyArray<string>;
+  };
   /** What a model explorer plugs in. */
   readonly hooks: Hooks;
 }
@@ -139,6 +145,17 @@ export interface Hooks {
   /** Models of library functions the caller adds, by `module:path`. */
   readonly models: Map<string, Library.Model>;
 }
+
+/** A value the prover knows, as the text JavaScript makes of it in a string. */
+const shown = (v: V): string =>
+  v._tag === "Null"
+    ? "null"
+    : v._tag === "Undef"
+      ? "undefined"
+      : String((v as { readonly value?: unknown }).value);
+
+/** What a chain of `?.` gives once a link of it is `null` or `undefined`: the rest of it is not run. */
+const SHORT: V = { _tag: "Undef" };
 
 /** What the code did with a value, where the value is what an opaque function returned. */
 const inside = (what: string, ...values: ReadonlyArray<V | undefined>): string | undefined => {
@@ -1086,6 +1103,19 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         }
         return yield* reaches(site, `assigns to ${target.name}, which is not a local variable`);
       }
+      if (target.type === "ArrayPattern" || target.type === "ObjectPattern") {
+        // `[x, y] = pair`: each name is bound as a declaration binds it, then given to the variable it names.
+        const bound = child(env.scope);
+        yield* bind(target, value, bound, { ...env, scope: bound });
+        for (const [name, part] of bound.variables)
+          yield* assign(
+            { type: "Identifier", name, start: target.start, end: target.end },
+            part,
+            env,
+            site,
+          );
+        return;
+      }
       if (target.type !== "MemberExpression")
         return yield* reaches(site, "assigns in a way the prover does not read");
       const object = yield* evaluate(target.object, env);
@@ -1427,26 +1457,28 @@ export const make = (loader: Loader, run: Run): Interpreter => {
       // number only as the real `String` gives it, one number at a time.
       const written = (v: V) =>
         textual(v) ??
-        (v._tag === "Num" || v._tag === "Big"
+        (v._tag === "Num" || v._tag === "Big" || v._tag === "Bool"
           ? Smt.string(String(v.value))
-          : v._tag === "Term" && (v.term.sort === "Int" || v.term.sort === "Real")
-            ? current.run.apply(
-                `String of ${v.term.sort}`,
-                v.term,
-                "String",
-                String,
-                undefined,
-                true,
-              )
-            : undefined);
+          : v._tag === "Null" || v._tag === "Undef"
+            ? Smt.string(v._tag === "Null" ? "null" : "undefined")
+            : v._tag === "Term" && v.term.sort === "Bool"
+              ? ({ sort: "String", text: `(ite ${v.term.text} "true" "false")` } as const)
+              : v._tag === "Term" && (v.term.sort === "Int" || v.term.sort === "Real")
+                ? current.run.apply(
+                    `String of ${v.term.sort}`,
+                    v.term,
+                    "String",
+                    String,
+                    undefined,
+                    true,
+                  )
+                : undefined);
       const s = written(a);
       const t = written(b);
       if (s && t)
         return Effect.succeed(
           a._tag !== "Term" && b._tag !== "Term"
-            ? Value.str(
-                String((a as { value: unknown }).value) + String((b as { value: unknown }).value),
-              )
+            ? Value.str(shown(a) + shown(b))
             : Value.term("String", `(str.++ ${s.text} ${t.text})`),
         );
     }
@@ -1487,15 +1519,18 @@ export const make = (loader: Loader, run: Run): Interpreter => {
       case "TSNonNullExpression":
       case "TSTypeAssertion":
       case "TSInstantiationExpression":
-      case "ChainExpression":
         return yield* evaluate(node.expression, env);
+      case "ChainExpression": {
+        const made = yield* evaluate(node.expression, env);
+        return made === SHORT ? Value.undef : made;
+      }
       case "ArrowFunctionExpression":
       case "FunctionExpression":
         return { _tag: "Fn", node, env, effectful: false };
       case "MemberExpression": {
         const object = yield* evaluate(node.object, env);
-        if (node.optional && (object._tag === "Null" || object._tag === "Undef"))
-          return Value.undef;
+        if (object === SHORT) return SHORT;
+        if (node.optional && (object._tag === "Null" || object._tag === "Undef")) return SHORT;
         const key = node.computed
           ? yield* evaluate(node.property, env)
           : Value.str(node.property.name);
@@ -1505,8 +1540,8 @@ export const make = (loader: Loader, run: Run): Interpreter => {
       }
       case "CallExpression": {
         const callee = yield* evaluate(node.callee, env);
-        if (node.optional && (callee._tag === "Null" || callee._tag === "Undef"))
-          return Value.undef;
+        if (callee === SHORT) return SHORT;
+        if (node.optional && (callee._tag === "Null" || callee._tag === "Undef")) return SHORT;
         const args: Array<V> = [];
         for (const argument of node.arguments as ReadonlyArray<Node>) {
           if (argument.type === "SpreadElement") {
@@ -1617,6 +1652,12 @@ export const make = (loader: Loader, run: Run): Interpreter => {
               return yield* fail(site, "spreads a value the prover cannot see into");
             continue;
           }
+          // A getter runs when the property is read: the prover reads a property as the value it holds.
+          if (property.kind === "get" || property.kind === "set")
+            return yield* fail(
+              site,
+              `declares a ${property.kind}ter in an object, which the prover does not read`,
+            );
           const key = property.computed
             ? yield* evaluate(property.key, env)
             : Value.str(
@@ -1696,6 +1737,15 @@ export const make = (loader: Loader, run: Run): Interpreter => {
   /** Run statements in order. The result is what they returned, or `undefined` when they did not. */
   const execute: (statements: ReadonlyArray<Node>, env: Env) => Eval<V | undefined> =
     Effect.fnUntraced(function* (statements: ReadonlyArray<Node>, env: Env) {
+      // A function a block declares is there from the block's first line.
+      for (const statement of statements)
+        if (statement.type === "FunctionDeclaration" && !env.scope.variables.has(statement.id.name))
+          env.scope.variables.set(statement.id.name, {
+            _tag: "Fn",
+            node: statement,
+            env,
+            effectful: false,
+          });
       for (const statement of statements) {
         const site: Site = { module: env.module, node: statement };
         switch (statement.type) {
@@ -1769,7 +1819,9 @@ export const make = (loader: Loader, run: Run): Interpreter => {
                 ? yield* iterate(subject, site)
                 : subject._tag === "Obj" && !subject.brand
                   ? Object.keys(subject.fields).map(Value.str)
-                  : undefined;
+                  : subject._tag === "Arr"
+                    ? subject.items.map((_, index) => Value.str(String(index)))
+                    : undefined;
             const items = over ? [...over] : undefined;
             if (!items)
               return yield* fail(
@@ -1842,6 +1894,10 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     truth: truthOf,
     moduleEnv,
     id: (value) => (value._tag === "Applied" ? textOf(value) : value),
+    surface: {
+      ...library.surface,
+      arrays: [...Object.keys(arrayOwn), ...Object.keys(arrayMethods), "length"].sort(),
+    },
     hooks,
   };
 };

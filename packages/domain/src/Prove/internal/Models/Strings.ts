@@ -549,5 +549,5 @@ export const make = (kit: Kit) => {
 
   const values: Record<string, V> = { "effect/String:empty": Value.str("") };
 
-  return { models, values, member };
+  return { models, values, member, names: Object.keys(methods) };
 };
