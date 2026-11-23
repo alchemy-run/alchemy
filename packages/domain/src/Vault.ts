@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -115,20 +116,26 @@ export class Unsealed extends Schema.TaggedError<Unsealed>()("Unsealed", {
 
 /**
  * Where a Vault keeps one key per subject. Implement it over a store that is
- * backed up and exported separately from the model's own.
+ * backed up and exported separately from the model's own. Its methods may
+ * need the runtime they run in (`RuntimeContext`), as a database binding does.
  */
 export class VaultKeys extends Context.Service<
   VaultKeys,
   {
     /** The subject's key, as base64 text, if it has one. */
-    readonly get: (subject: string) => Effect.Effect<Option.Option<string>, VaultError>;
+    readonly get: (
+      subject: string,
+    ) => Effect.Effect<Option.Option<string>, VaultError, RuntimeContext>;
     /**
      * Store `key` for a subject that has none, and return the key the
      * subject now has: `key`, or the one another caller stored first.
      */
-    readonly create: (subject: string, key: string) => Effect.Effect<string, VaultError>;
+    readonly create: (
+      subject: string,
+      key: string,
+    ) => Effect.Effect<string, VaultError, RuntimeContext>;
     /** Remove the subject's key for good. Removing a key that is not there is not an error. */
-    readonly delete: (subject: string) => Effect.Effect<void, VaultError>;
+    readonly delete: (subject: string) => Effect.Effect<void, VaultError, RuntimeContext>;
   }
 >()("alchemy/Domain/VaultKeys") {}
 
@@ -206,9 +213,12 @@ const vaultOver = (text: {
   readonly shred: (subject: string) => Effect.Effect<void, VaultError>;
 }): Vault["Service"] => {
   const codecOf = (schema: Schema.Top) =>
-    Schema.fromJsonString(Schema.toCodecJson(schema)) as unknown as Schema.Codec<unknown, string>;
+    Schema.toCodecJson(schema).pipe(Schema.fromJsonString) as unknown as Schema.Codec<
+      unknown,
+      string
+    >;
   const invalid = (subject: string) => () =>
-    new VaultError({ subject, reason: "the value does not match its schema" });
+    VaultError.make({ subject, reason: "the value does not match its schema" });
   return {
     seal: Effect.fn(function* (sealed, subject, value) {
       const plain = yield* Schema.encodeUnknownEffect(codecOf(sealed.value))(value).pipe(
@@ -222,7 +232,7 @@ const vaultOver = (text: {
         : yield* text.open(value.subject, value.box);
       if (Option.isNone(plain)) return Option.none();
       return Option.some(
-        yield* Schema.decodeUnknownEffect(codecOf(sealed.value))(plain.value).pipe(
+        yield* Schema.decodeEffect(codecOf(sealed.value))(plain.value).pipe(
           Effect.mapError(invalid(value.subject)),
         ),
       );
@@ -240,8 +250,8 @@ const vaultOver = (text: {
 
 /**
  * A Vault that encrypts with AES-256-GCM, with one key per subject kept in
- * {@link VaultKeys}. A box is bound to its subject: moved under another
- * subject, it does not open.
+ * {@link VaultKeys}. A box is bound to its subject: under another subject,
+ * or under a key the subject got after being shredded, it does not open.
  *
  * **Example:** A model with a Vault
  * ```typescript
@@ -254,8 +264,13 @@ const vaultOver = (text: {
 export const VaultLive: Layer.Layer<Vault, never, VaultKeys> = Layer.effect(
   Vault,
   Effect.gen(function* () {
-    const keys = yield* VaultKeys;
-    const failed = (subject: string, reason: string) => () => new VaultError({ subject, reason });
+    // The model runs inside its runtime, which provides RuntimeContext to the key store.
+    const keys = (yield* VaultKeys) as unknown as {
+      readonly get: (subject: string) => Effect.Effect<Option.Option<string>, VaultError>;
+      readonly create: (subject: string, key: string) => Effect.Effect<string, VaultError>;
+      readonly delete: (subject: string) => Effect.Effect<void, VaultError>;
+    };
+    const failed = (subject: string, reason: string) => () => VaultError.make({ subject, reason });
     const importKey = (subject: string, key: string) =>
       Effect.tryPromise({
         try: () =>
@@ -287,21 +302,26 @@ export const VaultLive: Layer.Layer<Vault, never, VaultKeys> = Layer.effect(
       open: Effect.fn(function* (subject, box) {
         const [version, iv, sealed] = box.split(".");
         if (`${version}.` !== AES || iv === undefined || sealed === undefined) {
-          return yield* new VaultError({ subject, reason: "the box was not sealed by this vault" });
+          return yield* VaultError.make({
+            subject,
+            reason: "the box was not sealed by this vault",
+          });
         }
         const key = yield* keys.get(subject);
         if (Option.isNone(key)) return Option.none();
         const cryptoKey = yield* importKey(subject, key.value);
-        const plain = yield* Effect.tryPromise({
-          try: () =>
-            crypto.subtle.decrypt(
-              { name: "AES-GCM", iv: fromBase64(iv), additionalData: encoder.encode(subject) },
-              cryptoKey,
-              fromBase64(sealed),
-            ),
-          catch: failed(subject, "the box does not open with its subject's key"),
-        });
-        return Option.some(decoder.decode(plain));
+        // A box that does not open with the subject's key was sealed under one
+        // that is gone: the subject was shredded, and has a new key since.
+        return yield* Effect.tryPromise(() =>
+          crypto.subtle.decrypt(
+            { name: "AES-GCM", iv: fromBase64(iv), additionalData: encoder.encode(subject) },
+            cryptoKey,
+            fromBase64(sealed),
+          ),
+        ).pipe(
+          Effect.map((plain) => Option.some(decoder.decode(plain))),
+          Effect.orElseSucceed(() => Option.none<string>()),
+        );
       }),
       shred: keys.delete,
     });
@@ -359,7 +379,7 @@ export const VaultTest: Layer.Layer<Vault> = Layer.sync(Vault, () => {
             shredded.has(subject) ? Option.none() : Option.some(box.slice(CLEAR.length)),
           )
         : Effect.fail(
-            new VaultError({ subject, reason: "the box was not sealed by the test vault" }),
+            VaultError.make({ subject, reason: "the box was not sealed by the test vault" }),
           ),
     shred: (subject) => Effect.sync(() => void shredded.add(subject)),
   });
@@ -396,7 +416,7 @@ export const settle = (
   Effect.gen(function* () {
     const first = findPlain(json);
     if (first === undefined) return json;
-    if (Option.isNone(vault)) return yield* new VaultMissing({ subject: first.subject });
+    if (Option.isNone(vault)) return yield* VaultMissing.make({ subject: first.subject });
     const settleAll = (value: unknown): Effect.Effect<unknown, VaultError> => {
       if (typeof value !== "object" || value === null) return Effect.succeed(value);
       if (isSealedJson(value)) return vault.value.settle(value);

@@ -441,7 +441,7 @@ const build = (
       const plain = findPlain(encoded);
       return plain === undefined
         ? Effect.succeed(encoded)
-        : Effect.die(new Unsealed({ subject: plain.subject, event: event._tag }));
+        : Effect.die(Unsealed.make({ subject: plain.subject, event: event._tag }));
     });
   const decodeEvent = (json: Json): Effect.Effect<unknown> =>
     Effect.map(eventCodec((json as { _tag: string })._tag), (codec) => codec.decode(json));

@@ -182,7 +182,7 @@ describe("Domain Vault", { tags: ["unit", "local"] }, () => {
     });
   }
 
-  it.live("a value sealed in server code opens, and does not open under another subject", () =>
+  it.live("a value sealed in server code opens, and not under another subject or a later key", () =>
     Effect.gen(function* () {
       const vault = yield* Domain.Vault;
       const sealed = yield* vault.seal(Name, "c-1", "Sam");
@@ -193,16 +193,19 @@ describe("Domain Vault", { tags: ["unit", "local"] }, () => {
 
       // A box is bound to its subject: under another one it is refused.
       yield* vault.seal(Name, "c-2", "Alex");
-      const moved = yield* vault.open(Name, { ...sealed, subject: "c-2" }).pipe(Effect.flip);
-      expect(moved._tag).toBe("VaultError");
+      expect(yield* vault.open(Name, { ...sealed, subject: "c-2" })).toEqual(Option.none());
+      // A box this vault did not seal is an error, not a missing value.
+      const foreign = yield* vault
+        .open(Name, { subject: "c-1", box: "nonsense" })
+        .pipe(Effect.flip);
+      expect(foreign._tag).toBe("VaultError");
 
       yield* vault.shred("c-1");
       expect(yield* vault.open(Name, sealed)).toEqual(Option.none());
       // A subject sealed for again gets a new key: what was shredded stays unreadable.
       const again = yield* vault.seal(Name, "c-1", "Sam");
       expect(yield* vault.open(Name, again)).toEqual(Option.some("Sam"));
-      const old = yield* vault.open(Name, sealed).pipe(Effect.flip);
-      expect(old._tag).toBe("VaultError");
+      expect(yield* vault.open(Name, sealed)).toEqual(Option.none());
     }).pipe(Effect.provide(Sealing)),
   );
 
