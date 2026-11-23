@@ -890,6 +890,13 @@ export const make = (
             state: (id) =>
               Effect.sync(() => ({ state: instance(id).state, version: instance(id).version })),
             events: (id) => Effect.sync(() => [...instance(id).events]),
+            // The log a backfill reader reads (`SourceRpc.log`), creating no instance.
+            log: (id, after, limit) =>
+              Effect.sync(() =>
+                (instances.get(id)?.events ?? [])
+                  .filter((event) => event.envelope.seq > after)
+                  .slice(0, limit),
+              ),
             changes: (id) =>
               Stream.unwrap(
                 versionOf(id).pipe(
@@ -1534,6 +1541,8 @@ export const make = (
         }),
       history: (target) =>
         Effect.map(run(target).phase(target), (phase) => ({ complete: phase === "complete" })),
+      instances: (source, after, limit) =>
+        Backfill.listInstances(net.node.list, source, after, limit),
     };
   });
   const claim = hostedModels({ release: true });

@@ -1688,6 +1688,64 @@ export const makeNode = (
 
 export type Node = ReturnType<typeof makeNode>;
 
+/** A page of a source's instances, from its subtree of the directory. */
+export interface Instances {
+  readonly rows: ReadonlyArray<SourceRef>;
+  /** Where the next page starts (pass it as `after`), if any of the subtree is left. */
+  readonly next?: string;
+}
+
+/**
+ * Up to `limit` instances of `source`, read from its subtree of the directory
+ * (`Account:` and its children), after the cursor `after` a previous page gave.
+ * Each node's own instances are read before its children, depth first, a page
+ * at a time: never more than one node's page in memory. Read-only. An instance
+ * a node is moving to its children while the walk passes may be listed twice
+ * (the node lists it at the child before it leaves): a reader keys by id.
+ */
+export const listInstances = (
+  list: NodeRpc["list"],
+  source: string,
+  after: string | undefined,
+  limit: number,
+): Effect.Effect<Instances> =>
+  Effect.gen(function* () {
+    // The walk's frontier, in order: a node's path, and where in its own rows to go on.
+    let pending: ReadonlyArray<{ readonly path: string; readonly after?: string }> =
+      after === undefined
+        ? [{ path: `${source}:` }]
+        : after.split("\n").map((entry) => {
+            const tab = entry.indexOf("\t");
+            return tab < 0
+              ? { path: entry }
+              : { path: entry.slice(0, tab), after: entry.slice(tab + 1) };
+          });
+    const rows: Array<SourceRef> = [];
+    while (pending.length > 0 && rows.length < limit) {
+      const [head, ...rest] = pending;
+      const listing = yield* list(head!.path, head!.after);
+      const taken = listing.rows.slice(0, limit - rows.length);
+      rows.push(...taken);
+      const resume =
+        taken.length < listing.rows.length ? `i:${refKey(taken[taken.length - 1]!)}` : listing.next;
+      pending = [
+        ...(resume === undefined ? [] : [{ path: head!.path, after: resume }]),
+        ...listing.children.map((path) => ({ path })),
+        ...rest,
+      ];
+    }
+    return {
+      rows,
+      ...(pending.length === 0
+        ? {}
+        : {
+            next: pending
+              .map(({ path, after }) => (after === undefined ? path : `${path}\t${after}`))
+              .join("\n"),
+          }),
+    };
+  });
+
 // ---------------------------------------------------------------- relay
 
 /**

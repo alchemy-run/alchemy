@@ -2595,6 +2595,11 @@ export const makePlatform = <R>(
                           ),
                         (event) => event.envelope.seq,
                       ),
+                    // The log a backfill reader reads (`SourceRpc.log`): a page, as stored.
+                    log: (id, after, limit) =>
+                      unwrapDefects<ReadonlyArray<StoredEvent>>(
+                        namespace.getByName(id).bfLog(id, after, limit),
+                      ),
                   };
                 }),
               ),
@@ -2826,6 +2831,14 @@ export const makePlatform = <R>(
               net.run
                 .phase(target)
                 .pipe(Effect.map((phase) => ({ complete: phase === "complete" }))),
+            // A read: a call that failed in transit is asked again.
+            instances: (source, after, limit) =>
+              Backfill.listInstances(
+                (path, from) => unwrapDefects<Backfill.Listing>(nodeStub(path).list(path, from)),
+                source,
+                after,
+                limit,
+              ),
             start: (targets, plansOfTarget, backfilled) =>
               Effect.gen(function* () {
                 // At deploy time: the host runs the backfill of new consumers and waits.
@@ -2897,6 +2910,47 @@ export const multiplexedName = (model: string, name: string, key: string) =>
 /** A model's class name: `Billing.AccountAggregate`. */
 export const className = (modelName: string, name: string) =>
   `${modelName}.${name}`.replace(/[^A-Za-z0-9_.]/g, "_");
+
+/** What {@link readModel} reads of a model: its backfill directory and its aggregates' stored logs, nothing else. */
+export interface ModelReader {
+  /** A page of the instances the directory lists of `source` (see `ModelHost.instances`). */
+  readonly instances: (
+    source: string,
+    after: string | undefined,
+    limit: number,
+  ) => Effect.Effect<Backfill.Instances>;
+  /** A page of an aggregate instance's stored events (see `AggregateStore.log`). */
+  readonly log: (
+    aggregate: string,
+    id: string,
+    after: number,
+    limit: number,
+  ) => Effect.Effect<ReadonlyArray<StoredEvent>>;
+}
+
+/**
+ * Read-only access to a model's backfill directory and its aggregates' stored
+ * logs, from any process that reaches its objects (`objectOf(name, key)`, by
+ * the names its host gives them): no kit and no declaration, and never a
+ * command. The calls are the ones a backfill run makes (`NodeRpc.list`,
+ * `SourceRpc.log`), which any code answers.
+ */
+export const readModel = (objectOf: (name: string, key: string) => Stub): ModelReader => ({
+  instances: (source, after, limit) =>
+    Backfill.listInstances(
+      (path, from) =>
+        unwrapDefects<Backfill.Listing>(
+          objectOf("DomainDirectory", `node:${path}`).list!(path, from),
+        ),
+      source,
+      after,
+      limit,
+    ),
+  log: (aggregate, id, after, limit) =>
+    unwrapDefects<ReadonlyArray<StoredEvent>>(
+      objectOf(`${aggregate}Aggregate`, id).bfLog!(id, after, limit),
+    ),
+});
 
 /** Split a {@link multiplexedName} back into its class and key. */
 export const parseMultiplexedName = (name: string) => {

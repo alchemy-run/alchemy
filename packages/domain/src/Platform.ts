@@ -5,7 +5,7 @@ import * as Schema from "effect/Schema";
 import { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import * as Aggregate from "./Aggregate.ts";
-import type { Plan } from "./Backfill.ts";
+import type { Instances, Plan } from "./Backfill.ts";
 import type { ReplayInput, ReplayResult } from "./CatchUp.ts";
 import type * as Decision from "./Decision.ts";
 import { ModelHostedTwice } from "./DefinitionError.ts";
@@ -448,6 +448,18 @@ export interface AggregateStore {
   readonly state: (id: string) => Effect.Effect<{ readonly state: Json; readonly version: number }>;
   /** Read the committed events of an instance (tests and diagnostics; optional). */
   readonly events?: (id: string) => Effect.Effect<ReadonlyArray<StoredEvent>>;
+  /**
+   * Up to `limit` of an instance's stored events with `seq > after`, as
+   * stored, in seq order: its log as the backfill's sources serve it
+   * (`SourceRpc.log`). Read-only and bounded; ends where the log ends, and
+   * answers none for an id that was never written, without creating it.
+   * Optional.
+   */
+  readonly log?: (
+    id: string,
+    after: number,
+    limit: number,
+  ) => Effect.Effect<ReadonlyArray<StoredEvent>>;
   /** The stored state and version of an instance, then every new one. */
   readonly changes: (
     id: string,
@@ -916,6 +928,18 @@ export interface ModelHost {
    * across deploys, so there is no history to wait for.
    */
   readonly history?: (target: string) => Effect.Effect<HistoryJson>;
+  /**
+   * A page of the instances of `source` (an aggregate or view, by name) the
+   * model's backfill directory lists, after the cursor `after` an earlier
+   * page gave (`NodeRpc.list`, walked by `Backfill.listInstances`).
+   * Read-only and bounded by `limit`; an instance may be listed twice while
+   * its directory node splits, so a reader keys by id. Optional.
+   */
+  readonly instances?: (
+    source: string,
+    after: string | undefined,
+    limit: number,
+  ) => Effect.Effect<Instances>;
 }
 
 /** What a platform is told about a model it hosts. */
