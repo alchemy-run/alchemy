@@ -10,7 +10,7 @@ Not read
   Label.aggregate.ts:23  reads .startsWith of a string
 ```
 
-A handler has to be a plain function of what it is given: the state, the command and the context. It can call other functions in your own files, which are read the same way. A function from a package is read only if it is listed under [Library functions](#library-functions).
+A handler has to be a plain function of what it is given: the state, the command and the context. It can call other functions in your own files, which are read the same way. A function from Effect is read if it is listed under [Library functions](#library-functions), and one from [a package of your own](#your-own-packages) is read like your files. An exported function that cannot be read is [opaque](#opaque-functions).
 
 ## Statements
 
@@ -32,7 +32,7 @@ Read:
 - Destructuring of objects and arrays, with defaults and rest patterns.
 - Arrow functions and function expressions, and calls to them.
 - Template literals, and `+` on strings.
-- `new` on an event, a rejection or a command.
+- `new` on an event, a rejection or a command, and the class's `make`: `Started.make({})` is `new Started({})`.
 - TypeScript's `as`, `satisfies` and `!`, which change nothing at run time.
 
 Not read: bitwise operators, `instanceof`, regular expressions, `delete`, and a property read by a key that depends on an input.
@@ -87,16 +87,85 @@ A call to a package is read when it is one of these.
 - **`effect/Record`:** `get`, `has`, `set`, `remove`, `map`, `keys`, `values`, `size`, `isEmptyRecord`, `isEmptyReadonlyRecord`.
 - **`effect/Struct`:** `omit`, `pick`.
 - **`effect/Optic`:** `id`, `modify`, `replace`, and an optic's `key` and `tag`.
-- **`effect/DateTime`:** `toEpochMillis`, `formatIsoDate`, `formatIsoDateUtc`.
-- **`effect/Function`:** `pipe`, and `.pipe` on an effect, an option and a matcher.
+- **`effect/DateTime`:** `toEpochMillis`, `isLessThan`, `isLessThanOrEqualTo`, `isGreaterThan`, `isGreaterThanOrEqualTo`, `between`, `min`, `max`, `distance`, `addDuration`, `subtractDuration`, `add` and `subtract` (in milliseconds, seconds, minutes, hours, days and weeks), `now`, `isPast`, `isFuture`, `formatIsoDate`, `formatIsoDateUtc`.
+- **`effect/Duration`:** `millis`, `seconds`, `minutes`, `hours`, `days`, `weeks`, `zero`, `toMillis`, `toSeconds`, `toMinutes`, `toHours`, `toDays`, `toWeeks`, `sum`, `subtract`, `min`, `max`, `equals`, `isLessThan`, `isLessThanOrEqualTo`, `isGreaterThan`, `isGreaterThanOrEqualTo`. Where a function takes a duration, a number of milliseconds and text such as `"7 days"` are read too.
+- **`effect/Clock`:** `currentTimeMillis`.
+- **`effect/Function`:** `pipe`, and `.pipe` on an effect, an option, a matcher, a time and a duration.
 - **`Math`:** `floor`, `ceil`, `trunc`, `abs`, `max`, `min`.
 - **`Object`:** `keys`, `values`, `entries`.
 
 Inside `Effect.gen` and `Effect.fn`, `yield*` is read on an effect, on a rejection (which rejects the command) and on a request context (which gives any value its schema allows).
 
+## Your own packages
+
+Rules that several aggregates share often live in a package of their own. Its code is read like the files of the model:
+
+```typescript title="packages/domain/src/Ticket.aggregate.ts"
+import { canClose } from "@acme/rules";
+
+decide: {
+  Close: (ticket) => (canClose(ticket) ? [new Closed({})] : []),
+},
+```
+
+An import is found the way Node finds it: in the nearest `node_modules`, through the `exports` of the package's `package.json`. The code it leads to is held to everything above. Effect and Alchemy are never read this way: the prover knows their functions from the list above.
+
+## Opaque functions
+
+A hash, a parser or a string helper is not code the prover reads, and a rule about something else should not wait on it. Put it in a function your file exports:
+
+```typescript title="packages/domain/src/hash.ts"
+import { createHash } from "node:crypto";
+
+export const idOf = (seq: number) => createHash("sha256").update(String(seq)).digest("hex");
+```
+
+```typescript title="packages/domain/src/Ticket.aggregate.ts"
+evolve: {
+  Started: (ticket, _event, envelope) => ({ ...ticket, lastRun: idOf(envelope.seq) }),
+  Closed: (ticket) => ({ ...ticket, open: false }),
+},
+transitions: {
+  AClosedTicketStaysClosed: ({ before, after }) => before.open || !after.open,
+},
+```
+
+The prover cannot read the body of `idOf`, so it does not look inside it. A call gives a value that can be kept in the state, put in an event and passed along. Two calls on the same arguments are the same value, so `idOf(a) === idOf(a)` is true. A condition on the result, as in `if (isValid(command.email))`, is tried both ways.
+
+A rule that reads into the result is not proved, and the report says which function stands in the way, and why it was not read:
+
+```text
+Not read
+  Ticket.aggregate.ts:32  reads .length of what idOf returned, which the prover does not look inside: idOf reads .update of what createHash returned, which the prover does not look inside: createHash is a function of node:crypto, which is not code the prover reads
+```
+
+Where the prover runs your real code, to confirm a counterexample or to check its own reading, it calls the real function. A counterexample is always one the real `idOf` produces.
+
+This takes the function to be pure: the same result for the same arguments, and nothing changed. The report lists each such function under what it assumes. A function is never taken to be pure when what stops the prover could make it otherwise: a global such as `Date` or `Math.random`, a package function the prover has no model for, or a change to a value it was given. That code is reported as not read.
+
+Where you know such a function is pure, name it. A function the prover could read can be named too, to keep its body out of the proof:
+
+```typescript title="packages/domain/test/Ticket.test.ts"
+import * as DateTime from "effect/DateTime";
+
+Verify.aggregate(Ticket, { opaque: [DateTime.formatIso] });
+```
+
 ## What a handler is given
 
 `decide` is read with its three arguments: the state, the command, and the context with `id`, `now`, `commandId`, `stream` and `version`. `now` is any time, so a rule that depends on the clock is proved for every time. `evolve` is read with the state, the event and its envelope.
+
+The clock inside `decide` is that same `now`. `yield* DateTime.now` and `yield* Clock.currentTimeMillis` give the time the command is handled at, in the proof and when the command runs:
+
+```ts
+Renew: Effect.fn(function* (lease) {
+  const now = yield* DateTime.now;
+  if (DateTime.isLessThanOrEqualTo(lease.until, now)) return yield* new Lapsed();
+  return [Renewed.make({ until: DateTime.addDuration(lease.until, "30 days") })];
+}),
+```
+
+A time is compared and moved in whole milliseconds. A month and a year are not one length, so `DateTime.add(time, { months: 1 })` is not read. The clock anywhere but `decide` is not the time of a command, and is not read.
 
 A request context a handler yields is any value its schema allows. Middleware is not run, so a rule is proved for every caller, including ones your middleware would turn away.
 
@@ -109,7 +178,7 @@ Not read
   Label.aggregate.ts:23  reads .startsWith of a string
 ```
 
-Rewrite the line with what is read, or move what cannot be read out of the handler: compute it where the command is built and pass the result in as a field. What `decide` then checks is the field, which the prover reads.
+Rewrite the line with what is read, or put it in an exported function, which is then [opaque](#opaque-functions). You can also move it out of the handler: compute it where the command is built and pass the result in as a field. What `decide` then checks is the field, which the prover reads.
 
 A policy's or a saga's handler is read the same way when the model is searched. One the search cannot follow fails the check until it is allowed by name:
 

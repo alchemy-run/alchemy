@@ -1,4 +1,5 @@
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as SchemaAST from "effect/SchemaAST";
@@ -388,7 +389,8 @@ const any = (parts: ReadonlyArray<string>): string => {
  * a schema, the formula is `true`.
  */
 export const fits = (value: V, ast: SchemaAST.AST, run?: Run): string => {
-  if (value._tag === "Opaque" || value._tag === "Host") return "true";
+  // What an opaque function returns is taken to be what its place allows: the report says so.
+  if (value._tag === "Opaque" || value._tag === "Host" || value._tag === "Applied") return "true";
   const sort = value._tag === "Term" ? value.term.sort : undefined;
   switch (ast._tag) {
     case "String": {
@@ -554,6 +556,10 @@ export const concretize = (
           const held = build(option.value);
           return isUnbuildable(held) ? held : Option.some(held);
         }
+        if (v.brand?.kind === "Duration") {
+          const millis = build(v.fields.millis ?? Value.num(0));
+          return isUnbuildable(millis) ? millis : Duration.millis(Number(millis));
+        }
         const out: Record<string, unknown> = {};
         for (const [key, field] of Object.entries(v.fields)) {
           const built = build(field);
@@ -564,6 +570,20 @@ export const concretize = (
       }
       case "Opaque":
         return { _tag: "Unbuildable", reason: `the prover cannot build ${v.what}` } as Unbuildable;
+      case "Applied": {
+        // The real function, on the arguments the solver found.
+        const args = v.args.map(build);
+        const failed = args.find(isUnbuildable);
+        if (failed) return failed;
+        try {
+          return v.call(...args);
+        } catch (cause) {
+          return {
+            _tag: "Unbuildable",
+            reason: `${v.name} threw on ${args.map(show).join(", ")}: ${String(cause)}`,
+          } as Unbuildable;
+        }
+      }
       default:
         return {
           _tag: "Unbuildable",
@@ -581,6 +601,7 @@ export const show = (value: unknown): string => {
   if (typeof value === "bigint") return `${value}n`;
   if (value === null || typeof value !== "object") return String(value);
   if (DateTime.isDateTime(value)) return DateTime.formatIso(value);
+  if (Duration.isDuration(value)) return `Duration.millis(${Duration.toMillis(value)})`;
   if (Option.isOption(value))
     return Option.isSome(value) ? `Option.some(${show(value.value)})` : "Option.none()";
   if (Array.isArray(value)) return `[${value.map(show).join(", ")}]`;

@@ -22,6 +22,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@bank/rules": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "vitest": "catalog:"

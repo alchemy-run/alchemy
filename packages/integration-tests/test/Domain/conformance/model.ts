@@ -4,7 +4,8 @@
  * that starts a saga, a saga that writes to another aggregate, a policy that
  * schedules and cancels a command, and a decision that commits across two
  * instances, plus a view that refuses every reader, a view behind a
- * middleware whose verdict runs out, and a command that dies.
+ * middleware whose verdict runs out, a command that dies, and a policy that
+ * relays a command from one aggregate instance to the next.
  * Between them the platform hosts every kind of object, runs its workflow
  * engine and its durable timers, and commits atomically across instances.
  */
@@ -473,13 +474,47 @@ const MemoForwardLive = MemoForward.toLayer(
   Effect.succeed(Effect.fn(function* (_batch: Domain.Compaction.Batch<typeof Memo>) {})),
 );
 
+// ---------------------------------------------------------------- a relay of hops
+
+export class Passed extends Domain.Event("Passed", { chain: Schema.String, left: Schema.Int }) {}
+
+export class Pass extends Domain.Command("Pass", {
+  input: { id: Schema.String, chain: Schema.String, left: Schema.Int },
+  events: [Passed],
+}) {}
+
+/** One hop of a relay, `<chain>-<left>`: hop 0 is the last. */
+export class Hop extends Domain.Aggregate("Hop", {
+  id: Schema.String,
+  state: Schema.Struct({ passed: Schema.Boolean }),
+  initial: { passed: false },
+  commands: [Pass],
+  keyOf: (command) => command.id,
+  decide: { Pass: (_, { chain, left }) => [new Passed({ chain, left })] },
+  evolve: { Passed: () => ({ passed: true }) },
+}) {}
+
+/** Passes the relay on to the next hop, until none are left. */
+export class PassOn extends Domain.Policy("PassOn", { from: Hop, on: [Passed] }) {}
+
+const PassOnLive = PassOn.toLayer(
+  Effect.gen(function* () {
+    const hops = yield* Hop;
+    return Effect.fn(function* ({ event }) {
+      if (event.left === 0) return;
+      const left = event.left - 1;
+      yield* hops.send(new Pass({ id: `${event.chain}-${left}`, chain: event.chain, left }));
+    });
+  }),
+);
+
 export class Conformance extends Domain.Model("Conformance", {
-  aggregates: [Counter, Echo, Hold, Memo, ...latencyAggregates],
+  aggregates: [Counter, Echo, Hold, Hop, Memo, ...latencyAggregates],
   decisions: [Giving],
   views: [CounterTotal, CounterTimes, HiddenTotal, TicketedTotal, MemoText, ...latencyViews],
   projections: [TotalWriter, TallyWriter],
   streams: [Recorded, Tallies],
-  policies: [StartMirror, HoldDeadline],
+  policies: [StartMirror, HoldDeadline, PassOn],
   sagas: [MirrorFirst],
   rewrites: [Redact],
   compactions: [MemoForward],
@@ -490,7 +525,7 @@ export class Conformance extends Domain.Model("Conformance", {
  * and a view it adds, {@link CounterReplay}.
  */
 export class ConformanceV1 extends Domain.Model("Conformance", {
-  aggregates: [Counter, Echo, Hold, Memo, ...latencyAggregates],
+  aggregates: [Counter, Echo, Hold, Hop, Memo, ...latencyAggregates],
   decisions: [Giving],
   views: [
     CounterTotal,
@@ -503,7 +538,7 @@ export class ConformanceV1 extends Domain.Model("Conformance", {
   ],
   projections: [TotalWriter, TallyWriterV1],
   streams: [Recorded, Tallies],
-  policies: [StartMirror, HoldDeadline],
+  policies: [StartMirror, HoldDeadline, PassOn],
   sagas: [MirrorFirst],
   rewrites: [Redact],
   compactions: [MemoForward],
@@ -527,6 +562,7 @@ const handlers = Layer.mergeAll(
   StartMirrorLive,
   MirrorFirstLive,
   HoldDeadlineLive,
+  PassOnLive,
   HiddenTotalLive,
   TicketedTotalLive,
   TotalWriterLive,

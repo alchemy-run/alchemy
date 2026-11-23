@@ -1,13 +1,13 @@
 ---
 title: "Part 2: A sandbox with the repository"
-description: Start every issue's sandbox from a snapshot with the repository cloned, and make it the directory OpenCode works in.
+description: Start every issue's sandbox from a snapshot with the repository cloned, and make it the directory the session's tools work in.
 sidebar:
   order: 2
 ---
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-OpenCode needs the repository to answer a question about it. Cloning on every issue would be slow, so the clone happens once, at deploy, into the snapshot every sandbox starts from.
+OpenCode's tools need the repository to answer a question about it. Cloning on every issue would be slow, so the clone happens once, at deploy, into the snapshot every sandbox starts from.
 
 ## Install
 
@@ -70,7 +70,7 @@ The Layer takes the snapshot as a declaration or as an Effect that returns one. 
 +});
 ```
 
-OpenCode now starts in the repository, so relative paths and `git` work as they would in a checkout on your machine.
+The tools now run in the repository, so relative paths and `git` work as they would in a checkout on your machine.
 
 ## Tell the model what it is doing
 

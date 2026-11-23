@@ -1,3 +1,4 @@
+import type { CodeModeConvention, CodeModeGroup } from "@alchemy.run/ai/CodeMode";
 import type { AnyMcpServer, McpServerClass } from "@alchemy.run/ai/McpServer";
 import {
   isToolGroup,
@@ -13,9 +14,9 @@ import {
 const OpenCodeToolTypeId = "~alchemy/OpenCode/Tool" as const;
 
 /**
- * One of the tools only OpenCode has (`webfetch`, `task`, …), run by
- * OpenCode in the session's sandbox. The tools every coding agent has are
- * tool tags instead (`AI.Bash`), provided here by `OpenCode.CodingTools`.
+ * One of the tools only OpenCode has (`webfetch`, `subagent`, …), run by
+ * OpenCode itself. The tools every coding agent has are tool tags instead
+ * (`AI.Bash`), provided here by `OpenCode.CodingTools`.
  */
 export interface BuiltinTool<Name extends string = string> {
   readonly [OpenCodeToolTypeId]: "builtin";
@@ -37,13 +38,21 @@ type OwnRequirements<T> =
         ? SandboxesFor<Uses>
         : never;
 
+/** What a harness lists as a tool: a tool, an MCP server, or a code mode group of them. */
+export type Listed = AnyTool | AnyMcpServer | CodeModeGroup<ReadonlyArray<AnyTool | AnyMcpServer>>;
+
+/** What a prompt enables: a tool, an MCP server, or a code mode group of them. */
+export type Enabled = ToolRef | AnyMcpServer | CodeModeGroup<ReadonlyArray<AnyTool | AnyMcpServer>>;
+
 /** What listing `T` in a harness's `tools` requires to be provided. */
 export type ToolRequirements<T> =
-  T extends McpServerClass<infer Self, any>
-    ? Self
-    : T extends ToolGroup<infer Tools>
-      ? OwnRequirements<Tools[number]>
-      : OwnRequirements<T>;
+  T extends CodeModeGroup<infer Inner>
+    ? CodeModeConvention | ToolRequirements<Inner[number]>
+    : T extends McpServerClass<infer Self, any>
+      ? Self
+      : T extends ToolGroup<infer Tools>
+        ? OwnRequirements<Tools[number]>
+        : OwnRequirements<T>;
 
 export const isBuiltin = (tool: AnyTool | AnyMcpServer): tool is BuiltinTool =>
   OpenCodeToolTypeId in tool && tool[OpenCodeToolTypeId] === "builtin";
@@ -62,7 +71,7 @@ const builtin = <const Name extends string>(toolName: Name): BuiltinTool<Name> =
 
 /** Fetch a URL. */
 export const WebFetch = builtin("webfetch");
-/** Keep a todo list for the task. */
-export const TodoWrite = builtin("todowrite");
-/** Hand part of the task to a subagent. */
-export const Task = builtin("task");
+/** Search the web. */
+export const WebSearch = builtin("websearch");
+/** Hand part of the task to a subagent, in a session of its own. */
+export const Subagent = builtin("subagent");

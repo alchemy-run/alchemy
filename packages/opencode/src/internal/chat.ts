@@ -42,7 +42,7 @@ export interface ChatRequest {
   }>;
 }
 
-/** One answer, as the bridge turns back into a chat completion. */
+/** One answer, before it is written as a chat completion. */
 export interface ChatReply {
   readonly content: string;
   readonly reasoning?: string;
@@ -206,3 +206,60 @@ export const complete = (
       usage,
     }));
   });
+
+/** `reply` as the chat completion `request` asked for: one JSON body, or a stream of chunks. */
+export const chatResponse = (
+  request: ChatRequest & { readonly stream?: boolean },
+  reply: ChatReply,
+): globalThis.Response => {
+  const id = `chatcmpl-${crypto.randomUUID()}`;
+  const created = Math.floor(Date.now() / 1000);
+  const calls = reply.toolCalls.map((call, index) => ({
+    index,
+    id: call.id,
+    type: "function",
+    function: { name: call.name, arguments: call.arguments },
+  }));
+  const usage = {
+    prompt_tokens: reply.usage.input,
+    completion_tokens: reply.usage.output,
+    total_tokens: reply.usage.input + reply.usage.output,
+  };
+  if (request.stream !== true) {
+    return globalThis.Response.json({
+      id,
+      object: "chat.completion",
+      created,
+      model: request.model,
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: reply.content,
+            ...(reply.reasoning !== undefined ? { reasoning_content: reply.reasoning } : {}),
+            ...(calls.length > 0 ? { tool_calls: calls.map(({ index: _, ...call }) => call) } : {}),
+          },
+          finish_reason: reply.finishReason,
+        },
+      ],
+      usage,
+    });
+  }
+  const chunk = (choices: ReadonlyArray<unknown>, extra: object = {}) =>
+    `data: ${JSON.stringify({ id, object: "chat.completion.chunk", created, model: request.model, choices, ...extra })}\n\n`;
+  const delta = (value: object, finish: string | null = null) =>
+    chunk([{ index: 0, delta: value, finish_reason: finish }]);
+  return new globalThis.Response(
+    [
+      delta({ role: "assistant", content: "" }),
+      reply.reasoning !== undefined ? delta({ reasoning_content: reply.reasoning }) : "",
+      reply.content.length > 0 ? delta({ content: reply.content }) : "",
+      calls.length > 0 ? delta({ tool_calls: calls }) : "",
+      delta({}, reply.finishReason),
+      chunk([], { usage }),
+      "data: [DONE]\n\n",
+    ].join(""),
+    { headers: { "content-type": "text/event-stream" } },
+  );
+};

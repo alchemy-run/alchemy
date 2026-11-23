@@ -1,4 +1,5 @@
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { Term } from "./Smt.ts";
 import * as Smt from "./Smt.ts";
@@ -27,6 +28,8 @@ export interface Host {
   ) => Eval<V>;
   /** The request contexts provided around the code being run, by tag. */
   readonly provided: Map<unknown, V>;
+  /** The time the command being decided is handled at: none outside `decide`. */
+  readonly now: () => V | undefined;
   /** Models a caller adds, by `module:path`. They come before the prover's own. */
   readonly extra: ReadonlyMap<string, Model>;
 }
@@ -36,6 +39,21 @@ export type Model = (args: ReadonlyArray<V>, site: Site) => Eval<V>;
 
 /** Milliseconds in a day. */
 const DAY = 86_400_000;
+
+/** A whole number: one the prover knows, or a formula for one. */
+type Whole = number | Term;
+
+/** Milliseconds in each unit of `DateTime.add` that is the same length whenever it starts. */
+const PARTS: Readonly<Record<string, number>> = {
+  milliseconds: 1,
+  seconds: 1_000,
+  minutes: 60_000,
+  hours: 3_600_000,
+  days: DAY,
+  weeks: 7 * DAY,
+};
+
+const DURATION: Value.Brand = { kind: "Duration", cls: undefined };
 
 const native = (name: string, call: Model): V => ({ _tag: "Native", name, call });
 const effect = (run: Eval<V>): V => ({ _tag: "Effect", run });
@@ -239,6 +257,198 @@ export const make = (host: Host) => {
               self ? body([self, ...args], at) : wrongArguments(at, name),
             ),
           );
+
+  // Time. A time is its milliseconds since 1970 and a duration is a whole
+  // number of milliseconds, so comparing, adding and subtracting them is
+  // arithmetic on whole numbers.
+
+  const wholeOf = (v: V | undefined): Whole | undefined =>
+    v?._tag === "Num"
+      ? Number.isSafeInteger(v.value)
+        ? v.value
+        : undefined
+      : v?._tag === "Term" && v.term.sort === "Int" && v.big !== true
+        ? v.term
+        : undefined;
+
+  const termOf = (n: Whole): Term => (typeof n === "number" ? Smt.int(n) : n);
+  const valueOfWhole = (n: Whole): V =>
+    typeof n === "number" ? Value.num(n) : { _tag: "Term", term: n };
+
+  const sum = (a: Whole, b: Whole): Whole =>
+    typeof a === "number" && typeof b === "number"
+      ? a + b
+      : { sort: "Int", text: `(+ ${termOf(a).text} ${termOf(b).text})` };
+  const difference = (a: Whole, b: Whole): Whole =>
+    typeof a === "number" && typeof b === "number"
+      ? a - b
+      : { sort: "Int", text: `(- ${termOf(a).text} ${termOf(b).text})` };
+  const product = (a: Whole, b: Whole): Whole =>
+    typeof a === "number" && typeof b === "number"
+      ? a * b
+      : { sort: "Int", text: `(* ${termOf(a).text} ${termOf(b).text})` };
+
+  const ORDER = {
+    "<": (a: number, b: number) => a < b,
+    "<=": (a: number, b: number) => a <= b,
+    ">": (a: number, b: number) => a > b,
+    ">=": (a: number, b: number) => a >= b,
+    "=": (a: number, b: number) => a === b,
+  };
+
+  const ordered = (order: keyof typeof ORDER, a: Whole, b: Whole): V =>
+    typeof a === "number" && typeof b === "number"
+      ? Value.bool(ORDER[order](a, b))
+      : Value.term("Bool", `(${order} ${termOf(a).text} ${termOf(b).text})`);
+
+  /** The smaller of two, or the larger: the first where they are the same, as the library gives. */
+  const picked = (order: "<=" | ">=", a: Whole, b: Whole): Whole =>
+    typeof a === "number" && typeof b === "number"
+      ? ORDER[order](a, b)
+        ? a
+        : b
+      : {
+          sort: "Int",
+          text: `(ite (${order} ${termOf(a).text} ${termOf(b).text}) ${termOf(a).text} ${termOf(b).text})`,
+        };
+
+  const instant = (v: V | undefined): Term | undefined =>
+    v?._tag === "Time" ? v.millis : undefined;
+  const time = (millis: Whole): V => ({ _tag: "Time", millis: termOf(millis) });
+
+  const duration = (millis: Whole): V => Value.obj({ millis: valueOfWhole(millis) }, DURATION);
+
+  /**
+   * The milliseconds of what a function takes as a duration: a `Duration`, a
+   * number of milliseconds, or text such as `"7 days"`. A duration that is not
+   * a whole number of milliseconds is kept in nanoseconds by the library, and
+   * is not read.
+   */
+  const span = (v: V | undefined): Whole | undefined => {
+    if (v?._tag === "Obj")
+      return v.brand?.kind === "Duration" ? wholeOf(v.fields.millis) : undefined;
+    if (v?._tag !== "Str") return wholeOf(v);
+    // Text that is no duration, or one that is not whole milliseconds, is not a whole number.
+    const read = Duration.fromInput(v.value as Duration.Input);
+    const millis = read._tag === "Some" ? Duration.toMillis(read.value) : Number.NaN;
+    return wholeOf(Value.num(millis));
+  };
+
+  /** A function of two times, such as `DateTime.isLessThan`. */
+  const onTimes = (name: string, body: (self: Term, that: Term) => V): Model =>
+    dual(name, 2, ([self, that], site) => {
+      const a = instant(self);
+      const b = instant(that);
+      return a && b ? Effect.succeed(body(a, b)) : wrongArguments(site, name);
+    });
+
+  /** A function of two durations, such as `Duration.sum`. */
+  const onSpans = (name: string, body: (self: Whole, that: Whole) => V): Model =>
+    dual(name, 2, ([self, that], site) => {
+      const a = span(self);
+      const b = span(that);
+      return a !== undefined && b !== undefined
+        ? Effect.succeed(body(a, b))
+        : wrongArguments(site, name);
+    });
+
+  /** `Duration.days` and the like: so many of a unit. */
+  const spanOf =
+    (name: string, unit: number): Model =>
+    ([count], site) => {
+      const n = wholeOf(count);
+      return n === undefined
+        ? wrongArguments(site, name)
+        : Effect.succeed(duration(product(n, unit)));
+    };
+
+  /** `Duration.toDays` and the like: a duration counted in a unit, which need not be whole. */
+  const spanIn =
+    (name: string, unit: number): Model =>
+    ([self], site) => {
+      const millis = span(self);
+      if (millis === undefined) return wrongArguments(site, name);
+      if (unit === 1) return Effect.succeed(valueOfWhole(millis));
+      if (typeof millis === "number") return Effect.succeed(Value.num(millis / unit));
+      return Effect.succeed<V>({
+        _tag: "Term",
+        term: { sort: "Real", text: `(/ (to_real ${millis.text}) ${Smt.real(unit).text})` },
+        quotient: { dividend: millis.text, divisor: unit },
+      });
+    };
+
+  /** `DateTime.addDuration` and `DateTime.subtractDuration`. */
+  const shiftedBy = (name: string, sign: 1 | -1): Model =>
+    dual(name, 2, ([self, by], site) => {
+      const at = instant(self);
+      const millis = span(by);
+      return at && millis !== undefined
+        ? Effect.succeed(time(sign === 1 ? sum(at, millis) : difference(at, millis)))
+        : wrongArguments(site, name);
+    });
+
+  /**
+   * `DateTime.add` and `DateTime.subtract`, in the units that are the same
+   * length whenever they start. A month or a year is not: it is not read.
+   */
+  const shiftedByParts = (name: string, sign: 1 | -1): Model =>
+    dual(name, 2, ([self, parts], site) => {
+      const at = instant(self);
+      if (!at || parts?._tag !== "Obj" || parts.brand) return wrongArguments(site, name);
+      let moved: Whole = at;
+      for (const [key, value] of Object.entries(parts.fields)) {
+        const unit = PARTS[key];
+        if (unit === undefined)
+          return Effect.fail(
+            Value.notTranslated(
+              site,
+              `${name} moves a time by ${key}, which are not all the same length`,
+            ),
+          );
+        const count = wholeOf(value);
+        if (count === undefined) return wrongArguments(site, name);
+        const millis = product(count, unit);
+        moved = sign === 1 ? sum(moved, millis) : difference(moved, millis);
+      }
+      return Effect.succeed(time(moved));
+    });
+
+  /**
+   * What the clock reads: the time the command is handled at, which is what
+   * `decide` is given as `now` and what the clock is set to while it runs.
+   */
+  const clock = (name: string, site: Site, read: (now: Term) => V): V =>
+    effect(
+      Effect.suspend(() => {
+        const now = instant(host.now());
+        return now
+          ? Effect.succeed(read(now))
+          : Effect.fail(
+              Value.notTranslated(
+                site,
+                `reads the clock with ${name} outside decide, where the time is not an input`,
+                true,
+              ),
+            );
+      }),
+    );
+
+  /** The library's values that read the clock. */
+  const clocks: Readonly<Record<string, (site: Site) => V>> = {
+    "effect/Clock:currentTimeMillis": (site) =>
+      clock("Clock.currentTimeMillis", site, (now) => ({ _tag: "Term", term: now })),
+    "effect/DateTime:now": (site) => clock("DateTime.now", site, time),
+  };
+
+  /** `DateTime.isPast` and `DateTime.isFuture`: a time against what the clock reads. */
+  const against =
+    (name: string, order: "<" | ">"): Model =>
+    ([self], site) => {
+      const at = instant(self);
+      return at
+        ? Effect.succeed(clock(name, site, (now) => ordered(order, now, at)))
+        : wrongArguments(site, name);
+    };
 
   /** A function of an `Option`. */
   const onOption = (
@@ -999,6 +1209,66 @@ export const make = (host: Host) => {
       time?._tag === "Time"
         ? Effect.succeed<V>({ _tag: "Term", term: time.millis })
         : wrongArguments(site, "DateTime.toEpochMillis"),
+    "effect/DateTime:isLessThan": onTimes("DateTime.isLessThan", (a, b) => ordered("<", a, b)),
+    "effect/DateTime:isLessThanOrEqualTo": onTimes("DateTime.isLessThanOrEqualTo", (a, b) =>
+      ordered("<=", a, b),
+    ),
+    "effect/DateTime:isGreaterThan": onTimes("DateTime.isGreaterThan", (a, b) =>
+      ordered(">", a, b),
+    ),
+    "effect/DateTime:isGreaterThanOrEqualTo": onTimes("DateTime.isGreaterThanOrEqualTo", (a, b) =>
+      ordered(">=", a, b),
+    ),
+    "effect/DateTime:between": dual("DateTime.between", 2, ([self, bounds], site) => {
+      const at = instant(self);
+      const minimum = bounds?._tag === "Obj" ? instant(bounds.fields.minimum) : undefined;
+      const maximum = bounds?._tag === "Obj" ? instant(bounds.fields.maximum) : undefined;
+      return at && minimum && maximum
+        ? Effect.succeed(
+            Value.term(
+              "Bool",
+              `(and (<= ${minimum.text} ${at.text}) (<= ${at.text} ${maximum.text}))`,
+            ),
+          )
+        : wrongArguments(site, "DateTime.between");
+    }),
+    "effect/DateTime:min": onTimes("DateTime.min", (a, b) => time(picked("<=", a, b))),
+    "effect/DateTime:max": onTimes("DateTime.max", (a, b) => time(picked(">=", a, b))),
+    // From the first time to the second: negative when the second is the earlier.
+    "effect/DateTime:distance": onTimes("DateTime.distance", (a, b) => duration(difference(b, a))),
+    "effect/DateTime:addDuration": shiftedBy("DateTime.addDuration", 1),
+    "effect/DateTime:subtractDuration": shiftedBy("DateTime.subtractDuration", -1),
+    "effect/DateTime:add": shiftedByParts("DateTime.add", 1),
+    "effect/DateTime:subtract": shiftedByParts("DateTime.subtract", -1),
+    "effect/DateTime:isPast": against("DateTime.isPast", ">"),
+    "effect/DateTime:isFuture": against("DateTime.isFuture", "<"),
+    "effect/Duration:millis": spanOf("Duration.millis", 1),
+    "effect/Duration:seconds": spanOf("Duration.seconds", 1_000),
+    "effect/Duration:minutes": spanOf("Duration.minutes", 60_000),
+    "effect/Duration:hours": spanOf("Duration.hours", 3_600_000),
+    "effect/Duration:days": spanOf("Duration.days", DAY),
+    "effect/Duration:weeks": spanOf("Duration.weeks", 7 * DAY),
+    "effect/Duration:toMillis": spanIn("Duration.toMillis", 1),
+    "effect/Duration:toSeconds": spanIn("Duration.toSeconds", 1_000),
+    "effect/Duration:toMinutes": spanIn("Duration.toMinutes", 60_000),
+    "effect/Duration:toHours": spanIn("Duration.toHours", 3_600_000),
+    "effect/Duration:toDays": spanIn("Duration.toDays", DAY),
+    "effect/Duration:toWeeks": spanIn("Duration.toWeeks", 7 * DAY),
+    "effect/Duration:sum": onSpans("Duration.sum", (a, b) => duration(sum(a, b))),
+    "effect/Duration:subtract": onSpans("Duration.subtract", (a, b) => duration(difference(a, b))),
+    "effect/Duration:min": onSpans("Duration.min", (a, b) => duration(picked("<=", a, b))),
+    "effect/Duration:max": onSpans("Duration.max", (a, b) => duration(picked(">=", a, b))),
+    "effect/Duration:equals": onSpans("Duration.equals", (a, b) => ordered("=", a, b)),
+    "effect/Duration:isLessThan": onSpans("Duration.isLessThan", (a, b) => ordered("<", a, b)),
+    "effect/Duration:isLessThanOrEqualTo": onSpans("Duration.isLessThanOrEqualTo", (a, b) =>
+      ordered("<=", a, b),
+    ),
+    "effect/Duration:isGreaterThan": onSpans("Duration.isGreaterThan", (a, b) =>
+      ordered(">", a, b),
+    ),
+    "effect/Duration:isGreaterThanOrEqualTo": onSpans("Duration.isGreaterThanOrEqualTo", (a, b) =>
+      ordered(">=", a, b),
+    ),
     "Math:max": number("Math.max", Math.max, (a, b) => `(ite (>= ${a} ${b}) ${a} ${b})`),
     "Math:min": number("Math.min", Math.min, (a, b) => `(ite (<= ${a} ${b}) ${a} ${b})`),
   };
@@ -1006,6 +1276,7 @@ export const make = (host: Host) => {
   /** Library values that are not functions. */
   const values: Readonly<Record<string, V>> = {
     "effect/Effect:void": done,
+    "effect/Duration:zero": duration(0),
   };
 
   const keyOf = (lib: V & { readonly _tag: "Lib" }): string =>
@@ -1013,7 +1284,18 @@ export const make = (host: Host) => {
 
   return {
     opticMember,
-    valueOf: (lib: V & { readonly _tag: "Lib" }): V | undefined => values[keyOf(lib)],
+    valueOf: (lib: V & { readonly _tag: "Lib" }, site: Site): V | undefined =>
+      values[keyOf(lib)] ?? clocks[keyOf(lib)]?.(site),
+    /**
+     * Whether a package is one the prover knows by its models, and never
+     * reads the code of: Effect, and Alchemy's own.
+     */
+    known: (specifier: string): boolean =>
+      /^(effect|alchemy|@effect\/[^/]+|@alchemy\.run\/[^/]+)(\/|$)/.test(specifier) ||
+      [...host.extra.keys(), ...Object.keys(models)].some((key) => key.startsWith(`${specifier}:`)),
+    /** Whether the prover has a model for a library function. */
+    models: (lib: V & { readonly _tag: "Lib" }): boolean =>
+      host.extra.has(keyOf(lib)) || Object.hasOwn(models, keyOf(lib)),
     call: (lib: V & { readonly _tag: "Lib" }, args: ReadonlyArray<V>, site: Site): Eval<V> => {
       const model = host.extra.get(keyOf(lib)) ?? models[keyOf(lib)];
       if (model) return model(args, site);
@@ -1024,6 +1306,7 @@ export const make = (host: Host) => {
         Value.notTranslated(
           site,
           `calls ${lib.module.replace(/^effect\//, "")}.${lib.path.join(".")}, which the prover has no model for`,
+          true,
         ),
       );
     },

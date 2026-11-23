@@ -580,6 +580,20 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
     }),
     options,
   );
+
+  test(
+    "a policy relays a command through 20 aggregate instances",
+    Effect.gen(function* () {
+      // Each hop's event makes a policy send a command to the next instance.
+      // A platform that runs each hop inside the call that delivered the last
+      // one nests deeper every hop, until the host refuses the call (#3627).
+      const chain = fresh("relay");
+      expect(yield* call(`/relay/${chain}?hops=20`)).toEqual({ passed: true });
+      const last = yield* eventually<{ passed: boolean }>(`/hop/${chain}-0`, (hop) => hop.passed);
+      expect(last).toEqual({ passed: true });
+    }),
+    options,
+  );
 };
 
 export interface RebuildOptions extends Omit<ConformanceOptions, "within"> {
