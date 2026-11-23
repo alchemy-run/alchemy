@@ -136,7 +136,13 @@ export const NamespaceProvider = () =>
           // after a short wait rather than the full startup budget.
           const ns = yield* observe(olds, name, "30 seconds").pipe(
             Effect.catchTag(
-              ["BadGateway", "ServiceUnavailable", "GatewayTimeout", "TimeoutError"],
+              [
+                "BadGateway",
+                "ServiceUnavailable",
+                "GatewayTimeout",
+                "TimeoutError",
+                "EngineNotReady",
+              ],
               () => Effect.undefined,
             ),
             Effect.catchIf(
