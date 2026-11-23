@@ -367,11 +367,46 @@ const acquireLease = (state: ObjectStateShape, lease: string) =>
   });
 
 /**
+ * Failed attempts after which a queue row is buried: moved out of the queue
+ * into its dead letters, so the rows behind it are processed. An attempt is
+ * a drain that reaches the row and fails: a kick, or the callback's backstop
+ * with its backoff.
+ */
+const BURY_AFTER_ATTEMPTS = 5;
+
+/**
+ * A queue row buried after {@link BURY_AFTER_ATTEMPTS} failed attempts, as an
+ * object's `deadLetters` method returns it. Nothing processes it again.
+ */
+export const DeadLetter = Schema.Struct({
+  /** The queue it was buried from: `outbox` (aggregates, views) or `inbox` (policies). */
+  queue: Schema.String,
+  /** Its position in that queue. */
+  seq: Schema.Number,
+  /** The row: a `Delivery`. */
+  row: Schema.Unknown,
+  attempts: Schema.Number,
+  /** The last attempt's failure, as `Cause.pretty` prints it. */
+  error: Schema.String,
+  buriedAt: Schema.Number,
+});
+export type DeadLetter = typeof DeadLetter.Type;
+
+/** What `<queue>-failing` holds: the row at the queue's head that failed, and how often. */
+interface Failing {
+  readonly key: string;
+  readonly attempts: number;
+}
+
+/**
  * A durable, ordered work queue in the instance's storage. Rows are written
  * in the same transaction as the state change that produced them, processed
  * right after the commit (`kick`), and again by a durable callback if the
  * instance dies first. One drain runs at a time (a storage lease), rows are
- * processed in order, and a row is deleted only after its work succeeds.
+ * processed in order, and a row is deleted only after its work succeeds. A
+ * row that fails {@link BURY_AFTER_ATTEMPTS} times is buried (`deadLetters`
+ * lists it) and the rows behind it go on, so one row that can never succeed
+ * does not hold back the rest of the queue for good.
  *
  * A `detached` queue never drains inside the call that staged its rows: its
  * callback runs them at once, as an event of its own. A drain's calls nest
@@ -388,7 +423,45 @@ const queue = <Row>(
     const state = yield* ObjectState;
     const prefix = `${name}:`;
     const lease = `${name}-lease`;
+    const failingKey = `${name}-failing`;
+    const deadPrefix = `${name}-dead:`;
     const acquire = exclusively(acquireLease(state, lease));
+    /**
+     * Count a failed attempt at the row `key`. Below the limit the drain
+     * fails, and its callback retries it with backoff; at the limit the row
+     * is buried.
+     */
+    const failed = (
+      key: string,
+      row: Row,
+      previous: Failing | undefined,
+      cause: Cause.Cause<never>,
+    ) =>
+      Effect.gen(function* () {
+        const attempts = (previous?.key === key ? previous.attempts : 0) + 1;
+        if (attempts < BURY_AFTER_ATTEMPTS) {
+          yield* state.storage.put(failingKey, { key, attempts } satisfies Failing);
+          return yield* Effect.failCause(cause);
+        }
+        yield* Effect.logError(`domain ${name} row ${key} failed ${attempts} times; buried`, cause);
+        const position = key.slice(prefix.length);
+        const letter: DeadLetter = {
+          queue: name,
+          seq: Number(position),
+          row,
+          attempts,
+          error: Cause.pretty(cause),
+          buriedAt: yield* Clock.currentTimeMillis,
+        };
+        yield* exclusively(
+          state.storage.transaction(
+            Effect.gen(function* () {
+              yield* state.storage.put(`${deadPrefix}${position}`, letter);
+              yield* state.storage.delete([key, failingKey]);
+            }),
+          ),
+        );
+      });
     // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides its state and RuntimeContext on every event
     const drain: Effect.Effect<void> = Effect.gen(function* () {
       // Nothing staged: nothing to do, and no lease to take.
@@ -402,10 +475,23 @@ const queue = <Row>(
         return;
       }
       yield* Effect.gen(function* () {
+        let failing = yield* state.storage.get<Failing>(failingKey);
         const rows = yield* state.storage.list<Row>({ prefix });
         for (const [key, row] of rows) {
-          yield* process(row);
-          yield* state.storage.delete(key);
+          // A success clears the failures counted against the row.
+          const done = failing?.key === key ? [key, failingKey] : [key];
+          const exit = yield* Effect.exit(
+            Effect.gen(function* () {
+              yield* process(row);
+              yield* state.storage.delete(done);
+            }),
+          );
+          if (exit._tag === "Failure") {
+            // An interrupted attempt (the instance stopping) is no failure of the row.
+            if (Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause);
+            yield* failed(key, row, failing, exit.cause);
+          }
+          if (failing?.key === key) failing = undefined;
         }
       }).pipe(Effect.ensuring(state.storage.delete(lease).pipe(Effect.ignore)));
       // Rows staged while this drain ran.
@@ -448,6 +534,10 @@ const queue = <Row>(
           ),
       /** Process staged rows now, and wait (unless another drain holds the lease). */
       flush: drain,
+      /** The rows buried after {@link BURY_AFTER_ATTEMPTS} failed attempts, oldest first. */
+      deadLetters: state.storage
+        .list<DeadLetter>({ prefix: deadPrefix })
+        .pipe(Effect.map((rows) => [...rows.values()])),
     };
   });
 
@@ -1516,6 +1606,7 @@ const aggregateObject = (
         }).pipe(reportDefects),
       state: () => reportDefects(currentMeta),
       after: (after: number) => reportDefects(eventsAfter(after)),
+      deadLetters: () => reportDefects(outbox.deadLetters),
       // A decision, with this instance as its primary: see `TwoPhase.decide`.
       txDecide: (id: string, name: string, command: Json, meta: Aggregate.SendMeta) =>
         Effect.gen(function* () {
@@ -1801,6 +1892,7 @@ const viewObject = (
       read: () => reportDefects(read),
       after: (after: number) => reportDefects(entriesAfter(after)),
       page: (range: ListRange | undefined) => reportDefects(entriesIn(range)),
+      deadLetters: () => reportDefects(outbox.deadLetters),
       // The backfill protocol, as a source, a consumer and a scanner.
       ...scannerRpc(() => scannerFor()),
       ...runRpc(relay, runFor),
@@ -1879,6 +1971,7 @@ const policyObject = (kit: PolicyKit) =>
             if (accepted) yield* inbox.kick;
           }),
         ),
+      deadLetters: () => reportDefects(inbox.deadLetters),
     };
   });
 

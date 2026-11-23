@@ -15,6 +15,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
+import * as TestClock from "effect/testing/TestClock";
 import { type Disk, type Intercept, simHost, type Stats } from "./sim-host.ts";
 
 // ---------------------------------------------------------------- a ledger with a view and a stream
@@ -232,6 +233,99 @@ const importsOn = (platform: Layer.Layer<Domain.Platform, never, SecureRandom.Se
     Layer.provideMerge(platform),
     Layer.provideMerge(SecureRandom.layerWebCrypto),
   );
+
+// ---------------------------------------------------------------- a view that dies on one event
+
+/** The booking a {@link Strict} view dies on. */
+const POISON = 2;
+
+/** How often {@link Strict} was asked to fold the poisoned booking. */
+const folded = { poisoned: 0 };
+
+/** Folds every booking but one: its delivery can never succeed. */
+class Strict extends Domain.View("Strict", {
+  from: [Ledger],
+  key: Ledger,
+  state: Schema.Struct({ count: Schema.Number }),
+  initial: { count: 0 },
+  evolve: {
+    Booked: (_, e) => {
+      if (e.n === POISON) {
+        folded.poisoned += 1;
+        throw new Error(`booking ${e.n} cannot be folded`);
+      }
+      return { count: e.n };
+    },
+  },
+}) {}
+
+class Guarded extends Domain.Model("Guarded", { aggregates: [Ledger], views: [Strict] }) {}
+
+describe("Domain queues on Durable Objects", { tags: ["unit"] }, () => {
+  it.effect(
+    "a row that keeps failing is buried, and the rows behind it are delivered",
+    () => {
+      const sim = simHost({ rowsRead: 0 });
+      folded.poisoned = 0;
+      return Effect.gen(function* () {
+        const ledgers = yield* Ledger;
+        const strict = yield* Strict;
+        const ledger = Ledger.ref("main");
+        // Everything below runs on the TestClock: let time pass until `done`.
+        const until = (done: Effect.Effect<boolean>) =>
+          Effect.gen(function* () {
+            for (let second = 0; second < 120 && !(yield* done); second++) {
+              yield* TestClock.adjust("1 second");
+            }
+            expect(yield* done).toBe(true);
+          });
+        const counted = strict.get(ledger).pipe(
+          Effect.map((state) => Option.getOrUndefined(state)?.count),
+          Effect.orDie,
+        );
+        // The ledger's objects, as code that doesn't build the model reaches them.
+        const aggregate = sim.host.lookup!(
+          { modelName: "Guarded", id: {}, sagas: [], legacyData: false },
+          "LedgerAggregate",
+        )!.getByName(ledger.id);
+        // Called afresh each time: an evicted object is built again.
+        const deadLetters = Effect.suspend(
+          () => aggregate.deadLetters() as Effect.Effect<ReadonlyArray<DurableObjects.DeadLetter>>,
+        );
+        // The view's first backfill is over: bookings now reach it through the ledger's outbox.
+        yield* ledgers.send(new BookMany({ id: ledger.id, count: 1 }));
+        yield* until(Effect.map(counted, (count) => count === 1));
+        yield* TestClock.adjust("10 seconds");
+        // Booking 2 is the one the view dies on; 3 and 4 wait behind it.
+        for (let i = 0; i < 3; i++) yield* ledgers.send(new BookMany({ id: ledger.id, count: 1 }));
+        // Part way through its attempts, the object is evicted: the count is in storage.
+        yield* until(Effect.sync(() => folded.poisoned >= 2));
+        yield* sim.evict;
+        yield* until(Effect.map(deadLetters, (letters) => letters.length > 0));
+        const letters = yield* deadLetters;
+        expect(letters).toHaveLength(1);
+        expect(letters[0]).toMatchObject({ queue: "outbox", seq: 2, attempts: 5 });
+        expect(letters[0]!.error).toContain("cannot be folded");
+        // The rows behind it were delivered once it was out of the way.
+        yield* until(Effect.map(counted, (count) => count === 4));
+        // Five attempts in all, across the eviction; nothing is left to retry.
+        expect(folded.poisoned).toBe(5);
+        yield* TestClock.adjust("2 hours");
+        expect(folded.poisoned).toBe(5);
+        expect(yield* deadLetters).toHaveLength(1);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Guarded.layer(Layer.empty).pipe(
+            Layer.provideMerge(DurableObjects.makePlatform(sim.host)),
+            Layer.provideMerge(SecureRandom.layerWebCrypto),
+          ),
+        ),
+      );
+    },
+    { timeout: 60_000 },
+  );
+});
 
 describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
   for (const [name, platform] of [
