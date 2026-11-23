@@ -4,6 +4,7 @@ import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Scheduler from "effect/Scheduler";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
@@ -186,11 +187,22 @@ export const make = (
   let running = 0;
   let waitingRuns = 0;
   let pollingRuns = 0;
+  // Every change wakes `quiet` and the polls, as a queued task: completing a
+  // Deferred resumes its waiters inline, so waking them at once would run
+  // `quiet` in the middle of the run that changed, before it forks the rest
+  // of its fibers (the other calls of an `Effect.forEach`).
   let changed = Deferred.makeUnsafe<void>();
+  const notifier = new Scheduler.MixedScheduler().makeDispatcher();
+  let notifying = false;
   const notify = () => {
-    const was = changed;
-    changed = Deferred.makeUnsafe<void>();
-    Deferred.doneUnsafe(was, Effect.void);
+    if (notifying) return;
+    notifying = true;
+    notifier.scheduleTask(() => {
+      notifying = false;
+      const was = changed;
+      changed = Deferred.makeUnsafe<void>();
+      Deferred.doneUnsafe(was, Effect.void);
+    }, 0);
   };
   // This platform's runs, so a run of another platform never counts here.
   const runs = new WeakSet<Run>();
@@ -213,12 +225,12 @@ export const make = (
   /**
    * Count the current run as waiting (or polling) from now, and return the
    * end of that wait. The end counts once, whoever calls it first: the run
-   * when it resumes, or the run that wakes it (gives its turn, hands it a
-   * lock). A woken run's fiber resumes later, once scheduled; until then
-   * `quiet` would see it waiting, and `drain` return before it ran.
+   * when it resumes, or the run that wakes it (hands it a lock). A lock's
+   * waiter resumes later, once scheduled; until then `quiet` would see it
+   * waiting, and `drain` return before it ran.
    *
-   * `register` gets the end before the wait counts: counting it can let
-   * `drain` go on at once, which must find whatever wakes the run.
+   * `register` gets the end before the wait counts, so a `drain` that goes on
+   * once it counts finds whatever wakes the run.
    */
   const begin = (
     kind: keyof Run,
@@ -518,20 +530,12 @@ export const make = (
       ? (key, activity) =>
           Effect.suspend(() => {
             const turn = Deferred.makeUnsafe<void>();
-            return Effect.flatMap(
-              begin("waits", (end) =>
-                pending.push({
-                  // The run is running again from the moment its turn is given.
-                  run: Effect.sync(end).pipe(
-                    Effect.andThen(Deferred.succeed(turn, undefined)),
-                    Effect.asVoid,
-                  ),
-                  label: `saga ${key} → ${activity}`,
-                  lane: `saga:${key}`,
-                }),
-              ),
-              (end) => Deferred.await(turn).pipe(Effect.ensuring(Effect.sync(end))),
-            );
+            pending.push({
+              run: Deferred.succeed(turn, undefined).pipe(Effect.asVoid),
+              label: `saga ${key} → ${activity}`,
+              lane: `saga:${key}`,
+            });
+            return Deferred.await(turn).pipe(waiting);
           })
       : undefined,
     acquire,
