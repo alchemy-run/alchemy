@@ -67,9 +67,24 @@ A sum, a difference, a product, a comparison, `min`, `max`, `clamp`, `abs`, `neg
 
 A string is compared with `===`, joined with `+` or a template literal, and has a `length`.
 
-On a string from the state or a command, these methods are read: `startsWith`, `endsWith`, `includes`, `indexOf`, `charAt`, `concat`, `slice` and `substring` between places the code writes, and `replace` and `replaceAll` of one string by another. `effect/String` has the same as functions.
+On a string from the state or a command, these methods are read: `startsWith`, `endsWith`, `includes`, `indexOf`, `lastIndexOf`, `charAt`, `concat`, `slice`, `substring`, `split`, and `replace` and `replaceAll` of one string by another. `effect/String` has the same as functions.
 
-A method that changes letters is read only on a string the code writes: `toUpperCase`, `toLowerCase`, `trim`, `padStart`, `repeat`, `split`. `localeCompare`, `normalize` and regular expressions are not read at all. Two strings from an input are not put in order: `Order.String` is read on strings the code writes.
+An id that holds structure is taken apart the usual ways, and a rule about a part is proved:
+
+```typescript
+invariants: { NameHasNoAt: (tag) => !tag.name.includes("@") },
+decide: {
+  BySlice: (_tag, c) => [new Named({ name: c.ref.slice(0, c.ref.indexOf("@")) })],
+  BySplit: (_tag, c) => [new Named({ name: c.ref.split("@")[0]! })],
+  ByLast: (_tag, c) => [new Versioned({ version: c.ref.slice(c.ref.lastIndexOf("@") + 1) })],
+},
+```
+
+`slice` and `substring` are read at any place: one the code writes, one counted from the end, or one an input decides, such as where a separator is. The separator given to `indexOf`, `lastIndexOf` and `split` is a string the code writes.
+
+The first part of a `split` and the last are read however many parts there are: `parts[0]`, `parts.at(-1)` and `const [name] = ref.split("@")`. Code that counts the parts, or reads one in the middle, is read for a string of up to two separators, and its rule is then checked for short lists only.
+
+A method that changes letters is read only on a string the code writes: `toUpperCase`, `toLowerCase`, `trim`, `padStart`, `repeat`. `localeCompare`, `normalize` and regular expressions are not read at all. Two strings from an input are not put in order: `Order.String` is read on strings the code writes.
 
 ## Lists
 
@@ -102,6 +117,7 @@ The state, each command's input and each request context start as any value thei
 - `Schema.Literal` and `Schema.Literals`, `Schema.Null` and `Schema.Undefined`.
 - `Schema.Struct` and `Schema.TaggedStruct`, with optional fields.
 - `Schema.Union`, `Schema.NullOr` and the others built on it. A proof starts from each member in turn.
+- `Schema.TaggedUnion`, and a union made one with `Schema.toTaggedUnion`. Its `guards`, `isAnyOf`, `match` and `matchOrElse` are read as tests of the tag: `Status.guards.Open(ticket.status)`.
 - `Schema.Array`, tried as described under [Lists](#lists).
 - `Schema.Option`, started as `none` and as `some`.
 - `Schema.Result`, started as a success and as a failure.
@@ -109,6 +125,8 @@ The state, each command's input and each request context start as any value thei
 - `Schema.BigDecimal`. A `Schema.Rational` is not started from: make a fraction from whole numbers with `Rational.make`.
 - `Schema.HashSet` and `Schema.HashMap`, tried as described under [Hash sets and hash maps](#hash-sets-and-hash-maps).
 - A branded schema, read as what it brands.
+
+A field that may be left out, a union and an `Option` are each a choice, and a proof takes every choice in turn. The choice is made when the code first reads the field, so a field no handler or rule reads adds nothing: a decision that reads only `items.length` is read once for each length, however many optional fields an item has.
 
 Checks on a number are read: `isInt`, `isFinite`, `isGreaterThan`, `isGreaterThanOrEqualTo`, `isLessThan`, `isLessThanOrEqualTo`, `isBetween`, and `isMultipleOf` a whole number. On a string or a list, `isMinLength` and `isMaxLength` are read. On a decimal, `isGreaterThanBigDecimal`, `isGreaterThanOrEqualToBigDecimal`, `isLessThanBigDecimal`, `isLessThanOrEqualToBigDecimal` and `isBetweenBigDecimal` are read.
 
@@ -143,7 +161,7 @@ A call to a package is read when it is one of these. Each does to a value from t
 - **`effect/Number` and `effect/BigInt`:** `sum`, `subtract`, `multiply`, `divide`, `divideUnsafe`, `remainder`, `increment`, `decrement`, `min`, `max`, `clamp`, `between`, `sign`, `sumAll`, `multiplyAll`, the four comparisons, `isNumber` and `isBigInt`, `BigInt.abs`. On numbers the code writes: `Number.round`, `Number.parse`, `BigInt.gcd`, `lcm`, `sqrt`, `toNumber`, `fromNumber`, `fromString`.
 - **`effect/BigDecimal`:** `make`, `fromNumber`, `fromNumberUnsafe`, `fromBigInt`, `fromString`, `fromStringUnsafe`, `isBigDecimal`, `sum`, `subtract`, `multiply`, `sumAll`, `multiplyAll`, `negate`, `abs`, `min`, `max`, `clamp`, `between`, `sign`, `equals`, the four comparisons, `isZero`, `isPositive`, `isNegative`, `isInteger`, `floor`, `ceil`, `truncate`, `normalize`, `Order`. On decimals the code writes: `divide`, `divideUnsafe`, `format`, `scale`, `toNumberUnsafe`.
 - **`effect/Rational`:** `make`, `makeUnsafe`, `fromBigInt`, `fromNumber`, `fromNumberUnsafe`, `fromBigDecimal`, `fromString`, `fromStringUnsafe`, `isRational`, `sum`, `subtract`, `multiply`, `divide`, `divideUnsafe`, `sumAll`, `multiplyAll`, `negate`, `abs`, `min`, `max`, `clamp`, `between`, `sign`, `equals`, the four comparisons, `isZero`, `isPositive`, `isNegative`, `isInteger`, `Order`. A fraction is exact, so a division is read on any two of them. On fractions the code writes: `format`, `toNumberUnsafe`.
-- **`effect/String`:** `length`, `isEmpty`, `isNonEmpty`, `isString`, `concat`, `startsWith`, `endsWith`, `includes`, `indexOf`, `charAt`, `slice`, `substring`, `takeLeft`, `replace`, `replaceAll`. On strings the code writes: `at`, `lastIndexOf`, `takeRight`, `split`, `trim`, `trimStart`, `trimEnd`, `toUpperCase`, `toLowerCase`, `capitalize`, `uncapitalize`, `padStart`, `padEnd`, `repeat`.
+- **`effect/String`:** `length`, `isEmpty`, `isNonEmpty`, `isString`, `concat`, `startsWith`, `endsWith`, `includes`, `indexOf`, `lastIndexOf`, `charAt`, `slice`, `substring`, `split`, `takeLeft`, `replace`, `replaceAll`. On strings the code writes: `at`, `takeRight`, `trim`, `trimStart`, `trimEnd`, `toUpperCase`, `toLowerCase`, `capitalize`, `uncapitalize`, `padStart`, `padEnd`, `repeat`.
 - **`effect/Boolean`:** `and`, `or`, `not`, `xor`, `nand`, `nor`, `eqv`, `implies`, `match`, `every`, `some`, `isBoolean`.
 - **`effect/Predicate`:** `and`, `or`, `not`, `xor`, `nand`, `nor`, `eqv`, `implies`, `mapInput`, `isString`, `isNumber`, `isBoolean`, `isBigInt`, `isFunction`, `isNull`, `isNotNull`, `isUndefined`, `isNotUndefined`, `isNullish`, `isNotNullish`, `isTruthy`, `isTagged`, `hasProperty`.
 - **`effect/Order` and `effect/Equivalence`:** `Order.Number`, `BigInt`, `Boolean`, `String`, and the `Order` of `Number`, `BigInt`, `BigDecimal`, `DateTime` and `Duration`; `make`, `flip`, `mapInput`, `combine`, `min`, `max`, `clamp`, `isBetween`, `isLessThan`, `isLessThanOrEqualTo`, `isGreaterThan`, `isGreaterThanOrEqualTo`. `Equivalence.make`, `strictEqual`, `mapInput`. A function you write as an order or an equivalence is read as one.
@@ -275,7 +293,31 @@ transitions: {
 
 The prover cannot read the body of `idOf`, so it does not look inside it. A call gives a value that can be kept in the state, put in an event and passed along. Two calls on the same arguments are the same value, so `idOf(a) === idOf(a)` is true. A condition on the result, as in `if (isValid(command.email))`, is tried both ways.
 
-A rule that reads into the result is not proved, and the report says which function stands in the way, and why it was not read:
+The result is also taken for what the code uses it as. Where the solver picks a value for it, the real function is run on the same arguments, and an answer the real function does not give is ruled out.
+
+```typescript title="packages/domain/src/Transfer.decision.ts"
+export class Pay extends Domain.Decision(PayRef, {
+  reads: { from: Account, to: Account },
+  keyOf: (cmd) => ({ from: nameOf(cmd.from), to: nameOf(cmd.to) }),
+  decide: ({ from, to }, cmd) =>
+    nameOf(cmd.payee) === from.id
+      ? new SelfPay()
+      : Option.isNone(versionOf(cmd.ref))
+        ? new BadRef()
+        : cmd.amount > from.state.balance
+          ? new Short()
+          : [
+              from.record(new Debited({ amount: cmd.amount })),
+              to.record(new Credited({ amount: cmd.amount })),
+            ],
+}) {}
+```
+
+In `keyOf`, what `nameOf` returns is an id: the accounts read are the ones it names. Compared with `from.id` it is text, and next to a number or a boolean it is one of those. `Option.isNone(versionOf(cmd.ref))` takes the result for an `Option`: a `None` on one path, and a `Some` of a value the prover does not look inside on another.
+
+A result that is spread, looped over, or read with an array's `map`, `filter` and the like is a list of up to two items, so `keyOf: (cmd) => ({ to: [...partsOf(cmd.to)] })` reads one account for each. Its rule is then checked for short lists only. A number is any number: nothing says the function gives a whole one. It is compared with `<` and `===`, and a sum or a product of it is not read.
+
+A rule that reads into the result any other way is not proved, and the report says which function stands in the way, and why it was not read:
 
 ```text
 Not read
