@@ -110,6 +110,8 @@ jobs:
       # workspace and verifies a model there. Inside the workspace the package
       # is source the test runner transforms, which hides what an installed
       # package does. It does nothing when @alchemy.run/domain was not packed.
+      # A pull request runs this workflow from its merge commit but checks out
+      # its head, which lacks the script when the branch predates it.
       - name: Verify a model as a consumer of @alchemy.run/domain
-        if: steps.pack.outputs.package-count != '0'
+        if: steps.pack.outputs.package-count != '0' && hashFiles('scripts/test-domain-consumer.ts') != ''
         run: node scripts/test-domain-consumer.ts

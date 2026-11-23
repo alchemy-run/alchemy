@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as UrlParams from "effect/http/UrlParams";
 import * as Path from "effect/Path";
@@ -297,6 +298,9 @@ const scenarios = [
   "still missing",
   "run catching up",
   "rejected",
+  "flaky registry",
+  "storage unavailable",
+  "pull request closed",
 ] as const;
 
 for (const scenario of scenarios) {
@@ -304,31 +308,52 @@ for (const scenario of scenarios) {
     const requests: string[] = [];
     const reads: string[] = [];
     let attempts = 0;
+    let puts = 0;
     const http = HttpClient.make((request) =>
-      Effect.sync(() => {
+      Effect.suspend(() => {
         const query = UrlParams.toString(request.urlParams);
         requests.push(`${request.method} ${request.url}${query ? `?${query}` : ""}`);
+        const respond = (response: Response) =>
+          Effect.succeed(HttpClientResponse.fromWeb(request, response));
         if (request.method === "PUT") {
           expect(request.headers["content-length"]).toBe("3");
-          return HttpClientResponse.fromWeb(
-            request,
-            Response.json({
-              ...manifest.packages[1],
-              uploaded: true,
-            }),
+          puts++;
+          return respond(
+            scenario === "storage unavailable" && puts === 1
+              ? Response.json(
+                  { _tag: "Unavailable", message: "upload failed, try again" },
+                  { status: 503 },
+                )
+              : Response.json({ ...manifest.packages[1], uploaded: true }),
           );
         }
         attempts++;
-        const response =
+        if (scenario === "flaky registry" && attempts === 2) {
+          return Effect.fail(
+            new HttpClientError.HttpClientError({
+              reason: new HttpClientError.TransportError({ request, description: "reset" }),
+            }),
+          );
+        }
+        return respond(
           scenario === "rejected" || (scenario === "run catching up" && attempts <= 2)
             ? Response.json(
                 { _tag: "RunNotInProgress", message: "run is not in progress" },
                 { status: 409 },
               )
-            : scenario === "still missing" || (scenario === "upload" && attempts === 1)
-              ? Response.json(missing, { status: 409 })
-              : Response.json(published);
-        return HttpClientResponse.fromWeb(request, response);
+            : scenario === "flaky registry" && attempts === 1
+              ? new Response("Internal Server Error", { status: 500 })
+              : scenario === "pull request closed"
+                ? Response.json(
+                    { _tag: "NoOpenPullRequest", message: "no open pull request" },
+                    { status: 410 },
+                  )
+                : scenario === "still missing" ||
+                    ((scenario === "upload" || scenario === "storage unavailable") &&
+                      attempts === 1)
+                  ? Response.json(missing, { status: 409 })
+                  : Response.json(published),
+        );
       }),
     );
     const result = await Effect.gen(function* () {
@@ -357,18 +382,26 @@ for (const scenario of scenarios) {
       yield* TestClock.adjust("10 minutes");
       return yield* Fiber.join(fiber);
     }).pipe(Effect.provide(TestClock.layer()), Effect.runPromise);
-    const uploads = scenario === "upload" || scenario === "still missing";
+    const uploads =
+      scenario === "upload" || scenario === "still missing" || scenario === "storage unavailable";
     // A run GitHub does not report as in progress yet is retried every five
-    // seconds for three minutes.
+    // seconds for three minutes; a transient failure is sent again.
     const publishes =
-      scenario === "rejected" ? 37 : scenario === "run catching up" ? 3 : uploads ? 2 : 1;
+      scenario === "rejected"
+        ? 37
+        : scenario === "run catching up" || scenario === "flaky registry"
+          ? 3
+          : uploads
+            ? 2
+            : 1;
+    const put = `PUT https://pkg.ing/api/tarballs/%40alchemy.run%2Fpkg/${"1".repeat(64)}?repo=alchemy-run%2Falchemy&runId=123&attempt=2`;
     expect(attempts).toBe(publishes);
     expect(reads).toEqual(uploads ? ["/workspace/.pkg/1.tgz"] : []);
     expect(requests).toEqual(
       uploads
         ? [
             "POST https://pkg.ing/api/publish",
-            `PUT https://pkg.ing/api/tarballs/%40alchemy.run%2Fpkg/${"1".repeat(64)}?repo=alchemy-run%2Falchemy&runId=123&attempt=2`,
+            ...(scenario === "storage unavailable" ? [put, put] : [put]),
             "POST https://pkg.ing/api/publish",
           ]
         : Array.from({ length: publishes }, () => "POST https://pkg.ing/api/publish"),
@@ -384,7 +417,10 @@ for (const scenario of scenarios) {
         );
       }
     } else {
-      expect(Result.getOrThrow(result)).toEqual(published);
+      // A pull request merged or closed while the job ran publishes nothing.
+      expect(Result.getOrThrow(result)).toEqual(
+        scenario === "pull request closed" ? { packages: [] } : published,
+      );
     }
   });
 }
