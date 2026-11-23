@@ -17,14 +17,16 @@ test.provider.skipIf(!process.env.AWS_TEST_FRAUDDETECTOR)(
     Effect.gen(function* () {
       yield* stack.destroy();
       const name = missingName(stack.stage);
+      // Lists and variables are named with lowercase letters, digits and underscores only.
+      const snake = name.replace(/[^0-9a-z_]/g, "_");
       yield* expectAllMissing(stack, {
         "missing-detector": AWS.FraudDetector.Detector.lookup({ detectorId: name }).detectorId,
         "missing-entity-type": AWS.FraudDetector.EntityType.lookup({ name: name }).name,
         "missing-event-type": AWS.FraudDetector.EventType.lookup({ name: name }).name,
         "missing-label": AWS.FraudDetector.Label.lookup({ name: name }).name,
-        "missing-list": AWS.FraudDetector.List.lookup({ name: name }).name,
+        "missing-list": AWS.FraudDetector.List.lookup({ name: snake }).name,
         "missing-outcome": AWS.FraudDetector.Outcome.lookup({ name: name }).name,
-        "missing-variable": AWS.FraudDetector.Variable.lookup({ name: name }).name,
+        "missing-variable": AWS.FraudDetector.Variable.lookup({ name: snake }).name,
       });
     }),
   { tags, timeout: 180_000 },

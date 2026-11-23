@@ -480,7 +480,7 @@ const syncRules = (
             ...toRuleBody(rule),
             project,
             firewallPolicy: networkFirewallPolicyName,
-            priority,
+            rulePriority: priority,
           }),
         );
       }

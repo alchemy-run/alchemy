@@ -1,48 +1,46 @@
 ---
 title: What is OpenCode?
-description: The concepts behind OpenCode on Alchemy — the server in a sandbox, sessions and prompts, the bridge that carries model requests and tool calls, tools, skills — and how @alchemy.run/opencode models each of them.
+description: The concepts behind OpenCode on Alchemy — OpenCode in a Durable Object, sessions and prompts, model requests, tools, skills, the sandbox tools work in — and how @alchemy.run/opencode models each of them.
 ---
 
 import Tree from "../../../components/diagrams/Tree.astro";
 
-OpenCode is a coding agent built as a server. The server keeps **sessions**, each a transcript on its own disk. It ships its own tools, which read and change files and run commands on the machine it is on. For each answer it calls a model provider over HTTP. It is a program that needs a machine, so on Alchemy each session's OpenCode runs in a sandbox of its own, and the Durable Object that owns the session drives it from outside.
+OpenCode is a coding agent. It keeps **sessions**, each a transcript in its database. For each answer it asks a model, runs the tools the model calls, and asks again until the model is done. OpenCode 2 is built to run inside a Cloudflare Durable Object: its database is the object's SQLite, and it needs no machine of its own.
 
-Take one small app: a `Coder` Durable Object with a session `pr-142`. The session's sandbox on Boat runs OpenCode and a small **bridge**. OpenCode's own `bash` runs in the sandbox. Its model requests, and its calls to your `deploy` tool, go to the bridge, and the harness answers them from the Durable Object, where the `Fast` model's Layer and the tool's handler are.
+Take one small app: a `Coder` Durable Object with a session `pr-142`. OpenCode runs in the object. Its model requests are answered by the `Fast` model's Layer, and its call to your `deploy` tool runs the tool's handler, both in the same isolate. The `bash` tool needs a shell, which a Durable Object does not have, so it runs its command in the session's sandbox on Boat.
 
 <Tree
   nodes={[
     {
       id: "coder", label: "Coder", type: "Durable Object", icon: "box",
-      areas: ["fast harness", "deploy harness"], phoneAreas: ["harness harness", "fast deploy"], colGap: 4.5,
+      areas: ["opencode fast", "opencode deploy", "opencode bash"], phoneAreas: ["opencode opencode opencode", "fast deploy bash"], colGap: 4.5,
     },
-    { id: "harness", label: "harness", type: "your side", parent: "coder", tone: "accent", icon: "refresh-cw" },
+    {
+      id: "opencode", label: "OpenCode", type: "sessions in SQLite", parent: "coder", tone: "accent", icon: "brand:opencode",
+    },
     { id: "fast", label: "Fast", type: "model Layer", parent: "coder", icon: "sparkles" },
     { id: "deploy", label: "deploy", type: "your tool", parent: "coder", icon: "wrench" },
+    { id: "bash", label: "bash", type: "coding tool", parent: "coder", icon: "terminal" },
     {
       id: "sandbox", label: "pr-142", type: "sandbox · Boat", icon: "box",
-      areas: ["bridge", "opencode"], phoneAreas: ["bridge", "opencode"],
-    },
-    { id: "bridge", label: "bridge", type: "127.0.0.1", parent: "sandbox", icon: "cable" },
-    {
-      id: "opencode", label: "OpenCode", type: "server", parent: "sandbox", icon: "brand:opencode",
-      specs: [["runs", "bash · read · edit"], ["session", "on this disk"]],
+      specs: [["holds", "files · shell"]],
     },
   ]}
   areas={["coder sandbox"]}
   phoneAreas={["coder", "sandbox"]}
   colGap={4.5}
   links={[
-    { from: "harness", to: "bridge", label: "exec" },
-    { from: "opencode", to: "bridge", label: "asks" },
-    { from: "harness", to: "fast", label: "asks" },
-    { from: "harness", to: "deploy", label: "runs" },
+    { from: "opencode", to: "fast", label: "asks" },
+    { from: "opencode", to: "deploy", label: "calls" },
+    { from: "opencode", to: "bash", label: "calls" },
+    { from: "bash", to: "sandbox", label: "exec" },
   ]}
-  caption="OpenCode runs in the sandbox of the session pr-142 and runs its own tools there. It sends each model request and each call to your tools to the bridge beside it. The harness reaches the bridge over the sandbox's exec, asks the Fast model and runs deploy in the Durable Object, and sends the answers back. No key and no inbound address is in the sandbox."
+  caption="OpenCode runs in the Coder Durable Object and keeps the session pr-142 in the object's SQLite. It asks the Fast model and calls deploy in the same isolate. Only bash leaves it, to run a command in the session's sandbox."
 />
 
 ## The harness
 
-The **harness** is your side of OpenCode: the models sessions may run on, the tools and skills they may use, and where their sandboxes run. You yield it in a Durable Object's outer Effect.
+The **harness** is OpenCode with what you give it: the models sessions may run on, and the tools and skills they may use. You yield it in a Durable Object's outer Effect, and OpenCode starts in that object when a session is first used.
 
 ```typescript
 const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools, Deploy] });
@@ -50,7 +48,7 @@ const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools
 
 ## Sessions
 
-A **session** is one OpenCode session in one sandbox. You name it, and the harness finds its sandbox by that name. Nothing runs until the session is used: its first call opens the sandbox, installs OpenCode there and starts it.
+A **session** is one OpenCode session. You name it, and the harness finds it by that name in the object's storage.
 
 ```typescript
 const session = harness.session("pr-142");
@@ -66,15 +64,15 @@ A **prompt** is one message to a session. It returns when OpenCode has answered,
 const reply = yield* session.prompt("Fix the failing test.", { requestId: "msg-81" });
 ```
 
-## The bridge
+## Model requests
 
-OpenCode is configured with one model provider, and it points at the **bridge**: a small server on the sandbox's own loopback address. The bridge holds each request until the harness answers it. The harness follows the bridge over the sandbox's `exec`, the same call that runs any command there.
+OpenCode is configured with one model provider, and the harness answers it: each request is handed to the `AI.Model` Layer of the model the session runs on. No request for a model leaves the isolate through OpenCode, and it holds no API key.
 
 See [Model requests](/opencode/model-requests).
 
 ## Tools
 
-OpenCode ships its own coding tools and runs them in the sandbox. Your tools run in the Durable Object: OpenCode calls them through the bridge, and the model sees each as `alchemy_<name>`.
+Your tools are registered with OpenCode and run in the Durable Object, where their bindings are. The model sees each as `alchemy_<name>`.
 
 See [Tools](/opencode/tools).
 
@@ -86,12 +84,12 @@ See [Skills](/opencode/skills).
 
 ## The sandbox
 
-The session's transcript is OpenCode's own, on the sandbox's disk. Suspending the sandbox keeps the session, and removing it deletes both.
+A Durable Object has no files and no shell. A tool that needs either uses [`AI.Sandbox`](/ai/sandboxes), and the harness opens one sandbox per session for those tools. A session whose tools need neither never has one.
 
 See [The session's sandbox](/opencode/sandbox).
 
 ## How @alchemy.run/opencode models these concepts
 
-`OpenCode.Harness` is an Effect you yield where its Layers are provided. Models, tools, MCP servers, skills and sandboxes are the [`@alchemy.run/ai`](/ai) declarations, unchanged. `OpenCode.CodingTools` provides OpenCode's own tools for the shared names. A session's sandbox is found by a key made from the Durable Object's id and the session's name, so the object can be evicted and find its sessions again.
+`OpenCode.Harness` is an Effect you yield where its Layers are provided. Models, tools, MCP servers, skills and sandboxes are the [`@alchemy.run/ai`](/ai) declarations, unchanged. `OpenCodeCloudflare.DurableObjectStorage` runs OpenCode on the Durable Object's SQLite and keeps its alarm armed while a prompt runs, so an evicted object wakes up and the prompt resumes. `OpenCode.CodingTools` provides the shared coding tools, each working in the session's sandbox.
 
 Next: [Setup](/opencode/setup), then the [tutorial](/opencode/tutorial/part-1).

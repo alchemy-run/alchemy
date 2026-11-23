@@ -80,9 +80,13 @@ const list = (url: string) => onDeployment(url, deployment.listIntegrations({}))
 
 const typeOf = (stream: deployment.LogStreamConfig) => stream.logStreamType;
 
-/** A webhook stream carries its signing secret as a plain string, so wrap it. */
+/** A webhook stream carries its signing secret; wrap it if it arrives as a plain string. */
 const secretOf = (stream: deployment.LogStreamConfig | deployment.CreateIntegrationResponse) =>
-  "hmacSecret" in stream ? Redacted.make(stream.hmacSecret) : undefined;
+  "hmacSecret" in stream
+    ? typeof stream.hmacSecret === "string"
+      ? Redacted.make(stream.hmacSecret)
+      : stream.hmacSecret
+    : undefined;
 
 export const LogStreamProvider = () =>
   Provider.effect(

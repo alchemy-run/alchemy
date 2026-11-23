@@ -514,14 +514,15 @@ describe(
           const first = yield* stack.deploy(service("nginx:1.27-alpine"));
           const before = yield* publishedPorts(first.id);
           expect(before).toHaveLength(1);
-          // The port Swarm picked is an attribute, so callers can reach it.
-          expect(first.ports.map((port) => [port.external, port.internal])).toEqual([
-            [before[0], 80],
+          // The attributes report the port Swarm picked, so callers can reach it.
+          expect(first.ports).toEqual([
+            { external: before[0], internal: 80, protocol: "tcp", mode: "ingress" },
           ]);
 
           const second = yield* stack.deploy(service("nginx:1.28-alpine"));
           expect(second.id).toBe(first.id);
           expect(yield* publishedPorts(second.id)).toEqual(before);
+          expect(second.ports.map((port) => port.external)).toEqual(before);
 
           yield* stack.destroy();
         }),

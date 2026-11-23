@@ -66,6 +66,12 @@ export interface DriftResourceResult {
   /** Why the resource was skipped (only set when `action === "skipped"`). */
   reason?: string;
   /**
+   * What kind of skip it was (only set when `action === "skipped"`):
+   * `unstable` for an interrupted deploy that `deploy` must recover, and
+   * `unreadable` for a provider that has no `read`.
+   */
+  skip?: "unstable" | "unreadable";
+  /**
    * The resource's attributes after the drift: the reconciled attributes for
    * `repaired`/`recreated`, the observed cloud attributes for `drifted`, and
    * the persisted attributes for `unchanged`. Unset for `missing`/`skipped`.
@@ -153,7 +159,7 @@ const runDrift = (
       const { logicalId, instanceId, resourceType, namespace } = old;
 
       const result = (
-        partial: Pick<DriftResourceResult, "action" | "reason" | "attr">,
+        partial: Pick<DriftResourceResult, "action" | "reason" | "skip" | "attr">,
       ): DriftResourceResult => ({
         fqn,
         logicalId,
@@ -175,11 +181,11 @@ const runDrift = (
       // Surface the skip reason through the session (the TUI renders it as a
       // note under the row; the logging CLI prints it) and settle the row
       // with a terminal `skipped` status so it never shows as in-progress.
-      const skip = (reason: string) =>
+      const skip = (kind: "unstable" | "unreadable", reason: string) =>
         Effect.gen(function* () {
           yield* scopedSession.note(reason);
           yield* report("skipped");
-          return result({ action: "skipped", reason });
+          return result({ action: "skipped", reason, skip: kind });
         });
 
       if (old.status !== "created" && old.status !== "updated") {
@@ -187,6 +193,7 @@ const runDrift = (
         // to `deploy`'s recovery machinery — replacement generations and
         // dependency ordering are not drift's to drive.
         return yield* skip(
+          "unstable",
           old.status === "replaced" || old.status === "replacing"
             ? `resource has a pending replacement (status '${old.status}'); run deploy to finish it`
             : `resource status '${old.status}' is not stable; run deploy to recover`,
@@ -198,7 +205,7 @@ const runDrift = (
       // Legacy unstamped rows infer "local" from a `dev:` identity marker.
       const provider = yield* findProviderByType(resourceType, stampedMode(old));
       if (!provider.read) {
-        return yield* skip(`provider '${resourceType}' does not implement read`);
+        return yield* skip("unreadable", `provider '${resourceType}' does not implement read`);
       }
 
       // Persist a repaired row. Everything but the status, attributes and

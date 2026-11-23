@@ -97,13 +97,14 @@ export type GatewayStripe = {
 };
 
 /**
- * A single spend-limit rule. Caps cumulative spend (in cents) routed through
- * the gateway over a rolling `window` (in seconds), optionally scoped to a set
- * of models or providers.
+ * A single spend-limit rule. Caps cumulative spend (in US dollars) routed
+ * through the gateway over a rolling `window`, optionally scoped to a set of
+ * models or providers.
  */
 export type GatewaySpendLimitRule = {
   /**
-   * Spend cap for this rule. The amount is in cents (`limitType: "cost"`).
+   * Spend cap for this rule, in US dollars (`limitType: "cost"`): `500` caps
+   * spend at $500 per `window`, `0.5` at 50 cents.
    */
   limit: number;
   /**
@@ -475,14 +476,14 @@ export const isAiGateway = (value: unknown): value is Gateway =>
  * ### Spend Limits
  * **Example:** Cap cost per rolling window
  * Per-gateway spend limits replace the deprecated account-level spending
- * limit. Each rule caps cumulative cost (in cents) over a rolling `window`
- * (in seconds), optionally scoped to specific models or providers.
+ * limit. Each rule caps cumulative cost (in US dollars) over a rolling
+ * `window`, optionally scoped to specific models or providers.
  * ```typescript
  * const gateway = yield* Cloudflare.AI.Gateway("Gateway", {
  *   spendLimits: {
  *     enabled: true,
  *     rules: [
- *       { limitType: "cost", limit: 500_00, window: "1 day" }, // $500/day
+ *       { limitType: "cost", limit: 500, window: "1 day" }, // $500/day
  *     ],
  *   },
  * });

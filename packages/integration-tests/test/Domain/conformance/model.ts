@@ -4,7 +4,8 @@
  * that starts a saga, a saga that writes to another aggregate, a policy that
  * schedules and cancels a command, and a decision that commits across two
  * instances, plus a view that refuses every reader, a view behind a
- * middleware whose verdict runs out, and a command that dies.
+ * middleware whose verdict runs out, a command that dies, and a policy that
+ * relays a command from one aggregate instance to the next.
  * Between them the platform hosts every kind of object, runs its workflow
  * engine and its durable timers, and commits atomically across instances.
  */
@@ -104,6 +105,26 @@ export class Echo extends Domain.Aggregate("Echo", {
 }) {}
 
 export class CounterTotal extends Domain.View("CounterTotal", {
+  from: [Counter],
+  key: Counter,
+  state: Schema.Struct({ total: Schema.Int, increments: Schema.Int }),
+  initial: { total: 0, increments: 0 },
+  evolve: {
+    Incremented: (view, event) => ({
+      total: view.total + event.by,
+      increments: view.increments + 1,
+    }),
+    Taken: (view, event) => ({ ...view, total: view.total - event.by }),
+    Received: (view, event) => ({ ...view, total: view.total + event.by }),
+  },
+}) {}
+
+/**
+ * The same fold as {@link CounterTotal}, added by the model's next version
+ * ({@link ConformanceV1}): deployed after the counters have recorded events,
+ * it is backfilled from their history.
+ */
+export class CounterReplay extends Domain.View("CounterReplay", {
   from: [Counter],
   key: Counter,
   state: Schema.Struct({ total: Schema.Int, increments: Schema.Int }),
@@ -394,24 +415,59 @@ const HoldDeadlineLive = HoldDeadline.toLayer(
   }),
 );
 
+export class Passed extends Domain.Event("Passed", { chain: Schema.String, left: Schema.Int }) {}
+
+export class Pass extends Domain.Command("Pass", {
+  input: { id: Schema.String, chain: Schema.String, left: Schema.Int },
+  events: [Passed],
+}) {}
+
+/** One hop of a relay, `<chain>-<left>`: hop 0 is the last. */
+export class Hop extends Domain.Aggregate("Hop", {
+  id: Schema.String,
+  state: Schema.Struct({ passed: Schema.Boolean }),
+  initial: { passed: false },
+  commands: [Pass],
+  keyOf: (command) => command.id,
+  decide: { Pass: (_, { chain, left }) => [new Passed({ chain, left })] },
+  evolve: { Passed: () => ({ passed: true }) },
+}) {}
+
+/** Passes the relay on to the next hop, until none are left. */
+export class PassOn extends Domain.Policy("PassOn", { from: Hop, on: [Passed] }) {}
+
+const PassOnLive = PassOn.toLayer(
+  Effect.gen(function* () {
+    const hops = yield* Hop;
+    return Effect.fn(function* ({ event }) {
+      if (event.left === 0) return;
+      const left = event.left - 1;
+      yield* hops.send(new Pass({ id: `${event.chain}-${left}`, chain: event.chain, left }));
+    });
+  }),
+);
+
 export class Conformance extends Domain.Model("Conformance", {
-  aggregates: [Counter, Echo, Hold, ...latencyAggregates],
+  aggregates: [Counter, Echo, Hold, Hop, ...latencyAggregates],
   decisions: [Giving],
   views: [CounterTotal, CounterTimes, HiddenTotal, TicketedTotal, ...latencyViews],
   projections: [TotalWriter, TallyWriter],
   streams: [Recorded, Tallies],
-  policies: [StartMirror, HoldDeadline],
+  policies: [StartMirror, HoldDeadline, PassOn],
   sagas: [MirrorFirst],
 }) {}
 
-/** The model's next version: {@link TallyWriterV1} in place of {@link TallyWriter}. */
+/**
+ * The model's next version: {@link TallyWriterV1} in place of {@link TallyWriter},
+ * and a view it adds, {@link CounterReplay}.
+ */
 export class ConformanceV1 extends Domain.Model("Conformance", {
-  aggregates: [Counter, Echo, Hold, ...latencyAggregates],
+  aggregates: [Counter, Echo, Hold, Hop, ...latencyAggregates],
   decisions: [Giving],
-  views: [CounterTotal, CounterTimes, HiddenTotal, TicketedTotal, ...latencyViews],
+  views: [CounterTotal, CounterTimes, HiddenTotal, TicketedTotal, CounterReplay, ...latencyViews],
   projections: [TotalWriter, TallyWriterV1],
   streams: [Recorded, Tallies],
-  policies: [StartMirror, HoldDeadline],
+  policies: [StartMirror, HoldDeadline, PassOn],
   sagas: [MirrorFirst],
 }) {}
 
@@ -433,6 +489,7 @@ const handlers = Layer.mergeAll(
   StartMirrorLive,
   MirrorFirstLive,
   HoldDeadlineLive,
+  PassOnLive,
   HiddenTotalLive,
   TicketedTotalLive,
   TotalWriterLive,
@@ -441,5 +498,8 @@ const handlers = Layer.mergeAll(
 /** The model's Layer, given the platform it runs on. */
 export const ConformanceLive = Conformance.layer(Layer.merge(handlers, TallyWriterLive));
 
-/** The next version's Layer: deployed over {@link ConformanceLive}, it rebuilds the tallies. */
+/**
+ * The next version's Layer: deployed over {@link ConformanceLive}, it rebuilds
+ * the tallies and backfills {@link CounterReplay}.
+ */
 export const ConformanceLiveV1 = ConformanceV1.layer(Layer.merge(handlers, TallyWriterV1Live));

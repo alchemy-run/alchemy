@@ -503,7 +503,7 @@ const syncRules = (
             ...toRuleBody(rule),
             project,
             securityPolicy: securityPolicyName,
-            priority,
+            rulePriority: priority,
           }),
         );
       }

@@ -2385,7 +2385,10 @@ export default defineConfig({
             },
             {
               label: "Rivet Services",
-              items: [{ label: "Durable Streams", link: "/rivet/durable-streams" }],
+              items: [
+                { label: "Durable Streams", link: "/rivet/durable-streams" },
+                { label: "agentOS Sandboxes", link: "/rivet/sandboxes" },
+              ],
             },
             {
               label: "Running Rivet",
@@ -2507,6 +2510,7 @@ export default defineConfig({
                 { label: "Tools", link: "/ai/tools" },
                 { label: "Coding tools", link: "/ai/coding-tools" },
                 { label: "MCP servers", link: "/ai/mcp-servers" },
+                { label: "Code mode", link: "/ai/code-mode" },
                 { label: "Skills", link: "/ai/skills" },
               ],
             },
@@ -2583,6 +2587,7 @@ export default defineConfig({
               items: [
                 { label: "Tools", link: "/opencode/tools" },
                 { label: "MCP servers", link: "/opencode/mcp-servers" },
+                { label: "Code mode", link: "/opencode/code-mode" },
                 { label: "Skills", link: "/opencode/skills" },
               ],
             },

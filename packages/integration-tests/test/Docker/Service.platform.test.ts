@@ -182,6 +182,67 @@ test.provider(
   },
 );
 
+// The image is content-addressed by the whole bundle, so a change to a module
+// `main` imports rolls the service onto a new image too, though `main` and
+// every prop stay the same.
+test.provider(
+  "rolls a change to a module the program imports onto the service",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* ensureDockerSwarm;
+      yield* stack.destroy();
+
+      // A copy of the fixture, so the test edits its own `message.ts`.
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const tempRoot = path.resolve(import.meta.dirname, "../../.tmp");
+      yield* fs.makeDirectory(tempRoot, { recursive: true });
+      const dir = yield* fs.makeTempDirectoryScoped({
+        directory: tempRoot,
+        prefix: "code-change-",
+      });
+      const fixtures = path.resolve(import.meta.dirname, "fixtures/code-change");
+      for (const file of ["service.ts", "message.ts"]) {
+        yield* fs.copyFile(path.join(fixtures, file), path.join(dir, file));
+      }
+      const { default: CodeChangeService, CODE_CHANGE_EXTERNAL_PORT } = yield* Effect.promise(
+        () =>
+          import(path.join(dir, "service.ts")) as Promise<
+            typeof import("./fixtures/code-change/service.ts")
+          >,
+      );
+      const program = Effect.gen(function* () {
+        return yield* CodeChangeService;
+      });
+      const message = (expected: string) =>
+        HttpClient.get(`http://localhost:${CODE_CHANGE_EXTERNAL_PORT}/`).pipe(
+          Effect.flatMap((res) => res.text),
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (text) => text === expected,
+            times: 30,
+          }),
+        );
+
+      const first = yield* stack.deploy(program);
+      expect(yield* message("v1")).toBe("v1");
+
+      yield* fs.writeFileString(path.join(dir, "message.ts"), 'export const MESSAGE = "v2";\n');
+      const plan = yield* stack.plan(program);
+      expect(plan.resources.DockerCodeChangeService).toMatchObject({ action: "update" });
+      const second = yield* stack.deploy(program);
+      expect(second.id).toBe(first.id);
+      expect(second.code?.hash).not.toBe(first.code?.hash);
+      expect(yield* message("v2")).toBe("v2");
+
+      yield* stack.destroy();
+    }).pipe(Effect.scoped),
+  {
+    tags: ["provider:docker", "provider:docker:service", "local"],
+    timeout: 300_000,
+  },
+);
+
 // The collector is a live Cloudflare Worker: the swarm task exports to it
 // over the internet, as a deployed service would.
 test.provider(
