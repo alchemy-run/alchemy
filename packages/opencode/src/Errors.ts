@@ -1,9 +1,8 @@
 import * as Data from "effect/Data";
 
 /**
- * An OpenCode operation failed: its sandbox, the OpenCode server in it, or
- * a request to that server. `message` is OpenCode's or the platform's own
- * text.
+ * An OpenCode operation failed: starting OpenCode, a call to it, or a
+ * session's sandbox. `message` is OpenCode's or the platform's own text.
  */
 export class OpenCodeError extends Data.TaggedError("OpenCodeError")<{
   readonly message: string;

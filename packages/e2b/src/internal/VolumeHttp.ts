@@ -6,6 +6,7 @@
  * once per volume on first use and kept for the life of the runtime; a failed
  * lookup is not cached, so the next call retries it.
  */
+import type { ConfigError } from "@distilled.cloud/core/errors";
 import { volumeConnectionFor } from "@distilled.cloud/e2b";
 import type { VolumeConnection } from "@distilled.cloud/e2b/Credentials";
 import * as volumeContent from "@distilled.cloud/e2b/volume_content";
@@ -19,8 +20,12 @@ import type { ReadWriteVolumeClient } from "../VolumeFiles.ts";
 
 const decoder = new TextDecoder();
 
-/** The volume-token connection plus an HTTP client: what volume-content calls need. */
-type VolumeLayer = Layer.Layer<VolumeConnection | HttpClient.HttpClient>;
+/**
+ * The volume-token connection plus an HTTP client: what volume-content calls
+ * need. Building it fails with `ConfigError` when the volume's domain can't
+ * be a host name.
+ */
+type VolumeLayer = Layer.Layer<VolumeConnection | HttpClient.HttpClient, ConfigError>;
 
 export const makeVolumeFiles = (
   auth: E2BAuth,

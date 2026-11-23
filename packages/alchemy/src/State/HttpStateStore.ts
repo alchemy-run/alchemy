@@ -43,7 +43,14 @@ export interface HttpStateStoreProps extends HttpStateStoreCredentials {
   ) => HttpClientRequest.HttpClientRequest;
 }
 
-export const checkHttpStateStoreAuth = ({ url, authToken }: { url: string; authToken: string }) =>
+export const checkHttpStateStoreAuth = (
+  { url, authToken }: { url: string; authToken: string },
+  /**
+   * `false` makes a single attempt, so a caller can react to a failure such as
+   * an unresolvable host before spending the retry budget on it.
+   */
+  options: { readonly retry?: boolean } = {},
+) =>
   Effect.gen(function* () {
     const apiClient = yield* HttpApiClient.make(StateApi, {
       baseUrl: url,
@@ -56,8 +63,9 @@ export const checkHttpStateStoreAuth = ({ url, authToken }: { url: string; authT
       Effect.catchTag("Unauthorized", () => Effect.succeed(false)),
       Effect.retry({
         while: (error) =>
-          // the store failing behind the API is as transient as a 5xx
-          error._tag === "StateStoreFailure" ||
+          (options.retry !== false &&
+            // the store failing behind the API is as transient as a 5xx
+            error._tag === "StateStoreFailure") ||
           (error._tag === "HttpClientError" &&
             // transport-level failures (no response — DNS, TCP reset, TLS,
             // "fetch failed") are as transient as the post-deploy 404s

@@ -1,6 +1,6 @@
 ---
 title: Setup
-description: Install @alchemy.run/opencode and @alchemy.run/ai, choose a sandbox platform, and add an OpenCode harness to a Cloudflare Durable Object.
+description: Install @alchemy.run/opencode and @alchemy.run/ai, and add an OpenCode harness to a Cloudflare Durable Object. A sandbox platform is only needed for tools that use files or a shell.
 ---
 
 import PackageManagers from "../../../components/PackageManagers.astro";
@@ -9,19 +9,19 @@ You need:
 
 - [Node.js](https://nodejs.org) 24.11.1+ or [Bun](https://bun.sh)
 - An Alchemy app on Cloudflare. See [Cloudflare setup](/cloudflare/setup).
-- An account on a sandbox platform: [Boat](/boat/setup), [E2B](/e2b/setup), [Daytona](/daytona/setup), [Modal](/modal/setup) or [Archil](/archil/setup)
+- For the coding tools, an account on a sandbox platform: [Boat](/boat/setup), [E2B](/e2b/setup), [Daytona](/daytona/setup), [Modal](/modal/setup) or [Archil](/archil/setup)
 
-OpenCode needs no account, and you don't install it: the harness downloads it into each new sandbox.
+OpenCode needs no account. It is a dependency of the harness and is bundled into your Worker.
 
 ## Install
 
-Install the harness, the shared AI package and your sandbox platform's provider:
+Install the harness and the shared AI package, and your sandbox platform's provider if you use the coding tools:
 
 <PackageManagers add="@alchemy.run/opencode @alchemy.run/ai @alchemy.run/boat" />
 
 ## Add the sandbox provider
 
-OpenCode runs in a sandbox, so the Stack needs the platform's provider next to Cloudflare's:
+The coding tools work in a sandbox, so the Stack needs the platform's provider next to Cloudflare's:
 
 ```typescript title="alchemy.run.ts"
 import * as Boat from "@alchemy.run/boat";
@@ -50,7 +50,7 @@ Sign in to the platform with your profile:
 
 ## A model and sandboxes
 
-A harness needs a model and an `AI.Sandboxes` Layer. See [Models](/ai/models) and [Sandboxes](/ai/sandboxes#say-where-sandboxes-run) for both.
+A harness needs a model. Tools that use files or a shell also need an `AI.Sandboxes` Layer. See [Models](/ai/models) and [Sandboxes](/ai/sandboxes#say-where-sandboxes-run).
 
 ## A harness
 
@@ -68,10 +68,9 @@ import { Sandbox } from "./Sandbox.ts";
 
 const HarnessLive = Layer.mergeAll(
   FastLive,
-  Sandbox,
   OpenCode.CodingTools,
-  OpenCodeCloudflare.DurableObjectInstance,
-);
+  OpenCodeCloudflare.DurableObjectStorage,
+).pipe(Layer.provideMerge(Sandbox));
 
 export default class Coder extends Cloudflare.DurableObject<Coder>()(
   "Coder",
@@ -90,10 +89,10 @@ export default class Coder extends Cloudflare.DurableObject<Coder>()(
 ) {}
 ```
 
-`OpenCodeCloudflare.DurableObjectInstance` keys the harness's sandboxes on the Durable Object's id, so two objects with a session of the same name never share one.
+`OpenCodeCloudflare.DurableObjectStorage` runs OpenCode in the Durable Object, with its sessions in the object's SQLite. `Layer.provideMerge(Sandbox)` gives the sandboxes to the coding tools and to the harness.
 
 ## What the sandbox image needs
 
-The harness installs OpenCode with `sh`, `curl`, `tar` and `sha512sum`, from `registry.npmjs.org`, and checks the download against a known hash. Boat's own image and `node:22-bookworm` have what it needs. A new sandbox's first prompt waits for that install.
+Nothing of OpenCode is installed in the sandbox. The coding tools run `bash`, `grep` and `base64` there, which Boat's own image and `node:22-bookworm` have.
 
 Next: the [tutorial](/opencode/tutorial/part-1).

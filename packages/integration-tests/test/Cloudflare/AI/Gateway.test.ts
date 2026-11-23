@@ -129,19 +129,19 @@ test.provider(
             spendLimits: {
               enabled: true,
               // Effect Duration.Input is decoded to whole seconds for the API.
-              rules: [{ limitType: "cost", limit: 500_00, window: "1 day" }],
+              rules: [{ limitType: "cost", limit: 5, window: "1 day" }],
             },
           });
         }),
       );
 
       expect(gateway.spendLimits?.enabled).toEqual(true);
-      expect(gateway.spendLimits?.rules?.[0]?.limit).toEqual(500_00);
+      expect(gateway.spendLimits?.rules?.[0]?.limit).toEqual(5);
       expect(gateway.spendLimits?.rules?.[0]?.window).toEqual(86_400);
 
       const live = yield* aiGateway.getAiGateway({ accountId, id: gateway.gatewayId });
       expect(live.spendLimits?.enabled).toEqual(true);
-      expect(live.spendLimits?.rules?.[0]?.limit).toEqual(500_00);
+      expect(live.spendLimits?.rules?.[0]?.limit).toEqual(5);
       expect(live.spendLimits?.rules?.[0]?.window).toEqual(86_400);
 
       // Re-deploying identical props must be a no-op (no perpetual drift from
@@ -152,12 +152,12 @@ test.provider(
             id: "alchemy-test-ai-gateway-spend",
             spendLimits: {
               enabled: true,
-              rules: [{ limitType: "cost", limit: 500_00, window: "1 day" }],
+              rules: [{ limitType: "cost", limit: 5, window: "1 day" }],
             },
           });
         }),
       );
-      expect(again.spendLimits?.rules?.[0]?.limit).toEqual(500_00);
+      expect(again.spendLimits?.rules?.[0]?.limit).toEqual(5);
 
       // Update the cap in place.
       const updated = yield* stack.deploy(
@@ -166,15 +166,15 @@ test.provider(
             id: "alchemy-test-ai-gateway-spend",
             spendLimits: {
               enabled: true,
-              rules: [{ limitType: "cost", limit: 1_000_00, window: "1 hour" }],
+              rules: [{ limitType: "cost", limit: 0.5, window: "1 hour" }],
             },
           });
         }),
       );
-      expect(updated.spendLimits?.rules?.[0]?.limit).toEqual(1_000_00);
+      expect(updated.spendLimits?.rules?.[0]?.limit).toEqual(0.5);
 
       const liveUpdated = yield* aiGateway.getAiGateway({ accountId, id: gateway.gatewayId });
-      expect(liveUpdated.spendLimits?.rules?.[0]?.limit).toEqual(1_000_00);
+      expect(liveUpdated.spendLimits?.rules?.[0]?.limit).toEqual(0.5);
       expect(liveUpdated.spendLimits?.rules?.[0]?.window).toEqual(3_600);
 
       yield* stack.destroy();
