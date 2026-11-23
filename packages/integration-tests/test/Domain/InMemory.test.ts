@@ -4,6 +4,7 @@ import { describe, expect, it } from "@alchemy.run/test";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Scheduler from "effect/Scheduler";
 import * as Schema from "effect/Schema";
 import { Activity } from "effect/workflow";
 
@@ -175,4 +176,90 @@ describe("Domain InMemory: drain", { tags: ["unit", "local"] }, () => {
       { discard: true },
     ),
   );
+});
+
+/** A view keyed by its aggregate, and an Api to read it with `atLeast`. */
+class Tallied extends Domain.Event("Tallied", { by: Schema.Number }) {}
+class Tally extends Domain.Command("Tally", {
+  input: { id: Schema.String, by: Schema.Number },
+  events: [Tallied],
+}) {}
+class Tallier extends Domain.Aggregate("Tallier", {
+  id: Schema.String,
+  state: Schema.Struct({ total: Schema.Number }),
+  initial: { total: 0 },
+  commands: [Tally],
+  keyOf: (command) => command.id,
+  decide: { Tally: (_, { by }) => [new Tallied({ by })] },
+  evolve: { Tallied: (s, e) => ({ total: s.total + e.by }) },
+}) {}
+class Tallies extends Domain.View("Tallies", {
+  from: [Tallier],
+  key: Tallier,
+  state: Schema.Struct({ total: Schema.Number }),
+  initial: { total: 0 },
+  evolve: { Tallied: (s, e) => ({ total: s.total + e.by }) },
+}) {}
+class TallyModel extends Domain.Model("TallyKeys", { aggregates: [Tallier], views: [Tallies] }) {}
+class TallyApi extends Domain.Api("TallyApi", {
+  model: TallyModel,
+  commands: ["Tally"],
+  views: ["Tallies"],
+}) {}
+
+describe("Domain InMemory: view keys", { tags: ["unit", "local"] }, () => {
+  // A read does not take the view's lock. When it touches a key for the first
+  // time while the view applies the key's first event, both make the key; the
+  // one made last must not replace the other, or the event is lost and a read
+  // `atLeast` its receipt waits until it times out.
+  it.live("a read that first touches a key while the view applies to it loses nothing", () => {
+    const hosted = InMemory.make({ manual: true });
+    const settle: Effect.Effect<void> = Effect.gen(function* () {
+      while (true) {
+        yield* hosted.control.drain;
+        if (yield* hosted.control.idle) return;
+        yield* Effect.sleep("1 millis");
+      }
+    });
+    return Effect.gen(function* () {
+      const api = yield* TallyApi.Client;
+      yield* settle;
+      let lost = 0;
+      // The reads start a little later each round, to meet the drain on some key.
+      for (let round = 0; round < 150; round++) {
+        const ids = Array.from({ length: 50 }, (_, i) => `r${round}-${i}`);
+        const receipts = yield* Effect.forEach(ids, (id) => api.Tally({ id, by: 1 }));
+        // Yield after every step, so a fiber can be paused while it makes a key.
+        yield* Effect.all(
+          [
+            settle,
+            Effect.sleep(`${round % 25} millis`).pipe(
+              Effect.andThen(
+                Effect.forEach(ids.toReversed(), (id) => api.Tallies.get(id), { concurrency: 2 }),
+              ),
+            ),
+          ],
+          { concurrency: "unbounded" },
+        ).pipe(Effect.provideService(Scheduler.MaxOpsBeforeYield, 1));
+        yield* settle;
+        const read = yield* Effect.forEach(
+          ids,
+          (id, i) =>
+            api.Tallies.get(id, { atLeast: receipts[i]! }).pipe(
+              Effect.timeout("1 second"),
+              Effect.result,
+            ),
+          { concurrency: "unbounded" },
+        );
+        lost += read.filter((r) => r._tag !== "Success" || r.success?.total !== 1).length;
+      }
+      expect(lost).toBe(0);
+    }).pipe(
+      Effect.provide(
+        Layer.effect(TallyApi.Client, TallyApi.clientInProcess).pipe(
+          Layer.provideMerge(TallyModel.layer(Layer.empty).pipe(Layer.provide(hosted.layer))),
+        ),
+      ),
+    );
+  });
 });

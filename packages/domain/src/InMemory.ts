@@ -815,7 +815,15 @@ export const make = (
               const found = versions.get(id);
               if (found) return Effect.succeed(found);
               return SubscriptionRef.make(instance(id).version).pipe(
-                Effect.tap((created) => Effect.sync(() => versions.set(id, created))),
+                // Another fiber may have made it in the meantime: keep its.
+                Effect.flatMap((created) =>
+                  Effect.sync(() => {
+                    const filled = versions.get(id);
+                    if (filled) return filled;
+                    versions.set(id, created);
+                    return created;
+                  }),
+                ),
               );
             });
           const announce = (id: string) =>
@@ -1400,7 +1408,15 @@ export const make = (
                   waiting: new Map<string, ReadonlyArray<Revised>>(),
                   recalls: [] as ReadonlyArray<Delivery>,
                 })),
-                Effect.tap((created) => Effect.sync(() => keys.set(key, created))),
+                // Another fiber may have filled the key while these were made: keep its.
+                Effect.flatMap((created) =>
+                  Effect.sync(() => {
+                    const filled = keys.get(key);
+                    if (filled) return filled;
+                    keys.set(key, created);
+                    return created;
+                  }),
+                ),
               );
             });
           const target = kit.target;
@@ -1985,7 +2001,17 @@ export const make = (
               return Effect.all({
                 meta: SubscriptionRef.make(emptyStreamMeta),
                 entries: SubscriptionRef.make<ReadonlyArray<StreamEntry>>([]),
-              }).pipe(Effect.tap((created) => Effect.sync(() => keys.set(key, created))));
+              }).pipe(
+                // Another fiber may have filled the key while these were made: keep its.
+                Effect.flatMap((created) =>
+                  Effect.sync(() => {
+                    const filled = keys.get(key);
+                    if (filled) return filled;
+                    keys.set(key, created);
+                    return created;
+                  }),
+                ),
+              );
             });
           return {
             append: (key, write) =>
