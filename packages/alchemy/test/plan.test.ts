@@ -4251,12 +4251,68 @@ describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, (
           expect(error.message).toContain("A -> B -> A");
           expect(error.message).toContain("/infrastructure-as-effects/circular-bindings");
           // The other way out, for resources that aren't Effect-native runtimes.
-          expect(error.message).toContain(".ref(");
+          expect(error.message).toContain("Worker.ref(");
           expect(error.message).toContain("/infrastructure-as-code/references");
         }
       }),
     );
   });
+
+  test(
+    "a three-resource cycle prints its path",
+    Effect.gen(function* () {
+      const A: Effect.Effect<TestResource, never, Provider.Provider<TestResource>> = TestResource(
+        "A",
+        Effect.gen(function* () {
+          const c = yield* C;
+          return { string: "a", stringArray: [c.string] };
+        }),
+      );
+      const B: Effect.Effect<TestResource, never, Provider.Provider<TestResource>> = TestResource(
+        "B",
+        Effect.gen(function* () {
+          const a = yield* A;
+          return { string: "b", stringArray: [a.string] };
+        }),
+      );
+      const C: Effect.Effect<TestResource, never, Provider.Provider<TestResource>> = TestResource(
+        "C",
+        Effect.gen(function* () {
+          const b = yield* B;
+          return { string: "c", stringArray: [b.string] };
+        }),
+      );
+      const exit = yield* Effect.gen(function* () {
+        yield* A;
+        yield* B;
+        yield* C;
+      }).pipe(makePlan, Effect.timeout("5 seconds"), Effect.exit);
+      const error = Exit.isFailure(exit)
+        ? (Cause.squash(exit.cause) as DeclarationCycleError)
+        : undefined;
+      expect(error?._tag).toBe("DeclarationCycleError");
+      expect(error?.cycle).toEqual(["A", "C", "B", "A"]);
+    }),
+  );
+
+  test(
+    "a resource whose props yield itself fails the plan, never hangs",
+    Effect.gen(function* () {
+      const A: Effect.Effect<TestResource, never, Provider.Provider<TestResource>> = TestResource(
+        "A",
+        Effect.gen(function* () {
+          const a = yield* A;
+          return { string: "a", stringArray: [a.string] };
+        }),
+      );
+      const exit = yield* A.pipe(makePlan, Effect.timeout("5 seconds"), Effect.exit);
+      const error = Exit.isFailure(exit)
+        ? (Cause.squash(exit.cause) as DeclarationCycleError)
+        : undefined;
+      expect(error?._tag).toBe("DeclarationCycleError");
+      expect(error?.cycle).toEqual(["A", "A"]);
+    }),
+  );
 
   // #3112: two resources that reference each other, one through a ref,
   // deadlocked the plan.
@@ -4289,6 +4345,7 @@ describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, (
             expect(error.owner).toBe("Auth");
             expect(error.target).toBe("Api");
             expect(error.message).toContain("Auth -> Api -> Auth");
+            expect(error.cycle).toEqual(["Auth", "Api", "Auth"]);
           }
         }),
       );

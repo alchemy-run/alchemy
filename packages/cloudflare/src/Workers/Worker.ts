@@ -2972,10 +2972,11 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
 export const Worker: ResourceClassLike<Worker> & {
   /**
    * Reference a Worker by its logical id, in the current stack/stage by
-   * default or in another via `options`. A Worker this program declares in
-   * the same stack and stage is bound to that declaration (created first, no
+   * default or in another via `options`. Another Worker this program
+   * declares in the same stack and stage is bound to that declaration (no
    * earlier deploy needed), so a ref breaks a cycle between two Workers that
-   * bind each other; any other ref reads the deployed Worker from state. Pass
+   * bind each other; any other ref, including one to the Worker itself,
+   * reads the deployed Worker from state. Pass
    * the Worker's declaration instead of its logical id to keep its type,
    * including its RPC methods, for service bindings from another stack.
    */

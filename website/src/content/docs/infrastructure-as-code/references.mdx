@@ -150,17 +150,16 @@ type bindings.
 
 ## Reference a resource declared in this stack
 
-A ref whose `{ stack, stage, id }` names a resource this program
-declares, in this stack and stage, binds to that declaration instead
-of reading state. It behaves like a direct reference: the target is
-created before the resource that refs it and deleted after it, and the
-ref resolves to the target's fresh attributes. It needs no earlier
-deploy.
+A ref whose `{ stack, stage, id }` names another resource this
+program declares, in this stack and stage, binds to that declaration instead
+of reading state. It is ordered like a direct reference and resolves
+to the target's fresh attributes. It needs no earlier deploy.
 
-That makes a ref the way to break a cycle between resources whose
-props would otherwise yield each other. Declare one normally, and
-reach it from the other by its id (its logical id, prefixed with its
-namespace path when it is declared inside one):
+For two async Workers that bind each other, a ref breaks the cycle their
+props would otherwise form: the Worker provider moves a ref in `env`
+into a binding, so the pair deploys create-then-wire. Declare one
+normally, and reach it from the other by its id (its logical id,
+prefixed with its namespace path when it is declared inside one):
 
 ```typescript
 const auth = yield* Cloudflare.Worker("Auth", {
@@ -179,9 +178,10 @@ const dispatcher = yield* Cloudflare.Worker("Dispatcher", {
 ```
 
 Both Workers deploy together, on a fresh account, in one deploy.
-Declarations whose props yield each other directly can't be planned
-and fail with `DeclarationCycleError`
-([Circular references](/infrastructure-as-code/resource#circular-references)).
+For other resources a ref is still a prop: a ref that closes a cycle
+through props fails with `RefCycleError`, and declarations whose props
+yield each other fail with `DeclarationCycleError`. Bind one of them
+instead ([Circular references](/infrastructure-as-code/resource#circular-references)).
 
 ## Deploy order
 

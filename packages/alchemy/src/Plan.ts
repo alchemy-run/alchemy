@@ -429,78 +429,67 @@ interface RefEdge {
  * props only what the provider can't move into a binding.
  */
 export class RefCycleError extends Data.TaggedError("RefCycleError")<{
-  message: string;
   owner: string;
   target: string;
-}> {}
-
-/**
- * The first ref edge whose target reaches its owner through props, if any
- * (see {@link RefCycleError}).
- */
-const findRefCycle = (
-  edges: ReadonlyArray<RefEdge>,
-  upstream: { readonly [fqn: string]: ReadonlyArray<string> },
-): { edge: RefEdge; path: string[] } | undefined => {
-  for (const edge of edges) {
-    // Depth-first from the target along prop dependencies, back to the owner.
-    const visited = new Set<string>();
-    const walk = (fqn: string, path: string[]): string[] | undefined => {
-      if (fqn === edge.owner) return path;
-      if (visited.has(fqn)) return undefined;
-      visited.add(fqn);
-      for (const next of upstream[fqn] ?? []) {
-        const found = walk(next, [...path, next]);
-        if (found) return found;
-      }
-      return undefined;
-    };
-    const path = walk(edge.target, [edge.target]);
-    if (path) return { edge, path: [edge.owner, ...path] };
+  cycle: string[];
+}> {
+  override get message(): string {
+    return (
+      `'${this.owner}' references '${this.target}' through a ref in its props, and ` +
+      `'${this.target}' depends on '${this.owner}' through props (${this.cycle.join(" -> ")}). ` +
+      `Bind the reference instead of passing it as a prop, so the cycle runs through bindings.`
+    );
   }
-  return undefined;
-};
+}
 
 /**
- * New resources whose props reference each other directly. A declaration
- * can't reference a resource declared after it, so only declarations whose
- * props Effects yield each other build this cycle: each yields the other while
+ * New resources whose props reference each other directly, or a resource
+ * whose props reference itself. A declaration can't reference a resource
+ * declared after it, so only props Effects that yield each other build this
+ * cycle: each yields the other while
  * it is still being declared. Neither can be planned before the other, so the
  * plan fails instead of waiting forever. Declaring each as a class (the Tag
  * other declarations yield) with its implementation in `.make()` (a Layer)
  * lets the references run through bindings instead.
  */
 export class DeclarationCycleError extends Data.TaggedError("DeclarationCycleError")<{
-  message: string;
   cycle: string[];
-}> {}
+}> {
+  override get message(): string {
+    const what =
+      this.cycle.length === 2
+        ? `Resource ${this.cycle[0]} yields itself in its props, so it can't be planned.`
+        : `Resources ${this.cycle.join(" -> ")} yield each other in their props, so none can be planned first.`;
+    return (
+      `${what} Bind them instead (https://alchemy.run/infrastructure-as-effects/circular-bindings). ` +
+      `Two async Cloudflare Workers can also reach one by id with \`Worker.ref(id)\` (https://alchemy.run/infrastructure-as-code/references).`
+    );
+  }
+}
 
 /**
- * The first cycle through props among `among` (`A -> B -> A`), if any. A
- * resource's reference to itself isn't a cycle between declarations.
+ * The shortest path from `from` to `to` through `members`, both ends
+ * included. `members` is a strongly-connected component, so one exists.
  */
-const findDeclarationCycle = (
-  among: ReadonlySet<string>,
-  upstream: { readonly [fqn: string]: ReadonlyArray<string> },
-): string[] | undefined => {
-  const done = new Set<string>();
-  const walk = (fqn: string, path: string[]): string[] | undefined => {
-    const at = path.indexOf(fqn);
-    if (at !== -1) return [...path.slice(at), fqn];
-    if (done.has(fqn)) return undefined;
-    for (const next of upstream[fqn] ?? []) {
-      if (next === fqn || !among.has(next)) continue;
-      const found = walk(next, [...path, fqn]);
-      if (found) return found;
+const pathWithin = (
+  members: ReadonlySet<string>,
+  edges: { readonly [fqn: string]: ReadonlyArray<string> },
+  from: string,
+  to: string,
+): string[] => {
+  const prev = new Map<string, string>([[from, from]]);
+  const queue = [from];
+  while (queue.length > 0 && !prev.has(to)) {
+    const fqn = queue.shift()!;
+    for (const next of edges[fqn] ?? []) {
+      if (!members.has(next) || prev.has(next)) continue;
+      prev.set(next, fqn);
+      queue.push(next);
     }
-    done.add(fqn);
-    return undefined;
-  };
-  for (const fqn of among) {
-    const cycle = walk(fqn, []);
-    if (cycle) return cycle;
   }
-  return undefined;
+  const path = [to];
+  while (path[0] !== from) path.unshift(prev.get(path[0])!);
+  return path;
 };
 
 const makePlan = <A>(
@@ -1442,46 +1431,29 @@ const makePlan = <A>(
       ),
     ]);
 
-    // Fail before resolving anything: a ref that closes a cycle through
-    // props would leave both resources waiting on each other (#3112).
-    const refCycle = findRefCycle(
-      refPropEdges.filter((edge) => newResourceFqns.has(edge.owner)),
-      newUpstreamDependencies,
+    // Fail before resolving anything: resources whose props reference each
+    // other would each wait for the next (#3112). A same-stack ref bound to
+    // its declaration is a prop edge too, so one pass finds both kinds. Edges
+    // through Actions are left out: an Action input in a cycle stays unresolved.
+    const propEdges = Object.fromEntries(
+      resources.map((r) => [
+        r.FQN,
+        (newUpstreamDependencies[r.FQN] ?? []).filter((dep) => newResourceFqns.has(dep)),
+      ]),
     );
-    if (refCycle !== undefined) {
-      const { edge, path } = refCycle;
-      return yield* Effect.die(
-        new RefCycleError({
-          message:
-            `'${edge.owner}' references '${edge.target}' through a ref in its props, and ` +
-            `'${edge.target}' depends on '${edge.owner}' through props ` +
-            `(${path.join(" -> ")}). Neither can be planned before the other. ` +
-            `Bind the reference instead of passing it as a prop, so the cycle runs ` +
-            `through bindings.`,
-          owner: edge.owner,
-          target: edge.target,
-        }),
+    const propCycle = findCycles(propEdges).values().next().value;
+    if (propCycle !== undefined) {
+      const edge = refPropEdges.find(
+        (edge) => propCycle.has(edge.owner) && propCycle.has(edge.target),
       );
-    }
-
-    // Fail before resolving anything: new resources whose props reference
-    // each other directly would each wait for the next.
-    const declarationCycle = findDeclarationCycle(newResourceFqns, newUpstreamDependencies);
-    if (declarationCycle !== undefined) {
+      const from = edge?.owner ?? [...newResourceFqns].find((fqn) => propCycle.has(fqn))!;
+      const to =
+        edge?.target ?? propEdges[from].find((dep) => dep !== from && propCycle.has(dep)) ?? from;
+      const cycle = [from, ...pathWithin(propCycle, propEdges, to, from)];
       return yield* Effect.die(
-        new DeclarationCycleError({
-          message:
-            `Resources ${declarationCycle.join(" -> ")} reference each other in their props, ` +
-            `so none can be planned before the next. Props Effects that yield each other build ` +
-            `this cycle: each yields the other while it is still being declared. Declare each as ` +
-            `a class, the Tag the others yield, and supply its implementation with \`.make()\`, ` +
-            `a Layer, so the references run through bindings: ` +
-            `https://alchemy.run/infrastructure-as-effects/circular-bindings. ` +
-            `Or reach one of them from the other by its id with its type's \`.ref(id)\`, ` +
-            `which binds to the declaration in this stack without yielding it: ` +
-            `https://alchemy.run/infrastructure-as-code/references`,
-          cycle: declarationCycle,
-        }),
+        edge
+          ? new RefCycleError({ owner: edge.owner, target: edge.target, cycle })
+          : new DeclarationCycleError({ cycle }),
       );
     }
 
