@@ -283,11 +283,11 @@ export const SignedCustomersDeviceProvider = () =>
       if (current === undefined) {
         const created = yield* sasportal
           .createSignedCustomersDevices({
-            parent,
-            body: signedDeviceBody({
+            ...signedDeviceBody({
               encodedDevice: news.encodedDevice,
               installerId: news.installerId,
             }),
+            parent,
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -322,6 +322,7 @@ export const SignedCustomersDeviceProvider = () =>
         !sameJson(deviceMetadataOf(current.deviceMetadata), news.deviceMetadata);
       if (nameChanged || allowlistsChanged || configChanged || metadataChanged) {
         current = yield* sasportal.patchCustomersDevices({
+          ...desired,
           name,
           updateMask: updateMaskOf(
             "displayName",
@@ -329,7 +330,6 @@ export const SignedCustomersDeviceProvider = () =>
             news.preloadedConfig !== undefined ? "preloadedConfig" : undefined,
             news.deviceMetadata !== undefined ? "deviceMetadata" : undefined,
           ),
-          body: desired,
         });
       }
 

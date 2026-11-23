@@ -333,17 +333,15 @@ export const BackendBucketProvider = () =>
       if (current === undefined) {
         const inserted = yield* compute
           .insertBackendBuckets({
+            name,
+            bucketName: news.bucketName,
+            description: desiredDescription,
+            enableCdn,
+            compressionMode: news.compressionMode,
+            customResponseHeaders: desiredHeaders.length > 0 ? desiredHeaders : undefined,
+            loadBalancingScheme: news.loadBalancingScheme,
+            cdnPolicy: news.cdnPolicy,
             project: env.project,
-            body: {
-              name,
-              bucketName: news.bucketName,
-              description: desiredDescription,
-              enableCdn,
-              compressionMode: news.compressionMode,
-              customResponseHeaders: desiredHeaders.length > 0 ? desiredHeaders : undefined,
-              loadBalancingScheme: news.loadBalancingScheme,
-              cdnPolicy: news.cdnPolicy,
-            },
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
@@ -381,16 +379,14 @@ export const BackendBucketProvider = () =>
       ) {
         yield* compute
           .patchBackendBuckets({
+            bucketName: news.bucketName,
+            description: desiredDescription,
+            enableCdn,
+            compressionMode: news.compressionMode,
+            customResponseHeaders: desiredHeaders,
+            cdnPolicy: news.cdnPolicy,
             project: env.project,
             backendBucket: name,
-            body: {
-              bucketName: news.bucketName,
-              description: desiredDescription,
-              enableCdn,
-              compressionMode: news.compressionMode,
-              customResponseHeaders: desiredHeaders,
-              cdnPolicy: news.cdnPolicy,
-            },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* awaitResource(env.project, name);

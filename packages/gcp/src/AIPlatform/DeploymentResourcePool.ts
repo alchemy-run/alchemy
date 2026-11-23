@@ -471,16 +471,14 @@ export const DeploymentResourcePoolProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsDeploymentResourcePools({
-            parent: parentOf(env.project, location),
-            body: {
-              deploymentResourcePoolId: poolId,
-              deploymentResourcePool: {
-                dedicatedResources: dedicated,
-                disableContainerLogging,
-                serviceAccount,
-                encryptionSpec: news.encryptionSpec,
-              },
+            deploymentResourcePoolId: poolId,
+            deploymentResourcePool: {
+              dedicatedResources: dedicated,
+              disableContainerLogging,
+              serviceAccount,
+              encryptionSpec: news.encryptionSpec,
             },
+            parent: parentOf(env.project, location),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -508,6 +506,8 @@ export const DeploymentResourcePoolProvider = () =>
 
       if (minChanged || maxChanged || saChanged) {
         const patched = yield* aiplatform.patchProjectsLocationsDeploymentResourcePools({
+          dedicatedResources: dedicated,
+          serviceAccount,
           name: currentName,
           updateMask: [
             minChanged ? "dedicated_resources.min_replica_count" : undefined,
@@ -516,11 +516,6 @@ export const DeploymentResourcePoolProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name: currentName,
-            dedicatedResources: dedicated,
-            serviceAccount,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilExists(currentName);

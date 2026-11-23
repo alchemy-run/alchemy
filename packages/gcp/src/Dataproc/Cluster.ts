@@ -670,7 +670,7 @@ const createCluster = (
       yield* deleteCluster(projectId, region, clusterName);
     }
     const created = yield* dataproc
-      .createProjectsRegionsClusters({ projectId, region, body })
+      .createProjectsRegionsClusters({ ...body, projectId, region })
       .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
     if (created !== undefined) {
       yield* waitForOperation(created);
@@ -1035,23 +1035,19 @@ export const ClusterProvider = () =>
 
         const patched = yield* dataproc
           .patchProjectsRegionsClusters({
+            labels: desiredLabels,
+            config: {
+              workerConfig:
+                desiredWorkers !== undefined ? { numInstances: desiredWorkers } : undefined,
+              secondaryWorkerConfig:
+                desiredSecondary !== undefined ? { numInstances: desiredSecondary } : undefined,
+              autoscalingConfig:
+                desiredPolicy !== undefined ? { policyUri: desiredPolicy } : undefined,
+            },
             projectId,
             region,
             clusterName,
             updateMask: updateMask.join(","),
-            body: {
-              projectId,
-              clusterName,
-              labels: desiredLabels,
-              config: {
-                workerConfig:
-                  desiredWorkers !== undefined ? { numInstances: desiredWorkers } : undefined,
-                secondaryWorkerConfig:
-                  desiredSecondary !== undefined ? { numInstances: desiredSecondary } : undefined,
-                autoscalingConfig:
-                  desiredPolicy !== undefined ? { policyUri: desiredPolicy } : undefined,
-              },
-            },
           })
           .pipe(
             Effect.retry({

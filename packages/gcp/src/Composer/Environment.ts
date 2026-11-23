@@ -930,13 +930,11 @@ export const EnvironmentProvider = () =>
       if (current === undefined) {
         const created = yield* composer
           .createProjectsLocationsEnvironments({
+            name,
+            labels: desiredLabels,
+            config: toCreateConfig(news.config),
+            storageConfig: news.storageConfig,
             parent: `projects/${env.project}/locations/${location}`,
-            body: {
-              name,
-              labels: desiredLabels,
-              config: toCreateConfig(news.config),
-              storageConfig: news.storageConfig,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -973,9 +971,9 @@ export const EnvironmentProvider = () =>
       for (const patch of patches) {
         const operation = yield* composer
           .patchProjectsLocationsEnvironments({
+            ...patch.body,
             name: current.name ?? name,
             updateMask: patch.mask,
-            body: patch.body,
           })
           .pipe(
             Effect.retry({

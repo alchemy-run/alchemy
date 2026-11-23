@@ -320,15 +320,13 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createReasoningEnginesSandboxEnvironments({
+            displayName,
+            sandboxEnvironmentTemplate: news.sandboxEnvironmentTemplate,
+            sandboxEnvironmentSnapshot: news.sandboxEnvironmentSnapshot,
+            spec: news.spec,
+            ttl: news.ttl,
+            owner: news.owner,
             parent,
-            body: {
-              displayName,
-              sandboxEnvironmentTemplate: news.sandboxEnvironmentTemplate,
-              sandboxEnvironmentSnapshot: news.sandboxEnvironmentSnapshot,
-              spec: news.spec,
-              ttl: news.ttl,
-              owner: news.owner,
-            },
           })
           .pipe(
             GcpRetry.none,

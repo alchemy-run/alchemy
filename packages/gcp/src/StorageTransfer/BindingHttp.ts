@@ -43,13 +43,8 @@ export const makeTransferJobHttpBinding = <I extends { jobName?: string }, A, E>
           jobName,
         } as I;
         if (options.projectInBody) {
-          const withBody = input as I & {
-            body?: { projectId?: string };
-          };
-          withBody.body = {
-            ...withBody.body,
-            projectId: withBody.body?.projectId ?? projectId,
-          };
+          const withProject = input as I & { projectId?: string };
+          withProject.projectId = withProject.projectId ?? projectId;
         }
         return yield* run(input);
       });

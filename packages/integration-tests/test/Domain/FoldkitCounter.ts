@@ -15,14 +15,13 @@ export class Session extends RpcMiddleware.Service<Session>()("FoldkitTest/Sessi
 }) {}
 export class Incremented extends Domain.Event("Incremented", { amount: Schema.Number }) {}
 export class Increment extends Domain.Command("Increment", {
-  target: CounterId,
-  input: { amount: Schema.NumberFromString },
+  input: { counterId: CounterId, amount: Schema.NumberFromString },
   events: [Incremented],
   rejects: [Limit],
   reply: { total: Schema.Number },
 }) {}
 export class Reset extends Domain.Command("Reset", {
-  target: CounterId,
+  input: { counterId: CounterId },
   events: [Incremented],
   middleware: [Session],
 }) {}
@@ -31,6 +30,7 @@ export class Counter extends Domain.Aggregate("Counter", {
   state: Schema.Struct({ total: Schema.Number }),
   initial: { total: 0 },
   commands: [Increment, Reset],
+  keyOf: (command) => command.counterId,
   decide: {
     Increment: (_, { amount }) =>
       amount > 10 ? new Limit({ amount }) : [Incremented.make({ amount })],

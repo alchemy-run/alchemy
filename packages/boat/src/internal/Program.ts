@@ -1,6 +1,7 @@
 import * as boat from "@distilled.cloud/boat-dev/boat";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { findCwdForBundle, resolveMainPath } from "alchemy/Bundle/TempRoot";
+import { envString } from "alchemy/RuntimeContext";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -60,10 +61,7 @@ import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
 await bootstrap(entrypoint);
 `;
 
-const shellQuote = (value: unknown) => {
-  const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
-  return `'${text.replaceAll("'", `'\\''`)}'`;
-};
+const shellQuote = (value: unknown) => `'${(envString(value) ?? "").replaceAll("'", `'\\''`)}'`;
 
 /** The process environment as a shell file, sorted so its hash is stable. */
 export const renderEnv = (env: Record<string, unknown>) =>

@@ -303,13 +303,13 @@ export const ReasoningEnginesSandboxEnvironmentTemplateProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsReasoningEnginesSandboxEnvironmentTemplates({
-            parent,
-            body: compact({
+            ...compact({
               displayName,
               defaultContainerEnvironment: news.defaultContainerEnvironment,
               customContainerEnvironment: news.customContainerEnvironment,
               egressControlConfig: news.egressControlConfig,
             }),
+            parent,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         const done =

@@ -1,0 +1,62 @@
+---
+title: The session's sandbox
+description: OpenCode runs in the Durable Object. A sandbox is where a session's tools find files and a shell, opened on a tool's first use, and suspended or removed without touching the session.
+---
+
+OpenCode itself runs in the Durable Object, which has no files and no shell. A tool that needs either uses [`AI.Sandbox`](/ai/sandboxes), and the harness gives each session a sandbox of its own for those tools. The session's transcript is not in it: that is in the object's SQLite.
+
+## Where sandboxes run
+
+An [`AI.Sandboxes`](/ai/sandboxes) Layer says where: E2B, Daytona, Modal, Boat or Archil. Provide it to the coding tools and the harness together:
+
+```typescript
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  OpenCode.CodingTools,
+  OpenCodeCloudflare.DurableObjectStorage,
+).pipe(Layer.provideMerge(Sandbox));
+```
+
+A harness whose tools use neither files nor a shell takes no `AI.Sandboxes`, and its sessions never open a sandbox.
+
+## When a sandbox opens
+
+A session's sandbox opens the first time one of its tools uses `AI.Sandbox`. A prompt that calls only tools of yours, or none, opens nothing.
+
+A session's sandbox is found by a key made from the Durable Object's id and the session's name. `session.sandboxKey` is that key, for finding the sandbox on the platform yourself.
+
+## The working directory
+
+Tools run commands in the sandbox's own working directory. `cwd` sets another, such as a repository your image already has. Relative paths start there too:
+
+```typescript
+const harness = yield* OpenCode.Harness({
+  models: [Fast],
+  tools: [AI.CodingTools],
+  cwd: "/home/user/repo",
+});
+```
+
+## Suspend
+
+`suspendSandbox` stops the sandbox and keeps its disk, where the platform can:
+
+```typescript
+yield* harness.session("pr-142").suspendSandbox;
+```
+
+The session's next tool call resumes it, with its files as they were.
+
+## Remove
+
+`removeSandbox` deletes the sandbox:
+
+```typescript
+yield* harness.session("pr-142").removeSandbox;
+```
+
+The session keeps its transcript. Its next tool call that needs a sandbox starts a new one, empty.
+
+## Platforms that delete idle sandboxes
+
+A platform that deletes a sandbox takes the session's files, not the session. Choose a platform that keeps a stopped sandbox's disk when files should last. See [Sandbox platforms](/ai/sandbox-platforms).

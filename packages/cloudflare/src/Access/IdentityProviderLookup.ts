@@ -17,7 +17,7 @@ export interface ObservedIdp {
     readonly identityUpdateBehavior?: string | null;
     readonly scimBaseUrl?: string | null;
     readonly seatDeprovision?: boolean | null;
-    readonly secret?: string | null;
+    readonly secret?: string | Redacted.Redacted<string> | null;
     readonly userDeprovision?: boolean | null;
   } | null;
 }
@@ -96,7 +96,12 @@ export const toAttributes = (
   type: idp.type as IdentityProviderType,
   scimBaseUrl: idp.scimConfig?.scimBaseUrl ?? undefined,
   // The SCIM secret is returned once when SCIM is enabled; afterwards the
-  // API masks it — carry the prior value forward.
-  scimSecret: idp.scimConfig?.secret ? Redacted.make(idp.scimConfig.secret) : priorSecret,
+  // API masks it — carry the prior value forward. Distilled returns it as
+  // `Redacted`; older versions return a string.
+  scimSecret: Redacted.isRedacted(idp.scimConfig?.secret)
+    ? idp.scimConfig.secret
+    : idp.scimConfig?.secret
+      ? Redacted.make(idp.scimConfig.secret)
+      : priorSecret,
   scimEnabled: idp.scimConfig?.enabled ?? false,
 });

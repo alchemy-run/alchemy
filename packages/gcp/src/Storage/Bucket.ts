@@ -438,24 +438,22 @@ export const BucketProvider = () =>
       if (current === undefined) {
         const created = yield* storage
           .insertBuckets({
+            name: bucketName,
+            location,
+            storageClass,
+            versioning: { enabled: versioning },
+            labels: desiredLabels,
+            hierarchicalNamespace: hierarchicalNamespace ? { enabled: true } : undefined,
+            website: desiredWebsite,
+            iamConfiguration: configureIam
+              ? {
+                  uniformBucketLevelAccess: {
+                    enabled: uniformBucketLevelAccess,
+                  },
+                }
+              : undefined,
             project: env.project,
             projection: "full",
-            body: {
-              name: bucketName,
-              location,
-              storageClass,
-              versioning: { enabled: versioning },
-              labels: desiredLabels,
-              hierarchicalNamespace: hierarchicalNamespace ? { enabled: true } : undefined,
-              website: desiredWebsite,
-              iamConfiguration: configureIam
-                ? {
-                    uniformBucketLevelAccess: {
-                      enabled: uniformBucketLevelAccess,
-                    },
-                  }
-                : undefined,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(bucketName)));
         current = created ?? undefined;
@@ -491,30 +489,26 @@ export const BucketProvider = () =>
           nextLabels[key] = null;
         }
         current = yield* storage.patchBuckets({
+          storageClass,
+          versioning: { enabled: versioning },
+          labels: nextLabels as unknown as Record<string, string>,
+          iamConfiguration: ublChanged
+            ? {
+                uniformBucketLevelAccess: {
+                  enabled: uniformBucketLevelAccess,
+                },
+              }
+            : undefined,
+          website: websiteChanged
+            ? ((desiredWebsite === undefined
+                ? null
+                : {
+                    mainPageSuffix: desiredWebsite.mainPageSuffix ?? null,
+                    notFoundPage: desiredWebsite.notFoundPage ?? null,
+                  }) as unknown as storage.BucketWebsite)
+            : undefined,
           bucket: bucketName,
           projection: "full",
-          body: {
-            storageClass,
-            versioning: { enabled: versioning },
-            labels: nextLabels as unknown as Record<string, string>,
-            iamConfiguration: ublChanged
-              ? {
-                  uniformBucketLevelAccess: {
-                    enabled: uniformBucketLevelAccess,
-                  },
-                }
-              : undefined,
-            // PATCH merges nested objects and clears a field only when it
-            // is sent as JSON null.
-            website: websiteChanged
-              ? ((desiredWebsite === undefined
-                  ? null
-                  : {
-                      mainPageSuffix: desiredWebsite.mainPageSuffix ?? null,
-                      notFoundPage: desiredWebsite.notFoundPage ?? null,
-                    }) as unknown as storage.BucketWebsite)
-              : undefined,
-          },
         });
       }
 

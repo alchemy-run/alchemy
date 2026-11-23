@@ -343,10 +343,7 @@ export const AgentsSessionsEntityTypeProvider = () =>
 
       if (current === undefined) {
         const created = yield* dialogflow
-          .createProjectsLocationsAgentsSessionsEntityTypes({
-            parent,
-            body,
-          })
+          .createProjectsLocationsAgentsSessionsEntityTypes({ ...body, parent })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -364,8 +361,8 @@ export const AgentsSessionsEntityTypeProvider = () =>
           // The body always carries both fields; an `entities` update mask
           // is silently ignored by the API, so replace the whole resource.
           yield* dialogflow.patchProjectsLocationsAgentsSessionsEntityTypes({
+            ...body,
             name: currentName,
-            body: { ...body, name: currentName },
           });
       }
 

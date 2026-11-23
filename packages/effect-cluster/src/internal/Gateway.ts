@@ -42,6 +42,7 @@ import {
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import type { Workflow, WorkflowEngine } from "effect/workflow";
+import { encode, entityObjectName, OBJECT_CALL_HEADER, payloadCodec } from "./Wire.ts";
 import { WorkflowRpcs, workflowHandlers } from "./WorkflowGateway.ts";
 
 /** The path every gateway serves its RPCs on. */
@@ -63,14 +64,25 @@ export interface GatewayTarget {
    * another Worker's `workers.dev` URL in the same account.
    */
   readonly service?: string;
+  /**
+   * The environment key of a binding to the namespace of the objects the
+   * entity's instances run on, when the caller is a Worker and the pool's
+   * instances are Durable Objects: what `connect` opens WebSockets through.
+   */
+  readonly objects?: string;
 }
 
 /**
  * Give the runtime being deployed a direct route, bound under `key`, to the
- * gateway Worker `worker`. A host whose gateway is a Worker registers one;
- * it binds nothing for a caller that isn't a Worker.
+ * gateway Worker `worker`, and, for an entity, its instances' objects under
+ * `objects`. A host whose gateway is a Worker registers one; it binds
+ * nothing for a caller that isn't a Worker.
  */
-export type RouteBinder = (key: string, worker: unknown) => Effect.Effect<void, never, any>;
+export type RouteBinder = (
+  key: string,
+  worker: unknown,
+  objects: string | undefined,
+) => Effect.Effect<void, never, any>;
 
 const routeBinders: Array<RouteBinder> = ((globalThis as Record<symbol, unknown>)[
   Symbol.for("alchemy/Cluster/RouteBinders")
@@ -93,14 +105,31 @@ export const routeType = (type: string, worker: unknown) => {
 
 /**
  * While deploying, bind a route to the gateway Worker serving `type` into
- * the runtime being deployed, under `key`. Returns the key when one exists.
+ * the runtime being deployed, under `key` (and its instances' objects under
+ * `objects`, where the host has them). Returns the key when one exists.
  */
-export const bindRoute = (type: string, key: string) =>
+export const bindRoute = (type: string, key: string, objects?: string) =>
   Effect.gen(function* () {
     const worker = routedTypes.get(type);
     if (worker === undefined) return undefined;
-    for (const binder of routeBinders) yield* binder(key, worker);
+    for (const binder of routeBinders) yield* binder(key, worker, objects);
     return key;
+  });
+
+/** A Durable Object namespace binding, as a Worker's `env` holds it. */
+interface ObjectNamespaceBinding {
+  readonly getByName: (name: string) => {
+    readonly fetch: (request: Request) => Promise<Response>;
+  };
+}
+
+/** The namespace bound under `key` in the Worker this runs in, if any. */
+const objectNamespace = (key: string | undefined) =>
+  Effect.map(Effect.serviceOption(WorkerEnvironment), (env) => {
+    const namespace = key === undefined ? undefined : Option.getOrUndefined(env)?.[key];
+    return typeof namespace?.getByName === "function"
+      ? (namespace as ObjectNamespaceBinding)
+      : undefined;
   });
 
 /**
@@ -262,7 +291,43 @@ export const makeNamespace = (entity: AnyEntity, target: GatewayTarget) => {
       return methods;
     });
 
-  return { getByName };
+  /**
+   * Open a WebSocket to the object `entityId` runs on: forward the client's
+   * upgrade `request` to it with the call. `undefined` where the caller has
+   * no binding to the objects.
+   */
+  const connect = (
+    entityId: string,
+    request: Request,
+    call: { readonly tag: string; readonly payload: unknown; readonly headers?: Headers.Input },
+  ) =>
+    Effect.gen(function* () {
+      const namespace = yield* objectNamespace(target.objects);
+      if (namespace === undefined) return undefined;
+      const rpc = entity.protocol.requests.get(call.tag) as Rpc.AnyWithProps | undefined;
+      if (rpc === undefined) {
+        return yield* Effect.die(
+          new Error(`Cluster.Entity '${entity.type}' has no RPC ${call.tag}`),
+        );
+      }
+      const services = yield* Effect.context<never>();
+      const headers = yield* clientHeaders(services, rpc, call.payload, { headers: call.headers });
+      const forwarded = new Request(request.url, { headers: request.headers });
+      forwarded.headers.set(
+        OBJECT_CALL_HEADER,
+        JSON.stringify({
+          tag: call.tag,
+          payload: yield* encode(payloadCodec(rpc), call.payload),
+          headers: Object.fromEntries(Object.entries(headers)),
+        }),
+      );
+      return yield* Effect.tryPromise({
+        try: () => namespace.getByName(entityObjectName(entity.type, entityId)).fetch(forwarded),
+        catch: (cause) => PersistenceError.make({ cause }),
+      });
+    });
+
+  return { getByName, connect };
 };
 
 /**

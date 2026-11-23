@@ -335,13 +335,11 @@ export const SacAttachmentProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsSacAttachments({
+            sacRealm,
+            nccGateway,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             sacAttachmentId,
-            body: {
-              sacRealm,
-              nccGateway,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({

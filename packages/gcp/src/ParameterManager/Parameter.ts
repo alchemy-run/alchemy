@@ -285,13 +285,11 @@ export const ParameterProvider = () =>
       if (current === undefined) {
         const created = yield* parametermanager
           .createProjectsLocationsParameters({
+            labels: desiredLabels,
+            format,
+            kmsKey: news.kmsKey,
             parent: `projects/${env.project}/locations/${location}`,
             parameterId,
-            body: {
-              labels: desiredLabels,
-              format,
-              kmsKey: news.kmsKey,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getParameter(name)));
         current = (yield* getParameter(name)) ?? created ?? undefined;
@@ -308,15 +306,12 @@ export const ParameterProvider = () =>
 
       if (labelsChanged || kmsChanged) {
         yield* parametermanager.patchProjectsLocationsParameters({
+          labels: desiredLabels,
+          kmsKey: news.kmsKey,
           name,
           updateMask: [labelsChanged ? "labels" : undefined, kmsChanged ? "kmsKey" : undefined]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            kmsKey: news.kmsKey,
-          },
         });
         current = (yield* getParameter(name)) ?? current;
       }

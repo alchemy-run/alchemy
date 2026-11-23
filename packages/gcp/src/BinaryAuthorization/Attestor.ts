@@ -271,9 +271,9 @@ export const AttestorProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           binaryauthorization.createProjectsAttestors({
+            ...toBody(news, desiredDescription, desiredNote),
             parent: `projects/${env.project}`,
             attestorId,
-            body: toBody(news, desiredDescription, desiredNote),
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -293,18 +293,15 @@ export const AttestorProvider = () =>
       if (descriptionChanged || keysChanged) {
         current = yield* retryTransient(
           binaryauthorization.updateProjectsAttestors({
-            name: current.name ?? name,
-            body: {
-              name: current.name ?? name,
-              description: desiredDescription,
-              etag: current.etag,
-              userOwnedGrafeasNote: {
-                noteReference: observedNote || desiredNote,
-                publicKeys: news.publicKeys,
-                delegationServiceAccountEmail:
-                  current.userOwnedGrafeasNote?.delegationServiceAccountEmail,
-              },
+            description: desiredDescription,
+            etag: current.etag,
+            userOwnedGrafeasNote: {
+              noteReference: observedNote || desiredNote,
+              publicKeys: news.publicKeys,
+              delegationServiceAccountEmail:
+                current.userOwnedGrafeasNote?.delegationServiceAccountEmail,
             },
+            name: current.name ?? name,
           }),
         );
       }
