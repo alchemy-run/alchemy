@@ -35,7 +35,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { AuthoritativeRecordCheck, SwitchboardDnsCheck } from "./internal/AuthoritativeDns.ts";
 import { attrOrString, devId, devProvider } from "./internal/DevStub.ts";
-import { isPlainHostname, normalizeHostname } from "./internal/Hostname.ts";
+import { isPlainHostname, normalizeHostname, wildcardOf } from "./internal/Hostname.ts";
 import { publishesDns } from "./internal/PublishesDns.ts";
 import { concreteIdOf, isPrismaDevId } from "./internal/Refs.ts";
 import {
@@ -570,12 +570,6 @@ const updateRefusals = (hostname: string, logicalId: string, serviceId: string) 
   RoutingUrlServiceOnAnotherBranch: (error: PrismaServiceOnAnotherBranch) =>
     Effect.fail(new RoutingUrlServiceOnAnotherBranch({ message: error.message, cause: error })),
 });
-
-/** `*.example.com` for `api.example.com`; a wildcard's base needs two labels. */
-const wildcardOf = (hostname: string) => {
-  const labels = hostname.split(".");
-  return labels.length >= 3 ? `*.${labels.slice(1).join(".")}` : undefined;
-};
 
 /** How long a deploy with `dns` waits for its published `CNAME` to reach every authoritative nameserver. */
 const RECORDS_WAIT = Duration.minutes(3);

@@ -38,6 +38,14 @@ export interface DomainOwnershipRowProps {
   publishesRecord?: boolean;
 }
 
+/** Props for `Prisma.DomainOwnership.lookup`: a domain ownership this stack does not manage. */
+export interface DomainOwnershipLookup {
+  /** Project (or project ID) whose workspace owns the domain ownership. */
+  project: ProjectReference;
+  /** The domain ownership's exact domain, such as `app.example.com` or `*.example.com`. */
+  domain: string;
+}
+
 export interface DomainOwnershipRow extends Resource<
   "Prisma.DomainOwnership",
   DomainOwnershipRowProps,
@@ -60,7 +68,8 @@ export interface DomainOwnershipRow extends Resource<
     createdAt: string;
   },
   never,
-  Providers
+  Providers,
+  DomainOwnershipLookup
 > {}
 
 export const DomainOwnershipRow = Resource<DomainOwnershipRow>("Prisma.DomainOwnership");
@@ -156,7 +165,7 @@ const ProviderLive = () =>
         });
 
       return {
-        stables: [],
+        stables: ["workspaceId", "domain"],
         list: Effect.fn(function* () {
           const workspaces = yield* getWorkspaces({});
           const ownerships = yield* Effect.forEach(
@@ -165,6 +174,11 @@ const ProviderLive = () =>
             { concurrency: 4 },
           );
           return ownerships.flat().map(attrsFrom);
+        }),
+        lookup: Effect.fn(function* ({ project, domain }) {
+          const workspaceId = yield* resolveWorkspaceId(project);
+          const found = yield* findOwnership(workspaceId, normalizeHostname(domain));
+          return found ? attrsFrom(found) : undefined;
         }),
         diff: Effect.fn(function* ({ news, output }) {
           if (!output || !isInputObject(news) || typeof news.domain !== "string") {

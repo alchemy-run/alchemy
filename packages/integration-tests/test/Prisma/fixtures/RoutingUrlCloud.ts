@@ -405,6 +405,24 @@ export const makeUrlCloud = () => {
     rows.set(moved.id, moved);
     return moved;
   };
+  /** A RoutingUrl that `deleted` covered goes back to `pending` when no verified domain ownership covers it any more. */
+  const lapse = (deleted: WireOwnership) => {
+    for (const url of [...rows.values()]) {
+      if (!coveringDomains(url.hostname).includes(deleted.domain)) continue;
+      if (url.status !== "active" || zone.ownershipVerified(url.hostname)) continue;
+      rows.set(
+        url.id,
+        withOwnershipState({
+          ...routingUrl(url.id, {
+            hostname: url.hostname,
+            serviceId: url.serviceId,
+            logicalId: url.logicalId,
+          }),
+          customDomain: url.customDomain,
+        }),
+      );
+    }
+  };
   const fake: FakeManagementApi = makeFakeManagementApi((request) => {
     const path = request.pathname;
     const body = request.bodyJson as Record<string, unknown> | undefined;
@@ -538,6 +556,7 @@ export const makeUrlCloud = () => {
       if (request.method === "GET") return data(row);
       if (request.method === "DELETE") {
         ownerships.delete(row.id);
+        lapse(row);
         return noContent();
       }
     }

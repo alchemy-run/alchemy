@@ -80,6 +80,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
         compute: undefined,
         project: undefined,
         domain: undefined,
+        domainOwnership: undefined,
       } satisfies Website;
     }
     if (props.spa && props.errorPage !== undefined) {
@@ -130,6 +131,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
         compute: undefined,
         project: undefined,
         domain: undefined,
+        domainOwnership: undefined,
       } satisfies Website;
     }
     const artifact = yield* WebsiteArtifact("Artifact", {

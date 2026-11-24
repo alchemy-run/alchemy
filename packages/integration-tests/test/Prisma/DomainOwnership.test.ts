@@ -7,10 +7,14 @@ import { getProject, getWorkspaceDomainOwnerships } from "@distilled.cloud/prism
 import { adopt } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as DeployRetry from "alchemy/DeployRetry";
+import type * as DNSAdapter from "alchemy/DNS/Adapter";
+import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
+import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import {
@@ -41,6 +45,7 @@ import {
 } from "./fixtures/FakeManagementApi.ts";
 import { failureOf as failuresOf } from "./fixtures/Live.ts";
 import {
+  DnsRecords,
   HOSTNAME as URL_HOSTNAME,
   makeUrlCloud,
   OTHER_WORKSPACE_TXT_VALUE,
@@ -949,6 +954,103 @@ urlTestFor(deletedMidDeploy).test.provider(
       expect(deletedMidDeploy.ownerships.size).toBe(0);
     }),
   { tags },
+);
+
+/** A record whose value reports what `found` resolved to, so a deploy shows the lookup's attributes. */
+const lookupProbe = (found: DomainOwnership) =>
+  DnsRecords("Probe", {
+    records: Output.map(
+      Output.all(found.recordName, found.domainOwnershipId, found.domain, found.status),
+      ([name, id, domain, status]): DNSAdapter.DnsRecord[] => [
+        { name, type: "TXT", value: `${id} ${domain} ${status}` },
+      ],
+    ),
+  });
+
+const lookupTags = [...tags, "provider:prisma:lookup"];
+
+const lookedUp = makeUrlCloud();
+urlTestFor(lookedUp).test.provider(
+  "lookup finds a domain ownership made in the Console by its exact domain and writes nothing to Prisma",
+  (stack) =>
+    Effect.gen(function* () {
+      lookedUp.reset();
+      lookedUp.seedOwnership("*.example.com", "verified", "do-console");
+      lookedUp.seedOwnership("example.com", "unverified", "do-apex");
+      yield* stack.destroy();
+
+      yield* stack.deploy(
+        lookupProbe(DomainOwnership.lookup({ project: "proj-1", domain: "*.Example.com." })),
+      );
+
+      expect(lookedUp.zone.records).toEqual([
+        {
+          name: "_prisma-verification.example.com",
+          type: "TXT",
+          value: "do-console *.example.com verified",
+        },
+      ]);
+      expect(NOT_GET(lookedUp)).toEqual([]);
+
+      yield* stack.destroy();
+      expect([...lookedUp.ownerships.keys()].sort()).toEqual(["do-apex", "do-console"]);
+    }),
+  { tags: lookupTags },
+);
+
+const lookedUpMissing = makeUrlCloud();
+urlTestFor(lookedUpMissing).test.provider(
+  "lookup of a domain ownership that does not exist fails the deploy with LookupNotFoundError",
+  (stack) =>
+    Effect.gen(function* () {
+      lookedUpMissing.reset();
+      lookedUpMissing.seedOwnership("*.example.com", "verified", "do-console");
+      yield* stack.destroy();
+
+      const exit = yield* Effect.exit(
+        stack.deploy(
+          lookupProbe(DomainOwnership.lookup({ project: "proj-1", domain: "app.example.com" })),
+        ),
+      );
+
+      expect(Exit.isFailure(exit) && Cause.pretty(exit.cause)).toContain("LookupNotFoundError");
+      expect(NOT_GET(lookedUpMissing)).toEqual([]);
+
+      yield* stack.destroy();
+    }),
+  { tags: lookupTags },
+);
+
+const lookedUpManaged = makeUrlCloud();
+urlTestFor(lookedUpManaged).test.provider(
+  "lookup of a domain ownership this stack manages fails the deploy with LookupOfManagedResourceError",
+  (stack) =>
+    Effect.gen(function* () {
+      lookedUpManaged.reset({ fromZone: true });
+      yield* stack.destroy();
+      yield* stack.deploy(dnsStack());
+
+      lookedUpManaged.fake.captured.length = 0;
+      const exit = yield* Effect.exit(
+        stack.deploy(
+          Effect.gen(function* () {
+            yield* dnsStack();
+            return yield* lookupProbe(
+              DomainOwnership.lookup({ project: "proj-1", domain: URL_HOSTNAME }),
+            );
+          }),
+        ),
+      );
+
+      expect(Exit.isFailure(exit) && Cause.pretty(exit.cause)).toContain(
+        "LookupOfManagedResourceError",
+      );
+      expect(NOT_GET(lookedUpManaged)).toEqual([]);
+
+      yield* stack.destroy();
+      expect(lookedUpManaged.ownerships.size).toBe(0);
+    }),
+  { tags: lookupTags },
 );
 
 const live = Test.make({ providers: Prisma.providers() });

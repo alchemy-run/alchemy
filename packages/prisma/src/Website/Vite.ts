@@ -47,6 +47,25 @@ export interface ViteProps extends FrameworkSiteProps {
  * });
  * ```
  *
+ * **Example:** Several sites under one domain ownership
+ * ```typescript
+ * const dns = Cloudflare.DNS.Adapter();
+ * const example = yield* Prisma.DomainOwnership("Example", {
+ *   project,
+ *   domain: "*.example.com",
+ *   dns,
+ * });
+ * yield* Prisma.Website.Vite("Web", {
+ *   project,
+ *   domain: { name: "www.example.com", dns, ownership: example },
+ * });
+ * yield* Prisma.Website.Vite("Docs", {
+ *   project,
+ *   rootDir: "./docs",
+ *   domain: { name: "docs.example.com", dns, ownership: example },
+ * });
+ * ```
+ *
  * @resource
  * @product Website
  */

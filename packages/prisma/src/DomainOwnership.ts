@@ -12,6 +12,7 @@ import { publishesDns } from "./internal/PublishesDns.ts";
 import { publishedRecordsId } from "./internal/RoutingUrlRequiredRecords.ts";
 
 export { PrismaDomainOwnershipRequired } from "./internal/DomainOwnership.ts";
+export type { DomainOwnershipLookup } from "./internal/DomainOwnershipRow.ts";
 
 const recordSetId = (domain: string) =>
   publishedRecordsId(recordDomainOf(normalizeHostname(domain)));
@@ -71,9 +72,10 @@ export interface DomainOwnershipProps {
  * domain ownership the stack did not create, made in the Console, by a
  * RoutingUrl with `createDomainOwnership: true`, by Prisma for an older
  * custom domain, or by another stack, needs `--adopt`, or better `adopt(true)`
- * on this resource alone. With `dns`, the refusal can name
- * `Prisma.DomainVerification`, the resource that checks for an existing domain
- * ownership of this domain or of the wildcard or apex that shares its record,
+ * on this resource alone; to use one without managing it, use `lookup`. With
+ * `dns`, the refusal can name `Prisma.DomainVerification`, the resource that
+ * checks for an existing domain ownership of this domain or of the wildcard
+ * or apex that shares its record,
  * before the record is published. Adopting in
  * that last case makes the stack publish, and on destroy delete, the record
  * the other domain ownership also uses. Once two stacks have it,
@@ -121,32 +123,54 @@ export interface DomainOwnershipProps {
  * // with value ownership.recordValue, is published and Prisma looks
  * ```
  *
+ * ### Using a Domain Ownership Managed Elsewhere
+ * `Prisma.DomainOwnership.lookup` finds the workspace's domain ownership
+ * for exactly `domain`, made in the Console or by another stack. It is read
+ * while the deploy is planned, and never created, changed or deleted. The
+ * deploy fails when there is none, or when this stack manages it. It asks
+ * Prisma even under `alchemy dev`, and needs `workspaceManage` access.
+ *
+ * **Example:** Serve a site under a wildcard made in the Console
+ * ```typescript
+ * const example = Prisma.DomainOwnership.lookup({ project, domain: "*.example.com" });
+ * yield* Prisma.Website.Vite("Web", {
+ *   project,
+ *   domain: { name: "www.example.com", dns: Cloudflare.DNS.Adapter(), ownership: example },
+ * });
+ * ```
+ *
  * @resource
  * @product Compute
  */
-export const DomainOwnership = (id: string, props: DomainOwnershipProps) =>
-  Effect.gen(function* () {
-    const dns = props.dns !== undefined && (yield* publishesDns) ? props.dns : undefined;
-    const verification = yield* DomainVerification("Verification", {
-      project: props.project,
-      domain: props.domain,
-      ...(dns === undefined ? {} : { publishesRecord: true }),
-    });
-    if (dns === undefined) {
+export const DomainOwnership = Object.assign(
+  (id: string, props: DomainOwnershipProps) =>
+    Effect.gen(function* () {
+      const dns = props.dns !== undefined && (yield* publishesDns) ? props.dns : undefined;
+      const verification = yield* DomainVerification("Verification", {
+        project: props.project,
+        domain: props.domain,
+        ...(dns === undefined ? {} : { publishesRecord: true }),
+      });
+      if (dns === undefined) {
+        return yield* DomainOwnershipRow("Ownership", {
+          project: props.project,
+          domain: props.domain,
+        });
+      }
+      const published = yield* (yield* DNS.resolve(dns)).records(recordSetId(props.domain), {
+        records: Output.map(
+          Output.all(verification.recordName, verification.recordValue),
+          ([name, value]): DNS.DnsRecord[] => [{ name, type: "TXT", value }],
+        ),
+      });
       return yield* DomainOwnershipRow("Ownership", {
         project: props.project,
         domain: props.domain,
+        publishesRecord: Output.map(Output.of(published as ResourceLike), () => true),
       });
-    }
-    const published = yield* (yield* DNS.resolve(dns)).records(recordSetId(props.domain), {
-      records: Output.map(
-        Output.all(verification.recordName, verification.recordValue),
-        ([name, value]): DNS.DnsRecord[] => [{ name, type: "TXT", value }],
-      ),
-    });
-    return yield* DomainOwnershipRow("Ownership", {
-      project: props.project,
-      domain: props.domain,
-      publishesRecord: Output.map(Output.of(published as ResourceLike), () => true),
-    });
-  }).pipe(Namespace.push(id));
+    }).pipe(Namespace.push(id)),
+  {
+    lookup: (props: Parameters<typeof DomainOwnershipRow.lookup>[0]) =>
+      DomainOwnershipRow.lookup(props),
+  },
+);
