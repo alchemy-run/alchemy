@@ -162,25 +162,45 @@ Anything else a handler hits is a defect: use `Effect.orDie` on errors the model
 
 ## Declare a tool inline
 
-A tool can be a value, declared where its bindings are in scope:
+A tool can be a value. Give it an Effect that binds what it uses and returns the handler:
 
 ```typescript
-const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
-
-const SaveNote = AI.Tool(
+const SaveNote = yield* AI.Tool(
   "save_note",
   {
     description: "Save a note the user can read later.",
     parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
     success: Schema.Void,
   },
-  Effect.fn(function* ({ key, text }) {
-    yield* notes.put(key, text).pipe(Effect.orDie);
+  Effect.gen(function* () {
+    const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
+    return Effect.fn(function* ({ key, text }) {
+      yield* notes.put(key, text).pipe(Effect.orDie);
+    });
   }),
 );
 ```
 
 An inline tool has no Layer to provide. Mention it, or list it on a harness, like any other.
+
+## A tool uses only what it binds
+
+A plan lists each tool with the bindings it binds while it is built:
+
+```
+[Session]   Tool save_note
+[Session]     Cloudflare.KVNamespace.ReadWrite Cloudflare.KV.Namespace(Notes)
+```
+
+That list is also the limit when the tool runs. A handler that uses a client bound somewhere else, one it was handed or closed over, fails on that call:
+
+```
+CapabilityDenied: Tool save_note used Cloudflare.KVNamespace.ReadWrite on
+Cloudflare.KV.Namespace(Notes), which the plan does not list under it.
+Bind it where the tool is built.
+```
+
+So bind inside the tool: in the Effect of an inline tool, or of `make`. A service the tool looks up while it is built counts too, with whatever that service's Layer bound.
 
 ## Know which call is running
 

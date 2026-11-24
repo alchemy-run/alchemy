@@ -26,10 +26,9 @@ type ToolName = "add" | "save_note";
 export default class Session extends Cloudflare.DurableObject<Session>()(
   "Session",
   Effect.gen(function* () {
-    const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
-
-    // An inline tool, closing over a binding resolved in this scope.
-    const SaveNote = AI.Tool(
+    // An inline tool. Its Effect binds what the tool uses, so the plan lists
+    // the namespace under `save_note` and the tool can use nothing else.
+    const SaveNote = yield* AI.Tool(
       "save_note",
       {
         description:
@@ -37,8 +36,17 @@ export default class Session extends Cloudflare.DurableObject<Session>()(
         parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
         success: Schema.Void,
       },
-      Effect.fn(function* ({ key, text }) {
-        yield* notes.put(key, text).pipe(Effect.orDie);
+      Effect.gen(function* () {
+        const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
+        return Effect.fn(function* ({
+          key,
+          text,
+        }: {
+          readonly key: string;
+          readonly text: string;
+        }) {
+          yield* notes.put(key, text).pipe(Effect.orDie);
+        });
       }),
     );
 

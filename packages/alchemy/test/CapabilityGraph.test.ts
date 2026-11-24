@@ -1,7 +1,9 @@
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 /**
@@ -14,12 +16,16 @@ import * as Layer from "effect/Layer";
  *   `serviceOption`;
  * - a runtime built at plan time stores what its terms reach on the stack.
  */
+import * as Binding from "@/Binding.ts";
 import {
+  calling,
   CapabilityGraph,
+  CurrentPolicy,
   framed,
   makeCapabilityGraph,
   observeLayerBuilds,
   observeLookups,
+  policyOf,
   recordAcquisition,
 } from "@/CapabilityGraph.ts";
 import { Platform } from "@/Platform.ts";
@@ -47,6 +53,23 @@ const MailLive = Layer.effect(
   Effect.gen(function* () {
     yield* recordAcquisition({ binding: "AWS.SES.SendEmail", targets: [] });
     return { send: Effect.void };
+  }),
+);
+
+/** A binding whose client has a method and an Effect. */
+interface Store extends Binding.Service<
+  Store,
+  "Test.Store",
+  (name: string) => Effect.Effect<{
+    readonly put: (value: string) => Effect.Effect<string>;
+    readonly count: Effect.Effect<number>;
+  }>
+> {}
+const Store = Binding.Service<Store>("Test.Store");
+const StoreLive = Layer.succeed(
+  Store,
+  Effect.fn(function* (_name: string) {
+    return { put: (value: string) => Effect.succeed(`put ${value}`), count: Effect.succeed(1) };
   }),
 );
 
@@ -188,6 +211,53 @@ describe("CapabilityGraph", { tags: ["unit"] }, () => {
     }),
   );
 
+  it.effect("at runtime a tool can use only the bindings the plan listed under it", () =>
+    Effect.gen(function* () {
+      // The plan: `save` binds the store where it is built, `peek` binds nothing.
+      const graph = makeCapabilityGraph();
+      yield* observed(
+        graph,
+        Effect.gen(function* () {
+          yield* framed("Tool", "save")(Store("notes"));
+          yield* framed("Tool", "peek")(Effect.void);
+        }),
+      );
+      const policy = policyOf(graph.describe());
+      expect(policy).toEqual({
+        bindings: ["Test.Store|"],
+        terms: { "Tool:peek": [], "Tool:save": [0] },
+      });
+
+      // The runtime: the same client, whoever holds it.
+      const store = yield* Store("notes").pipe(Effect.provideService(CurrentPolicy, policy));
+      expect(yield* store.put("a")).toBe("put a");
+      expect(yield* calling("Tool", "save")(store.put("b"))).toBe("put b");
+      expect(yield* Effect.exit(calling("Tool", "save")(store.count))).toEqual(Exit.succeed(1));
+
+      // `peek` closed over a client it never bound: the build could not see that.
+      const denied = yield* Effect.exit(calling("Tool", "peek")(store.put("c")));
+      expect(Exit.isFailure(denied) && Cause.squash(denied.cause)).toMatchObject({
+        _tag: "CapabilityDenied",
+        kind: "Tool",
+        term: "peek",
+        binding: "Test.Store",
+        message:
+          "Tool peek used Test.Store, which the plan does not list under it. Bind it where the tool is built.",
+      });
+      // A tool the plan never saw is held to nothing, and so are forked fibers of a tool.
+      expect(Exit.isFailure(yield* Effect.exit(calling("Tool", "new")(store.count)))).toBe(true);
+      const forked = yield* calling(
+        "Tool",
+        "peek",
+      )(Effect.flatMap(Effect.forkChild(Effect.exit(store.count)), Fiber.join));
+      expect(Exit.isFailure(forked)).toBe(true);
+
+      // Without a policy a client is what the binding returned.
+      const free = yield* Store("notes");
+      expect(yield* calling("Tool", "peek")(free.put("d"))).toBe("put d");
+    }).pipe(Effect.provide(StoreLive)),
+  );
+
   it.effect("without a graph in context every recorder does nothing", () =>
     Effect.gen(function* () {
       yield* framed("Tool", "lonely")(recordAcquisition({ binding: "X", targets: [] }));
@@ -202,8 +272,17 @@ interface Widget extends Resource<
   { name: string },
   { env?: Record<string, any> }
 > {}
+/** What the plan stored on the runtime, by key. */
+const stored: Record<string, unknown> = {};
 const Widget: any = Platform<Widget>("Test.GraphWidget", {
-  createRuntimeContext: () => ({}) as any,
+  createRuntimeContext: () =>
+    ({
+      set: (key: string, output: { readonly value: unknown }) =>
+        Effect.sync(() => {
+          stored[key] = output.value;
+          return key;
+        }),
+    }) as any,
 });
 const providers = Layer.mergeAll(
   Provider.succeed(Widget, {
@@ -279,6 +358,11 @@ test.provider(
           ],
         },
       ]);
+      // The same list is stored on the runtime, where it is the limit.
+      expect(JSON.parse(stored.ALCHEMY_CAPABILITIES as string)).toEqual({
+        bindings: ["Test.ProbeBinding|Test.ModalResource(probed)"],
+        terms: { "Process:Prober": [0], "Tool:probe": [0] },
+      });
     }),
   { tags: ["unit"] },
 );

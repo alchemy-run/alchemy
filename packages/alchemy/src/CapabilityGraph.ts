@@ -27,15 +27,25 @@
  * It is recorded at plan time. Without a graph in context every recorder
  * here does nothing.
  *
+ * The plan's list is also the limit at runtime. The plan stores it on the
+ * runtime as a {@link Policy}, and every client a `Binding.Service` hands out
+ * checks it: a call made while a tool runs ({@link calling}) dies with
+ * {@link CapabilityDenied} unless the plan listed that binding under the
+ * tool. So a tool that closes over a client bound somewhere else, which the
+ * build could not see, fails on its first use and never works unseen.
+ *
  * @module
  */
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
+import { RuntimeContext } from "./RuntimeContext.ts";
 
 /** `Layer` for a Layer build. Anything else names a kind of term: `Process`, `Tool`. */
 export type FrameKind = "Layer" | (string & {});
@@ -466,3 +476,152 @@ export const recordAcquisition = (acquisition: Acquisition): Effect.Effect<void>
         }
       }),
   );
+
+/**
+ * What each named term may use at runtime: the plan's list, as stored on the
+ * runtime. `terms` maps `Kind:name` to indexes into `bindings`.
+ */
+export interface Policy {
+  readonly bindings: ReadonlyArray<string>;
+  readonly terms: { readonly [term: string]: ReadonlyArray<number> };
+}
+
+/** The env key a runtime's {@link Policy} is stored under. */
+export const POLICY_KEY = "ALCHEMY_CAPABILITIES";
+
+/** The {@link Policy} for what {@link CapabilityGraphShape.describe} gave. */
+export const policyOf = (nodes: ReadonlyArray<CapabilityNode>): Policy => {
+  const bindings: Array<string> = [];
+  const index = new Map<string, number>();
+  const terms: { [term: string]: ReadonlyArray<number> } = {};
+  const visit = (node: CapabilityNode): void => {
+    const id = `${node.kind}:${node.name}`;
+    if (!(id in terms)) {
+      terms[id] = node.permissions.map((permission) => {
+        const key = keyOf(permission);
+        let at = index.get(key);
+        if (at === undefined) {
+          at = bindings.push(key) - 1;
+          index.set(key, at);
+        }
+        return at;
+      });
+    }
+    node.uses.forEach(visit);
+  };
+  nodes.forEach(visit);
+  return { bindings, terms };
+};
+
+/**
+ * The policy in force. Set to try one without a deployed runtime; otherwise
+ * it is read from the runtime's env, where the plan stored it.
+ */
+export const CurrentPolicy: Context.Reference<Policy | undefined> = Context.Reference(
+  "alchemy/CapabilityGraph/CurrentPolicy",
+  { defaultValue: (): Policy | undefined => undefined },
+);
+
+/** The named term running on this fiber: the tool whose handler is being called. */
+export const CurrentCaller: Context.Reference<
+  { readonly kind: string; readonly name: string } | undefined
+> = Context.Reference("alchemy/CapabilityGraph/CurrentCaller", {
+  defaultValue: (): { readonly kind: string; readonly name: string } | undefined => undefined,
+});
+
+/**
+ * Run `effect` as a named term: `calling("Tool", name)(handler(parameters))`.
+ * The bindings it uses are checked against what the plan listed under it.
+ */
+export const calling =
+  (kind: NamedFrameKind, name: string) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.provideService(effect, CurrentCaller, { kind, name });
+
+/** A term used a binding the plan does not list under it. */
+export class CapabilityDenied extends Data.TaggedError("CapabilityDenied")<{
+  /** The kind of term that made the call: `Tool`. */
+  readonly kind: string;
+  /** Its name. */
+  readonly term: string;
+  readonly binding: string;
+  readonly targets: ReadonlyArray<string>;
+  readonly message: string;
+}> {}
+
+const policies = new WeakMap<object, Policy | undefined>();
+
+/** The policy a client bound now is held to, if the runtime has one. */
+const policyInForce: Effect.Effect<Policy | undefined> = Effect.flatMap(CurrentPolicy, (given) => {
+  if (given !== undefined || !globalThis.__ALCHEMY_RUNTIME__) return Effect.succeed(given);
+  return Effect.flatMap(Effect.serviceOption(RuntimeContext), (runtime) => {
+    if (Option.isNone(runtime)) return Effect.succeed(undefined);
+    const context = runtime.value;
+    if (policies.has(context)) return Effect.succeed(policies.get(context));
+    return Effect.map(context.get<string>(POLICY_KEY), (raw) => {
+      let policy: Policy | undefined;
+      try {
+        policy =
+          typeof raw === "string" ? (JSON.parse(raw) as Policy) : (raw as Policy | undefined);
+      } catch {
+        policy = undefined;
+      }
+      policies.set(context, policy);
+      return policy;
+    });
+  });
+});
+
+/**
+ * Hold a client a `Binding.Service` hands out to the policy in force: each
+ * call it makes while a named term runs is checked. Without a policy the
+ * client is returned as it is.
+ */
+export const guardClient = (acquisition: Acquisition, client: unknown): Effect.Effect<unknown> =>
+  Effect.map(policyInForce, (policy) => {
+    if (policy === undefined) return client;
+    const at = policy.bindings.indexOf(keyOf(acquisition));
+    const check = Effect.flatMap(CurrentCaller, (caller) => {
+      if (caller === undefined) return Effect.void;
+      if (at !== -1 && policy.terms[`${caller.kind}:${caller.name}`]?.includes(at)) {
+        return Effect.void;
+      }
+      const what = `${acquisition.binding}${acquisition.targets.length > 0 ? ` on ${acquisition.targets.join(", ")}` : ""}`;
+      return Effect.die(
+        new CapabilityDenied({
+          kind: caller.kind,
+          term: caller.name,
+          ...acquisition,
+          message: `${caller.kind} ${caller.name} used ${what}, which the plan does not list under it. Bind it where the ${caller.kind.toLowerCase()} is built.`,
+        }),
+      );
+    });
+    const guard = (value: unknown): unknown =>
+      Effect.isEffect(value)
+        ? // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- a client's Effects come in any shape
+          Effect.andThen(check, value as Effect.Effect<any, any, any>)
+        : Stream.isStream(value)
+          ? Stream.unwrap(Effect.as(check, value))
+          : value;
+    if (Effect.isEffect(client) || Stream.isStream(client)) return guard(client);
+    if (typeof client === "function") {
+      return new Proxy(client, {
+        apply: (target, thisArg, argArray) => guard(Reflect.apply(target, thisArg, argArray)),
+        get: (target, prop, receiver) => method(target, prop, receiver),
+      });
+    }
+    if (typeof client === "object" && client !== null) {
+      return new Proxy(client, { get: (target, prop, receiver) => method(target, prop, receiver) });
+    }
+    return client;
+    function method(target: object, prop: string | symbol, receiver: unknown): unknown {
+      const value = Reflect.get(target, prop, receiver);
+      const own = Reflect.getOwnPropertyDescriptor(target, prop);
+      // A frozen property must be returned as it is.
+      if (own !== undefined && !own.configurable && !own.writable) return value;
+      if (typeof value === "function") {
+        return (...args: Array<unknown>) => guard(Reflect.apply(value, target, args));
+      }
+      return guard(value);
+    }
+  });

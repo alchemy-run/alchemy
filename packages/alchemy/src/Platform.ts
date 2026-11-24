@@ -20,6 +20,8 @@ import {
   makeCapabilityGraph,
   observeLayerBuilds,
   observeLookups,
+  POLICY_KEY,
+  policyOf,
 } from "./CapabilityGraph.ts";
 import type { Dependencies } from "./Dependencies.ts";
 import { toFqn } from "./FQN.ts";
@@ -680,6 +682,12 @@ export const Platform = <
                 if (reached.length > 0) {
                   const stack = yield* Stack;
                   (stack.capabilities ??= {})[instance.FQN] = reached;
+                  // The same list is the limit at runtime: a tool that uses
+                  // a binding not listed under it dies (CapabilityGraph.ts).
+                  yield* runtimeContext.set(
+                    POLICY_KEY,
+                    Output.literal(JSON.stringify(policyOf(reached))),
+                  );
                 }
               }
 

@@ -33,10 +33,8 @@ const Programs = AI.CodeMode(Add, Withdraw);
 export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
   "PiSession",
   Effect.gen(function* () {
-    const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
-
-    // An inline tool, closing over a binding resolved in this scope.
-    const SaveNote = AI.Tool(
+    // An inline tool. Its Effect binds what the tool uses.
+    const SaveNote = yield* AI.Tool(
       "save_note",
       {
         description:
@@ -44,8 +42,17 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
         parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
         success: Schema.Void,
       },
-      Effect.fn(function* ({ key, text }) {
-        yield* notes.put(key, text).pipe(Effect.orDie);
+      Effect.gen(function* () {
+        const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
+        return Effect.fn(function* ({
+          key,
+          text,
+        }: {
+          readonly key: string;
+          readonly text: string;
+        }) {
+          yield* notes.put(key, text).pipe(Effect.orDie);
+        });
       }),
     );
 

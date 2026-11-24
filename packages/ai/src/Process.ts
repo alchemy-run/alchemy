@@ -21,7 +21,7 @@ import { isMcpServer, type McpServerClass } from "./McpServer.ts";
 import { isModel, type AnyModel, type ModelClass } from "./Model.ts";
 import {
   isToolGroup,
-  Tool,
+  ownTool,
   ToolCall,
   type AnyTool,
   type InlineTool,
@@ -426,7 +426,7 @@ const childTools = (
   const cached = known.tools.get(child.name);
   if (cached !== undefined) return cached;
   const id = snake(child.name);
-  const start = Tool(
+  const start = ownTool(
     `start_${id}`,
     {
       description: `Start a session of the ${child.name} process: ${child.description} It runs on its own, apart from this conversation. Returns the session's name.`,
@@ -472,7 +472,7 @@ const childTools = (
       return { session };
     }),
   );
-  const send = Tool(
+  const send = ownTool(
     `send_${id}`,
     {
       description: `Send a message to a session of the ${child.name} process that was started earlier.`,
@@ -638,7 +638,7 @@ const compileUnframed = (definition: Definition): Effect.Effect<ProcessService<a
     const follow =
       followable.length === 0
         ? undefined
-        : Tool(
+        : ownTool(
             `follow_${snake(definition.name)}`,
             {
               description:

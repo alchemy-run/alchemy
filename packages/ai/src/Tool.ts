@@ -1,4 +1,4 @@
-import { framed } from "alchemy/CapabilityGraph";
+import { calling, framed } from "alchemy/CapabilityGraph";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { Tool as AiTool } from "effect/ai";
 import * as Cause from "effect/Cause";
@@ -133,7 +133,7 @@ export interface ToolClass<
   ): Layer.Layer<Self, never, Exclude<R, Scope.Scope> | Sandboxes>;
 }
 
-/** A tool declared inline, closing over whatever is in scope. */
+/** A tool declared inline: a value, with no Layer to provide. */
 export interface InlineTool<
   Name extends string,
   Spec extends ToolSpec,
@@ -195,6 +195,20 @@ export interface ToolConstructor {
     spec: Spec,
     handler: ToolHandler<Spec>,
   ): InlineTool<Name, Spec, Sandbox>;
+  /**
+   * Inline, with what it binds: the Effect runs where the tool is yielded
+   * and returns the handler, so the plan lists its bindings under the tool.
+   */
+  <const Name extends string, const Spec extends ToolSpec, R>(
+    name: Name,
+    spec: Spec,
+    build: Effect.Effect<PlainToolHandler<Spec>, never, R>,
+  ): Effect.Effect<InlineTool<Name, Spec>, never, R>;
+  <const Name extends string, const Spec extends ToolSpec, R>(
+    name: Name,
+    spec: Spec,
+    build: Effect.Effect<ToolHandler<Spec>, never, R>,
+  ): Effect.Effect<InlineTool<Name, Spec, Sandbox>, never, R>;
 }
 
 /**
@@ -295,19 +309,37 @@ export interface ToolConstructor {
  * );
  * ```
  *
- * **Example:** Inline, closing over the Durable Object's bindings
+ * **Example:** Inline, with a binding of its own
  * ```typescript
- * const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
- * const SaveNote = AI.Tool(
+ * // The Effect binds what the tool uses and returns its handler. A plan
+ * // lists the namespace under `save_note`, and at runtime the tool can use
+ * // no binding the plan does not list under it.
+ * const SaveNote = yield* AI.Tool(
  *   "save_note",
  *   {
  *     description: "Save a note the user can read later.",
  *     parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
  *     success: Schema.Void,
  *   },
- *   Effect.fn(function* ({ key, text }) {
- *     yield* notes.put(key, text).pipe(Effect.orDie);
+ *   Effect.gen(function* () {
+ *     const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
+ *     return Effect.fn(function* ({ key, text }) {
+ *       yield* notes.put(key, text).pipe(Effect.orDie);
+ *     });
  *   }),
+ * );
+ * ```
+ *
+ * **Example:** Inline, with nothing to bind
+ * ```typescript
+ * const Add = AI.Tool(
+ *   "add",
+ *   {
+ *     description: "Add two numbers.",
+ *     parameters: Schema.Struct({ a: Schema.Number, b: Schema.Number }),
+ *     success: Schema.Struct({ sum: Schema.Number }),
+ *   },
+ *   ({ a, b }) => Effect.succeed({ sum: a + b }),
  * );
  * ```
  */
@@ -324,16 +356,57 @@ const lift =
         : Effect.succeed(result);
     });
 
+/**
+ * A handler that runs as the tool `name`: a binding it uses must be one the
+ * plan lists under that tool (alchemy's CapabilityGraph).
+ */
+const called =
+  (name: string, handler: ToolHandler<ToolSpec>): ToolHandler<ToolSpec> =>
+  (parameters) =>
+    calling("Tool", name)(handler(parameters));
+
 /** What `make` was given, as the Effect that builds the handler. */
 const implOf = (
+  name: string,
   impl: Effect.Effect<AnyHandler, never, unknown> | AnyHandler,
 ): Effect.Effect<ToolHandler<ToolSpec>, never, unknown> =>
-  Effect.isEffect(impl) ? Effect.map(impl, lift) : Effect.succeed(lift(impl));
+  Effect.isEffect(impl)
+    ? Effect.map(impl, (handler) => called(name, lift(handler)))
+    : Effect.succeed(called(name, lift(impl)));
+
+/**
+ * An inline tool of the framework's own (a process's `start_` and `follow_`
+ * tools). It does not run as a named tool, so what it uses is not held to
+ * the plan's list: it has no Layer where a binding could be listed.
+ *
+ * @internal
+ */
+export const ownTool = ((name: string, spec: ToolSpec, handler: AnyHandler): unknown => ({
+  [ToolTypeId]: "inline",
+  toolName: name,
+  spec,
+  handler: lift(handler),
+})) as ToolConstructor;
 
 export const Tool = ((...args: ReadonlyArray<unknown>): unknown => {
+  if (args.length === 3 && typeof args[0] === "string" && Effect.isEffect(args[2])) {
+    const [name, spec, build] = args as [string, ToolSpec, Effect.Effect<AnyHandler>];
+    // Built under the tool's own frame: what it binds is what the tool can reach.
+    return framed(
+      "Tool",
+      name,
+    )(
+      Effect.map(build, (handler) => ({
+        [ToolTypeId]: "inline",
+        toolName: name,
+        spec,
+        handler: called(name, lift(handler)),
+      })),
+    );
+  }
   if (args.length === 3 && typeof args[0] === "string" && typeof args[2] === "function") {
     const [name, spec, handler] = args as [string, ToolSpec, AnyHandler];
-    return { [ToolTypeId]: "inline", toolName: name, spec, handler: lift(handler) };
+    return { [ToolTypeId]: "inline", toolName: name, spec, handler: called(name, lift(handler)) };
   }
   return (
     name: string,
@@ -349,7 +422,7 @@ export const Tool = ((...args: ReadonlyArray<unknown>): unknown => {
       static readonly impl = impl;
       static make(implementation: Effect.Effect<AnyHandler, never, unknown> | AnyHandler) {
         // Built under the tool's own frame: what it binds is what the tool can reach.
-        return Layer.effect(this as never, framed("Tool", name)(implOf(implementation)));
+        return Layer.effect(this as never, framed("Tool", name)(implOf(name, implementation)));
       }
     };
   };
@@ -517,7 +590,13 @@ const toolTag = (name: string) => {
         framed(
           "Tool",
           name,
-        )(Effect.map(implOf(impl), (handler): ToolTagService => ({ kind: "tool", spec, handler }))),
+        )(
+          Effect.map(implOf(name, impl), (handler): ToolTagService => ({
+            kind: "tool",
+            spec,
+            handler,
+          })),
+        ),
       );
     }
     static native(engine: string, tool: unknown) {
