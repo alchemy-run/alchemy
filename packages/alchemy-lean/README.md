@@ -268,17 +268,18 @@ def Warehouse (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
     return fun _ => return { status := 204 }
 ```
 
-`served.host` runs a domain model on a journal. Each outside call of the model is answered by an operation.
+`served.host` runs a domain model on a journal, and says who answers each call the model makes to the outside.
 
 ```lean
-def outside (shipments : Queue) [Has role (SQS.Send shipments)] : (c : Call) → Run role Never (Reply c)
-  | .charge order amount => pure (sandboxCharge order amount)
-  | .ship order item => SQS.sendMessage shipments s!"{order}:{item}"
+def theShop (role : Access Kind) (orders : Bucket) (shipments : Queue) … : Hosted served role :=
+  served.host (S3.journal orders) fun
+    | .charge order amount => pure (sandboxCharge order amount)
+    | .ship order item => SQS.sendMessage shipments s!"{order}:{item}"
 
 def Api (orders : Bucket) (shipments : Queue) : Construct Kind Function := do
   let stage ← stage
   Lambda.Function "Api" { url := true, memory := if stage = "prod" then 1024 else 512 } do
-    return route (served.host (S3.journal orders) (outside shipments))
+    return route (theShop _ orders shipments)
 ```
 
 A Cloudflare Worker ends with `fetch` and typed methods other Workers call. Its bindings are still taken as steps.
@@ -357,9 +358,9 @@ theorem everyGrantIsCalledFor : prod.EveryGrantIsCalledFor := by decide
 ```
   Api
     may        read Orders/journal
-                 ← Shop.lean:272  S3.journal orders
+                 ← Shop.lean:273  theShop _ orders shipments
     may        send to Shipments
-                 ← Shop.lean:272  outside shipments
+                 ← Shop.lean:273  theShop _ orders shipments
   Warehouse
     may        write Orders/packed
                  ← Shop.lean:279  S3.putObject orders ["packed"] order item

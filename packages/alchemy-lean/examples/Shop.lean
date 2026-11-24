@@ -222,12 +222,6 @@ def describe (order : Order.State) : Response :=
   | .paid charge => { status := 200, body := s!"paid {charge}" }
   | .declined reason => { status := 402, body := reason }
 
-/-- Who answers each call the shop makes to the outside. -/
-def outside {role : Access Kind} (shipments : Queue) [Has role (SQS.Send shipments)] :
-    (c : Call) → Run role Never (Reply c)
-  | .charge order amount => pure (sandboxCharge order amount)
-  | .ship order item => SQS.sendMessage shipments s!"{order}:{item}"
-
 /-! The Api's routes, each a function of the hosted shop. -/
 
 section Routes
@@ -265,11 +259,25 @@ def route (request : Request) : Run role Never Response :=
 
 end Routes
 
+/--
+The shop, hosted: its history is a journal in the bucket, and each call it makes
+to the outside is answered here. Charging goes to a sandbox gateway; shipping
+is a message on the queue.
+-/
+def theShop (role : Access Kind) (orders : Bucket) (shipments : Queue)
+    [Has role (S3.Get orders ["journal"])] [Has role (S3.Put orders ["journal"])]
+    [Has role (S3.Get orders (["journal"] ++ ["lines"]))]
+    [Has role (S3.Put orders (["journal"] ++ ["lines"]))]
+    [Has role (SQS.Send shipments)] : Hosted served role :=
+  served.host (S3.journal orders) fun
+    | .charge order amount => pure (sandboxCharge order amount)
+    | .ship order item => SQS.sendMessage shipments s!"{order}:{item}"
+
 /-- Takes orders. Hosts the shop: its history is in the bucket, and it ships through the queue. -/
 def Api (orders : Bucket) (shipments : Queue) : Construct Kind Function := do
   let stage ← stage
   Lambda.Function "Api" { url := true, memory := if stage = "prod" then 1024 else 512 } do
-    return route (served.host (S3.journal orders) (outside shipments))
+    return route (theShop _ orders shipments)
 
 /-- Consumes the shipments queue and files a packing slip for each. -/
 def Warehouse (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
@@ -314,14 +322,6 @@ the bucket holds afterwards. Proved from the laws of the bindings.
 -/
 
 section ApiBehaviour
-
-/-- The Api's shop: its journal in the bucket, its calls answered through the queue. -/
-abbrev theShop (role : Access Kind) (orders : Bucket) (shipments : Queue)
-    [Has role (S3.Get orders ["journal"])] [Has role (S3.Put orders ["journal"])]
-    [Has role (S3.Get orders (["journal"] ++ ["lines"]))]
-    [Has role (S3.Put orders (["journal"] ++ ["lines"]))]
-    [Has role (SQS.Send shipments)] : Hosted served role :=
-  served.host (S3.journal orders) (outside shipments)
 
 variable {role : Access Kind} {orders : Bucket} {shipments : Queue}
   [Has role (S3.Get orders ["journal"])] [Has role (S3.Put orders ["journal"])]
@@ -377,12 +377,12 @@ theorem postingACommand (command : Order.Command) (cloud : Memory) (whole : Whol
         cases call with
         | charge order amount => exact ⟨rfl, whole⟩
         | ship order item =>
-          have sent : (outside (role := role) shipments (.ship order item)).eval InMemory cloud
+          have sent : ((theShop role orders shipments).call (.ship order item)).eval InMemory cloud
               = (.ok (), cloud.send shipments s!"{order}:{item}") := SQS.sendMessage_eval _ _ cloud
           show S3.lines orders ["journal"]
-              ((outside (role := role) shipments (.ship order item)).eval InMemory cloud).2 = _ ∧
+              (((theShop role orders shipments).call (.ship order item)).eval InMemory cloud).2 = _ ∧
             S3.Sound orders ["journal"]
-              ((outside (role := role) shipments (.ship order item)).eval InMemory cloud).2
+              (((theShop role orders shipments).call (.ship order item)).eval InMemory cloud).2
           rw [sent]
           have same := S3.untouched (bucket := orders) (under := ["journal"]) (m := cloud)
             (m' := cloud.send shipments s!"{order}:{item}") (fun _ => rfl)
