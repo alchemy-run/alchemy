@@ -15,6 +15,7 @@ import Alchemy.Cloud.Effect
 import Alchemy.Cloud.Layer
 import Alchemy.Cloud.Graph
 import Alchemy.Cloud.Sim
+import Alchemy.Cloud.Tactics
 import Alchemy.Cloud.AWS
 import Alchemy.Cloud.Hosted
 import Alchemy.Cloud.AWSJournal

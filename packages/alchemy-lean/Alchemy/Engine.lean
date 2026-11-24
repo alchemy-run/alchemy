@@ -126,3 +126,58 @@ def run (moves : List (Move m)) (fuel : Nat := 1000) : World m.signature :=
 
 end Model
 end Alchemy
+
+namespace Alchemy
+namespace Model
+
+variable (m : Model)
+
+theorem answerGo_split (c : m.signature.Call) (reply : m.signature.Reply c) :
+    ∀ (fibers fibers' : List (Fiber m.signature)), m.answerGo c reply fibers = some fibers' →
+      ∃ before f after k, fibers = before ++ f :: after ∧ f.program = .call c k ∧
+        fibers' = before ++ { f with program := k reply } :: after := by
+  intro fibers
+  induction fibers with
+  | nil => intro _ h; simp [answerGo] at h
+  | cons f rest ih =>
+    intro fibers' h
+    unfold answerGo at h
+    split at h
+    · next c' k program =>
+      split at h
+      · next same =>
+        subst same
+        cases h
+        exact ⟨[], f, rest, k, rfl, program, rfl⟩
+      · obtain ⟨tail, found, rfl⟩ := Option.map_eq_some_iff.mp h
+        obtain ⟨before, g, after, k', rfl, program', rfl⟩ := ih tail found
+        exact ⟨f :: before, g, after, k', rfl, program', rfl⟩
+    · obtain ⟨tail, found, rfl⟩ := Option.map_eq_some_iff.mp h
+      obtain ⟨before, g, after, k', rfl, program', rfl⟩ := ih tail found
+      exact ⟨f :: before, g, after, k', rfl, program', rfl⟩
+
+/-- An answer the engine applies is one an outside system may give. -/
+theorem answer_step (w w' : World m.signature) (c : m.signature.Call) (reply : m.signature.Reply c)
+    (h : m.answer w c reply = some w') : m.Step w w' := by
+  obtain ⟨fibers, found, rfl⟩ := Option.map_eq_some_iff.mp h
+  obtain ⟨before, f, after, k, split, program, rfl⟩ := m.answerGo_split c reply _ _ found
+  exact .answer w f before after c k reply split program
+
+/-- Sending an offered command, and letting what follows run, stays within what the model can reach. -/
+theorem play_send_reachable (fuel : Nat) (w : World m.signature) (s : Send m.signature.aggregates)
+    (offered : m.offered s) (reach : m.Reachable w) : m.Reachable (m.play fuel w (.send s)) :=
+  m.settle_reachable fuel _ (.step reach (.send w s offered))
+
+/-- So does an outside system's answer. -/
+theorem play_answer_reachable (fuel : Nat) (w : World m.signature) (c : m.signature.Call)
+    (reply : m.signature.Reply c) (reach : m.Reachable w) :
+    m.Reachable (m.play fuel w (.answer c reply)) := by
+  show m.Reachable (match m.answer w c reply with
+    | some w' => m.settle fuel w'
+    | none => w)
+  split
+  · next w' h => exact m.settle_reachable fuel _ (.step reach (m.answer_step w w' c reply h))
+  · exact reach
+
+end Model
+end Alchemy

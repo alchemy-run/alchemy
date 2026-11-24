@@ -189,9 +189,7 @@ def ChargedOnce (s : State) : Prop :=
 
 /-- No command an order accepts breaks the rule. -/
 theorem chargedOnce_kept : Order.Keeps ChargedOnce := by
-  intro ctx s c es h eq
-  cases c <;> simp only [Shop.decide] at eq <;> (repeat' split at eq) <;>
-    grind [evolve, Aggregate.apply, ChargedOnce]
+  aggregate_rule [Shop.decide, evolve, ChargedOnce]
 
 /--
 So it holds for every order in every world the shop can reach: whatever callers
@@ -253,45 +251,26 @@ example : Shop.passes [
     .rejected .order .notAwaitingPayment
   ] = true := by decide
 
-/-! ## The outside systems, as services -/
+/-! ## How the shop is spoken to -/
 
-/-- The payment gateway. -/
-structure Payments (access : Access Kind) where
-  charge : String → Nat → Run access Never Charge
-
-/-- The warehouse. -/
-structure Warehouse (access : Access Kind) where
-  ship : String → String → Run access Never Unit
-
-variable {In R : Service Kind}
-
-/-- A gateway that approves anything up to a limit. It touches no resource. -/
-def PaymentsSandbox (limit : Nat := 1000) : Layer Nothing Payments := .make do
-  return {
-    charge := fun order amount =>
-      pure (if amount ≤ limit then .approved s!"ch_{order}" else .refused "over the limit") }
-
-/-- A warehouse that is told what to ship through a queue. -/
-def WarehouseQueue (queue : Queue) [Uses In (SQS.SendMessage.Client queue)] : Layer In Warehouse :=
-  .make do
-    let shipments ← SQS.SendMessage queue
-    return { ship := fun order item => shipments.call s!"{order}:{item}" }
-
-/-- The warehouse, on the queue itself. -/
-def WarehouseLive (queue : Queue) : Layer Nothing Warehouse :=
-  (WarehouseQueue queue).provide (SQS.SendMessageLive queue)
-
-/-! ## The model, hosted: each outside call goes to a service -/
-
-def hosted [Uses R Payments] [Uses R Warehouse] : Hosted Shop R where
+/-- Callers send order commands. Its history is written as JSON. -/
+def served : Served Shop where
   Input := Command
   command := fun command => ⟨.order, (), command⟩
-  call
-    | .charge order amount => use Payments (·.charge order amount)
-    | .ship order item => use Warehouse (·.ship order item)
-  reply
-    | .charge .. => inferInstance
-    | .ship .. => inferInstance
+
+/--
+The rule holds of the shop as deployed: whatever its journal holds, every
+order it replays to was charged at most once.
+-/
+theorem deployedOrdersChargedOnce (journal : List String) (id : String) :
+    ChargedOnce ((served.replay journal).state .order id) :=
+  everyOrderChargedOnce _ (served.replay_reachable journal) id
+
+/-! ## The stack -/
+
+/-- A payment gateway that approves anything up to a limit. It touches no resource. -/
+def sandboxCharge (order : String) (amount : Nat) (limit : Nat := 1000) : Charge :=
+  if amount ≤ limit then .approved s!"ch_{order}" else .refused "over the limit"
 
 def describe (order : State) : Response :=
   match order.status with
@@ -300,24 +279,40 @@ def describe (order : State) : Response :=
   | .paid charge => { status := 200, body := s!"paid {charge}" }
   | .declined reason => { status := 402, body := reason }
 
-/-- The shop's API. It names the services it needs, and no resource. -/
-def orders [Uses R Journal] [Uses R Payments] [Uses R Warehouse] (request : Request) :
-    Effect R Never Response := do
-  match request.method, request.path, request.body.splitOn ":" with
-  | .post, ["orders", id], [item, amount] =>
-    let (answer, shop) ← hosted.send (.place id item amount.toNat!)
-    match answer with
-    | .ok _ => return describe (shop.state .order id)
-    | .error rejection => return { status := 409, body := reprStr rejection }
-  | .get, ["orders", id], _ =>
-    let shop ← hosted.world
-    return describe (shop.state .order id)
-  | .get, ["revenue"], _ =>
-    let shop ← hosted.world
-    return { status := 200, body := toString (Revenue.stateAt shop.log ()) }
-  | _, _, _ => return { status := 404, body := "not found" }
+/-- Takes orders. Hosts the shop: its history is in the bucket, and it ships through the queue. -/
+def Api (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
+  Lambda.Function "Api" { url := true } do
+    let journal ← S3.Journal orders
+    let queue ← SQS.SendMessage shipments
 
-/-! ## The stack -/
+    let shop := served.host journal fun
+      | .charge order amount => pure (sandboxCharge order amount)
+      | .ship order item => queue.call s!"{order}:{item}"
+
+    return fun request => do
+      match request.method, request.path, request.body.splitOn ":" with
+      | .post, ["orders", id], [item, amount] =>
+        let (answer, after) ← shop.send (.place id item amount.toNat!)
+        match answer with
+        | .ok _ => return describe (after.state .order id)
+        | .error rejection => return { status := 409, body := reprStr rejection }
+      | .get, ["orders", id], _ =>
+        return describe ((← shop.world).state .order id)
+      | .get, ["revenue"], _ =>
+        return { status := 200, body := toString (Revenue.stateAt (← shop.world).log ()) }
+      | _, _, _ => return { status := 404, body := "not found" }
+
+/-- Consumes the shipments queue and files a packing slip for each. -/
+def Packer (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
+  Lambda.Function "Packer" {} do
+    let slips ← S3.PutObject orders ["packed"]
+
+    SQS.consume shipments fun shipment => do
+      match shipment.splitOn ":" with
+      | [order, item] => slips.call order item
+      | _ => pure ()
+
+    return fun _ => return { status := 204 }
 
 structure Outputs where
   api : Function
@@ -326,24 +321,15 @@ structure Outputs where
 def ShopStack : Stack Kind Outputs where
   name := "Shop"
   body := do
-    let journal ← S3.Bucket "Orders"
+    let orders ← S3.Bucket "Orders"
     let shipments ← SQS.Queue "Shipments"
-    let api ← Lambda.Function "Api" { url := true } do
-      serve
-        (S3.JournalLive journal
-          ++ PaymentsSandbox
-          ++ WarehouseLive shipments)
-        orders
-    let packer ← Lambda.Function "Packer" {} do
-      serve (SQS.ReceiveMessageLive shipments) fun _ => do
-        match ← SQS.receiveMessage shipments with
-        | some shipment => return { status := 200, body := shipment }
-        | none => return { status := 204 }
+    let api ← Api orders shipments
+    let packer ← Packer orders shipments
     return { api, packer }
 
 def prod : Graph Kind := ShopStack.graph "prod"
 
-def journal : Bucket := ⟨"Orders"⟩
+def orders : Bucket := ⟨"Orders"⟩
 def shipments : Queue := ⟨"Shipments"⟩
 def api : Function := ⟨"Api"⟩
 def packer : Function := ⟨"Packer"⟩
@@ -352,51 +338,41 @@ example : ShopStack.problem "prod" = none ∧ prod.deployable = true := by decid
 
 example : prod.order = ["Orders", "Shipments", "Api", "Packer"] := by decide
 
-/-! ## What is proved about access -/
-
-/-- Each function's role. Nobody wrote these down: each is what its layers need. -/
-theorem roles : prod.roles = [
-    ("Orders", ∅),
-    ("Shipments", ∅),
-    ("Api", S3.List journal ∪ S3.Get journal ["journal"] ∪ S3.Put journal ["journal"] ∪ ∅
-      ∪ (SQS.Send shipments ∪ ∅)),
-    ("Packer", SQS.Receive shipments)] := by
-  rfl
-
-/-- Only the Api can write the shop's history, and only under `journal/`. -/
-theorem onlyTheApiWritesHistory (key : Path) (host : String)
-    (can : host ∈ prod.whoCan ⟨.bucket, journal, BucketOp.put key⟩) :
-    host = "Api" ∧ ["journal"] <+: key := by
-  access [roles, BucketOp.covers]
-  grind
-
-/-- The Packer can read no order. -/
-theorem thePackerReadsNoOrder (key : Path) :
-    prod.can "Packer" ⟨.bucket, journal, BucketOp.get key⟩ = false := by
-  access [roles, BucketOp.covers]
-
-/-! ## Stories, run against the stack in memory -/
+/-! ## Stories: the whole stack, run in memory -/
 
 abbrev Story := List (Graph.Step Kind InMemory)
 
 def anOrder : Story := [
   .request api { method := .post, path := ["orders", "o-1"], body := "kettle:40" }
     (responds { status := 200, body := "paid ch_o-1" }),
-  .holds "the warehouse was told" (·.queued shipments == ["o-1:kettle"]),
+  .holds "the packer filed a slip" (·.object orders ["packed", "o-1"] == some "kettle"),
+  .holds "and took the shipment off the queue" (·.queued shipments == []),
   .request api { path := ["orders", "o-1"] } (responds { status := 200, body := "paid ch_o-1" }),
   .request api { method := .post, path := ["orders", "o-1"], body := "kettle:40" }
     (responds { status := 409, body := "Shop.Rejection.alreadyPlaced" }),
-  .request api { path := ["revenue"] } (responds { status := 200, body := "40" }),
-  .request packer {} (responds { status := 200, body := "o-1:kettle" }),
-  .request packer {} (responds { status := 204 }) ]
+  .request api { path := ["revenue"] } (responds { status := 200, body := "40" }) ]
 
 def anOrderTooLarge : Story := [
   .request api { method := .post, path := ["orders", "o-2"], body := "yacht:5000" }
     (responds { status := 402, body := "over the limit" }),
-  .holds "nothing was shipped" (·.queued shipments == []) ]
+  .holds "nothing was packed" (·.object orders ["packed", "o-2"] == none) ]
 
 example : prod.passes anOrder = true := by native_decide
 example : prod.passes anOrderTooLarge = true := by native_decide
+
+/-! ## What is proved about access -/
+
+/-- Only the Api can write the shop's history. -/
+theorem onlyTheApiWritesHistory (key : Path) (history : ["journal"] <+: key) (host : String)
+    (can : host ∈ prod.whoCan ⟨.bucket, orders, BucketOp.put key⟩) : host = "Api" := by
+  obtain ⟨rest, rfl⟩ := history
+  access in prod using [BucketOp.covers, orders]
+  grind
+
+/-- The Packer can read nothing: no order, and none of the history. -/
+theorem thePackerReadsNothing (key : Path) :
+    prod.can "Packer" ⟨.bucket, orders, BucketOp.get key⟩ = false := by
+  access in prod using [BucketOp.covers, orders]
 
 /--
 Least privilege: no function holds a grant it does not need. For each one there

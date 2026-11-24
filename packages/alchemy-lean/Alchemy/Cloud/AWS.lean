@@ -1,4 +1,4 @@
-import Alchemy.Cloud.Sim
+import Alchemy.Cloud.Host
 
 /-!
 # A small AWS
@@ -125,8 +125,13 @@ def needs : {k : Kind} → Call k → Op k
 inductive BucketEvent where
   | objectCreated (key : Path)
 
+/-- A queue tells its consumers that a message arrived. -/
+inductive QueueEvent where
+  | messageSent
+
 abbrev Event : Kind → Type
   | .bucket => BucketEvent
+  | .queue => QueueEvent
   | _ => Empty
 
 inductive Method where
@@ -213,6 +218,8 @@ def GetObjectLive (bucket : AWS.Bucket) (under : Path := []) :
         | .ok body => return body
         | .error missing => throw (.noSuchKey missing) }
 
+instance (bucket : AWS.Bucket) (under : Path) : Live (GetObject.Client bucket under) := ⟨GetObjectLive bucket under⟩
+
 /-- Write the objects of a bucket under a prefix: a step that gives the client. -/
 def PutObject (bucket : AWS.Bucket) (under : Path := []) {m : Type → Type} {access : Access Kind}
     [Gives m (PutObject.Client bucket under) access] : m (PutObject.Client bucket under access) :=
@@ -227,6 +234,8 @@ def PutObjectLive (bucket : AWS.Bucket) (under : Path := []) :
         Run.performUnder bucket (BucketCall.putObject (under ++ [name]) body) (BucketOp.put under)
           ⟨le⟩ (by simp [Cloud.needs, AWS.needs, Kinds.covers, BucketOp.covers]) }
 
+instance (bucket : AWS.Bucket) (under : Path) : Live (PutObject.Client bucket under) := ⟨PutObjectLive bucket under⟩
+
 /-- List the keys of a bucket: a step that gives the client. -/
 def ListObjects (bucket : AWS.Bucket) {m : Type → Type} {access : Access Kind}
     [Gives m (ListObjects.Client bucket) access] : m (ListObjects.Client bucket access) :=
@@ -236,6 +245,8 @@ def ListObjects (bucket : AWS.Bucket) {m : Type → Type} {access : Access Kind}
 def ListObjectsLive (bucket : AWS.Bucket) : Layer Nothing (ListObjects.Client bucket) where
   needs := List bucket
   build le _ := { call := Run.perform bucket BucketCall.listObjects ⟨le⟩ }
+
+instance (bucket : AWS.Bucket) : Live (ListObjects.Client bucket) := ⟨ListObjectsLive bucket⟩
 
 /-- Read `under/name`. -/
 def getObject (bucket : AWS.Bucket) (under : Path) (name : String)
@@ -291,6 +302,8 @@ def SendMessageLive (queue : AWS.Queue) : Layer Nothing (SendMessage.Client queu
   needs := Send queue
   build le _ := { call := fun body => Run.perform queue (QueueCall.sendMessage body) ⟨le⟩ }
 
+instance (queue : AWS.Queue) : Live (SendMessage.Client queue) := ⟨SendMessageLive queue⟩
+
 /-- Take messages off a queue: a step that gives the client. -/
 def ReceiveMessage (queue : AWS.Queue) {m : Type → Type} {access : Access Kind}
     [Gives m (ReceiveMessage.Client queue) access] : m (ReceiveMessage.Client queue access) :=
@@ -301,6 +314,8 @@ def ReceiveMessageLive (queue : AWS.Queue) : Layer Nothing (ReceiveMessage.Clien
   needs := Receive queue
   build le _ := { call := Run.perform queue QueueCall.receiveMessage ⟨le⟩ }
 
+instance (queue : AWS.Queue) : Live (ReceiveMessage.Client queue) := ⟨ReceiveMessageLive queue⟩
+
 def sendMessage (queue : AWS.Queue) (body : String) [Uses R (SendMessage.Client queue)] :
     Effect R ε Unit :=
   use (SendMessage.Client queue) (·.call body)
@@ -309,12 +324,37 @@ def receiveMessage (queue : AWS.Queue) [Uses R (ReceiveMessage.Client queue)] :
     Effect R ε (Option String) :=
   use (ReceiveMessage.Client queue) (·.call)
 
+/--
+Consume a queue: run this for each message. A step of a function's block, so
+the function is registered as the queue's consumer when the stack is built. It
+grants receiving from the queue, which is what takes the message off it.
+-/
+def consume {role : Access Kind} {ε : Type} [Repr ε] (queue : AWS.Queue)
+    (handle : String → Run role ε Unit) : Host role Unit := do
+  let messages ← ReceiveMessage queue
+  Host.listen {
+    kind := .queue
+    source := queue
+    handle := fun (_ : QueueEvent) => do
+      match ← messages.call.mapError (fun e => nomatch e) with
+      | some message => (handle message).mapError reprStr
+      | none => pure () }
+
 end SQS
 
 namespace Lambda
 
-/-- A function. Its body declares what it uses and ends with what it serves. -/
-def Function (id : String) (props : FunctionProps := {})
+/--
+A function. Its block binds what it uses and ends with how it answers a
+request. Its role is the grants its bindings asked for.
+-/
+def Function (id : String) (props : FunctionProps)
+    (body : {role : Access Kind} → Host role (Request → Run role Never Response)) :
+    Construct Kind AWS.Function :=
+  hostOf Kind.function id props body
+
+/-- A function given its services by layers: its body ends with `serve`. -/
+def FunctionWith (id : String) (props : FunctionProps := {})
     (body : Construct Kind (Serve Kind.function)) : Construct Kind AWS.Function :=
   host Kind.function id props body
 
@@ -354,7 +394,8 @@ def simulate : {k : Kind} → Ref k → (c : Call k) → Memory → Reply c × M
   | .bucket, bucket, .listObjects, m =>
     ((m.objects.filter (·.1 == bucket.id)).map (·.2.1), m, [])
   | .queue, queue, .sendMessage body, m =>
-    ((), { m with messages := m.messages ++ [(queue.id, body)] }, [])
+    ((), { m with messages := m.messages ++ [(queue.id, body)] },
+      [(⟨.queue, queue, .messageSent⟩ : Cloud.Emitted Kind)])
   | .queue, queue, .receiveMessage, m =>
     match m.messages.find? (·.1 == queue.id) with
     | none => (none, m, [])

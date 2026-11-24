@@ -84,19 +84,19 @@ def forward (queue : Queue) [Uses R JobStorage] [Uses R (SQS.SendMessage.Client 
 
 def Api (bucket : Bucket) (queue : Queue) : Construct Kind Function := do
   let stage ← stage
-  Lambda.Function "Api" { url := true, memory := if stage = "prod" then 1024 else 512 } do
+  Lambda.FunctionWith "Api" { url := true, memory := if stage = "prod" then 1024 else 512 } do
     serve (JobStorageS3 bucket ++ SQS.SendMessageLive queue) jobs
       [S3.onObjectCreated bucket (forward queue)]
 
 def Worker (queue : Queue) : Construct Kind Function :=
-  Lambda.Function "Worker" {} do
+  Lambda.FunctionWith "Worker" {} do
     serve (SQS.ReceiveMessageLive queue) fun _ => do
       match ← SQS.receiveMessage queue with
       | some job => return { status := 200, body := job }
       | none => return { status := 204 }
 
 def Auditor (bucket : Bucket) : Construct Kind Function :=
-  Lambda.Function "Auditor" {} do
+  Lambda.FunctionWith "Auditor" {} do
     serve (S3.ListObjectsLive bucket) fun _ => do
       let keys ← S3.listObjects bucket
       return { status := 200, body := toString keys.length }

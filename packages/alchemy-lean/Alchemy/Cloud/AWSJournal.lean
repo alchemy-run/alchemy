@@ -31,4 +31,9 @@ def JournalLive (bucket : AWS.Bucket) (under : Path := ["journal"]) : Layer Noth
         return lines
       append := fun text => do writer.call (toString (← count)) text }
 
+/-- A journal in a bucket: a step of a host's block. -/
+def Journal {role : Access Kind} (bucket : AWS.Bucket) (under : Path := ["journal"]) :
+    Host role (Cloud.Journal role) :=
+  Host.provide (JournalLive bucket under)
+
 end Alchemy.AWS.S3
