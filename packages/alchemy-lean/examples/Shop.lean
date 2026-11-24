@@ -199,9 +199,9 @@ def PaymentsSandbox (limit : Nat := 1000) : Layer Nothing Payments := .make do
       pure (if amount ≤ limit then .approved s!"ch_{order}" else .refused "over the limit") }
 
 /-- A warehouse that is told what to ship through a queue. -/
-def WarehouseQueue (queue : Queue) [Uses In (SQS.SendMessage queue)] : Layer In Warehouse :=
+def WarehouseQueue (queue : Queue) [Uses In (SQS.SendMessage.Client queue)] : Layer In Warehouse :=
   .make do
-    let shipments ← service (SQS.SendMessage queue)
+    let shipments ← SQS.SendMessage queue
     return { ship := fun order item => shipments.call s!"{order}:{item}" }
 
 /-- The warehouse, on the queue itself. -/

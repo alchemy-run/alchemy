@@ -40,8 +40,8 @@ becomes the service's own.
 -/
 def JobStorageS3 (bucket : Bucket) : Layer Nothing JobStorage :=
   .from (S3.GetObjectLive bucket ["jobs"] ++ S3.PutObjectLive bucket ["jobs"]) do
-    let objects ← service (S3.GetObject bucket ["jobs"])
-    let store ← service (S3.PutObject bucket ["jobs"])
+    let objects ← S3.GetObject bucket ["jobs"]
+    let store ← S3.PutObject bucket ["jobs"]
     return {
       put := fun id content => store.call id content
       get := fun id =>
@@ -76,7 +76,7 @@ deriving DecidableEq, Repr
 instance : Raises ForwardError JobNotFound := ⟨.missing⟩
 
 /-- Sends a stored job to the queue. -/
-def forward (queue : Queue) [Uses R JobStorage] [Uses R (SQS.SendMessage queue)] (key : Path) :
+def forward (queue : Queue) [Uses R JobStorage] [Uses R (SQS.SendMessage.Client queue)] (key : Path) :
     Effect R ForwardError Unit := do
   let some id := key.getLast? | throw (.notAJob key)
   let content ← getJob id

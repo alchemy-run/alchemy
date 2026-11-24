@@ -185,20 +185,25 @@ inductive GetObjectError where
 deriving DecidableEq, Repr
 
 /-- Reads the objects of a bucket under a prefix. -/
-structure GetObject (bucket : AWS.Bucket) (under : Path) (access : Access Kind) where
+structure GetObject.Client (bucket : AWS.Bucket) (under : Path) (access : Access Kind) where
   call : String → Run access GetObjectError String
 
 /-- Writes the objects of a bucket under a prefix. -/
-structure PutObject (bucket : AWS.Bucket) (under : Path) (access : Access Kind) where
+structure PutObject.Client (bucket : AWS.Bucket) (under : Path) (access : Access Kind) where
   call : String → String → Run access Never Unit
 
 /-- Lists the keys of a bucket. -/
-structure ListObjects (bucket : AWS.Bucket) (access : Access Kind) where
+structure ListObjects.Client (bucket : AWS.Bucket) (access : Access Kind) where
   call : Run access Never (_root_.List Path)
+
+/-- Read the objects of a bucket under a prefix: a step that gives the client. -/
+def GetObject (bucket : AWS.Bucket) (under : Path := []) {m : Type → Type} {access : Access Kind}
+    [Gives m (GetObject.Client bucket under) access] : m (GetObject.Client bucket under access) :=
+  Layer.Gives.give
 
 /-- `GetObject` on the bucket itself. Grants read access to the prefix. -/
 def GetObjectLive (bucket : AWS.Bucket) (under : Path := []) :
-    Layer Nothing (GetObject bucket under) where
+    Layer Nothing (GetObject.Client bucket under) where
   needs := Get bucket under
   build le _ :=
     { call := fun name => do
@@ -208,33 +213,43 @@ def GetObjectLive (bucket : AWS.Bucket) (under : Path := []) :
         | .ok body => return body
         | .error missing => throw (.noSuchKey missing) }
 
+/-- Write the objects of a bucket under a prefix: a step that gives the client. -/
+def PutObject (bucket : AWS.Bucket) (under : Path := []) {m : Type → Type} {access : Access Kind}
+    [Gives m (PutObject.Client bucket under) access] : m (PutObject.Client bucket under access) :=
+  Layer.Gives.give
+
 /-- `PutObject` on the bucket itself. Grants write access to the prefix. -/
 def PutObjectLive (bucket : AWS.Bucket) (under : Path := []) :
-    Layer Nothing (PutObject bucket under) where
+    Layer Nothing (PutObject.Client bucket under) where
   needs := Put bucket under
   build le _ :=
     { call := fun name body =>
         Run.performUnder bucket (BucketCall.putObject (under ++ [name]) body) (BucketOp.put under)
           ⟨le⟩ (by simp [Cloud.needs, AWS.needs, Kinds.covers, BucketOp.covers]) }
 
+/-- List the keys of a bucket: a step that gives the client. -/
+def ListObjects (bucket : AWS.Bucket) {m : Type → Type} {access : Access Kind}
+    [Gives m (ListObjects.Client bucket) access] : m (ListObjects.Client bucket access) :=
+  Layer.Gives.give
+
 /-- `ListObjects` on the bucket itself. Grants listing its keys. -/
-def ListObjectsLive (bucket : AWS.Bucket) : Layer Nothing (ListObjects bucket) where
+def ListObjectsLive (bucket : AWS.Bucket) : Layer Nothing (ListObjects.Client bucket) where
   needs := List bucket
   build le _ := { call := Run.perform bucket BucketCall.listObjects ⟨le⟩ }
 
 /-- Read `under/name`. -/
 def getObject (bucket : AWS.Bucket) (under : Path) (name : String)
-    [Uses R (GetObject bucket under)] [Raises ε GetObjectError] : Effect R ε String :=
-  use (GetObject bucket under) (·.call name)
+    [Uses R (GetObject.Client bucket under)] [Raises ε GetObjectError] : Effect R ε String :=
+  use (GetObject.Client bucket under) (·.call name)
 
 /-- Write `under/name`. -/
 def putObject (bucket : AWS.Bucket) (under : Path) (name : String) (body : String)
-    [Uses R (PutObject bucket under)] : Effect R ε Unit :=
-  use (PutObject bucket under) (·.call name body)
+    [Uses R (PutObject.Client bucket under)] : Effect R ε Unit :=
+  use (PutObject.Client bucket under) (·.call name body)
 
-def listObjects (bucket : AWS.Bucket) [Uses R (ListObjects bucket)] :
+def listObjects (bucket : AWS.Bucket) [Uses R (ListObjects.Client bucket)] :
     Effect R ε (_root_.List Path) :=
-  use (ListObjects bucket) (·.call)
+  use (ListObjects.Client bucket) (·.call)
 
 /-- Run this whenever an object is created in the bucket. -/
 def onObjectCreated {ε : Type} [Repr ε] (bucket : AWS.Bucket)
@@ -259,30 +274,40 @@ abbrev Receive (queue : AWS.Queue) : Access Kind := .on queue QueueOp.receive
 variable {R : Service Kind} {ε : Type}
 
 /-- Sends messages to a queue. -/
-structure SendMessage (queue : AWS.Queue) (access : Access Kind) where
+structure SendMessage.Client (queue : AWS.Queue) (access : Access Kind) where
   call : String → Run access Never Unit
 
 /-- Takes messages off a queue. -/
-structure ReceiveMessage (queue : AWS.Queue) (access : Access Kind) where
+structure ReceiveMessage.Client (queue : AWS.Queue) (access : Access Kind) where
   call : Run access Never (Option String)
 
+/-- Put messages on a queue: a step that gives the client. -/
+def SendMessage (queue : AWS.Queue) {m : Type → Type} {access : Access Kind}
+    [Gives m (SendMessage.Client queue) access] : m (SendMessage.Client queue access) :=
+  Layer.Gives.give
+
 /-- `SendMessage` on the queue itself. Grants sending to it. -/
-def SendMessageLive (queue : AWS.Queue) : Layer Nothing (SendMessage queue) where
+def SendMessageLive (queue : AWS.Queue) : Layer Nothing (SendMessage.Client queue) where
   needs := Send queue
   build le _ := { call := fun body => Run.perform queue (QueueCall.sendMessage body) ⟨le⟩ }
 
+/-- Take messages off a queue: a step that gives the client. -/
+def ReceiveMessage (queue : AWS.Queue) {m : Type → Type} {access : Access Kind}
+    [Gives m (ReceiveMessage.Client queue) access] : m (ReceiveMessage.Client queue access) :=
+  Layer.Gives.give
+
 /-- `ReceiveMessage` on the queue itself. Grants receiving from it. -/
-def ReceiveMessageLive (queue : AWS.Queue) : Layer Nothing (ReceiveMessage queue) where
+def ReceiveMessageLive (queue : AWS.Queue) : Layer Nothing (ReceiveMessage.Client queue) where
   needs := Receive queue
   build le _ := { call := Run.perform queue QueueCall.receiveMessage ⟨le⟩ }
 
-def sendMessage (queue : AWS.Queue) (body : String) [Uses R (SendMessage queue)] :
+def sendMessage (queue : AWS.Queue) (body : String) [Uses R (SendMessage.Client queue)] :
     Effect R ε Unit :=
-  use (SendMessage queue) (·.call body)
+  use (SendMessage.Client queue) (·.call body)
 
-def receiveMessage (queue : AWS.Queue) [Uses R (ReceiveMessage queue)] :
+def receiveMessage (queue : AWS.Queue) [Uses R (ReceiveMessage.Client queue)] :
     Effect R ε (Option String) :=
-  use (ReceiveMessage queue) (·.call)
+  use (ReceiveMessage.Client queue) (·.call)
 
 end SQS
 

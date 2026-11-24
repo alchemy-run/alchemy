@@ -25,13 +25,25 @@ variable {In Mid Out R T S : Service K}
 
 /--
 Building something with the services `In` at hand, under some access. A `do`
-block: `let s3 ← service (S3.GetObject bucket)` takes one of the services.
+block: `let objects ← S3.GetObject bucket` takes a binding, and
+`let jobs ← service JobStorage` any other service.
 -/
 abbrev Make (In : Service K) (access : Access K) := ReaderT (In access) Id
 
 /-- One of the services at hand. -/
 def service (S : Service K) [Uses In S] {access : Access K} : Make In access (S access) :=
   fun services => Uses.get services
+
+/--
+`Gives m S access`: in `m`, the service `S` can be asked for, and comes built
+for `access`. It is what lets a binding be written as a step: `← S3.GetObject bucket`.
+-/
+class Gives (m : Type → Type) (S : Service K) (access : outParam (Access K)) where
+  give : m (S access)
+
+/-- A layer's block gives any service its dependencies include. -/
+instance (S : Service K) [Uses In S] {access : Access K} : Gives (Make In access) S access :=
+  ⟨service S⟩
 
 /-- Services that need no access of their own: built from the services they are given. -/
 def make (build : {access : Access K} → Make In access (Out access)) : Layer In Out where
@@ -77,7 +89,7 @@ def services (layer : Layer Nothing R) : R layer.needs :=
 
 end Layer
 
-export Layer (service)
+export Layer (service Gives)
 
 /-- Run code with the services of a layer. It runs with the access the layer needs. -/
 def Effect.provide {R : Service K} {ε α : Type} (effect : Effect R ε α) (layer : Layer Nothing R) :

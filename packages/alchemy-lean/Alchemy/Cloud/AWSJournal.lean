@@ -16,9 +16,9 @@ listing the bucket, and reading and writing under that prefix.
 -/
 def JournalLive (bucket : AWS.Bucket) (under : Path := ["journal"]) : Layer Nothing (Journal (K := Kind)) :=
   .from (ListObjectsLive bucket ++ GetObjectLive bucket under ++ PutObjectLive bucket under) do
-    let objects ← service (ListObjects bucket)
-    let reader ← service (GetObject bucket under)
-    let writer ← service (PutObject bucket under)
+    let objects ← ListObjects bucket
+    let reader ← GetObject bucket under
+    let writer ← PutObject bucket under
     let count : Run _ Never Nat := do
       return ((← objects.call).filter (under.isPrefixOf ·)).length
     return {

@@ -18,6 +18,8 @@ import Alchemy.Cloud.Sim
 import Alchemy.Cloud.AWS
 import Alchemy.Cloud.Hosted
 import Alchemy.Cloud.AWSJournal
+import Alchemy.Cloud.Host
+import Alchemy.Cloud.Cloudflare
 import Alchemy.Cloud.Api
 import Alchemy.Cloud.Provider
 import Alchemy.Cloud.Engine
