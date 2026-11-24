@@ -267,9 +267,11 @@ Change `Pi.HarnessLive` for `OpenCode.HarnessLive` and the same processes run on
 
 See [Choose a harness](/ai/harnesses).
 
-## Sandboxes: where files and commands live
+## Sandboxes: a machine for files and commands
 
-A session runs where your program runs, which on Cloudflare has no files and no shell. Tools that need either work in a **sandbox**: a Linux machine on E2B, Daytona, Modal, Boat or Archil, one for each session.
+The harness and a sandbox are two separate things. The harness runs the loop, inside your program. A **sandbox** is a Linux machine somewhere else, on E2B, Daytona, Modal, Boat or Archil. It only holds files and runs shell commands.
+
+A session that never touches a file needs no sandbox. When a tool reads a file or runs a command, the harness sends that one call to the session's sandbox, and each session has its own.
 
 ```typescript
 const sandbox = yield* AI.Sandbox;
