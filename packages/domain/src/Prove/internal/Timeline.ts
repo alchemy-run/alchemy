@@ -105,8 +105,22 @@ const tagOf = (value: unknown): unknown =>
   typeof value === "object" && value !== null && "_tag" in value ? value._tag : undefined;
 
 /** An error the library itself fails with, as a value: a `TimeoutError`, a queue's `Done`. */
-const errorOf = (error: unknown): V => {
+/** The key the library marks its `Cause.Done` with. */
+export const DONE = "~effect/Cause/Done";
+
+/** `Cause.Done`: no more of a pull, with what it ended with. */
+export const done = (value: V): V =>
+  Value.obj({ [DONE]: Value.str(DONE), _tag: Value.str("Done"), value });
+
+export const errorOf = (error: unknown): V => {
   const tag = tagOf(error);
+  if (tag === "Done" && typeof error === "object" && error !== null && DONE in error) {
+    const value = "value" in error ? error.value : undefined;
+    // What it ended with is a value of the code, when the code gave it.
+    return done(
+      typeof value === "object" && value !== null && "_tag" in value ? (value as V) : Value.undef,
+    );
+  }
   return typeof tag === "string"
     ? Value.obj({ _tag: Value.str(tag) })
     : { _tag: "Opaque", what: "an error of the library" };

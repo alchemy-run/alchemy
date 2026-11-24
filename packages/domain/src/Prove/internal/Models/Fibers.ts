@@ -72,7 +72,8 @@ type Kind =
   | "Resolver"
   | "TxHashMap"
   | "TxHashSet"
-  | "TxPriorityQueue";
+  | "TxPriorityQueue"
+  | "Channel";
 
 /** How often effects may be run again in one handler before the prover stops reading. */
 const MAX_TURNS = 100;
@@ -3658,6 +3659,10 @@ export const make = (
     effectOf,
     scheduleOf,
     heldOf,
+    wrap,
+    exitOf,
+    outputOf,
+    sure,
     plainOf: (v: V | undefined): unknown => {
       const read = plainOf(v);
       return read === NOT_PLAIN ? undefined : read;

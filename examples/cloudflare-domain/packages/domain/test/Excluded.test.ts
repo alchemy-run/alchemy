@@ -22,7 +22,7 @@ const READ = new Set([
   ...["Cache", "Deferred", "Fiber", "FiberHandle", "FiberMap", "FiberSet", "Latch", "Pool"],
   ...["PubSub", "Queue", "Request", "RequestResolver", "Schedule"],
   ...["PartitionedSemaphore", "ScopedCache", "Semaphore", "TxChunk", "TxDeferred", "TxPubSub"],
-  ...["TxHashMap", "TxHashSet", "TxPriorityQueue", "TxQueue"],
+  ...["TxHashMap", "TxHashSet", "TxPriorityQueue", "TxQueue", "Channel", "Pull", "Take"],
   ...["TxReentrantLock", "TxRef", "TxSemaphore", "TxSubscriptionRef", "index"],
 ]);
 
@@ -109,7 +109,7 @@ it.effect(
         "compares values the prover does not model",
       ]);
       expect(modules.length).toBeGreaterThan(45);
-      expect(calls.length).toBeGreaterThan(1400);
+      expect(calls.length).toBeGreaterThan(1200);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   300_000,
 );

@@ -32,6 +32,7 @@ import {
 import * as Known from "./Known.ts";
 import { hostOf } from "./Known.ts";
 import * as Cells from "./Models/Cells.ts";
+import * as Channels from "./Models/Channels.ts";
 import * as Collections from "./Models/Collections.ts";
 import * as Decimals from "./Models/Decimals.ts";
 import * as Effects from "./Models/Effects.ts";
@@ -1342,6 +1343,9 @@ export const make = (host: Host) => {
   const flows = Flows.make(kit, { ...written }, fibers.tools);
   Object.assign(written, flows.models);
   Object.assign(clocks, flows.sited);
+  const channels = Channels.make(kit, { ...fibers.tools, real: flows.real, flow: flows.flow });
+  Object.assign(written, channels.models);
+  Object.assign(clocks, channels.sited);
 
   // A `Chunk` and an `Iterable` are read as the array of their items: the
   // functions the three modules share do the same to one.

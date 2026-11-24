@@ -2160,6 +2160,145 @@ TxPriorityQueue.removeIf(other, (n) => n === 3);
 TxPriorityQueue.retainIf(other, (n) => n > 1);
 ```
 
+```typescript title="effect/Channel, effect/Pull and effect/Take"
+// What a stream is made of. A channel gives values and then ends with one. A pull is an
+// effect that fails with Cause.Done when there is no more, and a take is one result of a pull.
+Channel.fromIterable([a, b, 3]);
+Channel.fromArray([a, b]);
+Channel.fromIterableArray([a, b, 3], 2);
+Channel.succeed(a);
+Channel.end(a); // gives nothing, and ends with a
+Channel.sync(() => a + b);
+Channel.endSync(() => a + b);
+Channel.empty;
+Channel.never;
+Channel.fail(new Odd({ n: a }));
+Channel.failSync(() => a);
+Channel.failCause(Cause.fail(a));
+Channel.failCauseSync(() => Cause.fail(b));
+Channel.die("boom");
+Channel.fromEffect(even(a));
+Channel.fromEffectDone(Effect.succeed(a));
+Channel.fromEffectDrain(Effect.succeed(a));
+Channel.fromEffectTake(Effect.succeed(Exit.succeed(a)));
+Channel.fromChunk(Chunk.make(a, b));
+Channel.fromQueue(queue);
+Channel.fromQueueArray(queue);
+Channel.fromPubSub(hub);
+Channel.fromPubSubArray(hub);
+Channel.fromSubscription(subscription);
+Channel.fromSubscriptionArray(subscription);
+Channel.callback((queue) => Effect.andThen(Queue.offerAll(queue, [a, b]), Queue.end(queue)));
+Channel.fromSchedule(Schedule.recurs(2));
+Channel.fromPull(Effect.succeed(Cause.done(a)));
+Channel.suspend(() => Channel.succeed(a));
+Channel.unwrap(Effect.succeed(Channel.fromEffectDrain(Effect.succeed(a))));
+Channel.acquireRelease(Effect.succeed(a), () => Effect.void);
+Channel.identity();
+Channel.isChannel(a);
+Channel.Do;
+Channel.bind("x", () => Channel.fromArray([a, b]));
+Channel.bindTo("n");
+
+Channel.map((n) => n + 1);
+Channel.mapEffect((n) => even(n));
+Channel.mapDone((n) => n + b);
+Channel.mapDoneEffect((n) => Effect.succeed(n * 2));
+Channel.tap((n) => Effect.succeed(n));
+Channel.filter((n) => n > 0);
+Channel.filterEffect((n) => Effect.succeed(n !== 0));
+Channel.scan(a, (sum, n) => sum + n);
+Channel.scanEffect(b, (sum, n) => Effect.succeed(sum + n));
+Channel.mapAccum(() => 0, (sum, n) => [sum + n, [n, sum + n]]);
+Channel.flatMap((n) => Channel.fromArray([n, n + 1]));
+Channel.switchMap((n) => Channel.succeed(n + 1));
+Channel.mergeAll({ concurrency: 1 });
+Channel.flatten;
+Channel.flattenArray;
+Channel.flattenTake;
+Channel.concat(Channel.succeed(a), Channel.succeed(b));
+Channel.concatWith(() => Channel.succeed(9));
+Channel.merge(Channel.fromEffect(Effect.as(Effect.sleep(2), a)), Channel.fromEffect(Effect.as(Effect.sleep(1), b)));
+Channel.pipeTo(Channel.identity());
+Channel.pipeToOrFail(Channel.identity());
+Channel.mapInput((n) => Effect.succeed(n * 2));
+Channel.mapInputError((error) => error);
+Channel.mergeEffect(Effect.sleep(1));
+Channel.filterArray((n) => n > 0);
+Channel.filterArrayEffect((n) => Effect.succeed(n !== b));
+Channel.bufferArray({ capacity: 4 });
+Channel.orElseIfEmpty(() => Channel.succeed(b));
+Channel.drain;
+Channel.forever;
+Channel.scoped;
+Channel.buffer({ capacity: 2 });
+Channel.interruptWhen(Effect.as(Effect.sleep(1), a)); // ends with what the effect gives
+Channel.haltWhen(Effect.as(Effect.sleep(1), b)); // stops between two values
+Channel.repeat(Schedule.recurs(2));
+Channel.retry(Schedule.recurs(4));
+Channel.schedule(Schedule.spaced(1));
+
+Channel.catch((error) => Channel.succeed(error.n * 2));
+Channel.catchTag("Odd", (error) => Channel.succeed(-error.n));
+Channel.catchIf((error) => error.n < -2, () => Channel.succeed(0));
+Channel.catchCause((cause) => Channel.succeed(Cause.hasFails(cause)));
+Channel.catchCauseIf(Cause.hasFails, () => Channel.succeed(b));
+Channel.catchDefect((defect) => Channel.succeed(defect));
+Channel.tapCause((cause) => log(seen, Cause.hasFails(cause)));
+Channel.ignoreCause;
+Channel.mapError((error) => error.n);
+Channel.tapError((error) => log(seen, error.n));
+Channel.orDie;
+Channel.ignore;
+Channel.onStart(log(seen, "start"));
+Channel.onFirst((n) => log(seen, n));
+Channel.onEnd(log(seen, "end"));
+Channel.ensuring(log(seen, "closed"));
+Channel.onExit((exit) => log(seen, Exit.isSuccess(exit)));
+Channel.onError((cause) => log(seen, Cause.hasFails(cause)));
+
+Channel.runCollect(Channel.fromIterable([a, b, 3]));
+Channel.runDrain(Channel.end(a)); // what the channel ends with
+Channel.runCount;
+Channel.runHead(Channel.empty);
+Channel.runLast(Channel.fromIterable([a, b]));
+Channel.runFold(Channel.fromIterable([a, b, 3]), () => 0, (sum, n) => sum + n);
+Channel.runFoldEffect(Channel.fromIterable([a, b]), () => 1, (sum, n) => Effect.succeed(sum + n));
+Channel.runForEach(Channel.fromIterable([a, b]), (n) => log(seen, n));
+Channel.runForEachWhile(Channel.fromIterable([a, b, 3]), (n) => Effect.as(log(seen, n), n !== b));
+Channel.runIntoQueue(Channel.fromIterable([a, b]), queue);
+Channel.runIntoPubSub(Channel.fromIterable([a, b]), hub);
+Channel.toQueue(Channel.fromIterable([a, b]), { capacity: 4 }); // inside Effect.scoped
+Channel.toQueueArray(Channel.fromIterableArray([a, b, 3], 2), { capacity: 4 });
+Channel.toPubSub(Channel.fromEffect(Effect.as(Effect.sleep(2), a)), { capacity: 4 });
+const pull = yield* Channel.toPull(Channel.fromIterable([a, b])); // inside Effect.scoped
+
+Cause.done(a); // no more, with what is left
+Cause.Done(a);
+Cause.isDone(b);
+Pull.catchDone(pull, (left) => Effect.succeed(left + b));
+Pull.matchEffect(pull, { onSuccess: () => Effect.succeed("more"), onFailure: () => Effect.succeed("failed"), onDone: () => Effect.succeed("done") });
+Pull.isDoneCause(exit.cause);
+Pull.isDoneFailure(reason);
+Pull.doneExitFromCause(exit.cause);
+Pull.filterDone(exit.cause);
+Pull.filterDoneVoid(exit.cause);
+Pull.filterNoDone(exit.cause);
+Pull.filterDoneLeftover(exit.cause);
+Take.toPull([a, b]);
+Take.toPull(Exit.succeed(a));
+Take.toPull(Exit.fail(new Odd({ n: a })));
+
+Stream.fromChannel(Channel.fromIterableArray([a, b, 3])); // a channel of lists, as a stream
+Stream.toChannel(Stream.make(a, b));
+Stream.toPull(Stream.make(a, b)); // inside Effect.scoped
+Stream.fromPull(Effect.succeed(Cause.done()));
+Stream.pipeThroughChannel(Stream.make(a, b, 3), Channel.identity());
+Stream.callback((queue) => Effect.andThen(Queue.offerAll(queue, [a, b]), Queue.end(queue)));
+```
+
+A channel that reads what another gives starts from `Channel.identity()`. One written from a pull of its input with `Channel.fromTransform`, or from a web stream, is not supported.
+
 ```typescript title="effect/PubSub"
 // What is published reaches each one who subscribed before it was.
 const hub = yield* PubSub.unbounded();
@@ -2632,9 +2771,6 @@ A handler's sleeps, time limits, races, fibers, queues, transactions and request
 
 ```typescript title="Time passing and things running together"
 import * as Scheduler from "effect/Scheduler"; // what decides which fiber runs: a proof has its own
-import * as Channel from "effect/Channel"; // what a stream is made of: write the stream
-import * as Pull from "effect/Pull";
-import * as Take from "effect/Take";
 import * as ExecutionPlan from "effect/ExecutionPlan"; // each step provides a Layer, which is wiring
 
 Deferred.await(done); // a wait for what no fiber of the handler does: the handler would never end
