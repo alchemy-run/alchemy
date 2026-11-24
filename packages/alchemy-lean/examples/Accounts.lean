@@ -126,7 +126,7 @@ structure TransferRequest where
   source : String
   destination : String
   amount : Nat
-deriving DecidableEq, Repr
+deriving DecidableEq, Repr, Lean.ToJson, Lean.FromJson
 
 inductive TransferRefused where
   | sameAccount

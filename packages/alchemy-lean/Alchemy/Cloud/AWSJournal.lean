@@ -17,11 +17,13 @@ open Alchemy.Cloud
 def encodeLine : Cloud.Journal.Line → String
   | .input text => String.ofList ('>' :: text.toList)
   | .answer text => String.ofList ('<' :: text.toList)
+  | .decided text => String.ofList ('!' :: text.toList)
 
 def decodeLine (body : String) : Option Cloud.Journal.Line :=
   match body.toList with
   | '>' :: text => some (.input (String.ofList text))
   | '<' :: text => some (.answer (String.ofList text))
+  | '!' :: text => some (.decided (String.ofList text))
   | _ => none
 
 theorem decode_encode (line : Cloud.Journal.Line) : decodeLine (encodeLine line) = some line := by

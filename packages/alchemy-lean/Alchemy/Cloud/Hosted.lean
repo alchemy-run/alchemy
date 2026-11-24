@@ -24,6 +24,10 @@ class Text (α : Type) where
   write : α → String
   read : String → Option α
 
+instance : Text Empty where
+  write := nofun
+  read _ := none
+
 instance {α : Type} [ToJson α] [FromJson α] : Text α where
   write a := (toJson a).compress
   read text := do (fromJson? (← (Json.parse text).toOption)).toOption
@@ -32,6 +36,8 @@ instance {α : Type} [ToJson α] [FromJson α] : Text α where
 inductive Journal.Line where
   | input (text : String)
   | answer (text : String)
+  /-- A decision across instances that a caller asked for. -/
+  | decided (text : String)
 deriving DecidableEq, Repr
 
 /-- Where a model's history is kept: lines, in the order they were written. -/
@@ -50,6 +56,12 @@ structure Served (m : Model) where
   [input : Text Input]
   reply : (c : m.signature.Call) → Text (m.signature.Reply c) := by
     intro c; cases c <;> exact inferInstance
+  /-- What callers send that is decided across instances. -/
+  Deciding : Type := Empty
+  /-- The decision such an input is: one of the model's, who asks, and its command. -/
+  decision : Deciding → (d : Decision m.signature.aggregates) × PLift (d ∈ m.decisions) ×
+    d.Actor × d.Command := by exact nofun
+  deciding : Text Deciding := by exact inferInstance
 
 namespace Served
 
@@ -71,6 +83,12 @@ def apply (served : Served m) (w : Alchemy.World m.signature) :
       | some reply => m.play fuel w (.answer c reply)
       | none => w
     | [] => w
+  | .decided text =>
+    match served.deciding.read text with
+    | some input =>
+      m.play fuel w (.decide (served.decision input).1 (served.decision input).2.2.1
+        (served.decision input).2.2.2)
+    | none => w
 
 /-- The world a journal leaves. -/
 def replay (served : Served m) (lines : List Journal.Line) : Alchemy.World m.signature :=
@@ -97,6 +115,16 @@ theorem apply_reachable (served : Served m) (w : Alchemy.World m.signature) (lin
     · split
       · exact m.play_answer_reachable fuel w _ _ reach
       · exact reach
+    · exact reach
+  | decided text =>
+    show m.Reachable (match served.deciding.read text with
+      | some input =>
+        m.play fuel w (.decide (served.decision input).1 (served.decision input).2.2.1
+          (served.decision input).2.2.2)
+      | none => w)
+    split
+    · next input _ =>
+      exact m.play_decide_reachable fuel w _ (served.decision input).2.1.down _ _ reach
     · exact reach
 
 /--
@@ -169,6 +197,20 @@ def send (hosted : Hosted served role) (input : served.Input) :
   hosted.journal.append (.input (served.input.write input))
   let after ← hosted.answerCalls 100 (m.play Served.fuel before (.send command))
   return (before.toRecorded.outcome before.now command, after)
+
+/--
+Have the model decide across instances. Answers the rejection, if it is
+refused, and the world once everything that follows has run.
+-/
+def decide (hosted : Hosted served role) (input : served.Deciding) :
+    Run role Never (Except (served.decision input).1.Rejection Unit × Alchemy.World m.signature) := do
+  let before ← hosted.world
+  hosted.journal.append (.decided (served.deciding.write input))
+  let after ← hosted.answerCalls 100
+    (m.play Served.fuel before (.decide (served.decision input).1 (served.decision input).2.2.1
+      (served.decision input).2.2.2))
+  return (((served.decision input).1.decide ⟨(served.decision input).2.2.1, before.now⟩
+    before.state (served.decision input).2.2.2).map fun _ => (), after)
 
 /--
 What the caller of a command is told: the rejection, or the aggregate's reply

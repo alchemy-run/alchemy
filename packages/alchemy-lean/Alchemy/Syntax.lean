@@ -127,7 +127,7 @@ macro_rules
                     ∀ event ∈ events, (match event with $allowed:matchAlt*) := by
                   simp only [$(n `decide):ident] at accepted
                   (repeat' split at accepted) <;>
-                    first | (cases accepted <;> simp) | simp_all | grind)))
+                    first | (cases accepted <;> simp) | simp_all | grind | fail "this command can record an event that its records line does not list")))
             if let some rejections := rejections then
               let allowed ← rejections.getElems.mapM fun rejection =>
                 `(Term.matchAltExpr|
@@ -142,7 +142,7 @@ macro_rules
                     (match rejection with $allowed:matchAlt*) := by
                   simp only [$(n `decide):ident] at rejected
                   (repeat' split at rejected) <;>
-                    first | (cases rejected <;> simp) | simp_all | grind)))
+                    first | (cases rejected <;> simp) | simp_all | grind | fail "this command can be refused with a rejection that its rejects line does not list")))
           | _ => Macro.throwUnsupported
         let (ctors, names) ← casesOf (n `Command) plain
         commands := commands.push (← `(command|
@@ -267,6 +267,7 @@ macro_rules
     let mut views : Array Ident := #[]
     let mut projections : Array Ident := #[]
     let mut decisions : Array Ident := #[]
+    let mut decisionCommands : Array Term := #[]
     let mut saga : Option Ident := none
     let mut sagaInput : Term ← `(Unit)
     let mut sagaSignal : Term ← `(Unit)
@@ -341,6 +342,7 @@ macro_rules
             Alchemy.Projection.each_exact _ _ log))
       | `(modelItem| decision $d:ident ($command:term) : $rejection:term $alts:modelAlt*) =>
         decisions := decisions.push d
+        decisionCommands := decisionCommands.push command
         let run := under d `decide
         let alts ← exactly alts
         later := later.push (← `(command|
@@ -484,11 +486,34 @@ macro_rules
       `(Term.matchAltExpr| | $(under input a.getId):ident command =>
           ⟨$(under name a.getId), (), command⟩)
     let served := mkIdent `served
-    commands := commands.push (← `(command|
-      /-- How the model is spoken to: callers send commands, and its history is written as JSON. -/
-      abbrev $served : Alchemy.Cloud.Served $(rooted m) where
-        Input := $input
-        command := fun input => match input with $commandAlts:matchAlt*))
+    if decisions.isEmpty then
+      commands := commands.push (← `(command|
+        /-- How the model is spoken to: callers send commands, and its history is written as JSON. -/
+        abbrev $served : Alchemy.Cloud.Served $(rooted m) where
+          Input := $input
+          command := fun input => match input with $commandAlts:matchAlt*))
+    else
+      let deciding := mkIdent `Deciding
+      let decidingCtors ← (decisions.zip decisionCommands).mapM fun (d, command) =>
+        `(Command.ctor| | $d:ident (command : $command))
+      commands := commands.push (← `(command|
+        /-- What callers send that is decided across instances. -/
+        inductive $deciding where $decidingCtors* deriving Lean.ToJson, Lean.FromJson))
+      let decisionAlts ← decisions.mapM fun d =>
+        `(Term.matchAltExpr| | $(under deciding d.getId):ident command =>
+            ⟨$(under m d.getId), ⟨by repeat (first | exact List.Mem.head _ | apply List.Mem.tail)⟩,
+              (), command⟩)
+      let decisionAlts : Array (TSyntax ``Term.matchAlt) := decisionAlts.map fun alt => ⟨alt.raw⟩
+      commands := commands.push (← `(command|
+        /--
+        How the model is spoken to: callers send commands and ask for decisions,
+        and its history is written as JSON.
+        -/
+        abbrev $served : Alchemy.Cloud.Served $(rooted m) where
+          Input := $input
+          command := fun input => match input with $commandAlts:matchAlt*
+          Deciding := $deciding
+          decision := fun input => match input with $decisionAlts:matchAlt*))
     for a in aggregates do
       let always := mkIdent (a.getId ++ `always)
       let here := under name a.getId
