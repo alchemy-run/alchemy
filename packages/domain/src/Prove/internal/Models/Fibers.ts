@@ -1,3 +1,4 @@
+import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -5,9 +6,11 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FiberHandle from "effect/FiberHandle";
+import * as FiberMap from "effect/FiberMap";
 import * as FiberSet from "effect/FiberSet";
 import * as Latch from "effect/Latch";
 import * as Option from "effect/Option";
+import * as Pool from "effect/Pool";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
@@ -41,7 +44,9 @@ type Kind =
   | "FiberHandle"
   | "TxRef"
   | "TxQueue"
-  | "Pool";
+  | "Pool"
+  | "FiberMap"
+  | "Cache";
 
 /** How often effects may be run again in one handler before the prover stops reading. */
 const MAX_TURNS = 100;
@@ -1957,7 +1962,260 @@ export const make = (kit: Kit, base: Models) => {
     ),
   };
 
+  // ---- What is kept by a key: a `Cache` and a `FiberMap`. The key is one the code writes.
+
+  type Key = string | number | boolean;
+  type FM = FiberMap.FiberMap<Key, V, Held>;
+  type C = Cache.Cache<Key, V, Held>;
+  type PL = Pool.Pool<V, Held>;
+
+  /** The library finds a key by what it is, so the prover has to know what it is. */
+  const keyOf = (name: string, v: V | undefined, site: Site): Eval<Key> =>
+    v?._tag === "Num" || v?._tag === "Str" || v?._tag === "Bool"
+      ? Effect.succeed(v.value)
+      : unseen(site, `calls ${name} with a key the prover cannot see`);
+
+  const keyed = (key: Key): V =>
+    typeof key === "number" ? Value.num(key) : typeof key === "string" ? Value.str(key) : bool(key);
+
+  /** A function of one of these and a key, which gives an effect. */
+  const byKey = <H, A>(
+    kind: "FiberMap" | "Cache",
+    name: string,
+    arity: number,
+    body: (
+      held: H,
+      key: Key,
+      rest: ReadonlyArray<V>,
+      site: Site,
+    ) => Eval<Effect.Effect<A, unknown>>,
+    give: (value: A) => V,
+    wait?: string,
+  ): Model =>
+    later<H, A>(
+      kind,
+      name,
+      arity,
+      (held, [key, ...rest], site) =>
+        Effect.flatMap(keyOf(`${kind}.${name}`, key, site), (read) => body(held, read, rest, site)),
+      give,
+      wait,
+    );
+
+  const kept: Models = {
+    "effect/FiberMap:make": (_, site) =>
+      Effect.succeed(
+        scoped(
+          "FiberMap.make",
+          site,
+          () => FiberMap.make<Key, V, Held>(),
+          (held) => wrap("FiberMap", held),
+        ),
+      ),
+    "effect/FiberMap:run": ([self, key, third, fourth], site) => {
+      const held = heldOf<FM>("FiberMap", self);
+      if (held === undefined) return wrongArguments(site, "FiberMap.run");
+      const start = (read: Key, effect: V | undefined, given_: V | undefined, at: Site): Eval<V> =>
+        effect?._tag === "Effect"
+          ? Effect.succeed(
+              timed(
+                "FiberMap.run",
+                (timeline) =>
+                  Timeline.back(
+                    timeline,
+                    FiberMap.run(
+                      held,
+                      read,
+                      Timeline.real(timeline, effect.run),
+                      optionsOf(given_) as never,
+                    ),
+                    (fiber) => wrap("Fiber", fiber),
+                  ),
+                at,
+              ),
+            )
+          : wrongArguments(at, "FiberMap.run");
+      return Effect.flatMap(keyOf("FiberMap.run", key, site), (read) =>
+        third?._tag === "Effect"
+          ? start(read, third, fourth, site)
+          : Effect.succeed(
+              native("FiberMap.run", ([effect], at) => start(read, effect, third, at)),
+            ),
+      );
+    },
+    "effect/FiberMap:get": byKey<FM, Option.Option<F>>(
+      "FiberMap",
+      "get",
+      2,
+      (held, key) => Effect.succeed(FiberMap.get(held, key)),
+      (found) => (Option.isSome(found) ? Value.some(wrap("Fiber", found.value)) : Value.none),
+    ),
+    "effect/FiberMap:has": byKey<FM, boolean>(
+      "FiberMap",
+      "has",
+      2,
+      (held, key) => Effect.succeed(FiberMap.has(held, key)),
+      bool,
+    ),
+    "effect/FiberMap:remove": byKey<FM, void>(
+      "FiberMap",
+      "remove",
+      2,
+      (held, key) => Effect.succeed(FiberMap.remove(held, key)),
+      none,
+    ),
+    "effect/FiberMap:clear": on<FM, void>(
+      "FiberMap",
+      "clear",
+      1,
+      (held) => FiberMap.clear(held),
+      none,
+    ),
+    "effect/FiberMap:size": on<FM, number>(
+      "FiberMap",
+      "size",
+      1,
+      (held) => FiberMap.size(held),
+      num,
+    ),
+    "effect/FiberMap:awaitEmpty": on<FM, void>(
+      "FiberMap",
+      "awaitEmpty",
+      1,
+      (held) => FiberMap.awaitEmpty(held),
+      none,
+      "waits for the fibers of a FiberMap, which never end",
+    ),
+    "effect/Cache:make": ([given_], site) => {
+      const fields = given_?._tag === "Obj" && !given_.brand ? given_.fields : undefined;
+      const lookup = fields?.lookup;
+      if (
+        !fields ||
+        !lookup ||
+        !Object.keys(fields).every((key) => ["lookup", "capacity", "timeToLive"].includes(key))
+      )
+        return wrongArguments(site, "Cache.make");
+      return Effect.succeed(
+        timed(
+          "Cache.make",
+          (timeline) =>
+            Effect.gen(function* () {
+              const size = yield* count("Cache.make", fields.capacity, site);
+              const timeToLive = fields.timeToLive
+                ? yield* written("Cache.make", fields.timeToLive, site)
+                : undefined;
+              const held = yield* Cache.make<Key, V, Held>({
+                capacity: size,
+                timeToLive,
+                lookup: (key) => called(timeline, lookup, site)(keyed(key)),
+              });
+              return wrap("Cache", held);
+            }),
+          site,
+        ),
+      );
+    },
+    "effect/Cache:get": byKey<C, V>(
+      "Cache",
+      "get",
+      2,
+      (held, key) => Effect.succeed(Cache.get(held, key)),
+      same,
+    ),
+    "effect/Cache:getOption": byKey<C, Option.Option<V>>(
+      "Cache",
+      "getOption",
+      2,
+      (held, key) => Effect.succeed(Cache.getOption(held, key)),
+      option,
+    ),
+    "effect/Cache:set": byKey<C, void>(
+      "Cache",
+      "set",
+      3,
+      (held, key, [value]) => Effect.succeed(Cache.set(held, key, value ?? Value.undef)),
+      none,
+    ),
+    "effect/Cache:has": byKey<C, boolean>(
+      "Cache",
+      "has",
+      2,
+      (held, key) => Effect.succeed(Cache.has(held, key)),
+      bool,
+    ),
+    "effect/Cache:invalidate": byKey<C, void>(
+      "Cache",
+      "invalidate",
+      2,
+      (held, key) => Effect.succeed(Cache.invalidate(held, key)),
+      none,
+    ),
+    "effect/Cache:refresh": byKey<C, V>(
+      "Cache",
+      "refresh",
+      2,
+      (held, key) => Effect.succeed(Cache.refresh(held, key)),
+      same,
+    ),
+    "effect/Cache:invalidateAll": on<C, void>(
+      "Cache",
+      "invalidateAll",
+      1,
+      (held) => Cache.invalidateAll(held),
+      none,
+    ),
+    "effect/Cache:size": on<C, number>("Cache", "size", 1, (held) => Cache.size(held), num),
+    "effect/Pool:make": ([given_], site) => {
+      const fields = given_?._tag === "Obj" && !given_.brand ? given_.fields : undefined;
+      const acquire = fields?.acquire;
+      if (
+        !fields ||
+        acquire?._tag !== "Effect" ||
+        !Object.keys(fields).every((key) => ["acquire", "size"].includes(key))
+      )
+        return wrongArguments(site, "Pool.make");
+      return Effect.succeed(
+        scoped(
+          "Pool.make",
+          site,
+          (timeline) =>
+            Effect.flatMap(Timeline.real(timeline, count("Pool.make", fields.size, site)), (size) =>
+              Pool.make({ acquire: Timeline.real(timeline, acquire.run), size }),
+            ),
+          (held) => wrap("Pool", held),
+        ),
+      );
+    },
+    "effect/Pool:get": ([self], site) => {
+      const held = heldOf<PL>("Pool", self);
+      return held
+        ? Effect.succeed(
+            scoped(
+              "Pool.get",
+              site,
+              (timeline) =>
+                Timeline.waiting(
+                  timeline,
+                  "waits for an item of a Pool that nothing gives back",
+                  site,
+                  Pool.get(held),
+                ),
+              same,
+            ),
+          )
+        : wrongArguments(site, "Pool.get");
+    },
+    "effect/Pool:invalidate": on<PL, void>(
+      "Pool",
+      "invalidate",
+      2,
+      (held, [item]) => Pool.invalidate(held, item ?? Value.undef),
+      none,
+    ),
+  };
+
   const models: Models = {
+    ...kept,
     ...transactions,
     ...sets,
     ...changes,

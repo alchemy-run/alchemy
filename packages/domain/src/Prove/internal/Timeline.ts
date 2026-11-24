@@ -153,12 +153,12 @@ export const back = <A, B = V>(
   });
 
 /** Say what a fiber waits for while it does: a handler that never ends is reported with it. */
-export const waiting = <A, E>(
+export const waiting = <A, E, R>(
   timeline: Timeline,
   what: string,
   site: Site,
-  self: Effect.Effect<A, E>,
-): Effect.Effect<A, E> =>
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
   Effect.withFiber((fiber) => {
     // A wait inside another is the one the fiber is in, until it is over.
     const before = timeline.waits.get(fiber.id);

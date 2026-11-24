@@ -1934,6 +1934,33 @@ TxQueue.isEmpty(line);
 TxQueue.isFull(line);
 ```
 
+```typescript title="effect/Cache, effect/FiberMap and effect/Pool"
+// What is kept by a key is found by a key the code writes.
+const prices = yield* Cache.make({
+  capacity: 2,
+  lookup: (name) => Effect.as(log(asked, name), name.length + a),
+});
+Cache.get(prices, "tea"); // runs the lookup once for a key
+Cache.getOption(prices, "milk");
+Cache.set(prices, "milk", b);
+Cache.has(prices, "tea");
+Cache.invalidate(prices, "tea");
+Cache.invalidateAll(prices);
+Cache.refresh(prices, "tea");
+Cache.size(prices);
+const jobs = yield* FiberMap.make(); // in a scope
+FiberMap.run(jobs, "one", Effect.andThen(Effect.sleep(3), log(seen, "one again"))); // stops the fiber the key had
+FiberMap.get(jobs, "one");
+FiberMap.has(jobs, "two");
+FiberMap.remove(jobs, 4);
+FiberMap.clear(jobs);
+FiberMap.size(jobs);
+FiberMap.awaitEmpty(jobs);
+const pool = yield* Pool.make({ acquire: Ref.updateAndGet(made, (n) => n + 1), size: 2 });
+Pool.get(pool); // in a scope: waits for an item to be given back
+Pool.invalidate(pool, item);
+```
+
 ```typescript title="effect/PubSub"
 // What is published reaches each one who subscribed before it was.
 const hub = yield* PubSub.unbounded();
@@ -2404,10 +2431,7 @@ A handler's sleeps, time limits, races and fibers are [supported](#time-and-fibe
 
 ```typescript title="Time passing and things running together"
 import * as Scheduler from "effect/Scheduler";
-import * as FiberMap from "effect/FiberMap";
 import * as PartitionedSemaphore from "effect/PartitionedSemaphore";
-import * as Pool from "effect/Pool";
-import * as Cache from "effect/Cache";
 import * as ScopedCache from "effect/ScopedCache";
 import * as Request from "effect/Request";
 import * as RequestResolver from "effect/RequestResolver";

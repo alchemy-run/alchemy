@@ -19,7 +19,8 @@ const READ = new Set([
   ...["Order", "Ordering", "Predicate", "PrimaryKey", "Rational", "Record", "Redacted"],
   ...["Ref", "RegExp", "Result", "SemVer", "SemVerRange", "Sink", "Stream", "String", "Struct"],
   ...["SubscriptionRef", "Symbol", "SynchronizedRef", "TextDiff", "Trie", "Tuple", "UndefinedOr"],
-  ...["Deferred", "Fiber", "FiberHandle", "FiberSet", "Latch", "PubSub", "Queue", "Schedule"],
+  ...["Cache", "Deferred", "Fiber", "FiberHandle", "FiberMap", "FiberSet", "Latch", "Pool"],
+  ...["PubSub", "Queue", "Schedule"],
   ...["Semaphore", "TxQueue", "TxRef", "index"],
 ]);
 
@@ -105,7 +106,7 @@ it.effect(
         "calls M.f, which the prover has no model for",
         "compares values the prover does not model",
       ]);
-      expect(modules.length).toBeGreaterThan(70);
+      expect(modules.length).toBeGreaterThan(60);
       expect(calls.length).toBeGreaterThan(1500);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   300_000,

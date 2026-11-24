@@ -114,14 +114,19 @@ export class Fog extends Domain.Aggregate("Fog", {
     }),
     // A function the prover has no model for is run as it is, but only on values the code writes.
     Turn: (_fog, command) => [new Seen({ n: Array.rotate([command.n, 2, 3], 1)[0] ?? 0 })],
-    // A cache remembers across calls: what it gives depends on what was asked before.
+    // A cache finds what it kept by its key, so the key has to be one the code writes.
     Remember: Effect.fn(function* (_fog, command) {
       const cache = yield* Cache.make({ capacity: 8, lookup: (n: number) => Effect.succeed(n) });
       return [new Seen({ n: yield* Cache.get(cache, command.n) })];
     }),
-    // A pool hands out what others may hold.
+    // A pool that grows and shrinks with time, which the prover has no model for.
     Borrow: Effect.fn(function* (_fog, command) {
-      const pool = yield* Pool.make({ acquire: Effect.succeed(command.n), size: 1 });
+      const pool = yield* Pool.makeWithTTL({
+        acquire: Effect.succeed(command.n),
+        min: 1,
+        max: 2,
+        timeToLive: "1 second",
+      });
       return [new Seen({ n: yield* Pool.get(pool) })];
     }, Effect.scoped),
     // A semaphore with too few permits free waits for another fiber, and a handler is one fiber.

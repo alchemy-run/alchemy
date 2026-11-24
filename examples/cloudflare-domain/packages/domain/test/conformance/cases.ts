@@ -2513,6 +2513,9 @@ const rest: ReadonlyArray<Group> = [
       `import * as FiberHandle from "effect/FiberHandle";`,
       `import * as TxRef from "effect/TxRef";`,
       `import * as TxQueue from "effect/TxQueue";`,
+      `import * as FiberMap from "effect/FiberMap";`,
+      `import * as Cache from "effect/Cache";`,
+      `import * as Pool from "effect/Pool";`,
       `import * as Fiber from "effect/Fiber";`,
       `import * as Latch from "effect/Latch";`,
       `import * as Queue from "effect/Queue";`,
@@ -2589,6 +2592,11 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const stock = yield* TxRef.make(0); const taken = yield* Effect.forkChild(Effect.tx(Effect.gen(function* () { const held = yield* TxRef.get(stock); if (held < 2) return yield* Effect.txRetry; yield* TxRef.set(stock, held - 2); return held; }))); yield* Effect.sleep(1); yield* TxRef.set(stock, 1); yield* Effect.sleep(1); yield* TxRef.set(stock, a + 30); return [yield* Fiber.join(taken), yield* TxRef.get(stock)]; })`,
       `Effect.gen(function* () { const line = yield* TxQueue.unbounded(); const offered = yield* TxQueue.offer(line, a); yield* TxQueue.offerAll(line, [b, 1, 2]); return [offered, yield* TxQueue.take(line), yield* TxQueue.peek(line), yield* TxQueue.takeN(line, 1), yield* TxQueue.size(line), yield* TxQueue.isEmpty(line), yield* TxQueue.isFull(line), yield* TxQueue.poll(line), yield* TxQueue.takeAll(line), yield* TxQueue.poll(line)]; })`,
       `Effect.gen(function* () { const line = yield* TxQueue.bounded(1); yield* Effect.forkChild(Effect.forEach([a, b], (n) => TxQueue.offer(line, n))); return [yield* TxQueue.take(line), yield* TxQueue.take(line)]; })`,
+      // What is kept by a key the code writes: fibers, what a lookup gave, and what a pool holds.
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const sizes = yield* Effect.scoped(Effect.gen(function* () { const jobs = yield* FiberMap.make(); yield* FiberMap.run(jobs, "one", Effect.onInterrupt(Effect.sleep(20), () => log(seen, "one stopped"))); yield* FiberMap.run(jobs, "two")(Effect.andThen(Effect.sleep(2), log(seen, "two done"))); yield* Effect.sleep(1); yield* FiberMap.run(jobs, "one", Effect.andThen(Effect.sleep(3), log(seen, "one again"))); const before = [yield* FiberMap.size(jobs), yield* FiberMap.has(jobs, "two"), Option.isSome(yield* FiberMap.get(jobs, "one")), Option.isSome(yield* FiberMap.get(jobs, "three"))]; yield* FiberMap.awaitEmpty(jobs); yield* FiberMap.run(jobs, 4, Effect.onInterrupt(Effect.sleep(20), () => log(seen, "four stopped"))); yield* Effect.sleep(1); yield* FiberMap.remove(jobs, 4); yield* FiberMap.clear(jobs); return [before, yield* FiberMap.size(jobs)]; })); return [sizes, yield* Ref.get(seen)]; })`,
+      `Effect.gen(function* () { const asked = yield* Ref.make([]); const prices = yield* Cache.make({ capacity: 2, lookup: (name) => Effect.as(log(asked, name), name.length + a) }); const first = [yield* Cache.get(prices, "tea"), yield* Cache.get(prices, "tea"), yield* Cache.has(prices, "tea"), yield* Cache.has(prices, "milk"), yield* Cache.getOption(prices, "milk")]; yield* Cache.set(prices, "milk", b); yield* Cache.invalidate(prices, "tea"); const second = [yield* Cache.get(prices, "milk"), yield* Cache.get(prices, "tea"), yield* Cache.refresh(prices, "tea"), yield* Cache.size(prices)]; yield* Cache.invalidateAll(prices); return [first, second, yield* Cache.size(prices), yield* Ref.get(asked)]; })`,
+      `Effect.gen(function* () { const prices = yield* Cache.make({ capacity: 4, lookup: (n) => even(n + a) }); return [yield* Effect.result(Cache.get(prices, 0)), yield* Effect.result(Cache.get(prices, 1))]; })`,
+      `Effect.gen(function* () { const made = yield* Ref.make(0); const seen = yield* Ref.make([]); yield* Effect.scoped(Effect.gen(function* () { const pool = yield* Pool.make({ acquire: Ref.updateAndGet(made, (n) => n + 1), size: 2 }); const use = (name, millis) => Effect.scoped(Effect.gen(function* () { const item = yield* Pool.get(pool); yield* log(seen, name + " has " + item); yield* Effect.sleep(millis); if (name === "one") yield* Pool.invalidate(pool, item); if (name === "two") yield* pipe(pool, Pool.invalidate(item)); })); yield* Effect.all([use("one", 3), use("two", 5), use("three", 1)], { concurrency: 3 }); })); return [yield* Ref.get(made), yield* Ref.get(seen)]; })`,
       // Effects run together.
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const made = yield* Effect.all([Effect.as(Effect.andThen(Effect.sleep(2), log(seen, "a")), a), Effect.as(Effect.andThen(Effect.sleep(1), log(seen, "b")), b), Effect.as(log(seen, "c"), 1)], { concurrency: "unbounded" }); return [made, yield* Ref.get(seen)]; })`,
       `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.all([Effect.andThen(Effect.sleep(2), log(seen, "a")), Effect.andThen(Effect.sleep(1), log(seen, "b")), log(seen, "c"), Effect.andThen(Effect.sleep(4), log(seen, "d"))], { concurrency: 2, discard: true }); return yield* Ref.get(seen); })`,
@@ -2615,6 +2623,10 @@ const rest: ReadonlyArray<Group> = [
         /a concurrency the prover cannot see/,
       ],
       [`Effect.acquireRelease(Effect.succeed(a), () => Effect.void)`, /outside Effect\.scoped/],
+      [
+        `Effect.gen(function* () { const prices = yield* Cache.make({ capacity: 2, lookup: (n) => Effect.succeed(n) }); return yield* Cache.get(prices, a); })`,
+        /a key the prover cannot see/,
+      ],
       [
         `Effect.tx(Effect.gen(function* () { const cell = yield* TxRef.make(a); if ((yield* TxRef.get(cell)) < 99) return yield* Effect.txRetry; return a; }))`,
         /retries a transaction whose TxRefs nothing changes/,
