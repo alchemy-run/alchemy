@@ -3,13 +3,11 @@ import Alchemy.Cloud.Sim
 /-!
 # A host's body
 
-`Host role` is the `do` block a host is written in. A binding is a step: it
-adds a grant to the host's role and gives back a client. Listening to a
-resource is a step too: it registers the listener. The block ends with what the
-host serves.
+`Host role` is the `do` block a host is written in. Listening to a resource is
+a step: it registers the listener. The block ends with what the host serves.
 
-Nobody writes the role. The block is run when the stack is built, and its role
-is the grants its steps asked for.
+Nobody writes the role. It is the grants the calls in the block ask for, read
+off the code when the file is checked.
 -/
 
 namespace Alchemy.Cloud
@@ -82,14 +80,6 @@ def listen (subscription : Subscription role) : Host role Unit :=
   modify fun hosting => { hosting with on := hosting.on ++ [subscription] }
 
 end Host
-
-/-- `Live S`: the service `S` on the resource itself, and the grant that takes. -/
-class Live (S : Service K) where
-  layer : Layer Nothing S
-
-/-- A host's block gives any binding, and adds its grant to the role. -/
-instance (S : Service K) [Live S] {role : Access K} : Gives (Host role) S role :=
-  ⟨Host.provide Live.layer⟩
 
 /-- Run a host's block until its role has every grant it asks for. -/
 def settleHost {F : Access K → Type} (body : {role : Access K} → Host role (F role))

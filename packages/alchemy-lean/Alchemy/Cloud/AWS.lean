@@ -219,7 +219,6 @@ def GetObjectLive (bucket : AWS.Bucket) (under : Path := []) :
         | .ok body => return body
         | .error missing => throw (.noSuchKey missing) }
 
-instance (bucket : AWS.Bucket) (under : Path) : Live (GetObject.Client bucket under) := ⟨GetObjectLive bucket under⟩
 
 /-- Write the objects of a bucket under a prefix: a step that gives the client. -/
 def PutObject (bucket : AWS.Bucket) (under : Path := []) {m : Type → Type} {access : Access Kind}
@@ -235,7 +234,6 @@ def PutObjectLive (bucket : AWS.Bucket) (under : Path := []) :
         Run.performUnder bucket (BucketCall.putObject (under ++ [name]) body) (BucketOp.put under)
           ⟨le⟩ (by simp [Cloud.needs, AWS.needs, Kinds.covers, BucketOp.covers]) }
 
-instance (bucket : AWS.Bucket) (under : Path) : Live (PutObject.Client bucket under) := ⟨PutObjectLive bucket under⟩
 
 /-- List the keys of a bucket: a step that gives the client. -/
 def ListObjects (bucket : AWS.Bucket) {m : Type → Type} {access : Access Kind}
@@ -247,7 +245,6 @@ def ListObjectsLive (bucket : AWS.Bucket) : Layer Nothing (ListObjects.Client bu
   needs := List bucket
   build le _ := { call := Run.perform bucket BucketCall.listObjects ⟨le⟩ }
 
-instance (bucket : AWS.Bucket) : Live (ListObjects.Client bucket) := ⟨ListObjectsLive bucket⟩
 
 /-- Read `under/name`. -/
 def getObjectE (bucket : AWS.Bucket) (under : Path) (name : String)
@@ -303,7 +300,6 @@ def SendMessageLive (queue : AWS.Queue) : Layer Nothing (SendMessage.Client queu
   needs := Send queue
   build le _ := { call := fun body => Run.perform queue (QueueCall.sendMessage body) ⟨le⟩ }
 
-instance (queue : AWS.Queue) : Live (SendMessage.Client queue) := ⟨SendMessageLive queue⟩
 
 /-- Take messages off a queue: a step that gives the client. -/
 def ReceiveMessage (queue : AWS.Queue) {m : Type → Type} {access : Access Kind}
@@ -315,7 +311,6 @@ def ReceiveMessageLive (queue : AWS.Queue) : Layer Nothing (ReceiveMessage.Clien
   needs := Receive queue
   build le _ := { call := Run.perform queue QueueCall.receiveMessage ⟨le⟩ }
 
-instance (queue : AWS.Queue) : Live (ReceiveMessage.Client queue) := ⟨ReceiveMessageLive queue⟩
 
 def sendMessageE (queue : AWS.Queue) (body : String) [Uses R (SendMessage.Client queue)] :
     Effect R ε Unit :=

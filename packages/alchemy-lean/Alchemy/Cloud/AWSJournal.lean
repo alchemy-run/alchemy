@@ -270,11 +270,6 @@ theorem quiet {access : Access Kind} {ε α : Type} (run : Run access ε α) (m 
       Sound bucket under (run.eval InMemory m).2 :=
   ⟨(untouched objects).1, (untouched objects).2 sound⟩
 
-/-- A journal in a bucket: a step of a host's block. -/
-def Journal {role : Access Kind} (bucket : AWS.Bucket) (under : Path := ["journal"]) :
-    Host role (Cloud.Journal role) :=
-  Host.provide (JournalLive bucket under)
-
 end Alchemy.AWS.S3
 
 namespace Alchemy.AWS
