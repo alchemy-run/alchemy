@@ -2795,6 +2795,45 @@ const rest: ReadonlyArray<Group> = [
     ],
   },
   {
+    // A hash map, a hash set and a priority queue in a transaction, by keys an input decides.
+    name: "Stores",
+    chunk: 2,
+    ...numbers,
+    effectful: true,
+    prelude: [
+      `import * as Fiber from "effect/Fiber";`,
+      `import * as Request from "effect/Request";`,
+      `import * as RequestResolver from "effect/RequestResolver";`,
+      `import * as TxHashMap from "effect/TxHashMap";`,
+      `import * as TxHashSet from "effect/TxHashSet";`,
+      `import * as TxPriorityQueue from "effect/TxPriorityQueue";`,
+      `export class GetPrice extends Request.TaggedClass("GetPrice")<{ readonly item: number }, number> {}`,
+      `export class Ask extends Request.Class<{ readonly n: number }, number> {}`,
+      `class Kept extends Request.TaggedClass("Kept")<{ readonly item: number }, number> {}`,
+    ],
+    both: [
+      `Effect.gen(function* () { const stock = yield* TxHashMap.make([a, 1], [b, 2]); const first = [yield* TxHashMap.get(stock, a), yield* TxHashMap.has(stock, b), yield* TxHashMap.has(stock, 99), yield* TxHashMap.size(stock), yield* TxHashMap.isEmpty(stock), yield* TxHashMap.isNonEmpty(stock)]; yield* TxHashMap.set(stock, 99, 3); const removed = [yield* TxHashMap.remove(stock, a), yield* TxHashMap.remove(stock, 77)]; return [first, removed, yield* TxHashMap.get(stock, 99), yield* TxHashMap.size(stock)]; })`,
+      `Effect.gen(function* () { const stock = yield* TxHashMap.empty(); yield* TxHashMap.set(stock, "tea", a); yield* TxHashMap.setMany(stock, [["milk", b], ["salt", 1]]); const before = yield* TxHashMap.modify(stock, "tea", (n) => n + 10); const missing = yield* TxHashMap.modify(stock, "none", (n) => n + 10); yield* TxHashMap.modifyAt(stock, "rice", (held) => Option.some(Option.getOrElse(held, () => 0) + 5)); yield* TxHashMap.removeMany(stock, ["salt"]); yield* TxHashMap.union(stock, HashMap.make(["oil", 7])); return [before, missing, yield* TxHashMap.get(stock, "tea"), yield* TxHashMap.get(stock, "rice"), yield* TxHashMap.has(stock, "salt"), yield* TxHashMap.get(stock, "oil"), yield* TxHashMap.size(stock)]; })`,
+      `Effect.gen(function* () { const stock = yield* TxHashMap.fromIterable([["tea", a], ["milk", b]]); const doubled = yield* TxHashMap.map(stock, (n) => n * 2); const some = yield* TxHashMap.filter(stock, (n) => n > 0); yield* TxHashMap.set(doubled, "more", 1); const whole = yield* TxHashMap.snapshot(stock); return [yield* TxHashMap.reduce(stock, 0, (total, n) => total + n), yield* TxHashMap.some(stock, (n) => n > a), yield* TxHashMap.every(stock, (n) => n >= a), yield* TxHashMap.hasBy(stock, (n, name) => name === "tea" && n === a), yield* TxHashMap.get(doubled, "tea"), yield* TxHashMap.size(doubled), yield* TxHashMap.size(some), HashMap.size(whole), yield* TxHashMap.size(stock)]; })`,
+      `Effect.gen(function* () { const stock = yield* TxHashMap.make(["tea", a]); const kinds = [yield* TxHashMap.keys(stock), yield* TxHashMap.values(stock), yield* TxHashMap.toValues(stock), yield* TxHashMap.entries(stock), yield* TxHashMap.toEntries(stock), yield* TxHashMap.findFirst(stock, (n) => n === a)]; yield* TxHashMap.clear(stock); return [kinds, yield* TxHashMap.isEmpty(stock), yield* pipe(stock, TxHashMap.set("x", b), Effect.andThen(TxHashMap.get(stock, "x")))]; })`,
+      `Effect.gen(function* () { const stock = yield* TxHashMap.make(["tea", 0]); const buyer = yield* Effect.forkChild(Effect.tx(Effect.gen(function* () { const held = Option.getOrElse(yield* TxHashMap.get(stock, "tea"), () => 0); if (held < 2) return yield* Effect.txRetry; yield* TxHashMap.set(stock, "tea", held - 2); return held; }))); yield* Effect.sleep(1); yield* TxHashMap.set(stock, "tea", a + 30); return [yield* Fiber.join(buyer), yield* TxHashMap.get(stock, "tea")]; })`,
+      `Effect.gen(function* () { const seen = yield* TxHashSet.make(a, b); const first = [yield* TxHashSet.has(seen, a), yield* TxHashSet.has(seen, 99), yield* TxHashSet.size(seen), yield* TxHashSet.isEmpty(seen), yield* TxHashSet.isNonEmpty(seen)]; yield* TxHashSet.add(seen, 99); yield* TxHashSet.add(seen, a); const removed = [yield* TxHashSet.remove(seen, b), yield* TxHashSet.remove(seen, 77)]; return [first, removed, yield* TxHashSet.has(seen, 99), yield* TxHashSet.size(seen)]; })`,
+      `Effect.gen(function* () { const left = yield* TxHashSet.fromIterable([1, 2, a]); const right = yield* TxHashSet.fromHashSet(HashSet.make(2, 3)); const none = yield* TxHashSet.empty(); const all = yield* TxHashSet.union(left, right); const both = yield* TxHashSet.intersection(left, right); const only = yield* TxHashSet.difference(left, right); const doubled = yield* TxHashSet.map(left, (n) => n * 2); const big = yield* TxHashSet.filter(left, (n) => n > 1); yield* TxHashSet.clear(none); return [yield* TxHashSet.size(all), yield* TxHashSet.size(both), yield* TxHashSet.size(only), yield* TxHashSet.has(doubled, 4), yield* TxHashSet.size(big), yield* TxHashSet.isSubset(both, left), yield* TxHashSet.isSubset(left, right), yield* TxHashSet.some(left, (n) => n > 1), yield* TxHashSet.every(left, (n) => n > 1), yield* TxHashSet.reduce(left, 0, (total, n) => total + n), yield* TxHashSet.size(none), yield* TxHashSet.size(left)]; })`,
+      `Effect.gen(function* () { const line = yield* TxPriorityQueue.make(Order.Number)(3, a); yield* TxPriorityQueue.offer(line, b); yield* TxPriorityQueue.offerAll(line, [0, 5]); const first = [yield* TxPriorityQueue.size(line), yield* TxPriorityQueue.peek(line), yield* TxPriorityQueue.peekOption(line), yield* TxPriorityQueue.take(line), yield* TxPriorityQueue.takeUpTo(line, 2), yield* TxPriorityQueue.takeOption(line)]; const left = yield* TxPriorityQueue.toArray(line); return [first, left, yield* TxPriorityQueue.takeAll(line), yield* TxPriorityQueue.isEmpty(line), yield* TxPriorityQueue.isNonEmpty(line), yield* TxPriorityQueue.takeOption(line), yield* TxPriorityQueue.peekOption(line)]; })`,
+      `Effect.gen(function* () { const line = yield* TxPriorityQueue.empty(byN); yield* TxPriorityQueue.offer(line, { n: 1, t: "first" }); yield* TxPriorityQueue.offer(line, { n: 1, t: "second" }); yield* TxPriorityQueue.offer(line, { n: a, t: "held" }); const other = yield* TxPriorityQueue.fromIterable(Order.Number, [5, 1, 3, a]); yield* TxPriorityQueue.removeIf(other, (n) => n === 3); const kept = yield* TxPriorityQueue.toArray(other); yield* TxPriorityQueue.retainIf(other, (n) => n > 1); return [yield* TxPriorityQueue.toArray(line), kept, yield* TxPriorityQueue.toArray(other)]; })`,
+      `Effect.gen(function* () { const line = yield* TxPriorityQueue.empty(Order.Number); const taker = yield* Effect.forkChild(TxPriorityQueue.take(line)); yield* Effect.sleep(1); yield* TxPriorityQueue.offerAll(line, [b, a]); return [yield* Fiber.join(taker), yield* TxPriorityQueue.toArray(line)]; })`,
+      // A resolver from a plain function, and a request written as a class.
+      `Effect.gen(function* () { const ask = Request.tagged("Double"); const doubled = RequestResolver.fromFunction((entry) => entry.request.n * 2 + a); return yield* Effect.all([Effect.request(ask({ n: 1 }), doubled), Effect.request(ask({ n: 2 }), doubled)], { concurrency: 2 }); })`,
+      `Effect.gen(function* () { const prices = RequestResolver.make((entries) => Effect.forEach(entries, (entry) => Request.succeed(entry, entry.request._tag.length + entry.request.item + a), { discard: true })); const asked = RequestResolver.fromEffect((entry) => Effect.succeed(entry.request.n * 2 + b)); return [yield* Effect.request(new GetPrice({ item: 2 }), prices), yield* Effect.request(new Ask({ n: 3 }), asked), yield* Effect.request(new Kept({ item: 1 }), prices)]; })`,
+    ],
+    unread: [
+      [
+        `Effect.gen(function* () { const line = yield* TxPriorityQueue.empty(Order.Number); return yield* TxPriorityQueue.take(line); })`,
+        /waits for a TxPriorityQueue that nothing changes/,
+      ],
+    ],
+  },
+  {
     name: "Services",
     ...numbers,
     effectful: true,

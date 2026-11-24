@@ -22,7 +22,7 @@ const READ = new Set([
   ...["Cache", "Deferred", "Fiber", "FiberHandle", "FiberMap", "FiberSet", "Latch", "Pool"],
   ...["PubSub", "Queue", "Request", "RequestResolver", "Schedule"],
   ...["PartitionedSemaphore", "ScopedCache", "Semaphore", "TxChunk", "TxDeferred", "TxPubSub"],
-  ...["TxQueue"],
+  ...["TxHashMap", "TxHashSet", "TxPriorityQueue", "TxQueue"],
   ...["TxReentrantLock", "TxRef", "TxSemaphore", "TxSubscriptionRef", "index"],
 ]);
 
@@ -108,8 +108,8 @@ it.effect(
         "calls M.f, which the prover has no model for",
         "compares values the prover does not model",
       ]);
-      expect(modules.length).toBeGreaterThan(50);
-      expect(calls.length).toBeGreaterThan(1500);
+      expect(modules.length).toBeGreaterThan(45);
+      expect(calls.length).toBeGreaterThan(1400);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   300_000,
 );

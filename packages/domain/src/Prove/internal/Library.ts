@@ -1329,7 +1329,14 @@ export const make = (host: Host) => {
     ...exits.models,
     ...rationals.models,
   };
-  const fibers = Fibers.make(kit, { ...written });
+  /** Classes of the library other than `effect/Data`'s, each with what a class that extends it is. */
+  const extending = new WeakMap<object, (name: string) => V>();
+  const asClass = (made: V, extended: (name: string) => V): V => {
+    classes.add(made);
+    extending.set(made, extended);
+    return made;
+  };
+  const fibers = Fibers.make(kit, { ...written }, asClass);
   Object.assign(written, fibers.models);
   Object.assign(clocks, fibers.sited);
   const flows = Flows.make(kit, { ...written }, fibers.tools);
@@ -1555,6 +1562,8 @@ export const make = (host: Host) => {
     opticMember,
     /** A member of a latch or a semaphore: `latch.open`, `semaphore.withPermits`. */
     waitMember: fibers.member,
+    /** An instance of a class of the library that a file exports, other than one of `effect/Data`'s. */
+    constructHost: fibers.constructs,
     /** A helper of a tagged union of `effect/Schema`, as a value the code calls. */
     unionMember,
     /** A method of a string, as a value the code calls. */
@@ -1567,6 +1576,8 @@ export const make = (host: Host) => {
     isClass: (value: V): boolean => classes.has(value),
     /** A class a file declares by extending one of `effect/Data`'s: its own class, with the same fields. */
     subclass: (base: V, name: string): V | undefined => {
+      const extended = extending.get(base);
+      if (extended) return extended(name);
       const kind = bases.get(base);
       return kind && dataClass(name, kind.tag, kind.error);
     },

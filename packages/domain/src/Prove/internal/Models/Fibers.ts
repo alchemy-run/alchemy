@@ -69,7 +69,10 @@ type Kind =
   | "TxChunk"
   | "Request"
   | "Entry"
-  | "Resolver";
+  | "Resolver"
+  | "TxHashMap"
+  | "TxHashSet"
+  | "TxPriorityQueue";
 
 /** How often effects may be run again in one handler before the prover stops reading. */
 const MAX_TURNS = 100;
@@ -93,7 +96,12 @@ const failure = (reasons: ReadonlyArray<V>): V =>
  * given the code's effects to run on the handler's timeline: what it does to
  * them is what the deployed handler does, by being the same code.
  */
-export const make = (kit: Kit, base: Models) => {
+export const make = (
+  kit: Kit,
+  base: Models,
+  /** Say that a value is a class, and what a class that extends it is. */
+  asClass: (made: V, extended: (name: string) => V) => V,
+) => {
   const { host, ran } = kit;
 
   // ---- What the library holds, as values of the code, and back.
@@ -1382,6 +1390,8 @@ export const make = (kit: Kit, base: Models) => {
         ),
       ),
     "effect/Schedule:forever": () => wrap("Schedule", Schedule.forever),
+    "effect/Request:Class": () =>
+      requestClass("Request.Class", (fields) => Request.of<Asked>()(fields as never)),
     "effect/Schedule:once": () => wrap("Schedule", Schedule.once),
   };
 
@@ -3131,7 +3141,7 @@ export const make = (kit: Kit, base: Models) => {
         : wrongArguments(site, `Request.${name}`);
     });
 
-  const requests: Models = {
+  const requests: Record<string, Model> = {
     "effect/Request:tagged": ([tag], site) =>
       tag?._tag === "Str"
         ? Effect.succeed(
@@ -3226,7 +3236,397 @@ export const make = (kit: Kit, base: Models) => {
     },
   };
 
+  // ---- A hash map, a hash set and a priority queue in a transaction.
+  // Each is a `TxRef` of the collection, as the library has it: the collection is the prover's own,
+  // so a key an input decides is read as it is in a `HashMap`.
+
+  interface Store {
+    readonly ref: TxRef.TxRef<V>;
+    /** How a priority queue puts its items in order. */
+    readonly order?: V;
+  }
+  type StoreKind = "TxHashMap" | "TxHashSet" | "TxPriorityQueue";
+
+  /** A function of the library the prover has a model for, by `module:name`. */
+  const lib = (key: string, args: ReadonlyArray<V>, site: Site): Eval<V> => {
+    const model = base[key];
+    return model ? model(args, site) : wrongArguments(site, key);
+  };
+
+  const storing = (kind: StoreKind, collection: Eval<V>, order?: V): V =>
+    lazy(() =>
+      Effect.flatMap(collection, (held) =>
+        Effect.map(TxRef.make(held), (ref) => wrap(kind, order ? { ref, order } : { ref })),
+      ),
+    );
+
+  /**
+   * A function of one of these: `step` says what it gives of what the store
+   * holds, what the store holds after, or that it waits for the store to change.
+   */
+  const stored = (
+    kind: StoreKind,
+    name: string,
+    step: (
+      before: V,
+      rest: ReadonlyArray<V>,
+      site: Site,
+      store: Store,
+    ) => Eval<{ readonly next?: V; readonly gives: V } | "retry">,
+    /** How many arguments it takes, when another is a store too: which comes first is then counted. */
+    arity?: number,
+  ): Model =>
+    (arity === undefined
+      ? (body: Model) => dualBy(`${kind}.${name}`, (v) => kindOf(v) === kind, body)
+      : (body: Model) => dual(`${kind}.${name}`, arity, body))(([self, ...rest], site) => {
+      const store = heldOf<Store>(kind, self);
+      return store
+        ? Effect.succeed(
+            timed(
+              `${kind}.${name}`,
+              (timeline) =>
+                Timeline.back(
+                  timeline,
+                  Timeline.waiting(
+                    timeline,
+                    `waits for a ${kind} that nothing changes`,
+                    site,
+                    store.ref.pipe(
+                      TxRef.get,
+                      Effect.flatMap((before) =>
+                        Timeline.real(timeline, step(before, rest, site, store)),
+                      ),
+                      Effect.flatMap((read) =>
+                        read === "retry"
+                          ? Effect.txRetry
+                          : read.next
+                            ? Effect.as(TxRef.set(store.ref, read.next), read.gives)
+                            : Effect.succeed(read.gives),
+                      ),
+                      Effect.tx,
+                    ),
+                  ),
+                  same,
+                ),
+              site,
+            ),
+          )
+        : wrongArguments(site, `${kind}.${name}`);
+    });
+
+  /** A function that reads the collection as the prover's model of it does. */
+  const reads = (kind: StoreKind, name: string, key: string, listed_ = false): Model =>
+    stored(kind, name, (before, rest, site) =>
+      Effect.flatMap(lib(key, [before, ...rest], site), (made_) =>
+        listed_
+          ? Effect.map(lib("effect/Array:fromIterable", [made_], site), (gives) => ({ gives }))
+          : Effect.succeed({ gives: made_ }),
+      ),
+    );
+
+  /** A function that changes the collection as the prover's model of it does. */
+  const writes = (kind: StoreKind, name: string, key: string): Model =>
+    stored(kind, name, (before, rest, site) =>
+      Effect.map(lib(key, [before, ...rest], site), (next) => ({ next, gives: Value.undef })),
+    );
+
+  /** A function that gives a new store of what the prover's model makes of this one. */
+  const derives = (kind: StoreKind, name: string, key: string, arity?: number): Model =>
+    stored(
+      kind,
+      name,
+      (before, rest, site) =>
+        Effect.flatMap(
+          Effect.forEach(rest, (each) => {
+            const other = heldOf<Store>(kind, each);
+            return other ? TxRef.get(other.ref) : Effect.succeed(each);
+          }),
+          (given_) =>
+            Effect.flatMap(lib(key, [before, ...given_], site), (made_) =>
+              Effect.map(TxRef.make(made_), (ref) => ({ gives: wrap(kind, { ref }) })),
+            ),
+        ),
+      arity,
+    );
+
+  const not = (v: V, site: Site): Eval<V> =>
+    Effect.map(host.decide(v, site), (held) => bool(!held));
+
+  const itemsOf_ = (v: V): ReadonlyArray<V> => kit.itemsOf(v) ?? [];
+  const sorted = (itemsNow: ReadonlyArray<V>, store: Store, site: Site): Eval<V> =>
+    lib("effect/Array:sort", [arr(itemsNow), store.order ?? Value.undef], site);
+
+  const queueOf = (
+    name: string,
+    order: V | undefined,
+    given_: Eval<ReadonlyArray<V>>,
+    site: Site,
+  ): V =>
+    order
+      ? storing(
+          "TxPriorityQueue",
+          Effect.flatMap(given_, (found) => lib("effect/Array:sort", [arr(found), order], site)),
+          order,
+        )
+      : lazy(() => wrongArguments(site, name));
+
+  const stores: Models = {
+    "effect/TxHashMap:empty": (_, site) =>
+      Effect.succeed(storing("TxHashMap", lib("effect/HashMap:empty", [], site))),
+    "effect/TxHashMap:make": (args, site) =>
+      Effect.succeed(storing("TxHashMap", lib("effect/HashMap:make", args, site))),
+    "effect/TxHashMap:fromIterable": (args, site) =>
+      Effect.succeed(storing("TxHashMap", lib("effect/HashMap:fromIterable", args, site))),
+    "effect/TxHashMap:get": reads("TxHashMap", "get", "effect/HashMap:get"),
+    "effect/TxHashMap:has": reads("TxHashMap", "has", "effect/HashMap:has"),
+    "effect/TxHashMap:size": reads("TxHashMap", "size", "effect/HashMap:size"),
+    "effect/TxHashMap:isEmpty": reads("TxHashMap", "isEmpty", "effect/HashMap:isEmpty"),
+    "effect/TxHashMap:isNonEmpty": stored("TxHashMap", "isNonEmpty", (before, _, site) =>
+      Effect.flatMap(lib("effect/HashMap:isEmpty", [before], site), (empty) =>
+        Effect.map(not(empty, site), (gives) => ({ gives })),
+      ),
+    ),
+    "effect/TxHashMap:keys": reads("TxHashMap", "keys", "effect/HashMap:keys", true),
+    "effect/TxHashMap:values": reads("TxHashMap", "values", "effect/HashMap:values", true),
+    "effect/TxHashMap:toValues": reads("TxHashMap", "toValues", "effect/HashMap:values", true),
+    "effect/TxHashMap:entries": reads("TxHashMap", "entries", "effect/HashMap:entries", true),
+    "effect/TxHashMap:toEntries": reads("TxHashMap", "toEntries", "effect/HashMap:entries", true),
+    "effect/TxHashMap:some": reads("TxHashMap", "some", "effect/HashMap:some"),
+    "effect/TxHashMap:every": reads("TxHashMap", "every", "effect/HashMap:every"),
+    "effect/TxHashMap:hasBy": reads("TxHashMap", "hasBy", "effect/HashMap:hasBy"),
+    "effect/TxHashMap:findFirst": reads("TxHashMap", "findFirst", "effect/HashMap:findFirst"),
+    "effect/TxHashMap:reduce": reads("TxHashMap", "reduce", "effect/HashMap:reduce"),
+    "effect/TxHashMap:snapshot": stored("TxHashMap", "snapshot", (before) =>
+      Effect.succeed({ gives: before }),
+    ),
+    "effect/TxHashMap:set": writes("TxHashMap", "set", "effect/HashMap:set"),
+    "effect/TxHashMap:setMany": writes("TxHashMap", "setMany", "effect/HashMap:setMany"),
+    "effect/TxHashMap:removeMany": writes("TxHashMap", "removeMany", "effect/HashMap:removeMany"),
+    "effect/TxHashMap:union": writes("TxHashMap", "union", "effect/HashMap:union"),
+    "effect/TxHashMap:modifyAt": writes("TxHashMap", "modifyAt", "effect/HashMap:modifyAt"),
+    "effect/TxHashMap:clear": stored("TxHashMap", "clear", (_, __, site) =>
+      Effect.map(lib("effect/HashMap:empty", [], site), (next) => ({ next, gives: Value.undef })),
+    ),
+    // Whether the key was there.
+    "effect/TxHashMap:remove": stored("TxHashMap", "remove", (before, rest, site) =>
+      Effect.flatMap(lib("effect/HashMap:has", [before, ...rest], site), (gives) =>
+        Effect.map(lib("effect/HashMap:remove", [before, ...rest], site), (next) => ({
+          next,
+          gives,
+        })),
+      ),
+    ),
+    // What the key held before.
+    "effect/TxHashMap:modify": stored("TxHashMap", "modify", (before, rest, site) =>
+      Effect.flatMap(lib("effect/HashMap:get", [before, rest[0] ?? Value.undef], site), (gives) =>
+        Effect.map(lib("effect/HashMap:modify", [before, ...rest], site), (next) => ({
+          next,
+          gives,
+        })),
+      ),
+    ),
+    "effect/TxHashMap:map": derives("TxHashMap", "map", "effect/HashMap:map"),
+    "effect/TxHashMap:filter": derives("TxHashMap", "filter", "effect/HashMap:filter"),
+    "effect/TxHashSet:empty": (_, site) =>
+      Effect.succeed(storing("TxHashSet", lib("effect/HashSet:empty", [], site))),
+    "effect/TxHashSet:make": (args, site) =>
+      Effect.succeed(storing("TxHashSet", lib("effect/HashSet:make", args, site))),
+    "effect/TxHashSet:fromIterable": (args, site) =>
+      Effect.succeed(storing("TxHashSet", lib("effect/HashSet:fromIterable", args, site))),
+    "effect/TxHashSet:fromHashSet": ([set]) =>
+      Effect.succeed(storing("TxHashSet", Effect.succeed(set ?? Value.undef))),
+    "effect/TxHashSet:has": reads("TxHashSet", "has", "effect/HashSet:has"),
+    "effect/TxHashSet:size": reads("TxHashSet", "size", "effect/HashSet:size"),
+    "effect/TxHashSet:isEmpty": reads("TxHashSet", "isEmpty", "effect/HashSet:isEmpty"),
+    "effect/TxHashSet:isNonEmpty": stored("TxHashSet", "isNonEmpty", (before, _, site) =>
+      Effect.flatMap(lib("effect/HashSet:isEmpty", [before], site), (empty) =>
+        Effect.map(not(empty, site), (gives) => ({ gives })),
+      ),
+    ),
+    "effect/TxHashSet:some": reads("TxHashSet", "some", "effect/HashSet:some"),
+    "effect/TxHashSet:every": reads("TxHashSet", "every", "effect/HashSet:every"),
+    "effect/TxHashSet:reduce": reads("TxHashSet", "reduce", "effect/HashSet:reduce"),
+    "effect/TxHashSet:add": writes("TxHashSet", "add", "effect/HashSet:add"),
+    "effect/TxHashSet:clear": stored("TxHashSet", "clear", (_, __, site) =>
+      Effect.map(lib("effect/HashSet:empty", [], site), (next) => ({ next, gives: Value.undef })),
+    ),
+    "effect/TxHashSet:remove": stored("TxHashSet", "remove", (before, rest, site) =>
+      Effect.flatMap(lib("effect/HashSet:has", [before, ...rest], site), (gives) =>
+        Effect.map(lib("effect/HashSet:remove", [before, ...rest], site), (next) => ({
+          next,
+          gives,
+        })),
+      ),
+    ),
+    "effect/TxHashSet:map": derives("TxHashSet", "map", "effect/HashSet:map"),
+    "effect/TxHashSet:filter": derives("TxHashSet", "filter", "effect/HashSet:filter"),
+    "effect/TxHashSet:union": derives("TxHashSet", "union", "effect/HashSet:union", 2),
+    "effect/TxHashSet:intersection": derives(
+      "TxHashSet",
+      "intersection",
+      "effect/HashSet:intersection",
+      2,
+    ),
+    "effect/TxHashSet:difference": derives(
+      "TxHashSet",
+      "difference",
+      "effect/HashSet:difference",
+      2,
+    ),
+    "effect/TxHashSet:isSubset": stored(
+      "TxHashSet",
+      "isSubset",
+      (before, [that], site) => {
+        const other = heldOf<Store>("TxHashSet", that);
+        return other
+          ? Effect.flatMap(TxRef.get(other.ref), (held) =>
+              Effect.map(lib("effect/HashSet:isSubset", [before, held], site), (gives) => ({
+                gives,
+              })),
+            )
+          : wrongArguments(site, "TxHashSet.isSubset");
+      },
+      2,
+    ),
+    "effect/TxPriorityQueue:empty": ([order], site) =>
+      Effect.succeed(queueOf("TxPriorityQueue.empty", order, Effect.succeed([]), site)),
+    "effect/TxPriorityQueue:fromIterable": ([order, given_], site) =>
+      Effect.succeed(
+        queueOf(
+          "TxPriorityQueue.fromIterable",
+          order,
+          items("TxPriorityQueue.fromIterable", given_, site),
+          site,
+        ),
+      ),
+    "effect/TxPriorityQueue:make": ([order]) =>
+      Effect.succeed(
+        native("TxPriorityQueue.make", (given_, site) =>
+          Effect.succeed(queueOf("TxPriorityQueue.make", order, Effect.succeed(given_), site)),
+        ),
+      ),
+    "effect/TxPriorityQueue:size": stored("TxPriorityQueue", "size", (before) =>
+      Effect.succeed({ gives: num(itemsOf_(before).length) }),
+    ),
+    "effect/TxPriorityQueue:isEmpty": stored("TxPriorityQueue", "isEmpty", (before) =>
+      Effect.succeed({ gives: bool(itemsOf_(before).length === 0) }),
+    ),
+    "effect/TxPriorityQueue:isNonEmpty": stored("TxPriorityQueue", "isNonEmpty", (before) =>
+      Effect.succeed({ gives: bool(itemsOf_(before).length > 0) }),
+    ),
+    "effect/TxPriorityQueue:toArray": stored("TxPriorityQueue", "toArray", (before) =>
+      Effect.succeed({ gives: before }),
+    ),
+    "effect/TxPriorityQueue:peek": stored("TxPriorityQueue", "peek", (before) => {
+      const [first] = itemsOf_(before);
+      return Effect.succeed(first ? { gives: first } : ("retry" as const));
+    }),
+    "effect/TxPriorityQueue:peekOption": stored("TxPriorityQueue", "peekOption", (before) => {
+      const [first] = itemsOf_(before);
+      return Effect.succeed({ gives: first ? Value.some(first) : Value.none });
+    }),
+    "effect/TxPriorityQueue:take": stored("TxPriorityQueue", "take", (before) => {
+      const [first, ...rest] = itemsOf_(before);
+      return Effect.succeed(first ? { gives: first, next: arr(rest) } : ("retry" as const));
+    }),
+    "effect/TxPriorityQueue:takeOption": stored("TxPriorityQueue", "takeOption", (before) => {
+      const [first, ...rest] = itemsOf_(before);
+      return Effect.succeed(
+        first ? { gives: Value.some(first), next: arr(rest) } : { gives: Value.none },
+      );
+    }),
+    "effect/TxPriorityQueue:takeAll": stored("TxPriorityQueue", "takeAll", (before) =>
+      Effect.succeed({ gives: before, next: arr([]) }),
+    ),
+    "effect/TxPriorityQueue:takeUpTo": stored("TxPriorityQueue", "takeUpTo", (before, [n], site) =>
+      Effect.map(count("TxPriorityQueue.takeUpTo", n, site), (most) => ({
+        gives: arr(itemsOf_(before).slice(0, most)),
+        next: arr(itemsOf_(before).slice(most)),
+      })),
+    ),
+    "effect/TxPriorityQueue:offer": stored(
+      "TxPriorityQueue",
+      "offer",
+      (before, [value], site, store) =>
+        Effect.map(sorted([...itemsOf_(before), value ?? Value.undef], store, site), (next) => ({
+          next,
+          gives: Value.undef,
+        })),
+    ),
+    "effect/TxPriorityQueue:offerAll": stored(
+      "TxPriorityQueue",
+      "offerAll",
+      (before, [values], site, store) =>
+        Effect.flatMap(items("TxPriorityQueue.offerAll", values, site), (found) =>
+          Effect.map(sorted([...itemsOf_(before), ...found], store, site), (next) => ({
+            next,
+            gives: Value.undef,
+          })),
+        ),
+    ),
+    "effect/TxPriorityQueue:retainIf": stored(
+      "TxPriorityQueue",
+      "retainIf",
+      (before, [test], site) =>
+        test
+          ? Effect.map(
+              Effect.filter(itemsOf_(before), (item) => kit.holds(test, [item], site)),
+              (kept_) => ({ next: arr(kept_), gives: Value.undef }),
+            )
+          : wrongArguments(site, "TxPriorityQueue.retainIf"),
+    ),
+    "effect/TxPriorityQueue:removeIf": stored(
+      "TxPriorityQueue",
+      "removeIf",
+      (before, [test], site) =>
+        test
+          ? Effect.map(
+              Effect.filter(itemsOf_(before), (item) =>
+                Effect.map(kit.holds(test, [item], site), (held) => !held),
+              ),
+              (kept_) => ({ next: arr(kept_), gives: Value.undef }),
+            )
+          : wrongArguments(site, "TxPriorityQueue.removeIf"),
+    ),
+  };
+
+  /** An instance of a request class a file exports: the class is the one the runtime loaded. */
+  const constructs = (cls: unknown, args: ReadonlyArray<V>, site: Site): Eval<V> | undefined => {
+    if (typeof cls !== "function" || !Request.isRequest(cls.prototype)) return undefined;
+    const fields = plainOf(args[0] ?? Value.obj({}));
+    return fields === NOT_PLAIN || typeof fields !== "object" || fields === null
+      ? unseen(site, `makes a ${cls.name} request of values the prover cannot see`)
+      : Effect.sync(() => wrap("Request", Reflect.construct(cls, [fields]) as Asked));
+  };
+
+  /** A request written as a class: `class GetPrice extends Request.TaggedClass("GetPrice")<...> {}`. */
+  const requestClass = (name: string, build: (fields: object) => Asked): V =>
+    asClass(asking(name, build), (extended) => requestClass(extended, build));
+
+  // A resolver from a plain function: each request is answered with what the function gives.
+  Object.assign(requests, {
+    "effect/Request:TaggedClass": ([tag]: ReadonlyArray<V>, site: Site) =>
+      tag?._tag === "Str"
+        ? Effect.succeed(
+            requestClass(tag.value, (fields) =>
+              Request.tagged<Asked & { _tag: string }>(tag.value)(fields as never),
+            ),
+          )
+        : wrongArguments(site, "Request.TaggedClass"),
+    "effect/RequestResolver:fromFunction": ([f]: ReadonlyArray<V>, site: Site) =>
+      f && callable(f)
+        ? Effect.succeed(
+            resolving((timeline) =>
+              RequestResolver.fromEffect<Asked>((entry) =>
+                Timeline.real(timeline, host.call(f, [entryOf(entry)], site)),
+              ),
+            ),
+          )
+        : wrongArguments(site, "RequestResolver.fromFunction"),
+  });
+
   const models: Models = {
+    ...stores,
     ...requests,
     ...chunks,
     ...shared,
@@ -3264,5 +3664,5 @@ export const make = (kit: Kit, base: Models) => {
     },
   };
 
-  return { models, sited, member, tools };
+  return { models, sited, member, tools, constructs };
 };

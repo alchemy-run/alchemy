@@ -1545,6 +1545,8 @@ export const make = (given: Loader, run: Run): Interpreter => {
       if (cls._tag === "Host" && !isDomainClass(cls.value) && isDataClass(cls.value))
         return yield* constructData(cls, args, site);
       if (cls._tag === "Native" && library.isClass(cls)) return yield* cls.call(args, site);
+      const made = cls._tag === "Host" ? library.constructHost(cls.value, args, site) : undefined;
+      if (made) return yield* made;
       if (cls._tag !== "Host" || !isDomainClass(cls.value))
         return yield* reaches(
           site,

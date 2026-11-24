@@ -2067,6 +2067,11 @@ ScopedCache.size(files);
 // Requests asked for together are answered together, in one call of the resolver.
 const GetPrice = Request.tagged("GetPrice"); // a request of values the code writes
 const ask = Request.of();
+class GetPrice extends Request.TaggedClass("GetPrice")<{ readonly item: number }, number> {}
+class Ask extends Request.Class<{ readonly n: number }, number> {}
+Effect.request(new GetPrice({ item: 2 }), prices);
+Effect.request(new Ask({ n: 3 }), asked);
+RequestResolver.fromFunction((entry) => entry.request.n * 2 + a);
 const prices = RequestResolver.make((entries) =>
   Effect.andThen(
     log(batches, entries.length),
@@ -2083,6 +2088,76 @@ pipe(ask({ n }), Effect.request(answers));
 Request.succeed(entry, entry.request.n + b);
 Request.fail(entry, new Odd({ n: entry.request.n }));
 Request.completeEffect(entry, even(entry.request.n + a));
+```
+
+```typescript title="effect/TxHashMap, effect/TxHashSet and effect/TxPriorityQueue"
+// A HashMap, a HashSet and a queue kept in order, in a transaction. A key may be one an input decides.
+const stock = yield* TxHashMap.make([a, 1], [b, 2]);
+TxHashMap.empty();
+TxHashMap.fromIterable([["tea", a], ["milk", b]]);
+TxHashMap.get(stock, a);
+TxHashMap.has(stock, b);
+TxHashMap.set(stock, 99, 3);
+TxHashMap.setMany(stock, [["milk", b], ["salt", 1]]);
+TxHashMap.remove(stock, a); // gives whether the key was there
+TxHashMap.removeMany(stock, ["salt"]);
+TxHashMap.modify(stock, "tea", (n) => n + 10); // gives what the key held before
+TxHashMap.modifyAt(stock, "rice", (held) => Option.some(Option.getOrElse(held, () => 0) + 5));
+TxHashMap.union(stock, HashMap.make(["oil", 7]));
+TxHashMap.clear(stock);
+TxHashMap.size(stock);
+TxHashMap.isEmpty(stock);
+TxHashMap.isNonEmpty(stock);
+TxHashMap.keys(stock);
+TxHashMap.values(stock);
+TxHashMap.toValues(stock);
+TxHashMap.entries(stock);
+TxHashMap.toEntries(stock);
+TxHashMap.snapshot(stock);
+TxHashMap.map(stock, (n) => n * 2); // a new one
+TxHashMap.filter(stock, (n) => n > 0);
+TxHashMap.reduce(stock, 0, (total, n) => total + n);
+TxHashMap.some(stock, (n) => n > a);
+TxHashMap.every(stock, (n) => n >= a);
+TxHashMap.hasBy(stock, (n, name) => name === "tea" && n === a);
+TxHashMap.findFirst(stock, (n) => n === a);
+const seen = yield* TxHashSet.make(a, b);
+TxHashSet.empty();
+TxHashSet.fromIterable([1, 2, a]);
+TxHashSet.fromHashSet(HashSet.make(2, 3));
+TxHashSet.add(seen, 99);
+TxHashSet.remove(seen, b);
+TxHashSet.has(seen, a);
+TxHashSet.size(seen);
+TxHashSet.isEmpty(seen);
+TxHashSet.isNonEmpty(seen);
+TxHashSet.clear(none);
+TxHashSet.union(left, right);
+TxHashSet.intersection(left, right);
+TxHashSet.difference(left, right);
+TxHashSet.isSubset(both, left);
+TxHashSet.map(left, (n) => n * 2);
+TxHashSet.filter(left, (n) => n > 1);
+TxHashSet.some(left, (n) => n > 1);
+TxHashSet.every(left, (n) => n > 1);
+TxHashSet.reduce(left, 0, (total, n) => total + n);
+const line = yield* TxPriorityQueue.make(Order.Number)(3, a);
+TxPriorityQueue.empty(byN);
+TxPriorityQueue.fromIterable(Order.Number, [5, 1, 3, a]);
+TxPriorityQueue.offer(line, b);
+TxPriorityQueue.offerAll(line, [0, 5]);
+TxPriorityQueue.take(line); // the least: waits for a fiber to offer
+TxPriorityQueue.takeOption(line);
+TxPriorityQueue.takeUpTo(line, 2);
+TxPriorityQueue.takeAll(line);
+TxPriorityQueue.peek(line);
+TxPriorityQueue.peekOption(line);
+TxPriorityQueue.toArray(line);
+TxPriorityQueue.size(line);
+TxPriorityQueue.isEmpty(line);
+TxPriorityQueue.isNonEmpty(line);
+TxPriorityQueue.removeIf(other, (n) => n === 3);
+TxPriorityQueue.retainIf(other, (n) => n > 1);
 ```
 
 ```typescript title="effect/PubSub"
@@ -2561,9 +2636,6 @@ import * as Channel from "effect/Channel"; // what a stream is made of: write th
 import * as Pull from "effect/Pull";
 import * as Take from "effect/Take";
 import * as ExecutionPlan from "effect/ExecutionPlan"; // each step provides a Layer, which is wiring
-import * as TxHashMap from "effect/TxHashMap"; // found by the hash of a key, which an input's value does not have
-import * as TxHashSet from "effect/TxHashSet";
-import * as TxPriorityQueue from "effect/TxPriorityQueue"; // kept in an order the library works out as it goes
 
 Deferred.await(done); // a wait for what no fiber of the handler does: the handler would never end
 gate.await;
