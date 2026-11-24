@@ -102,11 +102,13 @@ export interface FrameworkSiteProps {
    * it adopts every resource of the site, and with `dns` publishes the
    * `TXT`. Without `dns`, an adopted row Prisma made stays `expiring`:
    * publish `domainOwnership.recordName` with value
-   * `domainOwnership.recordValue` before its `expiresAt`, or add `dns`. If it
-   * is managed elsewhere, pass
+   * `domainOwnership.recordValue` before its `expiresAt`, or add `dns`. The
+   * deploy warns about it from the status saved in state until the row is
+   * saved again: once Prisma has verified it, `alchemy deploy --force` does
+   * that. If it is managed elsewhere, pass
    * `ownership: Prisma.DomainOwnership.lookup({ project, domain })`; the site
-   * then publishes no `TXT`, and a row Prisma made is `expiring` and stops
-   * serving at its `expiresAt` unless its `TXT` is published. See
+   * then publishes no `TXT`, and a row Prisma made is `expiring`: Prisma
+   * lapses it after its `expiresAt` unless its `TXT` is published. See
    * [DNS Adapters](/infrastructure-as-code/dns-adapters).
    */
   domain?: WebsiteDomain;

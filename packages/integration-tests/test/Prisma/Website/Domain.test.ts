@@ -70,7 +70,7 @@ const record = (domain: string) => `TXT ${txtFor(domain).name} = ${txtFor(domain
 const unverifiedWarning = (domain: string, hostname: string, is = "is") =>
   `The domain ownership of '${domain}' ${is} unverified: it does not make hostnames it covers, such as '${hostname}', serve until Prisma finds ${record(domain)}, unless another verified domain ownership covers them.`;
 const expiringWarning = (domain: string, hostname: string, is = "is") =>
-  `The domain ownership of '${domain}' ${is} expiring: hostnames it covers, such as '${hostname}', stop serving at ${EXPIRES_AT} unless ${record(domain)} is published, or another verified domain ownership covers them.`;
+  `The domain ownership of '${domain}' ${is} expiring: hostnames it covers that serve, such as '${hostname}', keep serving until Prisma lapses it after ${EXPIRES_AT}, and none starts serving, unless ${record(domain)} is published or another verified domain ownership covers them.`;
 const LAST_SAVED = "was, when this stack last saved it,";
 const unitTags = [
   "unit",
@@ -562,7 +562,7 @@ for (const withRecords of [true, false]) {
 
   const adopted = makeUrlCloud();
   testFor(adopted).test.provider(
-    `${how}, a released site adopted with adopt(true) on the site takes the existing domain ownership, ${withRecords ? "verifies it without a warning" : "warns once that it stays expiring"}, and destroying it deletes the row`,
+    `${how}, a released site adopted with adopt(true) on the site takes the existing domain ownership, ${withRecords ? "verifies it without a warning" : "warns that it stays expiring until a forced deploy saves it verified"}, and destroying it deletes the row`,
     (stack) =>
       Effect.gen(function* () {
         adopted.reset({ fromZone: true });
@@ -583,6 +583,16 @@ for (const withRecords of [true, false]) {
           withRecords ? [txtFor(SITE_HOST)] : [],
         );
         expect(adopted.routes()).not.toContain(OWNERSHIP_CREATE);
+
+        if (!withRecords) {
+          const row = adopted.ownerships.get("do-backfill")!;
+          adopted.ownerships.set(row.id, { ...row, status: "verified", expiresAt: null });
+          const stale = yield* warningsOf(stack.deploy(siteDomain(domain)));
+          expect(stale.warnings).toEqual([expiringWarning(SITE_HOST, SITE_HOST, LAST_SAVED)]);
+          const forced = yield* warningsOf(stack.deploy(siteDomain(domain), { force: true }));
+          expect(forced.warnings).toEqual([]);
+          expect(forced.result.ownership.status).toBe("verified");
+        }
 
         yield* stack.deploy(siteDomain(domain));
         yield* stack.destroy();

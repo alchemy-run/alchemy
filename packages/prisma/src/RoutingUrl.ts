@@ -366,9 +366,12 @@ export interface RoutingUrl extends Resource<
  * Before Prisma first looks at a new hostname, the deploy waits up to 3
  * minutes for the `CNAME` to appear at its authoritative nameservers, and
  * fails with `RoutingUrlRecordsNotSeen` while it is still absent. This
- * applies to a create, and to a hostname change of a RoutingUrl that is not
- * yet `active`. When that save leaves the row in `waiting_for_dns` with no
- * custom domain, the deploy asks Prisma to check once.
+ * applies to a create and to a hostname change of a RoutingUrl that is not
+ * yet `active`, and fails before anything is written. When that save leaves
+ * the row in `waiting_for_dns` with no custom domain, the deploy asks Prisma
+ * to check once. Adding `dns` to a deployed RoutingUrl in `waiting_for_dns`
+ * waits the same way before that check, and fails after the row is saved:
+ * Prisma was not asked to look at its DNS.
  *
  * A failed certificate shows as `state: "certificate_failed"` with
  * `certificateFailureReason`; a deploy does not retry it. Retry it from

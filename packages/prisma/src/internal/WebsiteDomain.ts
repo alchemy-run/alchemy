@@ -86,7 +86,7 @@ const notVerifiedWarning = (
   const is = lookedUp ? "is" : "was, when this stack last saved it,";
   const record = `TXT ${recordName} = ${recordValue}`;
   return status === "expiring"
-    ? `The domain ownership of '${domain}' ${is} expiring: hostnames it covers, such as '${hostname}', stop serving at ${expiresAt ?? "its expiry"} unless ${record} is published, or another verified domain ownership covers them.`
+    ? `The domain ownership of '${domain}' ${is} expiring: hostnames it covers that serve, such as '${hostname}', keep serving until Prisma lapses it after ${expiresAt ?? "its expiry"}, and none starts serving, unless ${record} is published or another verified domain ownership covers them.`
     : `The domain ownership of '${domain}' ${is} ${status}: it does not make hostnames it covers, such as '${hostname}', serve until Prisma finds ${record}, unless another verified domain ownership covers them.`;
 };
 
