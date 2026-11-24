@@ -16,6 +16,8 @@ import Alchemy.Cloud.Layer
 import Alchemy.Cloud.Graph
 import Alchemy.Cloud.Sim
 import Alchemy.Cloud.AWS
+import Alchemy.Cloud.Hosted
+import Alchemy.Cloud.AWSJournal
 import Alchemy.Cloud.Api
 import Alchemy.Cloud.Provider
 import Alchemy.Cloud.Engine

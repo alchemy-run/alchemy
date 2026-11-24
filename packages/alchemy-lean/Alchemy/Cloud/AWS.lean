@@ -316,7 +316,7 @@ def queued (m : Memory) (queue : AWS.Queue) : List String :=
 
 end Memory
 
-def simulate : {k : Kind} → Ref k → (c : Call k) → Memory → Reply c × Memory × List (Emitted Kind)
+def simulate : {k : Kind} → Ref k → (c : Call k) → Memory → Reply c × Memory × List (Cloud.Emitted Kind)
   | .bucket, bucket, .getObject key, m =>
     (match m.object bucket key with
       | some body => .ok body
@@ -325,7 +325,7 @@ def simulate : {k : Kind} → Ref k → (c : Call k) → Memory → Reply c × M
     ((), { m with
         objects := (m.objects.filter fun (id, k, _) => !(id == bucket.id && k == key))
           ++ [(bucket.id, key, body)] },
-      [⟨.bucket, bucket, .objectCreated key⟩])
+      [(⟨.bucket, bucket, .objectCreated key⟩ : Cloud.Emitted Kind)])
   | .bucket, bucket, .listObjects, m =>
     ((m.objects.filter (·.1 == bucket.id)).map (·.2.1), m, [])
   | .queue, queue, .sendMessage body, m =>
