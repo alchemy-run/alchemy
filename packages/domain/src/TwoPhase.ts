@@ -87,12 +87,18 @@ export interface Prepare {
   readonly now: number;
   readonly correlationId: string;
   readonly trace?: TraceJson;
+  /** Who sent the command (see `RequestContext.Originator`), as its context encoded it. */
+  readonly originator?: Json;
+  /** What the host's commit hook attached to the envelope of `events`. */
+  readonly metadata?: Readonly<Record<string, unknown>>;
 }
 
 /** What another instance is to record: its address, and its part of the decision. */
 export interface Part extends Address {
   readonly version: number;
   readonly events: ReadonlyArray<Json>;
+  /** What the host's commit hook attached to the envelope of these events. */
+  readonly metadata?: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -227,11 +233,17 @@ export const deliver = (
  */
 export const finish = (drive: Drive, plan: Plan): Effect.Effect<Outcome> =>
   Effect.gen(function* () {
-    const { others: _, receipt: __, ...shared } = plan;
+    // Each instance has its own metadata, so the primary's is not shared with the others.
+    const { others: _, receipt: __, metadata: ___, ...shared } = plan;
     for (const other of plan.others) {
       const answer = yield* drive
         .participant(other)
-        .prepare({ ...shared, version: other.version, events: other.events })
+        .prepare({
+          ...shared,
+          version: other.version,
+          events: other.events,
+          ...(other.metadata === undefined ? {} : { metadata: other.metadata }),
+        })
         .pipe(Effect.catchTag("Unreachable", () => Effect.succeed({ _tag: "Unreachable" })));
       if (answer._tag !== "Prepared") return yield* undo(drive, plan);
     }
@@ -339,12 +351,15 @@ export const decide = ({
       now,
       correlationId: result.correlationId,
       ...(result.trace ? { trace: result.trace } : {}),
+      ...(result.originator === undefined ? {} : { originator: result.originator }),
       receipt: result.receipt,
-      others: theirs.map(({ aggregate, id, version, events }) => ({
+      ...(mine!.metadata === undefined ? {} : { metadata: mine!.metadata }),
+      others: theirs.map(({ aggregate, id, version, events, metadata }) => ({
         aggregate,
         id,
         version,
         events,
+        ...(metadata === undefined ? {} : { metadata }),
       })),
     };
     const held = yield* drive.primary.hold(plan);

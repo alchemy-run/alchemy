@@ -7,6 +7,7 @@ import type * as DateTime from "effect/DateTime";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import type { Annotations } from "./Annotations.ts";
 import type * as Command from "./Command.ts";
@@ -61,6 +62,19 @@ export const Envelope = Schema.Struct({
    * command, the events it records, and every reaction and command they cause.
    */
   correlationId: Schema.String,
+  /**
+   * Who sent the command that produced the event: the `Originator` request
+   * context it was sent with, as the application encoded it. Absent when the
+   * command carried none.
+   */
+  originator: Schema.optionalKey(Schema.Unknown),
+  /**
+   * What the host's {@link CommitHook} attached when the command committed the
+   * event: the application's own JSON, stored as returned and handed to
+   * `evolve`, views, policies and projections as it is. The platform never
+   * reads it. Absent when no hook is installed or it attached none.
+   */
+  metadata: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
 });
 
 /** An {@link Envelope} whose `id` is the aggregate's (branded) id. */
@@ -244,6 +258,109 @@ export interface SendOptions {
   /** Idempotency key. A command with an already-seen id returns the original receipt. */
   readonly commandId?: string;
 }
+
+/**
+ * What a {@link CommitHook} is handed: a decided command, before anything of
+ * it is stored. It is called once for each instance the command writes.
+ */
+export interface CommitHookInput {
+  /** The aggregate's name. */
+  readonly aggregate: string;
+  /** The instance's id, as the command addressed it. */
+  readonly id: string;
+  /** The stream the events commit to, e.g. `Account/a-1`. */
+  readonly stream: string;
+  /** The stream's version before this commit: `0` for a new instance. */
+  readonly version: number;
+  /** The id the command was sent with. */
+  readonly commandId: string;
+  /** The tag of the command: for a decision, the decision's command. */
+  readonly command: string;
+  /** The events to commit to the instance, in order. */
+  readonly events: ReadonlyArray<{ readonly _tag: string }>;
+  /** The request context the command was sent with, as it encodes. */
+  readonly context: RequestContext.Json;
+}
+
+/**
+ * A {@link CommitHook} refused a commit, so nothing of the command was stored:
+ * no event, no state and no receipt. `reason` is the hook's own value, and is
+ * not logged.
+ *
+ * A refusal is a defect of the send. A typed failure would put `CommitRefused`
+ * in the error channel of `AggregateKit.handle`, which every platform
+ * implements, and of every client's `send`. Read it from the send's cause with
+ * {@link isCommitRefused}. A Durable Object returns it to its caller with its
+ * fields (`reason` as JSON), where any other defect reaches the caller as text.
+ */
+export class CommitRefused extends Data.TaggedError("CommitRefused")<{
+  readonly aggregate: string;
+  readonly id: string;
+  readonly reason: unknown;
+}> {}
+
+/**
+ * Whether a defect is {@link CommitRefused}. It matches the tag and the
+ * instance it names, so an instance of the class from another copy of this
+ * package matches too.
+ */
+export const isCommitRefused = (defect: unknown): defect is CommitRefused =>
+  Predicate.isTagged(defect, "CommitRefused") &&
+  Predicate.hasProperty(defect, "aggregate") &&
+  typeof defect.aggregate === "string" &&
+  Predicate.hasProperty(defect, "id") &&
+  typeof defect.id === "string";
+
+/**
+ * A rule of the host that every commit passes through, to refuse a commit or
+ * to attach metadata to the envelope of its events.
+ *
+ * It runs after `decide` and before anything is stored, once for each instance
+ * a command writes that has events: for an aggregate's command, and for each
+ * instance a `Decision` records on. It returns the metadata for the envelope of
+ * each of those events (`undefined` for none), or fails with
+ * {@link CommitRefused} to commit nothing.
+ *
+ * The hook belongs to the host. A model reads it from the Layer it is built
+ * in, so a service a sender provides is not it, and a handler can neither
+ * provide nor author it. Events a platform imports or seeds as history keep the
+ * envelope they come with, and the hook is not run for them.
+ *
+ * ### Labelling every event
+ * **Example:** Attach a label, and keep who sent the command with it
+ * ```typescript
+ * import * as Domain from "@alchemy.run/domain";
+ * import * as Effect from "effect/Effect";
+ * import * as Layer from "effect/Layer";
+ *
+ * export const Labels = Layer.succeed(Domain.CommitHook, {
+ *   commit: ({ aggregate, context }) =>
+ *     Effect.succeed({
+ *       label: aggregate === "Account" ? "financial" : "internal",
+ *       sentBy: context["Domain/Originator"],
+ *     }),
+ * });
+ * ```
+ *
+ * ### Refusing a commit
+ * **Example:** Refuse writes for a tenant that is suspended
+ * ```typescript
+ * export const Tenancy = Layer.succeed(Domain.CommitHook, {
+ *   commit: ({ aggregate, id, context }) =>
+ *     isSuspended(context)
+ *       ? Effect.fail(new Domain.CommitRefused({ aggregate, id, reason: "suspended" }))
+ *       : Effect.succeed(undefined),
+ * });
+ * ```
+ */
+export class CommitHook extends Context.Service<
+  CommitHook,
+  {
+    readonly commit: (
+      input: CommitHookInput,
+    ) => Effect.Effect<Readonly<Record<string, unknown>> | undefined, CommitRefused>;
+  }
+>()("alchemy/Domain/CommitHook") {}
 
 /**
  * The command scheduled with this id already ran, so it can no longer be

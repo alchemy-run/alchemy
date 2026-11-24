@@ -100,6 +100,8 @@ export declare namespace Aggregate {
   export type Envelope<Id = string> = AggregateModule.Envelope<Id>;
   export type SendOptions = AggregateModule.SendOptions;
   export type ScheduleOptions = AggregateModule.ScheduleOptions;
+  /** What a commit hook is handed: one instance's events about to commit, and the request context. */
+  export type CommitHookInput = AggregateModule.CommitHookInput;
   /** Options for `client.import`: the import's command id and the version it expects. */
   export type ImportOptions = AggregateModule.ImportOptions;
   /** One event for `client.import`: the event, or `{ event, at }` to keep its original commit time. */
@@ -118,6 +120,13 @@ export declare namespace Aggregate {
 }
 /** A consistency boundary that decides commands. See {@link AggregateModule.make}. */
 export const Aggregate = AggregateModule.make;
+/** The host's rule every commit passes through, to refuse it or attach metadata to its envelope. See {@link AggregateModule.CommitHook}. */
+export const CommitHook = AggregateModule.CommitHook;
+/** A commit hook refused a commit, so nothing of it was stored. See {@link AggregateModule.CommitRefused}. */
+export const CommitRefused = AggregateModule.CommitRefused;
+export type CommitRefused = AggregateModule.CommitRefused;
+/** Whether a defect is a {@link CommitRefused}. */
+export const isCommitRefused = AggregateModule.isCommitRefused;
 /** A command with this id already ran, so it can't be scheduled or cancelled. */
 export const AlreadyExecuted = AggregateModule.AlreadyExecuted;
 export type AlreadyExecuted = AggregateModule.AlreadyExecuted;
@@ -407,6 +416,9 @@ export const RequestContext = RequestContextModule.make;
 
 /** When a middleware's verdict expires; a live read is judged again then. See {@link RequestContextModule.setExpiry}. */
 export const setExpiry = RequestContextModule.setExpiry;
+
+/** Who sent a command: recorded on the envelope of every event it commits. See {@link RequestContextModule.Originator}. */
+export { Originator } from "./RequestContext.ts";
 
 export type { Filter, OrderBy } from "./Filter.ts";
 export { InMemory } from "./InMemory.ts";

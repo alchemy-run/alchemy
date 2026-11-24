@@ -31,7 +31,13 @@ import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import type * as Aggregate from "./Aggregate.ts";
-import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "./Aggregate.ts";
+import {
+  AlreadyCancelled,
+  AlreadyExecuted,
+  CommitRefused,
+  isCommitRefused,
+  NotScheduled,
+} from "./Aggregate.ts";
 import * as Backfill from "./Backfill.ts";
 import { type Routed, targetId } from "./CatchUp.ts";
 import { DecisionsUnsupported, DefinitionError } from "./DefinitionError.ts";
@@ -280,18 +286,34 @@ const entryRange = (range: ListRange | undefined): ListOptions => {
 };
 
 const DefectTag = "alchemy/Domain/Defect";
+const RefusedTag = "alchemy/Domain/CommitRefused";
 
 /**
  * Calls between objects may lose thrown errors (Workers RPC replaces them
  * with an opaque "internal error"). Return failures as data instead, and
- * rethrow them as defects on the calling side.
+ * rethrow them as defects on the calling side. A commit hook's refusal keeps
+ * its fields on the way, so the caller can still read it with `isCommitRefused`.
  */
 const reportDefects = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.catchCause((cause) =>
-      Effect.succeed({ [DefectTag]: Cause.pretty(cause) } as unknown as A),
-    ),
+    Effect.catchCause((cause) => {
+      const defect = Cause.squash(cause);
+      return Effect.succeed({
+        [DefectTag]: Cause.pretty(cause),
+        ...(isCommitRefused(defect)
+          ? { [RefusedTag]: { aggregate: defect.aggregate, id: defect.id, reason: defect.reason } }
+          : {}),
+      } as unknown as A);
+    }),
   );
+
+/** The defect a reported failure stands for. */
+const defectFrom = (reported: Record<string, unknown>): unknown => {
+  const refused = reported[RefusedTag];
+  return refused === undefined
+    ? new Error(String(reported[DefectTag]))
+    : new CommitRefused(refused as ConstructorParameters<typeof CommitRefused>[0]);
+};
 
 /**
  * How long to keep retrying a call that failed in transit: an instance being
@@ -319,7 +341,7 @@ export const unwrapDefects = <A>(call: Effect.Effect<unknown, unknown>): Effect.
     Effect.orDie,
     Effect.flatMap((value) =>
       value !== null && typeof value === "object" && DefectTag in value
-        ? Effect.die(new Error(String((value as Record<string, unknown>)[DefectTag])))
+        ? Effect.die(defectFrom(value as Record<string, unknown>))
         : Effect.succeed(value as A),
     ),
   );
@@ -334,7 +356,7 @@ const callOnce = <A>(call: Effect.Effect<unknown, unknown>): Effect.Effect<A> =>
     Effect.orDie,
     Effect.flatMap((value) =>
       value !== null && typeof value === "object" && DefectTag in value
-        ? Effect.die(new Error(String((value as Record<string, unknown>)[DefectTag])))
+        ? Effect.die(defectFrom(value as Record<string, unknown>))
         : Effect.succeed(value as A),
     ),
   );
@@ -1664,6 +1686,8 @@ const aggregateObject = (
                 now: intent.now,
                 correlationId: intent.correlationId,
                 trace: intent.trace,
+                originator: intent.originator,
+                metadata: intent.metadata,
               });
         const kick = yield* state.storage.transaction(
           Effect.gen(function* () {

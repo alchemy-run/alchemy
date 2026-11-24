@@ -137,6 +137,33 @@ MoneyWithdrawn: (_, e, { at }) => ({
 
 The `commandId` lets a client recognize the events its own commands caused, which is how an app confirms an [optimistic update](/domain/optimistic-updates).
 
+### Who sent the command
+
+A command that was sent with a `Domain.Originator` in its request context commits events whose envelope has an `originator`: the value, as the app encoded it. A [middleware](/domain/sessions) provides it next to the rest of the request's context. A command sent without one commits events with no `originator`.
+
+```typescript title="src/Session.middleware.ts"
+Effect.provideService(effect, Domain.Originator, { actor: actor.customerId })
+```
+
+Views, policies and projections read it from the envelope they receive, so an audit row can say who deposited without the event carrying a field for it. A decision records it on every instance it writes, and a view passes it on with the events it emits. It is part of the envelope's schema, so an [Api](/domain/api) client that reads events sees it too.
+
+### Refusing a commit, or attaching metadata
+
+A host can put a rule in front of every commit with `Domain.CommitHook`. It runs after `decide` and before anything is stored, once for each instance a command writes that has events. It is handed the instance (`aggregate`, `id`, `stream`), the `version` the events follow, the `commandId` and `command`, the `events` and the request `context`. It returns the metadata for the envelope of those events, or `undefined` for none, or fails with `Domain.CommitRefused` to commit nothing.
+
+```typescript title="src/Labels.layer.ts"
+export const Labels = Layer.succeed(Domain.CommitHook, {
+  commit: ({ aggregate, context }) =>
+    Effect.succeed({ label: aggregate, sentBy: context["Domain/Originator"] }),
+});
+```
+
+Provide it where the model's layer is built. A model reads it from the host, so a service a sender provides is not the hook, and a handler can neither provide nor replace it. What the hook returns is the envelope's `metadata`, which views, policies and projections read like `originator`. A decision asks the hook once for each instance it writes, so each keeps its own metadata. Events committed with no hook have no `metadata` key.
+
+A refusal stores no event, no state and no receipt, on any instance of a decision. It is a defect of the send rather than a typed error, so the error of every client's `send` stays what it was. Read it from the cause with `Domain.isCommitRefused`, which also recognises a refusal that crossed a Durable Object. `reason` is the hook's own value, and a Durable Object carries it as JSON.
+
+The hook is not run for events a platform imports or seeds as history, which keep the envelope they come with.
+
 ## Delivered to views and policies
 
 In the same commit that stores an event, the instance records a delivery for every [view](/domain/view) and [policy](/domain/policy) that consumes it. After the commit, each delivery is sent. Every consumer receives every event it consumes at least once, and in the order the instance recorded them.
