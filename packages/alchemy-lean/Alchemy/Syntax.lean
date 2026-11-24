@@ -267,6 +267,10 @@ syntax &"view " ident &" on " ident &" by " &"id" " : " term " := " term modelAl
 /-- Rows written for an aggregate's events: `| id, event => […]`. -/
 syntax &"projection " ident &" on " ident " : " term modelAlt+ : modelItem
 
+/-- An ordered log for each instance of an aggregate, that readers follow: `| id, event => […]`. -/
+syntax &"stream " ident &" on " ident " : " term modelAlt+ : modelItem
+/-- A question answered from everything recorded: `| log, input => rows`. -/
+syntax &"query " ident "(" term ")" " : " term modelAlt+ : modelItem
 /--
 A command decided across several instances at once: `| states, command => …`
 answers the events to record on each, or a rejection.
@@ -317,6 +321,8 @@ macro_rules
     let mut views : Array Ident := #[]
     let mut projections : Array Ident := #[]
     let mut decisions : Array Ident := #[]
+    let mut streams : Array Ident := #[]
+    let mut queries : Array Ident := #[]
     let mut decisionCommands : Array Term := #[]
     let mut saga : Option Ident := none
     let mut sagaInput : Term ← `(Unit)
@@ -415,6 +421,39 @@ macro_rules
           theorem $(under p `exact):ident (log : List (Alchemy.Emitted $aggregatesId)) :
               Alchemy.Projection.table $p log = log.flatMap $rows :=
             Alchemy.Projection.each_exact _ _ log))
+      | `(modelItem| stream $v:ident on $a:ident : $entry:term $alts:modelAlt*) =>
+        streams := streams.push v
+        let entries := under v `appended
+        let alts ← withFallback alts (← `(Term.matchAltExpr| | _, _ => []))
+        later := later.push (← lenient <| ← `(command|
+          def $entries:ident : Alchemy.Emitted $aggregatesId → List (String × $entry)
+            | ⟨$(under name a.getId), id, event, _, _⟩ =>
+              (match (id : String), (event : $(rooted a `Event)) with $alts:matchAlt*).map
+                fun entry => (id, entry)
+            | _ => []))
+        later := later.push (← `(command|
+          abbrev $v:ident : Alchemy.Stream $aggregatesId := Alchemy.Stream.each $(text v) $entries))
+        later := later.push (← `(command|
+          /-- The stream at an instance holds exactly the entries its events gave it, in order. -/
+          theorem $(under v `exact):ident (log : List (Alchemy.Emitted $aggregatesId)) (id : String) :
+              Alchemy.Stream.entries $v log id
+                = (log.flatMap $entries).filterMap fun (k, entry) => if k = id then some entry else none :=
+            Alchemy.Stream.each_exact _ _ log id))
+      | `(modelItem| query $v:ident ($input:term) : $row:term $alts:modelAlt*) =>
+        queries := queries.push v
+        let rows := under v `rows
+        let alts ← exactly alts
+        later := later.push (← `(command|
+          def $rows:ident (log : List (Alchemy.Emitted $aggregatesId)) (input : $input) : List $row :=
+            match log, input with $alts:matchAlt*))
+        later := later.push (← `(command|
+          abbrev $v:ident : Alchemy.Query $aggregatesId where
+            name := $(text v)
+            Input := $input
+            Row := $row
+            Actor := Unit
+            Rejection := Empty
+            handle := fun _ log input => .ok ($rows log input)))
       | `(modelItem| decision $d:ident ($command:term) : $rejection:term $alts:modelAlt*) =>
         decisions := decisions.push d
         decisionCommands := decisionCommands.push command
@@ -532,6 +571,8 @@ macro_rules
         policies := [$[$(policies.map (under m ·.getId))],*]
         views := [$[$(views.map (under m ·.getId))],*]
         projections := [$[$(projections.map (under m ·.getId))],*]
+        streams := [$[$(streams.map (under m ·.getId))],*]
+        queries := [$[$(queries.map (under m ·.getId))],*]
         saga := $sagaRun))
     -- What callers send, how the model is served, and each aggregate's rules lifted to the model.
     commands := commands.push (← `(command| namespace $m))

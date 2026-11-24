@@ -211,6 +211,18 @@ model Bank where
     | balance, .transferredIn amount => balance + amount
     | balance, .transferredOut amount => balance - amount
 
+  -- Each account's movements, in order, for a reader to follow.
+  stream Activity on Account : String
+    | _, .deposited amount => [s!"+{amount}"]
+    | _, .withdrawn amount => [s!"-{amount}"]
+    | _, .frozen reason => [s!"frozen: {reason}"]
+
+  -- The accounts that are frozen, from everything recorded.
+  query Frozen (Unit) : String
+    | log, _ => (log.filterMap fun
+        | ⟨.Account, id, .frozen _, _, _⟩ => some id
+        | _ => none).eraseDups
+
   projection Statement on Account : String × String × Nat
     | id, .deposited amount => [(id, "deposit", amount)]
     | id, .withdrawn amount => [(id, "withdrawal", amount)]
@@ -558,6 +570,19 @@ example :
   aBouncedPayoutIsRefunded "a-1" "Sam" "p-1" 500 200 (by decide) (by decide) (by decide)
 
 /-! What is read from the bank. These came with the model. -/
+
+/-- An account's activity is exactly the entries its events gave it, in order. -/
+example (log : List (Emitted Aggregates)) (id : String) :
+    Activity.entries log id
+      = (log.flatMap Activity.appended).filterMap fun (k, entry) => if k = id then some entry else none :=
+  Activity.exact log id
+
+/-- A query is answered from the log: after the story below, one account is frozen. -/
+example :
+    ((Frozen.ask () (Bank.run [
+      .send ⟨.Account, (), .open "a-1" "Sam"⟩,
+      .send ⟨.Account, (), .freeze "a-1" "review"⟩]).log ()).toOption.map (·.entries))
+      = some ["a-1"] := by decide
 
 example (log : List (Emitted Aggregates)) :
     Holdings.stateAt log () = log.foldl Holdings.step 0 := Holdings.exact log

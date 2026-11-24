@@ -260,3 +260,36 @@ theorem View.keyed_exact {State : Type} [DecidableEq State] (name : String) (ini
   View.keyed_go name initial key step k [] log initial
 
 end Alchemy
+
+namespace Alchemy
+
+variable {g : Aggregates}
+
+/-- A stream that appends entries for each event by itself. -/
+abbrev Stream.each {Entry : Type} [DecidableEq Entry] (name : String)
+    (entries : Emitted g → List (String × Entry)) : Stream g where
+  name := name
+  Key := String
+  Entry := Entry
+  Actor := Unit
+  Rejection := Empty
+  append := fun _ event => entries event
+
+theorem Stream.each_go {Entry : Type} [DecidableEq Entry] (name : String)
+    (entries : Emitted g → List (String × Entry)) (history log : List (Emitted g)) :
+    (Stream.each name entries).go history log = log.flatMap entries := by
+  induction log generalizing history with
+  | nil => rfl
+  | cons event rest ih =>
+    show entries event ++ (Stream.each name entries).go (history ++ [event]) rest = _
+    rw [ih]
+    rfl
+
+/-- Such a stream holds, at a key, exactly the entries its events gave that key, in order. -/
+theorem Stream.each_exact {Entry : Type} [DecidableEq Entry] (name : String)
+    (entries : Emitted g → List (String × Entry)) (log : List (Emitted g)) (key : String) :
+    (Stream.each name entries).entries log key
+      = (log.flatMap entries).filterMap fun (k, entry) => if k = key then some entry else none := by
+  simp [Stream.entries, Stream.each_go]
+
+end Alchemy

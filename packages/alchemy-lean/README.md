@@ -141,6 +141,36 @@ A view can keep a value for each instance.
     | balance, .transferredOut amount => balance - amount
 ```
 
+A stream is an ordered log per instance, and a query answers from everything recorded.
+
+```lean
+  stream Activity on Account : String
+    | _, .deposited amount => [s!"+{amount}"]
+    | _, .withdrawn amount => [s!"-{amount}"]
+    | _, .frozen reason => [s!"frozen: {reason}"]
+
+  query Frozen (Unit) : String
+    | log, _ => (log.filterMap fun
+        | ⟨.Account, id, .frozen _, _, _⟩ => some id
+        | _ => none).eraseDups
+```
+
+An aggregate can say who sends its commands. `decide` is then given the actor first.
+
+```lean
+aggregate Watch where
+  actor : Who
+
+  decide
+    | _, _, .assess _ amount =>
+      if amount = 0 then .error .nothingToAssess
+      else if amount ≥ 50000 then .ok [.flagged amount]
+      else .ok [.cleared amount]
+    | .officer name, s, .dismiss _ =>
+      if s.flagged = 0 then .error .nothingFlagged else .ok [.dismissed name]
+    | .system, _, .dismiss _ => .error .notAnOfficer
+```
+
 ## Behaviour
 
 Given events, when a command, then a result. It holds for every id and amount.
@@ -547,5 +577,5 @@ In the editor, `#eval` shows any of it without running a program.
 
 - Stacks run against a cloud held in memory. Nothing deploys to a real account.
 - A host handles one request at a time, by design.
-- `model` takes one saga and string ids. Streams, queries and actors are written without it.
+- `model` takes one saga, and ids are strings.
 - Cloudflare has no control-plane model, so its stacks have a graph but no plan.
