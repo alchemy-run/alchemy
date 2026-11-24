@@ -77,8 +77,15 @@ The state store used by top-level `deploy(Stack)` and
 
 ```typescript
 state: Cloudflare.state(),  // R2-backed, survives across CI runners
-state: localState({ path: ".alchemy-test/" }),  // separate dir
 state: undefined,  // omit → defaults to localState()
+```
+
+`localState()` takes no arguments. To keep test state in a
+separate directory, move the whole `.alchemy` directory with
+[`ALCHEMY_DIR`](/cli#common-options):
+
+```sh
+ALCHEMY_DIR=.alchemy-test alchemy-test
 ```
 
 Persistent state lets `deploy(Stack)` skip recreating unchanged
