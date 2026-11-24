@@ -240,13 +240,16 @@ const runnerHealthCheck = (group: string, self: RunnerAddress.RunnerAddress) =>
                 Effect.isSuccess,
               );
       /** Mark every runner of the pool by whether it answers. */
-      const checkAll = (registered: ReadonlyArray<readonly [Runner.Runner, boolean]>) =>
+      const checkAll = (
+        registered: ReadonlyArray<readonly [Runner.Runner, boolean]>,
+        answers: (address: RunnerAddress.RunnerAddress) => Effect.Effect<boolean>,
+      ) =>
         Effect.gen(function* () {
           let healthy = registered.filter(([, isHealthy]) => isHealthy).length;
           yield* Effect.forEach(
             registered,
             ([runner, isHealthy]) =>
-              Effect.flatMap(isAlive(runner.address), (alive) => {
+              Effect.flatMap(answers(runner.address), (alive) => {
                 if (alive === isHealthy || (!alive && healthy <= 1)) return Effect.void;
                 healthy += alive ? 1 : -1;
                 return Effect.logInfo(
@@ -257,11 +260,14 @@ const runnerHealthCheck = (group: string, self: RunnerAddress.RunnerAddress) =>
           );
         });
       /** Whether a runner before this one in the order answers: then it checks. */
-      const anEarlierAnswers = (earlier: ReadonlyArray<Runner.Runner>): Effect.Effect<boolean> =>
+      const anEarlierAnswers = (
+        earlier: ReadonlyArray<Runner.Runner>,
+        answers: (address: RunnerAddress.RunnerAddress) => Effect.Effect<boolean>,
+      ): Effect.Effect<boolean> =>
         earlier.length === 0
           ? Effect.succeed(false)
-          : Effect.flatMap(isAlive(earlier[0]!.address), (alive) =>
-              alive ? Effect.succeed(true) : anEarlierAnswers(earlier.slice(1)),
+          : Effect.flatMap(answers(earlier[0]!.address), (alive) =>
+              alive ? Effect.succeed(true) : anEarlierAnswers(earlier.slice(1), answers),
             );
       const check = Effect.gen(function* () {
         const registered = (yield* storage.getRunners)
@@ -270,8 +276,19 @@ const runnerHealthCheck = (group: string, self: RunnerAddress.RunnerAddress) =>
         const earlier = registered
           .filter(([runner]) => key(runner.address).localeCompare(key(self)) < 0)
           .map(([runner]) => runner);
-        if (yield* anEarlierAnswers(earlier)) return;
-        yield* checkAll(registered);
+        // Each runner is pinged once per check: a crashed runner before this
+        // one, found not to answer, is marked without waiting for it again.
+        const answered = new Map<string, boolean>();
+        const answers = (address: RunnerAddress.RunnerAddress) => {
+          const known = answered.get(key(address));
+          return known !== undefined
+            ? Effect.succeed(known)
+            : Effect.tap(isAlive(address), (alive) =>
+                Effect.sync(() => answered.set(key(address), alive)),
+              );
+        };
+        if (yield* anEarlierAnswers(earlier, answers)) return;
+        yield* checkAll(registered, answers);
       }).pipe(Effect.catchCause((cause) => Effect.logWarning("Runner health check failed", cause)));
       yield* check.pipe(
         Effect.andThen(Effect.sleep(RUNNER_HEALTH_CHECK_INTERVAL)),
