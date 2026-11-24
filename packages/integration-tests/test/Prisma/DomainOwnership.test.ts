@@ -16,6 +16,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Result from "effect/Result";
 import {
   AuthoritativeRecordCheck,
@@ -473,6 +474,21 @@ const dnsStack = (
     ...(props.dns === false ? {} : { dns: TEST_DNS }),
   });
 
+const WARNED_RECORD = `TXT ${txtFor(URL_HOSTNAME).name} = ${txtFor(URL_HOSTNAME).value}`;
+const unverifiedWarning = (domain: string) =>
+  `The domain ownership of '${domain}' is unverified: it does not make hostnames it covers serve until Prisma finds ${WARNED_RECORD}, unless another verified domain ownership covers them.`;
+const expiringWarning = (domain: string) =>
+  `The domain ownership of '${domain}' is expiring. Of the hostnames it covers those that already serve keep serving until Prisma lapses it after 2026-12-01T00:00:00.000Z, and none starts serving, unless ${WARNED_RECORD} is published or another verified domain ownership covers them.`;
+const warningsOf = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const warnings: string[] = [];
+    const logger = Logger.make(({ logLevel, message }) => {
+      if (logLevel === "Warn") warnings.push(String(message));
+    });
+    const result = yield* effect.pipe(Effect.provide(Logger.layer([logger])));
+    return { result, warnings };
+  });
+
 const NOT_GET = (cloud: ReturnType<typeof makeUrlCloud>) =>
   cloud.routes().filter((route) => !route.startsWith("GET"));
 
@@ -898,7 +914,7 @@ urlTestFor(inDev, { dev: true }).test.provider(
 for (const status of [429, 503]) {
   const verifyRefused = makeUrlCloud();
   urlTestFor(verifyRefused).test.provider(
-    `with dns, gives up a verify request that keeps failing with ${status}, succeeds unverified, and an unchanged redeploy sends no write`,
+    `with dns, gives up a verify request that keeps failing with ${status}, succeeds unverified, and an unchanged redeploy sends one verify request and no other write`,
     (stack) =>
       Effect.gen(function* () {
         verifyRefused.reset({
@@ -920,7 +936,7 @@ for (const status of [429, 503]) {
         verifyRefused.state.throttle = [];
         verifyRefused.fake.captured.length = 0;
         yield* stack.deploy(dnsStack());
-        expect(verifyRefused.routes().some((route) => !route.startsWith("GET"))).toBe(false);
+        expect(NOT_GET(verifyRefused)).toEqual(["POST /v1/domain-ownerships/do-1/verify"]);
 
         yield* stack.destroy();
       }),
@@ -959,33 +975,35 @@ urlTestFor(deletedMidDeploy).test.provider(
 for (const withRecord of [false, true]) {
   const reread = makeUrlCloud();
   urlTestFor(reread).test.provider(
-    `${withRecord ? "with dns" : "without dns"}, an unverified row is read again on each deploy with one GET and no verify request, and a verified one is not read again`,
+    `${withRecord ? "with dns" : "without dns"}, an unverified row is read on each deploy, checks its record once without waiting, asks Prisma to verify only once the record is seen, and warns while unverified`,
     (stack) =>
       Effect.gen(function* () {
-        reread.reset({ fromZone: withRecord, verifiesAs: "unverified", txt: "absent" });
+        reread.reset({ txt: "absent", verifiesAs: "unverified" });
         yield* stack.destroy();
         const program = dnsStack({ dns: withRecord });
-        const first = yield* stack.deploy(program);
-        expect(first.status).toBe("unverified");
-        const id = first.domainOwnershipId;
-        const txtChecks = reread.state.txtChecked.length;
+        const first = yield* warningsOf(stack.deploy(program));
+        expect(first.result.status).toBe("unverified");
+        expect(first.warnings).toEqual([unverifiedWarning(URL_HOSTNAME)]);
+        const id = first.result.domainOwnershipId;
 
         reread.fake.captured.length = 0;
-        const still = yield* stack.deploy(program);
-        expect(still.status).toBe("unverified");
+        const absent = yield* warningsOf(stack.deploy(program));
+        expect(absent.result.status).toBe("unverified");
+        expect(absent.warnings).toEqual([unverifiedWarning(URL_HOSTNAME)]);
         expect(NOT_GET(reread)).toEqual([]);
-        expect(reread.state.txtChecked).toHaveLength(txtChecks);
+        expect(reread.state.txtOptions.at(-1)).toEqual({
+          margin: "if-unseen",
+          nameservers: "parent",
+          attempts: "once",
+        });
 
-        reread.ownerships.set(id, { ...reread.ownerships.get(id)!, status: "verified" });
+        reread.state.txt = "seen";
+        reread.state.verifiesAs = "verified";
         reread.fake.captured.length = 0;
-        const second = yield* stack.deploy(program);
-
-        expect(second.status).toBe("verified");
-        expect(
-          reread.routes().filter((route) => route.startsWith(`GET /v1/domain-ownerships/`)),
-        ).toEqual([`GET /v1/domain-ownerships/${id}`]);
-        expect(NOT_GET(reread)).toEqual([]);
-        expect(reread.state.txtChecked).toHaveLength(txtChecks);
+        const seen = yield* warningsOf(stack.deploy(program));
+        expect(seen.result.status).toBe("verified");
+        expect(seen.warnings).toEqual([]);
+        expect(NOT_GET(reread)).toEqual([`POST /v1/domain-ownerships/${id}/verify`]);
 
         reread.fake.captured.length = 0;
         yield* stack.deploy(program);
@@ -996,6 +1014,57 @@ for (const withRecord of [false, true]) {
     { tags },
   );
 }
+
+const expiringRow = makeUrlCloud();
+urlTestFor(expiringRow, { adopt: true }).test.provider(
+  "an expiring row warns once on each deploy, with Prisma's rule for an expiring domain ownership",
+  (stack) =>
+    Effect.gen(function* () {
+      expiringRow.reset({ txt: "absent", verifiesAs: "expiring" });
+      expiringRow.seedOwnership(URL_HOSTNAME, "expiring", "do-backfill");
+      yield* stack.destroy();
+      const program = dnsStack({ dns: false });
+
+      const first = yield* warningsOf(stack.deploy(program));
+      expect(first.warnings).toEqual([expiringWarning(URL_HOSTNAME)]);
+      const again = yield* warningsOf(stack.deploy(program));
+      expect(again.warnings).toEqual([expiringWarning(URL_HOSTNAME)]);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const replacedByAdmin = makeUrlCloud();
+urlTestFor(replacedByAdmin).test.provider(
+  "an unverified row an Admin deleted is found again or created with a new id, and a resource that reads its id sees the new one",
+  (stack) =>
+    Effect.gen(function* () {
+      replacedByAdmin.reset({ verifiesAs: "unverified" });
+      yield* stack.destroy();
+      const program = Effect.gen(function* () {
+        const ownership = yield* dnsStack({ dns: false });
+        yield* DnsRecords("IdProbe", {
+          records: Output.map(ownership.domainOwnershipId, (id): DNSAdapter.DnsRecord[] => [
+            { name: "probe.example.com", type: "TXT", value: id },
+          ]),
+        });
+        return ownership;
+      });
+      const first = yield* stack.deploy(program);
+
+      replacedByAdmin.ownerships.delete(first.domainOwnershipId);
+      const second = yield* stack.deploy(program);
+
+      expect(second.domainOwnershipId).not.toBe(first.domainOwnershipId);
+      expect(replacedByAdmin.zone.records.map((record) => record.value)).toEqual([
+        second.domainOwnershipId,
+      ]);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
 
 /** A record whose value reports what `found` resolved to, so a deploy shows the lookup's attributes. */
 const lookupProbe = (found: DomainOwnership) =>

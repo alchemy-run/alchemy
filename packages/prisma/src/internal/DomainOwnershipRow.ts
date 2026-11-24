@@ -22,6 +22,7 @@ import {
   ensureSameWorkspace,
   findOwnership,
   listOwnerships,
+  notVerifiedWarning,
   type ProjectReference,
   recordDomainOf,
   resolveWorkspaceId,
@@ -164,6 +165,17 @@ const ProviderLive = () =>
             : yield* verify(ownership, 6);
         });
 
+      /** Ask Prisma to look only once its record is at the nameservers, without waiting for it. */
+      const verifyIfRecordSeen = (ownership: ApiDomainOwnership) =>
+        Effect.gen(function* () {
+          const { name, value } = ownership.verification;
+          const visibility = yield* checkRecord(
+            { type: "TXT", name, value },
+            { margin: "if-unseen", nameservers: "parent", attempts: "once" },
+          );
+          return visibility === "seen" ? yield* verify(ownership, 0) : ownership;
+        });
+
       return {
         stables: ["workspaceId", "domain"],
         list: Effect.fn(function* () {
@@ -193,13 +205,7 @@ const ProviderLive = () =>
             ? undefined
             : ({
                 action: "update",
-                stables: [
-                  "domainOwnershipId",
-                  "workspaceId",
-                  "domain",
-                  "recordName",
-                  "recordValue",
-                ],
+                stables: ["workspaceId", "domain", "recordName", "recordValue"],
               } as const);
         }),
         read: Effect.fn(function* ({ output, olds }) {
@@ -226,21 +232,27 @@ const ProviderLive = () =>
             recorded && normalizeHostname(recorded.domain) === domain
               ? recorded
               : yield* findOwnership(workspaceId, domain);
-          // A verify request before the record is published makes Prisma's
-          // resolver cache the miss, so only a deploy that first takes the row
-          // or first publishes its record asks Prisma to look; later deploys
-          // read what Prisma found on its own.
-          const asksPrismaToLook =
+          // A deploy that first takes the row or first publishes its record
+          // asks Prisma to look; a later one asks only once the record is at
+          // the nameservers, since a verify before then makes Prisma's
+          // resolver cache the miss.
+          const firstLook =
             olds === undefined || (news.publishesRecord === true && olds.publishesRecord !== true);
           const ownership =
-            existing?.status === "verified" || (existing !== undefined && !asksPrismaToLook)
+            existing?.status === "verified"
               ? existing
-              : news.publishesRecord === true
-                ? yield* ensureWithPublishedRecord(workspaceId, domain, existing)
-                : existing
-                  ? yield* verify(existing, 0)
-                  : yield* createOwnership(workspaceId, domain);
-          return attrsFrom(ownership);
+              : existing !== undefined && !firstLook
+                ? yield* verifyIfRecordSeen(existing)
+                : news.publishesRecord === true
+                  ? yield* ensureWithPublishedRecord(workspaceId, domain, existing)
+                  : existing
+                    ? yield* verify(existing, 0)
+                    : yield* createOwnership(workspaceId, domain);
+          const attrs = attrsFrom(ownership);
+          if (attrs.status !== "verified") {
+            yield* Effect.logWarning(notVerifiedWarning({ ...attrs, status: attrs.status }));
+          }
+          return attrs;
         }),
         delete: Effect.fn(function* ({ output }) {
           if (isPrismaDevId(output.domainOwnershipId)) return;

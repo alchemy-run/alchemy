@@ -248,7 +248,7 @@ export interface CloudState {
   throttle: Array<{ route: string; retryAfter: number; status?: number }>;
   /** How many TXT checks had run when Prisma received a `/check`. */
   txtCheckedAtCheck: number | undefined;
-  /** The status Prisma's create and verify lookups report, instead of the zone, as when its resolver has cached a miss. */
+  /** The status every Prisma lookup of a domain ownership reports, instead of the zone, as when its resolver has cached a miss. */
   verifiesAs: OwnershipStatus | undefined;
   /** What the zone held, and how many requests and TXT checks had run, at each domain ownership create. */
   atOwnershipCreate: Array<{ txtPublished: boolean; requests: number; txtChecks: number }>;
@@ -361,7 +361,8 @@ export const makeUrlCloud = () => {
     return looked;
   };
   const syncOwnerships = (hostname: string) => {
-    for (const row of covering(hostname)) if (row.status !== "verified") lookUp(row);
+    for (const row of covering(hostname))
+      if (row.status !== "verified") lookUp(row, state.verifiesAs);
   };
   const createOwnership = (domain: string) => {
     state.atOwnershipCreate.push({
