@@ -632,7 +632,7 @@ decide: {
 },
 ```
 
-An `Option` field is read as either case, and so is an optional one: a proof starts from a state with the field and from one without it.
+An `Option` field is read as either case, and so is an optional one: a proof starts from a state with the field and from one without it. The two are told apart where the code first reads the field, so a field nothing reads does not double the work.
 
 ```typescript title="packages/domain/src/Wallet.aggregate.ts"
 invariants: {

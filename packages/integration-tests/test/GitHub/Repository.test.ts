@@ -65,6 +65,8 @@ test.provider.skipIf(!owner || !canDeleteRepos)(
             // wiki toggle can never be asserted here.
             hasIssues: false,
             topics: ["alchemy", "test"],
+            squashMergeCommitTitle: "PR_TITLE",
+            squashMergeCommitMessage: "BLANK",
           }).pipe(destroy());
         }),
       );
@@ -83,6 +85,8 @@ test.provider.skipIf(!owner || !canDeleteRepos)(
       expect(fetched?.private).toEqual(true);
       expect(fetched?.has_issues).toEqual(false);
       expect(fetched?.topics).toEqual(expect.arrayContaining(["alchemy", "test"]));
+      expect(fetched?.squash_merge_commit_title).toEqual("PR_TITLE");
+      expect(fetched?.squash_merge_commit_message).toEqual("BLANK");
 
       // Update — change settings and topics, same logical ID → same repoId.
       const updated = yield* stack.deploy(
@@ -94,6 +98,8 @@ test.provider.skipIf(!owner || !canDeleteRepos)(
             visibility: "private",
             hasIssues: true,
             topics: ["alchemy"],
+            squashMergeCommitTitle: "COMMIT_OR_PR_TITLE",
+            squashMergeCommitMessage: "COMMIT_MESSAGES",
           }).pipe(destroy());
         }),
       );
@@ -103,6 +109,8 @@ test.provider.skipIf(!owner || !canDeleteRepos)(
       expect(afterUpdate?.description).toEqual("updated description");
       expect(afterUpdate?.has_issues).toEqual(true);
       expect(afterUpdate?.topics).toEqual(["alchemy"]);
+      expect(afterUpdate?.squash_merge_commit_title).toEqual("COMMIT_OR_PR_TITLE");
+      expect(afterUpdate?.squash_merge_commit_message).toEqual("COMMIT_MESSAGES");
 
       // Rename — new `name`, same logical ID → in-place rename, same repoId.
       const wasRenamed = yield* stack.deploy(

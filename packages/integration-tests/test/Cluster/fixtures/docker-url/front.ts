@@ -4,7 +4,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { FRONT_PORT, Network } from "./cluster.ts";
+import { Network } from "./cluster.ts";
 import UrlEcho from "./echo.ts";
 
 export default class UrlFront extends Docker.Service<UrlFront>()(
@@ -14,7 +14,7 @@ export default class UrlFront extends Docker.Service<UrlFront>()(
     return {
       main: import.meta.url,
       port: 3000,
-      ports: [{ external: FRONT_PORT, internal: 3000 }],
+      ports: [{ internal: 3000 }],
       networks: [{ name: network.name }],
     };
   }),

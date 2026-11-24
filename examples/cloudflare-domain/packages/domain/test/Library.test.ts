@@ -127,7 +127,8 @@ it.effect(
       // does not give is left uncompared, never said to differ.
       expect(verdictsOf(report, "ALeadIsAMember").Lead).toMatchObject(bounded("state.members"));
       expect(report.agreement.differs).toEqual([]);
-      expect(report.agreement.compared).toBeGreaterThan(100);
+      // The lead is chosen only by the commands and rules that read it.
+      expect(report.agreement.compared).toBeGreaterThan(50);
       expect(report.unread).toEqual([]);
     }).pipe(Effect.provide(NodeServices.layer)),
   180_000,

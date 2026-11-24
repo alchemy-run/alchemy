@@ -4,6 +4,7 @@ import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Scheduler from "effect/Scheduler";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
@@ -187,11 +188,22 @@ export const make = (
   let running = 0;
   let waitingRuns = 0;
   let pollingRuns = 0;
+  // Every change wakes `quiet` and the polls, as a queued task: completing a
+  // Deferred resumes its waiters inline, so waking them at once would run
+  // `quiet` in the middle of the run that changed, before it forks the rest
+  // of its fibers (the other calls of an `Effect.forEach`).
   let changed = Deferred.makeUnsafe<void>();
+  const notifier = new Scheduler.MixedScheduler().makeDispatcher();
+  let notifying = false;
   const notify = () => {
-    const was = changed;
-    changed = Deferred.makeUnsafe<void>();
-    Deferred.doneUnsafe(was, Effect.void);
+    if (notifying) return;
+    notifying = true;
+    notifier.scheduleTask(() => {
+      notifying = false;
+      const was = changed;
+      changed = Deferred.makeUnsafe<void>();
+      Deferred.doneUnsafe(was, Effect.void);
+    }, 0);
   };
   // This platform's runs, so a run of another platform never counts here.
   const runs = new WeakSet<Run>();
@@ -211,26 +223,46 @@ export const make = (
       ),
     );
   };
+  /**
+   * Count the current run as waiting (or polling) from now, and return the
+   * end of that wait. The end counts once, whoever calls it first: the run
+   * when it resumes, or the run that wakes it (hands it a lock). A lock's
+   * waiter resumes later, once scheduled; until then `quiet` would see it
+   * waiting, and `drain` return before it ran.
+   *
+   * `register` gets the end before the wait counts, so a `drain` that goes on
+   * once it counts finds whatever wakes the run.
+   */
+  const begin = (
+    kind: keyof Run,
+    register: (end: () => void) => void = () => {},
+  ): Effect.Effect<() => void> =>
+    Effect.map(Effect.service(CurrentRun), (current) => {
+      // A wait outside any run of this platform counts on its own.
+      const run = current && runs.has(current) ? current : { waits: 0, polls: 0 };
+      const recount = (change: () => void) => {
+        const waited = run.waits + run.polls > 0;
+        const polled = run.polls > 0;
+        change();
+        waitingRuns += Number(run.waits + run.polls > 0) - Number(waited);
+        pollingRuns += Number(run.polls > 0) - Number(polled);
+        notify();
+      };
+      let open = true;
+      const end = () => {
+        if (!open) return;
+        open = false;
+        recount(() => run[kind]--);
+      };
+      register(end);
+      recount(() => run[kind]++);
+      return end;
+    });
   /** Count the current run as waiting (or polling) while `effect` runs. */
   const hold =
     (kind: keyof Run) =>
     <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-      Effect.flatMap(Effect.service(CurrentRun), (current) =>
-        Effect.suspend(() => {
-          // A wait outside any run of this platform counts on its own.
-          const run = current && runs.has(current) ? current : { waits: 0, polls: 0 };
-          const recount = (change: () => void) => {
-            const waited = run.waits + run.polls > 0;
-            const polled = run.polls > 0;
-            change();
-            waitingRuns += Number(run.waits + run.polls > 0) - Number(waited);
-            pollingRuns += Number(run.polls > 0) - Number(polled);
-            notify();
-          };
-          recount(() => run[kind]++);
-          return effect.pipe(Effect.ensuring(Effect.sync(() => recount(() => run[kind]--))));
-        }),
-      );
+      Effect.flatMap(begin(kind), (end) => effect.pipe(Effect.ensuring(Effect.sync(end))));
   const waiting = hold("waits");
   /**
    * A poll for another run's work. The queue goes on while it polls (`quiet`),
@@ -259,20 +291,82 @@ export const make = (
    */
   const pollsWait = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     options.manual ? Effect.provideService(effect, RunWait, poll) : effect;
-  /** Run `effect` holding `lock`, counted as waiting while another run holds it. */
+  /**
+   * Run `effect` holding `lock`, counted as waiting while another run holds it.
+   * Not `counted`: the wait counts for nothing (backfill's storage, which shares
+   * a projection's lock), but takes its place in the lock's queue all the same.
+   */
   const exclusively =
-    (lock: Semaphore.Semaphore) =>
+    (lock: Semaphore.Semaphore, counted = true) =>
     <A, E, R>(effect: Effect.Effect<A, E, R>) =>
       Effect.acquireUseRelease(
-        acquire(lock),
+        acquire(lock, counted),
         () => effect,
-        () => lock.release(1),
+        () => release(lock),
       );
-  /** Take `lock`, counted as waiting only when it is held. */
-  const acquire = (lock: Semaphore.Semaphore): Effect.Effect<void> =>
-    lock
-      .takeIfAvailable(1)
-      .pipe(Effect.flatMap((taken) => (taken ? Effect.void : waiting(lock.take(1)))));
+  /** One wait for a lock: its end, and whether `release` has handed it the lock. */
+  interface LockWait {
+    end: () => void;
+    handed: boolean;
+  }
+  // The waits for each lock, in the order the lock wakes them, and how many
+  // were handed the lock but have not taken it yet.
+  const lockWaits = new WeakMap<
+    Semaphore.Semaphore,
+    { readonly queue: Array<LockWait>; handed: number }
+  >();
+  const waitsFor = (lock: Semaphore.Semaphore) => {
+    let found = lockWaits.get(lock);
+    if (!found) lockWaits.set(lock, (found = { queue: [], handed: 0 }));
+    return found;
+  };
+  /**
+   * Take `lock`, counted as waiting only when it is held. While a wait is
+   * queued or handed the lock, a new taker queues behind it: `takeIfAvailable`
+   * would take the lock first, leaving the run handed it waiting again while it
+   * counts as running.
+   */
+  const acquire = (lock: Semaphore.Semaphore, counted = true): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      const waits = waitsFor(lock);
+      const first = waits.queue.length === 0 && waits.handed === 0;
+      return (first ? lock.takeIfAvailable(1) : Effect.succeed(false)).pipe(
+        Effect.flatMap((taken) => {
+          if (taken) return Effect.void;
+          const wait: LockWait = { end: () => {}, handed: false };
+          const register = (end: () => void) => {
+            wait.end = end;
+            waits.queue.push(wait);
+          };
+          return Effect.flatMap(
+            counted ? begin("waits", register) : Effect.sync(() => (register(() => {}), () => {})),
+            (end) =>
+              lock.take(1).pipe(
+                Effect.ensuring(
+                  Effect.sync(() => {
+                    if (wait.handed) waits.handed--;
+                    else waits.queue.splice(waits.queue.indexOf(wait), 1);
+                    end();
+                  }),
+                ),
+                Effect.asVoid,
+              ),
+          );
+        }),
+      );
+    });
+  /** Give `lock` back. The run it wakes (the first waiting) is running from now. */
+  const release = (lock: Semaphore.Semaphore): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      const waits = waitsFor(lock);
+      const next = waits.queue.shift();
+      if (next) {
+        next.handed = true;
+        waits.handed++;
+        next.end();
+      }
+      return Effect.asVoid(lock.release(1));
+    });
   /** Wait until every forked run is finished or waiting. */
   const quiet: Effect.Effect<void> = Effect.suspend(function wait(): Effect.Effect<void> {
     if (running === waitingRuns) return Effect.void;
@@ -446,6 +540,7 @@ export const make = (
           })
       : undefined,
     acquire,
+    release,
     timer,
     failed: (cause) => void failures.push(cause),
     died: (saga, executionId, defect) => void deaths.push({ saga, executionId, defect }),
@@ -497,7 +592,7 @@ export const make = (
             }
             return out;
           }),
-        exclusive: (effect) => lock.withPermits(1)(effect),
+        exclusive: exclusively(lock, false),
       };
     };
     // Queued jobs, by object and id: scheduling one already queued is a no-op.
