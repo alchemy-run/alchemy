@@ -94,7 +94,8 @@ theorem answerCalls_recorded (hosted : Hosted served role)
         exact endSound
 
 /--
-A host records what it applies. After sending the model a command, the journal
+A host answers what the model answers, and records what it applies. The answer
+is the one the model, as the journal had it, gives the command. Afterwards the journal
 replays to exactly the world the host answered with: whatever the cloud held
 before, whatever the outside systems answered. It needs only the journal's law,
 that what is written reads back, and that answering a call leaves the journal alone.
@@ -105,7 +106,9 @@ theorem send_recorded (hosted : Hosted served role)
     (quiet : ∀ c s, sound s →
       lines ((hosted.call c).eval sim s).2 = lines s ∧ sound ((hosted.call c).eval sim s).2)
     (input : served.Input) (s : sim.State) (sounds : sound s) :
-    ∃ answer after, ((hosted.send input).eval sim s).1 = .ok (answer, after) ∧
+    ∃ after, ((hosted.send input).eval sim s).1 =
+        .ok ((served.replay (lines s)).toRecorded.outcome (served.replay (lines s)).now
+          (served.command input), after) ∧
       served.replay (lines ((hosted.send input).eval sim s).2) = after ∧
       sound ((hosted.send input).eval sim s).2 := by
   obtain ⟨appended, grown, appendSound⟩ :=
@@ -117,8 +120,7 @@ theorem send_recorded (hosted : Hosted served role)
     simp [Served.apply, faithful.input]
   obtain ⟨after, ok, recorded, endSound⟩ :=
     hosted.answerCalls_recorded lawful faithful quiet 100 _ _ appendSound step
-  refine ⟨(served.replay (lines s)).toRecorded.outcome (served.replay (lines s)).now
-    (served.command input), after, ?_, ?_, ?_⟩
+  refine ⟨after, ?_, ?_, ?_⟩
   · show (Run.eval sim (Run.bind hosted.world _) s).1 = _
     rw [Run.eval_bind, hosted.world_eval lawful]
     show (Run.eval sim (Run.bind _ _) s).1 = _

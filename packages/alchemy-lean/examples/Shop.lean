@@ -228,28 +228,49 @@ def outside {role : Access Kind} {shipments : Queue} (queue : SQS.SendMessage.Cl
   | .charge order amount => pure (sandboxCharge order amount)
   | .ship order item => queue.call s!"{order}:{item}"
 
+/-! The Api's routes, each a function of the hosted shop. -/
+
+section Routes
+variable {role : Access Kind} (shop : Hosted served role)
+
+/-- What the Api says about a command, given the shop's answer and the shop afterwards. -/
+def respond (command : Order.Command) (answer : Except Order.Rejection (List Order.Event))
+    (after : Alchemy.World Signature) : Response :=
+  match answer with
+  | .ok _ => describe (after.state .Order (Order.key command))
+  | .error rejection => { status := 409, body := reprStr rejection }
+
+/-- `POST /orders` -/
+def postOrder (command : Order.Command) : Run role Never Response := do
+  let (answer, after) ← shop.send (.Order command)
+  return respond command answer after
+
+/-- `GET /orders/{id}` -/
+def getOrder (id : String) : Run role Never Response := do
+  return describe ((← shop.world).state .Order id)
+
+/-- `GET /revenue` -/
+def getRevenue : Run role Never Response := do
+  return { status := 200, body := toString (Revenue.stateAt (← shop.world).log ()) }
+
+def route (request : Request) : Run role Never Response :=
+  match request.method, request.path with
+  | .post, ["orders"] =>
+    match Text.read (α := Order.Command) request.body with
+    | some command => postOrder shop command
+    | none => pure { status := 400, body := "not a command" }
+  | .get, ["orders", id] => getOrder shop id
+  | .get, ["revenue"] => getRevenue shop
+  | _, _ => pure { status := 404, body := "not found" }
+
+end Routes
+
 /-- Takes orders. Hosts the shop: its history is in the bucket, and it ships through the queue. -/
 def Api (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
   Lambda.Function "Api" { url := true } do
     let journal ← S3.Journal orders
     let queue ← SQS.SendMessage shipments
-
-    let shop := served.host journal (outside queue)
-
-    return fun request => do
-      match request.method, request.path with
-      | .post, ["orders"] =>
-        let some command := Text.read (α := Order.Command) request.body
-          | return { status := 400, body := "not a command" }
-        let (answer, after) ← shop.send (.Order command)
-        match answer with
-        | .ok _ => return describe (after.state .Order (Order.key command))
-        | .error rejection => return { status := 409, body := reprStr rejection }
-      | .get, ["orders", id] =>
-        return describe ((← shop.world).state .Order id)
-      | .get, ["revenue"] =>
-        return { status := 200, body := toString (Revenue.stateAt (← shop.world).log ()) }
-      | _, _ => return { status := 404, body := "not found" }
+    return route (served.host journal (outside queue))
 
 /-- Consumes the shipments queue and files a packing slip for each. -/
 def Warehouse (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
@@ -288,40 +309,114 @@ example : ShopStack.problem "prod" = none ∧ prod.deployable = true := by decid
 
 example : prod.order = ["Orders", "Shipments", "Api", "Warehouse"] := by decide
 
-/-! ## What is proved about the Api's code -/
+/-! ## Behaviour of the Api, for every request
+
+The same shape as the domain's behaviour theorems, one level out: given what the
+bucket holds, when a request arrives, then this is the response and this is what
+the bucket holds afterwards. Proved from the laws of the bindings.
+-/
+
+section ApiBehaviour
+
+variable {role : Access Kind} {orders : Bucket} {shipments : Queue}
+  (le : (S3.JournalLive orders).needs ≤ role)
+  (queue : SQS.SendMessage.Client shipments role) (sends : SQS.SendMessage.Lawful queue)
+  (faithful : served.Faithful)
+
+/-- The Api's shop: its journal on the bucket, its calls answered through the queue. -/
+abbrev theShop : Hosted served role :=
+  served.host ((S3.JournalLive orders).build le ⟨⟩) (outside queue)
+
+/-- The shop as a bucket has it: what its journal replays to. -/
+abbrev shopIn (orders : Bucket) (cloud : Memory) : Alchemy.World Signature :=
+  served.replay (S3.lines orders ["journal"] cloud)
+
+/-- A bucket whose journal is whole: every line it counts is there. -/
+abbrev Whole (orders : Bucket) (cloud : Memory) : Prop := S3.Sound orders ["journal"] cloud
 
 /--
-The Api records what it applies. For any command, in any cloud whose journal is
-sound, the journal afterwards replays to exactly the world the Api answered
-with, and is still sound for the next request. Proved from the laws of the
-bindings alone: the journal's, and that sending to a queue touches no object.
+Given any bucket, when an order is asked for, then the Api describes that order
+as the journal has it, and changes nothing.
 -/
-theorem theApiRecordsWhatItApplies {role : Access Kind} (orders : Bucket) (shipments : Queue)
-    (le : (S3.JournalLive orders).needs ≤ role)
-    (queue : SQS.SendMessage.Client shipments role) (sends : SQS.SendMessage.Lawful queue)
-    (faithful : served.Faithful) (command : Order.Command) (m : Memory)
-    (sound : S3.Sound orders ["journal"] m) :
-    let shop := served.host ((S3.JournalLive orders).build le ⟨⟩) (outside queue)
-    ∃ answer after, ((shop.send (.Order command)).eval InMemory m).1 = .ok (answer, after) ∧
-      served.replay (S3.lines orders ["journal"] ((shop.send (.Order command)).eval InMemory m).2)
-        = after ∧
-      S3.Sound orders ["journal"] ((shop.send (.Order command)).eval InMemory m).2 := by
-  intro shop
-  refine Hosted.send_recorded (sim := InMemory) (lines := S3.lines orders ["journal"])
-    (sound := S3.Sound orders ["journal"]) shop
-    (S3.JournalLive.lawful orders ["journal"] le) faithful ?_ (.Order command) m sound
-  intro c m sound
-  cases c with
-  | charge order amount => exact ⟨rfl, sound⟩
-  | ship order item =>
-    have sent : (outside queue (.ship order item)).eval InMemory m
-        = (.ok (), m.send shipments s!"{order}:{item}") := sends.send m _
-    show S3.lines orders ["journal"] ((outside queue (.ship order item)).eval InMemory m).2 = _ ∧
-      S3.Sound orders ["journal"] ((outside queue (.ship order item)).eval InMemory m).2
-    rw [sent]
-    have same := S3.untouched (bucket := orders) (under := ["journal"])
-      (m := m) (m' := m.send shipments s!"{order}:{item}") (fun _ => rfl)
-    exact ⟨same.1, same.2 sound⟩
+theorem gettingAnOrder (id : String) (cloud : Memory) :
+    (getOrder (theShop le queue) id).eval InMemory cloud
+      = (.ok (describe ((shopIn orders cloud).state .Order id)), cloud) := by
+  show Run.eval InMemory (Run.bind _ _) cloud = _
+  rw [Run.eval_bind, Hosted.world_eval _ (S3.JournalLive.lawful orders ["journal"] le)]
+  rfl
+
+/-- Given any bucket, when the revenue is asked for, then the Api answers the Revenue view, and changes nothing. -/
+theorem gettingTheRevenue (cloud : Memory) :
+    (getRevenue (theShop le queue)).eval InMemory cloud
+      = (.ok { status := 200, body := toString (Revenue.stateAt (shopIn orders cloud).log ()) },
+          cloud) := by
+  show Run.eval InMemory (Run.bind _ _) cloud = _
+  rw [Run.eval_bind, Hosted.world_eval _ (S3.JournalLive.lawful orders ["journal"] le)]
+  rfl
+
+include sends faithful in
+/--
+Given a bucket whose journal is whole, when a command is posted, then the Api
+answers what the order, as the journal had it, decides: a refusal as a 409, and
+otherwise the order as the journal has it now. The journal is whole afterwards.
+-/
+theorem postingACommand (command : Order.Command) (cloud : Memory) (whole : Whole orders cloud) :
+    let result := (postOrder (theShop le queue) command).eval InMemory cloud
+    result.1 = .ok (respond command
+        (Order.decide ((shopIn orders cloud).state .Order (Order.key command)) command)
+        (shopIn orders result.2)) ∧
+      Whole orders result.2 := by
+  obtain ⟨after, answered, recorded, wholeAfter⟩ :=
+    Hosted.send_recorded (sim := InMemory) (lines := S3.lines orders ["journal"])
+      (sound := S3.Sound orders ["journal"]) (theShop le queue)
+      (S3.JournalLive.lawful orders ["journal"] le) faithful
+      (by
+        intro call cloud whole
+        cases call with
+        | charge order amount => exact ⟨rfl, whole⟩
+        | ship order item =>
+          have sent : (outside queue (.ship order item)).eval InMemory cloud
+              = (.ok (), cloud.send shipments s!"{order}:{item}") := sends.send cloud _
+          show S3.lines orders ["journal"] ((outside queue (.ship order item)).eval InMemory cloud).2
+              = _ ∧ S3.Sound orders ["journal"] ((outside queue (.ship order item)).eval InMemory cloud).2
+          rw [sent]
+          have same := S3.untouched (bucket := orders) (under := ["journal"]) (m := cloud)
+            (m' := cloud.send shipments s!"{order}:{item}") (fun _ => rfl)
+          exact ⟨same.1, same.2 whole⟩)
+      (.Order command) cloud whole
+  have evaluated : (postOrder (theShop le queue) command).eval InMemory cloud
+      = (.ok (respond command
+          (Order.decide ((shopIn orders cloud).state .Order (Order.key command)) command) after),
+        ((Hosted.send (theShop le queue) (.Order command)).eval InMemory cloud).2) := by
+    show Run.eval InMemory (Run.bind _ _) cloud = _
+    rw [Run.eval_bind, answered]
+    rfl
+  show ((postOrder (theShop le queue) command).eval InMemory cloud).1 = .ok (respond command _
+      (shopIn orders ((postOrder (theShop le queue) command).eval InMemory cloud).2)) ∧
+    Whole orders ((postOrder (theShop le queue) command).eval InMemory cloud).2
+  rw [evaluated]
+  exact ⟨by rw [← recorded], wholeAfter⟩
+
+include sends faithful in
+/--
+Given a bucket in which an order is already placed, when it is placed again,
+then the Api refuses with a 409, whatever the item and the amount.
+-/
+theorem placingAnOrderTwiceIsRefused (id item : String) (amount : Nat) (cloud : Memory)
+    (whole : Whole orders cloud)
+    (placed : ((shopIn orders cloud).state .Order id).status ≠ .new) :
+    ((postOrder (theShop le queue) (.place id item amount)).eval InMemory cloud).1
+      = .ok { status := 409, body := reprStr Order.Rejection.alreadyPlaced } := by
+  have answered := (postingACommand le queue sends faithful (.place id item amount) cloud whole).1
+  simp only [respond, Order.decide, Order.key, placed, ne_eq, not_false_eq_true, ite_true] at answered
+  exact answered
+
+/-- The routes are the requests: each request reaches the route its path names. -/
+example (id : String) :
+    route (theShop le queue) { method := .get, path := ["orders", id] }
+      = getOrder (theShop le queue) id := rfl
+
+end ApiBehaviour
 
 /-! ## Stories: the whole stack, run in memory -/
 
