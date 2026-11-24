@@ -748,9 +748,10 @@ export interface AppRef extends Resource<
 > {}
 export const AppRef = Resource<AppRef>("Test.AppRef");
 
-export const testFor = (cloud: UrlCloud, options: { dev?: boolean } = {}) =>
+export const testFor = (cloud: UrlCloud, options: { dev?: boolean; adopt?: boolean } = {}) =>
   Test.make({
     ...(options.dev ? { dev: true, sidecar: false } : {}),
+    ...(options.adopt ? { adopt: true } : {}),
     providers: Layer.effect(
       TestPrismaProviders,
       Provider.collection([

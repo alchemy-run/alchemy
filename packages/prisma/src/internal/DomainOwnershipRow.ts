@@ -1,10 +1,8 @@
 import {
-  type CreateWorkspaceDomainOwnershipResponseData,
   createDomainOwnershipVerify,
   createWorkspaceDomainOwnership,
   deleteDomainOwnership,
   getDomainOwnership,
-  getWorkspaceDomainOwnerships,
   getWorkspaceDomainOwnershipsVerification,
   getWorkspaces,
 } from "@distilled.cloud/prisma/management";
@@ -19,12 +17,15 @@ import type { Providers } from "../Providers.ts";
 import { AuthoritativeRecordCheck } from "./AuthoritativeDns.ts";
 import { DEV_TIMESTAMP, devId, devProvider } from "./DevStub.ts";
 import {
+  type ApiDomainOwnership,
   DomainOwnershipOperationFailed,
+  ensureSameWorkspace,
+  findOwnership,
+  listOwnerships,
   type ProjectReference,
   resolveWorkspaceId,
 } from "./DomainOwnership.ts";
 import { normalizeHostname } from "./Hostname.ts";
-import { PrismaPaginationError } from "./Pagination.ts";
 import { isInputObject, isPrismaDevId } from "./Refs.ts";
 
 export interface DomainOwnershipRowProps {
@@ -63,8 +64,6 @@ export interface DomainOwnershipRow extends Resource<
 
 export const DomainOwnershipRow = Resource<DomainOwnershipRow>("Prisma.DomainOwnership");
 
-type ApiDomainOwnership = CreateWorkspaceDomainOwnershipResponseData;
-
 const attrsFrom = (ownership: ApiDomainOwnership): DomainOwnershipRow["Attributes"] => ({
   domainOwnershipId: ownership.id,
   workspaceId: ownership.workspaceId,
@@ -75,35 +74,6 @@ const attrsFrom = (ownership: ApiDomainOwnership): DomainOwnershipRow["Attribute
   expiresAt: ownership.expiresAt,
   createdAt: ownership.createdAt,
 });
-
-const listOwnerships = (workspaceId: string, domain?: string) =>
-  Effect.gen(function* () {
-    const ownerships: ApiDomainOwnership[] = [];
-    let cursor: string | undefined;
-    while (true) {
-      const page = yield* getWorkspaceDomainOwnerships({
-        workspaceId,
-        limit: 100,
-        ...(domain === undefined ? {} : { domain }),
-        ...(cursor === undefined ? {} : { cursor }),
-      });
-      ownerships.push(...page.data);
-      if (!page.pagination.hasMore) return ownerships;
-      if (page.pagination.nextCursor === null) {
-        return yield* new PrismaPaginationError({
-          message: `Prisma listed more domain ownerships for workspace '${workspaceId}' without a next cursor.`,
-        });
-      }
-      cursor = page.pagination.nextCursor;
-    }
-  });
-
-export const findOwnership = (workspaceId: string, domain: string) =>
-  listOwnerships(workspaceId, domain).pipe(
-    Effect.map((ownerships) =>
-      ownerships.find((ownership) => normalizeHostname(ownership.domain) === domain),
-    ),
-  );
 
 const deleteOwnership = (domainOwnershipId: string) =>
   deleteDomainOwnership({ domainOwnershipId }).pipe(Effect.catchTag("NotFound", () => Effect.void));
@@ -218,14 +188,13 @@ const ProviderLive = () =>
         reconcile: Effect.fn(function* ({ news, output }) {
           const workspaceId = yield* resolveWorkspaceId(news.project);
           const domain = normalizeHostname(news.domain);
+          yield* ensureSameWorkspace(domain, output?.workspaceId, workspaceId);
           const domainOwnershipId = isPrismaDevId(output?.domainOwnershipId)
             ? undefined
             : output?.domainOwnershipId;
           const recorded = domainOwnershipId ? yield* getOwnership(domainOwnershipId) : undefined;
           const existing =
-            recorded &&
-            recorded.workspaceId === workspaceId &&
-            normalizeHostname(recorded.domain) === domain
+            recorded && normalizeHostname(recorded.domain) === domain
               ? recorded
               : yield* findOwnership(workspaceId, domain);
           const ownership =
@@ -236,9 +205,6 @@ const ProviderLive = () =>
                 : existing
                   ? yield* verify(existing, 0)
                   : yield* createOwnership(workspaceId, domain);
-          if (recorded && recorded.workspaceId !== workspaceId) {
-            yield* deleteOwnership(recorded.id);
-          }
           return attrsFrom(ownership);
         }),
         delete: Effect.fn(function* ({ output }) {

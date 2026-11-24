@@ -32,8 +32,8 @@ export interface DomainOwnershipProps {
    * Prisma to verify; it does not fail when the record never appears or
    * Prisma has not verified it. Nothing is published under `alchemy dev`.
    * Removing `dns` from a deployed domain ownership deletes the record, and a
-   * verified domain ownership later becomes `expiring`. Omitted: publish
-   * `recordName` and `recordValue` yourself.
+   * verified domain ownership becomes `expiring` at Prisma's next lookup of
+   * that record. Omitted: publish `recordName` and `recordValue` yourself.
    */
   dns?: DNS.DnsConfig;
 }
@@ -63,9 +63,13 @@ export interface DomainOwnershipProps {
  * domain ownership the stack did not create, made in the Console, by a
  * RoutingUrl with `createDomainOwnership: true`, by Prisma for an older
  * custom domain, or by another stack, needs `--adopt`, or better `adopt(true)`
- * on this resource alone. Once two stacks have it, destroying either deletes
- * it for both, so declare a shared one in one stack, with
- * `RemovalPolicy.retain()` if it must outlive that stack.
+ * on this resource alone. The refusal can name `Prisma.DomainVerification`,
+ * the resource that checks for an existing domain ownership of this domain,
+ * or of the wildcard or apex that shares its record. Once two stacks have it,
+ * destroying either deletes it for both, so declare a shared one in one
+ * stack, with `RemovalPolicy.retain()` if it must outlive that stack. A
+ * domain ownership belongs to a workspace: moving `project` to another
+ * workspace fails the deploy and changes nothing.
  *
  * ### Proving a Domain
  * **Example:** Prove a hostname and serve it
@@ -109,16 +113,16 @@ export interface DomainOwnershipProps {
 export const DomainOwnership = (id: string, props: DomainOwnershipProps) =>
   Effect.gen(function* () {
     const dns = props.dns !== undefined && (yield* publishesDns) ? props.dns : undefined;
+    const verification = yield* DomainVerification("Verification", {
+      project: props.project,
+      domain: props.domain,
+    });
     if (dns === undefined) {
       return yield* DomainOwnershipRow("Ownership", {
         project: props.project,
         domain: props.domain,
       });
     }
-    const verification = yield* DomainVerification("Verification", {
-      project: props.project,
-      domain: props.domain,
-    });
     const published = yield* (yield* DNS.resolve(dns)).records("Record", {
       records: Output.map(
         Output.all(verification.recordName, verification.recordValue),
@@ -127,7 +131,7 @@ export const DomainOwnership = (id: string, props: DomainOwnershipProps) =>
     });
     return yield* DomainOwnershipRow("Ownership", {
       project: props.project,
-      domain: Output.map(Output.of(published as ResourceLike), () => props.domain),
-      publishesRecord: true,
+      domain: props.domain,
+      publishesRecord: Output.map(Output.of(published as ResourceLike), () => true),
     });
   }).pipe(Namespace.push(id));

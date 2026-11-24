@@ -281,7 +281,7 @@ testFor(warned).test.provider(
       yield* deployLogged(stack.deploy(dnsStack()));
 
       expect(warnings.map(String)).toEqual([
-        `No domain ownership covered '${HOSTNAME}' when it was saved. If this stack declares one, the hostname moves on once it is verified; otherwise declare Prisma.DomainOwnership or set createDomainOwnership: true.`,
+        `No domain ownership covered '${HOSTNAME}' when it was saved. If this stack declares one, the hostname continues once that domain ownership is verified; otherwise declare Prisma.DomainOwnership or set createDomainOwnership: true.`,
       ]);
 
       yield* stack.destroy();

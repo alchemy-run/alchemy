@@ -1,10 +1,16 @@
-import type { DomainOwnershipRequired } from "@distilled.cloud/prisma/management";
-import { getProject } from "@distilled.cloud/prisma/management";
+import {
+  type CreateWorkspaceDomainOwnershipResponseData,
+  type DomainOwnershipRequired,
+  getProject,
+  getWorkspaceDomainOwnerships,
+} from "@distilled.cloud/prisma/management";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type { Project } from "../Project.ts";
+import { normalizeHostname } from "./Hostname.ts";
+import { PrismaPaginationError } from "./Pagination.ts";
 import { concreteIdOf } from "./Refs.ts";
 
 /**
@@ -76,3 +82,53 @@ export const resolveWorkspaceId = (project: ProjectReference) =>
     const response = yield* getProject({ id: projectId });
     return response.data.workspace.id;
   });
+
+export type ApiDomainOwnership = CreateWorkspaceDomainOwnershipResponseData;
+
+export const listOwnerships = (workspaceId: string, domain?: string) =>
+  Effect.gen(function* () {
+    const ownerships: ApiDomainOwnership[] = [];
+    let cursor: string | undefined;
+    while (true) {
+      const page = yield* getWorkspaceDomainOwnerships({
+        workspaceId,
+        limit: 100,
+        ...(domain === undefined ? {} : { domain }),
+        ...(cursor === undefined ? {} : { cursor }),
+      });
+      ownerships.push(...page.data);
+      if (!page.pagination.hasMore) return ownerships;
+      if (page.pagination.nextCursor === null) {
+        return yield* new PrismaPaginationError({
+          message: `Prisma listed more domain ownerships for workspace '${workspaceId}' without a next cursor.`,
+        });
+      }
+      cursor = page.pagination.nextCursor;
+    }
+  });
+
+export const findOwnership = (workspaceId: string, domain: string) =>
+  listOwnerships(workspaceId, domain).pipe(
+    Effect.map((ownerships) =>
+      ownerships.find((ownership) => normalizeHostname(ownership.domain) === domain),
+    ),
+  );
+
+/** The other domain whose ownership shares `domain`'s `TXT` record name: a wildcard's apex, or an apex's wildcard. */
+export const sharingRecordWith = (domain: string) =>
+  domain.startsWith("*.") ? domain.slice(2) : `*.${domain}`;
+
+/** Fails when the stack recorded the domain ownership in another workspace than `project`'s. */
+export const ensureSameWorkspace = (
+  domain: string,
+  recordedWorkspaceId: string | undefined,
+  workspaceId: string,
+) => {
+  if (recordedWorkspaceId === undefined || recordedWorkspaceId === workspaceId) return Effect.void;
+  if (recordedWorkspaceId.startsWith("dev:")) return Effect.void;
+  return Effect.fail(
+    new DomainOwnershipOperationFailed({
+      message: `The domain ownership of '${domain}' belongs to workspace '${recordedWorkspaceId}', but the project is now in workspace '${workspaceId}'. A domain ownership belongs to a workspace and does not move with a project. Destroy it in the old stack, or remove it from state, and deploy again.`,
+    }),
+  );
+};

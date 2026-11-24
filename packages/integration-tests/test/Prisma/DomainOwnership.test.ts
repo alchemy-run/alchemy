@@ -27,7 +27,10 @@ import {
   DomainOwnershipRow,
   DomainOwnershipRowProvider,
 } from "../../../prisma/src/internal/DomainOwnershipRow.ts";
-import { DomainVerification } from "../../../prisma/src/internal/DomainVerification.ts";
+import {
+  DomainVerification,
+  DomainVerificationProvider,
+} from "../../../prisma/src/internal/DomainVerification.ts";
 import {
   data,
   failure,
@@ -180,8 +183,13 @@ class TestPrismaProviders extends Provider.ProviderCollection<TestPrismaProvider
 const testFor = (cloud: OwnershipCloud, adopt = false) =>
   Test.make({
     adopt,
-    providers: Layer.effect(TestPrismaProviders, Provider.collection([DomainOwnershipRow])).pipe(
-      Layer.provideMerge(DomainOwnershipRowProvider()),
+    providers: Layer.effect(
+      TestPrismaProviders,
+      Provider.collection([DomainVerification, DomainOwnershipRow]),
+    ).pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(DomainVerificationProvider(), DomainOwnershipRowProvider()),
+      ),
       Layer.provide(
         Layer.succeed(AuthoritativeRecordCheck, (_record, options) =>
           Effect.sync(() => {
@@ -234,7 +242,7 @@ testFor(created).test.provider(
       expect(ownership.recordValue).toBe(RECORD.value);
       expect(created.state.checkedWith).toBe(undefined);
       expect(created.routes().filter((route) => route === CREATE)).toEqual([CREATE]);
-      expect(created.routes().filter((route) => route === LIST)).toEqual([LIST, LIST]);
+      expect(created.routes().filter((route) => route === LIST)).toEqual([LIST, LIST, LIST, LIST]);
       expect(VERIFIES(created)).toEqual([]);
 
       yield* stack.destroy();
@@ -410,7 +418,7 @@ testFor(replaced).test.provider(
 
 const moved = makeOwnershipCloud();
 testFor(moved).test.provider(
-  "deletes the recorded row when the project moves to another workspace, and records the new one",
+  "fails with how to move it, and deletes nothing, when the project moves to another workspace",
   (stack) =>
     Effect.gen(function* () {
       moved.reset();
@@ -418,12 +426,14 @@ testFor(moved).test.provider(
       const first = yield* stack.deploy(ownershipStack());
       expect(first.workspaceId).toBe("ws-1");
 
-      const second = yield* stack.deploy(ownershipStack("proj-2", "ws-2"));
+      moved.fake.captured.length = 0;
+      const failure = yield* failureOf(stack.deploy(ownershipStack("proj-2", "ws-2")));
 
-      expect(second.domainOwnershipId).toBe("do-created-ws-2");
-      expect(second.workspaceId).toBe("ws-2");
-      expect([...moved.rows.keys()]).toEqual(["do-created-ws-2"]);
-      expect(moved.routes()).toContain("DELETE /v1/domain-ownerships/do-created");
+      expect(failure).toContain(
+        `The domain ownership of '${HOSTNAME}' belongs to workspace 'ws-1', but the project is now in workspace 'ws-2'. A domain ownership belongs to a workspace and does not move with a project. Destroy it in the old stack, or remove it from state, and deploy again.`,
+      );
+      expect([...moved.rows.keys()]).toEqual(["do-created"]);
+      expect(moved.routes().some((route) => !route.startsWith("GET"))).toBe(false);
 
       yield* stack.destroy();
       expect(moved.rows.size).toBe(0);
@@ -451,12 +461,17 @@ testFor(expiring, true).test.provider(
   { tags },
 );
 
-const dnsStack = (props: { project?: string | ProjectReference } = {}) =>
+const dnsStack = (
+  props: { project?: string | ProjectReference; domain?: string; dns?: boolean } = {},
+) =>
   DomainOwnership("Ownership", {
     project: props.project ?? "proj-1",
-    domain: URL_HOSTNAME,
-    dns: TEST_DNS,
+    domain: props.domain ?? URL_HOSTNAME,
+    ...(props.dns === false ? {} : { dns: TEST_DNS }),
   });
+
+const NOT_GET = (cloud: ReturnType<typeof makeUrlCloud>) =>
+  cloud.routes().filter((route) => !route.startsWith("GET"));
 
 const OWNERSHIP_VERIFIES = (cloud: ReturnType<typeof makeUrlCloud>) =>
   cloud.routes().filter((route) => /^POST \/v1\/domain-ownerships\/[^/]+\/verify$/.test(route));
@@ -565,6 +580,165 @@ urlTestFor(refusedBeforeDns).test.provider(
       expect(refusedBeforeDns.routes().some((route) => !route.startsWith("GET"))).toBe(false);
 
       refusedBeforeDns.reset();
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+for (const how of ["--adopt", "adopt(true)"] as const) {
+  const adoptedWithDns = makeUrlCloud();
+  urlTestFor(adoptedWithDns, { adopt: how === "--adopt" }).test.provider(
+    `with dns and ${how}, takes an unverified domain ownership, publishes its record and verifies it`,
+    (stack) =>
+      Effect.gen(function* () {
+        adoptedWithDns.reset({ fromZone: true });
+        adoptedWithDns.seedOwnership(URL_HOSTNAME, "unverified", "do-1");
+        yield* stack.destroy();
+
+        const taken = yield* stack.deploy(
+          how === "--adopt" ? dnsStack() : dnsStack().pipe(adopt(true)),
+        );
+
+        expect(taken.domainOwnershipId).toBe("do-1");
+        expect(taken.status).toBe("verified");
+        expect(adoptedWithDns.zone.records).toEqual([txtFor(URL_HOSTNAME)]);
+        expect(adoptedWithDns.zone.publishes).toBe(1);
+        expect(adoptedWithDns.routes()).not.toContain(CREATE);
+
+        yield* stack.destroy();
+        expect(adoptedWithDns.ownerships.size).toBe(0);
+        expect(adoptedWithDns.zone.records).toEqual([]);
+      }),
+    { tags },
+  );
+}
+
+const OTHER_HOSTNAME = "other.example.com";
+
+const renamed = makeUrlCloud();
+urlTestFor(renamed).test.provider(
+  "with dns, a domain change deletes the old domain ownership and its record, and publishes the new one",
+  (stack) =>
+    Effect.gen(function* () {
+      renamed.reset({ fromZone: true });
+      yield* stack.destroy();
+      const first = yield* stack.deploy(dnsStack());
+
+      const second = yield* stack.deploy(dnsStack({ domain: OTHER_HOSTNAME }));
+
+      expect(second.domain).toBe(OTHER_HOSTNAME);
+      expect(second.status).toBe("verified");
+      expect([...renamed.ownerships.keys()]).toEqual([second.domainOwnershipId]);
+      expect(renamed.routes()).toContain(`DELETE /v1/domain-ownerships/${first.domainOwnershipId}`);
+      expect(renamed.zone.records).toEqual([txtFor(OTHER_HOSTNAME)]);
+      expect(renamed.zone.publishes).toBe(2);
+
+      yield* stack.destroy();
+      expect(renamed.ownerships.size).toBe(0);
+      expect(renamed.zone.records).toEqual([]);
+    }),
+  { tags },
+);
+
+const renamedOntoForeign = makeUrlCloud();
+urlTestFor(renamedOntoForeign).test.provider(
+  "with dns, a domain change onto a domain ownership the stack did not record is refused before any publish",
+  (stack) =>
+    Effect.gen(function* () {
+      renamedOntoForeign.reset({ fromZone: true });
+      yield* stack.destroy();
+      const first = yield* stack.deploy(dnsStack());
+      renamedOntoForeign.seedOwnership(OTHER_HOSTNAME, "verified", "do-foreign");
+
+      renamedOntoForeign.fake.captured.length = 0;
+      const publishes = renamedOntoForeign.zone.publishes;
+      const failure = yield* failureOf(stack.deploy(dnsStack({ domain: OTHER_HOSTNAME })));
+
+      expect(failure).toContain("Cannot replace resource");
+      expect(failure).toContain("Prisma.DomainVerification");
+      expect(renamedOntoForeign.zone.publishes).toBe(publishes);
+      expect(renamedOntoForeign.zone.records).toEqual([txtFor(URL_HOSTNAME)]);
+      expect(NOT_GET(renamedOntoForeign)).toEqual([]);
+      expect([...renamedOntoForeign.ownerships.keys()].sort()).toEqual(
+        [first.domainOwnershipId, "do-foreign"].sort(),
+      );
+
+      renamedOntoForeign.ownerships.delete("do-foreign");
+      yield* stack.destroy();
+      expect(renamedOntoForeign.ownerships.size).toBe(0);
+      expect(renamedOntoForeign.zone.records).toEqual([]);
+    }),
+  { tags },
+);
+
+const dnsAdded = makeUrlCloud();
+urlTestFor(dnsAdded).test.provider(
+  "adding dns to a deployed domain ownership publishes its record and verifies it, with no --adopt",
+  (stack) =>
+    Effect.gen(function* () {
+      dnsAdded.reset({ fromZone: true });
+      yield* stack.destroy();
+      const first = yield* stack.deploy(dnsStack({ dns: false }));
+      expect(first.status).toBe("unverified");
+      expect(dnsAdded.zone.publishes).toBe(0);
+
+      const second = yield* stack.deploy(dnsStack());
+
+      expect(second.domainOwnershipId).toBe(first.domainOwnershipId);
+      expect(second.status).toBe("verified");
+      expect(dnsAdded.zone.records).toEqual([txtFor(URL_HOSTNAME)]);
+      expect(dnsAdded.zone.publishes).toBe(1);
+
+      yield* stack.destroy();
+      expect(dnsAdded.ownerships.size).toBe(0);
+      expect(dnsAdded.zone.records).toEqual([]);
+    }),
+  { tags },
+);
+
+const dnsReadded = makeUrlCloud();
+urlTestFor(dnsReadded).test.provider(
+  "removing dns deletes the record, and adding it back publishes it again, with no --adopt",
+  (stack) =>
+    Effect.gen(function* () {
+      dnsReadded.reset({ fromZone: true });
+      yield* stack.destroy();
+      const first = yield* stack.deploy(dnsStack());
+
+      yield* stack.deploy(dnsStack({ dns: false }));
+      expect(dnsReadded.zone.records).toEqual([]);
+
+      const third = yield* stack.deploy(dnsStack());
+
+      expect(third.domainOwnershipId).toBe(first.domainOwnershipId);
+      expect(dnsReadded.zone.records).toEqual([txtFor(URL_HOSTNAME)]);
+      expect(dnsReadded.zone.publishes).toBe(2);
+
+      yield* stack.destroy();
+      expect(dnsReadded.ownerships.size).toBe(0);
+      expect(dnsReadded.zone.records).toEqual([]);
+    }),
+  { tags },
+);
+
+const wildcardOverApex = makeUrlCloud();
+urlTestFor(wildcardOverApex).test.provider(
+  "with dns, a wildcard is refused while a domain ownership of its apex that the stack did not record shares the record, and nothing is published",
+  (stack) =>
+    Effect.gen(function* () {
+      wildcardOverApex.reset({ fromZone: true });
+      wildcardOverApex.seedOwnership("example.com", "verified", "do-apex");
+      yield* stack.destroy();
+
+      const failure = yield* failureOf(stack.deploy(dnsStack({ domain: "*.example.com" })));
+
+      expect(failure).toContain("Cannot adopt resource");
+      expect(failure).toContain("Prisma.DomainVerification");
+      expect(wildcardOverApex.zone.publishes).toBe(0);
+      expect(NOT_GET(wildcardOverApex)).toEqual([]);
+      expect([...wildcardOverApex.ownerships.keys()]).toEqual(["do-apex"]);
+
+      wildcardOverApex.reset();
       yield* stack.destroy();
     }),
   { tags },

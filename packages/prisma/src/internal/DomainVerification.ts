@@ -6,9 +6,15 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import { devProvider } from "./DevStub.ts";
-import { type ProjectReference, resolveWorkspaceId } from "./DomainOwnership.ts";
-import { findOwnership } from "./DomainOwnershipRow.ts";
+import {
+  ensureSameWorkspace,
+  findOwnership,
+  type ProjectReference,
+  resolveWorkspaceId,
+  sharingRecordWith,
+} from "./DomainOwnership.ts";
 import { normalizeHostname } from "./Hostname.ts";
+import { isInputObject } from "./Refs.ts";
 
 export interface DomainVerificationProps {
   /** Project (or project ID) whose workspace proves ownership. */
@@ -17,12 +23,7 @@ export interface DomainVerificationProps {
   domain: string;
 }
 
-/**
- * The `TXT` record that proves a Prisma workspace owns a domain, read from
- * Prisma before the record exists. Deleting it is a no-op. A domain ownership
- * the stack did not record makes it unowned, since that row's record belongs
- * to whoever created it. Declared by `Prisma.DomainOwnership`.
- */
+/** The `TXT` record that proves a domain ownership; unowned while a domain ownership this stack did not record shares it. */
 export interface DomainVerification extends Resource<
   "Prisma.DomainVerification",
   DomainVerificationProps,
@@ -47,23 +48,38 @@ const ProviderLive = () =>
     DomainVerification,
     Effect.gen(function* () {
       return {
-        read: Effect.fn(function* ({ output, olds }) {
+        diff: Effect.fn(function* ({ news, output }) {
+          if (!output || !isInputObject(news) || typeof news.domain !== "string") {
+            return undefined;
+          }
+          return normalizeHostname(news.domain) === normalizeHostname(output.domain)
+            ? undefined
+            : ({ action: "replace" } as const);
+        }),
+        read: Effect.fn(function* ({ output, olds, previous }) {
           if (output !== undefined) return output;
           if (typeof olds?.domain !== "string") return undefined;
           const workspaceId = yield* resolveWorkspaceId(olds.project);
           const domain = normalizeHostname(olds.domain);
-          const existing = yield* findOwnership(workspaceId, domain);
-          if (existing === undefined) return undefined;
+          const recorded =
+            previous?.workspaceId === workspaceId ? normalizeHostname(previous.domain) : undefined;
+          const existing = yield* Effect.forEach(
+            [domain, sharingRecordWith(domain)].filter((each) => each !== recorded),
+            (each) => findOwnership(workspaceId, each),
+          );
+          const unrecorded = existing.find((ownership) => ownership !== undefined);
+          if (unrecorded === undefined) return undefined;
           return Unowned({
             workspaceId,
             domain,
-            recordName: existing.verification.name,
-            recordValue: existing.verification.value,
+            recordName: unrecorded.verification.name,
+            recordValue: unrecorded.verification.value,
           });
         }),
-        reconcile: Effect.fn(function* ({ news }) {
+        reconcile: Effect.fn(function* ({ news, output }) {
           const workspaceId = yield* resolveWorkspaceId(news.project);
           const domain = normalizeHostname(news.domain);
+          yield* ensureSameWorkspace(domain, output?.workspaceId, workspaceId);
           const record = yield* getWorkspaceDomainOwnershipsVerification({ workspaceId, domain });
           return {
             workspaceId,

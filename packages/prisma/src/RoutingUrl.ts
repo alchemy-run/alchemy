@@ -249,8 +249,9 @@ export interface RoutingUrl extends Resource<
      * What the hostname is doing now, as of the deploy's last write or check.
      * At the end of a deploy:
      * `no_domain_ownership`: no domain ownership covered the hostname, so
-     * Prisma looked up no `TXT`; a `Prisma.DomainOwnership` the stack
-     * declares moves it on once verified, otherwise declare one or set
+     * Prisma looked up no `TXT`; if the stack declares a
+     * `Prisma.DomainOwnership`, the hostname continues once that domain
+     * ownership is verified, otherwise declare one or set
      * `createDomainOwnership: true`.
      * `not_verified`: a domain ownership covers it but is not verified yet;
      * Prisma continues on its own once it is.
@@ -621,7 +622,7 @@ const checksAfterSave = (
     normalizeHostname(olds.hostname) !== normalizeHostname(news.hostname));
 
 const noDomainOwnershipWarning = (hostname: string) =>
-  `No domain ownership covered '${hostname}' when it was saved. If this stack declares one, the hostname moves on once it is verified; otherwise declare Prisma.DomainOwnership or set createDomainOwnership: true.`;
+  `No domain ownership covered '${hostname}' when it was saved. If this stack declares one, the hostname continues once that domain ownership is verified; otherwise declare Prisma.DomainOwnership or set createDomainOwnership: true.`;
 
 const ProviderLive = () =>
   Provider.effect(
