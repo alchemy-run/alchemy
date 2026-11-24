@@ -3,10 +3,9 @@ import Alchemy
 /-!
 # An inbox, on Cloudflare Workers
 
-A Worker written as one `do` block: it binds a bucket and a queue, consumes the
-queue, and ends with what it serves, a `fetch` handler and methods another
-Worker calls. Nobody lists its bindings or writes its role: both are what the
-steps of the block asked for.
+A Worker written as one `do` block: it consumes a queue, and ends with what it
+serves, a `fetch` handler and methods another Worker calls. Nobody lists its
+bindings: they are read off the calls in its code.
 -/
 
 open Alchemy Cloud Cloudflare
@@ -34,40 +33,36 @@ stores each message; tells other Workers what is stored.
 -/
 def Inbox (mail : Bucket) (incoming : Queue) : Construct Kind (Worker Api) :=
   Workers.Worker "Inbox" {} Api do
-    let mail ← R2.ReadWrite mail
-    let queue ← Queues.Send incoming
-
     Queues.consume incoming fun message => do
-      let stored ← mail.list
-      mail.put (toString stored.length) message
+      let stored ← R2.list mail
+      R2.put mail (toString stored.length) message
 
     return {
       fetch := fun request => do
         match request.method, request.path with
         | "POST", "/messages" =>
           if request.body.isEmpty then return { status := 400, body := "a message needs a body" }
-          queue.send request.body
+          Queues.send incoming request.body
           return { status := 202 }
         | _, _ => return { status := 404 }
       rpc := fun
-        | .count => return (← mail.list).length
-        | .read id => mail.get (toString id) }
+        | .count => return (← R2.list mail).length
+        | .read id => R2.get mail (toString id) }
 
 /-- A page that says what is in the inbox. It holds no data: it asks the Inbox. -/
 def Web (inbox : Worker Api) : Construct Kind (Worker .none) :=
   Workers.Worker "Web" {} .none do
-    let inbox ← Workers.Bind inbox
     return {
       fetch := fun request => do
         match request.path with
         | "/" =>
-          match ← (inbox.call .count).result with
+          match ← (Workers.call inbox .count).result with
           | .ok count => return { body := s!"{count} messages" }
           | .error (_ : Workers.RpcError) => return { status := 502, body := "the inbox did not answer" }
         | "/latest" =>
           match ← (do
-              let count ← inbox.call .count
-              inbox.call (.read (count - 1))).result with
+              let count ← Workers.call inbox .count
+              Workers.call inbox (.read (count - 1))).result with
           | .ok (some message) => return { body := message }
           | .ok none => return { status := 404, body := "the inbox is empty" }
           | .error (_ : Workers.RpcError) => return { status := 502, body := "the inbox did not answer" }
@@ -131,9 +126,9 @@ theorem leastPrivilege : prod.LeastPrivilege (InMemory prod) :=
   .of_tests [aMessage] (by native_decide)
 
 /-- Only the Inbox can touch the mail, to read it or to write it. -/
-theorem onlyTheInboxTouchesTheMail (op : BucketOp) :
-    prod.whoCan ⟨.bucket, mail, op⟩ = ["Inbox"] := by
-  cases op <;> rfl
+theorem onlyTheInboxTouchesTheMail :
+    prod.only [inbox] (R2.reading mail) ∧ prod.only [inbox] (R2.writing mail) := by
+  constructor <;> stack_rule in prod using [mail, inbox]
 
 /-- Nothing but the Web can call the Inbox, and nothing can call the Web. -/
 theorem whoCallsWhom :

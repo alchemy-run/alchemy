@@ -1,12 +1,14 @@
 import Alchemy.Cloud.Host
+import Alchemy.Cloud.Infer
+import Alchemy.Cloud.Tactics
 import Alchemy.Cloud.Hosted
 
 /-!
 # A small Cloudflare
 
-Workers, R2 buckets and Queues. A Worker is written as a `do` block: bindings
-and queue consumers are steps, and it ends with what the Worker serves, a
-`fetch` handler and typed methods other Workers can call.
+Workers, R2 buckets and Queues. A Worker is written as a `do` block: a queue
+consumer is a step, and it ends with what the Worker serves, a `fetch` handler
+and typed methods other Workers can call. Its bindings are read off its calls.
 -/
 
 namespace Alchemy.Cloudflare
@@ -153,64 +155,9 @@ def Queue (id : String) (props : QueueProps := {}) : Construct Kind Cloudflare.Q
 
 end Queues
 
-/-! ## Bindings -/
-
-variable {m : Type → Type} {access : Access Kind}
-
-namespace R2
-
-structure Read.Client (bucket : Cloudflare.Bucket) (access : Access Kind) where
-  get : String → Run access Never (Option String)
-  list : Run access Never (List String)
-
-instance (bucket : Cloudflare.Bucket) : Live (Read.Client bucket) where
-  layer := {
-    needs := .on bucket BucketOp.read
-    build := fun le _ => {
-      get := fun key => Run.perform bucket (BucketCall.get key) ⟨le⟩
-      list := Run.perform bucket BucketCall.list ⟨le⟩ } }
-
-/-- Read a bucket. -/
-def Read (bucket : Cloudflare.Bucket) [Gives m (Read.Client bucket) access] :
-    m (Read.Client bucket access) :=
-  Layer.Gives.give
-
-structure ReadWrite.Client (bucket : Cloudflare.Bucket) (access : Access Kind) where
-  get : String → Run access Never (Option String)
-  list : Run access Never (List String)
-  put : String → String → Run access Never Unit
-
-instance (bucket : Cloudflare.Bucket) : Live (ReadWrite.Client bucket) where
-  layer := {
-    needs := .on bucket BucketOp.read ∪ .on bucket BucketOp.write
-    build := fun le _ =>
-      let read := Access.le_trans (Access.le_union_left _ _) le
-      let write := Access.le_trans (Access.le_union_right _ _) le
-      { get := fun key => Run.perform bucket (BucketCall.get key) ⟨read⟩
-        list := Run.perform bucket BucketCall.list ⟨read⟩
-        put := fun key body => Run.perform bucket (BucketCall.put key body) ⟨write⟩ } }
-
-/-- Read and write a bucket. -/
-def ReadWrite (bucket : Cloudflare.Bucket) [Gives m (ReadWrite.Client bucket) access] :
-    m (ReadWrite.Client bucket access) :=
-  Layer.Gives.give
-
-end R2
+/-! ## Consumers -/
 
 namespace Queues
-
-structure Send.Client (queue : Cloudflare.Queue) (access : Access Kind) where
-  send : String → Run access Never Unit
-
-instance (queue : Cloudflare.Queue) : Live (Send.Client queue) where
-  layer := {
-    needs := .on queue QueueOp.send
-    build := fun le _ => { send := fun body => Run.perform queue (QueueCall.send body) ⟨le⟩ } }
-
-/-- Put messages on a queue. -/
-def Send (queue : Cloudflare.Queue) [Gives m (Send.Client queue) access] :
-    m (Send.Client queue access) :=
-  Layer.Gives.give
 
 /--
 Consume a queue: run this for each message. A step of the Worker's block, so the
@@ -275,27 +222,69 @@ inductive RpcError where
   | unreadable (reply : String)
 deriving DecidableEq, Repr
 
-structure Bind.Client {rpc : Rpc} (worker : Cloudflare.Worker rpc) (access : Access Kind) where
-  call : (c : rpc.Method) → Run access RpcError (rpc.Reply c)
+end Workers
 
-instance {rpc : Rpc} (worker : Cloudflare.Worker rpc) : Live (Bind.Client worker) where
-  layer := {
-    needs := .on worker.ref WorkerOp.call
-    build := fun le _ => {
-      call := fun c => do
-        match ← Run.perform worker.ref (WorkerCall.rpc (rpc.method.write c)) ⟨le⟩ with
-        | none => .fail .unknownMethod
-        | some text =>
-          match (rpc.reply c).read text with
-          | some reply => pure reply
-          | none => .fail (.unreadable text) } }
+/-! ## Operations called directly: the call is what asks for the binding -/
 
-/-- Call another Worker's methods. -/
-def Bind {rpc : Rpc} (worker : Cloudflare.Worker rpc) [Gives m (Bind.Client worker) access] :
-    m (Bind.Client worker access) :=
-  Layer.Gives.give
+namespace R2
+
+/-- Read an object. -/
+def get {role : Access Kind} (bucket : Cloudflare.Bucket) (key : String)
+    [granted : Has role (.on bucket BucketOp.read)] : Run role Never (Option String) :=
+  Run.perform bucket (BucketCall.get key) granted
+
+/-- The keys of a bucket. -/
+def list {role : Access Kind} (bucket : Cloudflare.Bucket)
+    [granted : Has role (.on bucket BucketOp.read)] : Run role Never (List String) :=
+  Run.perform bucket BucketCall.list granted
+
+/-- Write an object. -/
+def put {role : Access Kind} (bucket : Cloudflare.Bucket) (key body : String)
+    [granted : Has role (.on bucket BucketOp.write)] : Run role Never Unit :=
+  Run.perform bucket (BucketCall.put key body) granted
+
+/-- Reading a bucket. -/
+abbrev reading (bucket : Cloudflare.Bucket) : Doing Kind := ⟨Unit, fun _ => ⟨.bucket, bucket, BucketOp.read⟩⟩
+
+/-- Writing a bucket. -/
+abbrev writing (bucket : Cloudflare.Bucket) : Doing Kind := ⟨Unit, fun _ => ⟨.bucket, bucket, BucketOp.write⟩⟩
+
+end R2
+
+namespace Queues
+
+/-- Put a message on a queue. -/
+def send {role : Access Kind} (queue : Cloudflare.Queue) (body : String)
+    [granted : Has role (.on queue QueueOp.send)] : Run role Never Unit :=
+  Run.perform queue (QueueCall.send body) granted
+
+/-- Putting messages on a queue. -/
+abbrev sending (queue : Cloudflare.Queue) : Doing Kind := ⟨Unit, fun _ => ⟨.queue, queue, QueueOp.send⟩⟩
+
+end Queues
+
+namespace Workers
+
+/-- Call a method of another Worker. -/
+def call {role : Access Kind} {rpc : Rpc} (worker : Cloudflare.Worker rpc) (c : rpc.Method)
+    [granted : Has role (.on worker.ref WorkerOp.call)] : Run role RpcError (rpc.Reply c) := do
+  match ← Run.perform worker.ref (WorkerCall.rpc (rpc.method.write c)) granted with
+  | none => .fail .unknownMethod
+  | some text =>
+    match (rpc.reply c).read text with
+    | some reply => pure reply
+    | none => .fail (.unreadable text)
+
+/-- Calling a Worker's methods. -/
+abbrev calling {rpc : Rpc} (worker : Cloudflare.Worker rpc) : Doing Kind :=
+  ⟨Unit, fun _ => ⟨.worker, worker.ref, WorkerOp.call⟩⟩
 
 end Workers
+
+/-- A Worker's block has its bindings read off the calls in it. -/
+macro_rules
+  | `(Workers.Worker $id $props $rpc $body) =>
+    `(Alchemy.Cloudflare.Workers.Worker $id $props $rpc (granted% $body))
 
 /-! ## In memory -/
 
