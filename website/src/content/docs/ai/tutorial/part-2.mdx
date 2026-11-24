@@ -184,11 +184,11 @@ export const BoardLive = Board.layer(Layer.empty).pipe(
 ```diff lang="typescript" title="src/Agents.ts"
 import * as Layer from "effect/Layer";
 +import { BoardLive } from "./Board.ts";
-import { ModelsLive, Smart } from "./Models.ts";
+import { SmartLlama, Smart } from "./Models.ts";
 
--const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(Layer.provide(ModelsLive));
+-const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(Layer.provide(SmartLlama));
 +const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), BoardLive).pipe(
-+  Layer.provide(ModelsLive),
++  Layer.provide(SmartLlama),
 +);
 ```
 

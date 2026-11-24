@@ -25,7 +25,7 @@ Yield the process in the outer Effect and provide one Layer. The methods are wha
 ```typescript
 // src/Agents.ts
 const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), PostAnswerLive).pipe(
-  Layer.provide(Layer.mergeAll(ModelsLive, SandboxLive)),
+  Layer.provide(Layer.mergeAll(SmartLlama, SandboxLive)),
   Layer.provide(Boat.CreateSandboxHttp),
 );
 

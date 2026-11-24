@@ -248,7 +248,7 @@ A **Layer** provides an implementation. It connects a tool, a model or a process
 A model's Layer is the LLM behind its name:
 
 ```typescript title="src/Models.ts"
-export const SmartLive = AICloudflare.Model(Smart, {
+export const SmartLlama = AICloudflare.Model(Smart, {
   model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
 });
 ```
@@ -275,7 +275,7 @@ export const Live = TriageLive.pipe(
     Layer.mergeAll(
       AnsweringLive,
       PostAnswerLive,
-      SmartLive,
+      SmartLlama,
       AI.DefaultModel(Smart),
       Pi.HarnessLive,
     ),

@@ -15,11 +15,11 @@ import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Layer from "effect/Layer";
 import { EngineerLive } from "./Engineer.process.ts";
-import { ModelsLive, Smart } from "./Models.ts";
+import { SmartLlama, Smart } from "./Models.ts";
 
 export const Live = EngineerLive.pipe(
   Layer.provide(Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools, AI.DefaultModel(Smart))),
-  Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, ModelsLive)),
+  Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, SmartLlama)),
 );
 ```
 

@@ -69,7 +69,7 @@ import * as AI from "@alchemy.run/ai";
 +import * as Boat from "@alchemy.run/boat";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 
-import { ModelsLive, Smart } from "./Models.ts";
+import { SmartLlama, Smart } from "./Models.ts";
 +import { SandboxLive } from "./Sandbox.ts";
 import { Triage } from "./Triage.process.ts";
 
@@ -79,8 +79,8 @@ import { Triage } from "./Triage.process.ts";
 +);
 
 const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), boardOver(own)).pipe(
--  Layer.provide(ModelsLive),
-+  Layer.provide(Layer.mergeAll(ModelsLive, SandboxLive)),
+-  Layer.provide(SmartLlama),
++  Layer.provide(Layer.mergeAll(SmartLlama, SandboxLive)),
 +  Layer.provide(Boat.CreateSandboxHttp),
 );
 ```
@@ -255,7 +255,7 @@ import { Triage } from "./Triage.process.ts";
 +  PostAnswerLive,
 +  boardOver(own),
 +).pipe(
-  Layer.provide(Layer.mergeAll(ModelsLive, SandboxLive)),
+  Layer.provide(Layer.mergeAll(SmartLlama, SandboxLive)),
 ```
 
 `Answering` needs no Layer: its prose is on the class, and it mentions nothing.

@@ -222,7 +222,7 @@ const HarnessLive = Pi.HarnessLive.pipe(Layer.provide(PiCloudflare.DurableObject
 +);
 +
 +const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), boardOver(own)).pipe(
-  Layer.provide(ModelsLive),
+  Layer.provide(SmartLlama),
 );
 ```
 

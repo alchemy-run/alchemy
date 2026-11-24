@@ -150,7 +150,7 @@ const own = Effect.map(
 );
 
 const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), boardOver(own)).pipe(
-  Layer.provide(ModelsLive),
+  Layer.provide(SmartLlama),
 );
 
 export default class IssueAgents extends Cloudflare.DurableObject<IssueAgents>()(

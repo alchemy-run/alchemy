@@ -9,7 +9,7 @@ export const Gateway = Cloudflare.AI.Gateway("ProcessGateway", { collectLogs: tr
 /** Llama 3.3 70B reliably returns OpenAI-shaped tool calls on Workers AI. */
 export class Fast extends AI.Model<Fast>()("fast") {}
 
-export const ModelsLive = AICloudflare.Model(Fast, {
+export const FastLlama = AICloudflare.Model(Fast, {
   gateway: Gateway,
   model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
   parameters: { temperature: 0, maxTokens: 1024 },
@@ -60,5 +60,5 @@ export const OperatorLive = Operator.toLayer({
 export const ProcessesLive = OperatorLive.pipe(
   Layer.provideMerge(AdderLive),
   Layer.provide(Layer.mergeAll(AddLive, AI.DefaultModel(Fast))),
-  Layer.provide(ModelsLive),
+  Layer.provide(FastLlama),
 );

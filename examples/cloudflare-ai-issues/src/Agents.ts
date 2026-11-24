@@ -16,7 +16,7 @@ import type { IssueId } from "./Board/Issue.id.ts";
 import { IssueSession } from "./Board/IssueSession.aggregate.ts";
 import { RecordActivity } from "./Board/RecordActivity.command.ts";
 import { Triager } from "./Board/Triager.external.ts";
-import { ModelsLive, Smart } from "./Models.ts";
+import { SmartLlama, Smart } from "./Models.ts";
 import { PostAnswerLive } from "./PostAnswer.tool.ts";
 import { SandboxLive } from "./Sandbox.ts";
 import { SearchIssuesLive } from "./SearchIssues.tool.ts";
@@ -79,7 +79,7 @@ const Live = Layer.mergeAll(
   PostAnswerLive,
   boardOver(own),
 ).pipe(
-  Layer.provide(Layer.mergeAll(ModelsLive, SandboxLive)),
+  Layer.provide(Layer.mergeAll(SmartLlama, SandboxLive)),
   Layer.provide(Boat.CreateSandboxHttp),
 );
 

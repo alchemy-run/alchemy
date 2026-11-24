@@ -23,7 +23,7 @@ Finish [Cloudflare setup](/cloudflare/setup). Part 3 also needs [GitHub setup](/
 
 ## Declare a model
 
-A model is a name. `ModelsLive` says which LLM answers under it: Llama 3.3 on Workers AI, through the Worker's own AI binding.
+A model is a name. `SmartLlama` says which LLM answers under it: Llama 3.3 on Workers AI, through the Worker's own AI binding.
 
 ```typescript title="src/Models.ts"
 import * as AI from "@alchemy.run/ai";
@@ -31,7 +31,7 @@ import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 
 export class Smart extends AI.Model<Smart>()("smart") {}
 
-export const ModelsLive = AICloudflare.Model(Smart, {
+export const SmartLlama = AICloudflare.Model(Smart, {
   model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
   parameters: { temperature: 0, maxTokens: 2048 },
 });
@@ -67,12 +67,12 @@ import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { ModelsLive, Smart } from "./Models.ts";
+import { SmartLlama, Smart } from "./Models.ts";
 import { Triage } from "./Triage.process.ts";
 
 const HarnessLive = Pi.HarnessLive.pipe(Layer.provide(PiCloudflare.DurableObjectStorage));
 
-const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(Layer.provide(ModelsLive));
+const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(Layer.provide(SmartLlama));
 
 export default class IssueAgents extends Cloudflare.DurableObject<IssueAgents>()(
   "IssueAgents",

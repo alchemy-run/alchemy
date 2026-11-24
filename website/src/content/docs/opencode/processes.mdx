@@ -15,13 +15,13 @@ import * as OpenCode from "@alchemy.run/opencode";
 import * as OpenCodeCloudflare from "@alchemy.run/opencode/Cloudflare";
 import * as Layer from "effect/Layer";
 import { EngineerLive } from "./Engineer.process.ts";
-import { ModelsLive, Smart } from "./Models.ts";
+import { SmartLlama, Smart } from "./Models.ts";
 
 export const Live = EngineerLive.pipe(
   Layer.provide(
     Layer.mergeAll(OpenCode.HarnessLive, OpenCode.CodingTools, AI.DefaultModel(Smart)),
   ),
-  Layer.provide(Layer.mergeAll(OpenCodeCloudflare.DurableObjectStorage, ModelsLive)),
+  Layer.provide(Layer.mergeAll(OpenCodeCloudflare.DurableObjectStorage, SmartLlama)),
 );
 ```
 

@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import { Fast, ModelsLive } from "../Processes.ts";
+import { Fast, FastLlama } from "../Processes.ts";
 import { Board, BoardHandlers, Labeler, Triager } from "./Board.ts";
 import type { IssueId } from "./Issue.id.ts";
 import { IssueSession, RecordActivity } from "./Session.ts";
@@ -61,7 +61,7 @@ const own = Effect.map(
 
 /** What the Triage process runs with: Pi, a model, and the board it reports to. */
 const Live = Layer.mergeAll(Pi.HarnessLive, AI.DefaultModel(Fast), boardOver(own)).pipe(
-  Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, ModelsLive)),
+  Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, FastLlama)),
 );
 
 /** Where an issue's Triage session runs, and what the board may ask of it. */
