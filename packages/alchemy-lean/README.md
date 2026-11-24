@@ -361,6 +361,17 @@ theorem theShopComesToRest (w : Alchemy.World Signature) (reach : Shop.Reachable
   weights.comesToRest policiesAreCalm w reach
 ```
 
+A model with sagas gets the same, from a rank for each saga's program. The bank, with two sagas and their undos, comes to rest from any world it can reach.
+
+```lean
+theorem payout_ranked (payout : String) (input : PayoutRequest) :
+    Model.Ranked ranking (Bank.Payout.run payout input) 17 := by
+
+theorem theBankComesToRest (w : Alchemy.World Signature) (reach : Bank.Reachable w) :
+    ∃ steps, Bank.AtRest (Bank.settle steps w) :=
+  ranking.comesToRest reacts w reach
+```
+
 ## A stack
 
 Resources and functions are steps of the stack's block.

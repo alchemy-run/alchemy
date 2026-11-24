@@ -258,6 +258,343 @@ theorem Weights.eventually (weights : m.Weights)
   ⟨weights.measure w, weights.comesToRest policies w reach,
     atRest _ (m.settle_reachable _ w reach) (weights.comesToRest policies w reach)⟩
 
+/-! ## With sagas
+
+A saga registers undos, starts runs, waits for signals and may fail. Its
+programs branch on what it is answered, so a rank cannot be computed from one:
+instead `Ranked p n` says the program can be shown to have rank at most `n`,
+whatever it is answered. The same argument then goes through.
+-/
+
+variable (m)
+
+/-- Weights for events and commands, as before, for a model whose reactions may do anything. -/
+structure Ranking where
+  event : (n : m.signature.aggregates.Name) → (m.signature.aggregates.of n).Event → Nat
+  send : Send m.signature.aggregates → Nat
+  /-- A command weighs at least what it records. -/
+  emits : ∀ (n : m.signature.aggregates.Name) (ctx : Context (m.signature.aggregates.of n).Actor)
+      (state : (m.signature.aggregates.of n).State) (command : (m.signature.aggregates.of n).Command)
+      (es : List (m.signature.aggregates.of n).Event),
+    (m.signature.aggregates.of n).decide ctx state command = .ok es →
+      (es.map (event n)).sum ≤ send ⟨n, ctx.actor, command⟩
+
+variable {m}
+
+/-- The program has rank at most `t`: it takes at most that many steps, whatever it is answered. -/
+inductive Ranked (ranking : m.Ranking) : Program m.signature Unit → Nat → Prop where
+  | pure {t} : 1 ≤ t → Ranked ranking (.pure ()) t
+  | fail {t} (failure) : 1 ≤ t → Ranked ranking (.fail failure) t
+  | send {t n} (s) (k) : (∀ r, Ranked ranking (k r) n) → 2 + ranking.send s + n ≤ t →
+      Ranked ranking (.send s k) t
+  | call {t n} (c) (k) : (∀ r, Ranked ranking (k r) n) → n ≤ t → Ranked ranking (.call c k) t
+  | await {t n} (k) : (∀ signal, Ranked ranking (k signal) n) → 1 + n ≤ t →
+      Ranked ranking (.await k) t
+  | compensate {t n b} (undo) (k) : (∀ failure, ranking.send (undo failure) ≤ b) →
+      Ranked ranking k n → 3 + b + n ≤ t → Ranked ranking (.compensate undo k) t
+  | start {t n j} (saga) (input) (k) : Ranked ranking k n →
+      Ranked ranking (m.saga saga input) j → 1 + n + j ≤ t → Ranked ranking (.start saga input k) t
+  | signal {t n} (saga) (told) (k) : Ranked ranking k n → 1 + n ≤ t →
+      Ranked ranking (.signal saga told k) t
+  | schedule {t n} (after) (s) (k) : Ranked ranking k n → 1 + n ≤ t →
+      Ranked ranking (.schedule after s k) t
+
+/-- What the undos a reaction has registered weigh. -/
+inductive Undoing (ranking : m.Ranking) : List (m.signature.Failure → Send m.signature.aggregates) → Nat → Prop where
+  | nil {t} : Undoing ranking [] t
+  | cons {t n b} (undo) (rest) : (∀ failure, ranking.send (undo failure) ≤ b) →
+      Undoing ranking rest n → 2 + b + n ≤ t → Undoing ranking (undo :: rest) t
+
+/-- A reaction under way has rank at most `r`: its program and its undos together. -/
+def Ranking.fiber (ranking : m.Ranking) (f : Fiber m.signature) (r : Nat) : Prop :=
+  ∃ p u, Ranked ranking f.program p ∧ Undoing ranking f.undo u ∧ p + u ≤ r
+
+/-- The reactions under way, each with a rank. -/
+inductive Ranking.fibers (ranking : m.Ranking) : List (Fiber m.signature) → Nat → Prop where
+  | nil : Ranking.fibers ranking [] 0
+  | cons {f r fs n} : ranking.fiber f r → Ranking.fibers ranking fs n →
+      Ranking.fibers ranking (f :: fs) (r + n)
+
+theorem Ranking.fibers_append (ranking : m.Ranking) {a b : List (Fiber m.signature)} {x y : Nat}
+    (ha : ranking.fibers a x) (hb : ranking.fibers b y) : ranking.fibers (a ++ b) (x + y) := by
+  induction ha with
+  | nil => simpa using hb
+  | cons hf _ ih => rw [List.cons_append, Nat.add_assoc]; exact .cons hf ih
+
+theorem Ranking.fibers_split (ranking : m.Ranking) {a : List (Fiber m.signature)}
+    {f : Fiber m.signature} {b : List (Fiber m.signature)} {n : Nat}
+    (h : ranking.fibers (a ++ f :: b) n) :
+    ∃ x r y, ranking.fibers a x ∧ ranking.fiber f r ∧ ranking.fibers b y ∧ n = x + r + y := by
+  induction a generalizing n with
+  | nil =>
+    cases h with
+    | cons hf hb => exact ⟨0, _, _, .nil, hf, hb, by omega⟩
+  | cons g a ih =>
+    cases h with
+    | cons hg rest =>
+      obtain ⟨x, r, y, ha, hf, hb, rfl⟩ := ih rest
+      exact ⟨_, r, y, .cons hg ha, hf, hb, by omega⟩
+
+theorem Ranking.single (ranking : m.Ranking) {f : Fiber m.signature} {r : Nat}
+    (ranked : ranking.fiber f r) : ranking.fibers [f] r := by
+  simpa using Ranking.fibers.cons ranked .nil
+
+/-- What is left to do in a world is at most `n`. -/
+def Ranking.bounds (ranking : m.Ranking) (w : World m.signature) (n : Nat) : Prop :=
+  ∃ fibers, ranking.fibers w.fibers fibers ∧
+    (w.inbox.map fun e => ranking.event e.source e.event).sum + fibers ≤ n
+
+theorem Ranking.dispatch_inbox (ranking : m.Ranking) (w : World m.signature)
+    (s : Send m.signature.aggregates) :
+    ((w.dispatch s).inbox.map fun e => ranking.event e.source e.event).sum
+      ≤ (w.inbox.map fun e => ranking.event e.source e.event).sum + ranking.send s := by
+  simp only [World.dispatch, World.lift, Recorded.dispatch]
+  cases outcome : w.toRecorded.outcome w.now s with
+  | error _ => simp
+  | ok es =>
+    simp only [Recorded.record, List.drop_left, List.map_append, List.sum_append]
+    have bound : (es.map (ranking.event s.to)).sum ≤ ranking.send s :=
+      ranking.emits s.to ⟨s.actor, w.now⟩ _ s.command es outcome
+    rw [zipIdx_weight (ranking.event s.to) _ _ (fun _ _ => rfl)]
+    omega
+
+/-- One step of one reaction lowers what is left: its own rank and the inbox, against what replaces it. -/
+theorem Ranking.advance (ranking : m.Ranking) {w w' : World m.signature} {f : Fiber m.signature}
+    {fs : List (Fiber m.signature)} {r : Nat} (ranked : ranking.fiber f r)
+    (advanced : m.advance w f = some (w', fs)) :
+    ∃ after, ranking.fibers fs after ∧
+      (w'.inbox.map fun e => ranking.event e.source e.event).sum + after
+        < (w.inbox.map fun e => ranking.event e.source e.event).sum + r := by
+  obtain ⟨p, u, program, undos, total⟩ := ranked
+  have finished : ∀ owner status, (w.finish owner status).inbox = w.inbox := by
+    intro owner status; unfold World.finish; split <;> rfl
+  unfold Model.advance at advanced
+  cases shape : f.program with
+  | pure x =>
+    rw [shape] at program advanced
+    cases x
+    cases program with
+    | pure one =>
+      simp only at advanced
+      cases advanced
+      exact ⟨0, .nil, by rw [finished]; omega⟩
+  | fail failure =>
+    rw [shape] at program advanced
+    cases program with
+    | fail _ one =>
+      simp only at advanced
+      cases undoList : f.undo with
+      | nil =>
+        rw [undoList] at advanced
+        cases advanced
+        exact ⟨0, .nil, by rw [finished]; omega⟩
+      | cons undo rest =>
+        rw [undoList] at advanced undos
+        cases advanced
+        cases undos with
+        | cons _ _ small restUndos fits =>
+          have grown := ranking.dispatch_inbox w (undo failure)
+          have := small failure
+          refine ⟨p + _, ranking.single (f := { f with program := .fail failure, undo := rest })
+            ⟨p, _, .fail failure one, restUndos, Nat.le_refl _⟩, ?_⟩
+          omega
+  | send s k =>
+    rw [shape] at program advanced
+    cases program with
+    | send _ _ each fits =>
+      simp only at advanced
+      cases advanced
+      have grown := ranking.dispatch_inbox w s
+      refine ⟨_ + u, ranking.single (f := { f with program := k (w.toRecorded.outcome w.now s) }) ⟨_, u, each _, undos, Nat.le_refl _⟩, ?_⟩
+      omega
+  | call c k => rw [shape] at advanced; simp at advanced
+  | await k =>
+    rw [shape] at program advanced
+    cases program with
+    | await _ each fits =>
+      simp only at advanced
+      cases owner : f.owner with
+      | none => rw [owner] at advanced; simp at advanced
+      | some saga =>
+        rw [owner] at advanced
+        simp only at advanced
+        cases signals : w.signals saga with
+        | nil => rw [signals] at advanced; simp at advanced
+        | cons told rest =>
+          rw [signals] at advanced
+          cases advanced
+          refine ⟨_ + u, ranking.single (f := { f with owner := some saga, program := k told })
+            ⟨_, u, each told, undos, Nat.le_refl _⟩, ?_⟩
+          simp only
+          omega
+  | compensate undo k =>
+    rw [shape] at program advanced
+    cases program with
+    | compensate _ _ small rest fits =>
+      simp only at advanced
+      cases advanced
+      refine ⟨_ + (2 + _ + u), ranking.single (f := { f with program := k, undo := undo :: f.undo }) ⟨_, 2 + _ + u, rest, .cons undo f.undo small undos (Nat.le_refl _), Nat.le_refl _⟩, ?_⟩
+      omega
+  | start saga input k =>
+    rw [shape] at program advanced
+    cases program with
+    | start _ _ _ rest run fits =>
+      simp only at advanced
+      cases status : w.sagas saga with
+      | notStarted =>
+        rw [status] at advanced
+        cases advanced
+        refine ⟨(_ + u) + (_ + 0), .cons (f := { f with program := k })
+          ⟨_, u, rest, undos, Nat.le_refl _⟩ (.cons
+            (f := { owner := some saga, program := m.saga saga input, undo := [] })
+            ⟨_, 0, run, .nil, Nat.le_refl _⟩ .nil), ?_⟩
+        simp only
+        omega
+      | running | completed | failed _ =>
+        rw [status] at advanced
+        cases advanced
+        refine ⟨_ + u, ranking.single (f := { f with program := k }) ⟨_, u, rest, undos, Nat.le_refl _⟩, ?_⟩
+        omega
+  | signal saga told k =>
+    rw [shape] at program advanced
+    cases program with
+    | signal _ _ _ rest fits =>
+      simp only at advanced
+      cases advanced
+      refine ⟨_ + u, ranking.single (f := { f with program := k }) ⟨_, u, rest, undos, Nat.le_refl _⟩, ?_⟩
+      simp only
+      omega
+  | schedule after s k =>
+    rw [shape] at program advanced
+    cases program with
+    | schedule _ _ _ rest fits =>
+      simp only at advanced
+      cases advanced
+      refine ⟨_ + u, ranking.single (f := { f with program := k }) ⟨_, u, rest, undos, Nat.le_refl _⟩, ?_⟩
+      simp only
+      omega
+
+/-- An event weighs more than the reactions to it, each of which has a rank. -/
+def Ranking.Reacts (ranking : m.Ranking) : Prop :=
+  ∀ history (e : Emitted m.signature.aggregates), ∃ total,
+    ranking.fibers (m.policies.map fun p => { owner := none, program := p.react history e, undo := [] })
+      total ∧ 1 + total ≤ ranking.event e.source e.event
+
+theorem Ranking.bounds_mono (ranking : m.Ranking) {w : World m.signature} {n n' : Nat}
+    (bound : ranking.bounds w n) (le : n ≤ n') : ranking.bounds w n' := by
+  obtain ⟨fibers, ranked, fits⟩ := bound
+  exact ⟨fibers, ranked, by omega⟩
+
+/-- Every step of the engine lowers what is left to do. -/
+theorem Ranking.lowers (ranking : m.Ranking) (reacts : ranking.Reacts) {w w' : World m.signature}
+    {n : Nat} (bound : ranking.bounds w n) (step : m.stepOnce w = some w') :
+    ∃ n', n' < n ∧ ranking.bounds w' n' := by
+  obtain ⟨total, ranked, fits⟩ := bound
+  unfold stepOnce at step
+  split at step
+  · next e rest inbox =>
+    cases step
+    obtain ⟨added, reactions, less⟩ := reacts (w.log.take e.seq) e
+    refine ⟨n - 1, ?_, total + added, ranking.fibers_append ranked reactions, ?_⟩
+    · simp only [inbox, List.map_cons, List.sum_cons] at fits; omega
+    · simp only [react, inbox, List.map_cons, List.sum_cons] at fits ⊢
+      omega
+  · obtain ⟨skipped, f, rest, w'', fs, split, adv, rfl⟩ := m.tryFibers_split w w' _ _ step
+    rw [split] at ranked
+    obtain ⟨x, r, y, before, fiber, after, rfl⟩ := ranking.fibers_split ranked
+    obtain ⟨replaced, new, less⟩ := ranking.advance fiber adv
+    refine ⟨n - 1, by omega, x + replaced + y, ?_, ?_⟩
+    · simpa [List.append_assoc] using
+        ranking.fibers_append (ranking.fibers_append before new) after
+    · simp only; omega
+
+/-- So within as many steps as are left to do, nothing can go on. -/
+theorem Ranking.rest (ranking : m.Ranking) (reacts : ranking.Reacts) :
+    ∀ n (w : World m.signature), ranking.bounds w n → m.AtRest (m.settle n w) := by
+  intro n
+  induction n with
+  | zero =>
+    intro w bound
+    show m.stepOnce w = none
+    cases step : m.stepOnce w with
+    | none => rfl
+    | some w' => obtain ⟨n', less, _⟩ := ranking.lowers reacts bound step; omega
+  | succ n ih =>
+    intro w bound
+    unfold settle
+    cases step : m.stepOnce w with
+    | none => exact step
+    | some w' =>
+      obtain ⟨n', less, bound'⟩ := ranking.lowers reacts bound step
+      exact ih w' (ranking.bounds_mono bound' (by omega))
+
+theorem Ranked.answered {ranking : m.Ranking} {c : m.signature.Call}
+    {k : m.signature.Reply c → Program m.signature Unit} {t : Nat}
+    (ranked : Ranked ranking (.call c k) t) (reply : m.signature.Reply c) :
+    Ranked ranking (k reply) t := by
+  cases ranked with
+  | call _ _ each fits =>
+    have : ∀ {p : Program m.signature Unit} {a b : Nat}, Ranked ranking p a → a ≤ b →
+        Ranked ranking p b := by
+      intro p a b h le
+      induction h generalizing b with
+      | pure one => exact .pure (by omega)
+      | fail failure one => exact .fail failure (by omega)
+      | send s k each fits _ => exact .send s k each (by omega)
+      | call c k each fits _ => exact .call c k each (by omega)
+      | await k each fits _ => exact .await k each (by omega)
+      | compensate undo k small rest fits _ => exact .compensate undo k small rest (by omega)
+      | start saga input k rest run fits _ _ => exact .start saga input k rest run (by omega)
+      | signal saga told k rest fits _ => exact .signal saga told k rest (by omega)
+      | schedule after s k rest fits _ => exact .schedule after s k rest (by omega)
+    exact this (each reply) fits
+
+/-- In every world the model can reach, every reaction under way has a rank. -/
+theorem Ranking.reachable (ranking : m.Ranking) (reacts : ranking.Reacts)
+    (w : World m.signature) (reach : m.Reachable w) : ∃ n, ranking.fibers w.fibers n := by
+  induction reach with
+  | start => exact ⟨0, .nil⟩
+  | step _ step ih =>
+    obtain ⟨n, ranked⟩ := ih
+    cases step with
+    | send s _ => exact ⟨n, ranked⟩
+    | decide d actor c _ => exact ⟨n, ranked⟩
+    | deliver e before after inbox =>
+      obtain ⟨added, reactions, _⟩ := reacts (_ : List _) e
+      exact ⟨_, ranking.fibers_append ranked reactions⟩
+    | redeliver e _ =>
+      obtain ⟨added, reactions, _⟩ := reacts (_ : List _) e
+      exact ⟨_, ranking.fibers_append ranked reactions⟩
+    | advance f before after w' fs split adv =>
+      rw [split] at ranked
+      obtain ⟨x, r, y, hb, fiber, ha, rfl⟩ := ranking.fibers_split ranked
+      obtain ⟨replaced, new, _⟩ := ranking.advance fiber adv
+      exact ⟨_, ranking.fibers_append (ranking.fibers_append hb new) ha⟩
+    | answer f before after c k reply split program =>
+      rw [split] at ranked
+      obtain ⟨x, r, y, hb, ⟨p, u, prog, undos, total⟩, ha, rfl⟩ := ranking.fibers_split ranked
+      rw [program] at prog
+      exact ⟨_, ranking.fibers_append hb
+        (.cons (f := { f with program := k reply }) ⟨p, u, prog.answered reply, undos, total⟩ ha)⟩
+    | tick time _ => exact ⟨n, ranked⟩
+    | fire due s before after _ _ => exact ⟨n, ranked⟩
+
+/--
+A model with such a ranking comes to rest. From any world it can reach, with
+policies, sagas, undos and signals, after some number of steps nothing can go on.
+-/
+theorem Ranking.comesToRest (ranking : m.Ranking) (reacts : ranking.Reacts)
+    (w : World m.signature) (reach : m.Reachable w) : ∃ steps, m.AtRest (m.settle steps w) := by
+  obtain ⟨n, ranked⟩ := ranking.reachable reacts w reach
+  exact ⟨_, ranking.rest reacts _ w ⟨n, ranked, Nat.le_refl _⟩⟩
+
+/-- So what holds of every reachable world at rest holds eventually, from any reachable world. -/
+theorem Ranking.eventually (ranking : m.Ranking) (reacts : ranking.Reacts)
+    {P : World m.signature → Prop} (atRest : ∀ w, m.Reachable w → m.AtRest w → P w)
+    (w : World m.signature) (reach : m.Reachable w) : m.Eventually w P := by
+  obtain ⟨steps, rest⟩ := ranking.comesToRest reacts w reach
+  exact ⟨steps, rest, atRest _ (m.settle_reachable _ w reach) rest⟩
+
 end Model
 
 end Alchemy

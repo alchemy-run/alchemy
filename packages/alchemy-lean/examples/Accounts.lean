@@ -637,4 +637,104 @@ example : Bank.passes [
     .rejected .Account (.frozen "source of funds")
   ] = true := by decide
 
+/-! ## Eventually: the bank comes to rest
+
+Policies, two sagas with their undos, outside calls. Left to run from any world
+it can reach, the bank stops. Each event is given a weight, each command at
+least what it records, and each saga a rank; every step then lowers what is left.
+-/
+
+
+/-- What each event and each command of the bank weighs. -/
+def ranking : Bank.Ranking where
+  event
+    | .Account, .opened _ => 3
+    | .Account, .deposited _ => 8
+    | .Account, .withdrawn _ => 3
+    | .Account, .transferredOut _ => 3
+    | .Account, .transferredIn _ => 3
+    | .Account, .frozen _ => 3
+    | .Account, .closed => 10
+    | .Account, .payoutRequested .. => 21
+  send
+    | ⟨.Account, _, .open ..⟩ => 3
+    | ⟨.Account, _, .deposit ..⟩ => 8
+    | ⟨.Account, _, .withdraw ..⟩ => 3
+    | ⟨.Account, _, .freeze ..⟩ => 3
+    | ⟨.Account, _, .close _⟩ => 10
+    | ⟨.Account, _, .requestPayout ..⟩ => 21
+  emits := by
+    intro n ctx state command es accepted
+    cases n; cases command <;>
+      simp only [Account.decide] at accepted <;>
+      (repeat' split at accepted) <;> first | (cases accepted; simp) | cases accepted
+
+theorem farewell_ranked (id : String) : Model.Ranked ranking (Bank.Farewell.run id ()) 6 := by
+  simp only [Farewell.run, Farewell.Account.must, Program.step]
+  exact .send _ _ (n := 1)
+    (fun r => by cases r <;> first | exact .pure (Nat.le_refl _) | exact .fail _ (Nat.le_refl _))
+    (by simp [ranking])
+
+theorem payout_ranked (payout : String) (input : PayoutRequest) :
+    Model.Ranked ranking (Bank.Payout.run payout input) 17 := by
+  obtain ⟨account, amount⟩ := input
+  refine .send (n := 12) _ _ (fun r => ?_) (by simp [ranking])
+  cases r with
+  | error _ => exact .fail _ (by omega)
+  | ok _ =>
+    refine .compensate (b := 8) (n := 1) _ _ (fun _ => by simp [ranking]) ?_ (by omega)
+    exact .call (n := 1) _ _
+      (fun reply => by cases reply <;> first | exact .pure (Nat.le_refl _) | exact .fail _ (Nat.le_refl _))
+      (Nat.le_refl _)
+
+theorem compliance_deposited (history) (id : String) (amount seq time) :
+    Model.Ranked ranking (Compliance.react history ⟨.Account, id, .deposited amount, seq, time⟩) 6 := by
+  show Model.Ranked ranking (if amount ≥ 10000 then _ else _) 6
+  split
+  · exact .call (n := 6) _ _ (fun reply => by
+      cases reply
+      · exact .pure (by omega)
+      · exact .send (n := 1) _ _ (fun _ => .pure (Nat.le_refl _)) (by simp [ranking])) (Nat.le_refl _)
+  · exact .pure (by omega)
+
+/-- A reaction with no undos registered, at its program's rank. -/
+theorem plain {program : Program Signature Unit} {rank : Nat}
+    (ranked : Model.Ranked ranking program rank) :
+    ranking.fiber { owner := none, program, undo := [] } rank :=
+  ⟨rank, 0, ranked, .nil, Nat.le_refl _⟩
+
+/-- Every event weighs more than the reactions to it. -/
+theorem reacts : ranking.Reacts := by
+  intro history e
+  obtain ⟨source, id, event, seq, time⟩ := e
+  cases source
+  cases event with
+  | deposited amount =>
+    exact ⟨1 + (6 + 0), .cons (plain (.pure (Nat.le_refl _)))
+      (.cons (plain (compliance_deposited history id amount seq time)) .nil), by simp [ranking]⟩
+  | payoutRequested payout amount =>
+    exact ⟨19 + (1 + 0), .cons (plain (.start (t := 19) (n := 1) (j := 17) _ _ _
+        (.pure (Nat.le_refl _)) (payout_ranked payout ⟨id, amount⟩) (by omega)))
+      (.cons (plain (.pure (Nat.le_refl _))) .nil), by simp [ranking]⟩
+  | closed =>
+    exact ⟨8 + (1 + 0), .cons (plain (.start (t := 8) (n := 1) (j := 6) _ _ _
+        (.pure (Nat.le_refl _)) (farewell_ranked id) (by omega)))
+      (.cons (plain (.pure (Nat.le_refl _))) .nil), by simp [ranking]⟩
+  | _ =>
+    exact ⟨1 + (1 + 0), .cons (plain (.pure (Nat.le_refl _)))
+      (.cons (plain (.pure (Nat.le_refl _))) .nil), by simp [ranking]⟩
+
+/--
+The bank comes to rest. From any world it can reach, after some number of steps
+nothing can go on without a caller, an outside answer or the clock.
+-/
+theorem theBankComesToRest (w : Alchemy.World Signature) (reach : Bank.Reachable w) :
+    ∃ steps, Bank.AtRest (Bank.settle steps w) :=
+  ranking.comesToRest reacts w reach
+
+/-- So eventually, from any world the bank can reach, it is at rest with every account balanced. -/
+theorem eventuallyAtRestAndBalanced (w : Alchemy.World Signature) (reach : Bank.Reachable w)
+    (id : String) : Bank.Eventually w fun rested => Balanced (rested.state .Account id) :=
+  ranking.eventually reacts (fun rested reached _ => everyAccountBalanced rested reached id) w reach
+
 end Bank
