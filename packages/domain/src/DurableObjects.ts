@@ -266,6 +266,23 @@ const putRows = <T>(storage: ObjectStorage, rows: ReadonlyArray<readonly [string
     { discard: true },
   );
 
+/** Every row under a prefix, in key order, read a page at a time. */
+const allRows = <T>(storage: ObjectStorage, prefix: string) =>
+  Effect.gen(function* () {
+    const out: Array<readonly [string, T]> = [];
+    let after: string | undefined;
+    while (true) {
+      const page = yield* storage.list<T>({
+        prefix,
+        limit: 512,
+        ...(after === undefined ? {} : { startAfter: after }),
+      });
+      out.push(...page.entries());
+      if (page.size < 512) return out;
+      after = out[out.length - 1]![0];
+    }
+  });
+
 /** The storage list that reads exactly the `entry:` rows in `range`. */
 const entryRange = (range: ListRange | undefined): ListOptions => {
   const limit = range?.limit === undefined ? {} : { limit: Math.max(0, range.limit) };
@@ -2121,22 +2138,6 @@ const viewObject = (
       Effect.map(state.storage.list<Delivery>({ prefix: `rev:${source}|` }), (rows) =>
         awaitsRevision(rows.values(), root, source),
       );
-    /** Every row under a prefix, read a page at a time. */
-    const allRows = <T>(prefix: string) =>
-      Effect.gen(function* () {
-        const out: Array<readonly [string, T]> = [];
-        let after: string | undefined;
-        while (true) {
-          const page = yield* state.storage.list<T>({
-            prefix,
-            limit: 512,
-            ...(after === undefined ? {} : { startAfter: after }),
-          });
-          out.push(...page.entries());
-          if (page.size < 512) return out;
-          after = out[out.length - 1]![0];
-        }
-      });
     const entriesAfter = (after: number) =>
       stored.pipe(
         Effect.flatMap((snapshot) =>
@@ -2266,7 +2267,7 @@ const viewObject = (
         const before = yield* read;
         const held = yield* revs;
         const pending = new Map(
-          (yield* allRows<Delivery>("rev:")).map(
+          (yield* allRows<Delivery>(state.storage, "rev:")).map(
             ([, revised]) => [revisionKey(revised.source, revised.seq), revised] as const,
           ),
         );
@@ -2287,9 +2288,10 @@ const viewObject = (
             yield* state.storage.delete(waiting);
             yield* state.storage.put(row, all);
           });
-        let inputs: ReadonlyArray<StoredViewInput> = (yield* allRows<StoredViewInput>("in:")).map(
-          ([, row]) => row,
-        );
+        let inputs: ReadonlyArray<StoredViewInput> = (yield* allRows<StoredViewInput>(
+          state.storage,
+          "in:",
+        )).map(([, row]) => row);
         // Rows stored before entries were tracked: fold them as they are, to learn each one's entries.
         if (inputs.some((row) => !("delivery" in row))) {
           inputs = (yield* kit.refold(key, { snapshot: emptySnapshot, top: 0 }, inputs)).inputs;
@@ -2319,7 +2321,9 @@ const viewObject = (
           return yield* note([]);
         }
         const folded = yield* kit.refold(key, { snapshot: emptySnapshot, top: 0 }, taken.rows);
-        const entries = (yield* allRows<ViewEntry>("entry:")).map(([, entry]) => entry);
+        const entries = (yield* allRows<ViewEntry>(state.storage, "entry:")).map(
+          ([, entry]) => entry,
+        );
         const changes = entryChanges(entries, folded.entries);
         const snapshot = refolded(before, folded.snapshot, folded.top);
         yield* clearPrefixes(["in:"]);
@@ -2716,33 +2720,32 @@ const projectionObject = (
     /** A per-source cursor, or 0. Read after `upgrade`, so the rows are all there is. */
     const cursor = (prefix: string, source: string) =>
       Effect.map(state.storage.get<number>(prefix + source), (n) => n ?? 0);
-    /** The last handled `seq` per source: every source's, or only `sources`'. */
+    /**
+     * The last handled `seq` per source: every source's, or only `sources`'.
+     * A key not yet upgraded still keeps them in `meta`, and its rows win.
+     */
     const checkpointsOf = (sources?: ReadonlyArray<string>) =>
       Effect.gen(function* () {
         const meta = yield* readMeta;
-        const out: Record<string, number> = {};
         // Nothing accepted in this generation (an earlier one's rows read as empty).
-        if (meta.key === null) return out;
-        if (sources !== undefined) {
-          for (const source of sources) {
-            const seq =
-              (yield* state.storage.get<number>(CHECKPOINT + source)) ?? meta.checkpoints?.[source];
-            if (seq !== undefined) out[source] = seq;
-          }
-          return out;
+        if (meta.key === null) return {};
+        const legacy = meta.checkpoints ?? {};
+        if (sources === undefined) {
+          const rows = yield* allRows<number>(state.storage, CHECKPOINT);
+          return {
+            ...legacy,
+            ...Object.fromEntries(rows.map(([row, seq]) => [row.slice(CHECKPOINT.length), seq])),
+          };
         }
-        Object.assign(out, meta.checkpoints);
-        let after: string | undefined;
-        while (true) {
-          const page = yield* state.storage.list<number>({
-            prefix: CHECKPOINT,
-            ...(after === undefined ? {} : { startAfter: after }),
-            limit: 1_000,
-          });
-          for (const [row, seq] of page) out[row.slice(CHECKPOINT.length)] = seq;
-          if (page.size < 1_000) return out;
-          after = [...page.keys()].at(-1);
-        }
+        const seqs = yield* Effect.forEach(sources, (source) =>
+          Effect.map(
+            state.storage.get<number>(CHECKPOINT + source),
+            (seq) => seq ?? legacy[source],
+          ),
+        );
+        return Object.fromEntries(
+          sources.flatMap((source, i) => (seqs[i] === undefined ? [] : [[source, seqs[i]]])),
+        );
       });
     const size = kit.options.batch?.size ?? 1;
     const waitMillis = kit.options.batch?.waitMillis ?? 0;
