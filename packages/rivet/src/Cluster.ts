@@ -73,9 +73,11 @@ export interface ControlPlaneProps {
    */
   nodeEndpoint?: Input<string>;
   /**
-   * The private network {@link nodeEndpoint} is on. A pool that runs its
-   * nodes on this network, such as `RivetGCP.CloudRunPool` on a `gcp` one,
-   * joins it; pools anywhere else connect to `endpoint`.
+   * The private network {@link nodeEndpoint} is on, made from the cloud's
+   * own resources: `RivetGCP.Network(subnetwork)`, `RivetAWS.Network(vpc,
+   * securityGroup)`, `RivetDocker.Network(network)` or
+   * `RivetKubernetes.Network({ cluster, namespace })`. Pools on that cloud
+   * run their nodes there; pools anywhere else connect to `endpoint`.
    */
   network?: ClusterNetwork;
 }

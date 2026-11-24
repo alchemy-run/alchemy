@@ -82,9 +82,18 @@ export const Cluster = Rivet.ControlPlane("Rivet", {
 
 It still creates a namespace for your stage. [Rivet Cloud](/rivet/rivet-cloud) runs the control plane for you.
 
-When the control plane also has a private address on a network your nodes can join, name both. A pool that runs its nodes on that network connects them to `nodeEndpoint`. Deploys, callers, and pools anywhere else keep using `endpoint`:
+### Reach it at a private address
+
+When the control plane also has a private address on a network your nodes can join, name both. A pool that runs its nodes on that network connects them to `nodeEndpoint`. Deploys, callers, and pools anywhere else keep using `endpoint`.
+
+Each cloud makes its `network` from its own resources, declared in your stack or looked up. On GCP it's a subnetwork. `RivetGCP.CloudRunPool` and `RivetGCP.ComputeEnginePool` run their nodes in it:
 
 ```typescript title="src/cluster.ts"
+import * as GCP from "@alchemy.run/gcp";
+import * as Rivet from "@alchemy.run/rivet";
+import * as RivetGCP from "@alchemy.run/rivet/GCP";
+import * as Config from "effect/Config";
+
 export const Cluster = Rivet.ControlPlane("Rivet", {
   endpoint: "https://rivet.example.com",
   token: Config.Redacted("RIVET_TOKEN"),
@@ -93,6 +102,61 @@ export const Cluster = Rivet.ControlPlane("Rivet", {
 });
 ```
 
-`RivetGCP.CloudRunPool` and `RivetGCP.ComputeEnginePool` join a `RivetGCP.Network`, made from a `GCP.Compute.Subnetwork` your stack declares or looks up. See [GCP](/rivet/gcp#on-cloud-run).
+The subnetwork gives its network, its name and its region, and nodes run in that region unless their pool names one. See [GCP](/rivet/gcp#on-cloud-run).
+
+On AWS it's a VPC, the subnets with a route to the internet, and the security group nodes run with. An `EC2.Network` your stack declares gives the first two, and looked-up ones fit too. `RivetAWS.EcsPool`, `RivetAWS.Ec2Pool` and `RivetAWS.ServicesPool` run their nodes in those subnets, in that group:
+
+```typescript title="src/cluster.ts"
+import * as EC2 from "@alchemy.run/aws/EC2";
+import * as Rivet from "@alchemy.run/rivet";
+import * as RivetAWS from "@alchemy.run/rivet/AWS";
+import * as Config from "effect/Config";
+
+const vpc = EC2.Vpc.lookup({ name: "rivet" });
+const a = EC2.Subnet.lookup({ name: "rivet-public-a" });
+const b = EC2.Subnet.lookup({ name: "rivet-public-b" });
+const nodes = EC2.SecurityGroup.lookup({ name: "rivet-nodes" });
+
+export const Cluster = Rivet.ControlPlane("Rivet", {
+  endpoint: "https://rivet.example.com",
+  token: Config.Redacted("RIVET_TOKEN"),
+  nodeEndpoint: "http://rivet.internal:6420",
+  network: RivetAWS.Network({ vpcId: vpc.vpcId, publicSubnetIds: [a.subnetId, b.subnetId] }, nodes),
+});
+```
+
+On Docker it's a `Docker.Network`. `RivetDocker.SwarmPool` and `RivetDocker.ServicesPool` join it by name:
+
+```typescript title="src/cluster.ts"
+import * as Docker from "@alchemy.run/docker";
+import * as Rivet from "@alchemy.run/rivet";
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as Config from "effect/Config";
+
+export const Cluster = Rivet.ControlPlane("Rivet", {
+  endpoint: "http://localhost:6420",
+  token: Config.Redacted("RIVET_TOKEN"),
+  nodeEndpoint: "http://rivet-engine:6420",
+  network: RivetDocker.Network(Docker.Network.lookup({ name: "rivet" })),
+});
+```
+
+On Kubernetes it's a cluster and the namespace nodes run in. `RivetKubernetes.DeploymentPool` and `RivetKubernetes.ServicesPool` run their nodes there:
+
+```typescript title="src/cluster.ts"
+import * as Rivet from "@alchemy.run/rivet";
+import * as RivetKubernetes from "@alchemy.run/rivet/Kubernetes";
+import * as Config from "effect/Config";
+import { KubeCluster } from "./kube.ts";
+
+export const Cluster = Rivet.ControlPlane("Rivet", {
+  endpoint: "https://rivet.example.com",
+  token: Config.Redacted("RIVET_TOKEN"),
+  nodeEndpoint: "http://rivet-engine.rivet.svc.cluster.local:6420",
+  network: RivetKubernetes.Network({ cluster: KubeCluster, namespace: "rivet" }),
+});
+```
+
+The control planes in this package fill in `nodeEndpoint` and `network` themselves, so you only write them for one you run.
 
 Next, [Pool](/rivet/pools): the nodes that run your code.
