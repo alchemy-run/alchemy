@@ -159,7 +159,11 @@ it.effect(
 
 const locked = (source: string) =>
   `${JSON.stringify(
-    { version: 1, rules: { Escrow: { NeverOverdrawn: { kind: "invariant", source } } } },
+    {
+      version: 1,
+      rules: { Escrow: { NeverOverdrawn: { kind: "invariant", source } } },
+      aggregates: { Escrow: ["Escrow"] },
+    },
     null,
     2,
   )}\n`;
@@ -215,13 +219,136 @@ it.effect(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const lock = yield* lockIn("verify.lock.json");
-      // Written another way, and a rule that allowed more: neither is a loss.
+      // Written another way: it allows the same states.
       yield* fs.writeFileString(lock, locked("(hold) =>\n  0 <= hold.balance"));
       yield* Verify.aggregate(Escrow, { lock });
       expect(yield* fs.readFileString(lock)).toBe(locked("(hold) => hold.balance >= 0"));
+    }).pipe(Effect.scoped, Effect.provide(services(false))),
+  60_000,
+);
+
+/** A lock of `Covered` from before it said the reserved amount is covered. */
+const before = (rules: Record<string, string>) =>
+  `${JSON.stringify(
+    {
+      version: 1,
+      rules: {
+        Covered: Object.fromEntries(
+          Object.entries(rules).map(([name, source]) => [name, { kind: "invariant", source }]),
+        ),
+      },
+      aggregates: { Covered: ["Covered"] },
+    },
+    null,
+    2,
+  )}\n`;
+
+it.effect(
+  "a rule that says more than the one locked fails, with a state an instance may be stored in",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const lock = yield* lockIn("verify.lock.json");
+      // The locked rule let an escrow go five below nothing: one recorded then may still be there.
       yield* fs.writeFileString(lock, locked("(hold) => hold.balance >= -5"));
-      yield* Verify.aggregate(Escrow, { lock });
-      expect(yield* fs.readFileString(lock)).toBe(locked("(hold) => hold.balance >= 0"));
+      const error = yield* failure(Verify.aggregate(Escrow, { lock }));
+      expect(error.message).toMatch(
+        /✗ NeverOverdrawn says more than the rules locked in verify\.lock\.json: they allowed \{ balance: -[1-5], reserved: -?\d+ \}, and it refuses it\. An instance recorded before this change may be stored in such a state, and no proof starts from it: check that none is, or rewrite the ones that are/,
+      );
+      expect(error.message).toContain("UPDATE_VERIFY_LOCK=1");
+      expect(yield* fs.readFileString(lock)).toBe(locked("(hold) => hold.balance >= -5"));
+    }).pipe(Effect.scoped, Effect.provide(services(false))),
+  60_000,
+);
+
+it.effect(
+  "a new rule the locked ones did not keep fails, and is locked only when asked",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const lock = yield* lockIn("verify.lock.json");
+      const kept = before({ NeverOverdrawn: "(hold) => hold.balance >= 0" });
+      yield* fs.writeFileString(lock, kept);
+      const error = yield* failure(Verify.aggregate(Covered, { lock }));
+      expect(error.message).toMatch(
+        /✗ ReservedIsCovered is new, and the rules locked in verify\.lock\.json allowed \{ balance: \d+, reserved: -?\d+ \}, which it refuses\. An instance recorded before this change may be stored in such a state/,
+      );
+      expect(yield* fs.readFileString(lock)).toBe(kept);
+    }).pipe(Effect.scoped, Effect.provide(services(false))),
+  60_000,
+);
+
+it.effect(
+  "UPDATE_VERIFY_LOCK=1 locks a new rule the locked ones did not keep, and says so",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const lock = yield* lockIn("verify.lock.json");
+      yield* fs.writeFileString(lock, before({ NeverOverdrawn: "(hold) => hold.balance >= 0" }));
+      const report = yield* Verify.aggregate(Covered, { lock });
+      expect(report.relocked).toHaveLength(1);
+      expect(report.relocked[0]).toMatch(/^ReservedIsCovered is new, and the rules locked/);
+      expect(yield* fs.readFileString(lock)).toBe(
+        before({
+          NeverOverdrawn: "(hold) => hold.balance >= 0",
+          ReservedIsCovered: "(hold) => hold.reserved >= 0 && hold.reserved <= hold.balance",
+        }),
+      );
+    }).pipe(Effect.scoped, Effect.provide(services(false, true))),
+  60_000,
+);
+
+it.effect(
+  "under CI a new rule the locked ones did not keep fails for that, once",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const lock = yield* lockIn("verify.lock.json");
+      yield* fs.writeFileString(lock, before({ NeverOverdrawn: "(hold) => hold.balance >= 0" }));
+      const error = yield* failure(Verify.aggregate(Covered, { lock }));
+      expect(error.message).toContain("✗ ReservedIsCovered is new, and the rules locked");
+      expect(error.message).not.toContain("ReservedIsCovered is not in verify.lock.json");
+    }).pipe(Effect.scoped, Effect.provide(services(true))),
+  60_000,
+);
+
+it.effect(
+  "a new rule the locked ones already kept is added to the lock",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const lock = yield* lockIn("verify.lock.json");
+      // One rule said it all: it is now written as two.
+      yield* fs.writeFileString(
+        lock,
+        before({
+          NeverOverdrawn:
+            "(hold) => hold.balance >= 0 && hold.reserved >= 0 && hold.reserved <= hold.balance",
+        }),
+      );
+      const report = yield* Verify.aggregate(Covered, { lock });
+      expect(report.undone).toEqual([]);
+      expect(yield* fs.readFileString(lock)).toBe(
+        before({
+          NeverOverdrawn: "(hold) => hold.balance >= 0",
+          ReservedIsCovered: "(hold) => hold.reserved >= 0 && hold.reserved <= hold.balance",
+        }),
+      );
+    }).pipe(Effect.scoped, Effect.provide(services(false))),
+  60_000,
+);
+
+it.effect(
+  "the first rule of an aggregate the lock already had is held against every state",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const lock = yield* lockIn("verify.lock.json");
+      // Locked while it had no rule: its instances may be stored in any state of its schema.
+      yield* fs.writeFileString(lock, before({}));
+      const error = yield* failure(Verify.aggregate(Covered, { lock }));
+      expect(error.message).toContain("✗ NeverOverdrawn is new, and the rules locked");
+      expect(error.message).toContain("✗ ReservedIsCovered is new, and the rules locked");
     }).pipe(Effect.scoped, Effect.provide(services(false))),
   60_000,
 );
@@ -234,7 +361,7 @@ it.effect(
       const lock = yield* lockIn("verify.lock.json");
       yield* Verify.aggregate(Covered, { lock });
       // Escrow is Covered without ReservedIsCovered: the lock, kept under its name, says so.
-      const kept = (yield* fs.readFileString(lock)).replace('"Covered"', '"Escrow"');
+      const kept = (yield* fs.readFileString(lock)).replaceAll('"Covered"', '"Escrow"');
       yield* fs.writeFileString(lock, kept);
       const error = yield* failure(Verify.aggregate(Escrow, { lock }));
       expect(error.message).toContain(
@@ -324,6 +451,7 @@ it.effect(
       yield* Verify.model(Kiosk, { apis: [KioskApi], walks: { count: 0 }, lock });
       const written = JSON.parse(yield* fs.readFileString(lock)) as {
         readonly rules: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+        readonly aggregates: Readonly<Record<string, ReadonlyArray<string>>>;
       };
       expect(written.rules.Kiosk).toEqual({
         "Shelf.NeverBelowZero": { kind: "invariant", source: "(shelf) => shelf.stock >= 0" },
@@ -332,6 +460,17 @@ it.effect(
           source: "(kiosk) => kiosk.Shelf.some((shelf) => shelf.state.sold > 0)",
         },
       });
+      expect(written).toMatchObject({ aggregates: { Kiosk: ["Shelf"] } });
+      // An aggregate's invariant that says more is found under the model's name for it.
+      const loose = (yield* fs.readFileString(lock)).replace("stock >= 0", "stock >= -5");
+      yield* fs.writeFileString(lock, loose);
+      const tightened = yield* failure(
+        Verify.model(Kiosk, { apis: [KioskApi], walks: { count: 0 }, lock }),
+      );
+      expect(tightened.message).toContain(
+        "✗ Shelf.NeverBelowZero says more than the rules locked in verify.lock.json",
+      );
+      yield* fs.writeFileString(lock, loose.replace("stock >= -5", "stock >= 0"));
       // What must be possible is compared as text: one that changed fails.
       yield* fs.writeFileString(
         lock,

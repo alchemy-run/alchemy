@@ -96,7 +96,8 @@ export interface Options extends Prove.Reading {
   readonly histories?: number;
   /**
    * A file that keeps each rule as it is written, so that none is taken out
-   * or made to say less without it showing: a path from the test file that
+   * or made to say less without it showing, and none is added or made to say
+   * more than stored instances were held to: a path from the test file that
    * calls, or a URL. See `AggregateOptions.lock`.
    */
   readonly lock?: URL | string;
@@ -132,6 +133,8 @@ const LockFile = Schema.fromJsonString(
       Schema.String,
       Schema.Record(Schema.String, Schema.Struct({ kind: Schema.String, source: Schema.String })),
     ),
+    /** The aggregates each model or aggregate had when its rules were locked: their instances may be stored. */
+    aggregates: Schema.optional(Schema.Record(Schema.String, Schema.Array(Schema.String))),
   }),
 );
 
@@ -139,8 +142,11 @@ const LockFile = Schema.fromJsonString(
  * Hold the rules as they are written against the ones a lock file keeps, and
  * say each way they fall short: a rule taken out, or one that changed and is
  * not known to say as much as it did. A new rule is added to the file, and a
- * rule that says as much as the one kept replaces it. Under `CI` nothing is
- * written: a rule the file does not have fails instead.
+ * rule that says as much as the one kept replaces it. An invariant that is
+ * new or says more is held against the states the locked invariants allowed:
+ * one of them it refuses is a state an instance may be stored in, and it is
+ * locked only when asked. Under `CI` nothing is written: a rule the file does
+ * not have fails instead.
  */
 const locking = Effect.fn(function* (options: {
   readonly lock: URL | string;
@@ -173,7 +179,7 @@ const locking = Effect.fn(function* (options: {
           (error) => new VerifyError({ message: `${file} is not a lock file: ${error.message}` }),
         ),
       )
-    : { version: 1 as const, rules: {} };
+    : { version: 1 as const, rules: {}, aggregates: undefined };
   const entries = kept.rules[options.key] ?? {};
   const inspected = yield* Lock.inspect({
     file: source,
@@ -184,6 +190,12 @@ const locking = Effect.fn(function* (options: {
     qualified: options.model !== undefined,
     reading: options.reading,
     locked: new Map(Object.entries(entries).map(([name, entry]) => [name, entry.source])),
+    known: kept.aggregates?.[options.key],
+    invariants: new Set(
+      Object.entries(entries).flatMap(([name, entry]) =>
+        entry.kind === "invariant" ? [name] : [],
+      ),
+    ),
   }).pipe(Effect.scoped, Effect.mapError(failed));
   const ci = yield* Config.Boolean("CI").pipe(
     Config.withDefault(false),
@@ -211,7 +223,12 @@ const locking = Effect.fn(function* (options: {
     next[name] = entry;
     if (Lock.normal(now.source) === Lock.normal(entry.source)) continue;
     const compared = inspected.compared.get(name);
-    if (compared?._tag === "Kept" || update) next[name] = now;
+    const stored = inspected.stored.get(name);
+    if ((compared?._tag === "Kept" && stored?._tag !== "Stricter") || update) next[name] = now;
+    if (stored?._tag === "Stricter")
+      fallen.push(
+        `${name} says more than the rules locked in ${short}: they allowed ${Symbolic.show(stored.state)}, and it refuses it. ${STORED}`,
+      );
     if (compared?._tag !== "Kept")
       fallen.push(
         compared?._tag === "Weaker"
@@ -221,14 +238,27 @@ const locking = Effect.fn(function* (options: {
             : `${name} changed from the rule locked in ${short}: only an invariant of an aggregate is compared with the one it was`,
       );
   }
+  const fresh = [...inspected.sources].filter(([name]) => !(name in entries));
+  /** A new invariant that refuses a state the locked ones allowed: locked only when asked. */
+  const strict = new Set<string>();
+  for (const [name] of fresh) {
+    const stored = inspected.stored.get(name);
+    if (stored?._tag !== "Stricter") continue;
+    if (!update) strict.add(name);
+    fallen.push(
+      `${name} is new, and the rules locked in ${short} allowed ${Symbolic.show(stored.state)}, which it refuses. ${STORED}`,
+    );
+  }
   if (!update) reasons.push(...fallen);
-  const added = [...inspected.sources].filter(([name]) => !(name in entries));
+  const added = fresh.filter(([name]) => !strict.has(name));
   if (ci)
     reasons.push(
-      ...added.map(
-        ([name]) =>
-          `${name} is not in ${short}: run the test outside CI, and commit the file it writes`,
-      ),
+      ...added
+        .filter(([name]) => inspected.stored.get(name)?._tag !== "Stricter")
+        .map(
+          ([name]) =>
+            `${name} is not in ${short}: run the test outside CI, and commit the file it writes`,
+        ),
     );
   else for (const [name, now] of added) next[name] = now;
   if (reasons.length > 0 && !ci)
@@ -238,12 +268,18 @@ const locking = Effect.fn(function* (options: {
   const relocked = update ? fallen : [];
   // A run that passes prints no report: what was let go is said where it will be seen.
   for (const line of relocked) yield* Effect.logWarning(`${short} relocked: ${line}`);
+  // An aggregate is one whose instances may be stored once its rules are locked with it.
+  const had = kept.aggregates?.[options.key];
+  const aggregates = [...new Set([...(had ?? []), ...inspected.aggregates])].sort();
   const changed =
-    added.length > 0 || Object.keys(entries).some((name) => next[name] !== entries[name]);
+    added.length > 0 ||
+    Object.keys(entries).some((name) => next[name] !== entries[name]) ||
+    aggregates.length !== (had?.length ?? -1);
   if (!ci && (changed || !exists)) {
     const text = yield* Schema.encodeEffect(LockFile)({
       version: 1,
       rules: { ...kept.rules, [options.key]: next },
+      aggregates: { ...kept.aggregates, [options.key]: aggregates },
     }).pipe(Effect.mapError(failed));
     // Written as a formatter would leave it, so the file changes only where a rule did.
     yield* Effect.try({
@@ -256,6 +292,10 @@ const locking = Effect.fn(function* (options: {
   }
   return { reasons, relocked };
 });
+
+/** What a rule that refuses a state the locked rules allowed leaves to do. */
+const STORED =
+  "An instance recorded before this change may be stored in such a state, and no proof starts from it: check that none is, or rewrite the ones that are";
 
 /** Nothing was held against a lock. */
 const UNLOCKED: {
@@ -850,8 +890,15 @@ export interface AggregateOptions extends Prove.Reading {
    * the code. From then on a rule that is in the file and no longer in the
    * code fails the verification, and so does one that changed, unless it is
    * an invariant of an aggregate that still refuses every state it refused.
-   * A new rule is added to the file, and one made to say more replaces the
-   * one kept. To change a rule on purpose, run the test once with
+   * A new rule is added to the file, and a changed one that refuses the same
+   * states replaces the one kept.
+   *
+   * An invariant that is new, or says more, is held against the states the
+   * locked invariants allowed: an instance recorded before the change may be
+   * stored in one of them. If it refuses one, the verification fails with
+   * that state, and the rule is not locked.
+   *
+   * To change a rule on purpose, run the test once with
    * `UPDATE_VERIFY_LOCK=1`: every rule is locked as it is written, and the
    * report's `relocked` says which ones no longer say what they did.
    */

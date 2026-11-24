@@ -18,6 +18,14 @@ export type Comparison =
   | { readonly _tag: "Weaker"; readonly state: unknown }
   | { readonly _tag: "Unknown"; readonly reason: string };
 
+/** How a rule stands against the states the locked rules allowed: the ones instances may be stored in. */
+export type Stored =
+  /** Every state the locked rules allowed keeps the rule. */
+  | { readonly _tag: "Implied" }
+  /** A state the locked rules allowed, that the rule refuses now. */
+  | { readonly _tag: "Stricter"; readonly state: unknown }
+  | { readonly _tag: "Unknown"; readonly reason: string };
+
 /** The most ways through a state's schema and a rule that two rules are compared on. */
 const MAX_PATHS = 256;
 
@@ -121,12 +129,138 @@ const compare = Effect.fn(function* (
   return made;
 });
 
+/**
+ * Whether the invariants an aggregate was locked with allowed a state one of
+ * its invariants refuses now. An instance recorded while the locked rules
+ * stood may be stored in such a state: no command of today's leaves it there,
+ * and a proof, which starts from a state the rules allow, never meets it.
+ */
+const stored = Effect.fn(function* (
+  solver: Smt.Solver,
+  loader: Source.Loader,
+  interpreter: Interpreter.Interpreter,
+  aggregate: Aggregate.Any,
+  definition: Paths.Definition,
+  name: string,
+  /** Each invariant the aggregate was locked with, as it was written then. */
+  locked: ReadonlyMap<string, string>,
+) {
+  const site: Value.Site = { module: definition.module, node: definition.node };
+  const ast = Symbolic.typeOf(definition.state);
+  if (!ast) return { _tag: "Unknown", reason: "the state is not a schema" } as const;
+  const real = (aggregate.definition.invariants ?? {}) as unknown as Record<
+    string,
+    (state: unknown) => boolean
+  >;
+  const now = new Map(Paths.written(definition, "invariants"));
+  const before: Array<{ readonly name: string; readonly node: Value.Node }> = [];
+  /** The locked rules that are written the same today: the real ones are run on what is found. */
+  const same: Array<(state: unknown) => boolean> = [];
+  for (const [rule, text] of locked) {
+    const parsed = yield* loader.parse(definition.module.path, text).pipe(Effect.result);
+    // A locked rule that cannot be read is left out: more states are then taken to have been allowed.
+    if (Result.isFailure(parsed)) continue;
+    before.push({ name: rule, node: parsed.success });
+    const written = now.get(rule);
+    if (written && real[rule] && normal(Paths.textOf(definition, written)) === normal(text))
+      same.push(real[rule]);
+  }
+  let unknown: string | undefined;
+  let paths = 0;
+  let prefix: ReadonlyArray<number> | undefined = [];
+  while (prefix) {
+    if (++paths > MAX_PATHS)
+      return {
+        _tag: "Unknown",
+        reason: `there are more than ${MAX_PATHS} ways through it`,
+      } as const;
+    const run = new Value.Run(prefix);
+    interpreter.current.run = run;
+    const read = yield* Effect.gen(function* () {
+      const state = Symbolic.symbolic(ast, "state", run);
+      for (const rule of before) {
+        const held = yield* Effect.gen(function* () {
+          const made = yield* interpreter.evaluate(
+            rule.node,
+            interpreter.moduleEnv(definition.module),
+          );
+          const value = yield* interpreter
+            .call(made, [state], site)
+            .pipe(
+              Effect.flatMap((value) =>
+                value._tag === "Effect" ? value.run : Effect.succeed(value),
+              ),
+            );
+          const truth = yield* interpreter.truth(value, site);
+          return typeof truth === "boolean" ? String(truth) : truth;
+        }).pipe(
+          // One the prover cannot read is left out, as one that cannot be parsed is.
+          Effect.catchTags({
+            NotTranslated: () => Effect.succeed("true"),
+            Rejected: () => Effect.succeed("false"),
+          }),
+        );
+        if (held === "false") return yield* new Value.Infeasible();
+        run.assume(held);
+      }
+      for (const check of yield* Paths.checks(interpreter, definition, state)) {
+        if (check.name !== name) continue;
+        if (Result.isFailure(check.condition)) return yield* check.condition.failure;
+        return { state, formula: check.condition.success };
+      }
+      return yield* Value.notTranslated(site, `${name} is not an invariant`);
+    }).pipe(
+      Effect.map((made) => ({ _tag: "Read", ...made }) as const),
+      Effect.catchTags({
+        Infeasible: () => Effect.succeed({ _tag: "Infeasible" } as const),
+        Rejected: () => Effect.succeed({ _tag: "Unread", reason: "the rule fails" } as const),
+        NotTranslated: (error) => Effect.succeed({ _tag: "Unread", reason: error.reason } as const),
+      }),
+    );
+    prefix = Value.nextPrefix(run.taken);
+    if (read._tag === "Unread") return { _tag: "Unknown", reason: read.reason } as const;
+    if (read._tag === "Infeasible" || read.formula === "true") continue;
+    const answer = yield* Check.solve(solver, run, read.formula);
+    if (answer._tag === "Unsat") continue;
+    if (answer._tag === "Unknown") {
+      unknown = answer.reason;
+      continue;
+    }
+    const built = Symbolic.concretize(read.state, answer.model, run.lists);
+    if (!("value" in built)) {
+      unknown = built.reason;
+      continue;
+    }
+    const state = built.value;
+    // Held against the real code: the schema, the locked rules still written as they were, and the rule itself.
+    let allowed = Schema.is(aggregate.definition.state)(state);
+    for (const holds of same)
+      allowed &&= yield* Effect.try(() => holds(state)).pipe(Effect.orElseSucceed(() => false));
+    const refused =
+      real[name] === undefined
+        ? false
+        : !(yield* Effect.try(() => real[name]!(state)).pipe(Effect.orElseSucceed(() => true)));
+    if (allowed && refused) return { _tag: "Stricter", state } as const;
+    unknown = "the state the solver found is not one the real rules tell apart";
+  }
+  const made: Stored =
+    unknown === undefined ? { _tag: "Implied" } : { _tag: "Unknown", reason: unknown };
+  return made;
+});
+
 /** What a model's or an aggregate's files say of its rules, and how the changed ones compare. */
 export interface Inspected {
   /** Each rule the files write, by the name a report gives it, as the code that writes it. */
   readonly sources: ReadonlyMap<string, { readonly kind: string; readonly source: string }>;
   /** Each rule asked about, by name, against the text it was locked as. */
   readonly compared: ReadonlyMap<string, Comparison>;
+  /**
+   * Each invariant that is new or changed, of an aggregate the lock knows,
+   * against the states its locked invariants allowed.
+   */
+  readonly stored: ReadonlyMap<string, Stored>;
+  /** The aggregates whose rules were read. */
+  readonly aggregates: ReadonlyArray<string>;
 }
 
 /**
@@ -146,6 +280,13 @@ export const inspect = Effect.fn(function* (options: {
   readonly qualified: boolean;
   /** For a rule that may have changed: the text it was locked as. */
   readonly locked: ReadonlyMap<string, string>;
+  /**
+   * The aggregates that had been read when the rules were locked: instances
+   * of them may be stored. Without it, the ones the lock holds a rule of.
+   */
+  readonly known?: ReadonlyArray<string> | undefined;
+  /** The locked rules that are invariants of an aggregate, by name. */
+  readonly invariants?: ReadonlySet<string> | undefined;
   /** The functions not read, as for the verification itself. */
   readonly reading?: Source.Reading | undefined;
 }) {
@@ -155,6 +296,16 @@ export const inspect = Effect.fn(function* (options: {
   const interpreter = Interpreter.make(loader, new Value.Run([]));
   const sources = new Map<string, { readonly kind: string; readonly source: string }>();
   const compared = new Map<string, Comparison>();
+  const held = new Map<string, Stored>();
+  const read: Array<string> = [];
+  /** Each invariant that is new, or not written as it was locked. */
+  const tightened: Array<{
+    readonly aggregate: Aggregate.Any;
+    readonly definition: Paths.Definition;
+    readonly rule: string;
+    readonly name: string;
+    readonly locked: ReadonlyMap<string, string>;
+  }> = [];
   const changed: Array<{
     readonly aggregate: Aggregate.Any;
     readonly definition: Paths.Definition;
@@ -164,6 +315,24 @@ export const inspect = Effect.fn(function* (options: {
   for (const aggregate of options.aggregates) {
     const definition = Paths.aggregateIn(modules, aggregate);
     if (!definition) continue;
+    read.push(aggregate.aggregateName);
+    const prefix = options.qualified ? `${aggregate.aggregateName}.` : "";
+    /** The invariants this aggregate was locked with, by the name it gives each. */
+    const before = new Map(
+      [...options.locked]
+        .filter(
+          ([name]) =>
+            (options.invariants?.has(name) ?? false) &&
+            name.startsWith(prefix) &&
+            !name.slice(prefix.length).includes("."),
+        )
+        .map(([name, source]) => [name.slice(prefix.length), source]),
+    );
+    const known =
+      options.known?.includes(aggregate.aggregateName) ??
+      [...options.locked.keys()].some(
+        (name) => name.startsWith(prefix) && !name.slice(prefix.length).includes("."),
+      );
     for (const key of ["invariants", "transitions"])
       for (const [rule, node] of Paths.written(definition, key)) {
         const name = options.qualified ? `${aggregate.aggregateName}.${rule}` : rule;
@@ -172,6 +341,12 @@ export const inspect = Effect.fn(function* (options: {
         const locked = options.locked.get(name);
         if (key === "invariants" && locked !== undefined && normal(locked) !== normal(source))
           changed.push({ aggregate, definition, rule, name });
+        if (
+          key === "invariants" &&
+          known &&
+          (locked === undefined || normal(locked) !== normal(source))
+        )
+          tightened.push({ aggregate, definition, rule, name, locked: before });
       }
   }
   for (const decision of options.decisions ?? []) {
@@ -211,6 +386,22 @@ export const inspect = Effect.fn(function* (options: {
       }
     }
   }
+  if (tightened.length > 0) {
+    const solver = yield* Smt.solver;
+    for (const one of tightened)
+      held.set(
+        one.name,
+        yield* stored(
+          solver,
+          loader,
+          interpreter,
+          one.aggregate,
+          one.definition,
+          one.rule,
+          one.locked,
+        ),
+      );
+  }
   if (changed.length > 0) {
     const solver = yield* Smt.solver;
     for (const one of changed)
@@ -227,6 +418,6 @@ export const inspect = Effect.fn(function* (options: {
         ),
       );
   }
-  const made: Inspected = { sources, compared };
+  const made: Inspected = { sources, compared, stored: held, aggregates: read };
   return made;
 });
