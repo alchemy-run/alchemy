@@ -65,7 +65,10 @@ const sections: Readonly<Record<string, Section>> = {
   },
   "Effects and failures": {
     base: numbers,
+    prelude: [`import * as Schedule from "effect/Schedule";`],
     context: `const url = "https://example.com";`,
+    // A cell is not a value an event carries.
+    quiet: /^const tries/,
     effectful: true,
   },
   Streams: {

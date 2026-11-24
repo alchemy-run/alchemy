@@ -2337,6 +2337,24 @@ yield* Option.some(a); // an Option or a Result in Effect.gen: use Option.gen, R
 
 A defect is not a failure. After `Effect.die`, `Effect.orDie` or a `getOrThrow` on nothing, the command fails and records nothing, and no `catch` after it handles it.
 
+### An effect run again
+
+`Effect.retry` and `Effect.repeat` are proved by running the effect once for each time the code allows. The count is a number the code writes, so there is no loop for the solver to reason about.
+
+```typescript title="Run again"
+const tries = yield* Ref.make(0);
+const attempt = Ref.updateAndGet(tries, (n) => n + 1).pipe(
+  Effect.flatMap((n) => (n < a ? Effect.fail(new Odd({ n })) : Effect.succeed(n))),
+);
+const made = yield* attempt.pipe(Effect.retry(Schedule.recurs(2)), Effect.result);
+```
+
+Each run can succeed or fail, and the proof takes both. Here `a` is a field of the command, and there are four ways through: the first run succeeds (`a` is at most 1), the second does (`a` is 2), the third does (`a` is 3), or all three fail. A rule is checked on each. What one run writes, the next one reads: the third run sees `tries` at 2.
+
+`while` and `until` are called on what the last run gave, and each is one more branch. A count of 2 is cheap. A large count on an effect that branches is not, since every run can double the ways through.
+
+`Effect.repeat(effect, { times: 2 })` gives what the last run gave. `Effect.repeat(effect, Schedule.recurs(2))` gives how many times it ran again, as Effect does.
+
 `Effect.all`, `forEach` and the others run one effect after another. Their `concurrency` option changes nothing a handler can see, since nothing in a handler waits.
 
 ## Streams
