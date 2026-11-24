@@ -7,7 +7,7 @@ A [rewrite](/domain/rewrite) changes the events the model stores. It can't chang
 
 ## Seal a field
 
-`Domain.Sealed` wraps the schema of a value. A field of it holds the name of a subject and the value encrypted under that subject's key.
+`Domain.Sealed` wraps the schema of a value, making a [sealed value](/domain/sealed-value). A field of it holds the name of a subject and the value encrypted under that subject's key.
 
 ```typescript title="packages/domain/src/Customer/Address.ts"
 import * as Domain from "@alchemy.run/domain";

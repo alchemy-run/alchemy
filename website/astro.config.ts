@@ -2045,6 +2045,7 @@ export default defineConfig({
                 { label: "Saga", link: "/domain/saga" },
                 { label: "Rewrite", link: "/domain/rewrite" },
                 { label: "Compaction", link: "/domain/compaction" },
+                { label: "Sealed Value", link: "/domain/sealed-value" },
                 { label: "External System", link: "/domain/external-system" },
                 { label: "Api", link: "/domain/api" },
                 { label: "Annotations", link: "/domain/annotations" },

@@ -384,7 +384,7 @@ yield* vault.shred(customerId);
 - A restored backup of the key store brings shredded keys back: keep its backups off or expiring.
 - Stories run with a test Vault: expect values with `Domain.sealedInTest(Address, subject, value)`, shred with `Story.shred(subject)`.
 
-More: [Crypto-shredding](https://alchemy.run/domain/crypto-shredding), [Choose where the keys are kept](https://alchemy.run/domain/crypto-shredding#choose-where-the-keys-are-kept), [Call KMS less often](https://alchemy.run/domain/crypto-shredding#call-kms-less-often), [Erasing personal data: Or seal it under a key you can delete](https://alchemy.run/domain/erasing-personal-data#or-seal-it-under-a-key-you-can-delete).
+More: [Sealed Value](https://alchemy.run/domain/sealed-value), [Crypto-shredding](https://alchemy.run/domain/crypto-shredding), [Choose where the keys are kept](https://alchemy.run/domain/crypto-shredding#choose-where-the-keys-are-kept), [Call KMS less often](https://alchemy.run/domain/crypto-shredding#call-kms-less-often), [Erasing personal data: Or seal it under a key you can delete](https://alchemy.run/domain/erasing-personal-data#or-seal-it-under-a-key-you-can-delete).
 
 ## Compaction
 

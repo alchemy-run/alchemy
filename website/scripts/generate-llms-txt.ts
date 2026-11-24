@@ -1181,6 +1181,7 @@ const SECTIONS: Section[] = [
         "domain/saga",
         "domain/rewrite",
         "domain/compaction",
+        "domain/sealed-value",
         "domain/external-system",
         "domain/api",
         "domain/annotations",
