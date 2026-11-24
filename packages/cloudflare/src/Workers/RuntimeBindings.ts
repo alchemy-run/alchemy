@@ -93,9 +93,26 @@ export const toRuntimeBinding = Effect.fn(function* (
     case "data_blob":
       return Data.local(b.name, Buffer.from(b.part));
     case "dispatch_namespace":
+      // Cloudflare's preview refuses a dispatch binding with an outbound
+      // Worker, so one goes through its deployed shim (see
+      // `WorkersForPlatforms/internal/DispatchShim.ts`).
+      if (b.shim !== undefined) {
+        if (b.shim.url === undefined) {
+          return yield* WorkerValidationError.make({
+            message: `Dispatch binding "${b.name}" has an outbound Worker but its dev shim has no URL yet: restart alchemy dev.`,
+            value: b,
+          });
+        }
+        return DispatchNamespace.shim({
+          binding: b.name,
+          url: b.shim.url,
+          token: typeof b.shim.token === "string" ? b.shim.token : Redacted.value(b.shim.token),
+        });
+      }
       return DispatchNamespace.remote({
         binding: b.name,
         namespace: b.namespace,
+        outbound: b.outbound,
       });
     case "durable_object_namespace":
       return DurableObjectNamespace.local({

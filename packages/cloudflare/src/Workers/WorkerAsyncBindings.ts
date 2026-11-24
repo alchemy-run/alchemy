@@ -49,6 +49,13 @@ import { isStream } from "../Stream/Stream.ts";
 import { isIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isVpcService } from "../VpcService/VpcService.ts";
 import { isDispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
+import { isDispatchBinding } from "../WorkersForPlatforms/Get.ts";
+import { maybeDispatchShim } from "../WorkersForPlatforms/internal/DispatchShim.ts";
+import {
+  resolveDispatchNamespace,
+  resolveOutbound,
+  toWireOutbound,
+} from "../WorkersForPlatforms/internal/outbound.ts";
 import {
   isWorkflowLike,
   isWorkflowResource,
@@ -174,6 +181,32 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
           yield* resolveBucket(bindingEff.bucket),
           bindingEff.access,
         );
+        continue;
+      }
+      // `Cloudflare.WorkersForPlatforms.Get(namespace, { outbound })` is also
+      // an Effect (its Effect-native form yields the dispatch client): bind
+      // it as a `dispatch_namespace` binding under the env key instead of
+      // yielding it.
+      if (isDispatchBinding(bindingEff)) {
+        env[bindingName] = bindingEff;
+        const namespace = yield* resolveDispatchNamespace(bindingEff.namespace);
+        const outbound = bindingEff.outbound
+          ? yield* resolveOutbound(bindingEff.outbound)
+          : undefined;
+        // A local Worker in a dev run dispatches with an outbound Worker
+        // through a deployed shim (see `WorkersForPlatforms/internal/DispatchShim.ts`).
+        const shim = outbound ? yield* maybeDispatchShim(namespace, outbound, resource) : undefined;
+        yield* resource.bind`${bindingName}`({
+          bindings: [
+            {
+              type: "dispatch_namespace",
+              name: bindingName,
+              namespace: namespace.name,
+              ...(outbound ? { outbound: toWireOutbound(outbound) } : {}),
+              ...(shim ? { shim } : {}),
+            },
+          ],
+        });
         continue;
       }
       // Bindings can be passed as a plain resource value, an Effect that

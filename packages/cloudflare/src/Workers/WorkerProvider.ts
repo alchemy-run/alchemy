@@ -3473,6 +3473,12 @@ export const LiveWorkerProvider = () =>
               const { queueId: _, shim: __, ...rest } = item;
               return rest;
             }
+            // `shim` (dev-mode outbound dispatch) is alchemy-only metadata
+            // on dispatch bindings.
+            if (item.type === "dispatch_namespace" && item.shim !== undefined) {
+              const { shim: _, ...rest } = item;
+              return rest;
+            }
             return item;
           }),
         );
