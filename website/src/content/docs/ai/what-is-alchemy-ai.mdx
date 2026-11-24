@@ -43,16 +43,24 @@ The examples come from an issue board that looks after a GitHub repository, the 
 
 ## A process: a description of work
 
-A **process** is a class with a name, a description and prose. The prose is what the LLM reads as its instructions.
+A **process** has two parts. The class is its name, which the rest of your program refers to:
 
 ```typescript title="src/Triage.process.ts"
-export class Triage extends AI.Process<Triage>()("Triage", {
+export class Triage extends AI.Process<Triage>()("Triage", {}) {}
+```
+
+A **Layer** gives that name its prose, which the LLM reads as its instructions:
+
+```typescript title="src/Triage.process.ts"
+export const TriageLive = Triage.toLayer({
   description: "Say what kind of issue this is.",
 })`
   Read the issue you are given and reply with one word:
   bug, feature or question.
-` {}
+`;
 ```
+
+Everything in Alchemy AI is split this way. A tool, an LLM, the harness and the sandbox are each a name and a Layer that says how it is done. Code depends on the name, so any Layer can be swapped for another without changing the code that uses it.
 
 A process is not an agent with an identity. It describes work, and it can run any number of times.
 
@@ -63,17 +71,17 @@ See [Processes](/ai/processes).
 Prose mentions things with `${}`. The LLM reads the thing's name in the sentence, and the process may use it.
 
 ```typescript title="src/Triage.process.ts"
-export class Triage extends AI.Process<Triage>()("Triage", {
+export const TriageLive = Triage.toLayer({
   description: "Say what kind of issue this is.",
 })`
   Find the code the issue is about with ${AI.Grep} and ${AI.Read}.
   Reply with one word: bug, feature or question.
-` {}
+`;
 ```
 
 A process can use only what it mentions. This `Triage` can search and read files, and it cannot edit one or run a command.
 
-A mention is also a dependency. A program that runs `Triage` without providing both tools does not compile.
+A mention is also a dependency. `TriageLive` needs a Layer for each tool, and a program that provides it without them does not compile.
 
 ## Sessions: a running process
 
@@ -127,20 +135,24 @@ See [Models](/ai/models).
 A process can mention another. Its session may then **follow** it, reading that process's prose into its own conversation, or **start** it, as a session of its own.
 
 ```typescript title="src/Answering.process.ts"
-export class Answering extends AI.Process<Answering>()("Answering", {
+export class Answering extends AI.Process<Answering>()("Answering", {}) {}
+
+export const AnsweringLive = Answering.toLayer({
   description: "How to write an answer on an issue. Follow it before you post one.",
 })`
   Keep the answer under two hundred words. Name each file you read.
-` {}
+`;
 ```
 
 ```typescript title="src/Triage.process.ts"
-export class Triage extends AI.Process<Triage>()("Triage", {
+export const TriageLive = Triage.toLayer({
   description: "Answer one issue and say what kind of issue it is.",
 })`
   Follow ${Answering}, then post your answer with ${PostAnswer}.
-` {}
+`;
 ```
+
+`Triage` mentions the name `Answering`, not its prose, so `AnsweringLive` can change without `Triage` knowing.
 
 Following is what other systems call a skill, and starting is what they call a subagent. Here both are a process, and the prose says which to do. Processes that mention each other are how you model a team or an organization.
 
@@ -160,13 +172,13 @@ export class Board extends Domain.Model("Board", {
 A process describes a business process over that model. Its prose mentions the model's commands and views, and a session reads and acts through them:
 
 ```typescript title="src/Triage.process.ts"
-export class Triage extends AI.Process<Triage>()("Triage", {
+export const TriageLive = Triage.toLayer({
   description: "Say what kind of issue this is.",
 })`
   Get the issue with ${Board.IssueDetail}. Then send ${Board.LabelIssue}:
   bug when something is broken, feature when something new is asked for,
   question otherwise.
-` {}
+`;
 ```
 
 The model's rules hold whoever sends a command. A session cannot label an issue nobody reported, because the board rejects it. A session is started as someone, and every command it sends is sent as them:
@@ -181,7 +193,7 @@ See [Processes and Domain models](/ai/domain).
 
 ## Layers: how each thing is done
 
-A declaration says what something is. A **Layer** says how it is done. A tool's Layer is its handler, an Effect that runs in your program:
+A tool and a model get their Layers the same way a process does. A tool's Layer is its handler, an Effect that runs in your program:
 
 ```typescript title="src/PostAnswer.tool.ts"
 export const PostAnswerLive = PostAnswer.make(
@@ -204,19 +216,15 @@ export const SmartLive = AICloudflare.Model(Smart, {
 });
 ```
 
-A process can be split the same way. Declare its name alone, and give it prose in a Layer:
+A process that will only ever have one prose can skip the Layer and carry it on the class:
 
-```typescript title="src/Triage.process.ts"
-export class Triage extends AI.Process<Triage>()("Triage", {}) {}
-
-export const TriageLive = Triage.toLayer({
-  description: "Answer one issue and say what kind of issue it is.",
+```typescript title="src/Answering.process.ts"
+export class Answering extends AI.Process<Answering>()("Answering", {
+  description: "How to write an answer on an issue. Follow it before you post one.",
 })`
-  Follow ${Answering}, then post your answer with ${PostAnswer}.
-`;
+  Keep the answer under two hundred words. Name each file you read.
+` {}
 ```
-
-Code that uses `Triage` now depends on its name, and another Layer can give it other prose and other tools.
 
 ## The harness: what runs a session
 
@@ -227,7 +235,13 @@ A process never names one. The harness is one more Layer, provided with the rest
 ```typescript title="src/Layers.ts"
 export const Live = TriageLive.pipe(
   Layer.provide(
-    Layer.mergeAll(Pi.HarnessLive, AI.DefaultModel(Smart), SmartLive, PostAnswerLive),
+    Layer.mergeAll(
+      AnsweringLive,
+      PostAnswerLive,
+      SmartLive,
+      AI.DefaultModel(Smart),
+      Pi.HarnessLive,
+    ),
   ),
 );
 ```
