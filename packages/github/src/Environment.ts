@@ -64,9 +64,12 @@ export interface EnvironmentProps {
    * Which branches can deploy to this environment. Omit to allow all
    * branches. Set `protectedBranches: true` to restrict deployments to
    * branches with branch protection rules, or `customBranchPolicies` to a
-   * list of branch name patterns (e.g. `["main", "release/*"]`).
+   * list of branch name patterns (e.g. `["main", "release/*"]`), plus
+   * `customTagPolicies` for tag name patterns (e.g. `["v*"]`).
    */
-  deploymentBranchPolicy?: { protectedBranches: true } | { customBranchPolicies: string[] };
+  deploymentBranchPolicy?:
+    | { protectedBranches: true }
+    | { customBranchPolicies: string[]; customTagPolicies?: string[] };
 
   /**
    * Override the GitHub host or API base URL for this resource only (e.g.
@@ -356,23 +359,36 @@ export const EnvironmentProvider = () =>
           news.deploymentBranchPolicy !== undefined &&
           "customBranchPolicies" in news.deploymentBranchPolicy
         ) {
-          const desired = news.deploymentBranchPolicy.customBranchPolicies;
+          // A policy is a (type, pattern) pair: a branch and a tag policy can share a pattern.
+          const desired = [
+            ...news.deploymentBranchPolicy.customBranchPolicies.map((name) => ({
+              name,
+              type: "branch" as const,
+            })),
+            ...(news.deploymentBranchPolicy.customTagPolicies ?? []).map((name) => ({
+              name,
+              type: "tag" as const,
+            })),
+          ];
+          const policyKey = (policy: { name?: string; type?: string }) =>
+            `${policy.type ?? "branch"}:${policy.name}`;
+          const desiredKeys = new Set(desired.map(policyKey));
           const observed = yield* Stream.runCollect(
             Repos.listDeploymentBranchPolicies.items({ ...scope, per_page: 100 }),
           );
-          const observedNames = new Set(observed.map((policy) => policy.name));
-          for (const name of desired) {
-            if (!observedNames.has(name)) {
-              yield* Repos.createDeploymentBranchPolicy({ ...scope, name, type: "branch" });
-            }
-          }
+          const observedKeys = new Set(observed.map(policyKey));
           for (const policy of observed) {
             if (
               policy.id !== undefined &&
               policy.name !== undefined &&
-              !desired.includes(policy.name)
+              !desiredKeys.has(policyKey(policy))
             ) {
               yield* Repos.deleteDeploymentBranchPolicy({ ...scope, branch_policy_id: policy.id });
+            }
+          }
+          for (const policy of desired) {
+            if (!observedKeys.has(policyKey(policy))) {
+              yield* Repos.createDeploymentBranchPolicy({ ...scope, ...policy });
             }
           }
         }

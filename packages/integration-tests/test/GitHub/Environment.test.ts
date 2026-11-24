@@ -48,7 +48,11 @@ const listBranchPolicies = (name: string) =>
         environment_name: name,
         per_page: 100,
       }),
-    ).pipe(Effect.map((data) => (data.branch_policies ?? []).map((policy) => policy.name)));
+    ).pipe(
+      Effect.map((data) =>
+        (data.branch_policies ?? []).map((policy) => `${policy.type ?? "branch"}:${policy.name}`),
+      ),
+    );
   });
 
 test.provider.skipIf(!owner)(
@@ -60,7 +64,7 @@ test.provider.skipIf(!owner)(
       // Clean up any leftovers from a previous run before deploying.
       yield* stack.destroy();
 
-      // Create — environment with a wait timer and custom branch patterns.
+      // Create — environment with a wait timer, custom branch patterns and a tag pattern.
       // `Repository` defaults to `retain`, so the host repo is created once
       // and reused across runs (reconcile is idempotent).
       const created = yield* stack.deploy(
@@ -83,6 +87,7 @@ test.provider.skipIf(!owner)(
             preventSelfReview: true,
             deploymentBranchPolicy: {
               customBranchPolicies: ["main", "release/*"],
+              customTagPolicies: ["v*"],
             },
           }).pipe(destroy());
         }),
@@ -105,9 +110,10 @@ test.provider.skipIf(!owner)(
       ).toEqual(5);
 
       const patterns = yield* listBranchPolicies(name);
-      expect(patterns.sort()).toEqual(["main", "release/*"]);
+      expect(patterns.sort()).toEqual(["branch:main", "branch:release/*", "tag:v*"]);
 
-      // Update — drop the wait timer, converge the pattern list, same
+      // Update — drop the wait timer, converge the pattern list (a tag pattern
+      // that shares a branch pattern's name stays its own policy), same
       // logical ID → same environmentId (update in place, not replace).
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -124,6 +130,7 @@ test.provider.skipIf(!owner)(
             name,
             deploymentBranchPolicy: {
               customBranchPolicies: ["main"],
+              customTagPolicies: ["main"],
             },
           }).pipe(destroy());
         }),
@@ -135,7 +142,7 @@ test.provider.skipIf(!owner)(
         (rule) => rule.type === "wait_timer",
       );
       expect(waitAfterUpdate).toBeUndefined();
-      expect(yield* listBranchPolicies(name)).toEqual(["main"]);
+      expect((yield* listBranchPolicies(name)).sort()).toEqual(["branch:main", "tag:main"]);
 
       // Switch the policy mode to protected branches only.
       const switched = yield* stack.deploy(
