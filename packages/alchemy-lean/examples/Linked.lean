@@ -172,3 +172,126 @@ def anOrdinaryLargeDeposit : screening.Worlds := screening.run [
 example : (anOrdinaryLargeDeposit.1.state .Account "a-1").status = .open ∧
     anOrdinaryLargeDeposit.2.state .Watch "a-1" = { assessed := 1, flagged := 0 } := by
   native_decide
+
+/-! ## Three models: a network
+
+The bank's wires are sent by a third model, the wire desk, with a rule of its
+own. A `Network` joins any number of models. Each model's theorems hold of all
+of them together, and a run goes through all three.
+-/
+
+aggregate Transfer where
+  command
+    | send (payout account : String) (amount : Nat)
+        records sent
+        rejects alreadySent, tooLarge
+
+  event
+    | sent (account : String) (amount : Nat)
+
+  rejection
+    | alreadySent
+    | tooLarge
+
+  state
+    sent : Nat := 0
+    count : Nat := 0
+
+  decide
+    | s, .send _ account amount =>
+      if s.count ≠ 0 then .error .alreadySent
+      else if amount > 100000 then .error .tooLarge
+      else .ok [.sent account amount]
+
+  evolve
+    | s, .sent _ amount => { sent := s.sent + amount, count := s.count + 1 }
+
+model Wires where
+  aggregate Transfer
+
+namespace Wires
+
+/-- A wire is sent at most once, and never for more than the desk's limit. -/
+def SentOnce (s : Transfer.State) : Prop :=
+  (s.count = 0 → s.sent = 0) ∧ s.count ≤ 1 ∧ s.sent ≤ 100000
+
+theorem sentOnce_kept : Transfer.Keeps SentOnce := by aggregate_rule
+
+theorem everyWireSentOnce (w : Alchemy.World Signature) (reach : Wires.Reachable w)
+    (payout : String) : SentOnce (w.state .Transfer payout) :=
+  Transfer.always (by simp [SentOnce]) sentOnce_kept w reach payout
+
+end Wires
+
+/-- The three models. -/
+inductive Part where
+  | bank
+  | compliance
+  | wires
+deriving DecidableEq, Repr
+
+abbrev part : Part → Model
+  | .bank => Bank
+  | .compliance => Compliance
+  | .wires => Wires
+
+/-- The bank's screening goes to compliance, and its wires to the wire desk. -/
+def institution : Network Part part where
+  ask
+    | .bank, .screen account amount =>
+      some ⟨.compliance, ⟨.Watch, .system, .assess account amount⟩⟩
+    | .bank, .wire payout account amount =>
+      some ⟨.wires, ⟨.Transfer, (), .send payout account amount⟩⟩
+    | .compliance, call => nomatch call
+    | .wires, call => nomatch call
+  reply
+    | .bank, .screen .., .compliance, ⟨.Watch, _, _⟩, .ok [.flagged _] =>
+      .flagged "over the reporting threshold"
+    | .bank, .screen .., _, _, _ => .clear
+    | .bank, .wire .., .wires, ⟨.Transfer, _, _⟩, .ok _ => .sent
+    | .bank, .wire .., _, _, _ => .bounced
+    | .compliance, call, _, _, _ => nomatch call
+    | .wires, call, _, _, _ => nomatch call
+  offered := by intro i c j s _; cases j <;> trivial
+
+/--
+In every world the three can reach together: every account is balanced, no
+transfer has created money, compliance never objected more often than it
+looked, and every wire was sent at most once. Each was proved of one model
+alone; none is proved again.
+-/
+theorem allThreeAreSound (w : institution.Worlds) (reach : institution.Reachable w)
+    (account payout : String) :
+    Bank.Balanced ((w .bank).state .Account account) ∧
+      Bank.Conserved (w .bank).toRecorded ∧
+      Compliance.FlagsAreAssessments ((w .compliance).state .Watch account) ∧
+      Wires.SentOnce ((w .wires).state .Transfer payout) :=
+  ⟨Bank.everyAccountBalanced _ (institution.reachable_each reach .bank) account,
+    Bank.noTransferCreatesMoney _ (institution.reachable_each reach .bank),
+    Compliance.everyWatchIsSound _ (institution.reachable_each reach .compliance) account,
+    Wires.everyWireSentOnce _ (institution.reachable_each reach .wires) payout⟩
+
+/-- A payout through all three: the bank takes the money out, and the wire desk sends it. -/
+def aPayout : institution.Worlds := institution.run [.bank, .compliance, .wires] [
+  ⟨.bank, .send ⟨.Account, (), .open "a-1" "Sam"⟩⟩,
+  ⟨.bank, .send ⟨.Account, (), .deposit "a-1" 500⟩⟩,
+  ⟨.bank, .send ⟨.Account, (), .requestPayout "a-1" "p-1" 200⟩⟩ ]
+
+example : ((aPayout .bank).state .Account "a-1").balance = 300 ∧
+    (aPayout .bank).sagas (.Payout, "p-1") = .completed ∧
+    (aPayout .wires).state .Transfer "p-1" = { sent := 200, count := 1 } := by
+  native_decide
+
+/-- A payout over the desk's limit: the wire desk refuses, and the bank puts the money back. -/
+def aPayoutTooLarge : institution.Worlds := institution.run [.bank, .compliance, .wires] [
+  ⟨.bank, .send ⟨.Account, (), .open "a-1" "Sam"⟩⟩,
+  ⟨.bank, .send ⟨.Account, (), .deposit "a-1" 40000⟩⟩,
+  ⟨.bank, .send ⟨.Account, (), .deposit "a-1" 40000⟩⟩,
+  ⟨.bank, .send ⟨.Account, (), .deposit "a-1" 40000⟩⟩,
+  ⟨.bank, .send ⟨.Account, (), .requestPayout "a-1" "p-1" 110000⟩⟩ ]
+
+example : ((aPayoutTooLarge .bank).state .Account "a-1").balance = 120000 ∧
+    (aPayoutTooLarge .bank).sagas (.Payout, "p-1") = .failed (.Payout .bounced) ∧
+    (aPayoutTooLarge .compliance).state .Watch "a-1" = { assessed := 3, flagged := 0 } ∧
+    (aPayoutTooLarge .wires).state .Transfer "p-1" = {} := by
+  native_decide

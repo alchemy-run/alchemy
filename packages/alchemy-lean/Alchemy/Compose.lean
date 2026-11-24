@@ -124,3 +124,124 @@ def run (moves : List (Model.Move a)) : link.Worlds :=
 end Link
 
 end Alchemy
+
+namespace Alchemy
+
+/--
+Any number of models that call one another. For each model, `ask` says which of
+its calls another model answers and with what command, and `reply` what the
+caller is told.
+-/
+structure Network (ι : Type) [DecidableEq ι] (model : ι → Model) where
+  ask : (i : ι) → (model i).signature.Call →
+    Option ((j : ι) × Send (model j).signature.aggregates)
+  reply : (i : ι) → (c : (model i).signature.Call) → (j : ι) →
+    (s : Send (model j).signature.aggregates) → Answer (model j).signature.aggregates s.to →
+    (model i).signature.Reply c
+  /-- A call only becomes a command the answering model offers. -/
+  offered : ∀ i c j s, ask i c = some ⟨j, s⟩ → (model j).offered s := by intros; trivial
+
+namespace Network
+
+variable {ι : Type} [DecidableEq ι] {model : ι → Model} (net : Network ι model)
+
+/-- Every model's world. -/
+abbrev Worlds (_ : Network ι model) := (i : ι) → World (model i).signature
+
+/-- The worlds with one model's replaced. -/
+def set (w : net.Worlds) (i : ι) (wi : World (model i).signature) : net.Worlds :=
+  fun k => if h : i = k then h ▸ wi else w k
+
+@[simp] theorem set_same (w : net.Worlds) (i : ι) (wi : World (model i).signature) :
+    net.set w i wi i = wi := by simp [set]
+
+theorem set_other (w : net.Worlds) (i k : ι) (wi : World (model i).signature) (ne : i ≠ k) :
+    net.set w i wi k = w k := by simp [set, ne]
+
+/-- One thing a network of models can do. -/
+inductive Step : net.Worlds → net.Worlds → Prop where
+  /-- One model takes a step of its own. -/
+  | own (w) (i) (wi') : (model i).Step (w i) wi' → Step w (net.set w i wi')
+  /-- A waiting call is answered by another model: it is sent the command, and its answer goes back. -/
+  | call (w) (i) (f) (before after : List (Fiber (model i).signature)) (c) (k) (j) (s) :
+      (w i).fibers = before ++ f :: after →
+      f.program = .call c k →
+      net.ask i c = some ⟨j, s⟩ →
+      i ≠ j →
+      Step w (net.set
+        (net.set w i { w i with fibers := before ++
+          { f with program := k (net.reply i c j s ((w j).toRecorded.outcome (w j).now s)) } :: after })
+        j ((w j).dispatch s))
+
+/-- The worlds a network can get to. -/
+inductive Reachable : net.Worlds → Prop where
+  | start : Reachable fun i => World.start (model i).signature
+  | step {w w'} : Reachable w → net.Step w w' → Reachable w'
+
+/-- In a network, each model is still only where it could get to alone. -/
+theorem reachable_each {w : net.Worlds} (reach : net.Reachable w) (k : ι) :
+    (model k).Reachable (w k) := by
+  induction reach generalizing k with
+  | start => exact .start
+  | step _ step ih =>
+    cases step with
+    | own i wi' h =>
+      by_cases same : i = k
+      · subst same; rw [set_same]; exact .step (ih i) h
+      · rw [net.set_other _ _ _ _ same]; exact ih k
+    | call i f before after c cont j s fibers program asked differ =>
+      by_cases toK : j = k
+      · subst toK
+        rw [set_same]
+        exact .step (ih j) (.send _ s (net.offered i c j s asked))
+      · rw [net.set_other _ _ _ _ toK]
+        by_cases fromK : i = k
+        · subst fromK
+          rw [set_same]
+          exact .step (ih i) (.answer _ f before after c cont _ fibers program)
+        · rw [net.set_other _ _ _ _ fromK]; exact ih k
+
+/--
+So whatever is proved of each model alone holds of all of them together: a rule
+for each model's worlds holds of every model in every world the network reaches.
+-/
+theorem all {P : (i : ι) → World (model i).signature → Prop}
+    (each : ∀ i w, (model i).Reachable w → P i w) {w : net.Worlds} (reach : net.Reachable w) :
+    ∀ i, P i (w i) :=
+  fun i => each i _ (net.reachable_each reach i)
+
+/-! ## Running a network -/
+
+/-- The first waiting call that another model answers is answered by it. -/
+def answerNext (nodes : List ι) (w : net.Worlds) : Option net.Worlds :=
+  nodes.findSome? fun i =>
+    ((model i).waiting (w i)).findSome? fun c =>
+      match net.ask i c with
+      | none => none
+      | some ⟨j, s⟩ =>
+        if i = j then none
+        else
+          let answer := (w j).toRecorded.outcome (w j).now s
+          ((model i).answer (w i) c (net.reply i c j s answer)).map fun wi =>
+            net.set (net.set w i ((model i).settle Link.fuel wi)) j
+              ((model j).settle Link.fuel ((w j).dispatch s))
+
+/-- Answers calls between the models until none is waiting, or the fuel runs out. -/
+def settle (nodes : List ι) : Nat → net.Worlds → net.Worlds
+  | 0, w => w
+  | calls + 1, w =>
+    match net.answerNext nodes w with
+    | none => w
+    | some w' => settle nodes calls w'
+
+/-- A move of one model, then everything that follows in all of them. -/
+def play (nodes : List ι) (w : net.Worlds) (move : (i : ι) × Model.Move (model i)) : net.Worlds :=
+  net.settle nodes 100 (net.set w move.1 ((model move.1).play Link.fuel (w move.1) move.2))
+
+/-- Every model's world after every move, from the start. `nodes` lists the models. -/
+def run (nodes : List ι) (moves : List ((i : ι) × Model.Move (model i))) : net.Worlds :=
+  moves.foldl (net.play nodes) fun i => World.start (model i).signature
+
+end Network
+
+end Alchemy
