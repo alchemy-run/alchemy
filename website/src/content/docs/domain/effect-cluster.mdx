@@ -142,7 +142,7 @@ DomainCluster.layerEntities({
 
 These are the defaults. `"forever"` keeps a kind of row. Events, state and the views' entries are never deleted.
 
-Retention applies to pools with a cluster database. On `ClusterCloudflare.DurableObjectPool`, each instance keeps its rows in its own Durable Object, and the host keeps them.
+On `ClusterCloudflare.DurableObjectPool`, each instance keeps its rows in its own Durable Object and deletes a few past their window every time it commits, as on [Cloudflare](/domain/cloudflare#keep-dedupe-rows-for-a-while). `messages` and `interval` apply only to pools with a cluster database.
 
 ## Watch without polling
 

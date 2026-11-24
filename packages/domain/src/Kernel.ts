@@ -83,6 +83,7 @@ import * as RequestContext from "./RequestContext.ts";
 import type * as Rewrite from "./Rewrite.ts";
 import type * as DomainStream from "./Stream.ts";
 import * as Telemetry from "./Telemetry.ts";
+import { findPlain, Unsealed } from "./Vault.ts";
 import type * as View from "./View.ts";
 
 /**
@@ -433,7 +434,15 @@ const build = (
       : Effect.die(new DefinitionError({ reason: new UnknownEvent({ event: tag }) }));
   };
   const encodeEvent = (event: { readonly _tag: string }): Effect.Effect<Json> =>
-    Effect.map(eventCodec(event._tag), (codec) => codec.encode(event));
+    Effect.flatMap(eventCodec(event._tag), (codec) => {
+      const encoded = codec.encode(event);
+      // A value made with `plain` is sealed when a command carries it in; one
+      // that reaches an event any other way is never stored.
+      const plain = findPlain(encoded);
+      return plain === undefined
+        ? Effect.succeed(encoded)
+        : Effect.die(Unsealed.make({ subject: plain.subject, event: event._tag }));
+    });
   const decodeEvent = (json: Json): Effect.Effect<unknown> =>
     Effect.map(eventCodec((json as { _tag: string })._tag), (codec) => codec.decode(json));
 

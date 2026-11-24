@@ -617,11 +617,11 @@ A proof also covers two things you didn't write down. Every command leaves the s
 
 ## Write handlers the prover can read
 
-The prover reads `decide`, `evolve` and the rules as written, so they have to be plain functions of their inputs. Most ordinary TypeScript is read: conditions, `switch`, spreads, rest patterns, local variables that change, `+=` and `++`, array and string methods, and Effect's own library: effects and their failures, `Option`, `Result`, `Match`, arrays, records, decimals, hash sets and maps, times, and a stream run to a value. The whole list is in [What the prover reads](/domain/verifiable-code).
+The prover reads `decide`, `evolve` and the rules as written, so what they return has to depend only on their inputs. They can return a value or an Effect, written with `Effect.gen` or `Effect.fn`. Most ordinary TypeScript is supported: conditions, `switch`, spreads, rest patterns, local variables that change, `+=` and `++`, array and string methods, and Effect's own library: effects and their failures, `Option`, `Result`, `Match`, arrays, records, decimals, hash sets and maps, times, and a stream run to a value. The whole list is in [What can be verified](/domain/verifiable-code).
 
-A package of shared rules is read like your own files. An exported helper the prover cannot read, such as a hash, is [opaque](/domain/verifiable-code#opaque-functions): rules that do not depend on its result are still proved.
+A package of shared rules is supported like your own files. An exported helper the prover cannot read, such as a hash, is [opaque](/domain/verifiable-code#opaque-functions): rules that do not depend on its result are still proved.
 
-Whole numbers are exact, and so is a `bigint`. A division is read where its result is exact: through `Math.floor`, `Math.ceil` or `Math.trunc`, or compared with a whole number.
+Whole numbers are exact, and so is a `bigint`. A division is supported where its result is exact: through `Math.floor`, `Math.ceil` or `Math.trunc`, or compared with a whole number.
 
 ```typescript title="packages/domain/src/Window.aggregate.ts"
 decide: {
@@ -675,7 +675,7 @@ Checked: in every sequence of up to 3 commands on a new instance
       not proved for AddLines: state.lines was tried with up to 2 items, command.lines was tried with up to 2 items
 ```
 
-A schema's checks are read where the solver has the words for them: whole numbers, bounds, multiples, the bounds of a decimal, and the length of a string or a list. Any other check is named in the report. A command that writes to a field with such a check is listed too, since nothing proves the new value passes it.
+A schema's checks are supported where the solver has the words for them: whole numbers, bounds, multiples, the bounds of a decimal, and the length of a string or a list. Any other check is named in the report. A command that writes to a field with such a check is listed too, since nothing proves the new value passes it.
 
 ```text
 Schema checks not proved kept
@@ -855,7 +855,7 @@ relations: {
 
 Relations are proved together: each proof takes every relation to hold before the step. One that fails is taken out and the rest are proved again without it, so a proof never rests on a rule that isn't proved itself.
 
-Arithmetic on numbers that may not be whole isn't proved. A solver counts exactly and JavaScript rounds, so `0.1 + 0.2 === 0.3` is true to one and false to the other. Code that adds, subtracts or multiplies such numbers is reported as not read. Keep money in whole cents, which is exact.
+Arithmetic on numbers that may not be whole isn't proved. A solver counts exactly and JavaScript rounds, so `0.1 + 0.2 === 0.3` is true to one and false to the other. Code that adds, subtracts or multiplies such numbers is reported as not supported. Keep money in whole cents, which is exact.
 
 `eventually` is checked on the sequences that run their course, not proved for all of them.
 

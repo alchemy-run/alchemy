@@ -30,6 +30,8 @@ export interface Module {
 
 export type Declaration =
   | { readonly _tag: "Const"; readonly init: Node | undefined }
+  /** A name a pattern binds: `const { a, b: [c] } = made` declares `a` and `c`. */
+  | { readonly _tag: "Pattern"; readonly pattern: Node; readonly init: Node }
   | { readonly _tag: "Function"; readonly node: Node }
   | { readonly _tag: "Class"; readonly node: Node };
 
@@ -149,9 +151,11 @@ export type V =
     }
   /**
    * A field of an input, before the code looks at it: whether an optional
-   * field is there, which member of a union it is. It is only ever a field
-   * of an object. Reading the field makes the choice, which the run takes
-   * each way; a field no code reads is never chosen.
+   * field is there, which member of a union it is. It is a field of an
+   * object, and what `??` or a function of `effect/Option` is given when it
+   * reads one, until that looks at it. Reading the field makes the choice,
+   * which the run takes each way; a field no code reads is never chosen, and
+   * one read only for a value or a default is one conditional value.
    */
   | {
       readonly _tag: "Pending";
@@ -179,6 +183,11 @@ export type V =
       readonly _tag: "Native";
       readonly name: string;
       readonly call: (args: ReadonlyArray<V>, site: Site) => Eval<V>;
+      /**
+       * What a function written both ways was given, before `pipe` gives it
+       * what it works on: `Option.getOrElse(() => 0)`.
+       */
+      readonly given?: ReadonlyArray<V>;
     }
   | { readonly _tag: "Optic"; readonly path: ReadonlyArray<OpticStep> }
   | {
@@ -413,8 +422,9 @@ export class Run {
   readonly contexts = new Map<string, { readonly tag: unknown; readonly value: V }>();
   /**
    * The lists the code looked at, by name, with the items this path gave
-   * each; and under `?name`, the fields it looked at, with what this path
-   * chose for each.
+   * each; under `?name`, the fields it looked at, with what this path chose
+   * for each; and under `??name`, the fields read only for a value or a
+   * default, with the input that says whether each is there.
    */
   readonly lists = new Map<string, V>();
   /** Each object an input holds with every field chosen, as this run settled it. */
@@ -505,13 +515,21 @@ export class Run {
     if (condition !== "true") this.conditions.push(condition);
   }
 
-  /** Take one side of a condition, and remember which. */
-  branch(condition: string): boolean {
+  /** The side of a condition this path is on, where it has taken one. */
+  sideOf(condition: string): boolean | undefined {
     if (condition === "true") return true;
     if (condition === "false") return false;
-    const known = this.decided.get(condition);
+    return this.decided.get(condition);
+  }
+
+  /**
+   * Take one side of a condition, and remember which. Where only one side
+   * can occur, `only` is that side: it is taken, and no path is made for the other.
+   */
+  branch(condition: string, only?: boolean): boolean {
+    const known = this.sideOf(condition);
     if (known !== undefined) return known;
-    const taken = this.choose(2) === 0;
+    const taken = only ?? this.choose(2) === 0;
     this.decided.set(condition, taken);
     this.conditions.push(taken ? condition : Smt.not(condition));
     return taken;

@@ -36,6 +36,7 @@ import * as Backfill from "./Backfill.ts";
 import { type Routed, targetId } from "./CatchUp.ts";
 import { DecisionsUnsupported, DefinitionError } from "./DefinitionError.ts";
 import { admitStreamWrite, advanceStreamMeta, mergeCheckpoints } from "./InMemory.ts";
+import type { KeyStore } from "./KeyStore.ts";
 import {
   type Accepted,
   type AggregateKit,
@@ -384,6 +385,205 @@ interface Armed {
   readonly commandId: string;
   readonly at: number;
 }
+
+// ---------------------------------------------------------------- retention
+
+/**
+ * How long a model's objects keep the rows that only dedupe needs.
+ * `"forever"` keeps that kind of row.
+ */
+export interface Retention {
+  /**
+   * Receipts of accepted commands and committed decisions. A command or
+   * decision sent again after this time is decided again.
+   * @default "30 days"
+   */
+  readonly receipts?: Duration.Input | "forever";
+  /**
+   * The marks that a policy instance ran a delivery. A delivery that arrives
+   * again after this time runs again.
+   * @default "7 days"
+   */
+  readonly deliveries?: Duration.Input | "forever";
+  /**
+   * Cancelled scheduled commands. After this time, `unschedule` answers
+   * `NotScheduled` instead of `AlreadyCancelled`.
+   * @default "7 days"
+   */
+  readonly cancelled?: Duration.Input | "forever";
+}
+
+/** A retention window in milliseconds; `undefined` keeps rows forever. */
+export const retentionMillis = (
+  value: Duration.Input | "forever" | undefined,
+  fallback: Duration.Input,
+) => {
+  if (value === "forever") return undefined;
+  const duration = Duration.fromInputUnsafe(value ?? fallback);
+  return Duration.isFinite(duration) ? Duration.toMillis(duration) : undefined;
+};
+
+/** The windows `retention` sets, in milliseconds; `undefined` keeps rows forever. */
+export const retentionWindows = (retention: Retention = {}) => ({
+  receipts: retentionMillis(retention.receipts, "30 days"),
+  deliveries: retentionMillis(retention.deliveries, "7 days"),
+  cancelled: retentionMillis(retention.cancelled, "7 days"),
+});
+
+/** Options for {@link makePlatform}. */
+export interface PlatformOptions {
+  /**
+   * How long each object keeps the rows that only dedupe needs. `false`
+   * when the host's storage removes them itself, as Effect Cluster's sweep
+   * does in Postgres.
+   * @default { receipts: "30 days", deliveries: "7 days", cancelled: "7 days" }
+   */
+  readonly retention?: Retention | false;
+}
+
+type AgedKind = keyof Retention;
+
+/** The rows of each kind, by prefix. */
+const AGED_PREFIXES: Readonly<Record<AgedKind, ReadonlyArray<string>>> = {
+  receipts: ["receipt:", "decided:"],
+  deliveries: ["seen:"],
+  cancelled: ["scheduled:"],
+};
+
+/** Rows of a kind one call deletes at most: pruning never makes a call slow. */
+const PRUNE_BATCH = 16;
+/** Rows of a kind one call stamps at most, on an instance from before stamps. */
+const SCAN_BATCH = 128;
+
+/**
+ * How far an instance has stamped the rows it kept before stamps: the
+ * prefix it is on and the last key it stamped, or `"done"`.
+ */
+type AgedScan = { readonly prefix: number; readonly after?: string } | "done";
+
+/**
+ * What each object keeps of when its dedupe rows were written, and the
+ * pruning of those past their window. Every such row has an index row,
+ * `aged:<kind>:<when>:<key>`, written with it, so a call lists only the
+ * oldest few. A cancelled name can be armed and cancelled again, so its
+ * latest stamp is also kept under `aged-at:<key>`, and an older index row
+ * leaves the name alone.
+ *
+ * Rows written before stamps (an older instance) are stamped, in key
+ * order, by the first prunes after the upgrade: their window starts then.
+ */
+interface Aging {
+  /** Index a row written now. Call in the transaction that writes it. */
+  readonly stamp: (kind: AgedKind, key: string) => Effect.Effect<void, never, ObjectState>;
+  /** Delete a few rows of these kinds that are past their window. */
+  readonly prune: (kinds: ReadonlyArray<AgedKind>) => Effect.Effect<void, never, ObjectState>;
+}
+
+const agedStamp = (at: number) => at.toString().padStart(16, "0");
+const agedIndex = (kind: AgedKind, at: number, key: string) =>
+  `aged:${kind}:${agedStamp(at)}:${key}`;
+const agedScanKey = (kind: AgedKind) => `aged-scan:${kind}`;
+const agedAtKey = (key: string) => `aged-at:${key}`;
+
+/** Whether the scan of an older instance's rows has yet to reach `key`. */
+const scanAhead = (kind: AgedKind, scan: AgedScan | undefined, key: string) => {
+  if (scan === "done") return false;
+  if (scan === undefined) return true;
+  const prefix = AGED_PREFIXES[kind].findIndex((p) => key.startsWith(p));
+  return prefix > scan.prefix || (prefix === scan.prefix && (scan.after ?? "") < key);
+};
+
+const makeAging = (retention: Retention | false): Aging => {
+  if (retention === false) return { stamp: () => Effect.void, prune: () => Effect.void };
+  const windows = retentionWindows(retention);
+  const stampRows = (kind: AgedKind, at: number, key: string): Array<[string, unknown]> =>
+    kind === "cancelled"
+      ? [
+          [agedIndex(kind, at, key), true],
+          [agedAtKey(key), at],
+        ]
+      : [[agedIndex(kind, at, key), true]];
+  const stamp = (kind: AgedKind, key: string) =>
+    Effect.gen(function* () {
+      const state = yield* ObjectState;
+      // A row the scan has yet to reach gets its stamp from the scan.
+      if (scanAhead(kind, yield* state.storage.get<AgedScan>(agedScanKey(kind)), key)) return;
+      const at = yield* Clock.currentTimeMillis;
+      yield* state.storage.put(Object.fromEntries(stampRows(kind, at, key)));
+    });
+  /** Stamp a batch of the rows an older instance kept before stamps. */
+  const scan = (kind: AgedKind) =>
+    Effect.gen(function* () {
+      const state = yield* ObjectState;
+      const stored = yield* state.storage.get<AgedScan>(agedScanKey(kind));
+      if (stored === "done") return;
+      const prefixes = AGED_PREFIXES[kind];
+      let prefix = stored?.prefix ?? 0;
+      let after = stored?.after;
+      let budget = SCAN_BATCH;
+      const at = yield* Clock.currentTimeMillis;
+      while (budget > 0 && prefix < prefixes.length) {
+        const rows = yield* state.storage.list({
+          prefix: prefixes[prefix]!,
+          ...(after === undefined ? {} : { startAfter: after }),
+          limit: budget,
+        });
+        const stamps: Array<[string, unknown]> = [];
+        for (const [key, value] of rows) {
+          if (kind !== "cancelled" || value === CANCELLED) stamps.push(...stampRows(kind, at, key));
+          after = key;
+        }
+        yield* putRows(state.storage, stamps);
+        if (rows.size < budget) {
+          prefix += 1;
+          after = undefined;
+        }
+        budget -= rows.size;
+      }
+      yield* state.storage.put<AgedScan>(
+        agedScanKey(kind),
+        prefix >= prefixes.length ? "done" : { prefix, ...(after === undefined ? {} : { after }) },
+      );
+    });
+  const expire = (kind: AgedKind) =>
+    Effect.gen(function* () {
+      const window = windows[kind];
+      if (window === undefined) return;
+      const state = yield* ObjectState;
+      const now = yield* Clock.currentTimeMillis;
+      const prefix = `aged:${kind}:`;
+      const rows = yield* state.storage.list({
+        prefix,
+        end: `${prefix}${agedStamp(now - window)}`,
+        limit: PRUNE_BATCH,
+      });
+      if (rows.size === 0) return;
+      const deletes: Array<string> = [];
+      for (const index of rows.keys()) {
+        deletes.push(index);
+        const stamped = index.slice(prefix.length);
+        const key = stamped.slice(17);
+        if (kind !== "cancelled") {
+          deletes.push(key);
+          continue;
+        }
+        // Cancelled again since: the later stamp decides.
+        const at = Number(stamped.slice(0, 16));
+        if ((yield* state.storage.get<number>(agedAtKey(key))) !== at) continue;
+        deletes.push(agedAtKey(key));
+        // Armed again since: the name has a job now.
+        if ((yield* state.storage.get(key)) === CANCELLED) deletes.push(key);
+      }
+      yield* state.storage.delete(deletes);
+    });
+  return {
+    stamp,
+    prune: (kinds) =>
+      Effect.forEach(kinds, (kind) => Effect.andThen(scan(kind), expire(kind)), {
+        discard: true,
+      }),
+  };
+};
 
 /** How long a queue drain may hold its lease before another drain may take over. */
 const LEASE_MS = 60_000;
@@ -1080,10 +1280,14 @@ const aggregateObject = (
   random: Random,
   peer: Peer,
   decisionOf: DecisionOf,
+  aging: Aging,
 ) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
     const outbox = yield* queue<Delivery>("outbox", kit.deliver);
+    /** Index a receipt, and delete a few receipts and cancelled names past their window. */
+    const receiptKept = (key: string) =>
+      Effect.andThen(aging.stamp("receipts", key), aging.prune(["receipts", "cancelled"]));
     // `held` marks an instance a decision's intent holds, so a command learns
     // it from the row it reads anyway.
     const storedMeta = state.storage
@@ -1203,6 +1407,7 @@ const aggregateObject = (
               `receipt:${meta.commandId}`,
               storedResult(result.version, result.events.length, result.reply),
             );
+            yield* receiptKept(`receipt:${meta.commandId}`);
             return yield* persist(id, current.version, result);
           }),
         );
@@ -1281,6 +1486,7 @@ const aggregateObject = (
               `receipt:${meta.commandId}`,
               storedResult(receipt.version, receipt.events.length, null),
             );
+            yield* receiptKept(`receipt:${meta.commandId}`);
             return yield* persist(id, current.version, result);
           }),
         );
@@ -1408,7 +1614,14 @@ const aggregateObject = (
               for (const name of (yield* state.storage.list({ prefix: "armed:" })).keys()) {
                 yield* timers.cancel(name.slice("armed:".length)).pipe(Effect.ignore);
               }
-              yield* clearPrefixes(["receipt:", "decided:", "armed:", "scheduled:"]);
+              yield* clearPrefixes([
+                "receipt:",
+                "decided:",
+                "armed:",
+                "scheduled:",
+                "aged:",
+                "aged-at:",
+              ]);
               yield* state.storage.delete("reached");
             } else {
               // A decision's receipt stored with a copy of its events keeps none of them.
@@ -1735,6 +1948,7 @@ const aggregateObject = (
                 `decided:${intent.commandId}`,
                 storedDecisionReceipt(intent.receipt),
               );
+              yield* receiptKept(`decided:${intent.commandId}`);
               if (intent.others.length > 0) {
                 yield* state.storage.put<Recorded>(outcomeKey(txId), {
                   outcome: "Committed",
@@ -2073,7 +2287,13 @@ const aggregateObject = (
           // A job scheduled before tokens existed has a job but no token.
           if (token === undefined && (yield* timers.getStatus(name)) === undefined)
             return "NotScheduled" as const;
-          yield* state.storage.put(key, CANCELLED);
+          yield* state.storage.transaction(
+            Effect.gen(function* () {
+              yield* state.storage.put(key, CANCELLED);
+              yield* aging.stamp("cancelled", key);
+              yield* aging.prune(["receipts", "cancelled"]);
+            }),
+          );
           yield* timers.cancel(name);
           return "Cancelled" as const;
         }).pipe(exclusively, reportDefects),
@@ -2678,7 +2898,7 @@ interface ViewRevisions {
   readonly recalls?: ReadonlyArray<Delivery>;
 }
 
-const policyObject = (kit: PolicyKit) =>
+const policyObject = (kit: PolicyKit, aging: Aging) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
     // Detached: a delivery arrives inside the sender's drain, so draining it
@@ -2694,8 +2914,11 @@ const policyObject = (kit: PolicyKit) =>
             const accepted = yield* exclusively(
               state.storage.transaction(
                 Effect.gen(function* () {
+                  // A mark past its window goes first: that delivery runs again.
+                  yield* aging.prune(["deliveries"]);
                   if (yield* state.storage.get(`seen:${id}`)) return false;
                   yield* state.storage.put(`seen:${id}`, true);
+                  yield* aging.stamp("deliveries", `seen:${id}`);
                   yield* inbox.stage([delivery]);
                   return true;
                 }),
@@ -2828,6 +3051,16 @@ const projectionObject = (
                   } satisfies ProjectionMeta);
                   // A handled input is not kept: the store the handler wrote has it.
                   yield* state.storage.delete(rows.size === 0 ? [] : [...rows.keys()]);
+                  // Inputs handled on 2.0.0-beta.87 and earlier stayed: a batch of them goes each run.
+                  if (!(yield* state.storage.get<boolean>("in-pruned"))) {
+                    const handled = yield* state.storage.list({
+                      prefix: "in:",
+                      end: `in:${pad(current.processed + 1)}`,
+                      limit: 128,
+                    });
+                    if (handled.size > 0) yield* state.storage.delete([...handled.keys()]);
+                    if (handled.size < 128) yield* state.storage.put("in-pruned", true);
+                  }
                 }),
               ),
             );
@@ -3244,6 +3477,39 @@ const bindState = (impl: ObjectImpl): ObjectImpl =>
     return bound;
   });
 
+/** Where a host keeps a Vault's keys: the class `Domain.VaultKeys`, one object per subject. */
+const VAULT: HostedModel = { modelName: "Domain", id: {}, sagas: [], legacyData: false };
+
+/**
+ * One subject's key, in its object's own storage. The first key stored
+ * wins, as `KeyStore.create` says.
+ */
+const keyObject: ObjectImpl = Effect.succeed({
+  keyGet: () =>
+    reportDefects(
+      Effect.flatMap(ObjectState, ({ storage }) =>
+        Effect.map(storage.get<string>("key"), (key) => key ?? null),
+      ),
+    ),
+  keyCreate: (key: string) =>
+    reportDefects(
+      Effect.flatMap(ObjectState, ({ storage }) =>
+        storage.transaction(
+          Effect.gen(function* () {
+            const existing = yield* storage.get<string>("key");
+            if (existing !== undefined) return existing;
+            yield* storage.put("key", key);
+            return key;
+          }),
+        ),
+      ),
+    ),
+  keyDelete: () =>
+    reportDefects(
+      Effect.flatMap(ObjectState, ({ storage }) => Effect.as(storage.delete("key"), null)),
+    ),
+});
+
 /** Every runtime's claims, by host name; a process outside any runtime has one of its own. */
 const runtimeClaims = new WeakMap<object, Map<string, object>>();
 const noRuntime = {};
@@ -3292,10 +3558,12 @@ const claimsOf = (key: object) => {
  */
 export const makePlatform = <R>(
   host: Host<R>,
+  options: PlatformOptions = {},
 ): Layer.Layer<Platform, never, R | SecureRandom.SecureRandom> =>
   Layer.effect(
     Platform,
     Effect.gen(function* () {
+      const aging = makeAging(options.retention ?? {});
       // Factories run while the Domain's Layer is built, inside the host's
       // construction phase; declaring a class needs that context.
       const init = yield* captureContext<R>();
@@ -3534,6 +3802,7 @@ export const makePlatform = <R>(
                           bound(`${address.aggregate}Aggregate`)
                         )?.getByName(address.id),
                       (name) => decisions.get(name),
+                      aging,
                     ),
                   );
                   sources.set(name, namespace);
@@ -3899,7 +4168,10 @@ export const makePlatform = <R>(
             policy: (policy, kit) =>
               inInit(
                 Effect.gen(function* () {
-                  const namespace = yield* object(`${policy.policyName}Policy`, policyObject(kit));
+                  const namespace = yield* object(
+                    `${policy.policyName}Policy`,
+                    policyObject(kit, aging),
+                  );
                   return {
                     receive: (delivery) =>
                       unwrapDefects(namespace.getByName(delivery.key).receive(delivery)),
@@ -3911,6 +4183,19 @@ export const makePlatform = <R>(
         });
 
       return Platform.of({
+        keys: Effect.map(
+          inInit(host.declare(VAULT, "VaultKeys", bindState(keyObject))),
+          (namespace): KeyStore["Service"] => ({
+            get: (subject) =>
+              Effect.map(
+                unwrapDefects<string | null>(namespace.getByName(subject).keyGet()),
+                Option.fromNullishOr,
+              ),
+            create: (subject, key) =>
+              unwrapDefects<string>(namespace.getByName(subject).keyCreate(key)),
+            delete: (subject) => unwrapDefects<void>(namespace.getByName(subject).keyDelete()),
+          }),
+        ),
         model: (model) =>
           Effect.gen(function* () {
             yield* claim(model.modelName, model.id);

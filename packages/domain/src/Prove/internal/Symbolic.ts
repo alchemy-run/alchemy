@@ -11,7 +11,7 @@ import * as Schema from "effect/Schema";
 import type * as SchemaAST from "effect/SchemaAST";
 import * as Brands from "./Brands.ts";
 import * as Compare from "./Compare.ts";
-import type { Sort } from "./Smt.ts";
+import type { Sort, Term } from "./Smt.ts";
 import * as Smt from "./Smt.ts";
 import type { Brand, Run, V } from "./Value.ts";
 import * as Value from "./Value.ts";
@@ -431,12 +431,136 @@ export const resolve = (pending: V & { readonly _tag: "Pending" }, run: Run): V 
   const key = `?${pending.name}`;
   const known = run.lists.get(key);
   if (known) return known === Value.absent ? undefined : known;
+  const held = keptOf(pending, run.lists);
+  if (held) {
+    // Read for a value before, and looked at now: it holds the value, or one of the others.
+    const chosen = run.choose(1 + held.others.length);
+    run.assume(chosen === 0 ? held.present.text : Smt.not(held.present.text));
+    const made = chosen === 0 ? held.whole : held.others[chosen - 1];
+    run.lists.set(key, made ?? Value.absent);
+    return made;
+  }
   const made =
     pending.optional && run.choose(2) === 1
       ? undefined
       : symbolic(pending.ast as SchemaAST.AST, pending.name, run);
   run.lists.set(key, made ?? Value.absent);
   return made;
+};
+
+/**
+ * A field read only for the value it holds, or a default: whether it holds
+ * one is an input, and no path is made for each way.
+ */
+export interface Kept {
+  /** Whether the field holds a value. */
+  readonly present: Term;
+  /** The value it holds where it holds one: a string, a number or a boolean. */
+  readonly value: V;
+  /** Whether the field is an `Option`: `value` is then what its `Some` holds. */
+  readonly option: boolean;
+  /** The field where it holds a value. */
+  readonly whole: V;
+  /** What the field is where it holds none: `undefined` for a field left out. */
+  readonly others: ReadonlyArray<V | undefined>;
+}
+
+/** Whether a schema allows only values the solver has a sort for: a string, a number, a boolean. */
+const isScalar = (ast: SchemaAST.AST): boolean =>
+  ast._tag === "String" ||
+  ast._tag === "TemplateLiteral" ||
+  ast._tag === "Number" ||
+  ast._tag === "Boolean" ||
+  (ast._tag === "Literal" && ["string", "number", "boolean"].includes(typeof ast.literal));
+
+/**
+ * The one value a field's schema allows beside nothing, and each nothing it
+ * allows: `optionalKey(String)`, `NullOr(Number)`, `Option(String)`.
+ * `undefined` for any other schema.
+ */
+const shapeOf = (
+  pending: V & { readonly _tag: "Pending" },
+):
+  | {
+      readonly leaf: SchemaAST.AST;
+      readonly name: string;
+      readonly option: boolean;
+      readonly others: ReadonlyArray<V | undefined>;
+    }
+  | undefined => {
+  const ast = pending.ast as SchemaAST.AST;
+  const left: ReadonlyArray<V | undefined> = pending.optional ? [undefined] : [];
+  if (isOption(ast)) {
+    const leaf = ast.typeParameters[0];
+    // An `Option` that is left out is not one: only the code says what it does with that.
+    return leaf && isScalar(leaf) && !pending.optional
+      ? { leaf, name: `${pending.name}.value`, option: true, others: [Value.none] }
+      : undefined;
+  }
+  if (isScalar(ast))
+    return left.length > 0
+      ? { leaf: ast, name: pending.name, option: false, others: left }
+      : undefined;
+  if (ast._tag !== "Union") return undefined;
+  const leaves = ast.types.filter(isScalar);
+  const nothing = ast.types.flatMap((member) =>
+    member._tag === "Null"
+      ? [Value.nil]
+      : member._tag === "Undefined" || member._tag === "Void"
+        ? [Value.undef]
+        : [],
+  );
+  const leaf = leaves[0];
+  return leaf && leaves.length === 1 && nothing.length === ast.types.length - 1
+    ? { leaf, name: pending.name, option: false, others: [...left, ...nothing] }
+    : undefined;
+};
+
+/** A field read only for a value, as the path that read it kept it. */
+export const keptOf = (
+  pending: V & { readonly _tag: "Pending" },
+  lists: ReadonlyMap<string, V> | undefined,
+): Kept | undefined => {
+  const known = lists?.get(`??${pending.name}`);
+  const shape = known?._tag === "Obj" ? shapeOf(pending) : undefined;
+  if (known?._tag !== "Obj" || !shape) return undefined;
+  const present = known.fields.present;
+  const value = known.fields.value;
+  return present?._tag === "Term" && value
+    ? {
+        present: present.term,
+        value,
+        option: shape.option,
+        whole: shape.option ? Value.some(value) : value,
+        others: shape.others,
+      }
+    : undefined;
+};
+
+/**
+ * A field the code reads only for a value, or a default: `field ?? other`,
+ * `Option.getOrElse(field, other)`. Both ways go to the same code, so the run
+ * does not choose: whether the field holds a value is an input, and what the
+ * code computes is one value that depends on it. `undefined` where the field
+ * was chosen already, or holds more than one kind of value.
+ */
+export const keep = (pending: V & { readonly _tag: "Pending" }, run: Run): Kept | undefined => {
+  if (run.lists.has(`?${pending.name}`)) return undefined;
+  const known = keptOf(pending, run.lists);
+  if (known) return known;
+  const shape = shapeOf(pending);
+  if (!shape) return undefined;
+  const present = run.constant(`${pending.name} is there`, "Bool");
+  const from = run.conditions.length;
+  const value = symbolic(shape.leaf, shape.name, run);
+  // What the schema says of the value holds only where there is one.
+  for (const condition of run.conditions.splice(from))
+    run.assume(`(=> ${present.text} ${condition})`);
+  run.lists.set(
+    `??${pending.name}`,
+    Value.obj({ present: { _tag: "Term", term: present }, value }),
+  );
+  return keptOf(pending, run.lists);
 };
 
 /** Whether an object has a field the run has not chosen yet. */
@@ -875,6 +999,9 @@ export const concretize = (
   const chosen = (pending: V & { readonly _tag: "Pending" }): V | Unbuildable | undefined => {
     const known = lists?.get(`?${pending.name}`);
     if (known) return known === Value.absent ? undefined : known;
+    // Read only for a value: the solver says whether it holds one.
+    const held = keptOf(pending, lists);
+    if (held) return model.get(held.present.text) === true ? held.whole : held.others[0];
     if (pending.optional) return undefined;
     const least = sample(pending.ast as SchemaAST.AST);
     return least ?? { _tag: "Unbuildable", reason: `the prover cannot pick a ${pending.name}` };

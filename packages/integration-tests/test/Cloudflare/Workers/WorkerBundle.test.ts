@@ -157,6 +157,39 @@ layer(NodeServices.layer)("WorkerBundle", (it) => {
       }),
     { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   );
+  // #3725: a rule over a `.json` file uploads it as its own module (a large
+  // OpenAPI spec as Text) instead of inlining it as an object literal. JSON
+  // no rule matches is still bundled.
+  it.effect(
+    "emits JSON imports matching rules as modules of the rule's type",
+    () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const root = yield* writeFixture({
+          "package.json": "{}",
+          "src/spec.json": `{"openapi":"SPEC_MARKER"}`,
+          "src/config.json": `{"name":"CONFIG_MARKER"}`,
+          "src/worker.mjs": `import spec from "./spec.json"; import config from "./config.json"; export default { fetch: () => new Response(spec + config.name) };`,
+        });
+        const bundler = yield* WorkerBundle;
+        const output = yield* bundler.build({
+          id: "worker-bundle-json-rules",
+          main: path.join(root, "src/worker.mjs"),
+          compatibility: { date: "2026-03-17", flags: [] },
+          entry: { kind: "external" },
+          stack: { name: "worker-bundle-test", stage: "test" },
+          extraOptions: undefined,
+          rules: [{ type: "Text", globs: ["**/spec.json"] }],
+        });
+        const entry = decode(output.files[0].content);
+        const spec = output.files.find((file) => /spec\.json.*\.txt$/.test(file.path));
+        expect(spec && decode(spec.content)).toBe(`{"openapi":"SPEC_MARKER"}`);
+        expect(entry).toContain(path.basename(spec!.path));
+        expect(entry).not.toContain("SPEC_MARKER");
+        expect(entry).toContain("CONFIG_MARKER");
+      }),
+    { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
+  );
   it.effect(
     "applies input aliases before Node compatibility for imports and requires",
     () =>

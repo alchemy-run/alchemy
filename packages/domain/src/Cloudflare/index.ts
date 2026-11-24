@@ -48,6 +48,8 @@ import {
   generationOfTarget,
   type Host,
   makePlatform,
+  type Retention,
+  retentionWindows,
   type Namespace,
   type ObjectImpl,
   ObjectState,
@@ -64,8 +66,12 @@ import { Backfill as BackfillRun } from "./Backfill.ts";
 import type { Providers } from "./Providers.ts";
 import { DeployVersion } from "./Version.ts";
 
+export type { Retention } from "../DurableObjects.ts";
+
 export { Backfill, BackfillFailed, BackfillStillRunning } from "./Backfill.ts";
+export { D1KeyStore, type D1KeyStoreOptions } from "./D1KeyStore.ts";
 export { providers, Providers, type ProviderRequirements } from "./Providers.ts";
+export { SecretKeyWrap } from "./SecretKeyWrap.ts";
 
 /** A Cloudflare Durable Object namespace: Domain's, plus fetch, jurisdictions and placement. */
 interface CloudflareNamespace extends Namespace {
@@ -273,6 +279,7 @@ const cloudflareHost = (
   legacySagas: Map<string, string>,
   /** The class each saga's runs live on, by its name before Domain version 0. */
   sagaRenames: Map<string, InlineDurableObjectProps>,
+  retention: Retention | undefined,
 ): Layer.Layer<Platform, never, Worker | SecureRandom.SecureRandom> =>
   Layer.unwrap(
     Effect.gen(function* () {
@@ -430,7 +437,7 @@ const cloudflareHost = (
               });
           }),
       };
-      return makePlatform(host);
+      return makePlatform(host, { retention: retention ?? {} });
     }),
   );
 
@@ -531,6 +538,26 @@ const cloudflareHost = (
  * const AuditLive = Audit.layer(AuditHandlers).pipe(Layer.provide(Platform));
  * ```
  *
+ * ### Keeping dedupe rows for a while
+ * Receipts, policy delivery marks and cancelled scheduled commands exist only
+ * to drop repeats. Each Durable Object deletes a few that are past their
+ * window every time it commits.
+ *
+ * **Example:** Receipts for a year, delivery marks forever
+ * ```typescript
+ * import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+ * import * as Layer from "effect/Layer";
+ * import { Bank, BankPolicies } from "./Bank.ts";
+ *
+ * const BankLive = Bank.layer(BankPolicies).pipe(
+ *   Layer.provide(
+ *     DomainCloudflare.layerDurableObjects({
+ *       retention: { receipts: "365 days", deliveries: "forever" },
+ *     }),
+ *   ),
+ * );
+ * ```
+ *
  * @layer
  * @provides Domain.Platform
  * @provides WorkflowEngine
@@ -539,6 +566,7 @@ export function layerDurableObjects({
   jurisdiction,
   locationHint,
   backfillTimeout,
+  retention,
 }: DurableObjectsOptions = {}): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine,
   never,
@@ -548,7 +576,8 @@ export function layerDurableObjects({
     backfillTimeout === undefined ? undefined : Duration.toSeconds(backfillTimeout);
   // The same options return the same Layer, so models that each provide it
   // share one platform and one workflow engine.
-  const key = `${jurisdiction ?? ""}|${locationHint ?? ""}|${timeoutSeconds ?? ""}`;
+  const windows = retentionWindows(retention);
+  const key = `${jurisdiction ?? ""}|${locationHint ?? ""}|${timeoutSeconds ?? ""}|${windows.receipts}|${windows.deliveries}|${windows.cancelled}`;
   const placement: Placement = { jurisdiction, locationHint };
   let platform = platforms.get(key);
   if (platform === undefined)
@@ -561,7 +590,7 @@ export function layerDurableObjects({
           const engine = sagaEngine(placement, sagaRenames);
           const legacySagas = new Map<string, string>();
           return Layer.merge(
-            cloudflareHost(placement, timeoutSeconds, version, legacySagas, sagaRenames),
+            cloudflareHost(placement, timeoutSeconds, version, legacySagas, sagaRenames, retention),
             version === undefined ? legacyEngine(legacySagas).pipe(Layer.provide(engine)) : engine,
           );
         }),
@@ -675,6 +704,16 @@ export interface DurableObjectsOptions {
    * @default "30 minutes"
    */
   readonly backfillTimeout?: Duration.Input;
+  /**
+   * How long each Durable Object keeps the rows that only dedupe needs:
+   * command and decision receipts, policy delivery marks, and cancelled
+   * scheduled commands. An object deletes a few rows past their window each
+   * time it commits, so an instance stops growing with its traffic.
+   * `"forever"` keeps a kind of row.
+   *
+   * @default { receipts: "30 days", deliveries: "7 days", cancelled: "7 days" }
+   */
+  readonly retention?: Retention;
 }
 
 const platforms = new Map<

@@ -1,3 +1,4 @@
+import type { ContainerRuntimeSettings } from "@alchemy.run/docker/ContainerRuntime";
 import {
   ClusterAdapter,
   ClusterNotFoundError,
@@ -652,6 +653,7 @@ export const GkeKubernetesAdapter = () =>
             port: options.port,
             isExternal: options.isExternal,
             bootstrap: options.bootstrap,
+            runtime: options.runtime,
             session: options.session,
           });
           return {
@@ -676,6 +678,7 @@ export const GkeKubernetesAdapter = () =>
         port?: number | undefined;
         isExternal?: boolean | undefined;
         bootstrap: (importPath: string) => string;
+        runtime?: ContainerRuntimeSettings;
       }) {
         return yield* imageSource
           .hash({
@@ -684,6 +687,7 @@ export const GkeKubernetesAdapter = () =>
             port: options.port,
             isExternal: options.isExternal,
             bootstrap: options.bootstrap,
+            runtime: options.runtime,
           })
           .pipe(withGcp);
       });
@@ -715,6 +719,7 @@ export const GkeKubernetesAdapter = () =>
           hash: registryHash,
           delete: registryDelete,
         },
+        runtimeBootstrap: "@alchemy.run/gcp/Bootstrap/Gke",
         bootstrap: {
           server: makeGkeServerBootstrap,
           job: makeGkeJobBootstrap,

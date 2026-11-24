@@ -15,6 +15,7 @@ import {
   runProcess,
   stackFromEnv,
 } from "alchemy/Runtime/Bootstrap";
+import { TerminalsBun } from "alchemy/Runtime/TerminalBun";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -30,6 +31,7 @@ import * as Logger from "effect/Logger";
 export const bootstrap = (entrypoint: unknown): Promise<void> => {
   const platform = Layer.mergeAll(
     BunServices.layer,
+    TerminalsBun,
     FetchHttpClient.layer,
     SecureRandom.layerWebCrypto,
     Logger.layer([Logger.consolePretty()]),
