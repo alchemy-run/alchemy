@@ -1013,6 +1013,7 @@ describe("a projection key fed by many sources", { tags: ["unit"] }, () => {
     },
     { timeout: 90_000 },
   );
+
   it.live(
     "a rewrite's revisions of handled events leave each source's checkpoint where it was",
     () => {
