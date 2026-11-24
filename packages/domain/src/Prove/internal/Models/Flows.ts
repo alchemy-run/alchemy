@@ -1414,6 +1414,61 @@ export const make = (
     ),
   });
 
+  // ---- Text cut into lines, and items grouped by a key the code can see.
+
+  const textOf = (to: Handing, v: V): Effect.Effect<string, Held> => {
+    const forced = host.force(v);
+    return forced._tag === "Str"
+      ? Effect.succeed(forced.value)
+      : to.read(Value.notTranslated(to.site, `calls ${to.name} on text an input decides`));
+  };
+  type Keyed = string | number | boolean;
+  const keyOf = (to: Handing, v: V): Effect.Effect<Keyed, Held> => {
+    const forced = host.force(v);
+    return forced._tag === "Str" || forced._tag === "Num" || forced._tag === "Bool"
+      ? Effect.succeed(forced.value)
+      : to.read(Value.notTranslated(to.site, `calls ${to.name} with a key the prover cannot see`));
+  };
+  const keyed = (key: Keyed): V =>
+    typeof key === "string"
+      ? Value.str(key)
+      : typeof key === "number"
+        ? Value.num(key)
+        : Value.bool(key);
+
+  Object.assign(models, {
+    "effect/Stream:splitLines": lift("Stream.splitLines", (to, self) =>
+      Stream.map(Stream.splitLines(Stream.mapEffect(self, (item) => textOf(to, item))), (line): V =>
+        Value.str(line),
+      ),
+    ),
+    // A stream of each key, and a stream of the items that have it.
+    "effect/Stream:groupByKey": lift("Stream.groupByKey", (to, self, [f, given]) =>
+      Stream.map(
+        Stream.groupByKey(
+          Stream.mapEffect(self, (item) =>
+            Effect.map(
+              Effect.flatMap(straight(to, f)(item), (key) => keyOf(to, key)),
+              (key) => [key, item] as const,
+            ),
+          ),
+          ([key]) => key,
+          readOptions(given),
+        ),
+        ([key, group]): V =>
+          arr([
+            keyed(key),
+            flow(
+              to.timeline,
+              Stream.map(group, ([, item]) => item),
+              to.site,
+              same,
+            ),
+          ]),
+      ),
+    ),
+  });
+
   /** A stream many may read, made in a scope: `Stream.broadcast` and `Stream.share`. */
   const shared = (
     name: string,

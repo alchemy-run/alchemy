@@ -829,6 +829,25 @@ export const make = (host: Host) => {
           }),
         ),
       ),
+    // An object that is not an array: what `Predicate.isObject` holds of.
+    "effect/Match:record": ([input], site) => {
+      const is = input ? host.kind(input) : undefined;
+      if (!input || is === undefined) return wrongArguments(site, "Match.record");
+      const forced = host.force(input);
+      return Effect.succeed(
+        Value.bool(
+          is === "object" &&
+            forced._tag !== "Null" &&
+            forced._tag !== "Arr" &&
+            forced._tag !== "List",
+        ),
+      );
+    },
+    // A `Date`: the prover makes none, so only one a library gave is.
+    "effect/Match:date": ([input], site) =>
+      input && host.kind(input) !== undefined
+        ? Effect.succeed(Value.bool(input._tag === "Host" && input.value instanceof Date))
+        : wrongArguments(site, "Match.date"),
     "effect/Match:defined": ([input]) =>
       Effect.succeed(
         Value.bool(input !== undefined && input._tag !== "Null" && input._tag !== "Undef"),

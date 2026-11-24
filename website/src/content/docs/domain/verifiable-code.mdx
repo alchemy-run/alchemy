@@ -1059,6 +1059,8 @@ Match.tagStartsWith("Up", ({ n }) => n);
 Match.discriminatorStartsWith("kind")("x", ({ n }) => n + 1);
 Match.literals({ on: () => 1 });
 Match.literalsExhaustive({ 1: () => "one", 2: (n) => "two" + n });
+Match.record({ n: a }); // an object that is not an array
+Match.date(a);
 Match.value(shape.kind).pipe(
   Match.tag("Gift", () => 1),
   Match.orElse(() => 0),
@@ -2957,6 +2959,8 @@ Stream.scoped;
 Stream.slidingSize(2, 2);
 Stream.accumulate;
 Stream.collect;
+Stream.splitLines; // of text the code can see
+Stream.groupByKey((n) => (n % 2 === 0 ? 0 : 1)); // by a key the code can see
 Stream.filterMapEffect((n) => Effect.succeed(n > 2 ? Result.succeed(n * 2) : Result.fail(n)));
 Stream.takeWhileFilter((n) => (n > 2 ? Result.succeed(n + 1) : Result.fail(n)));
 Stream.dropWhileFilter((n) => (n > 2 ? Result.succeed(n) : Result.fail(n)));
