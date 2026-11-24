@@ -19,6 +19,7 @@ import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
 import * as Scope from "effect/Scope";
 import { registerLambdaExtension } from "../Lambda/RuntimeExtension.ts";
+import { loadSecretEnv } from "../Lambda/SecretEnv.ts";
 
 /**
  * Build the sandbox-lifetime layer stack and return the Lambda handler the
@@ -47,6 +48,9 @@ export const bootstrap = async (entrypoint: unknown): Promise<unknown> => {
 
   const entryLayer = entrypointLayer(entrypoint).pipe(
     Layer.provideMerge(stackFromEnv),
+    // Secrets the function's configuration only names, read into
+    // `process.env` before the entrypoint's Construction reads them.
+    Layer.provideMerge(Layer.effectDiscard(loadSecretEnv)),
     Layer.provideMerge(Credentials.fromEnv()),
     Layer.provideMerge(Region.fromEnv()),
     // AWS_ENDPOINT_URL is the LocalStack-standard override injected by local
