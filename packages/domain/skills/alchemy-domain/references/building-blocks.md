@@ -380,10 +380,11 @@ yield* vault.shred(customerId);
 - Provide `Domain.VaultLive` where the model's Layer is built, over a `Domain.KeyStore` (where each subject's key is kept) and a `Domain.KeyWrap` (what is stored of it).
 - Stores: `Domain.HostKeyStore` (the model's own host), `DomainCloudflare.D1KeyStore`, `DomainAWS.DynamoKeyStore`, `DomainGCP.FirestoreKeyStore`, `SqlKeyStore`, `Domain.MemoryKeyStore`.
 - Wraps: `DomainCloudflare.SecretKeyWrap`, `DomainAWS.KmsKeyWrap`, `DomainGCP.KmsKeyWrap`, `Domain.RootKeyWrap`, `Domain.NoKeyWrap`. Any store pairs with any wrap.
+- A KMS wrap calls KMS on every seal and open. `KmsKeyWrap(RootKey, { intermediateKey: { keep: "5 minutes" } })` calls it once per process instead; it puts an intermediate key in memory and drops per-subject KMS logs. Shredding is unchanged.
 - A restored backup of the key store brings shredded keys back: keep its backups off or expiring.
 - Stories run with a test Vault: expect values with `Domain.sealedInTest(Address, subject, value)`, shred with `Story.shred(subject)`.
 
-More: [Crypto-shredding](https://alchemy.run/domain/crypto-shredding), [Choose where the keys are kept](https://alchemy.run/domain/crypto-shredding#choose-where-the-keys-are-kept), [Erasing personal data: Or seal it under a key you can delete](https://alchemy.run/domain/erasing-personal-data#or-seal-it-under-a-key-you-can-delete).
+More: [Crypto-shredding](https://alchemy.run/domain/crypto-shredding), [Choose where the keys are kept](https://alchemy.run/domain/crypto-shredding#choose-where-the-keys-are-kept), [Call KMS less often](https://alchemy.run/domain/crypto-shredding#call-kms-less-often), [Erasing personal data: Or seal it under a key you can delete](https://alchemy.run/domain/erasing-personal-data#or-seal-it-under-a-key-you-can-delete).
 
 ## Compaction
 

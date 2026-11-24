@@ -297,7 +297,7 @@ export const Sealing = Domain.VaultLive.pipe(
 );
 ```
 
-KMS binds each key to its subject with an encryption context, and every seal and open is one `Decrypt` call.
+KMS binds each key to its subject with an encryption context, and every seal and open is one `Decrypt` call. [An intermediate key](#call-kms-less-often) cuts that to one call per process.
 
 ## Keep the keys on Google Cloud
 
@@ -332,6 +332,61 @@ export const Sealing = Domain.VaultLive.pipe(
   ),
 );
 ```
+
+## Call KMS less often
+
+With a KMS wrap, every seal and every open is one call to KMS to unwrap the subject's key. At AWS's price that is about $3 for a million of them, each waits on a network round trip, and they count against the account's KMS request quota.
+
+`intermediateKey` puts one key in between. A process has KMS make an intermediate key, keeps it in memory for `keep`, and wraps each subject's key under it locally.
+
+```typescript title="src/Sealing.ts"
+import * as AWS from "@alchemy.run/aws";
+import * as Domain from "@alchemy.run/domain";
+import * as DomainAWS from "@alchemy.run/domain/AWS";
+import * as Layer from "effect/Layer";
+
+export const Keys = AWS.DynamoDB.Table("VaultKeys", {
+  partitionKey: "subject",
+  attributes: { subject: "S" },
+});
+export const RootKey = AWS.KMS.Key("VaultRootKey");
+
+export const Sealing = Domain.VaultLive.pipe(
+  Layer.provide(
+    Layer.merge(
+      DomainAWS.DynamoKeyStore(Keys),
+      DomainAWS.KmsKeyWrap(RootKey, { intermediateKey: { keep: "5 minutes" } }),
+    ),
+  ),
+  Layer.provide(
+    Layer.mergeAll(
+      AWS.DynamoDB.GetItemHttp,
+      AWS.DynamoDB.PutItemHttp,
+      AWS.DynamoDB.DeleteItemHttp,
+      AWS.KMS.GenerateDataKeyHttp,
+      AWS.KMS.DecryptHttp,
+    ),
+  ),
+);
+```
+
+A process now calls KMS once per intermediate key it meets, not once per subject. What is stored for a subject carries its wrapped intermediate key, so another process opens it with one call and keeps the result too. `DomainGCP.KmsKeyWrap` takes the same option.
+
+Shredding is unchanged. Each subject still has a key and a row of its own, the row is read on every seal and open, and deleting it takes effect at once in every process.
+
+The saving is paid for in three places.
+
+| | Without it | With `intermediateKey` |
+|---|---|---|
+| Calls to KMS | One per seal and per open | One per intermediate key, per process, per `keep` |
+| Keys in the process's memory | A subject's key, while it is used | An intermediate key, for up to `keep` |
+| What a memory dump and a copy of the key store open | Nothing more than that subject | Every unshredded subject wrapped under that intermediate key |
+| What KMS logs | Every access, by subject | One call per intermediate key, with no subject |
+| After KMS access is revoked | The next seal or open fails | A process reads on for up to `keep` |
+
+A shorter `keep` narrows the last three and costs more calls. Leave the option off when you need KMS's log to say whose data was read, or when a key must never be usable outside KMS.
+
+Turning it on or off needs no migration: a key stored either way opens under both.
 
 ## Keep the keys in Postgres
 

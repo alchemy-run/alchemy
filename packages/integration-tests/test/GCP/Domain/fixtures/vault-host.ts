@@ -41,6 +41,12 @@ export default class DomainVaultHost extends GCP.Function<DomainVaultHost>()(
     const kms = yield* vaultOf(
       Layer.merge(DomainGCP.FirestoreKeyStore(Keys), DomainGCP.KmsKeyWrap(RootKey)),
     );
+    const kept = yield* vaultOf(
+      Layer.merge(
+        DomainGCP.FirestoreKeyStore(Keys, { collection: "kept_keys" }),
+        DomainGCP.KmsKeyWrap(RootKey, { intermediateKey: { keep: "5 minutes" } }),
+      ),
+    );
     const root = yield* vaultOf(
       Layer.merge(
         DomainGCP.FirestoreKeyStore(Keys, { collection: "root_keys" }),
@@ -50,6 +56,7 @@ export default class DomainVaultHost extends GCP.Function<DomainVaultHost>()(
     return {
       fetch: serveProbes({
         firestoreKms: runCases("cases-kms").pipe(Effect.provideService(Domain.Vault, kms)),
+        firestoreKmsKept: runCases("cases-kept").pipe(Effect.provideService(Domain.Vault, kept)),
         firestoreRoot: runCases("cases-root").pipe(Effect.provideService(Domain.Vault, root)),
       }),
     };

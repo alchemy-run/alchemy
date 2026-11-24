@@ -1,5 +1,7 @@
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -147,3 +149,97 @@ export const rootKeyWrap = <E>(
     }),
   };
 };
+
+/** How a KMS key wrap keeps an intermediate key. See `DomainAWS.KmsKeyWrap`. */
+export interface IntermediateKeyOptions {
+  /**
+   * How long a process keeps an intermediate key in memory: the one it wraps
+   * new subject keys under, and each one it has unwrapped. A process whose
+   * access to KMS is revoked can still read for this long.
+   */
+  readonly keep: Duration.Input;
+}
+
+const INTERMEDIATE = "i1.";
+
+/** Unwrapped intermediate keys a process holds at most, oldest dropped first. */
+const MAX_KEPT = 1000;
+
+/**
+ * A {@link KeyWrap} that calls a key service once per intermediate key
+ * rather than once per subject. A process makes an intermediate key, has the
+ * service wrap it, and wraps each new subject key under it locally for
+ * `keep`. What is stored for a subject carries the wrapped intermediate key,
+ * so any process opens it with one call to the service, and keeps the
+ * result for `keep`.
+ *
+ * @internal
+ */
+export const intermediateKeyWrap = (options: {
+  readonly keep: Duration.Input;
+  /** A new intermediate key (base64), and what the service wrapped it as (no `.` in it). */
+  readonly make: (subject: string) => Effect.Effect<WrappedKey, VaultError>;
+  /** The intermediate key (base64) inside what the service wrapped. */
+  readonly unwrap: (subject: string, wrapped: string) => Effect.Effect<string, VaultError>;
+  /** Unwrap a key stored before the intermediate key was turned on. */
+  readonly direct: (subject: string, wrapped: string) => Effect.Effect<string, VaultError>;
+}): {
+  readonly make: (subject: string) => Effect.Effect<WrappedKey, VaultError>;
+  readonly unwrap: (subject: string, wrapped: string) => Effect.Effect<string, VaultError>;
+} => {
+  const keep = Duration.toMillis(Duration.fromInputUnsafe(options.keep));
+  // The key this process wraps new subject keys under.
+  let current:
+    | { readonly wrapped: string; readonly key: CryptoKey; readonly until: number }
+    | undefined;
+  // Every intermediate key this process has unwrapped, by what the service wrapped it as.
+  const kept = new Map<string, { readonly key: CryptoKey; readonly until: number }>();
+  const remember = (wrapped: string, key: CryptoKey, until: number) => {
+    kept.delete(wrapped);
+    kept.set(wrapped, { key, until });
+    if (kept.size > MAX_KEPT) kept.delete(kept.keys().next().value!);
+  };
+  const writing = Effect.fn(function* (subject: string) {
+    const now = yield* Clock.currentTimeMillis;
+    if (current !== undefined && current.until > now) return current;
+    const made = yield* options.make(subject);
+    const key = yield* importAes(subject, fromBase64(made.key));
+    current = { wrapped: made.wrapped, key, until: now + keep };
+    remember(made.wrapped, key, now + keep);
+    return current;
+  });
+  const reading = Effect.fn(function* (subject: string, wrapped: string) {
+    const now = yield* Clock.currentTimeMillis;
+    const known = kept.get(wrapped);
+    if (known !== undefined && known.until > now) return known.key;
+    const key = yield* importAes(subject, fromBase64(yield* options.unwrap(subject, wrapped)));
+    remember(wrapped, key, now + keep);
+    return key;
+  });
+  return {
+    make: Effect.fn(function* (subject) {
+      const intermediate = yield* writing(subject);
+      const key = yield* newKey;
+      const sealed = yield* encryptFor(subject, intermediate.key, fromBase64(key));
+      return { key, wrapped: `${INTERMEDIATE}${intermediate.wrapped}.${sealed}` };
+    }),
+    unwrap: Effect.fn(function* (subject, wrapped) {
+      if (!wrapped.startsWith(INTERMEDIATE)) return yield* options.direct(subject, wrapped);
+      const [, intermediate, iv, sealed] = wrapped.split(".");
+      if (intermediate === undefined || iv === undefined || sealed === undefined) {
+        return yield* VaultError.make({ subject, reason: "its key is not a wrapped key" });
+      }
+      const key = yield* decryptFor(subject, yield* reading(subject, intermediate), iv, sealed);
+      if (Option.isNone(key)) {
+        return yield* VaultError.make({
+          subject,
+          reason: "its key does not unwrap under its intermediate key",
+        });
+      }
+      return toBase64(key.value);
+    }),
+  };
+};
+
+/** Whether a stored key was wrapped under an intermediate key. @internal */
+export const isIntermediate = (wrapped: string): boolean => wrapped.startsWith(INTERMEDIATE);

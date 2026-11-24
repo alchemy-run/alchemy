@@ -46,6 +46,12 @@ export default DomainVaultFunction.make(
       "dynamo-kms": yield* vaultOf(
         Layer.merge(DomainAWS.DynamoKeyStore(Keys), DomainAWS.KmsKeyWrap(RootKey)),
       ),
+      "dynamo-kms-kept": yield* vaultOf(
+        Layer.merge(
+          DomainAWS.DynamoKeyStore(Keys),
+          DomainAWS.KmsKeyWrap(RootKey, { intermediateKey: { keep: "5 minutes" } }),
+        ),
+      ),
       "dynamo-root": yield* vaultOf(
         Layer.merge(
           DomainAWS.DynamoKeyStore(Keys),

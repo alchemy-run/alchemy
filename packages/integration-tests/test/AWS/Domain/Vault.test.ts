@@ -74,6 +74,13 @@ describe(
       { timeout: 180_000 },
     );
     test(
+      "keys in DynamoDB, under an intermediate key that KMS wraps",
+      Effect.gen(function* () {
+        expect(yield* cases("dynamo-kms-kept")).toEqual(passed);
+      }),
+      { timeout: 180_000 },
+    );
+    test(
       "keys in DynamoDB, wrapped under a root key",
       Effect.gen(function* () {
         expect(yield* cases("dynamo-root")).toEqual(passed);

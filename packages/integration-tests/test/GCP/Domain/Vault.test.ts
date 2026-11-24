@@ -70,6 +70,13 @@ describe(
       { timeout: 300_000 },
     );
     test(
+      "keys in Firestore, under an intermediate key that Cloud KMS wraps",
+      Effect.gen(function* () {
+        expect(yield* cases("firestoreKmsKept")).toEqual(passed);
+      }),
+      { timeout: 300_000 },
+    );
+    test(
       "keys in Firestore, wrapped under a root key",
       Effect.gen(function* () {
         expect(yield* cases("firestoreRoot")).toEqual(passed);
