@@ -3094,11 +3094,11 @@ const projectionObject = Effect.fn(function* (
     }
   }) as Effect.Effect<void>;
   const callback = yield* makeCallback("domain:projection", () => drain);
-  wake = (at, progress) =>
-    callback
-      .schedule("drain", { at, payload: {}, ...(progress === undefined ? {} : { progress }) })
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides RuntimeContext on every event
-      .pipe(Effect.ignore) as Effect.Effect<void>;
+  wake = (at, progress) => {
+    const options = { at, payload: {}, ...(progress === undefined ? {} : { progress }) };
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides RuntimeContext on every event
+    return callback.schedule("drain", options).pipe(Effect.ignore) as Effect.Effect<void>;
+  };
   /**
    * Accept a delivery into the key's log, once. Callers hold the exclusive
    * section and its transaction; `true` when it was new.
