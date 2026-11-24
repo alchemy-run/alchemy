@@ -9878,6 +9878,28 @@ importers:
         specifier: 'catalog:'
         version: 7.1.0-beta
 
+  packages/coolify:
+    dependencies:
+      '@distilled.cloud/coolify':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/coolify
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.1.0-beta
+
   packages/daytona:
     dependencies:
       '@alchemy.run/docker':
@@ -11229,6 +11251,9 @@ importers:
       '@alchemy.run/convex':
         specifier: workspace:*
         version: link:../convex
+      '@alchemy.run/coolify':
+        specifier: workspace:*
+        version: link:../coolify
       '@alchemy.run/daytona':
         specifier: workspace:*
         version: link:../daytona
@@ -11340,6 +11365,9 @@ importers:
       '@distilled.cloud/convex':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/convex
+      '@distilled.cloud/coolify':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/coolify
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/core

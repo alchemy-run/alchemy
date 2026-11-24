@@ -134,6 +134,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/hetzner/src",
   },
   {
+    srcRoot: "packages/coolify/src",
+    providerPrefix: "Coolify",
+    sourceDisplayPrefix: "packages/coolify/src",
+  },
+  {
     srcRoot: "packages/digitalocean/src",
     providerPrefix: "DigitalOcean",
     sourceDisplayPrefix: "packages/digitalocean/src",
