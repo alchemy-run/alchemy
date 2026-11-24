@@ -180,9 +180,18 @@ own. A `Network` joins any number of models. Each model's theorems hold of all
 of them together, and a run goes through all three.
 -/
 
+/-- What names a wire: not a string, so a wire's id cannot be mistaken for an account's. -/
+structure WireId where
+  payout : String
+deriving DecidableEq, Repr, Lean.ToJson, Lean.FromJson
+
+derive_tokens WireId
+
 aggregate Transfer where
+  id : WireId
+
   command
-    | send (payout account : String) (amount : Nat)
+    | send (wire : WireId) (account : String) (amount : Nat)
         records sent
         rejects alreadySent, tooLarge
 
@@ -218,7 +227,7 @@ def SentOnce (s : Transfer.State) : Prop :=
 theorem sentOnce_kept : Transfer.Keeps SentOnce := by aggregate_rule
 
 theorem everyWireSentOnce (w : Alchemy.World Signature) (reach : Wires.Reachable w)
-    (payout : String) : SentOnce (w.state .Transfer payout) :=
+    (payout : WireId) : SentOnce (w.state .Transfer payout) :=
   Transfer.always (by simp [SentOnce]) sentOnce_kept w reach payout
 
 /-- One step of the wire desk, when nothing is part-way through: an event is taken off the inbox. -/
@@ -244,7 +253,7 @@ theorem comesToRest (w : Alchemy.World Signature) (idle : w.fibers = []) :
 
 /-- So eventually the desk is at rest with every wire sent at most once. -/
 theorem eventuallyEveryWireSentOnce (w : Alchemy.World Signature) (reach : Wires.Reachable w)
-    (idle : w.fibers = []) (payout : String) :
+    (idle : w.fibers = []) (payout : WireId) :
     Wires.Eventually w fun rested => SentOnce (rested.state .Transfer payout) :=
   ⟨w.inbox.length, comesToRest w idle,
     everyWireSentOnce _ (Wires.settle_reachable _ w reach) payout⟩
@@ -269,7 +278,7 @@ def institution : Network Part part where
     | .bank, .screen account amount =>
       some ⟨.compliance, ⟨.Watch, .system, .assess account amount⟩⟩
     | .bank, .wire payout account amount =>
-      some ⟨.wires, ⟨.Transfer, (), .send payout account amount⟩⟩
+      some ⟨.wires, ⟨.Transfer, (), .send ⟨payout⟩ account amount⟩⟩
     | .compliance, call => nomatch call
     | .wires, call => nomatch call
   reply
@@ -290,7 +299,7 @@ looked, and every wire was sent at most once. Each was proved of one model
 alone; none is proved again.
 -/
 theorem allThreeAreSound (w : institution.Worlds) (reach : institution.Reachable w)
-    (account payout : String) :
+    (account : String) (payout : WireId) :
     Bank.Balanced ((w .bank).state .Account account) ∧
       Bank.Conserved (w .bank).toRecorded ∧
       Compliance.FlagsAreAssessments ((w .compliance).state .Watch account) ∧
@@ -308,7 +317,7 @@ def aPayout : institution.Worlds := institution.run [
 
 example : ((aPayout .bank).state .Account "a-1").balance = 300 ∧
     (aPayout .bank).sagas (.Payout, "p-1") = .completed ∧
-    (aPayout .wires).state .Transfer "p-1" = { sent := 200, count := 1 } := by
+    (aPayout .wires).state .Transfer ⟨"p-1"⟩ = { sent := 200, count := 1 } := by
   native_decide
 
 /--
@@ -328,7 +337,7 @@ example : ((aPayoutTooLarge .bank).state .Account "a-1").balance = 120000 ∧
     ((aPayoutTooLarge .bank).state .Account "a-1").status = .frozen "over the reporting threshold" ∧
     (aPayoutTooLarge .bank).sagas (.Payout, "p-1") = .failed (.Payout .bounced) ∧
     (aPayoutTooLarge .compliance).state .Watch "a-1" = { assessed := 4, flagged := 1 } ∧
-    (aPayoutTooLarge .wires).state .Transfer "p-1" = {} := by
+    (aPayoutTooLarge .wires).state .Transfer ⟨"p-1"⟩ = {} := by
   native_decide
 
 /--
@@ -339,11 +348,11 @@ theorem thePayoutRunIsSound :
     Bank.Balanced ((aPayout .bank).state .Account "a-1") ∧
       Bank.Conserved (aPayout .bank).toRecorded ∧
       Compliance.FlagsAreAssessments ((aPayout .compliance).state .Watch "a-1") ∧
-      Wires.SentOnce ((aPayout .wires).state .Transfer "p-1") :=
+      Wires.SentOnce ((aPayout .wires).state .Transfer ⟨"p-1"⟩) :=
   allThreeAreSound _
     (institution.run_reachable [
         ⟨.bank, ⟨.Account, (), .open "a-1" "Sam"⟩⟩,
         ⟨.bank, ⟨.Account, (), .deposit "a-1" 500⟩⟩,
         ⟨.bank, ⟨.Account, (), .requestPayout "a-1" "p-1" 200⟩⟩]
       (by intro command _; obtain ⟨part, _⟩ := command; cases part <;> trivial))
-    "a-1" "p-1"
+    "a-1" ⟨"p-1"⟩

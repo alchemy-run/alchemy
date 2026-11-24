@@ -212,10 +212,10 @@ namespace Alchemy
 variable {g : Aggregates}
 
 /-- A view with a value for each key, folded over the events that are about that key. -/
-abbrev View.keyed {State : Type} [DecidableEq State] (name : String) (initial : State)
-    (key : Emitted g → Option String) (step : State → Emitted g → State) : View g where
+abbrev View.keyed {Key State : Type} [DecidableEq Key] [DecidableEq State] (name : String)
+    (initial : State) (key : Emitted g → Option Key) (step : State → Emitted g → State) : View g where
   name := name
-  Key := String
+  Key := Key
   State := State
   Event := Empty
   Actor := Unit
@@ -226,8 +226,8 @@ abbrev View.keyed {State : Type} [DecidableEq State] (name : String) (initial : 
     | some k => [{ key := k, evolve := fun state => step state event }]
     | none => []
 
-theorem View.keyed_go {State : Type} [DecidableEq State] (name : String) (initial : State)
-    (key : Emitted g → Option String) (step : State → Emitted g → State) (k : String)
+theorem View.keyed_go {Key State : Type} [DecidableEq Key] [DecidableEq State] (name : String)
+    (initial : State) (key : Emitted g → Option Key) (step : State → Emitted g → State) (k : Key)
     (history log : List (Emitted g)) (state : State) :
     (View.keyed name initial key step).go k history log state
       = log.foldl (fun state event => if key event = some k then step state event else state) state := by
@@ -240,8 +240,8 @@ theorem View.keyed_go {State : Type} [DecidableEq State] (name : String) (initia
     congr 1
     show ((match key event with
       | some k => [({ key := k, evolve := fun state => step state event } :
-          View.Update String State Empty)]
-      | none => []).foldl (fun s (u : View.Update String State Empty) =>
+          View.Update Key State Empty)]
+      | none => []).foldl (fun s (u : View.Update Key State Empty) =>
         if u.key = k then u.evolve s else s) state) = _
     cases found : key event with
     | none => simp
@@ -251,9 +251,9 @@ theorem View.keyed_go {State : Type} [DecidableEq State] (name : String) (initia
       · simp [same]
 
 /-- A keyed view at a key is exactly its step folded over the events about that key. -/
-theorem View.keyed_exact {State : Type} [DecidableEq State] (name : String) (initial : State)
-    (key : Emitted g → Option String) (step : State → Emitted g → State) (log : List (Emitted g))
-    (k : String) :
+theorem View.keyed_exact {Key State : Type} [DecidableEq Key] [DecidableEq State] (name : String)
+    (initial : State) (key : Emitted g → Option Key) (step : State → Emitted g → State)
+    (log : List (Emitted g)) (k : Key) :
     (View.keyed name initial key step).stateAt log k
       = log.foldl (fun state event => if key event = some k then step state event else state)
           initial :=
@@ -266,17 +266,17 @@ namespace Alchemy
 variable {g : Aggregates}
 
 /-- A stream that appends entries for each event by itself. -/
-abbrev Stream.each {Entry : Type} [DecidableEq Entry] (name : String)
-    (entries : Emitted g → List (String × Entry)) : Stream g where
+abbrev Stream.each {Key Entry : Type} [DecidableEq Key] [DecidableEq Entry] (name : String)
+    (entries : Emitted g → List (Key × Entry)) : Stream g where
   name := name
-  Key := String
+  Key := Key
   Entry := Entry
   Actor := Unit
   Rejection := Empty
   append := fun _ event => entries event
 
-theorem Stream.each_go {Entry : Type} [DecidableEq Entry] (name : String)
-    (entries : Emitted g → List (String × Entry)) (history log : List (Emitted g)) :
+theorem Stream.each_go {Key Entry : Type} [DecidableEq Key] [DecidableEq Entry] (name : String)
+    (entries : Emitted g → List (Key × Entry)) (history log : List (Emitted g)) :
     (Stream.each name entries).go history log = log.flatMap entries := by
   induction log generalizing history with
   | nil => rfl
@@ -286,8 +286,8 @@ theorem Stream.each_go {Entry : Type} [DecidableEq Entry] (name : String)
     rfl
 
 /-- Such a stream holds, at a key, exactly the entries its events gave that key, in order. -/
-theorem Stream.each_exact {Entry : Type} [DecidableEq Entry] (name : String)
-    (entries : Emitted g → List (String × Entry)) (log : List (Emitted g)) (key : String) :
+theorem Stream.each_exact {Key Entry : Type} [DecidableEq Key] [DecidableEq Entry] (name : String)
+    (entries : Emitted g → List (Key × Entry)) (log : List (Emitted g)) (key : Key) :
     (Stream.each name entries).entries log key
       = (log.flatMap entries).filterMap fun (k, entry) => if k = key then some entry else none := by
   simp [Stream.entries, Stream.each_go]

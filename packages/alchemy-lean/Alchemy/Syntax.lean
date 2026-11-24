@@ -54,6 +54,8 @@ syntax &"decide" modelAlt+ : aggregateItem
 syntax &"evolve" modelAlt+ : aggregateItem
 /-- What an accepted command answers its caller, from the state it left: `| state, command => …`. -/
 syntax &"reply" " : " term modelAlt+ : aggregateItem
+/-- What names an instance, if not a string. Each command's first field is of this type. -/
+syntax &"id" " : " term : aggregateItem
 /--
 Who sends its commands. With it, `decide` is given the actor first:
 `| actor, state, command => …`. A policy sends as the type's default.
@@ -107,6 +109,10 @@ macro_rules
     let mut actor : Option Term := none
     for item in items do
       if let `(aggregateItem| actor : $type:term) := item then actor := some type
+    let mut idType : Term ← `(String)
+    for item in items do
+      if let `(aggregateItem| id : $type:term) := item then idType := type
+    commands := commands.push (← `(command| abbrev $(n `Id) : Type := $idType))
     let actorType : Term ← match actor with
       | some type => pure type
       | none => `(Unit)
@@ -118,6 +124,7 @@ macro_rules
     for item in items do
       match item with
       | `(aggregateItem| actor : $_) => pure ()
+      | `(aggregateItem| id : $_) => pure ()
       | `(aggregateItem| command $cases*) =>
         let mut plain : Array (TSyntax ``caseOf) := #[]
         for case in cases do
@@ -174,7 +181,7 @@ macro_rules
         let keyAlts : Array (TSyntax ``Term.matchAlt) := keyAlts.map fun alt => ⟨alt.raw⟩
         commands := commands.push (← `(command|
           /-- The instance a command is for: its first field. -/
-          def $(n `key) (command : $(n `Command)) : String := match command with $keyAlts:matchAlt*))
+          def $(n `key) (command : $(n `Command)) : $(n `Id) := match command with $keyAlts:matchAlt*))
       | `(aggregateItem| event $cases*) =>
         let (ctors, _) ← casesOf (n `Event) cases
         commands := commands.push (← `(command|
@@ -240,7 +247,7 @@ macro_rules
       /-- The aggregate: its types and functions, tied together. -/
       abbrev $a:ident : Alchemy.Aggregate where
         name := $(Syntax.mkStrLit (toString a.getId))
-        Id := String
+        Id := $(r `Id)
         State := $(r `State)
         Command := $(r `Command)
         Event := $(r `Event)
@@ -358,7 +365,7 @@ macro_rules
         later := later.push (← lenient <| ← `(command|
           def $p:ident : Alchemy.Policy $signature :=
             Alchemy.Policy.on $(text p) $(under name a.getId)
-              fun (id : String) (event : $(rooted a `Event)) =>
+              fun (id : $(rooted a `Id)) (event : $(rooted a `Event)) =>
                 match id, event with $alts:matchAlt*))
       | `(modelItem| view $v:ident on $a:ident : $type := $initial:term $alts:modelAlt*) =>
         views := views.push v
@@ -389,7 +396,7 @@ macro_rules
             | _ => state))
         later := later.push (← lenient <| ← `(command|
           /-- The instance an event is about, if it is one of this aggregate's. -/
-          def $keyOf:ident : Alchemy.Emitted $aggregatesId → Option String
+          def $keyOf:ident : Alchemy.Emitted $aggregatesId → Option $(rooted a `Id)
             | ⟨$(under name a.getId), id, _, _, _⟩ => some id
             | _ => none))
         later := later.push (← `(command|
@@ -397,7 +404,8 @@ macro_rules
             Alchemy.View.keyed $(text v) $initial $keyOf $step))
         later := later.push (← `(command|
           /-- The view at an instance is exactly its step folded over that instance's events. -/
-          theorem $(under v `exact):ident (log : List (Alchemy.Emitted $aggregatesId)) (id : String) :
+          theorem $(under v `exact):ident (log : List (Alchemy.Emitted $aggregatesId))
+              (id : $(rooted a `Id)) :
               Alchemy.View.stateAt $v log id
                 = log.foldl (fun state event => if $keyOf event = some id then $step state event
                     else state) $initial :=
@@ -409,7 +417,7 @@ macro_rules
         later := later.push (← lenient <| ← `(command|
           def $rows:ident : Alchemy.Emitted $aggregatesId → List $row
             | ⟨$(under name a.getId), id, event, _, _⟩ =>
-              match (id : String), (event : $(rooted a `Event)) with $alts:matchAlt*
+              match (id : $(rooted a `Id)), (event : $(rooted a `Event)) with $alts:matchAlt*
             | _ => []))
         later := later.push (← `(command|
           abbrev $p:ident : Alchemy.Projection $aggregatesId :=
@@ -424,16 +432,17 @@ macro_rules
         let entries := under v `appended
         let alts ← withFallback alts (← `(Term.matchAltExpr| | _, _ => []))
         later := later.push (← lenient <| ← `(command|
-          def $entries:ident : Alchemy.Emitted $aggregatesId → List (String × $entry)
+          def $entries:ident : Alchemy.Emitted $aggregatesId → List ($(rooted a `Id) × $entry)
             | ⟨$(under name a.getId), id, event, _, _⟩ =>
-              (match (id : String), (event : $(rooted a `Event)) with $alts:matchAlt*).map
+              (match (id : $(rooted a `Id)), (event : $(rooted a `Event)) with $alts:matchAlt*).map
                 fun entry => (id, entry)
             | _ => []))
         later := later.push (← `(command|
           abbrev $v:ident : Alchemy.Stream $aggregatesId := Alchemy.Stream.each $(text v) $entries))
         later := later.push (← `(command|
           /-- The stream at an instance holds exactly the entries its events gave it, in order. -/
-          theorem $(under v `exact):ident (log : List (Alchemy.Emitted $aggregatesId)) (id : String) :
+          theorem $(under v `exact):ident (log : List (Alchemy.Emitted $aggregatesId))
+              (id : $(rooted a `Id)) :
               Alchemy.Stream.entries $v log id
                 = (log.flatMap $entries).filterMap fun (k, entry) => if k = id then some entry else none :=
             Alchemy.Stream.each_exact _ _ log id))
@@ -614,12 +623,12 @@ macro_rules
           Alchemy.Program.undoWith fun _ => ⟨$(under name a.getId), actor, command⟩))
       commands := commands.push (← `(command|
         /-- An event to record on an instance of this aggregate, in a decision. -/
-        def $(under a `record):ident (id : String) (event : $(rooted a `Event)) :
+        def $(under a `record):ident (id : $(rooted a `Id)) (event : $(rooted a `Event)) :
             Alchemy.Record $aggregatesId :=
           ⟨$(under name a.getId), id, event⟩))
       commands := commands.push (← `(command|
         /-- The state of an instance of this aggregate, in a decision. -/
-        def $(under a `of):ident (states : Alchemy.States $aggregatesId) (id : String) :
+        def $(under a `of):ident (states : Alchemy.States $aggregatesId) (id : $(rooted a `Id)) :
             $(rooted a `State) :=
           states $(under name a.getId) id))
     commands := commands ++ later
@@ -701,7 +710,7 @@ macro_rules
             (initially : P (Alchemy.Aggregate.initial $(rooted a)))
             (kept : Alchemy.Aggregate.Keeps $(rooted a) P)
             (w : Alchemy.World $signature) (reach : Alchemy.Model.Reachable $(rooted m) w)
-            (id : String)
+            (id : $(rooted a `Id))
             (decided : ∀ d ∈ Alchemy.Model.decisions $(rooted m),
               ∀ (r : Alchemy.Recorded $aggregatesId) (ctx : Alchemy.Context d.Actor) c,
                 (∀ id, P (r.state $here id)) → ∀ id, P ((r.decide d ctx c).state $here id) := by
@@ -713,7 +722,7 @@ macro_rules
         theorem $(mkIdent (a.getId ++ `deployed)) {P : $(rooted a `State) → Prop}
             (initially : P (Alchemy.Aggregate.initial $(rooted a)))
             (kept : Alchemy.Aggregate.Keeps $(rooted a) P)
-            (journal : List Alchemy.Cloud.Journal.Line) (id : String)
+            (journal : List Alchemy.Cloud.Journal.Line) (id : $(rooted a `Id))
             (decided : ∀ d ∈ Alchemy.Model.decisions $(rooted m),
               ∀ (r : Alchemy.Recorded $aggregatesId) (ctx : Alchemy.Context d.Actor) c,
                 (∀ id, P (r.state $here id)) → ∀ id, P ((r.decide d ctx c).state $here id) := by
