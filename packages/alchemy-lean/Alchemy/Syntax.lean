@@ -1,6 +1,7 @@
 import Lean
 import Alchemy.Attr
 import Alchemy.Model
+import Alchemy.Reads
 import Alchemy.Cloud.Hosted
 import Alchemy.Codec
 
@@ -656,6 +657,75 @@ macro_rules
         saga := $sagaRun))
     -- What callers send, how the model is served, and each aggregate's rules lifted to the model.
     commands := commands.push (← `(command| namespace $m))
+    -- The model as it is stored: its policies and views look at an event as it is, so each
+    -- can be kept up one delivered event at a time.
+    let plain := mkIdent `plain
+    if policies.isEmpty then
+      commands := commands.push (← `(command|
+        /-- Every policy reacts to an event as it is. -/
+        theorem $plain : Alchemy.Model.Local $(rooted m) := by
+          intro p mem; cases mem))
+    else
+      commands := commands.push (← `(command|
+        /-- Every policy reacts to an event as it is. -/
+        theorem $plain : Alchemy.Model.Local $(rooted m) := by
+          intro p mem history e
+          simp only [List.mem_cons, List.not_mem_nil, or_false] at mem
+          repeat' (first | (cases mem; done) | (rcases mem with h | mem; subst h) | subst mem)
+          all_goals rfl))
+    let readsId := mkIdent `reads
+    let mut readSide : Term ← `(Alchemy.ReadSide.none $aggregatesId)
+    for p in projections.reverse do
+      readSide ← `(Alchemy.ReadSide.both (Alchemy.Projection.reads $p) $readSide)
+    for v in views.reverse do
+      readSide ← `(Alchemy.ReadSide.both (Alchemy.View.reads $v) $readSide)
+    commands := commands.push (← `(command|
+      /-- What is read from the model, as it is stored: each view's state and each table's rows. -/
+      def $readsId : Alchemy.ReadSide $aggregatesId := $readSide))
+    let mut place : Term ← `(stored)
+    let localTactic ← `(tactic|
+      (intro history e; obtain ⟨n, id, event, seq, time⟩ := e; cases n <;> rfl))
+    for v in views do
+      commands := commands.push (← `(command|
+        /-- The view looks at an event as it is. -/
+        theorem $(under v `plain):ident : Alchemy.View.Local $v := by $localTactic:tactic))
+      commands := commands.push (← `(command|
+        /-- The view as it is stored. -/
+        def $(under v `held):ident (stored : Alchemy.ReadSide.State $readsId) :
+            Alchemy.ReadSide.State (Alchemy.View.reads $v) := ($place).1))
+      commands := commands.push (← `(command|
+        /-- The stored view, after every event, is the view the model computes from the log. -/
+        theorem $(under v `stored):ident (log : List (Alchemy.Emitted $aggregatesId))
+            (key : Alchemy.View.Key $v) :
+            $(under v `held) ((log.map Alchemy.Emitted.unplaced).foldl
+                (Alchemy.ReadSide.apply $readsId) (Alchemy.ReadSide.initial $readsId)) key
+              = Alchemy.View.stateAt $v log key := by
+          simp only [$readsId:ident, Alchemy.ReadSide.both_fold, $(under v `held):ident]
+          exact Alchemy.View.reads_exact _ $(under v `plain) log key))
+      place ← `(($place).2)
+    for p in projections do
+      commands := commands.push (← `(command|
+        /-- The table's rows for an event depend on that event alone. -/
+        theorem $(under p `plain):ident : Alchemy.Projection.Local $p := by $localTactic:tactic))
+      commands := commands.push (← `(command|
+        /-- The table as it is stored. -/
+        def $(under p `held):ident (stored : Alchemy.ReadSide.State $readsId) :
+            Alchemy.ReadSide.State (Alchemy.Projection.reads $p) := ($place).1))
+      commands := commands.push (← `(command|
+        /-- The stored table, after every event, is the table the model computes from the log. -/
+        theorem $(under p `stored):ident (log : List (Alchemy.Emitted $aggregatesId)) :
+            $(under p `held) ((log.map Alchemy.Emitted.unplaced).foldl
+                (Alchemy.ReadSide.apply $readsId) (Alchemy.ReadSide.initial $readsId))
+              = Alchemy.Projection.table $p log := by
+          simp only [$readsId:ident, Alchemy.ReadSide.both_fold, $(under p `held):ident]
+          exact Alchemy.Projection.reads_exact _ $(under p `plain) log))
+      place ← `(($place).2)
+    commands := commands.push (← `(command|
+      /-- The model run on services: the same engine, wherever its state is kept. -/
+      abbrev $(mkIdent `Stored) (μ : Type → Type) := Alchemy.Engine μ $(rooted m) $readsId))
+    commands := commands.push (← `(command|
+      /-- Everything the model asks of its host. -/
+      abbrev $(mkIdent `Services) (μ : Type → Type) := Alchemy.Services μ $signature $readsId))
     let input := mkIdent `Input
     let inputCtors ← aggregates.mapM fun a =>
       `(Command.ctor| | $a:ident (command : $(rooted a `Command))
