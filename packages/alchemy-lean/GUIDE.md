@@ -111,7 +111,7 @@ A model joins aggregates to each other and to the outside world.
 ```lean
 model Shop where
   aggregate Order
-  aggregate Shipment
+  internal aggregate Shipment
 
   call charge (order : String) (amount : Nat) : Charge
   call ship (order item : String) : Unit
@@ -135,7 +135,7 @@ model Shop where
     | id, .scheduled item => [(id, item)]
 ```
 
-**Reading it.** A `call` names something outside the model and what it answers, not how. A `policy` is "whenever this event is recorded, do that". `do` starts a sequence of steps, and `←` runs a step and takes its result, like `await`. A `view` is a value kept up to date from events; a `projection` writes rows.
+**Reading it.** An `internal aggregate` takes commands only from the model's own policies, never from a caller. A `call` names something outside the model and what it answers, not how. A `policy` is "whenever this event is recorded, do that". `do` starts a sequence of steps, and `←` runs a step and takes its result, like `await`. A `view` is a value kept up to date from events; a `projection` writes rows.
 
 **What you get.** The invariant of step 3 holds across the whole model, and of the model as a function hosts it, in one line each: any callers, any gateway answer, any delivery order, any event delivered twice.
 
@@ -149,7 +149,25 @@ theorem deployedOrdersChargedOnce (journal : List Journal.Line) (id : String) :
   Order.deployed (by simp [ChargedOnce]) chargedOnce journal id
 ```
 
-## 6. Prove a whole flow
+## 6. Say what its history must look like
+
+Some rules are about the order of what happened, not one state.
+
+```lean
+theorem paymentNeedsAPlacedOrder :
+    Order.Precedes Order.isPlaced Order.isPaid (fun s => s.status ≠ .new) := by
+  history_rule
+
+theorem nothingShipsUnlessPaid (w : Alchemy.World Signature) (reach : Shop.Reachable w) :
+    Model.Backed isShipment paidFor w.log := by
+  caused_by reach
+```
+
+**Reading it.** The first is about one order: a payment is only recorded on an order that shows it was placed. `history_rule` checks each command. The second crosses aggregates: every shipment recorded has a payment recorded for the same order. It is true because `Shipment` is `internal`, so only a policy schedules one, and `caused_by` walks every policy to check which.
+
+**What you get.** Both hold in every world the shop can reach. `Order.tallied` does the same for quantities: what an order was charged is the sum of the payments it recorded.
+
+## 7. Prove a whole flow
 
 A script of what happens, and a claim about where things end up.
 
@@ -175,7 +193,7 @@ comes_to_rest Shop
 
 **Reading it.** The command gives every event, command and saga a weight so that each step lowers the total, then states `Shop.comesToRest`. If some reaction feeds itself, no weights exist and the line fails.
 
-## 7. Show one concrete case: a story
+## 8. Show one concrete case: a story
 
 The same thing with real values, so a person can read it and check it is what they meant.
 
@@ -197,7 +215,29 @@ example : Shop.passes aKettle = true := by decide
 
 **Reading it.** `def` names the story so it can be told again later. `example` is a theorem with no name. `by decide` proves it by running it, which works because nothing is unknown. A theorem says it always holds; a story shows what "it" is.
 
-## 8. Put it on infrastructure
+## 9. Keep it anywhere
+
+The model does not say where an order's state is kept. A host gives it services, and the same engine runs on any of them.
+
+```lean
+def inMemory : Shop.Stored (StateM (Held Signature reads)) where
+  services := InMemory.services _ _ fun
+    | .charge order amount => sandboxCharge order amount
+    | .ship _ _ => ()
+```
+
+**Reading it.** `Shop.Stored μ` is the shop's engine on services that run in `μ`. `InMemory.services` is one set: every store is a value in memory, and the function says what the gateway and the warehouse answer. The engine loads one order, decides, and commits the state the events leave.
+
+**What you get.** One theorem for every set of services that keep their laws: the stored orders satisfy the rule of step 3.
+
+```lean
+theorem storedOrdersChargedOnce (shop : Shop.Stored μ) (lawful : shop.services.Lawful acts held sound)
+    {fresh now : S} (ok : sound fresh) (empty : held fresh = Held.start _ _)
+    (ran : shop.Runs acts fresh now) (id : String) :
+    ChargedOnce ((held now).state .Order id) :=
+```
+
+## 10. Put it on infrastructure
 
 A stack declares resources. A function calls what it needs, and its permissions are worked out from those calls.
 
@@ -233,7 +273,7 @@ def ShopStack : Stack Kind Outputs where
 
 **Reading it.** `def name (inputs) : Type := body` defines a function, and `fun x => …` is an anonymous one. `effect def` defines a function whose permissions are read off its body, so nobody lists them. `theShop` hosts the model: its history is a journal in the bucket, and it says who answers `charge` and `ship`. `SQS.consume` registers the function as the queue's consumer.
 
-## 9. Prove who can touch what
+## 11. Prove who can touch what
 
 Take the bucket in this stack. It holds two things with very different stakes.
 
@@ -302,13 +342,13 @@ $ lake exe shop graph prod --why
                  ← Shop.lean:323  SQS.consume shipments fun shipment => do match shipment.s…
 ```
 
-The domain's story also runs against the stack. It is step 7 again, but each command goes in through the Api, and the gateway and the queue answer the model's calls. This is what shows the wiring does what the model says.
+The domain's story also runs against the stack. It is step 8 again, but each command goes in through the Api, and the gateway and the queue answer the model's calls. This is what shows the wiring does what the model says.
 
 ```lean
 example : prod.tells deployed aKettle = true := by native_decide
 ```
 
-## 10. Run it
+## 12. Run it
 
 ```sh
 curl https://elan.lean-lang.org/elan-init.sh -sSf | sh && source ~/.elan/env

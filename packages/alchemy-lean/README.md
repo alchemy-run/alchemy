@@ -383,6 +383,115 @@ comes_to_rest Bank
 example : ranking.event .Account (.payoutRequested "p-1" 200) = 21 := rfl
 ```
 
+## History
+
+Some rules tie a state to the events its instance recorded. Each is proved of the aggregate, one command at a time, and holds of every instance in every world the model can reach.
+
+A quantity that is the sum of what was recorded:
+
+```lean
+def Order.worth : Order.Event → Int
+  | .paid _ _ amount => amount
+  | _ => 0
+
+theorem chargesAreTallied : Order.Tallies (fun s => s.charged) Order.worth := by
+  history_rule
+
+theorem chargedIsWhatWasPaid (w : Alchemy.World Signature) (reach : Shop.Reachable w) (id : String) :
+    ((w.state .Order id).charged : Int)
+      = ((w.toRecorded.eventsAt .Order id).map Order.worth).sum := by
+  simpa using Order.tallied chargesAreTallied w reach id
+```
+
+An event that is only recorded after another, on the same instance:
+
+```lean
+theorem paymentNeedsAPlacedOrder :
+    Order.Precedes Order.isPlaced Order.isPaid (fun s => s.status ≠ .new) := by
+  history_rule
+
+theorem noOrderIsPaidBeforeItIsPlaced (w : Alchemy.World Signature) (reach : Shop.Reachable w)
+    (id : String) :
+    Aggregate.Follows Order.isPlaced Order.isPaid (w.toRecorded.eventsAt .Order id) :=
+  Order.follows paymentNeedsAPlacedOrder w reach id
+```
+
+`Aggregate.Commutes.replay_perm` says that when commands commute, any order of delivery leaves the same state, and `Aggregate.Idempotent.replay_again` that a command delivered twice leaves what it leaves once.
+
+## Across aggregates
+
+An `internal aggregate` takes no commands from callers: only the model's policies and sagas reach it.
+
+```lean
+model Shop where
+  aggregate Order
+  internal aggregate Shipment
+```
+
+That makes "nothing ships unless it was paid" true, and `caused_by` proves it by walking every policy's reaction to every event.
+
+```lean
+def isShipment : Emitted Aggregates → Prop
+  | ⟨.Shipment, _, _, _, _⟩ => True
+  | _ => False
+
+def paidFor : Emitted Aggregates → Emitted Aggregates → Prop
+  | ⟨.Shipment, id, _, _, _⟩, ⟨.Order, id', .paid .., _, _⟩ => id = id'
+  | _, _ => False
+
+theorem nothingShipsUnlessPaid (w : Alchemy.World Signature) (reach : Shop.Reachable w) :
+    Model.Backed isShipment paidFor w.log := by
+  caused_by reach
+```
+
+## Kept in stores
+
+A model says nothing about where its state is kept. `Shop.Services` is what it asks of a host: a store for its aggregates, delivery of what they record, its calls, the clock. The engine is written once against them. It loads an instance, decides, and commits the state the events leave; it replays nothing.
+
+```lean
+def inMemory : Shop.Stored (StateM (Held Signature reads)) where
+  services := InMemory.services _ _ fun
+    | .charge order amount => sandboxCharge order amount
+    | .ship _ _ => ()
+```
+
+Each service has a law. For any services that keep theirs, whatever the host is sent, what is stored stands for a world the model can reach. So a rule proved of the model holds of the stored state, wherever that is.
+
+```lean
+theorem storedOrdersChargedOnce (shop : Shop.Stored μ) (lawful : shop.services.Lawful acts held sound)
+    {fresh now : S} (ok : sound fresh) (empty : held fresh = Held.start _ _)
+    (ran : shop.Runs acts fresh now) (id : String) :
+    ChargedOnce ((held now).state .Order id) :=
+```
+
+Views are stored as their state, changed once per delivered event, and are still exactly the view of everything recorded.
+
+```lean
+theorem storedRevenueIsExact (shop : Shop.Stored μ) (lawful : shop.services.Lawful acts held sound)
+    {fresh now : S} (ok : sound fresh) (empty : held fresh = Held.start _ _)
+    (ran : shop.Runs acts fresh now) (delivered : (held now).pending = []) :
+    ∃ w, Shop.Reachable w ∧ Revenue.held (held now).read () = Revenue.stateAt w.log () := by
+```
+
+## Services and Layers
+
+Code is written against a service, and a Layer says how the service is built. A Layer can ask for what it is built from, so two services share one dependency, provided once where the application is wired.
+
+```lean
+def JobIndexOnS3 (bucket : Bucket) [Uses In (S3.GetObject.Client bucket ["jobs"])] :
+    Layer In JobIndex :=
+  .make do
+    let objects ← S3.GetObject bucket ["jobs"]
+    return { has := fun id => do
+      match ← (objects.call id).result with
+      | .ok _ => return true
+      | .error (_ : S3.GetObjectError) => return false }
+
+def JobServices (bucket : Bucket) : Layer Nothing (Both JobStorage JobIndex) :=
+  (JobStorageOnS3 bucket ++ JobIndexOnS3 bucket).provide
+    (S3.GetObjectLive bucket ["jobs"] ++ S3.PutObjectLive bucket ["jobs"])
+```
+
 ## A stack
 
 Resources and functions are steps of the stack's block.
@@ -639,3 +748,6 @@ In the editor, `#eval` shows any of it without running a program.
 
 - Stacks run against a cloud held in memory. Nothing deploys to a real account.
 - A host handles one request at a time, by design.
+- The engine on stores has services held in memory only. Stores on S3, DynamoDB or a Durable Object are not written, and the stack still hosts the shop through its journal.
+- The engine on stores runs commands, policies, sagas, views and tables. Decisions, streams and queries are only in the model's own engine.
+- What is part-way through (a saga waiting, a call not yet answered) is kept as a value, which a real store cannot hold: it needs a journal per saga.
