@@ -168,6 +168,7 @@ syntax (name := helperCommand) (docComment)? "helper " ident bracketedBinder* " 
 @[command_elab helperCommand] def elabHelper : CommandElab := fun stx => do
   let `($[$doc:docComment]? helper $name:ident $binders* : $type := $body) := stx | throwUnsupportedSyntax
   let declName := (← getCurrNamespace) ++ name.getId
+  let needsClass ← IO.mkRef (none : Option (Array (TSyntax ``Parser.Term.bracketedBinder) × Array (Ident × Term) × Array Ident))
   runTermElabM fun _ => do
     elabBinders binders fun params => do
       -- The role is the parameter the result's type runs under.
@@ -211,6 +212,18 @@ syntax (name := helperCommand) (docComment)? "helper " ident bracketedBinder* " 
           addAndCompile <| .defnDecl {
             name := declName, levelParams := [], type := declType, value
             hints := .abbrev, safety := .safe }
+          -- What the helper needs, as one requirement a theorem about it can name.
+          let used := params.filter fun param =>
+            param == role || needs.any fun need => need.containsFVar param.fvarId!
+          let binders ← used.mapM fun param => do
+            let name := mkIdent (← param.fvarId!.getUserName)
+            let type ← PrettyPrinter.delab (← inferType param)
+            `(bracketedBinder| ($name : $type))
+          let fields ← (List.range needs.size).toArray.mapM fun i => do
+            let has ← PrettyPrinter.delab (← mkAppM ``Alchemy.Cloud.Has #[role, needs[i]!])
+            pure (mkIdent (Name.mkSimple s!"grant{i}"), has)
+          let arguments ← used.mapM fun param => do pure (mkIdent (← param.fvarId!.getUserName))
+          needsClass.set (some (binders, fields, arguments))
           let mut sites : Array String := #[]
           for need in needs do
             let mut site := ""
@@ -221,6 +234,23 @@ syntax (name := helperCommand) (docComment)? "helper " ident bracketedBinder* " 
           modifyEnv fun env => helperSites.addEntry env (declName, sites)
           if let some doc := doc then addDocString declName (mkNullNode binders) doc
       go 0 #[]
+  -- `name.Needs`: everything the helper needs, as one requirement.
+  if let some (classBinders, fields, arguments) ← needsClass.get then
+    let needsId := mkIdentFrom name (name.getId ++ `Needs)
+    let names := fields.map (·.1)
+    let types := fields.map (·.2)
+    elabCommand (← `(command|
+      class $needsId:ident $classBinders* : Prop where
+        $[$names:ident : $types]*))
+    for field in names do
+      let projection := mkIdentFrom name (name.getId ++ `Needs ++ field.getId)
+      elabCommand (← `(command| attribute [instance] $projection))
+    -- And the other way: a role that has each grant has the requirement.
+    let found ← names.mapM fun _ => `(inferInstance)
+    let given ← types.mapM fun type => `(bracketedBinder| [$type])
+    let allBinders := classBinders ++ given
+    elabCommand (← `(command|
+      instance $allBinders:bracketedBinder* : $needsId $arguments* := ⟨$found,*⟩))
 where
   lit := "{"
   rit := "}"

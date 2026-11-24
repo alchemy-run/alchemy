@@ -145,8 +145,7 @@ theorem whoCallsWhom :
 Given whatever mail is stored, when a message is consumed, then it is stored
 under the next number: one more than the mail already there.
 -/
-theorem aConsumedMessageIsStoredNext {role : Access Kind}
-    [Has role (.on mail BucketOp.read)] [Has role (.on mail BucketOp.write)]
+theorem aConsumedMessageIsStoredNext {role : Access Kind} [store.Needs role mail]
     (message : String) (cloud : Memory) :
     ((store (role := role) mail message).eval (InMemory prod) cloud).2.object mail
         (toString (cloud.keys mail).length)

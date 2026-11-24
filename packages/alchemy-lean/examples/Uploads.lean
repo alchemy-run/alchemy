@@ -159,9 +159,7 @@ def Safe (cloud : Memory) : Prop :=
   ∀ name body, cloud.object out.files ["clean", name] = some body → infected body = false
 
 section
-variable {role : Access Kind}
-  [Has role (S3.Get out.files ["incoming"])] [Has role (S3.Put out.files ["clean"])]
-  [Has role (S3.Put out.files ["quarantine"])]
+variable {role : Access Kind} [scan.Needs role out.files]
 
 /-- What a scan leaves: nothing, the file in quarantine, or the file published. -/
 theorem scan_eval (name : String) (cloud : Memory) :

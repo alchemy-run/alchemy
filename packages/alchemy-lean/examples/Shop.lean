@@ -364,10 +364,7 @@ the bucket holds afterwards. Proved from the laws of the bindings.
 section ApiBehaviour
 
 variable {role : Access Kind} {orders : Bucket} {shipments : Queue}
-  [Has role (S3.Get orders ["journal"])] [Has role (S3.Put orders ["journal"])]
-  [Has role (S3.Get orders (["journal"] ++ ["lines"]))]
-  [Has role (S3.Put orders (["journal"] ++ ["lines"]))]
-  [Has role (SQS.Send shipments)]
+  [theShop.Needs role orders shipments]
 
 /-- The shop as a bucket has it: what its journal replays to. -/
 abbrev shopIn (orders : Bucket) (cloud : Memory) : Alchemy.World Signature :=
