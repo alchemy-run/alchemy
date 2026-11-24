@@ -1,5 +1,6 @@
 import Alchemy.Cloud.AWS
 import Alchemy.Cloud.Engine
+import Alchemy.Cloud.Cli
 
 /-!
 # The AWS control plane, in small
