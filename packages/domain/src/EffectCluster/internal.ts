@@ -90,9 +90,25 @@ export const objectStorage = (
           Effect.map((rows) => new Map(rows.map((row) => [row.key, decode<T>(row.value)]))),
         ),
       ),
-    // Held across the whole transaction, as Cloudflare's gate is.
+    // Held across the whole transaction, as Cloudflare's gate is. The gate
+    // is this process's: a runner that stalled past its shard lock and
+    // resumed still runs the instance while another runner runs it too. So
+    // the transaction first takes the instance's lock in Postgres, and one
+    // instance's transactions run one at a time across runners. What a
+    // transaction then reads is what the last one committed, so a write
+    // decided from an earlier version sees that and writes nothing (see
+    // `stillAt` in `DurableObjects.ts`).
     transaction: (effect) =>
-      gate.exclusive(sql.withTransaction(effect).pipe(Effect.orDie)) as never,
+      gate.exclusive(
+        sql
+          .withTransaction(
+            Effect.andThen(
+              run(sql`SELECT pg_advisory_xact_lock(hashtextextended(${object}, 0))`),
+              effect,
+            ),
+          )
+          .pipe(Effect.orDie),
+      ) as never,
   };
 };
 
