@@ -243,6 +243,9 @@ const UNSENT_CODES = new Set([
   "ENOTFOUND",
   "EAI_AGAIN",
   "UND_ERR_CONNECT_TIMEOUT",
+  // Bun's fetch names them differently.
+  "ConnectionRefused",
+  "FailedToOpenSocket",
 ]);
 
 /** The `code`s along an error's `cause` chain, and of an `AggregateError`'s errors. */
