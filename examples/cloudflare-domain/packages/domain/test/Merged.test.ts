@@ -49,10 +49,21 @@ it.effect(
       const labelled = verdicts("Labelled");
       const sized = verdicts("Sized");
       const proved = { _tag: "Proved" };
-      for (const command of ["Name", "Note", "NoteThrough", "NameTwice", "NameOrNote"])
+      for (const command of [
+        "Name",
+        "Note",
+        "NoteThrough",
+        "NameTwice",
+        "NameOrNote",
+        "NameHeld",
+        "NameTaken",
+        "NameAssigned",
+        "NoteMarked",
+      ])
         expect(labelled[command], command).toEqual(proved);
       // The schema's check holds of a count that is there, and `null` is nothing.
-      for (const command of ["Count", "Limit"]) expect(sized[command], command).toEqual(proved);
+      for (const command of ["Count", "Limit", "CountPlus"])
+        expect(sized[command], command).toEqual(proved);
       // The field's own value is found where it breaks the rule: it is there, and empty.
       expect(labelled.Rename).toMatchObject({
         _tag: "Violated",
@@ -85,11 +96,16 @@ it.effect(
         NoteMatched: 1,
         NameTwice: 2,
         NameOrNote: 2,
+        NameHeld: 1,
+        NameTaken: 1,
+        NameAssigned: 1,
+        CountPlus: 1,
+        NoteMarked: 1,
       });
       // Inputs of every path, run on the real `decide` and `evolve`: a field the solver says is there is given.
       expect(report.agreement.differs).toEqual([]);
       expect(report.agreement.uncompared).toBe(0);
-      expect(report.agreement.compared).toBe(13);
+      expect(report.agreement.compared).toBe(18);
     }).pipe(Effect.provide(NodeServices.layer)),
   60_000,
 );

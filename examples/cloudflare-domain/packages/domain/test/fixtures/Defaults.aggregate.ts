@@ -34,6 +34,11 @@ export class NoteThrough extends Domain.Command("NoteThrough", command) {}
 export class NoteMatched extends Domain.Command("NoteMatched", command) {}
 export class NameTwice extends Domain.Command("NameTwice", command) {}
 export class NameOrNote extends Domain.Command("NameOrNote", command) {}
+export class NameHeld extends Domain.Command("NameHeld", command) {}
+export class NameTaken extends Domain.Command("NameTaken", command) {}
+export class NameAssigned extends Domain.Command("NameAssigned", command) {}
+export class CountPlus extends Domain.Command("CountPlus", command) {}
+export class NoteMarked extends Domain.Command("NoteMarked", command) {}
 
 export class Defaults extends Domain.Aggregate("Defaults", {
   id: Schema.String,
@@ -51,6 +56,11 @@ export class Defaults extends Domain.Aggregate("Defaults", {
     NoteMatched,
     NameTwice,
     NameOrNote,
+    NameHeld,
+    NameTaken,
+    NameAssigned,
+    CountPlus,
+    NoteMarked,
   ],
   keyOf: (command) => command.target,
   decide: {
@@ -94,6 +104,30 @@ export class Defaults extends Domain.Aggregate("Defaults", {
     // The default is another field's value: that one is chosen, and this one is not.
     NameOrNote: (_state, c) => [
       new Set({ label: (c.name ?? Option.getOrElse(c.note, () => "none")) + "!", size: 0 }),
+    ],
+    // A name the field is given is the field, until the code looks at it.
+    NameHeld: (_state, c) => {
+      const name = c.name;
+      return [new Set({ label: (name ?? "anon") + "!", size: 0 })];
+    },
+    NameTaken: (_state, c) => {
+      const { name, note } = c;
+      return [
+        new Set({ label: (name ?? "anon") + Option.getOrElse(note, () => "none") + "!", size: 0 }),
+      ];
+    },
+    NameAssigned: (_state, c) => {
+      let name = c.name;
+      name ??= "anon";
+      return [new Set({ label: name + "!", size: 0 })];
+    },
+    // A default, and a case, that is computed: a sum, with no test in it.
+    CountPlus: (_state, c) => [new Set({ label: "count", size: c.count ?? 1 + 1 })],
+    NoteMarked: (_state, c) => [
+      new Set({
+        label: Option.match(c.note, { onNone: () => "none", onSome: (text) => text + "!" }),
+        size: 0,
+      }),
     ],
   },
   events: [Set],

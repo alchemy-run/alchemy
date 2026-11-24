@@ -178,16 +178,26 @@ const WRAPPERS = new Set([
 /** `pipe`, as a function: what it is given first is what the steps work on. */
 const PIPES = new Set(["effect/pipe:", "effect/Function:pipe"]);
 
+/** The operators that only compute: none tests its operand, and none can fail. */
+const COMPUTES = new Set(["+", "-", "*", "===", "!==", "<", "<=", ">", ">="]);
+
 /**
- * Whether an expression only names a value: a literal, a name, a property of
- * one. Evaluating it tests nothing, calls nothing and writes nothing, so it
- * may be evaluated on a path the code would not evaluate it on.
+ * Whether an expression only computes a value: a literal, a name, a property
+ * of one, and sums, products and comparisons of those. Evaluating it tests
+ * nothing, calls nothing and writes nothing, so it may be evaluated on a path
+ * the code would not evaluate it on.
  */
 const isPlain = (node: Node): boolean =>
   node.type === "Literal" ||
   node.type === "Identifier" ||
-  (node.type === "TemplateLiteral" && node.expressions.length === 0) ||
-  (node.type === "UnaryExpression" && node.operator === "-" && node.argument.type === "Literal") ||
+  (node.type === "TemplateLiteral" && (node.expressions as ReadonlyArray<Node>).every(isPlain)) ||
+  (node.type === "UnaryExpression" &&
+    ["-", "+", "!"].includes(node.operator) &&
+    isPlain(node.argument)) ||
+  (node.type === "BinaryExpression" &&
+    COMPUTES.has(node.operator) &&
+    isPlain(node.left) &&
+    isPlain(node.right)) ||
   (node.type === "MemberExpression" && !node.computed && !node.optional && isPlain(node.object)) ||
   (WRAPPERS.has(node.type) && isPlain(node.expression));
 
@@ -1050,19 +1060,26 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     env: Env,
   ) {
     if (WRAPPERS.has(node.type)) return yield* unread(node.expression, env);
+    // A name the field was given: `const note = command.note`.
+    if (node.type === "Identifier")
+      return yield* lookup(node.name, env, { module: env.module, node });
     if (node.type !== "MemberExpression" || node.computed || node.optional)
       return yield* evaluate(node, env);
     const object = yield* evaluate(node.object, env);
     if (object === SHORT) return SHORT;
-    const key: string = node.property.name;
+    return yield* unreadMember(object, node.property.name, { module: env.module, node });
+  });
+
+  /** A property of a value, with a field of an input left as it is. */
+  const unreadMember = (object: V, key: string, site: Site): Eval<V> => {
     const held = object._tag === "Obj" ? object.fields[key] : undefined;
     return held?._tag === "Pending" &&
       object._tag === "Obj" &&
       !(object.brand && Brands.SEALED.has(object.brand.kind)) &&
       !library.waitMember(object, key)
-      ? held
-      : yield* member(object, key, { module: env.module, node });
-  });
+      ? Effect.succeed(held)
+      : member(object, key, site);
+  };
 
   /** A value as the solver holds one: a string, a number or a boolean. */
   const scalar = (value: V): Smt.Term | undefined =>
@@ -1185,7 +1202,9 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           if (value._tag === "Applied") return yield* fail(site, inside("defaults", value)!);
           return yield* bind(
             pattern.left,
-            value._tag === "Undef" ? yield* evaluate(pattern.right, { ...env, scope }) : value,
+            chosen(value)._tag === "Undef"
+              ? yield* evaluate(pattern.right, { ...env, scope })
+              : chosen(value),
             scope,
             env,
           );
@@ -1223,7 +1242,15 @@ export const make = (loader: Loader, run: Run): Interpreter => {
               return yield* fail(site, "destructures by a key the prover cannot see");
             const key = String(named.value);
             taken.push(key);
-            yield* bind(property.value, yield* member(value, key, site), scope, env);
+            // `const { note } = command`: the name is given the field, and its first use looks at it.
+            yield* bind(
+              property.value,
+              property.value.type === "Identifier" || property.value.type === "AssignmentPattern"
+                ? yield* unreadMember(value, key, site)
+                : yield* member(value, key, site),
+              scope,
+              env,
+            );
           }
           return;
         }
@@ -1720,7 +1747,8 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         return out;
       }
       case "Identifier":
-        return yield* lookup(node.name, env, site);
+        // A name given a field of an input no code looked at: this use looks at it.
+        return chosen(yield* lookup(node.name, env, site));
       case "ParenthesizedExpression":
       case "TSAsExpression":
       case "TSSatisfiesExpression":
@@ -1946,6 +1974,18 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           return value;
         }
         const operator: string = node.operator.slice(0, -1);
+        // `note ??= other`, as `note ?? other` is read: one value, and no path each way.
+        const waiting =
+          operator === "??" && node.left.type === "Identifier" && isPlain(node.right)
+            ? yield* unread(node.left, env)
+            : undefined;
+        const kept = waiting?._tag === "Pending" ? Symbolic.keep(waiting, current.run) : undefined;
+        const fallback = kept && !kept.option ? yield* tried(evaluate(node.right, env)) : undefined;
+        const merged = kept && fallback ? oneOf(kept.present, kept.value, fallback) : undefined;
+        if (merged) {
+          yield* assign(node.left, merged, env, site);
+          return merged;
+        }
         const before = yield* evaluate(node.left, env);
         let value: V;
         if (operator === "??" && before._tag === "Applied")
@@ -2008,7 +2048,12 @@ export const make = (loader: Loader, run: Run): Interpreter => {
             for (const declarator of statement.declarations as ReadonlyArray<Node>) {
               yield* bind(
                 declarator.id,
-                declarator.init ? yield* evaluate(declarator.init, env) : Value.undef,
+                // `const note = command.note`: the name is given the field, and its first use looks at it.
+                !declarator.init
+                  ? Value.undef
+                  : declarator.id.type === "Identifier"
+                    ? yield* unread(declarator.init, env)
+                    : yield* evaluate(declarator.init, env),
                 env.scope,
                 env,
               );

@@ -516,10 +516,13 @@ A field read only for its value or a default isn't a choice. Both ways go on to 
 command.note ?? "none";
 Option.getOrElse(command.memo, () => "none");
 command.memo.pipe(Option.getOrElse(() => "none"));
-Option.match(command.memo, { onNone: () => "none", onSome: (memo) => memo });
+Option.match(command.memo, { onNone: () => "none", onSome: (memo) => memo + "!" });
+
+const { note } = command; // a name the field is given is the field
+note ?? "none";
 ```
 
-This holds for a field that is a string, a number or a boolean, alone or with `null` and `undefined` beside it, and for an `Option` of one. The default has to be a literal, a name or a property of one, and so does what each case of `Option.match` returns. Anything else is a choice as before.
+This holds for a field that is a string, a number or a boolean, alone or with `null` and `undefined` beside it, and for an `Option` of one. The default, and what each case of `Option.match` returns, has to be a value the code only computes: a literal, a name, a property, or a sum, a product or a comparison of those. A default that calls a function or tests something is a choice as before.
 
 A test is a choice too, but only of the sides an input can reach. After `command.kind === "refund"` is true, `command.kind === "sale"` is false, and the proof doesn't go the other way.
 
