@@ -548,5 +548,4 @@ In the editor, `#eval` shows any of it without running a program.
 - Stacks run against a cloud held in memory. Nothing deploys to a real account.
 - A host handles one request at a time, by design.
 - `model` takes one saga and string ids. Streams, queries and actors are written without it.
-- The request theorems assume JSON written to the journal reads back as written.
 - Cloudflare has no control-plane model, so its stacks have a graph but no plan.

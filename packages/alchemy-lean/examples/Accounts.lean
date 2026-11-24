@@ -119,14 +119,18 @@ aggregate Account where
 inductive Screening where
   | clear
   | flagged (reason : String)
-deriving DecidableEq, Repr, Lean.ToJson, Lean.FromJson
+deriving DecidableEq, Repr
+
+derive_tokens Screening
 
 /-- Move money from one account to another. -/
 structure TransferRequest where
   source : String
   destination : String
   amount : Nat
-deriving DecidableEq, Repr, Lean.ToJson, Lean.FromJson
+deriving DecidableEq, Repr
+
+derive_tokens TransferRequest
 
 inductive TransferRefused where
   | sameAccount
@@ -146,7 +150,9 @@ deriving DecidableEq, Repr
 inductive WireResult where
   | sent
   | bounced
-deriving DecidableEq, Repr, Lean.ToJson, Lean.FromJson
+deriving DecidableEq, Repr
+
+derive_tokens WireResult
 
 inductive PayoutFailed where
   | refused

@@ -1,6 +1,7 @@
 import Alchemy.Engine
 import Alchemy.Cloud.Layer
 import Lean.Data.Json
+import Alchemy.Codec
 
 /-!
 # A model, hosted
@@ -53,15 +54,17 @@ structure Served (m : Model) where
   command : Input → Send m.signature.aggregates
   /-- Callers are only offered commands the model offers. -/
   offered : ∀ input, m.offered (command input) := by intro _; trivial
-  [input : Text Input]
-  reply : (c : m.signature.Call) → Text (m.signature.Reply c) := by
-    intro c; cases c <;> exact inferInstance
+  /-- How an input is kept in the journal. What is written reads back. -/
+  input : Codec Input := by exact Codec.of
+  /-- How each outside answer is kept in the journal. -/
+  reply : (c : m.signature.Call) → Codec (m.signature.Reply c) := by
+    intro c; cases c <;> exact Codec.of
   /-- What callers send that is decided across instances. -/
   Deciding : Type := Empty
   /-- The decision such an input is: one of the model's, who asks, and its command. -/
   decision : Deciding → (d : Decision m.signature.aggregates) × PLift (d ∈ m.decisions) ×
     d.Actor × d.Command := by exact nofun
-  deciding : Text Deciding := by exact inferInstance
+  deciding : Codec Deciding := by first | exact Codec.empty | exact Codec.of
 
 namespace Served
 

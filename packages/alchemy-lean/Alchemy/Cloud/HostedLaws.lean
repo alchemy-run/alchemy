@@ -32,6 +32,10 @@ structure Served.Faithful {m : Model} (served : Served m) : Prop where
   input : ∀ input, served.input.read (served.input.write input) = some input
   reply : ∀ c reply, (served.reply c).read ((served.reply c).write reply) = some reply
 
+/-- Every served model is faithful: its codecs carry the proof. -/
+theorem Served.faithful {m : Model} (served : Served m) : served.Faithful :=
+  ⟨served.input.back, fun c => (served.reply c).back⟩
+
 namespace Hosted
 
 variable {m : Model} {served : Served m} {sim : Sim K} {lines : sim.State → List Journal.Line}

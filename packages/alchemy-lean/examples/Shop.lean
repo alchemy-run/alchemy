@@ -93,7 +93,9 @@ aggregate Shipment where
 inductive Charge where
   | approved (id : String)
   | refused (reason : String)
-deriving DecidableEq, Repr, Lean.ToJson, Lean.FromJson
+deriving DecidableEq, Repr
+
+derive_tokens Charge
 
 model Shop where
   aggregate Order
@@ -365,7 +367,7 @@ variable {role : Access Kind} {orders : Bucket} {shipments : Queue}
   [Has role (S3.Get orders ["journal"])] [Has role (S3.Put orders ["journal"])]
   [Has role (S3.Get orders (["journal"] ++ ["lines"]))]
   [Has role (S3.Put orders (["journal"] ++ ["lines"]))]
-  [Has role (SQS.Send shipments)] (faithful : served.Faithful)
+  [Has role (SQS.Send shipments)]
 
 /-- The shop as a bucket has it: what its journal replays to. -/
 abbrev shopIn (orders : Bucket) (cloud : Memory) : Alchemy.World Signature :=
@@ -401,7 +403,6 @@ theorem answered_order (command : Order.Command) (before after : Alchemy.World S
       = (Order.decide (before.state .Order (Order.key command)) command).map
           fun _ => Order.reply (after.state .Order (Order.key command)) command := rfl
 
-include faithful in
 /--
 Given a bucket whose journal is whole, when a command is posted, then the Api
 answers what the order, as the journal had it, decides: a refusal as a 409, and
@@ -420,7 +421,7 @@ theorem postingACommand (command : Order.Command) (cloud : Memory) (whole : Whol
         ((postOrder (theShop (role := role) orders shipments) command).eval InMemory cloud).2 := by
   have asked := Hosted.ask_recorded (sim := InMemory) (lines := S3.lines orders ["journal"])
     (sound := S3.Sound orders ["journal"]) (theShop (role := role) orders shipments)
-    (S3.journal_lawful orders ["journal"]) faithful
+    (S3.journal_lawful orders ["journal"]) served.faithful
     (by
       intro call cloud whole
       cases call with
@@ -445,7 +446,6 @@ theorem postingACommand (command : Order.Command) (cloud : Memory) (whole : Whol
   rw [evaluated]
   exact ⟨congrArg (fun told => Except.ok (respond told)) (answered_order command _ _), asked.2⟩
 
-include faithful in
 /--
 Given a bucket in which an order is already placed, when it is placed again,
 then the Api refuses with a 409, whatever the item and the amount.
@@ -455,7 +455,7 @@ theorem placingAnOrderTwiceIsRefused (id item : String) (amount : Nat) (cloud : 
     (placed : ((shopIn orders cloud).state .Order id).status ≠ .new) :
     ((postOrder (theShop (role := role) orders shipments) (.place id item amount)).eval InMemory cloud).1
       = .ok { status := 409, body := reprStr Order.Rejection.alreadyPlaced } := by
-  have answered := (postingACommand (role := role) (shipments := shipments) faithful
+  have answered := (postingACommand (role := role) (shipments := shipments)
     (.place id item amount) cloud whole).1
   simp only [respond, Order.decide, Order.key, placed, ne_eq, not_false_eq_true, ite_true,
     Except.map] at answered

@@ -2,6 +2,7 @@ import Lean
 import Alchemy.Attr
 import Alchemy.Model
 import Alchemy.Cloud.Hosted
+import Alchemy.Codec
 
 /-!
 # `model … where`
@@ -148,6 +149,7 @@ macro_rules
         commands := commands.push (← `(command|
           inductive $(n `Command) where $ctors*
             deriving DecidableEq, Repr, Lean.ToJson, Lean.FromJson))
+        commands := commands.push (← `(command| derive_tokens $(n `Command)))
         let keyAlts ← names.mapM fun name => do
           let ctorName := mkIdentFrom name (`Command ++ name.getId)
           `(Term.matchAltExpr| | $ctorName:ident id .. => id)
@@ -509,6 +511,7 @@ macro_rules
     commands := commands.push (← `(command|
       /-- What callers send: a command for one of the aggregates. -/
       inductive $input where $inputCtors* deriving Lean.ToJson, Lean.FromJson))
+    commands := commands.push (← `(command| derive_tokens $input))
     let commandAlts ← aggregates.mapM fun a =>
       `(Term.matchAltExpr| | $(under input a.getId):ident command =>
           ⟨$(under name a.getId), (), command⟩)
@@ -525,7 +528,8 @@ macro_rules
         `(Command.ctor| | $d:ident (command : $command))
       commands := commands.push (← `(command|
         /-- What callers send that is decided across instances. -/
-        inductive $deciding where $decidingCtors* deriving Lean.ToJson, Lean.FromJson))
+        inductive $deciding where $decidingCtors*))
+      commands := commands.push (← `(command| derive_tokens $deciding))
       let decisionAlts ← decisions.mapM fun d =>
         `(Term.matchAltExpr| | $(under deciding d.getId):ident command =>
             ⟨$(under m d.getId), ⟨by repeat (first | exact List.Mem.head _ | apply List.Mem.tail)⟩,
