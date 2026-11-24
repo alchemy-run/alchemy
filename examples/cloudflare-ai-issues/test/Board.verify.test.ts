@@ -5,12 +5,12 @@ import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { Board } from "../src/Board/Board.model.ts";
 import { BoardApi } from "../src/Board/BoardApi.api.ts";
-import { IssueWorkLive } from "../src/Board/IssueWork.policy.ts";
+import { BoardHandlers } from "../src/Board/Handlers.ts";
 import { Triager } from "../src/Board/Triager.external.ts";
 
 // Each sequence the explorer finds is also run on the real board, in memory.
 // The triager is stubbed: the rules must hold whatever a session does.
-const story = Story.make(Board, { layer: IssueWorkLive, stub: [Triager] });
+const story = Story.make(Board, { layer: BoardHandlers, stub: [Triager] });
 
 it.effect(
   "no command, from a person or a session, breaks the board's rules",

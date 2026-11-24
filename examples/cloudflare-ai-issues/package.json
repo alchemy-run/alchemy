@@ -23,12 +23,16 @@
     "@alchemy.run/opencode": "workspace:*",
     "@alchemy.run/pi": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
+    "@effect/platform-browser": "catalog:",
     "alchemy": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "foldkit": "catalog:"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
+    "@foldkit/vite-plugin": "catalog:",
+    "vite": "catalog:",
     "vitest": "catalog:"
   }
 }

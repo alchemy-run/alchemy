@@ -191,7 +191,10 @@ export interface Mention<R = never, As = never> {
   readonly "~alchemy/AI/Mention": {
     readonly name: string;
     readonly tools: Effect.Effect<ReadonlyArray<never>, never, R>;
-    readonly as: (context: Context.Context<never>) => Effect.Effect<RequestContext.Json>;
+    /** Absent when nothing mentioned is behind a middleware. */
+    readonly as:
+      | ((context: Context.Context<never>) => Effect.Effect<RequestContext.Json>)
+      | undefined;
   };
   /** Phantom: what a session of a process that mentions this must be started as. */
   readonly "~as"?: As;
@@ -236,7 +239,14 @@ export const of = (model: Model.Any, entries: Entries): Mention<unknown, unknown
         const { api, operations } = surface();
         return operations.map((op) => `\`${specOf(api.apiName, op).name}\``).join(", ");
       },
-      as: (context) => RequestContext.capture.pipe(Effect.provideContext(context)),
+      // Only what sits behind a middleware asks who is calling. With none, a
+      // session acts as nobody and needs no start.
+      get as() {
+        return surface().operations.some((op) => op.rpc.middlewares.size > 0)
+          ? (context: Context.Context<never>) =>
+              RequestContext.capture.pipe(Effect.provideContext(context))
+          : undefined;
+      },
       tools: Effect.gen(function* () {
         const { api, operations } = surface();
         const context = yield* Effect.context<never>();

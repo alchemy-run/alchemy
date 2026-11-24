@@ -1,7 +1,10 @@
 import * as AI from "@alchemy.run/ai";
+import * as Domain from "@alchemy.run/domain";
+import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { LanguageModel } from "effect/ai";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as RpcTest from "effect/rpc/RpcTest";
@@ -358,6 +361,47 @@ describe("AI.Process", { tags: ["unit"] }, () => {
         ]);
       }),
     ),
+  );
+
+  it.effect("mentioning a command behind no middleware needs no start", () =>
+    Effect.suspend(() => {
+      class Noted extends Domain.Event("Noted", { text: Schema.String }) {}
+      class Note extends Domain.Command("Note", {
+        input: { id: Schema.String, text: Schema.String },
+        events: [Noted],
+        rejects: [],
+      }) {}
+      class Pad extends Domain.Aggregate("Pad", {
+        id: Schema.String,
+        state: Schema.Struct({ notes: Schema.Number }),
+        initial: { notes: 0 },
+        commands: [Note],
+        keyOf: (command) => command.id,
+        decide: { Note: (_, command) => [new Noted({ text: command.text })] },
+        evolve: { Noted: (pad) => ({ notes: pad.notes + 1 }) },
+      }) {}
+      class Pads extends Domain.Model("Pads", { aggregates: [Pad] }) {}
+      class Scribe extends (AI.Process<Scribe>()("Scribe", { description: "Take notes." })`
+        Write each thing you are told with ${Pads.Note}.
+      `) {}
+      const harness = recording();
+      return Effect.gen(function* () {
+        const scribe = yield* Scribe;
+        // Nothing it mentions asks who is calling, so it acts as nobody.
+        yield* scribe.get("a").send("Remember the milk.");
+        expect(harness.sessions.get("Scribe/a")!.messages).toEqual([
+          { text: "Remember the milk.", model: "smart" },
+        ]);
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(harness.layer, AI.DefaultModel(Smart), RuntimeContext.phantom).pipe(
+            Layer.provideMerge(Layer.mergeAll(ModelsLive, Pads.layer(Layer.empty))),
+            Layer.provideMerge(InMemory),
+            Layer.provideMerge(SecureRandom.layerWebCrypto),
+          ),
+        ),
+      );
+    }),
   );
 
   it.effect("a session that acts as nobody needs no start", () =>

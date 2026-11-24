@@ -22,6 +22,14 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const repo = yield* Repo;
     const worker = yield* Worker;
-    return { url: worker.url, repository: repo.htmlUrl };
+    // The foldkit app, built with Vite. Its Worker serves the build and
+    // forwards /api to the board, so the app and the Api share one origin.
+    const app = yield* Cloudflare.Website.Foldkit("BoardApp", {
+      rootDir: "web",
+      main: "src/worker.ts",
+      env: { BOARD: worker },
+      assets: { runWorkerFirst: ["/api", "/api/*"] },
+    });
+    return { url: worker.url, app: app.url, repository: repo.htmlUrl };
   }),
 );
