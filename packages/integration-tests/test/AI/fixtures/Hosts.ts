@@ -1,4 +1,4 @@
-import * as AI from "@alchemy.run/ai";
+import type * as AI from "@alchemy.run/ai";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as OpenCode from "@alchemy.run/opencode";
 import * as OpenCodeCloudflare from "@alchemy.run/opencode/Cloudflare";
@@ -9,6 +9,8 @@ import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
+import { ChatHandlers } from "./chat/Handlers.ts";
+import { ChatRpcs } from "./chat/Rpcs.ts";
 import { Adder, Operator, ProcessesLive } from "./Processes.ts";
 
 /** What a test asks of a session. */
@@ -93,17 +95,17 @@ export class OpenCodeAgents extends Cloudflare.DurableObject<OpenCodeAgents>()(
   ),
 ) {}
 
-/** One object per Adder session, named by its key, serving it as `AI.SessionRpcs`. */
+/** One object per Adder session, named by its key, serving it as `ChatRpcs`. */
 const served = Effect.gen(function* () {
   const adder = yield* Adder;
   const state = yield* Cloudflare.DurableObjectState;
-  return Effect.sync(() => AI.SessionHandlers(adder.get(state.id.name ?? "")));
+  return Effect.sync(() => ChatHandlers(adder.get(state.id.name ?? "")));
 });
 
 /** An Adder session a browser reaches, on Pi. */
 export class PiSessions extends Cloudflare.RpcDurableObject<PiSessions>()(
   "PiSessions",
-  { schema: AI.SessionRpcs },
+  { schema: ChatRpcs },
   served.pipe(
     Effect.provide(
       ProcessesLive.pipe(
@@ -117,7 +119,7 @@ export class PiSessions extends Cloudflare.RpcDurableObject<PiSessions>()(
 /** The same, on OpenCode. */
 export class OpenCodeSessions extends Cloudflare.RpcDurableObject<OpenCodeSessions>()(
   "OpenCodeSessions",
-  { schema: AI.SessionRpcs },
+  { schema: ChatRpcs },
   served.pipe(
     Effect.provide(
       ProcessesLive.pipe(

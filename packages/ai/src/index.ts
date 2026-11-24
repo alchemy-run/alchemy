@@ -58,14 +58,6 @@ export {
   type StartOptions,
   type Stored,
 } from "./Process.ts";
-export {
-  followSession,
-  SessionClient,
-  SessionClientWebSocket,
-  SessionError,
-  SessionHandlers,
-  SessionRpcs,
-} from "./SessionRpcs.ts";
 export { isModel, Model, type AnyModel, type ModelClass, type ModelOptions } from "./Model.ts";
 export {
   Sandbox,

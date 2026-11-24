@@ -7,7 +7,7 @@ import { OpenCodeAgents, OpenCodeSessions, PiAgents, PiSessions, type Ask } from
 
 /**
  * Drives the processes on each harness over HTTP: `POST /<harness>/<process>/<key>/<action>`.
- * `/<harness>/live/<key>` reaches one Adder session as `AI.SessionRpcs`.
+ * `/<harness>/live/<key>` reaches one Adder session as `ChatRpcs`.
  */
 export default class ProcessApi extends Cloudflare.Worker<ProcessApi>()(
   "ProcessApi",
@@ -32,7 +32,7 @@ export default class ProcessApi extends Cloudflare.Worker<ProcessApi>()(
         if (name === "tell" && key !== undefined) {
           const { text, requestId } = (yield* request.json) as Omit<Ask, "action">;
           const session = yield* (harness === "pi" ? piSessions : opencodeSessions).getByName(key);
-          yield* session.send({ text: text ?? "", requestId });
+          yield* session.send({ text: text ?? "", requestId: requestId ?? "tell" });
           return yield* HttpServerResponse.json({ ok: true });
         }
         if (name === undefined || key === undefined || action === undefined) {

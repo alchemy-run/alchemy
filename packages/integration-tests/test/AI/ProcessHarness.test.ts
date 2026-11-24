@@ -8,11 +8,10 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
-import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
+import { Chat, ChatLive, follow } from "./fixtures/chat/Client.ts";
 import ProcessApi from "./fixtures/ProcessApi.ts";
 
 const providers = Cloudflare.providers();
@@ -234,16 +233,14 @@ for (const harness of ["pi", "opencode"] as const) {
         "a client follows a session over a WebSocket",
         Effect.gen(function* () {
           const { url } = yield* stack;
-          const live = AI.SessionClientWebSocket(
-            `${url.replace(/^http/, "ws")}/${harness}/live/socket-3`,
-          ).pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal));
+          const live = ChatLive(`${url.replace(/^http/, "ws")}/${harness}/live/socket-3`);
 
           const events = yield* Effect.gen(function* () {
-            const session = yield* AI.SessionClient;
+            const session = yield* Chat;
             // Reading first: the session is idle, and has nothing yet.
             let worked = false;
             const first = yield* Deferred.make<void>();
-            const reading = yield* AI.followSession().pipe(
+            const reading = yield* follow().pipe(
               Stream.tap(() => Deferred.succeed(first, undefined)),
               // Idle again, after working: its answer is stored. A session kept from
               // an earlier run (NO_DESTROY) never works again: its stored answer ends the read.
@@ -279,7 +276,7 @@ for (const harness of ["pi", "opencode"] as const) {
           // Read again from the last item: only the status, nothing repeated.
           const last = items.at(-1)!.seq;
           const again = yield* Effect.gen(function* () {
-            const session = yield* AI.SessionClient;
+            const session = yield* Chat;
             const page = yield* session.history({ take: 1, order: "desc" });
             const first = yield* Stream.runHead(session.events({ after: last }));
             return { page, first: Option.getOrUndefined(first) };
@@ -294,13 +291,11 @@ for (const harness of ["pi", "opencode"] as const) {
         "a reader that waited while its session was idle sees the next message",
         Effect.gen(function* () {
           const { url } = yield* stack;
-          const live = AI.SessionClientWebSocket(
-            `${url.replace(/^http/, "ws")}/${harness}/live/socket-idle`,
-          ).pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal));
+          const live = ChatLive(`${url.replace(/^http/, "ws")}/${harness}/live/socket-idle`);
 
           const items = yield* Effect.gen(function* () {
             const first = yield* Deferred.make<void>();
-            const reading = yield* AI.followSession().pipe(
+            const reading = yield* follow().pipe(
               Stream.tap(() => Deferred.succeed(first, undefined)),
               Stream.filter((event) => event.type === "item"),
               Stream.takeUntil(

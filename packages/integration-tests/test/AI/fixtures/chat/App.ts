@@ -1,13 +1,13 @@
-import * as AIFoldkit from "@alchemy.run/ai/Foldkit";
 import { QueuedMessage, SessionEntry, SessionEvent } from "@alchemy.run/ai/Session";
-import * as AI from "@alchemy.run/ai/SessionRpcs";
-import * as Array from "effect/Array";
+import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { Command, Subscription, type Update } from "foldkit";
 import type { Document, HtmlBuilder } from "foldkit/html";
 import { defineMessageUnion } from "foldkit/message";
 import { modifyFields } from "foldkit/struct";
+import { Chat, follow } from "./Client.ts";
 
 // MODEL
 
@@ -34,37 +34,63 @@ export const Message = defineMessageUnion({
   ClickedStop: {},
   ClickedWithdraw: { id: Schema.String },
   ReceivedSessionEvent: { event: SessionEvent },
-  ReceivedSessionResult: { result: AIFoldkit.Message },
+  CompletedAct: {},
   FailedSession: { reason: Schema.String },
 });
 export type Message = typeof Message.Type;
 
+// COMMAND
+
+const completed = <E>(effect: Effect.Effect<void, E, Chat>) =>
+  effect.pipe(
+    Effect.as(Message.CompletedAct()),
+    Effect.catch(() => Effect.succeed(Message.FailedSession({ reason: "Not delivered" }))),
+  );
+
+const Text = { text: Schema.String, requestId: Schema.String };
+
+/** Queued behind the turn that is running. */
+export const Send = Command.define("Send", {
+  args: Text,
+  messages: [Message.CompletedAct, Message.FailedSession],
+  execute: (message) => completed(Effect.flatMap(Chat, (chat) => chat.send(message))),
+});
+
+/** Read by the turn that is running, at its next step. */
+export const Steer = Command.define("Steer", {
+  args: Text,
+  messages: [Message.CompletedAct, Message.FailedSession],
+  execute: (message) => completed(Effect.flatMap(Chat, (chat) => chat.steer(message))),
+});
+
+export const Withdraw = Command.define("Withdraw", {
+  args: { id: Schema.String },
+  messages: [Message.CompletedAct, Message.FailedSession],
+  execute: ({ id }) => completed(Effect.flatMap(Chat, (chat) => chat.withdraw({ id }))),
+});
+
+export const Stop = Command.define("Stop", {
+  messages: [Message.CompletedAct, Message.FailedSession],
+  execute: completed(Effect.flatMap(Chat, (chat) => chat.interrupt())),
+});
+
 // UPDATE
 
-type Return = Update.Return<Model, Message, AI.SessionClient>;
+type Return = Update.Return<Model, Message, Chat>;
 
-const act = (
-  model: Model,
-  command: (requestId: string) => Command.Command<AIFoldkit.Message, never, AI.SessionClient>,
-): Return => ({
+/** A message is named after the page and its count, so a retry is not run twice. */
+const say = (model: Model, command: typeof Send | typeof Steer): Return => ({
   model: modifyFields(model, { sent: (sent) => sent + 1, draft: () => "" }),
-  commands: [
-    Command.mapMessage(command(`${model.page}:${model.sent}`), (result) =>
-      Message.ReceivedSessionResult({ result }),
-    ),
-  ],
+  commands: [command({ text: model.draft, requestId: `${model.page}:${model.sent}` })],
 });
 
 export const update = (model: Model, message: Message) =>
   Message.match<Return>(message, {
     ChangedDraft: ({ text }) => ({ model: modifyFields(model, { draft: () => text }) }),
-    // Queued behind the turn that is running.
-    ClickedSend: () => act(model, (requestId) => AIFoldkit.Send({ text: model.draft, requestId })),
-    // Read by the turn that is running, at its next step.
-    ClickedSteer: () =>
-      act(model, (requestId) => AIFoldkit.Steer({ text: model.draft, requestId })),
-    ClickedStop: () => act(model, (requestId) => AIFoldkit.Interrupt({ requestId })),
-    ClickedWithdraw: ({ id }) => act(model, (requestId) => AIFoldkit.Withdraw({ id, requestId })),
+    ClickedSend: () => say(model, Send),
+    ClickedSteer: () => say(model, Steer),
+    ClickedStop: () => ({ model, commands: [Stop()] }),
+    ClickedWithdraw: ({ id }) => ({ model, commands: [Withdraw({ id })] }),
     ReceivedSessionEvent: ({ event }) => ({
       model:
         event.type === "status"
@@ -73,12 +99,7 @@ export const update = (model: Model, message: Message) =>
               items: (items) => [...items, { seq: event.seq, item: event.item }],
             }),
     }),
-    ReceivedSessionResult: ({ result }) => ({
-      model:
-        result._tag === "FailedSession"
-          ? modifyFields(model, { error: () => Option.some(result.reason) })
-          : model,
-    }),
+    CompletedAct: () => ({ model }),
     FailedSession: ({ reason }) => ({
       model: modifyFields(model, { error: () => Option.some(reason) }),
     }),
@@ -100,13 +121,19 @@ export const init = (flags: typeof Flags.Type): Return => ({
 
 // SUBSCRIPTION
 
-export const subscriptions = Subscription.make<Model, Message, AI.SessionClient>()(() => ({
-  session: AIFoldkit.events({
-    // The last item the Model holds: a reconnect resumes after it.
-    cursor: (model: Model) => Option.map(Array.last(model.items), (entry) => entry.seq),
-    onEvent: (event): Message => Message.ReceivedSessionEvent({ event }),
-    onFailure: (reason): Message => Message.FailedSession({ reason }),
-  }),
+export const subscriptions = Subscription.make<Model, Message, Chat>()((entry) => ({
+  session: entry(
+    {},
+    {
+      modelToDependencies: () => ({}),
+      // The status, every item, then each new one. It resumes by itself after a reconnect.
+      dependenciesToStream: () =>
+        follow().pipe(
+          Stream.map((event) => Message.ReceivedSessionEvent({ event })),
+          Stream.catch((error) => Stream.succeed(Message.FailedSession({ reason: error.message }))),
+        ),
+    },
+  ),
 }));
 
 // VIEW

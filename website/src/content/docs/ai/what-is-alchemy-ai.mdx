@@ -333,36 +333,41 @@ See [Where sessions run](/ai/hosting) and [Pi on other hosts](/pi/other-hosts).
 
 ## Front ends: watching a session live
 
-A session reports everything it does as a stream: its status, then each message, tool call and result. `AI.SessionRpcs` is that stream and the session's actions as an RPC group, and a Durable Object serves it:
+A session reports everything it does as a stream: its status, then each message, tool call and result. Alchemy AI exports the Schemas of that stream, and you put them in an RPC interface of your own:
+
+```typescript title="src/chat/Rpcs.ts"
+export class ChatRpcs extends RpcGroup.make(
+  Rpc.make("send", { payload: { text: Schema.String, requestId: Schema.String } }),
+  Rpc.make("events", {
+    payload: { after: Schema.optional(Schema.Number) },
+    success: SessionEvent,
+    stream: true,
+  }),
+) {}
+```
+
+A Durable Object serves it over a WebSocket, each procedure calling the session:
 
 ```typescript title="src/Sessions.ts"
 export default class Sessions extends Cloudflare.RpcDurableObject<Sessions>()(
   "Sessions",
-  { schema: AI.SessionRpcs },
+  { schema: ChatRpcs },
   Effect.gen(function* () {
     const triage = yield* Triage;
     const state = yield* Cloudflare.DurableObjectState;
 
-    return Effect.sync(() => AI.SessionHandlers(triage.get(state.id.name ?? "")));
+    return Effect.sync(() => {
+      const session = triage.get(state.id.name ?? "");
+      return ChatRpcs.toLayer({
+        send: ({ text, requestId }) => session.send(text, { requestId }).pipe(Effect.orDie),
+        events: ({ after }) => session.events({ after }).pipe(Stream.orDie),
+      });
+    });
   }).pipe(Effect.provide(Live)),
 ) {}
 ```
 
-A browser connects over one WebSocket. It follows the session, and sends, steers or stops it:
-
-```typescript title="web/follow.ts"
-const session = yield* AI.SessionClient;
-
-yield* session.send({ text: "Look at issue 42.", requestId: "m-1" });
-
-yield* AI.followSession().pipe(
-  Stream.runForEach((event) =>
-    event.type === "status" ? showStatus(event.status, event.queued) : showItem(event.item),
-  ),
-);
-```
-
-Each item has a number, so a page that reconnects resumes after the last one it has. See [Connect a front end](/ai/front-end).
+A browser gets a typed client for that interface. Each item has a number, so a page that reconnects resumes after the last one it has. See [Connect a front end](/ai/front-end).
 
 ## One program, down to the infrastructure
 

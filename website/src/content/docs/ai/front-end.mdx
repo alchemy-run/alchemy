@@ -1,29 +1,91 @@
 ---
 title: Connect a front end
-description: Serve a session from its Durable Object as an Effect RPC group, follow what it does over a WebSocket, and send, steer and stop it from a browser or a Foldkit app.
+description: Define an RPC interface over a session with its own Schemas, serve it from the session's Durable Object, and follow the session from a browser or a Foldkit app over one WebSocket.
 ---
 
-A front end needs two things from a session: a live stream of what it does, and a way to act on it. `AI.SessionRpcs` is a session as an [Effect RPC](/cloudflare/apis/effect-rpc) group, with the same methods as `AI.Session`. A Durable Object serves it, and a browser calls it over one WebSocket.
+A front end needs two things from a session: a live stream of what it does, and a way to act on it. You define that interface yourself, as an [Effect RPC](/cloudflare/apis/effect-rpc) group. Alchemy AI gives you the Schemas of what a session reports, and Alchemy serves the group over a WebSocket from the session's Durable Object.
 
-## Serve a session
+## Define the interface
 
-Declare the object with `Cloudflare.RpcDurableObject` and return `AI.SessionHandlers` for the session it holds:
+`@alchemy.run/ai/Session` has a Schema for everything a session says about itself: `SessionEvent`, `SessionEntry`, `SessionItem`, `QueuedMessage`, `HistoryOptions` and `SessionPage`. Use them as the results of your own procedures:
+
+```typescript title="src/chat/Rpcs.ts"
+import { HistoryOptions, SessionEvent, SessionPage } from "@alchemy.run/ai/Session";
+import * as Rpc from "effect/rpc/Rpc";
+import * as RpcGroup from "effect/rpc/RpcGroup";
+import * as Schema from "effect/Schema";
+
+/** The session could not do what it was asked. */
+export class ChatError extends Schema.TaggedClass<ChatError>()("ChatError", {
+  message: Schema.String,
+}) {}
+
+const Text = { text: Schema.String, requestId: Schema.String };
+
+/** What the front end may ask of one session. */
+export class ChatRpcs extends RpcGroup.make(
+  Rpc.make("send", { payload: Text, error: ChatError }),
+  Rpc.make("steer", { payload: Text, error: ChatError }),
+  Rpc.make("withdraw", { payload: { id: Schema.String }, error: ChatError }),
+  Rpc.make("interrupt", { error: ChatError }),
+  Rpc.make("events", {
+    payload: { after: Schema.optional(Schema.Number) },
+    success: SessionEvent,
+    error: ChatError,
+    stream: true,
+  }),
+  Rpc.make("history", { payload: HistoryOptions, success: SessionPage, error: ChatError }),
+) {}
+```
+
+`events` is a stream. The interface is yours, so it holds only what this front end may do: leave out `interrupt`, add a field, or put a middleware on it.
+
+## Implement it with a session
+
+Each procedure calls one method of `AI.Session`:
+
+```typescript title="src/chat/Handlers.ts"
+import type * as AI from "@alchemy.run/ai";
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import { ChatError, ChatRpcs } from "./Rpcs.ts";
+
+const failed = (error: AI.NotStarted | AI.HarnessError) =>
+  ChatError.make({ message: error._tag === "NotStarted" ? "Not started" : error.message });
+
+/** Each procedure is one method of the session. */
+export const ChatHandlers = (session: AI.Session) =>
+  ChatRpcs.toLayer({
+    send: ({ text, requestId }) => session.send(text, { requestId }).pipe(Effect.mapError(failed)),
+    steer: ({ text, requestId }) =>
+      session.steer(text, { requestId }).pipe(Effect.mapError(failed)),
+    withdraw: ({ id }) => session.withdraw(id).pipe(Effect.mapError(failed)),
+    interrupt: () => session.interrupt.pipe(Effect.mapError(failed)),
+    events: ({ after }) => session.events({ after }).pipe(Stream.mapError(failed)),
+    history: (options) => session.history(options).pipe(Effect.mapError(failed)),
+  });
+```
+
+## Serve it from the session's object
+
+`Cloudflare.RpcDurableObject` serves a group over HTTP and over a WebSocket. Return the handlers for the session the object holds:
 
 ```typescript title="src/Engineers.ts"
-import * as AI from "@alchemy.run/ai";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
+import { ChatHandlers } from "./chat/Handlers.ts";
+import { ChatRpcs } from "./chat/Rpcs.ts";
 import { Engineer } from "./Engineer.process.ts";
 import { Live } from "./Layers.ts";
 
 export default class Engineers extends Cloudflare.RpcDurableObject<Engineers>()(
   "Engineers",
-  { schema: AI.SessionRpcs },
+  { schema: ChatRpcs },
   Effect.gen(function* () {
     const engineer = yield* Engineer;
     const state = yield* Cloudflare.DurableObjectState;
 
-    return Effect.sync(() => AI.SessionHandlers(engineer.get(state.id.name ?? "")));
+    return Effect.sync(() => ChatHandlers(engineer.get(state.id.name ?? "")));
   }).pipe(Effect.provide(Live)),
 ) {}
 ```
@@ -61,92 +123,98 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
 Anyone who can open this route can read and steer that session. Check who is asking before you call `fetch`, or take the id from the signed-in user.
 
-## Connect from the browser
+## Connect and follow
 
-`AI.SessionClientWebSocket` is a Layer that holds one WebSocket to that route:
+In the browser, `RpcWebSocketClient.layer` gives a typed client over one WebSocket. `follow` reads the session's events and resumes after a reconnect:
 
-```typescript title="web/Session.ts"
-import * as AI from "@alchemy.run/ai/SessionRpcs";
+```typescript title="web/Client.ts"
+import type { SessionEvent } from "@alchemy.run/ai/Session";
+import * as RpcWebSocketClient from "@alchemy.run/cloudflare/Workers/RpcWebSocketClient";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as RpcClient from "effect/rpc/RpcClient";
+import type { RpcClientError } from "effect/rpc/RpcClientError";
 import * as Socket from "effect/socket/Socket";
+import * as Stream from "effect/Stream";
+import { ChatRpcs, type ChatError } from "./Rpcs.ts";
 
-export const SessionLive = (id: string) =>
-  AI.SessionClientWebSocket(`wss://${location.host}/sessions/${id}`).pipe(
+/** The typed client of one session. */
+export class Chat extends Context.Service<
+  Chat,
+  RpcClient.FromGroup<typeof ChatRpcs, RpcClientError>
+>()("Chat") {}
+
+/** One WebSocket to the session's object, open for as long as the Layer is. */
+export const ChatLive = (url: string) =>
+  RpcWebSocketClient.layer(Chat, ChatRpcs, url).pipe(
     Layer.provide(Socket.layerWebSocketConstructorGlobal),
   );
-```
 
-Import from `@alchemy.run/ai/SessionRpcs` in browser code. It brings in only Effect, so no server code reaches the bundle.
-
-## Follow what the session does
-
-`AI.followSession` is the session's `events` for as long as you read them:
-
-```typescript title="web/follow.ts"
-import * as AI from "@alchemy.run/ai/SessionRpcs";
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
-import { SessionLive } from "./Session.ts";
-
-export const follow = (id: string, show: (line: string) => void) =>
-  AI.followSession().pipe(
-    Stream.runForEach((event) =>
-      Effect.sync(() =>
-        show(event.type === "status" ? event.status : `${event.seq} ${event.item.type}`),
-      ),
-    ),
-    Effect.provide(SessionLive(id)),
-  );
+/**
+ * The session's events for as long as they are read. When the connection
+ * drops it asks again from the last item it delivered.
+ */
+export const follow = (options?: {
+  readonly after?: number;
+}): Stream.Stream<SessionEvent, ChatError, Chat> =>
+  Stream.suspend(() => {
+    let after = options?.after;
+    const read = (): Stream.Stream<SessionEvent, ChatError, Chat> =>
+      Stream.unwrap(Effect.map(Chat, (chat) => chat.events({ after }))).pipe(
+        Stream.tap((event) =>
+          Effect.sync(() => {
+            if (event.type === "item") after = event.seq;
+          }),
+        ),
+        Stream.catchTag("RpcClientError", () =>
+          Stream.flatMap(Stream.fromEffect(Effect.sleep("1 second")), read),
+        ),
+      );
+    return read();
+  });
 ```
 
 The first event is the status: `idle` or `working`, and the messages that are queued. Then come the stored items, then each new one as it happens. A change of status follows the items stored with it, so `idle` arrives after the answer.
 
 The stream is the whole picture. A page that folds these events knows the transcript, whether the session is working and what is queued, with no other call.
 
-## Resume after a reconnect
-
-Pass the `seq` of the last item you hold, and the stream starts after it:
-
-```typescript
-AI.followSession({ after: lastSeq });
-```
-
-`followSession` does the same on its own when the connection drops. An idle object is put to sleep with its sockets open, and wakes when the session is sent something. The stream then asks again from the last item it delivered, so nothing is missed or repeated.
+An idle object is put to sleep with its sockets open, and wakes when the session is sent something. Each item has a `seq`, so `follow` asks again from the last one it delivered and nothing is missed or repeated.
 
 ## Send, steer and stop
 
-The client has the session's methods. Each returns once the session has stored the message:
+The client has the procedures you declared:
 
 ```typescript title="web/act.ts"
-import * as AI from "@alchemy.run/ai/SessionRpcs";
 import * as Effect from "effect/Effect";
+import { Chat } from "./Client.ts";
 
 export const act = Effect.gen(function* () {
-  const session = yield* AI.SessionClient;
+  const chat = yield* Chat;
 
-  yield* session.send({ text: "Rename the config flag.", requestId: "m-1" });
-  yield* session.steer({ text: "Only in src.", requestId: "m-2" });
-  yield* session.interrupt();
+  yield* chat.send({ text: "Rename the config flag.", requestId: "m-1" });
+  yield* chat.steer({ text: "Only in src.", requestId: "m-2" });
+  yield* chat.interrupt();
 });
 ```
 
-A `requestId` makes a message exactly-once, so a retry after a lost answer is safe. `withdraw({ id })` takes back a queued message, by the `id` the status lists it with.
+A `requestId` makes a message exactly-once, so a retry after a lost answer is safe.
 
 ## In a Foldkit app
 
-`@alchemy.run/ai/Foldkit` has a Command for each action and a Subscription for the events. Keep the status, the queue and the items in the Model:
+Each procedure is a Command, and `follow` is a Subscription. The Model keeps the status, the queue and the items:
 
-```typescript title="web/Chat.ts"
-import * as AIFoldkit from "@alchemy.run/ai/Foldkit";
+```typescript title="web/App.ts"
 import { QueuedMessage, SessionEntry, SessionEvent } from "@alchemy.run/ai/Session";
-import * as AI from "@alchemy.run/ai/SessionRpcs";
-import * as Array from "effect/Array";
+import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { Command, Subscription, type Update } from "foldkit";
 import type { Document, HtmlBuilder } from "foldkit/html";
 import { defineMessageUnion } from "foldkit/message";
 import { modifyFields } from "foldkit/struct";
+import { Chat, follow } from "./Client.ts";
 
 // MODEL
 
@@ -173,37 +241,63 @@ export const Message = defineMessageUnion({
   ClickedStop: {},
   ClickedWithdraw: { id: Schema.String },
   ReceivedSessionEvent: { event: SessionEvent },
-  ReceivedSessionResult: { result: AIFoldkit.Message },
+  CompletedAct: {},
   FailedSession: { reason: Schema.String },
 });
 export type Message = typeof Message.Type;
 
+// COMMAND
+
+const completed = <E>(effect: Effect.Effect<void, E, Chat>) =>
+  effect.pipe(
+    Effect.as(Message.CompletedAct()),
+    Effect.catch(() => Effect.succeed(Message.FailedSession({ reason: "Not delivered" }))),
+  );
+
+const Text = { text: Schema.String, requestId: Schema.String };
+
+/** Queued behind the turn that is running. */
+export const Send = Command.define("Send", {
+  args: Text,
+  messages: [Message.CompletedAct, Message.FailedSession],
+  execute: (message) => completed(Effect.flatMap(Chat, (chat) => chat.send(message))),
+});
+
+/** Read by the turn that is running, at its next step. */
+export const Steer = Command.define("Steer", {
+  args: Text,
+  messages: [Message.CompletedAct, Message.FailedSession],
+  execute: (message) => completed(Effect.flatMap(Chat, (chat) => chat.steer(message))),
+});
+
+export const Withdraw = Command.define("Withdraw", {
+  args: { id: Schema.String },
+  messages: [Message.CompletedAct, Message.FailedSession],
+  execute: ({ id }) => completed(Effect.flatMap(Chat, (chat) => chat.withdraw({ id }))),
+});
+
+export const Stop = Command.define("Stop", {
+  messages: [Message.CompletedAct, Message.FailedSession],
+  execute: completed(Effect.flatMap(Chat, (chat) => chat.interrupt())),
+});
+
 // UPDATE
 
-type Return = Update.Return<Model, Message, AI.SessionClient>;
+type Return = Update.Return<Model, Message, Chat>;
 
-const act = (
-  model: Model,
-  command: (requestId: string) => Command.Command<AIFoldkit.Message, never, AI.SessionClient>,
-): Return => ({
+/** A message is named after the page and its count, so a retry is not run twice. */
+const say = (model: Model, command: typeof Send | typeof Steer): Return => ({
   model: modifyFields(model, { sent: (sent) => sent + 1, draft: () => "" }),
-  commands: [
-    Command.mapMessage(command(`${model.page}:${model.sent}`), (result) =>
-      Message.ReceivedSessionResult({ result }),
-    ),
-  ],
+  commands: [command({ text: model.draft, requestId: `${model.page}:${model.sent}` })],
 });
 
 export const update = (model: Model, message: Message) =>
   Message.match<Return>(message, {
     ChangedDraft: ({ text }) => ({ model: modifyFields(model, { draft: () => text }) }),
-    // Queued behind the turn that is running.
-    ClickedSend: () => act(model, (requestId) => AIFoldkit.Send({ text: model.draft, requestId })),
-    // Read by the turn that is running, at its next step.
-    ClickedSteer: () =>
-      act(model, (requestId) => AIFoldkit.Steer({ text: model.draft, requestId })),
-    ClickedStop: () => act(model, (requestId) => AIFoldkit.Interrupt({ requestId })),
-    ClickedWithdraw: ({ id }) => act(model, (requestId) => AIFoldkit.Withdraw({ id, requestId })),
+    ClickedSend: () => say(model, Send),
+    ClickedSteer: () => say(model, Steer),
+    ClickedStop: () => ({ model, commands: [Stop()] }),
+    ClickedWithdraw: ({ id }) => ({ model, commands: [Withdraw({ id })] }),
     ReceivedSessionEvent: ({ event }) => ({
       model:
         event.type === "status"
@@ -212,12 +306,7 @@ export const update = (model: Model, message: Message) =>
               items: (items) => [...items, { seq: event.seq, item: event.item }],
             }),
     }),
-    ReceivedSessionResult: ({ result }) => ({
-      model:
-        result._tag === "FailedSession"
-          ? modifyFields(model, { error: () => Option.some(result.reason) })
-          : model,
-    }),
+    CompletedAct: () => ({ model }),
     FailedSession: ({ reason }) => ({
       model: modifyFields(model, { error: () => Option.some(reason) }),
     }),
@@ -239,13 +328,19 @@ export const init = (flags: typeof Flags.Type): Return => ({
 
 // SUBSCRIPTION
 
-export const subscriptions = Subscription.make<Model, Message, AI.SessionClient>()(() => ({
-  session: AIFoldkit.events({
-    // The last item the Model holds: a reconnect resumes after it.
-    cursor: (model: Model) => Option.map(Array.last(model.items), (entry) => entry.seq),
-    onEvent: (event): Message => Message.ReceivedSessionEvent({ event }),
-    onFailure: (reason): Message => Message.FailedSession({ reason }),
-  }),
+export const subscriptions = Subscription.make<Model, Message, Chat>()((entry) => ({
+  session: entry(
+    {},
+    {
+      modelToDependencies: () => ({}),
+      // The status, every item, then each new one. It resumes by itself after a reconnect.
+      dependenciesToStream: () =>
+        follow().pipe(
+          Stream.map((event) => Message.ReceivedSessionEvent({ event })),
+          Stream.catch((error) => Stream.succeed(Message.FailedSession({ reason: error.message }))),
+        ),
+    },
+  ),
 }));
 
 // VIEW
@@ -299,15 +394,15 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
 });
 ```
 
-`cursor` is the last item the Model holds. The Subscription reads after it, and a changing cursor does not restart the read.
-
 Provide the client in the app's resources:
 
 ```typescript title="web/entry.ts"
 import * as Effect from "effect/Effect";
 import { Runtime } from "foldkit";
-import { Flags, init, Model, subscriptions, update, view } from "./Chat.ts";
-import { SessionLive } from "./Session.ts";
+import { Flags, init, Model, subscriptions, update, view } from "./App.ts";
+import { ChatLive } from "./Client.ts";
+
+const id = new URLSearchParams(location.search).get("session") ?? "main";
 
 Runtime.run(
   Runtime.makeApplication({
@@ -317,7 +412,7 @@ Runtime.run(
     update,
     view,
     subscriptions,
-    resources: SessionLive(new URLSearchParams(location.search).get("session") ?? "main"),
+    resources: ChatLive(`wss://${location.host}/sessions/${id}`),
     container: document.getElementById("root"),
   }),
   // Names this page's messages, so a retry is never run twice.
@@ -330,9 +425,9 @@ Runtime.run(
 The object answers the same group to your own services. A Worker, or a [Domain policy](/ai/domain#let-a-policy-ask-for-the-work), gets a client by the session's key:
 
 ```typescript
-const session = yield* engineers.getByName("task-7");
+const chat = yield* engineers.getByName("task-7");
 
-yield* session.send({ text: "Rename the config flag.", requestId: "start" });
+yield* chat.send({ text: "Rename the config flag.", requestId: "start" });
 ```
 
 A browser that is following `task-7` sees that message and everything the session does with it.

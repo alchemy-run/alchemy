@@ -85,23 +85,22 @@ More: [Read the transcript](https://alchemy.run/ai/processes#read-the-transcript
 
 ## Connect a front end
 
-Serve a session as `AI.SessionRpcs` from a `Cloudflare.RpcDurableObject` named after the session's key. A browser follows it and acts on it over one WebSocket.
+Define your own Effect RPC group over a session, using the Schemas in `@alchemy.run/ai/Session` (`SessionEvent`, `SessionEntry`, `QueuedMessage`, `HistoryOptions`, `SessionPage`). Serve it from a `Cloudflare.RpcDurableObject` named after the session's key.
 
 ```typescript
-export default class Engineers extends Cloudflare.RpcDurableObject<Engineers>()(
-  "Engineers",
-  { schema: AI.SessionRpcs },
-  Effect.gen(function* () {
-    const engineer = yield* Engineer;
-    const state = yield* Cloudflare.DurableObjectState;
-    return Effect.sync(() => AI.SessionHandlers(engineer.get(state.id.name ?? "")));
-  }).pipe(Effect.provide(Live)),
+export class ChatRpcs extends RpcGroup.make(
+  Rpc.make("send", { payload: { text: Schema.String, requestId: Schema.String } }),
+  Rpc.make("events", {
+    payload: { after: Schema.optional(Schema.Number) },
+    success: SessionEvent,
+    stream: true,
+  }),
 ) {}
 ```
 
-- The Worker forwards a route to it: `engineers.fetch(id, request)`. Authorize the caller first.
-- Browser code imports from `@alchemy.run/ai/SessionRpcs`: `AI.SessionClientWebSocket(url)` is the client Layer, `AI.followSession({ after })` the resumable event stream.
-- A Foldkit app uses `@alchemy.run/ai/Foldkit`: `Send`, `Steer`, `Withdraw`, `Interrupt` Commands and the `events` Subscription.
-- A server reaches the same object with `yield* engineers.getByName(id)`, which gives the same client.
+- Each handler calls one method of `AI.Session` (`send`, `steer`, `withdraw`, `interrupt`, `events`, `history`).
+- The Worker forwards a route to the object: `engineers.fetch(id, request)`. Authorize the caller first.
+- The browser uses `RpcWebSocketClient.layer` from `@alchemy.run/cloudflare/Workers/RpcWebSocketClient`. Read `events` again from the last `seq` after a reconnect.
+- A server reaches the same object with `yield* engineers.getByName(id)`.
 
-More: [Serve a session](https://alchemy.run/ai/front-end#serve-a-session), [Follow what the session does](https://alchemy.run/ai/front-end#follow-what-the-session-does), [In a Foldkit app](https://alchemy.run/ai/front-end#in-a-foldkit-app).
+More: [Define the interface](https://alchemy.run/ai/front-end#define-the-interface), [Connect and follow](https://alchemy.run/ai/front-end#connect-and-follow), [In a Foldkit app](https://alchemy.run/ai/front-end#in-a-foldkit-app).
