@@ -252,6 +252,27 @@ const ERRORS: ReadonlyMap<string, V> = new Map(
 );
 const ERROR_CLASSES: ReadonlySet<V> = new Set(ERRORS.values());
 
+/** What the language gives every file by name, read through the models of the library. */
+const GLOBAL_OBJECTS: ReadonlySet<string> = new Set(
+  "Math Object String Number Boolean Array JSON".split(" "),
+);
+const GLOBAL_FUNCTIONS: ReadonlySet<string> = new Set(
+  "parseInt parseFloat structuredClone Symbol".split(" "),
+);
+/** A name of the language itself, where no file gives it another meaning. */
+const globalOf = (name: string): V | undefined =>
+  name === "undefined"
+    ? Value.undef
+    : name === "Infinity" || name === "NaN"
+      ? Value.num(name === "NaN" ? Number.NaN : Number.POSITIVE_INFINITY)
+      : GLOBAL_OBJECTS.has(name)
+        ? { _tag: "Lib", module: name, path: [] }
+        : GLOBAL_FUNCTIONS.has(name)
+          ? { _tag: "Lib", module: "global", path: [name] }
+          : name === "globalThis"
+            ? { _tag: "Lib", module: "globalThis", path: [] }
+            : ERRORS.get(name);
+
 const BREAK: V = { _tag: "Opaque", what: "break" };
 /** `break outer` and `continue outer`: one value for each label, to find the statement it names. */
 const labelled = new Map<string, V>();
@@ -673,10 +694,8 @@ export const make = (given: Loader, run: Run): Interpreter => {
     }
     const found = yield* top(env.module, name, site);
     if (found) return found;
-    if (name === "undefined") return Value.undef;
-    if (name === "Math" || name === "Object") return { _tag: "Lib", module: name, path: [] } as V;
-    const error = ERRORS.get(name);
-    if (error) return error;
+    const global = globalOf(name);
+    if (global) return global;
     if (name === "BigInt")
       return {
         _tag: "Native",
@@ -713,6 +732,7 @@ export const make = (given: Loader, run: Run): Interpreter => {
         : Effect.succeed(fromTruth(equal));
     },
     force: (value) => forced(value),
+    fresh: (value) => made(value),
     array: (name, items, fn, initial, site) => arrayMethods[name]!(items, fn, initial, site),
   });
 
@@ -1081,6 +1101,12 @@ export const make = (given: Loader, run: Run): Interpreter => {
           (yield* fail(site, `uses an optic's .${key}, which the prover has no model for`))
         );
       case "Lib": {
+        // `globalThis.String`: the name, as a file that gives it no other meaning reads it.
+        if (value.module === "globalThis" && value.path.length === 0) {
+          const global = globalOf(key);
+          if (global) return global;
+          return yield* fail(site, `reads globalThis.${key}, which the prover has no model for`);
+        }
         const { host, ...lib } = value;
         const held =
           (typeof host === "object" || typeof host === "function") && host !== null

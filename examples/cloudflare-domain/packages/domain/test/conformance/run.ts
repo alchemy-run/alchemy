@@ -97,9 +97,19 @@ export const chunksOf = (group: Group): ReadonlyArray<Chunk> => {
   return out;
 };
 
+/** What a file that imports none of the library's modules starts with. */
+const BARE = [
+  "// @ts-nocheck",
+  `import * as Domain from "@alchemy.run/domain";`,
+  `import * as Schema from "effect/Schema";`,
+  `import * as Effect from "effect/Effect";`,
+  `const Small = Schema.Int.check(Schema.isBetween({ minimum: -20, maximum: 20 }));`,
+  `export class Done extends Domain.Event("Done", { results: Schema.Unknown }) {}`,
+];
+
 export const sourceOf = (group: Group, chunks: ReadonlyArray<Chunk>): string =>
   [
-    ...PRELUDE,
+    ...(group.bare ? BARE : PRELUDE),
     ...(group.prelude ?? []),
     `const PINS = ${group.pins};`,
     `const input = { id: Schema.String, pick: Schema.Literals(PINS.map((_, index) => index)), ${group.input} };`,

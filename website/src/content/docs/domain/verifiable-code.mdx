@@ -230,17 +230,12 @@ new Date();
 Math.random();
 globalThis.name;
 
-JSON.stringify(made); // globals with no model
-parseInt(text);
-Number(text);
-String(a);
-Boolean(a);
+JSON.stringify(made); // of a value an input decides
+parseInt("1" + a); // of text an input decides: so are parseFloat and Number
 a.toString();
 a.toFixed(2);
 new Map();
 new Set();
-Symbol("s");
-structuredClone(made);
 
 absurd(a); // what code calls where it cannot be: reaching it is reported
 ```
@@ -1421,6 +1416,36 @@ Array.sort(Array.fromIterable(HashMap.values(scores)), Order.Number);
   return MutableHashSet.size(seen);
 })();
 MutableHashSet.size(MutableHashSet.empty());
+```
+
+```typescript title="What the language gives by name"
+// In a file that does not import a module of the library under the same name.
+String(a); // as a template writes it
+Number("12");
+Number(flag);
+Boolean(a);
+Number.isInteger(a);
+Number.isSafeInteger(7);
+Number.isFinite(a);
+Number.isNaN(a);
+Number.MAX_SAFE_INTEGER;
+Number.MIN_SAFE_INTEGER;
+parseInt("ff", 16); // of text the code writes
+parseFloat("1.5e2");
+Number.parseInt("7");
+Number.parseFloat("2.5");
+Array.isArray([a]);
+Array.of(a, b, 3);
+Array.from([a, b], (n, index) => n + index);
+Array.from({ length: 3 }, (_, index) => index + a);
+Array.from("abc");
+JSON.stringify({ n: 1, list: [true, null] }); // of a value the code writes
+JSON.parse('{"n":1,"list":[true,null,"x"]}');
+structuredClone(made); // a copy the code may change
+Symbol("s"); // equal only to itself
+globalThis.String(a);
+Infinity;
+NaN;
 ```
 
 ```typescript title="effect/MutableList"

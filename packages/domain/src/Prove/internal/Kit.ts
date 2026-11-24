@@ -28,6 +28,8 @@ export interface Host {
   readonly kind: (value: V) => string | undefined;
   /** A list with its items, when the value is one. */
   readonly force: (value: V) => V;
+  /** A value the code being read has just made: it may change it, as it may what it wrote itself. */
+  readonly fresh: <A extends V>(value: A) => A;
   /** An array's method that takes a function, such as `map`. */
   readonly array: (
     name: string,

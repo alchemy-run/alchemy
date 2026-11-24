@@ -21,7 +21,7 @@ const text = sources.join("\n");
 const written = (module: string): string | undefined =>
   module === "effect/BigInt"
     ? "BigInts"
-    : module === "effect/Function" || module === "effect/pipe"
+    : module === "effect/Function" || module === "effect/pipe" || module === "global"
       ? undefined
       : module.replace(/^effect\//, "");
 
@@ -35,6 +35,9 @@ const used = (key: string): boolean => {
   // An optic's and a matcher's own methods are called on the value: `.replace(`, `.modify(`.
   if (module === "effect/Optic" && ["replace", "modify", "get", "getResult"].includes(path))
     return new RegExp(`Optic\\.[^;\\n]*\\.${escaped(path)}\\(`).test(text);
+  // A name of the language that is called itself: `String(a)`.
+  if (name !== undefined && path === "")
+    return new RegExp(`(?<![\\w.])${escaped(name)}\\(`).test(text);
   return name === undefined
     ? new RegExp(`(?<![\\w.])${escaped(last || "pipe")}(?![\\w])`).test(text)
     : new RegExp(`(?<![\\w.])${escaped(name)}\\.${escaped(path)}(?![\\w])`).test(text);

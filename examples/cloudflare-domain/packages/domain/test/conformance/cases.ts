@@ -83,6 +83,8 @@ export interface Group {
   readonly prelude?: ReadonlyArray<string>;
   /** The functions the prelude exports that the prover is told not to read. */
   readonly opaque?: ReadonlyArray<string>;
+  /** No module of the library is imported: `String`, `Number` and `Array` are the language's own. */
+  readonly bare?: boolean;
 }
 
 const numbers = {
@@ -3226,6 +3228,38 @@ const rest: ReadonlyArray<Group> = [
       `Schema.decodeUnknownEffect(Ticket)({ n: a }).pipe(Effect.map((ticket) => ticket.n + 1), Effect.catch(() => Effect.succeed(-1)))`,
       `Effect.map(Effect.result(Schema.encodeUnknownEffect(Ticket)({ n: a })), Result.isSuccess)`,
       `Schema.encodeEffect(Ticket)({ n: 2, note: "n" })`,
+    ],
+  },
+  {
+    // What the language gives by name, in a file that imports none of the library's modules.
+    name: "Globals",
+    bare: true,
+    ...numbers,
+    both: [
+      `[String(a), String(flag), String(null), String(undefined), String("s"), String()]`,
+      `"n" + String(a + b)`,
+      `[Number(a), Number("12"), Number(flag), Number(null), Number(" 3 "), Number()]`,
+      `[Boolean(a), Boolean(""), Boolean("x"), Boolean(flag), Boolean(null), Boolean([])]`,
+      `[Number.isInteger(a), Number.isInteger(1.5), Number.isInteger("1"), Number.isInteger(a / 2)]`,
+      `[Number.isFinite(a), Number.isFinite(Infinity), Number.isNaN(a), Number.isNaN(NaN), Number.isSafeInteger(7)]`,
+      `[Number.MAX_SAFE_INTEGER, Number.MIN_SAFE_INTEGER]`,
+      `[parseInt("42px"), parseInt("ff", 16), parseFloat("1.5e2"), Number.parseInt("7"), Number.parseFloat("2.5")]`,
+      `[Array.isArray([a]), Array.isArray(a), Array.isArray("s")]`,
+      `Array.of(a, b, 3)`,
+      `Array.from([a, b])`,
+      `Array.from([a, b], (n, index) => n + index)`,
+      `Array.from({ length: 3 }, (_, index) => index + a)`,
+      `Array.from("abc")`,
+      `[JSON.stringify({ n: 1, list: [true, null] }), JSON.stringify("s"), JSON.stringify([1, 2], null, 2)]`,
+      `JSON.parse('{"n":1,"list":[true,null,"x"]}')`,
+      `(() => { const made = { n: a, list: [b] }; const copy = structuredClone(made); copy.n = 9; copy.list.push(1); return [made, copy]; })()`,
+      `(() => { const one = Symbol("s"); const two = Symbol("s"); return [one === one, one === two]; })()`,
+      `[globalThis.String(a), globalThis.Math.max(a, b), globalThis.Number.isInteger(b)]`,
+    ],
+    unread: [
+      [`Number(String(a))`, /calls Number on a value the prover cannot see/],
+      [`JSON.stringify({ n: a })`, /calls JSON\.stringify on a value the prover cannot see/],
+      [`parseInt("1" + a)`, /calls parseInt on text the prover cannot see/],
     ],
   },
   {

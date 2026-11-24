@@ -164,9 +164,12 @@ it("every function the prover has a model for is on the page", () => {
     const name =
       module === "effect/BigInt"
         ? "BigInts"
-        : module === "effect/Function" || module === "effect/pipe"
+        : module === "effect/Function" || module === "effect/pipe" || module === "global"
           ? undefined
           : module.replace(/^effect\//, "");
+    // A name of the language that is called itself: `String(a)`.
+    if (name !== undefined && path === "")
+      return !new RegExp(`(?<![\\w.])${escaped(name)}\\(`).test(text);
     if (module === "effect/Optic" && ["replace", "modify", "get", "getResult"].includes(path))
       return !new RegExp(`\\.${escaped(path)}\\(`).test(text);
     return name === undefined

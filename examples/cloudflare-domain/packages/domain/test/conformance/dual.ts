@@ -35,6 +35,8 @@ const ONE_WAY: ReadonlySet<string> = new Set([
   ...["effect/PartitionedSemaphore:withPermit", "effect/PartitionedSemaphore:withPermits"],
   // Two ways to write its options, with a capacity and without: neither takes a value from `pipe`.
   "effect/RcMap:make",
+  // A function of the language, which is never given a value by `pipe`.
+  "Array:isArray",
 ]);
 
 const declared = new Map<string, ReadonlySet<string>>();

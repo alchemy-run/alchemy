@@ -894,6 +894,165 @@ export const make = (host: Host) => {
     "effect/Record:isEmptyReadonlyRecord": onRecord("Record.isEmptyReadonlyRecord", 1, (fields) =>
       Effect.succeed(Value.bool(Object.keys(fields).length === 0)),
     ),
+    // ---- What the language gives by name: conversions, and a few functions of arrays and text.
+    "String:": ([value], site) =>
+      value === undefined
+        ? Effect.succeed(Value.str(""))
+        : host.arithmetic("+", Value.str(""), value, site),
+    "Number:": ([value], site) => {
+      if (value === undefined) return Effect.succeed(Value.num(0));
+      if (
+        value._tag === "Num" ||
+        (value._tag === "Term" &&
+          value.term.sort !== "Bool" &&
+          value.term.sort !== "String" &&
+          value.big !== true)
+      )
+        return Effect.succeed(value);
+      if (value._tag === "Str" || value._tag === "Bool" || value._tag === "Big")
+        return Effect.succeed(Value.num(Number(value.value)));
+      if (value._tag === "Null") return Effect.succeed(Value.num(0));
+      if (value._tag === "Undef") return Effect.succeed(Value.num(Number.NaN));
+      if (value._tag === "Term" && value.term.sort === "Bool")
+        return Effect.succeed(Value.term("Int", `(ite ${value.term.text} 1 0)`));
+      return Effect.fail(
+        Value.notTranslated(site, "calls Number on a value the prover cannot see"),
+      );
+    },
+    "Boolean:": ([value], site) =>
+      Effect.map(host.truth(value ?? Value.undef, site), Compare.fromTruth),
+    "Number:isInteger": ([value]) =>
+      Effect.succeed(
+        value?._tag === "Num"
+          ? Value.bool(Number.isInteger(value.value))
+          : value?._tag === "Term" && value.big !== true && value.term.sort === "Int"
+            ? Value.bool(true)
+            : value?._tag === "Term" && value.big !== true && value.term.sort === "Real"
+              ? Compare.fromTruth(`(is_int ${value.term.text})`)
+              : Value.bool(false),
+      ),
+    "Number:isSafeInteger": ([value], site) =>
+      value?._tag === "Num"
+        ? Effect.succeed(Value.bool(Number.isSafeInteger(value.value)))
+        : value?._tag === "Term"
+          ? wrongArguments(site, "Number.isSafeInteger")
+          : Effect.succeed(Value.bool(false)),
+    // A number an input holds is one the prover takes to be a number: never NaN, never without end.
+    "Number:isFinite": ([value]) =>
+      Effect.succeed(
+        Value.bool(
+          value?._tag === "Num"
+            ? Number.isFinite(value.value)
+            : value?._tag === "Term" &&
+                value.big !== true &&
+                (value.term.sort === "Int" || value.term.sort === "Real"),
+        ),
+      ),
+    "Number:isNaN": ([value]) =>
+      Effect.succeed(Value.bool(value?._tag === "Num" && Number.isNaN(value.value))),
+    "Number:parseInt": ([text, radix], site) => parsed("Number.parseInt", text, radix, site),
+    "Number:parseFloat": ([text], site) => parsed("Number.parseFloat", text, undefined, site),
+    "global:parseInt": ([text, radix], site) => parsed("parseInt", text, radix, site),
+    "global:parseFloat": ([text], site) => parsed("parseFloat", text, undefined, site),
+    "Array:isArray": ([value], site) =>
+      value === undefined || value._tag === "Opaque" || value._tag === "Applied"
+        ? wrongArguments(site, "Array.isArray")
+        : Effect.succeed(Value.bool(value._tag === "Arr" || value._tag === "List")),
+    "Array:of": (args) => Effect.succeed(host.fresh(arr(args))),
+    "Array:from": ([given, map], site) =>
+      Effect.gen(function* () {
+        // `Array.from({ length: 3 }, f)`: that many places, each what the function gives.
+        const size =
+          given?._tag === "Obj" && !given.brand && given.fields.length?._tag === "Num"
+            ? given.fields.length.value
+            : undefined;
+        const items =
+          size !== undefined && Number.isInteger(size) && size >= 0 && size <= 1000
+            ? Array.from({ length: size }, () => Value.undef)
+            : given?._tag === "Str"
+              ? // Text the code writes, a letter at a time.
+                Array.from(given.value, Value.str)
+              : given
+                ? yield* kit.iterate(given, site)
+                : undefined;
+        if (!items) return yield* wrongArguments(site, "Array.from");
+        return host.fresh(
+          map && map._tag !== "Undef"
+            ? yield* host.array("map", items, map, undefined, site)
+            : arr(items),
+        );
+      }),
+    "JSON:stringify": ([value, replacer, space], site) => {
+      const real = value ? Known.real(value) : { value: undefined };
+      if (
+        !real ||
+        (replacer !== undefined && replacer._tag !== "Null" && replacer._tag !== "Undef")
+      )
+        return Effect.fail(
+          Value.notTranslated(site, "calls JSON.stringify on a value the prover cannot see"),
+        );
+      const indent = space?._tag === "Num" || space?._tag === "Str" ? space.value : undefined;
+      return Effect.try({
+        try: () => {
+          const text: string | undefined = JSON.stringify(real.value, null, indent);
+          return text === undefined ? Value.undef : Value.str(text);
+        },
+        catch: () => Value.notTranslated(site, "calls JSON.stringify on a value it cannot write"),
+      });
+    },
+    "JSON:parse": ([text], site) => {
+      if (text?._tag !== "Str")
+        return Effect.fail(
+          Value.notTranslated(site, "calls JSON.parse on text the prover cannot see"),
+        );
+      return Effect.try({
+        try: () => Known.known(JSON.parse(text.value) as unknown, "JSON.parse"),
+        catch: () =>
+          new Value.Rejected({
+            rejection: Value.obj({ name: Value.str("SyntaxError") }),
+            defect: true,
+          }),
+      }).pipe(
+        Effect.flatMap((made) =>
+          made ? Effect.succeed(made) : wrongArguments(site, "JSON.parse"),
+        ),
+      );
+    },
+    "global:structuredClone": ([value], site) => {
+      const clone = (v: V): V | undefined => {
+        if (v._tag === "Arr") {
+          const items = v.items.map(clone);
+          return items.every((item) => item !== undefined)
+            ? host.fresh(arr(items as ReadonlyArray<V>))
+            : undefined;
+        }
+        if (v._tag === "Obj" && !v.brand) {
+          const fields: Record<string, V> = {};
+          for (const [key, field] of Object.entries(v.fields)) {
+            const made = clone(field);
+            if (!made) return undefined;
+            fields[key] = made;
+          }
+          return host.fresh(Value.obj(fields));
+        }
+        return ["Num", "Big", "Str", "Bool", "Null", "Undef", "Term"].includes(v._tag)
+          ? v
+          : undefined;
+      };
+      const made = value ? clone(host.force(value)) : Value.undef;
+      return made
+        ? Effect.succeed(made)
+        : Effect.fail(
+            Value.notTranslated(site, "calls structuredClone on a value the prover cannot copy"),
+          );
+    },
+    // A symbol is equal only to itself.
+    "global:Symbol": ([name]) =>
+      Effect.sync((): V => ({
+        _tag: "Host",
+        value: Symbol(name?._tag === "Str" ? name.value : undefined),
+        name: "a symbol",
+      })),
     // The fields of each after the first are written into the first, which is what it gives.
     "Object:assign": ([target, ...sources], site) => {
       if (target?._tag !== "Obj" || target.brand) return wrongArguments(site, "Object.assign");
@@ -915,7 +1074,7 @@ export const make = (host: Host) => {
           fields[String(key.value)] = pair[1] ?? Value.undef;
         }
         return items
-          ? Effect.succeed(Value.obj(fields))
+          ? Effect.succeed(host.fresh(Value.obj(fields)))
           : wrongArguments(site, "Object.fromEntries");
       }),
     "Object:hasOwn": ([object, key], site) =>
@@ -1360,6 +1519,18 @@ export const make = (host: Host) => {
   );
   const rationals = Rationals.make(kit);
 
+  /** `parseInt` and `parseFloat`, of text the code writes. */
+  const parsed = (name: string, text: V | undefined, radix: V | undefined, site: Site): Eval<V> =>
+    text?._tag === "Str" && (radix === undefined || radix._tag === "Undef" || radix._tag === "Num")
+      ? Effect.succeed(
+          Value.num(
+            name.endsWith("parseFloat")
+              ? Number.parseFloat(text.value)
+              : Number.parseInt(text.value, radix?._tag === "Num" ? radix.value : undefined),
+          ),
+        )
+      : Effect.fail(Value.notTranslated(site, `calls ${name} on text the prover cannot see`));
+
   const written: Record<string, Model> = {
     ...own,
     ...timeModels,
@@ -1461,6 +1632,8 @@ export const make = (host: Host) => {
     ...rationals.values,
     ...streams.values,
     ...folds.constants,
+    "Number:MAX_SAFE_INTEGER": Value.num(Number.MAX_SAFE_INTEGER),
+    "Number:MIN_SAFE_INTEGER": Value.num(Number.MIN_SAFE_INTEGER),
     ...exits.values,
   };
   // The reducers the modules give are made of the orders and the zeros above.
