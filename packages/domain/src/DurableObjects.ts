@@ -3161,8 +3161,8 @@ const bindState = (impl: ObjectImpl): ObjectImpl =>
     return bound;
   });
 
-/** Where a host keeps a Vault's keys: the class `Vault.Keys`, one object per subject. */
-const VAULT: HostedModel = { modelName: "Vault", id: {}, sagas: [], legacyData: false };
+/** Where a host keeps a Vault's keys: the class `Domain.VaultKeys`, one object per subject. */
+const VAULT: HostedModel = { modelName: "Domain", id: {}, sagas: [], legacyData: false };
 
 /**
  * One subject's key, in its object's own storage. The first key stored
@@ -3862,7 +3862,7 @@ export const makePlatform = <R>(
 
       return Platform.of({
         keys: Effect.map(
-          inInit(host.declare(VAULT, "Keys", bindState(keyObject))),
+          inInit(host.declare(VAULT, "VaultKeys", bindState(keyObject))),
           (namespace): KeyStore["Service"] => ({
             get: (subject) =>
               Effect.map(

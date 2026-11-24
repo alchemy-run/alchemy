@@ -14,6 +14,7 @@ import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
+import { caseNames } from "../vault/cases.ts";
 import { ConformanceApi, SECRET } from "./model.ts";
 
 type TestFn = (
@@ -103,6 +104,16 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
         times: Math.ceil(within / 500),
       }),
     );
+
+  test(
+    "a Vault keeps each subject's key on the host: values open, and stop opening once shredded",
+    Effect.gen(function* () {
+      expect(yield* call(`/vault/${fresh("vault")}`)).toEqual(
+        Object.fromEntries(caseNames.map((name) => [name, true])),
+      );
+    }),
+    options,
+  );
 
   test(
     "a rewrite changes an instance's events, its state and its view, once per id",
