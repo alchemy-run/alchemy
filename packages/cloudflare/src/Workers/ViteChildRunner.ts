@@ -177,7 +177,12 @@ const program = Effect.scoped(
               context: runtimeContext,
               entrypoints: selfEntrypoints,
             },
-            { host: viteHost, port: vitePort, strictPort: false },
+            {
+              host: viteHost,
+              port: vitePort,
+              strictPort: false,
+              ...(config.allowedHosts?.length ? { allowedHosts: config.allowedHosts } : {}),
+            },
             viteMode,
           ).pipe(Effect.map((server) => server.resolvedUrls?.local[0]));
     if (!url) {

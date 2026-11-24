@@ -24,6 +24,12 @@ export interface ViteChildConfig {
   storageDirectory: string;
   stack: { name: string; stage: string };
   env: Record<string, unknown>;
+  /**
+   * Hostnames the dev server accepts beyond localhost: the edge hostnames
+   * (custom domain, zone-route hosts) whose requests reach it through the
+   * local edge router with their original `Host`. Vite's `allowedHosts`.
+   */
+  allowedHosts?: string[];
   source?: {
     descriptor: WorkerSourceDescriptor;
     id: string;

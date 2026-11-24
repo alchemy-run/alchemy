@@ -1,4 +1,8 @@
-import { matchRoute, routePatternUrl } from "@alchemy.run/cloudflare/Workers/RoutePattern";
+import {
+  matchRoute,
+  routePatternAllowedHost,
+  routePatternUrl,
+} from "@alchemy.run/cloudflare/Workers/RoutePattern";
 import { describe, expect, it } from "@alchemy.run/test";
 
 const route = (pattern: string) => ({ pattern });
@@ -39,6 +43,18 @@ describe(
       expect(routePatternUrl("api.example.com/users/*")).toBe("https://api.example.com");
       expect(routePatternUrl("http://api.example.com/*")).toBe("http://api.example.com");
       expect(routePatternUrl("*.example.com/*")).toBeUndefined();
+    });
+
+    it("derives the host a Vite dev server must allow", () => {
+      // A literal host is allowed as is, with or without scheme and path.
+      expect(routePatternAllowedHost("api.example.com/users/*")).toBe("api.example.com");
+      expect(routePatternAllowedHost("https://API.example.com/*")).toBe("api.example.com");
+      // `*.example.com` is Vite's leading-dot form (it also admits the apex).
+      expect(routePatternAllowedHost("*.example.com/*")).toBe(".example.com");
+      // Vite cannot name a suffix wildcard (`fooexample.com` would match), and
+      // a bare `*` host matches everything: the app's own `allowedHosts` rules.
+      expect(routePatternAllowedHost("*example.com/*")).toBeUndefined();
+      expect(routePatternAllowedHost("*/*")).toBeUndefined();
     });
   },
 );

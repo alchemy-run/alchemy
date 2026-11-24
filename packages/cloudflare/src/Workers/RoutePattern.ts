@@ -78,6 +78,21 @@ export const routePatternHost = (pattern: string): string | undefined => {
   return parsed.hostWildcard ? undefined : parsed.host;
 };
 
+/**
+ * The host a dev server must accept for a pattern, in Vite's `allowedHosts`
+ * dialect: the literal hostname, or `.example.com` for `*.example.com`
+ * (which also admits the apex). `undefined` for a bare `*` host or a suffix
+ * wildcard Vite cannot express (`*example.com`).
+ */
+export const routePatternAllowedHost = (pattern: string): string | undefined => {
+  const parsed = parseRoutePattern(pattern);
+  if (parsed.host === "") return undefined;
+  // Vite only expresses `*.example.com` (leading dot). A suffix wildcard such
+  // as `*example.com` also matches `fooexample.com`, which `allowedHosts`
+  // cannot name — leave it to the app's own `server.allowedHosts`.
+  return parsed.hostWildcard && !parsed.host.startsWith(".") ? undefined : parsed.host;
+};
+
 /** Whether a pattern's host component matches `host`. */
 export const routePatternMatchesHost = (pattern: string, host: string): boolean => {
   const parsed = parseRoutePattern(pattern);

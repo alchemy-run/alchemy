@@ -62,6 +62,9 @@ export class LocalEdge extends Context.Service<
       routes: ReadonlyArray<LocalEdgeRoute>,
     ) => Effect.Effect<void, RuntimeError>;
     readonly removeRoutes: (owner: string) => Effect.Effect<void, RuntimeError>;
+    /** Resolve a logical Worker name to its local edge service target. */
+    readonly setTarget: (script: string, target: string) => Effect.Effect<void, RuntimeError>;
+    readonly removeTarget: (script: string, target: string) => Effect.Effect<void, RuntimeError>;
     /**
      * Expose a custom-domain Worker. Replaces the Worker's own
      * `proxy.set(upstream)`: the edge points the proxy at the Worker or at
@@ -144,6 +147,7 @@ export const LocalEdgeLive = Layer.effect(
     )}`;
 
     const routes = new Map<string, ReadonlyArray<LocalEdgeRoute>>();
+    const targets = new Map<string, string>();
     const domains = new Map<string, LocalEdgeDomain>();
     const listeners = new Map<
       string,
@@ -193,7 +197,10 @@ export const LocalEdgeLive = Layer.effect(
     });
 
     const rebuild = Effect.gen(function* () {
-      const patterns = [...routes.values()].flat();
+      const patterns = [...routes.values()].flat().map((route) => ({
+        ...route,
+        script: route.script ? (targets.get(route.script) ?? route.script) : undefined,
+      }));
       yield* syncListeners(
         new Set(patterns.flatMap((route) => routePatternHost(route.pattern) ?? [])),
       );
@@ -224,7 +231,7 @@ export const LocalEdgeLive = Layer.effect(
           })),
           domains: Object.fromEntries(routedDomains.map(([host, d]) => [host, binding(d.script)])),
         };
-        const key = JSON.stringify(config);
+        const key = JSON.stringify({ scripts, config });
         if (previous?.key !== key) {
           router = { ...(yield* startRouter(scripts, config)), key };
         }
@@ -253,6 +260,18 @@ export const LocalEdgeLive = Layer.effect(
       Effect.sync(mutate).pipe(Effect.andThen(rebuild), lock.withPermits(1));
 
     return LocalEdge.of({
+      setTarget: (script, target) =>
+        Effect.suspend(() =>
+          targets.get(script) === target
+            ? Effect.void
+            : Effect.sync(() => targets.set(script, target)).pipe(Effect.andThen(rebuild)),
+        ).pipe(lock.withPermits(1)),
+      removeTarget: (script, target) =>
+        Effect.suspend(() =>
+          targets.get(script) === target
+            ? Effect.sync(() => targets.delete(script)).pipe(Effect.andThen(rebuild))
+            : Effect.void,
+        ).pipe(lock.withPermits(1)),
       setRoutes: (owner, next) =>
         Effect.suspend(() =>
           JSON.stringify(routes.get(owner) ?? []) === JSON.stringify(next)

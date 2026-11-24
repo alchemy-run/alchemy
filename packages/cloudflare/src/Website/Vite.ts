@@ -192,6 +192,37 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * });
  * ```
  *
+ * ### Routing a Vite Site Alongside Other Workers in Dev
+ * Under `alchemy dev`, a Vite site with a `domain` and `routes` joins the
+ * same local edge router as every other Worker. Matching paths go to the
+ * Worker that owns the route, and everything else, including assets and
+ * HMR WebSockets, falls back to the Vite dev server. The site's own dev URL
+ * serves the same routing.
+ *
+ * **Example:** Vite site with an API Worker on one hostname
+ * ```typescript
+ * const api = yield* Cloudflare.Worker("Api", {
+ *   main: "./api.ts",
+ *   routes: [{ pattern: "app.example.com/api/*", zoneName: "example.com" }],
+ * });
+ * const app = yield* Cloudflare.Website.Vite("App", {
+ *   domain: "app.example.com",
+ * });
+ * ```
+ *
+ * The local edge reaches the dev server over plain HTTP with the original
+ * `Host` header, and Alchemy adds the site's `domain` and literal route
+ * hostnames to Vite's `allowedHosts`, plus `.example.com` for a
+ * `*.example.com` route. Two limits apply in dev:
+ *
+ * - Vite's host validation rejects hosts Alchemy cannot name for it: a suffix
+ *   wildcard such as `*example.com`, a bare `*` host, and the hostname of a
+ *   standalone `Workers.WorkerRoute`. Add those to the app's own
+ *   `server.allowedHosts`.
+ * - An HTTPS dev server (`server.https`) cannot sit behind the edge. Routed
+ *   requests fail with an error naming the setting; turn it off to test
+ *   routing locally. The site's own dev URL keeps working.
+ *
  * ### Proxying to a Local Backend in Dev
  * Under `alchemy dev`, Vite's `server.proxy` runs in front of the Worker.
  * Paths it matches go to its target, WebSockets included with
