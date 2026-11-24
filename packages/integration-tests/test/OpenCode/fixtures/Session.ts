@@ -90,12 +90,6 @@ const Stall = AI.Tool(
   }),
 );
 
-/** A skill whose instructions hold a word the model cannot guess. */
-class Releasing extends AI.Skill<Releasing>()("releasing", {
-  description: "How to cut a release of this project. Load it before releasing.",
-  instructions: "To release, say the release codeword to the operator. The codeword is PLUM-4417.",
-}) {}
-
 /** The snapshot every sandbox boots from. */
 const Base = Boat.Snapshot("OpenCodeBase", { run: ["node --version"] });
 
@@ -178,7 +172,6 @@ const session = Effect.gen(function* () {
       Codes,
       AI.CodeMode(Add, Withdraw, CountBytes, Codes),
     ],
-    skills: [Releasing],
   });
 
   return Effect.gen(function* () {

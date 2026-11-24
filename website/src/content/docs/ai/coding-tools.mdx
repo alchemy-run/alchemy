@@ -26,19 +26,34 @@ A name says nothing about how the tool works. Each harness ships its own `bash`,
   caption="AI.Bash is a name. Pi.Bash, OpenCode.Bash and a Layer of your own each provide it, with their own description, parameters and place to run. A harness uses whichever one it is given."
 />
 
-## List them on a harness
+## Mention them in a process
 
-List the group, or the tools you want one at a time:
+Mention the tools a [process](/ai/processes) should have, one at a time:
 
-```typescript
-const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools] });
+```typescript title="src/Research.process.ts"
+import * as AI from "@alchemy.run/ai";
+
+export class Research extends AI.Process<Research>()("Research", {
+  description: "Answer a question about the code, with file paths.",
+})`
+  Search the repository with ${AI.Grep} and open what looks relevant with ${AI.Read}.
+  Never edit files.
+` {}
 ```
 
-```typescript
-const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.Bash, AI.Read] });
+`AI.CodingTools` is all six at once:
+
+```typescript title="src/Engineer.process.ts"
+import * as AI from "@alchemy.run/ai";
+
+export class Engineer extends AI.Process<Engineer>()("Engineer", {
+  description: "Make one change to the project.",
+})`
+  Make the change you are asked for. Your tools for the codebase are ${AI.CodingTools}.
+` {}
 ```
 
-Listing a name requires a Layer for it, so the harness does not compile until each one is provided.
+Mentioning a name requires a Layer for it, so the program does not compile until each one is provided. A harness can be given the names directly too: see [Tools on Pi](/pi/tools) and [Tools on OpenCode](/opencode/tools).
 
 ## Use the harness's own tools
 
@@ -85,7 +100,7 @@ const reply = yield* harness.session("pr-142").prompt("Why does the login test f
 
 `make` on a name takes the description, the schema and the handler together. Here `bash` logs every command before it runs:
 
-```typescript title="src/AuditedBash.ts"
+```typescript title="src/AuditedBash.tool.ts"
 import * as AI from "@alchemy.run/ai";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";

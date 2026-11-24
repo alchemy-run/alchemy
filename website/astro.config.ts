@@ -2508,7 +2508,28 @@ export default defineConfig({
           label: "AI",
           items: [
             { label: "Overview", link: "/ai" },
-            { label: "What is an agent harness?", link: "/ai/what-is-a-harness" },
+            { label: "What is Alchemy AI?", link: "/ai/what-is-alchemy-ai" },
+            { label: "Project layout", link: "/ai/project-layout" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "ai/tutorial" } }],
+            },
+            {
+              label: "Processes",
+              items: [
+                { label: "Processes", link: "/ai/processes" },
+                { label: "Processes that use processes", link: "/ai/process-graphs" },
+                { label: "Processes and Domain models", link: "/ai/domain" },
+              ],
+            },
+            {
+              label: "Running them",
+              items: [
+                { label: "Choose a harness", link: "/ai/harnesses" },
+                { label: "Where sessions run", link: "/ai/hosting" },
+                { label: "Connect a front end", link: "/ai/front-end" },
+              ],
+            },
             {
               label: "Models & tools",
               items: [
@@ -2517,7 +2538,6 @@ export default defineConfig({
                 { label: "Coding tools", link: "/ai/coding-tools" },
                 { label: "MCP servers", link: "/ai/mcp-servers" },
                 { label: "Code mode", link: "/ai/code-mode" },
-                { label: "Skills", link: "/ai/skills" },
               ],
             },
             {
@@ -2559,7 +2579,7 @@ export default defineConfig({
               label: "Extensions & skills",
               items: [
                 { label: "Extensions", link: "/pi/extensions" },
-                { label: "Skills", link: "/pi/skills" },
+                { label: "Processes", link: "/pi/processes" },
               ],
             },
             {
@@ -2594,7 +2614,7 @@ export default defineConfig({
                 { label: "Tools", link: "/opencode/tools" },
                 { label: "MCP servers", link: "/opencode/mcp-servers" },
                 { label: "Code mode", link: "/opencode/code-mode" },
-                { label: "Skills", link: "/opencode/skills" },
+                { label: "Processes", link: "/opencode/processes" },
               ],
             },
             {

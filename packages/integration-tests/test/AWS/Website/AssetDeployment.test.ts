@@ -7,6 +7,7 @@ import * as s3 from "@distilled.cloud/aws/s3";
 import * as Provider from "alchemy/Provider";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import { driftOf, repairDrift, waitForDrift } from "../drift.ts";
@@ -240,4 +241,87 @@ test.provider(
       yield* assertBucketDeleted(bucketName);
     }),
   { tags: ["provider:aws", "provider:aws:s3", "provider:aws:website", "live"], timeout: 180_000 },
+);
+
+// #2968: a `*` in a `fileOptions` glob reached the RegExp unescaped, so
+// `**` failed the deploy with "Nothing to repeat".
+test.provider(
+  "fileOptions globs pick each object's Cache-Control and Content-Type",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-asset-file-options-" });
+      const sources = [
+        "index.html",
+        "docs/guide.html",
+        "admin/index.html",
+        "app.js",
+        "assets/app.js",
+        "data.json",
+        "assets/data.json",
+        "file1.txt",
+        "file12.txt",
+        "notes(v1).txt",
+      ];
+      yield* Effect.forEach(sources, (file) =>
+        fs
+          .makeDirectory(path.dirname(path.join(root, file)), { recursive: true })
+          .pipe(Effect.andThen(fs.writeFileString(path.join(root, file), file))),
+      );
+
+      yield* stack.destroy();
+
+      const { bucket } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* Bucket("FileOptionsBucket", { forceDestroy: true });
+          const files = yield* AssetDeployment("FileOptionsFiles", {
+            bucket,
+            sourcePath: root,
+            purge: true,
+            fileOptions: [
+              // `**` matches every file, at any depth.
+              { files: "**", cacheControl: "max-age=60" },
+              // `**/` also matches no directory at all, so a root file counts.
+              { files: "**/*.html", ignore: "admin/**", cacheControl: "max-age=0" },
+              // `*` stays inside one path segment.
+              { files: "*.js", cacheControl: "max-age=120" },
+              {
+                files: "**/*.json",
+                contentType: "application/x-data",
+                cacheControl: "max-age=300",
+              },
+              // `?` is exactly one character; other regex characters are literal.
+              { files: ["file?.txt", "notes(v1).txt"], cacheControl: "max-age=600" },
+            ],
+          });
+          return { bucket, files };
+        }),
+      );
+
+      const observed = yield* Effect.forEach(
+        sources,
+        (file) =>
+          s3
+            .headObject({ Bucket: bucket.bucketName, Key: file })
+            .pipe(Effect.map((head) => [file, [head.CacheControl, head.ContentType]] as const)),
+        { concurrency: "unbounded" },
+      );
+      expect(Object.fromEntries(observed)).toEqual({
+        "index.html": ["max-age=0", "text/html; charset=utf-8"],
+        "docs/guide.html": ["max-age=0", "text/html; charset=utf-8"],
+        "admin/index.html": ["max-age=60", "text/html; charset=utf-8"],
+        "app.js": ["max-age=120", "application/javascript; charset=utf-8"],
+        "assets/app.js": ["max-age=60", "application/javascript; charset=utf-8"],
+        "data.json": ["max-age=300", "application/x-data"],
+        "assets/data.json": ["max-age=300", "application/x-data"],
+        "file1.txt": ["max-age=600", "text/plain; charset=utf-8"],
+        "file12.txt": ["max-age=60", "text/plain; charset=utf-8"],
+        "notes(v1).txt": ["max-age=600", "text/plain; charset=utf-8"],
+      });
+
+      yield* stack.destroy();
+      yield* assertBucketDeleted(bucket.bucketName);
+    }),
+  { tags: ["provider:aws", "provider:aws:s3", "provider:aws:website", "live"], timeout: 120_000 },
 );

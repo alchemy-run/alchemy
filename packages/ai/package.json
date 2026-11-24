@@ -22,7 +22,8 @@
   },
   "files": [
     "lib",
-    "src"
+    "src",
+    "skills"
   ],
   "type": "module",
   "sideEffects": false,

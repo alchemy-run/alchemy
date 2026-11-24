@@ -5,7 +5,7 @@ description: Run the OpenCode coding agent with Alchemy, inside a Cloudflare Dur
 
 import HubMap from "../../../components/HubMap.astro";
 
-[OpenCode](https://opencode.ai) is an open-source coding agent: it keeps sessions, runs a loop of model requests and tool calls, and stores each transcript. OpenCode 2 runs inside a Cloudflare Durable Object, on the object's own SQLite. Alchemy starts it there, answers its model requests with your models, and registers your tools with it, all in the same isolate. A sandbox is only where tools that need files or a shell do their work. Models, tools, skills and sandboxes are the ones you declare with [`@alchemy.run/ai`](/ai).
+[OpenCode](https://opencode.ai) is an open-source coding agent: it keeps sessions, runs a loop of model requests and tool calls, and stores each transcript. OpenCode 2 runs inside a Cloudflare Durable Object, on the object's own SQLite. Alchemy starts it there, answers its model requests with your models, and registers your tools with it, all in the same isolate. A sandbox is only where tools that need files or a shell do their work. Models, tools and sandboxes are the ones you declare with [`@alchemy.run/ai`](/ai).
 
 **New to OpenCode?** Start with [What is OpenCode?](/opencode/what-is-opencode).
 
@@ -69,7 +69,7 @@ export default class Coder extends Cloudflare.DurableObject<Coder>()(
 
 **Want to build?** Follow [Setup](/opencode/setup), then the [tutorial](/opencode/tutorial/part-1): a bot that answers issues on a GitHub repository.
 
-**Looking for something specific?** Every section of these docs is listed below. Models, tools, skills, MCP servers and sandboxes are shared by every harness, and are covered in the [AI docs](/ai).
+**Looking for something specific?** Every section of these docs is listed below. Models, tools, MCP servers, sandboxes and processes are shared by every harness, and are covered in the [AI docs](/ai).
 
 ## The docs
 
