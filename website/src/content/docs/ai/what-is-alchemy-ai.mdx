@@ -139,7 +139,7 @@ See [Models](/ai/models).
 
 ## Processes that use processes
 
-A process can mention another. Its session may then **follow** it, reading that process's prose into its own conversation, or **start** it, as a session of its own.
+A process can mention another. That gives its session two ways to use it: **follow** it, reading that process's prose into its own conversation, or **start** it, as a session of its own.
 
 ```typescript title="src/Answering.process.ts"
 export class Answering extends AI.Process<Answering>()("Answering", {}) {}
@@ -161,17 +161,11 @@ export const TriageLive = Triage.toLayer({
 
 `Triage` mentions the name `Answering`, not its prose, so `AnsweringLive` can change without `Triage` knowing.
 
-Other systems have two concepts here: a **skill**, instructions read into the current conversation, and a **subagent**, a separate conversation with its own instructions. Here there is one. `Answering` is a process, and it is not a skill or a subagent by nature. The prose that mentions it says which to do:
+A mention does not fix how `Answering` is used. It makes the process available, and the session decides: it can follow it, start it, or do both at different times. The prose can suggest one, as "Follow" does above, and it is still the session's choice.
 
-```typescript
-`Follow ${Answering}, then post your answer with ${PostAnswer}.`
-```
+Other systems have two concepts here: a **skill**, instructions read into the current conversation, and a **subagent**, a separate conversation with its own instructions. Here both are the same process, used in two ways.
 
-```typescript
-`Start ${Answering} to draft the answer, then post it with ${PostAnswer}.`
-```
-
-The first reads `Answering` into the same conversation. The second runs it as a session of its own. Processes that mention each other are how you model a team or an organization.
+Processes that mention each other are how you model a team or an organization.
 
 See [Processes that use processes](/ai/process-graphs).
 
