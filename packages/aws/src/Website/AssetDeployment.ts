@@ -31,8 +31,17 @@ export interface AssetFileOption {
   ignore?: string | string[];
 }
 
+/**
+ * The headers one file was uploaded with.
+ */
 export interface AssetFileMetadata {
+  /**
+   * `Content-Type` of the uploaded object.
+   */
   contentType: string;
+  /**
+   * `Cache-Control` of the uploaded object.
+   */
   cacheControl: string;
 }
 

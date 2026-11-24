@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
 import { Bucket } from "@alchemy.run/aws/S3";
-import { AssetDeployment } from "@alchemy.run/aws/Website/AssetDeployment";
+import { AssetDeployment, type AssetFileOption } from "@alchemy.run/aws/Website/AssetDeployment";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as s3 from "@distilled.cloud/aws/s3";
@@ -177,6 +177,67 @@ test.provider(
       ]);
 
       yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:s3", "provider:aws:website", "live"], timeout: 180_000 },
+);
+
+// #2994: a file whose body is unchanged must still be uploaded again when
+// its `fileOptions` change, or the old headers are served forever.
+test.provider(
+  "changing fileOptions updates the headers of unchanged files",
+  (stack) =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const v1 = path.join(import.meta.dirname, "fixtures", "asset-deployment-v1");
+      const deploy = (fileOptions?: AssetFileOption[]) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const bucket = yield* Bucket("MetadataAssetBucket", { forceDestroy: true });
+            const files = yield* AssetDeployment("MetadataFiles", {
+              bucket,
+              sourcePath: v1,
+              prefix: "site",
+              fileOptions,
+            });
+            return { bucket, files };
+          }),
+        );
+
+      yield* stack.destroy();
+
+      const first = yield* deploy();
+      const bucketName = first.bucket.bucketName;
+      const head = (file: string) => s3.headObject({ Bucket: bucketName, Key: `site/${file}` });
+
+      const robots = yield* head("robots.txt");
+      const index = yield* head("index.html");
+      expect(robots.CacheControl).toBe("max-age=31536000,public,immutable");
+      expect(robots.ContentType).toBe("text/plain; charset=utf-8");
+
+      const cacheControl = "max-age=0,public,must-revalidate";
+      const recached = yield* deploy([{ files: "robots.txt", cacheControl }]);
+      expect(recached.files.version).not.toBe(first.files.version);
+      expect((yield* head("robots.txt")).CacheControl).toBe(cacheControl);
+
+      const retyped = yield* deploy([
+        { files: "robots.txt", cacheControl },
+        { files: "about.html", contentType: "text/plain" },
+      ]);
+      expect(retyped.files.version).not.toBe(recached.files.version);
+      expect((yield* head("about.html")).ContentType).toBe("text/plain");
+      expect((yield* head("robots.txt")).CacheControl).toBe(cacheControl);
+
+      // A file no rule touched was never uploaded again.
+      expect((yield* head("index.html")).LastModified).toEqual(index.LastModified);
+
+      // Removing the rules puts the defaults back.
+      yield* deploy();
+      expect((yield* head("robots.txt")).CacheControl).toBe(robots.CacheControl);
+      expect((yield* head("about.html")).ContentType).toBe("text/html; charset=utf-8");
+      expect((yield* head("index.html")).LastModified).toEqual(index.LastModified);
+
+      yield* stack.destroy();
+      yield* assertBucketDeleted(bucketName);
     }),
   { tags: ["provider:aws", "provider:aws:s3", "provider:aws:website", "live"], timeout: 180_000 },
 );
