@@ -344,18 +344,6 @@ class ForgetOwnerForGood extends Domain.Rewrite("ForgetOwnerForGood", {
   },
 }) {}
 
-/** Undoes every event an account recorded after `since`, as a restore to that point would. */
-const undo = <E>(
-  event: E,
-  { since }: { readonly since: number },
-  { seq }: { readonly seq: number },
-) => (seq > since ? null : event);
-class UndoSince extends Domain.Rewrite("UndoSince", {
-  of: Account,
-  input: { since: Schema.Number },
-  events: { Opened: undo, Deposited: undo, Noted: undo, BroughtForward: undo },
-}) {}
-
 class DeleteCustomer extends Domain.Rewrite("DeleteCustomer", { of: Customer, delete: true }) {}
 class DeleteAccount extends Domain.Rewrite("DeleteAccount", { of: Account, delete: true }) {}
 
@@ -406,15 +394,7 @@ class Bank extends Domain.Model("Bank", {
   views: [Summary, Dashboard, Ledger, Holders],
   projections: [Directory, Owners, Cards],
   streams: [Card],
-  rewrites: [
-    ForgetOwner,
-    ForgetOwnerForGood,
-    DeleteCustomer,
-    DeleteAccount,
-    Reassign,
-    Overdraw,
-    UndoSince,
-  ],
+  rewrites: [ForgetOwner, ForgetOwnerForGood, DeleteCustomer, DeleteAccount, Reassign, Overdraw],
   compactions: [BringForward, Forget],
 }) {}
 
@@ -536,41 +516,6 @@ for (const platform of Object.keys(platforms) as ReadonlyArray<keyof typeof plat
             [2, "", 100],
             [3, "", 105],
           ]);
-        }).pipe(Effect.scoped, Effect.provide(bankOn(platform))),
-      { timeout: 60_000 },
-    );
-
-    it.live(
-      "undoing an instance's latest events never reuses their sequence numbers",
-      () =>
-        Effect.gen(function* () {
-          const { accounts } = yield* seeded;
-          expect(yield* cardsOf("a-1")).toEqual([
-            [1, "Sam", 0],
-            [2, "Sam", 100],
-          ]);
-
-          // Back to how the account stood after its second event.
-          const receipt = yield* accounts.rewrite("a-1", new UndoSince({ since: 2 }));
-          expect(receipt.changed).toBe(2);
-          yield* accounts.rewritten(receipt);
-          expect(yield* stored("Account", "a-1")).toEqual([
-            [1, "Opened"],
-            [2, "Noted"],
-          ]);
-          expect(yield* accounts.get("a-1")).toMatchObject({ balance: 0, notes: 1 });
-          expect(Option.getOrNull(yield* (yield* Summary).get(Account.ref("a-1")))).toMatchObject({
-            balance: 0,
-          });
-
-          // The next command follows the undone events: every consumer receives it.
-          const next = yield* accounts.send(new Deposit({ id: "a-1", amount: 5 }));
-          expect(next.version).toBe(5);
-          expect(next.reply).toEqual({ balance: 5 });
-          yield* Cards.caughtUp(next);
-          const summary = yield* (yield* Summary).get(Account.ref("a-1"), { atLeast: next });
-          expect(Option.getOrNull(summary)).toMatchObject({ balance: 5 });
-          expect((yield* cardsOf("a-1")).at(-1)).toEqual([3, "Sam", 5]);
         }).pipe(Effect.scoped, Effect.provide(bankOn(platform))),
       { timeout: 60_000 },
     );

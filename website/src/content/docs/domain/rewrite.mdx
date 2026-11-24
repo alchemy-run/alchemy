@@ -75,28 +75,6 @@ export class DropNotes extends Domain.Rewrite("DropNotes", {
 }) {}
 ```
 
-## Undo an instance's latest events
-
-A handler also gets the event's envelope. A rewrite that removes every event after a given sequence number takes an instance back to how it stood then.
-
-```typescript title="src/UndoSince.rewrite.ts"
-import * as Domain from "@alchemy.run/domain";
-import * as Schema from "effect/Schema";
-import { Guestbook } from "./Guestbook.aggregate.ts";
-
-const undo = <E>(event: E, { since }: { readonly since: number }, { seq }: { readonly seq: number }) =>
-  seq > since ? null : event;
-
-/** Takes a guestbook back to how it stood after event `since`. */
-export class UndoSince extends Domain.Rewrite("UndoSince", {
-  of: Guestbook,
-  input: { since: Schema.Number },
-  events: { Signed: undo, NoteAdded: undo },
-}) {}
-```
-
-The next command's events follow the removed ones, so every view and projection receives them. Restoring the instance's storage to an earlier point, such as a Durable Object bookmark, would instead commit new events under sequence numbers its consumers have already seen, and they would drop them as duplicates.
-
 ## Remove an instance
 
 `delete: true` removes every event of the instance, its state, and what it keeps of the commands it handled and scheduled.
@@ -232,6 +210,8 @@ export const forgetOwnerOnce = Effect.fn(function* (
 ```
 
 ## What a rewrite doesn't reach
+
+A rewrite is not an undo. To put right events recorded by mistake, record the facts that reverse them, so every policy and saga hears it too. See [Correcting mistakes](/domain/correcting-mistakes).
 
 A rewrite changes what the model stores. It doesn't reach what left the model: a row a projection wrote before you gave it a `rewrite` handler, a message a policy sent to an [external system](/domain/external-system), the events a [compaction](/domain/compaction) handed to your archive, your logs and traces.
 
