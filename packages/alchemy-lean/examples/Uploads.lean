@@ -209,10 +209,59 @@ theorem scan_safe (name : String) (cloud : Memory) (safe : Safe cloud) :
 
 end
 
+/-! ### What the deployed Scanner runs
+
+The Scanner's role, and the code it runs for each message on the queue, written
+out. Both are checked against the stack itself, by computation: if the stack's
+Scanner ever does anything else, these two lines stop compiling.
+-/
+
+abbrev scannerRole : Access Kind :=
+  S3.Get out.files ["incoming"] ∪ S3.Put out.files ["quarantine"] ∪ S3.Put out.files ["clean"]
+    ∪ SQS.Receive out.scans
+
+/-- Take the next upload's name off the queue, and scan it. -/
+def onMessage : Run scannerRole Failure Unit := do
+  match ← (((SQS.ReceiveMessageLive out.scans).build (access := scannerRole)
+      (inferInstance : Has scannerRole (SQS.Receive out.scans)).le ⟨⟩).call).mapError
+        (fun e => nomatch e) with
+  | some name => (scan out.files name).mapError reprStr
+  | none => pure ()
+
+/-- This is what the stack's Scanner runs when a message arrives, and all it listens to. -/
+theorem theScannerRunsThis :
+    prod.listens "Scanner" ⟨.queue, out.scans, QueueEvent.messageSent⟩
+      = [⟨scannerRole, onMessage⟩] := rfl
+
+/-- Asked directly, the stack's Scanner answers and touches nothing. -/
+theorem theScannerAnswersAndTouchesNothing (request : Request) :
+    prod.handler out.scanner request = some ⟨scannerRole, pure { status := 204 }⟩ := rfl
+
+/-- Handling a message keeps every published file clean. -/
+theorem onMessage_safe (cloud : Memory) (safe : Safe cloud) :
+    Safe (onMessage.exec InMemory cloud).state := by
+  have received : Safe (cloud.receive out.scans) := by
+    intro name body held
+    rw [Memory.object_receive] at held
+    exact safe name body held
+  show Safe (onMessage.eval InMemory cloud).2
+  unfold onMessage
+  show Safe (Run.eval InMemory (Run.bind _ _) cloud).2
+  rw [Run.eval_bind, Run.eval_mapError]
+  have took := (SQS.ReceiveMessageLive.lawful out.scans (access := scannerRole)
+    (inferInstance : Has scannerRole (SQS.Receive out.scans)).le).receive cloud
+  rw [took]
+  cases (cloud.queued out.scans).head? with
+  | none => exact received
+  | some name =>
+    show Safe (Run.eval InMemory (Run.mapError _ _) _).2
+    rw [Run.eval_mapError]
+    exact scan_safe name _ received
+
 /--
-The states of the cloud this stack can reach. The Scanner runs its own code on
-any upload. The two public functions run any code whatever under their roles:
-ours, or an attacker's.
+The states of the cloud this stack can reach. The Scanner runs the code the
+stack gives it, on whatever is on the queue. The two public functions run any
+code whatever under their roles: ours, or an attacker's.
 -/
 inductive Reaches : Memory → Prop where
   | start : Reaches {}
@@ -220,10 +269,7 @@ inductive Reaches : Memory → Prop where
       Reaches cloud → Reaches (code.exec InMemory cloud).state
   | download {cloud ε α} (code : Run (prod.roleOf "Download") ε α) :
       Reaches cloud → Reaches (code.exec InMemory cloud).state
-  | scan {cloud} {role : Access Kind}
-      [Has role (S3.Get out.files ["incoming"])] [Has role (S3.Put out.files ["clean"])]
-      [Has role (S3.Put out.files ["quarantine"])] (name : String) :
-      Reaches cloud → Reaches ((scan (role := role) out.files name).eval InMemory cloud).2
+  | scan {cloud} : Reaches cloud → Reaches (onMessage.exec InMemory cloud).state
 
 /--
 No infected file is ever published. In every state this stack can reach,
@@ -241,7 +287,7 @@ theorem noInfectedFileIsEverPublished (cloud : Memory) (reach : Reaches cloud) :
     intro name body held
     rw [downloadCannotPublish] at held
     exact safe name body held
-  | scan name _ safe => exact scan_safe name _ safe
+  | scan _ safe => exact onMessage_safe _ safe
 
 /--
 So nothing `Download` serves is infected. In any state the stack can reach, if

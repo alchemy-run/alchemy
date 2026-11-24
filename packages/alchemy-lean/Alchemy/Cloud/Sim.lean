@@ -256,3 +256,19 @@ theorem Graph.Reaches.invariant {g : Graph K} {sim : Sim K} {rule : sim.State �
   | step node mem _ does ih => exact kept node mem _ _ ih does
 
 end Alchemy.Cloud
+
+namespace Alchemy.Cloud
+
+variable {K : Type} [Cloud K]
+
+/-- What a host's listeners would run for an event, each with the role it runs under. -/
+def Graph.listens (g : Graph K) (host : String) (e : Emitted K) :
+    List ((access : Access K) × Run access Failure Unit) :=
+  match g.find host with
+  | none => []
+  | some node =>
+    match node.serve with
+    | none => []
+    | some serve => serve.on.filterMap fun sub => (Graph.Subscription.react sub e).map fun run => ⟨serve.access, run⟩
+
+end Alchemy.Cloud
