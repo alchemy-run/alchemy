@@ -150,3 +150,59 @@ def ask (q : Query g) (actor : q.Actor) (log : List (Emitted g)) (input : q.Inpu
 
 end Query
 end Alchemy
+
+namespace Alchemy
+
+variable {g : Aggregates}
+
+/-- A view with one value, folded over every event. -/
+abbrev View.fold {State : Type} [DecidableEq State] (name : String) (initial : State)
+    (step : State → Emitted g → State) : View g where
+  name := name
+  Key := Unit
+  State := State
+  Event := Empty
+  Actor := Unit
+  Rejection := Empty
+  initial := initial
+  on := fun _ event => [{ key := (), evolve := fun state => step state event }]
+
+theorem View.fold_go {State : Type} [DecidableEq State] (name : String) (initial : State)
+    (step : State → Emitted g → State) (history log : List (Emitted g)) (state : State) :
+    (View.fold name initial step).go () history log state = log.foldl step state := by
+  induction log generalizing history state with
+  | nil => rfl
+  | cons event rest ih =>
+    show (View.fold name initial step).go () (history ++ [event]) rest
+      ((View.fold name initial step).applyAt history event () state) = _
+    rw [ih]
+    simp [View.applyAt]
+
+/-- A folded view is exactly the fold of its step over the log, whatever was recorded. -/
+theorem View.fold_exact {State : Type} [DecidableEq State] (name : String) (initial : State)
+    (step : State → Emitted g → State) (log : List (Emitted g)) :
+    (View.fold name initial step).stateAt log () = log.foldl step initial :=
+  View.fold_go name initial step [] log initial
+
+/-- A projection that writes rows for each event by itself. -/
+abbrev Projection.each {Row : Type} (name : String) (rows : Emitted g → List Row) : Projection g where
+  name := name
+  Row := Row
+  write := fun _ event => rows event
+
+theorem Projection.each_go {Row : Type} (name : String) (rows : Emitted g → List Row)
+    (history log : List (Emitted g)) :
+    (Projection.each name rows).go history log = log.flatMap rows := by
+  induction log generalizing history with
+  | nil => rfl
+  | cons event rest ih =>
+    show rows event ++ (Projection.each name rows).go (history ++ [event]) rest = _
+    rw [ih]
+    rfl
+
+/-- Such a projection is given exactly each event's rows, in order: none missed, none twice. -/
+theorem Projection.each_exact {Row : Type} (name : String) (rows : Emitted g → List Row)
+    (log : List (Emitted g)) : (Projection.each name rows).table log = log.flatMap rows :=
+  Projection.each_go name rows [] log
+
+end Alchemy

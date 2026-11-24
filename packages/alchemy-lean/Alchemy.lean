@@ -4,6 +4,7 @@ import Alchemy.Program
 import Alchemy.View
 import Alchemy.Model
 import Alchemy.Engine
+import Alchemy.Syntax
 import Alchemy.Story
 import Alchemy.Check
 import Alchemy.Api
