@@ -50,7 +50,29 @@ A new RDS instance takes 10 to 15 minutes to create.
 
 ## Run in your own VPC
 
-Give the database a `network`, and the database, the runners and their gateways run in it. An `EC2.Network` with a NAT gateway puts them in its private subnets, where the runners reach the internet through the NAT:
+Give the database a `network` by id, and the database, the runners and their gateways run in its subnets. A VPC nobody manages is a `lookup`, whose attributes you pass directly:
+
+```typescript title="src/Database.ts"
+import * as EC2 from "@alchemy.run/aws/EC2";
+import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
+
+const vpc = EC2.Vpc.lookup({ name: "shared" });
+const a = EC2.Subnet.lookup({ name: "private-a" });
+const b = EC2.Subnet.lookup({ name: "private-b" });
+
+export const Database = ClusterAWS.Database("Cluster", {
+  network: {
+    vpcId: vpc.vpcId,
+    subnetIds: [a.subnetId, b.subnetId],
+    cidrBlock: vpc.cidrBlock,
+    assignPublicIp: false,
+  },
+});
+```
+
+Runners take a public IP unless `assignPublicIp` is `false`. Set it in private subnets, where the runners reach the internet through a NAT gateway. `cidrBlock` is the range an internal gateway admits.
+
+A network declared in your stack, or one another stack owns through `ref`, is an Effect. The `network` can be an Effect too: yield the resources in it and return their ids.
 
 ```typescript title="src/Network.ts"
 import * as EC2 from "@alchemy.run/aws/EC2";
@@ -62,60 +84,48 @@ export const AppNetwork = EC2.Network("App", {
 });
 ```
 
-```typescript title="src/Cluster.ts"
+```typescript title="src/Database.ts"
 import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
-import * as Layer from "effect/Layer";
+import * as Effect from "effect/Effect";
 import { AppNetwork } from "./Network.ts";
 
-export const Database = ClusterAWS.Database("Cluster", { network: AppNetwork });
-
-export const Default = ClusterAWS.EcsPool("Default", { replicas: 2 }).pipe(
-  Layer.provide(Database),
-);
+export const Database = ClusterAWS.Database("Cluster", {
+  network: Effect.gen(function* () {
+    const network = yield* AppNetwork;
+    return {
+      vpcId: network.vpcId,
+      subnetIds: network.privateSubnetIds,
+      publicSubnetIds: network.publicSubnetIds,
+      cidrBlock: network.vpc.cidrBlock,
+      assignPublicIp: false,
+    };
+  }),
+});
 ```
 
-A VPC another stack owns is a `ref` to its VPC and subnets:
+An internet-facing gateway's load balancer goes in `publicSubnetIds`, which default to `subnetIds`.
 
-```typescript title="src/Cluster.ts"
+Another stack's VPC works the same way, through `EC2.Vpc.ref` and `EC2.Subnet.ref`:
+
+```typescript title="src/Database.ts"
 import * as EC2 from "@alchemy.run/aws/EC2";
 import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
-import * as Layer from "effect/Layer";
+import * as Effect from "effect/Effect";
 
 export const Database = ClusterAWS.Database("Cluster", {
-  network: {
-    vpc: EC2.Vpc.ref("AppVpc", { stack: "network" }),
-    subnets: [
-      EC2.Subnet.ref("PrivateSubnetA", { stack: "network" }),
-      EC2.Subnet.ref("PrivateSubnetB", { stack: "network" }),
-    ],
-  },
+  network: Effect.gen(function* () {
+    const vpc = yield* EC2.Vpc.ref("AppVpc", { stack: "network" });
+    const a = yield* EC2.Subnet.ref("PrivateSubnetA", { stack: "network" });
+    const b = yield* EC2.Subnet.ref("PrivateSubnetB", { stack: "network" });
+    return {
+      vpcId: vpc.vpcId,
+      subnetIds: [a.subnetId, b.subnetId],
+      cidrBlock: vpc.cidrBlock,
+      assignPublicIp: false,
+    };
+  }),
 });
-
-export const Default = ClusterAWS.EcsPool("Default", { replicas: 2 }).pipe(
-  Layer.provide(Database),
-);
 ```
-
-A VPC nobody manages is a `lookup`:
-
-```typescript title="src/Cluster.ts"
-import * as EC2 from "@alchemy.run/aws/EC2";
-import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
-import * as Layer from "effect/Layer";
-
-export const Database = ClusterAWS.Database("Cluster", {
-  network: {
-    vpc: EC2.Vpc.lookup({ name: "shared" }),
-    subnets: [EC2.Subnet.lookup({ name: "private-a" }), EC2.Subnet.lookup({ name: "private-b" })],
-  },
-});
-
-export const Default = ClusterAWS.EcsPool("Default", { replicas: 2 }).pipe(
-  Layer.provide(Database),
-);
-```
-
-Given resource by resource, runners take no public IP, so the subnets need a NAT gateway (or VPC endpoints) for the runners to pull their image. Subnets without one take `assignPublicIp: true`. An internet-facing gateway's load balancer goes in `publicSubnets`, which default to `subnets`; an `EC2.Network`'s public subnets are used automatically.
 
 ## The pool
 
@@ -186,14 +196,12 @@ export const Default = ClusterAWS.EcsPool("Default", {
 
 CloudFront cuts a connection that sends nothing for its origin read timeout, 60 seconds here. The gateway writes a keep-alive line every 15 seconds while a call waits or a stream is quiet, so long calls stay open.
 
-When only callers in the VPC call the pool, make the load balancer internal. It admits the VPC's range unless you give it an `ingress`:
+When only callers in the VPC call the pool, make the load balancer internal. It admits the network's `cidrBlock` unless you give it an `ingress`:
 
 ```typescript title="src/Cluster.ts"
 import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
 import * as Layer from "effect/Layer";
-import { AppNetwork } from "./Network.ts";
-
-export const Database = ClusterAWS.Database("Cluster", { network: AppNetwork });
+import { Database } from "./Database.ts";
 
 export const Default = ClusterAWS.EcsPool("Default", {
   replicas: 2,

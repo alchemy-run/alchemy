@@ -45,7 +45,8 @@ export interface LoadBalancerGatewayOptions {
   readonly scheme?: "internet-facing" | "internal";
   /**
    * Who may connect. Defaults to anyone for an internet-facing gateway, and
-   * to the VPC's own range for an internal one.
+   * to the network's `cidrBlock` for an internal one: an internal gateway in
+   * a network given without its `cidrBlock` needs an `ingress`.
    */
   readonly ingress?: ReadonlyArray<GatewayIngress>;
   /**

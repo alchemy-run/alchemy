@@ -32,12 +32,13 @@ export type ClusterNetwork =
        */
       readonly publicSubnetIds?: Input<string>[];
       /** The VPC's IPv4 range, which an internal gateway admits by default. */
-      readonly cidrBlock: Input<string>;
+      readonly cidrBlock?: Input<string>;
       /**
        * Whether runners take a public IP: in subnets without a NAT gateway
        * it is how they reach the internet (their image registry, other APIs).
+       * @default true
        */
-      readonly assignPublicIp: boolean;
+      readonly assignPublicIp?: boolean;
     }
   | {
       /** A Fly private network; runners' Apps join it by name. */

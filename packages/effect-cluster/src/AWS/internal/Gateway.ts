@@ -36,6 +36,11 @@ export class GatewayHostedZoneNotFound extends Data.TaggedError("GatewayHostedZo
   readonly message: string;
 }> {}
 
+/** An internal gateway with no `ingress`, in a network with no `cidrBlock` to admit. */
+export class GatewayIngressRequired extends Data.TaggedError("GatewayIngressRequired")<{
+  readonly message: string;
+}> {}
+
 /** Every method a gateway call may use: RPCs are POSTs, `/health` a GET. */
 const ALL_METHODS = ["GET", "HEAD", "OPTIONS", "PUT", "PATCH", "POST", "DELETE"] as const;
 
@@ -139,6 +144,11 @@ const makeLoadBalancerGateway = Effect.fn(function* (
   gateway: LoadBalancerGateway,
 ) {
   const scheme = gateway.scheme ?? "internet-facing";
+  if (scheme === "internal" && gateway.ingress === undefined && network.cidrBlock === undefined) {
+    return yield* new GatewayIngressRequired({
+      message: `The internal gateway of pool "${id}" admits the VPC's range by default, and its network has no \`cidrBlock\`: give the network its \`cidrBlock\`, or the gateway its \`ingress\`.`,
+    });
+  }
   const ingress =
     gateway.ingress ??
     (scheme === "internal"

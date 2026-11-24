@@ -5,10 +5,23 @@
  */
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { AppNetwork } from "./network.ts";
 
-export const Database = ClusterAWS.Database("ClusterGateways", { network: AppNetwork });
+export const Database = ClusterAWS.Database("ClusterGateways", {
+  // The network's private subnets, behind its NAT gateway.
+  network: Effect.gen(function* () {
+    const network = yield* AppNetwork;
+    return {
+      vpcId: network.vpcId,
+      subnetIds: network.privateSubnetIds,
+      publicSubnetIds: network.publicSubnetIds,
+      cidrBlock: network.vpc.cidrBlock,
+      assignPublicIp: false,
+    };
+  }),
+});
 
 export const Private = ClusterAWS.EcsPool("Private", {
   replicas: 1,

@@ -1,42 +1,42 @@
-import type { NetworkResources } from "@alchemy.run/aws/EC2/Network";
-import type { Subnet } from "@alchemy.run/aws/EC2/Subnet";
-import type { Vpc } from "@alchemy.run/aws/EC2/Vpc";
+import type { Input } from "alchemy/Input";
 import type * as Effect from "effect/Effect";
 
 /**
- * A resource as a cluster prop: a declaration (`EC2.Vpc("App", …)`), a
- * reference to another stack's (`EC2.Vpc.ref("AppVpc", { stack })`), or one
- * nobody manages (`EC2.Vpc.lookup({ name })`).
+ * A VPC the cluster runs in, by id. Any resource's attributes fit: a
+ * lookup's (`EC2.Vpc.lookup({ name }).vpcId`), or a declaration's or
+ * another stack's (`EC2.Vpc.ref(…)`) inside an Effect that yields it.
  */
-export type ResourceInput<T, E = never, R = never> = T | Effect.Effect<T, E, R>;
-
-/** A VPC and the subnets the cluster runs in, given resource by resource. */
-export interface VpcNetwork<E = never, R = never> {
-  /** The VPC. */
-  readonly vpc: ResourceInput<Vpc, E, R>;
+export interface Network {
+  /** The VPC's id. */
+  readonly vpcId: Input<string>;
   /**
    * The subnets the database, runners and gateway run in. RDS requires two
    * Availability Zones.
    */
-  readonly subnets: ReadonlyArray<ResourceInput<Subnet, E, R>>;
+  readonly subnetIds: ReadonlyArray<Input<string>>;
   /**
    * Subnets with a route to an internet gateway, for an internet-facing
-   * gateway's load balancer. Defaults to `subnets`.
+   * gateway's load balancer. Defaults to `subnetIds`.
    */
-  readonly publicSubnets?: ReadonlyArray<ResourceInput<Subnet, E, R>>;
+  readonly publicSubnetIds?: ReadonlyArray<Input<string>>;
   /**
-   * Whether runners take a public IP. Give subnets without a NAT gateway
-   * `true`: runners pull their image and reach other APIs through it.
-   * @default false
+   * The VPC's IPv4 range, which an internal gateway admits when given no
+   * `ingress`.
+   */
+  readonly cidrBlock?: Input<string>;
+  /**
+   * Whether runners take a public IP. In subnets without a NAT gateway, it
+   * is how runners pull their image and reach other APIs; set `false` in
+   * private subnets behind one.
+   * @default true
    */
   readonly assignPublicIp?: boolean;
 }
 
 /**
- * The network a cluster runs in: an `EC2.Network` declaration (its private
- * subnets when it has a NAT gateway, else its public ones), or a VPC and
- * subnets given resource by resource.
+ * A {@link Network}, or an Effect that yields the resources it comes from
+ * (an `EC2.Network` declaration, `EC2.Vpc.ref(…)`) and returns one.
  */
-export type NetworkInput<E = never, R = never> =
-  | Effect.Effect<NetworkResources, E, R>
-  | VpcNetwork<E, R>;
+export type NetworkInput<N extends Network = Network, E = never, R = never> =
+  | N
+  | Effect.Effect<N, E, R>;
