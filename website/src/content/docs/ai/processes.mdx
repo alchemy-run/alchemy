@@ -77,17 +77,65 @@ yield* research.start("parser", { model: Fast });
 
 Starting a key that already started does nothing. A process that mentions a guarded command of a [Domain model](/ai/domain) has to be started, because `start` is where you say who its session acts as. Until then, `send` and `prompt` fail with `NotStarted`.
 
-## Wait, read and stop
+## Steer, withdraw and interrupt
 
-A session also has `wait`, which returns once it has nothing left to run, `messages`, its transcript as the harness stores it, and `abort`, which stops what is running:
+`send` queues a message: a session that is working reads it when its turn ends. `steer` gives a working session a message to read at its next step, without ending the turn:
 
 ```typescript
 const session = research.get("parser");
 
-yield* session.wait;
-const transcript = yield* session.messages;
-yield* session.abort;
+yield* session.steer("Only look in src.");
 ```
+
+A session with nothing running starts a turn on a steered message, as it does on a sent one.
+
+`interrupt` stops the turn that is running. The session keeps its transcript:
+
+```typescript
+yield* session.interrupt;
+```
+
+`withdraw` takes back a message that is still queued, by the id its status lists it with:
+
+```typescript
+yield* session.withdraw(queued.id);
+```
+
+## Watch a session
+
+`events` is everything a session does, as a stream. Its first event is always the session's status: whether it is working, and what is queued.
+
+```typescript
+yield* session.events().pipe(
+  Stream.runForEach((event) =>
+    event.type === "status"
+      ? Effect.log(event.status, event.queued.length)
+      : Effect.log(event.seq, event.item.type),
+  ),
+);
+```
+
+After the status come the stored items, then each new one as it happens. An item is a user message, an assistant message with the tools it called, or a tool's result. A `status` event is sent again whenever the session starts or stops working, or its queue changes.
+
+Each item has a `seq`. A client that reconnects passes the last one it saw and misses nothing:
+
+```typescript
+session.events({ after: lastSeq });
+```
+
+So a client needs no other call to know where a session stands. It reads `events`, and the stream tells it.
+
+## Read the transcript
+
+`history` returns a page of the same items, without waiting for new ones:
+
+```typescript
+const page = yield* session.history({ take: 50, order: "desc" });
+
+const older = yield* session.history({ take: 50, order: "desc", after: page.next });
+```
+
+`next` is absent on the last page.
 
 ## A process has no output
 

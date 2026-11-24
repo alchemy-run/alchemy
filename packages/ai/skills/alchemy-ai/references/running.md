@@ -76,9 +76,9 @@ More: [A session survives its object](https://alchemy.run/ai/hosting#a-session-s
 ## See what a session did
 
 ```typescript
-const transcript = yield* triage.get(String(issue)).messages;
+const page = yield* triage.get(String(issue)).history({ take: 50 });
 ```
 
-It is the harness's own transcript: every message, tool call and result.
+Each item is a message, the tools an answer called, or a tool's result. `events()` is the same items live, after the session's status.
 
-More: [Wait, read and stop](https://alchemy.run/ai/processes#wait-read-and-stop).
+More: [Read the transcript](https://alchemy.run/ai/processes#read-the-transcript), [Watch a session](https://alchemy.run/ai/processes#watch-a-session).

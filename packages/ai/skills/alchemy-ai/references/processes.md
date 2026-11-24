@@ -31,9 +31,12 @@ const session = research.get("parser");
 
 const reply = yield* session.prompt("Which file first?"); // waits; reply.text
 yield* session.send("Also check the tests.", { requestId: "comment-812" }); // returns at once
-yield* session.wait; // until it has nothing left to run
-const transcript = yield* session.messages;
-yield* session.abort;
+yield* session.steer("Only look in src."); // read by the turn that is running
+yield* session.interrupt; // stop the turn; the transcript stays
+
+// Status first (idle or working, what is queued), then every item, then live.
+yield* session.events({ after: lastSeq }).pipe(Stream.runForEach(forward));
+const page = yield* session.history({ take: 50, order: "desc" });
 ```
 
 Say what one session works on in its first message, under a fixed `requestId` so code that runs twice says it once:
@@ -44,7 +47,7 @@ yield* triage.get(issue).send(`The issue is ${issue}.`, { requestId: "start" });
 
 `start(key, { model })` makes a session on a model before its first message. A process that acts as someone must be started (`start(key, { as })`): until then `send` and `prompt` fail with `NotStarted`.
 
-More: [Talk to a session](https://alchemy.run/ai/processes#talk-to-a-session), [A process has no inputs](https://alchemy.run/ai/processes#a-process-has-no-inputs), [Start a session on a model](https://alchemy.run/ai/processes#start-a-session-on-a-model).
+More: [Talk to a session](https://alchemy.run/ai/processes#talk-to-a-session), [A process has no inputs](https://alchemy.run/ai/processes#a-process-has-no-inputs), [Start a session on a model](https://alchemy.run/ai/processes#start-a-session-on-a-model), [Steer, withdraw and interrupt](https://alchemy.run/ai/processes#steer-withdraw-and-interrupt), [Watch a session](https://alchemy.run/ai/processes#watch-a-session).
 
 ## Follow a process (a skill)
 

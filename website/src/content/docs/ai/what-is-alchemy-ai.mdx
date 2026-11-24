@@ -93,7 +93,13 @@ const triage = yield* Triage;
 const reply = yield* triage.get("issue-42").prompt("The app crashes on the settings page.");
 ```
 
-A session keeps its conversation indefinitely. Send it another message next week and it remembers everything so far. `prompt` waits for the answer, and `send` leaves a message without waiting.
+A session keeps its conversation indefinitely. Send it another message next week and it remembers everything so far. `send` leaves a message and returns, `steer` puts one into the turn that is running, and `interrupt` stops it.
+
+A session reports what it does as a stream. The first event says whether it is working, and the rest are its messages and tool calls as they happen:
+
+```typescript
+const events = triage.get("issue-42").events();
+```
 
 A process has no inputs and no output. A session is told what to do in its messages, and it acts through what its process mentions.
 

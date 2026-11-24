@@ -72,6 +72,6 @@ More: [Processes](https://alchemy.run/ai/processes), [Processes and Domain model
 2. Put each new tool in `<Name>.tool.ts`, with its class and `<Name>Live`. Mention it in the prose that uses it.
 3. Mention the Domain commands and views the work needs, through the model. Start each session with `as` if one is behind a middleware.
 4. Provide every new Layer where the process runs: each tool, each model, the hosted Domain model, and a Layer for each middleware that checks something. A missing one is a type error.
-5. Deploy and send one real message. Read `session.messages` to see what the model did.
+5. Deploy and send one real message. Read `session.history()` to see what the model did.
 
 More: [Where sessions run](https://alchemy.run/ai/hosting).
