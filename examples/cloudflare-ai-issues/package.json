@@ -12,7 +12,8 @@
   "scripts": {
     "deploy": "alchemy deploy",
     "destroy": "alchemy destroy",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:integ": "bun test test/integ.test.ts"
   },
   "dependencies": {
     "@alchemy.run/ai": "workspace:*",
@@ -29,6 +30,7 @@
     "foldkit": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/test": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@foldkit/vite-plugin": "catalog:",

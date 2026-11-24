@@ -30,6 +30,6 @@ export default Alchemy.Stack(
       env: { BOARD: worker },
       assets: { runWorkerFirst: ["/api", "/api/*"] },
     });
-    return { url: worker.url, app: app.url, repository: repo.htmlUrl };
+    return { url: worker.url.as<string>(), app: app.url.as<string>(), repository: repo.htmlUrl };
   }),
 );

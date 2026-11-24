@@ -10,6 +10,7 @@
     "types": ["bun", "@cloudflare/workers-types"]
   },
   "references": [
+    { "path": "../../packages/alchemy-test/tsconfig.json" },
     { "path": "../../packages/alchemy/tsconfig.json" },
     { "path": "../../packages/boat/tsconfig.json" },
     { "path": "../../packages/cloudflare/tsconfig.json" },
