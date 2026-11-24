@@ -7,9 +7,9 @@ import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Fast, FastLive } from "./models.ts";
-import { Repo } from "./Repo.ts";
+import { MARKER, Repo } from "./Repo.ts";
 import { Sandbox } from "./Sandbox.ts";
-import { MARKER, SearchIssues, SearchIssuesLive } from "./tools.ts";
+import { SearchIssues, SearchIssuesLive } from "./SearchIssues.tool.ts";
 
 const HarnessLive = Layer.mergeAll(
   FastLive,

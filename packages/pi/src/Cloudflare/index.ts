@@ -36,6 +36,25 @@ export const DurableObjectStorage: Layer.Layer<Storage> = Layer.succeed(Storage,
           callbacks: DurableObjectCallbacks.pipe(
             Layer.provide(Layer.succeed(DurableObjectState, state.value)),
           ),
+          values: {
+            // The object's own key-value storage, beside the harness's tables.
+            get: (key: string) =>
+              Effect.promise(() =>
+                (
+                  state.value.raw as unknown as {
+                    storage: { get(key: string): Promise<string | undefined> };
+                  }
+                ).storage.get(`alchemy:${key}`),
+              ),
+            put: (key: string, value: string) =>
+              Effect.promise(() =>
+                (
+                  state.value.raw as unknown as {
+                    storage: { put(key: string, value: string): Promise<void> };
+                  }
+                ).storage.put(`alchemy:${key}`, value),
+              ),
+          },
         }
       : {}),
     open: (prefix: string) =>

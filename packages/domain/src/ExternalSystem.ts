@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -232,7 +233,9 @@ type ErrorOf<S extends OpSpec> =
 export type Shape<Ops extends Record<string, OpSpec>> = {
   readonly [K in keyof Ops]: (
     args: ArgsOf<Ops[K]>,
-  ) => Effect.Effect<SuccessOf<Ops[K]>, ErrorOf<Ops[K]>>;
+    // An operation reaches outside the model, so it runs only inside a
+    // runtime: a binding or another Durable Object needs its context.
+  ) => Effect.Effect<SuccessOf<Ops[K]>, ErrorOf<Ops[K]>, RuntimeContext>;
 };
 
 /**

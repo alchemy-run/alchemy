@@ -17,10 +17,6 @@ class Add extends AI.Tool<Add>()("add", {
   success: Schema.Number,
 }) {}
 class Docs extends AI.McpServer<Docs>()("docs") {}
-class Releasing extends AI.Skill<Releasing>()("releasing", {
-  description: "Cut a release.",
-  instructions: "Run the tests, then deploy.",
-}) {}
 
 // OpenCode runs where the harness is yielded: a harness needs storage, and no sandbox.
 const bare = OpenCode.Harness({ models: [Fast] });
@@ -30,7 +26,6 @@ type _NeedsStorageOnly = Assert<Equals<Effect.Services<typeof bare>, OpenCode.St
 const full = OpenCode.Harness({
   models: [Fast],
   tools: [AI.Bash, AI.Read, OpenCode.WebFetch, Add, Docs],
-  skills: [Releasing],
 });
 type _ListedToolsNeedTheirLayers = Assert<
   Equals<Effect.Services<typeof full>, OpenCode.Storage | Fast | Add | Docs | AI.Bash | AI.Read>

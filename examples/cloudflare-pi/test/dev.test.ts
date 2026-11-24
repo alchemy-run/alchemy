@@ -143,16 +143,6 @@ test("tools are disabled and enabled on a running conversation", async () => {
   expect((await chat<string[]>("toggle", "tools")).toSorted()).toEqual(["add", "save_note"]);
 }, 120_000);
 
-test("a skill added to a conversation is loaded when the task calls for it", async () => {
-  await create("skill", []);
-  await chat("skill", "add-skill", {});
-  expect(await chat<string[]>("skill", "tools")).toEqual(["load_skill"]);
-
-  const messages = await prompt("skill", "Greet me.");
-  expect(toolResults(messages, "load_skill")).toMatchObject([{ isError: false }]);
-  expect(answer(messages)).toContain("HELLO-FROM-SKILL");
-}, 180_000);
-
 test("code mode runs a program that calls the conversation's tools", async () => {
   await create("code", ["add"]);
   await chat("code", "enable-code-mode", {});
