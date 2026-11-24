@@ -1420,6 +1420,7 @@ export const make = (host: Host) => {
     ...rationals.values,
     ...streams.values,
     ...folds.constants,
+    ...exits.values,
   };
   // The reducers the modules give are made of the orders and the zeros above.
   Object.assign(values, folds.values());

@@ -2369,6 +2369,45 @@ Stream.callback((queue) => Effect.andThen(Queue.offerAll(queue, [a, b]), Queue.e
 
 A channel that reads what another gives starts from `Channel.identity()`. One written from a pull of its input with `Channel.fromTransform`, or from a web stream, is not supported.
 
+```typescript title="effect/Scope, effect/ScopedRef, effect/RcRef, effect/RcMap and effect/Resource"
+// A scope the code holds, and what lives as long as one. A key of an RcMap is one the code writes.
+const scope = yield* Scope.make();
+Scope.make("parallel");
+Effect.scope; // the scope around: inside Effect.scoped
+Scope.fork(scope, "sequential");
+Scope.addFinalizer(scope, log(seen, a));
+Scope.addFinalizerExit(scope, (exit) => log(seen, Exit.isSuccess(exit)));
+Scope.provide(opened(seen, "x"), scope);
+Scope.use(scope);
+Scope.close(scope, Exit.void);
+Exit.interrupt();
+Exit.failCause(Cause.fail(a));
+Cause.interrupt();
+
+const ref = yield* ScopedRef.fromAcquire(opened(seen, "one")); // inside Effect.scoped, as the ones below
+ScopedRef.make(() => a);
+ScopedRef.get(ref);
+ScopedRef.getUnsafe(ref);
+ScopedRef.set(ref, opened(seen, "two")); // what it held is released
+RcRef.make({ acquire: opened(seen, "r") });
+RcRef.make({ acquire: opened(seen, "kept"), idleTimeToLive: "1 second" });
+RcRef.get(ref); // acquired for the first who asks, released when the last is done
+RcRef.invalidate(ref);
+const map = yield* RcMap.make({ lookup: (key) => opened(seen, "k" + key) });
+RcMap.make({ lookup: (key) => Effect.succeed(key + a), capacity: 1, idleTimeToLive: "1 second" });
+RcMap.get(map, 1);
+RcMap.getOption(map, 9);
+RcMap.has(map, 2);
+RcMap.keys(map);
+RcMap.touch(map, 2);
+RcMap.invalidate(map, 2);
+const resource = yield* Resource.manual(Ref.updateAndGet(turns, (n) => n + 1));
+Resource.auto(Ref.updateAndGet(turns, (n) => n + 1), Schedule.spaced("1 second")); // acquired again as the schedule says
+Resource.get(resource);
+Resource.refresh(resource);
+Resource.isResource(resource);
+```
+
 ```typescript title="effect/PubSub"
 // What is published reaches each one who subscribed before it was.
 const hub = yield* PubSub.unbounded();
@@ -2866,11 +2905,6 @@ import * as LayerMap from "effect/LayerMap";
 import * as LayerRef from "effect/LayerRef";
 import * as Context from "effect/Context";
 import * as References from "effect/References";
-import * as Scope from "effect/Scope";
-import * as ScopedRef from "effect/ScopedRef";
-import * as RcMap from "effect/RcMap";
-import * as RcRef from "effect/RcRef";
-import * as Resource from "effect/Resource";
 import * as Runtime from "effect/Runtime";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Logger from "effect/Logger";

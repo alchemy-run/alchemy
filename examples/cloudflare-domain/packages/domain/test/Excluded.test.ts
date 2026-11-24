@@ -23,7 +23,7 @@ const READ = new Set([
   ...["PubSub", "Queue", "Request", "RequestResolver", "Schedule"],
   ...["PartitionedSemaphore", "ScopedCache", "Semaphore", "TxChunk", "TxDeferred", "TxPubSub"],
   ...["TxHashMap", "TxHashSet", "TxPriorityQueue", "TxQueue", "Channel", "Pull", "Take"],
-  ...["Combiner", "Reducer", "MutableList"],
+  ...["Combiner", "Reducer", "MutableList", "Scope", "ScopedRef", "RcRef", "RcMap", "Resource"],
   ...["TxReentrantLock", "TxRef", "TxSemaphore", "TxSubscriptionRef", "index"],
 ]);
 
@@ -109,7 +109,7 @@ it.effect(
         "calls M.f, which the prover has no model for",
         "compares values the prover does not model",
       ]);
-      expect(modules.length).toBeGreaterThan(45);
+      expect(modules.length).toBeGreaterThan(35);
       expect(calls.length).toBeGreaterThan(1200);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   300_000,

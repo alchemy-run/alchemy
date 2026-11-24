@@ -178,7 +178,18 @@ export const make = (kit: Kit) => {
         ? Effect.succeed(reason.fields.error ?? reason.fields.defect ?? Value.undef)
         : wrongArguments(site, "Cause.squash");
     },
+    "effect/Exit:failCause": ([cause], site) =>
+      reasonsOf(cause) && cause
+        ? Effect.succeed(Value.obj({ _tag: Value.str("Failure"), cause }))
+        : wrongArguments(site, "Exit.failCause"),
+    "effect/Exit:interrupt": () =>
+      Effect.succeed(failure(Value.obj({ _tag: Value.str("Interrupt") }))),
+    "effect/Cause:interrupt": () =>
+      Effect.succeed(causeOf(Value.obj({ _tag: Value.str("Interrupt") }))),
   };
 
-  return { models };
+  /** Values of the two modules that are not functions. */
+  const values: Readonly<Record<string, V>> = { "effect/Exit:void": success(Value.undef) };
+
+  return { models, values };
 };

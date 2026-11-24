@@ -15,12 +15,16 @@ import * as PartitionedSemaphore from "effect/PartitionedSemaphore";
 import * as Pool from "effect/Pool";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
+import * as RcMap from "effect/RcMap";
+import * as RcRef from "effect/RcRef";
 import * as Request from "effect/Request";
 import * as RequestResolver from "effect/RequestResolver";
+import * as Resource from "effect/Resource";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as ScopedCache from "effect/ScopedCache";
+import * as ScopedRef from "effect/ScopedRef";
 import * as Semaphore from "effect/Semaphore";
 import * as TxChunk from "effect/TxChunk";
 import * as TxDeferred from "effect/TxDeferred";
@@ -32,7 +36,7 @@ import * as TxSemaphore from "effect/TxSemaphore";
 import * as TxSubscriptionRef from "effect/TxSubscriptionRef";
 import * as Brands from "../Brands.ts";
 import type { Kit, Model, Models } from "../Kit.ts";
-import { arr, callable, dual, dualBy, lazy, native, wrongArguments } from "../Kit.ts";
+import { arr, callable, dual, dualBy, lazy, native, tagOf, wrongArguments } from "../Kit.ts";
 import * as Timeline from "../Timeline.ts";
 import type { Eval, Site, V } from "../Value.ts";
 import * as Value from "../Value.ts";
@@ -73,7 +77,12 @@ type Kind =
   | "TxHashMap"
   | "TxHashSet"
   | "TxPriorityQueue"
-  | "Channel";
+  | "Channel"
+  | "Scope"
+  | "ScopedRef"
+  | "RcRef"
+  | "RcMap"
+  | "Resource";
 
 /** How often effects may be run again in one handler before the prover stops reading. */
 const MAX_TURNS = 100;
@@ -1368,6 +1377,13 @@ export const make = (
 
   /** Values of the library that are read where the code names them. */
   const sited: Readonly<Record<string, (site: Site) => V>> = {
+    "effect/Effect:scope": (site) =>
+      scoped(
+        "Effect.scope",
+        site,
+        () => Effect.scope,
+        (held) => wrap("Scope", held),
+      ),
     "effect/Effect:yieldNow": () => lazy(() => Effect.as(Effect.yieldNow, Value.undef)),
     "effect/Effect:never": (site) =>
       timed(
@@ -2038,7 +2054,7 @@ export const make = (
 
   /** A function of one of these and a key, which gives an effect. */
   const byKey = <H, A>(
-    kind: "FiberMap" | "Cache" | "ScopedCache",
+    kind: "FiberMap" | "Cache" | "ScopedCache" | "RcMap",
     name: string,
     arity: number,
     body: (
@@ -3626,7 +3642,318 @@ export const make = (
         : wrongArguments(site, "RequestResolver.fromFunction"),
   });
 
+  // ---- A scope the code holds, and what lives as long as one.
+
+  /** An `Exit` of the code, as the library takes one. */
+  const ended = (exit: V | undefined): Exit.Exit<V, Held> | undefined => {
+    if (exit?._tag !== "Obj") return undefined;
+    if (tagOf(exit) === "Success") return Exit.succeed(exit.fields.value ?? Value.undef);
+    const cause = exit.fields.cause;
+    const reasons = cause?._tag === "Obj" ? kit.itemsOf(cause.fields.reasons) : undefined;
+    if (tagOf(exit) !== "Failure" || !reasons) return undefined;
+    const die = reasons.find((each) => tagOf(each) === "Die");
+    const fail = reasons.find((each) => tagOf(each) === "Fail");
+    if (die?._tag === "Obj") return Exit.die(new Timeline.Defect(die.fields.defect ?? Value.undef));
+    if (fail?._tag === "Obj")
+      return Exit.fail(new Value.Rejected({ rejection: fail.fields.error ?? Value.undef }));
+    return Exit.interrupt();
+  };
+
+  const strategy = (v: V | undefined): "sequential" | "parallel" | undefined =>
+    v?._tag === "Str" && (v.value === "sequential" || v.value === "parallel") ? v.value : undefined;
+
+  type SR = ScopedRef.ScopedRef<V>;
+  type RR = RcRef.RcRef<V, Held>;
+  type RM = RcMap.RcMap<Key, V, Held>;
+  type RS = Resource.Resource<V, Held>;
+
+  /** A function of one of these that leaves something open in the scope around it. */
+  const opening = <H>(
+    kind: Kind,
+    name: string,
+    arity: number,
+    body: (
+      held: H,
+      rest: ReadonlyArray<V>,
+      site: Site,
+    ) => Eval<Effect.Effect<V, unknown, Scope.Scope>>,
+  ): Model =>
+    dual(`${kind}.${name}`, arity, ([self, ...rest], site) => {
+      const held = heldOf<H>(kind, self);
+      return held === undefined
+        ? wrongArguments(site, `${kind}.${name}`)
+        : Effect.succeed(
+            scoped(
+              `${kind}.${name}`,
+              site,
+              (timeline) =>
+                Effect.flatMap(Timeline.real(timeline, body(held, rest, site)), (effect) => effect),
+              same,
+            ),
+          );
+    });
+
+  const idle = (name: string, v: V | undefined, site: Site): Eval<Duration.Duration | undefined> =>
+    v === undefined || v._tag === "Undef"
+      ? Effect.succeed(undefined)
+      : callable(v)
+        ? unseen(site, `calls ${name} with a time to live that a function gives`)
+        : written(name, v, site);
+
+  const fieldOf = (v: V | undefined, key: string): V | undefined =>
+    v?._tag === "Obj" ? v.fields[key] : undefined;
+
+  const lifetimes: Models = {
+    "effect/Scope:make": made("Scope", ([given_]) => Scope.make(strategy(given_))),
+    "effect/Scope:fork": on<Scope.Scope, Scope.Closeable>(
+      "Scope",
+      "fork",
+      1,
+      (held, [given_]) => Scope.fork(held, strategy(given_)),
+      (forked) => wrap("Scope", forked),
+    ),
+    "effect/Scope:addFinalizer": later<Scope.Scope, void>(
+      "Scope",
+      "addFinalizer",
+      2,
+      (held, [finalizer], site, timeline) => {
+        const effect = effectOf(timeline, finalizer, site);
+        return effect
+          ? Effect.succeed(Scope.addFinalizer(held, sure(effect)))
+          : wrongArguments(site, "Scope.addFinalizer");
+      },
+      none,
+    ),
+    "effect/Scope:addFinalizerExit": later<Scope.Scope, void>(
+      "Scope",
+      "addFinalizerExit",
+      2,
+      (held, [finalizer], site, timeline) =>
+        finalizer
+          ? Effect.succeed(Scope.addFinalizerExit(held, closing(timeline, finalizer, site, [])))
+          : wrongArguments(site, "Scope.addFinalizerExit"),
+      none,
+    ),
+    "effect/Scope:close": later<Scope.Closeable, void>(
+      "Scope",
+      "close",
+      2,
+      (held, [exit], site) => {
+        const real = ended(exit);
+        return real ? Effect.succeed(Scope.close(held, real)) : wrongArguments(site, "Scope.close");
+      },
+      none,
+    ),
+    "effect/Scope:provide": onEffect("Scope.provide", 1, (timeline, self, [scope], site) => {
+      const held = heldOf<Scope.Scope>("Scope", scope);
+      return held
+        ? Timeline.back(timeline, Scope.provide(self, held), same)
+        : wrongArguments(site, "Scope.provide");
+    }),
+    "effect/Scope:use": onEffect("Scope.use", 1, (timeline, self, [scope], site) => {
+      const held = heldOf<Scope.Closeable>("Scope", scope);
+      return held
+        ? Timeline.back(timeline, Scope.use(self, held), same)
+        : wrongArguments(site, "Scope.use");
+    }),
+    "effect/ScopedRef:make": ([evaluate], site) =>
+      Effect.succeed(
+        scoped(
+          "ScopedRef.make",
+          site,
+          (timeline) =>
+            Effect.flatMap(
+              Timeline.real(
+                timeline,
+                evaluate ? host.call(evaluate, [], site) : wrongArguments(site, "ScopedRef.make"),
+              ),
+              (value) => ScopedRef.make(() => value),
+            ),
+          (held) => wrap("ScopedRef", held),
+        ),
+      ),
+    "effect/ScopedRef:fromAcquire": ([acquire], site) =>
+      Effect.succeed(
+        scoped(
+          "ScopedRef.fromAcquire",
+          site,
+          (timeline) =>
+            ScopedRef.fromAcquire(
+              effectOf(timeline, acquire, site) ??
+                Timeline.real(timeline, wrongArguments(site, "ScopedRef.fromAcquire")),
+            ),
+          (held) => wrap("ScopedRef", held),
+        ),
+      ),
+    "effect/ScopedRef:get": on<SR, V>("ScopedRef", "get", 1, (held) => ScopedRef.get(held), same),
+    "effect/ScopedRef:getUnsafe": now<SR, V>(
+      "ScopedRef",
+      "getUnsafe",
+      1,
+      (held) => ScopedRef.getUnsafe(held),
+      same,
+    ),
+    "effect/ScopedRef:set": later<SR, void>(
+      "ScopedRef",
+      "set",
+      2,
+      (held, [acquire], site, timeline) => {
+        const effect = effectOf(timeline, acquire, site);
+        return effect
+          ? Effect.succeed(ScopedRef.set(held, effect))
+          : wrongArguments(site, "ScopedRef.set");
+      },
+      none,
+    ),
+    "effect/RcRef:make": ([given_], site) =>
+      Effect.succeed(
+        scoped(
+          "RcRef.make",
+          site,
+          (timeline) =>
+            Effect.flatMap(
+              Timeline.real(timeline, idle("RcRef.make", fieldOf(given_, "idleTimeToLive"), site)),
+              (idleTimeToLive) =>
+                RcRef.make({
+                  acquire:
+                    effectOf(timeline, fieldOf(given_, "acquire"), site) ??
+                    Timeline.real(timeline, wrongArguments(site, "RcRef.make")),
+                  idleTimeToLive,
+                }),
+            ),
+          (held) => wrap("RcRef", held),
+        ),
+      ),
+    "effect/RcRef:get": opening<RR>("RcRef", "get", 1, (held) =>
+      held.pipe(RcRef.get, Effect.succeed),
+    ),
+    "effect/RcRef:invalidate": on<RR, void>(
+      "RcRef",
+      "invalidate",
+      1,
+      (held) => RcRef.invalidate(held),
+      none,
+    ),
+    "effect/RcMap:make": ([given_], site) =>
+      Effect.succeed(
+        scoped(
+          "RcMap.make",
+          site,
+          (timeline) => {
+            const lookup = fieldOf(given_, "lookup");
+            const size = fieldOf(given_, "capacity");
+            return Effect.flatMap(
+              Timeline.real(
+                timeline,
+                Effect.all([
+                  idle("RcMap.make", fieldOf(given_, "idleTimeToLive"), site),
+                  size === undefined || size._tag === "Undef"
+                    ? Effect.succeed(undefined)
+                    : count("RcMap.make", size, site),
+                  lookup && callable(lookup)
+                    ? Effect.succeed(lookup)
+                    : wrongArguments(site, "RcMap.make"),
+                ]),
+              ),
+              ([idleTimeToLive, capacity_, find]): Effect.Effect<RM, never, Scope.Scope> => {
+                const options_ = {
+                  lookup: (key: Key) => called(timeline, find, site)(keyed(key)),
+                  idleTimeToLive,
+                };
+                return capacity_ === undefined
+                  ? RcMap.make(options_)
+                  : (RcMap.make({ ...options_, capacity: capacity_ }) as Effect.Effect<
+                      RM,
+                      never,
+                      Scope.Scope
+                    >);
+              },
+            );
+          },
+          (held) => wrap("RcMap", held),
+        ),
+      ),
+    "effect/RcMap:get": opening<RM>("RcMap", "get", 2, (held, [key], site) =>
+      Effect.map(keyOf("RcMap.get", key, site), (read) => RcMap.get(held, read)),
+    ),
+    "effect/RcMap:getOption": opening<RM>("RcMap", "getOption", 2, (held, [key], site) =>
+      Effect.map(keyOf("RcMap.getOption", key, site), (read) =>
+        Effect.map(RcMap.getOption(held, read), option),
+      ),
+    ),
+    "effect/RcMap:keys": on<RM, Iterable<Key>>(
+      "RcMap",
+      "keys",
+      1,
+      (held) => RcMap.keys(held),
+      (keys) => arr([...keys].map(keyed)),
+    ),
+    "effect/RcMap:has": byKey<RM, boolean>(
+      "RcMap",
+      "has",
+      2,
+      (held, key) => Effect.succeed(RcMap.has(held, key)),
+      bool,
+    ),
+    "effect/RcMap:invalidate": byKey<RM, void>(
+      "RcMap",
+      "invalidate",
+      2,
+      (held, key) => Effect.succeed(RcMap.invalidate(held, key)),
+      none,
+    ),
+    "effect/RcMap:touch": byKey<RM, void>(
+      "RcMap",
+      "touch",
+      2,
+      (held, key) => Effect.succeed(RcMap.touch(held, key)),
+      none,
+    ),
+    "effect/Resource:manual": ([acquire], site) =>
+      Effect.succeed(
+        scoped(
+          "Resource.manual",
+          site,
+          (timeline) =>
+            Resource.manual(
+              effectOf(timeline, acquire, site) ??
+                Timeline.real(timeline, wrongArguments(site, "Resource.manual")),
+            ),
+          (held) => wrap("Resource", held),
+        ),
+      ),
+    "effect/Resource:auto": ([acquire, policy], site) => {
+      const schedule_ = scheduleOf(policy);
+      return schedule_
+        ? Effect.succeed(
+            scoped(
+              "Resource.auto",
+              site,
+              (timeline) =>
+                Resource.auto(
+                  effectOf(timeline, acquire, site) ??
+                    Timeline.real(timeline, wrongArguments(site, "Resource.auto")),
+                  schedule_,
+                ),
+              (held) => wrap("Resource", held),
+            ),
+          )
+        : wrongArguments(site, "Resource.auto");
+    },
+    "effect/Resource:get": on<RS, V>("Resource", "get", 1, (held) => Resource.get(held), same),
+    "effect/Resource:refresh": on<RS, void>(
+      "Resource",
+      "refresh",
+      1,
+      (held) => Resource.refresh(held),
+      none,
+    ),
+    "effect/Resource:isResource": ([value]) =>
+      Effect.succeed(bool(heldOf<RS>("Resource", value) !== undefined)),
+  };
+
   const models: Models = {
+    ...lifetimes,
     ...stores,
     ...requests,
     ...chunks,

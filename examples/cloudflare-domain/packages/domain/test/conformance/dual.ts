@@ -33,6 +33,8 @@ const ONE_WAY: ReadonlySet<string> = new Set([
   ...["effect/FiberSet:run", "effect/FiberHandle:run", "effect/FiberMap:run"],
   ...["effect/TxSemaphore:withPermit", "effect/TxSemaphore:withPermits"],
   ...["effect/PartitionedSemaphore:withPermit", "effect/PartitionedSemaphore:withPermits"],
+  // Two ways to write its options, with a capacity and without: neither takes a value from `pipe`.
+  "effect/RcMap:make",
 ]);
 
 const declared = new Map<string, ReadonlySet<string>>();
