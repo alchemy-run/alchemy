@@ -24,6 +24,7 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Headers from "effect/http/Headers";
 import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpRouter from "effect/http/HttpRouter";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
@@ -39,6 +40,7 @@ import {
   RpcSerialization,
   RpcServer,
 } from "effect/rpc";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import type { Workflow, WorkflowEngine } from "effect/workflow";
@@ -228,6 +230,53 @@ const clientHeaders = (
   });
 
 /**
+ * Errors a request fails with before it could reach a gateway: the
+ * connection was refused or never made, or the name didn't resolve. A
+ * gateway that several runners serve under one name (Railway replicas, a
+ * Swarm service) still lists a runner that just stopped for a while.
+ */
+const UNSENT_CODES = new Set([
+  "ECONNREFUSED",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "EADDRNOTAVAIL",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "UND_ERR_CONNECT_TIMEOUT",
+]);
+
+/** The `code`s along an error's `cause` chain, and of an `AggregateError`'s errors. */
+const errorCodes = (error: unknown, depth = 0): ReadonlyArray<string> => {
+  if (depth > 5 || typeof error !== "object" || error === null) return [];
+  const { code, cause, errors } = error as { code?: unknown; cause?: unknown; errors?: unknown };
+  return [
+    ...(typeof code === "string" ? [code] : []),
+    ...errorCodes(cause, depth + 1),
+    ...(Array.isArray(errors) ? errors.flatMap((inner) => errorCodes(inner, depth + 1)) : []),
+  ];
+};
+
+/** The request never left: sending it again can't run it twice. */
+const neverSent = (error: unknown) =>
+  HttpClientError.isHttpClientError(error) &&
+  error.reason._tag === "TransportError" &&
+  errorCodes(error.reason.cause).some((code) => UNSENT_CODES.has(code));
+
+/**
+ * Retry a request that never reached a gateway, so a caller rides out a
+ * runner that stopped while the gateway's name still lists it. A request
+ * that may have been sent is never retried: it could run twice.
+ */
+const retryUnsent = <E, R>(
+  client: HttpClient.HttpClient.With<E, R>,
+): HttpClient.HttpClient.With<E, R> =>
+  HttpClient.retry(client, {
+    while: neverSent,
+    schedule: Schedule.exponential("100 millis"),
+    times: 6,
+  });
+
+/**
  * A caller's view of one entity type: `getByName(entityId)` returns a
  * client with the same shape as Effect Cluster's `Entity.client(entityId)`.
  */
@@ -236,7 +285,8 @@ export const makeNamespace = (entity: AnyEntity, target: GatewayTarget) => {
   // NDJSON frames each message, so a streamed RPC delivers as it goes.
   const protocol = RpcClient.layerProtocolHttp({
     url: `${target.url.replace(/\/+$/, "")}${GATEWAY_PATH}`,
-    transformClient: HttpClient.mapRequest(HttpClientRequest.bearerToken(target.token)),
+    transformClient: (client) =>
+      client.pipe(HttpClient.mapRequest(HttpClientRequest.bearerToken(target.token)), retryUnsent),
   }).pipe(Layer.provide([FetchHttpClient.layer, RpcSerialization.layerNdjson]));
 
   const getByName = (entityId: string) =>
