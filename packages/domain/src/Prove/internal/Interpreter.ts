@@ -816,7 +816,9 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     site: Site,
   ) {
     switch (value._tag) {
-      case "Obj":
+      case "Obj": {
+        const waiting = library.waitMember(value, key);
+        if (waiting) return waiting;
         // A duration, a decimal, a hash set and a hash map are read through their modules, never by what they are made of.
         if (value.brand && Brands.SEALED.has(value.brand.kind) && key !== "pipe")
           return yield* fail(site, `reads .${key} of a ${value.brand.kind}`);
@@ -840,6 +842,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         return (
           (held?._tag === "Pending" ? Symbolic.resolve(held, current.run) : held) ?? Value.undef
         );
+      }
       case "List":
         // The first and the last part of a split string are known, however many parts there are.
         if (value.split && key === "0") return value.split.first;

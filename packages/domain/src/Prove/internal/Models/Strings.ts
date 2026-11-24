@@ -388,7 +388,24 @@ export const make = (kit: Kit) => {
             ),
       );
     },
-    at: computed("at", (self, [i]) => self.at(Number(i ?? 0))),
+    at: (self, [at], site) => {
+      const text = known(self);
+      const i = absent(at) ? 0 : index(at);
+      if (i === undefined) return unread(site, "at");
+      if (text !== undefined) {
+        const found = text.at(i);
+        return Effect.succeed(found === undefined ? Value.undef : Value.str(found));
+      }
+      const term = Compare.textual(self);
+      if (!term) return unread(site, "at");
+      // A place from the end is counted back from the length; one past either end has nothing.
+      const length = `(str.len ${term.text})`;
+      const [outside, place] =
+        i >= 0 ? [`(<= ${length} ${i})`, `${i}`] : [`(< ${length} ${-i})`, `(- ${length} ${-i})`];
+      return Effect.map(host.decide(Value.term("Bool", outside), site), (missing) =>
+        missing ? Value.undef : Value.term("String", `(str.at ${term.text} ${place})`),
+      );
+    },
     toUpperCase: computed("toUpperCase", (self) => self.toUpperCase()),
     toLowerCase: computed("toLowerCase", (self) => self.toLowerCase()),
     trim: computed("trim", (self) => self.trim()),

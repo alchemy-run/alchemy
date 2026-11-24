@@ -42,6 +42,7 @@ import * as Rationals from "./Models/Rationals.ts";
 import * as Results from "./Models/Results.ts";
 import * as Streams from "./Models/Streams.ts";
 import * as Strings from "./Models/Strings.ts";
+import * as Waits from "./Models/Waits.ts";
 import type { Term } from "./Smt.ts";
 import * as Smt from "./Smt.ts";
 import * as Symbolic from "./Symbolic.ts";
@@ -1310,6 +1311,7 @@ export const make = (host: Host) => {
   const cells = Cells.make(kit, (key, args, site) => models[key]!(args, site));
   const exits = Exits.make(kit);
   const rationals = Rationals.make(kit);
+  const waits = Waits.make(kit);
 
   const written: Record<string, Model> = {
     ...own,
@@ -1326,6 +1328,7 @@ export const make = (host: Host) => {
     ...cells.models,
     ...exits.models,
     ...rationals.models,
+    ...waits.models,
   };
 
   // A `Chunk` and an `Iterable` are read as the array of their items: the
@@ -1545,6 +1548,8 @@ export const make = (host: Host) => {
       strings: [...strings.names].sort(),
     },
     opticMember,
+    /** A member of a latch or a semaphore: `latch.open`, `semaphore.withPermits`. */
+    waitMember: waits.member,
     /** A helper of a tagged union of `effect/Schema`, as a value the code calls. */
     unionMember,
     /** A method of a string, as a value the code calls. */
