@@ -16,6 +16,7 @@ import {
 } from "../internal/ObjectStorage.ts";
 import { stackDnsLabel } from "../internal/PoolHost.ts";
 import { Namespace } from "../Namespace.ts";
+import { Network } from "./Network.ts";
 
 export { ObjectStorageRequired, type ObjectStorage } from "../internal/ObjectStorage.ts";
 
@@ -365,7 +366,7 @@ export const StatefulSetControlPlane = (id: string, props: StatefulSetControlPla
         // A node port's endpoint is the deploying machine's (a local cluster's
         // port mapping); callers in the cluster use the Service.
         clientEndpoint: expose.type === "NodePort" ? internal : external,
-        network: { kind: "kubernetes", cluster, namespace: k8sNamespace },
+        network: Network({ cluster, namespace: k8sNamespace }),
         token: token.text,
         namespace: namespace.name,
       };
