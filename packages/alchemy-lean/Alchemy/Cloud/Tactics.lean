@@ -17,25 +17,6 @@ elab "computed% " t:term : term => do
   let e ← instantiateMVars (← elabTerm t none)
   withTransparency .all (reduce e (skipProofs := true) (skipTypes := true))
 
-/--
-Settles a claim about who may do what in a graph: `access in prod`, or `access in prod using [BucketOp.covers]`. It computes
-each host's role from the stack, so nobody writes the roles down. Facts about
-how a kind's grants cover one another go in the list.
--/
-syntax "access" " in " term (" using " "[" Lean.Parser.Tactic.simpLemma,* "]")? : tactic
-
-macro_rules
-  | `(tactic| access in $g) =>
-    `(tactic| (
-        have roles : Graph.roles $g = computed% (Graph.roles $g) := rfl
-        simp [Graph.mem_whoCan, Graph.can, Access.permits, permitsOn, Kinds.covers,
-          roles] at *))
-  | `(tactic| access in $g using [$lemmas,*]) =>
-    `(tactic| (
-        have roles : Graph.roles $g = computed% (Graph.roles $g) := rfl
-        simp [Graph.mem_whoCan, Graph.can, Access.permits, permitsOn, Kinds.covers,
-          roles, $lemmas,*] at *))
-
 end Alchemy.Cloud
 
 namespace Alchemy.Cloud

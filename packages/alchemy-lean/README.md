@@ -99,7 +99,8 @@ A decision reads several instances and records on all of them or none.
 ```lean
   decision Transfer (TransferRequest) : TransferRefused
     | accounts, ⟨source, destination, amount⟩ =>
-      if (Account.of accounts source).balance < amount then
+      …
+      else if (Account.of accounts source).balance < amount then
         .error (.insufficientFunds (Account.of accounts source).balance amount)
       else .ok [
         Account.record source (.transferredOut amount),
@@ -164,8 +165,8 @@ theorem neverPaysOutMoreThanCameIn (commands : List Account.Sent) :
 `Account.always` lifts it to every world the model can reach: any callers, any outside answers, any delivery order.
 
 ```lean
-theorem everyAccountBalanced (w : World Signature) (reach : Bank.Reachable w) (id : String) :
-    Balanced (w.state .Account id) :=
+theorem everyAccountBalanced (w : Alchemy.World Signature) (reach : Bank.Reachable w)
+    (id : String) : Balanced (w.state .Account id) :=
   Account.always (by simp [Balanced]) balanced_kept w reach id transfer_balanced
 ```
 
@@ -183,7 +184,7 @@ A rule across aggregates is stated over the whole record.
 def Conserved (r : Recorded Aggregates) : Prop :=
   ((r.eventsOf .Account).map movedOut).sum = ((r.eventsOf .Account).map movedIn).sum
 
-theorem noTransferCreatesMoney (w : World Signature) (reach : Bank.Reachable w) :
+theorem noTransferCreatesMoney (w : Alchemy.World Signature) (reach : Bank.Reachable w) :
     Conserved w.toRecorded
 ```
 
@@ -313,28 +314,25 @@ def Api (orders : Bucket) (shipments : Queue) : Construct Kind Function := do
     return route (theShop orders shipments)
 ```
 
-A Cloudflare Worker ends with `fetch` and typed methods other Workers call. Its bindings are still taken as steps.
+A Cloudflare Worker is the same, and ends with `fetch` and typed methods other Workers call.
 
 ```lean
 def Inbox (mail : Bucket) (incoming : Queue) : Construct Kind (Worker Api) :=
   Workers.Worker "Inbox" {} Api do
-    let mail ← R2.ReadWrite mail
-    let queue ← Queues.Send incoming
-
     Queues.consume incoming fun message => do
-      let stored ← mail.list
-      mail.put (toString stored.length) message
+      let stored ← R2.list mail
+      R2.put mail (toString stored.length) message
 
     return {
       fetch := fun request => do
         match request.method, request.path with
         | "POST", "/messages" =>
-          queue.send request.body
+          Queues.send incoming request.body
           return { status := 202 }
         | _, _ => return { status := 404 }
       rpc := fun
-        | .count => return (← mail.list).length
-        | .read id => mail.get (toString id) }
+        | .count => return (← R2.list mail).length
+        | .read id => R2.get mail (toString id) }
 ```
 
 ## Access
@@ -433,7 +431,7 @@ Given what the bucket holds, when a request arrives, then the response and the b
 ```lean
 theorem gettingAnOrder (id : String) (cloud : Memory) :
     (getOrder (theShop (role := role) orders shipments) id).eval InMemory cloud
-      = (.ok (describe ((shopIn orders cloud).state .Order id)), cloud)
+      = (.ok (describe ((shopIn orders cloud).state .Order id).status), cloud)
 ```
 
 A response follows from the domain's `decide`, for every item and amount.
@@ -449,7 +447,8 @@ theorem placingAnOrderTwiceIsRefused (id item : String) (amount : Nat) (cloud : 
 These rest on a law per binding: what a call answers and what it does to the cloud.
 
 ```lean
-structure PutObject.Lawful (client : PutObject.Client bucket under access) : Prop where
+structure PutObject.Lawful {bucket : AWS.Bucket} {under : Path}
+    (client : PutObject.Client bucket under access) : Prop where
   put : ∀ (m : Memory) (name body : String),
     (client.call name body).eval InMemory m = (.ok (), m.put bucket (under ++ [name]) body)
 ```
@@ -517,9 +516,11 @@ example : plan Control.providers prod fresh.state = [
 In the editor, `#eval` shows any of it without running a program.
 
 ```lean
-#eval prod.order          -- ["Orders", "Shipments", "Api", "Warehouse"]
-#eval prod.edges          -- [("Api", "Orders"), ("Api", "Shipments"), …]
+-- #eval prod.order   gives ["Orders", "Shipments", "Api", "Warehouse"]
+-- #eval prod.edges   gives [("Api", "Orders"), ("Api", "Shipments"), …]
 ```
+
+`python3 check-docs.py` checks that every line of Lean on this page and in the guide is in the library or an example.
 
 ## Examples
 
@@ -539,5 +540,5 @@ In the editor, `#eval` shows any of it without running a program.
 - Stacks run against a cloud held in memory. Nothing deploys to a real account.
 - A host handles one request at a time, by design.
 - `model` takes one saga, string ids, and views of one value over one aggregate.
-- A decision cannot be sent through a hosted function.
-- The Cloudflare bindings have no laws and no access vocabulary.
+- The request theorems assume JSON written to the journal reads back as written.
+- Cloudflare has no control-plane model, so no plan, and its operations have no laws.

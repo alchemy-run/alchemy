@@ -140,8 +140,8 @@ model Shop where
 **What you get.** The invariant of step 3 holds across the whole model, and of the model as a function hosts it, in one line each: any callers, any gateway answer, any delivery order, any event delivered twice.
 
 ```lean
-theorem everyOrderChargedOnce (w : World Signature) (reach : Shop.Reachable w) (id : String) :
-    ChargedOnce (w.state .Order id) :=
+theorem everyOrderChargedOnce (w : Alchemy.World Signature) (reach : Shop.Reachable w)
+    (id : String) : ChargedOnce (w.state .Order id) :=
   Order.always (by simp [ChargedOnce]) chargedOnce w reach id
 
 theorem deployedOrdersChargedOnce (journal : List Journal.Line) (id : String) :
@@ -281,9 +281,9 @@ $ lake exe shop graph prod --why
 
   Warehouse
     may        write Orders/packed
-                 ← Shop.lean:334  S3.putObject orders ["packed"] order item
+                 ← Shop.lean:325  S3.putObject orders ["packed"] order item
     may        receive from Shipments
-                 ← Shop.lean:332  SQS.consume shipments fun shipment => do match shipment.s…
+                 ← Shop.lean:323  SQS.consume shipments fun shipment => do match shipment.s…
 ```
 
 The domain's story also runs against the stack. It is step 7 again, but each command goes in through the Api, and the gateway and the queue answer the model's calls. This is what shows the wiring does what the model says.
@@ -313,9 +313,9 @@ lake exe shop plan prod after dev # what a deploy would change
   Warehouse
     needs      Orders, Shipments
     may        write Orders/packed
-                 ← Shop.lean:334  S3.putObject orders ["packed"] order item
+                 ← Shop.lean:325  S3.putObject orders ["packed"] order item
     may        receive from Shipments
-                 ← Shop.lean:332  SQS.consume shipments fun shipment => do match shipment.s…
+                 ← Shop.lean:323  SQS.consume shipments fun shipment => do match shipment.s…
     consumes   Shipments
 
     no-op    Orders

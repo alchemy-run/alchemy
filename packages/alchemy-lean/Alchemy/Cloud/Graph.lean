@@ -113,18 +113,6 @@ def deployable (g : Graph K) : Bool := g.dangling.isEmpty && g.order.length == g
 
 end Graph
 
-/--
-Settles a claim about who may do what, given the stack's roles: `access [roles]`.
-Other facts it should use, such as how a kind's grants cover one another, go in
-the list too.
--/
-syntax "access" " [" Lean.Parser.Tactic.simpLemma,* "]" : tactic
-
-macro_rules
-  | `(tactic| access [$lemmas,*]) =>
-    `(tactic| simp [Graph.mem_whoCan, Graph.can, Access.permits,
-        permitsOn, Kinds.covers, $lemmas,*] at *)
-
 /-- What a construct can read about where it is being built. -/
 structure Env where
   stage : String

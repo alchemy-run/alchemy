@@ -143,40 +143,34 @@ example : prod.edges = [
 
 /-! ## What is proved about access -/
 
-/--
-Each function's access, pinned. Nobody wrote these down: each is what the
-function's layers need. Give a function another layer and this fails.
--/
-theorem roles : prod.roles = [
-    ("JobsBucket", ∅),
-    ("JobsQueue", ∅),
-    ("Api", S3.Get bucket ["jobs"] ∪ S3.Put bucket ["jobs"] ∪ SQS.Send queue),
-    ("Worker", SQS.Receive queue),
-    ("Auditor", S3.List bucket)] := by
-  rfl
+/-- Only the Api can write an object, whatever the key. -/
+theorem onlyTheApiWrites : prod.only [api] (S3.writing bucket) := by
+  stack_rule in prod using [bucket, api]
 
-/-- Only the Api can write an object, and only under `jobs/`, whatever the key. -/
-theorem onlyTheApiWrites (key : Path) (host : String)
-    (can : host ∈ prod.whoCan ⟨.bucket, bucket, BucketOp.put key⟩) :
-    host = "Api" ∧ ["jobs"] <+: key := by
-  access [roles, BucketOp.covers]
-  grind
+/-- And it can write nowhere but under `jobs/`. -/
+theorem theApiWritesOnlyJobs (key : Path) (elsewhere : ¬["jobs"] <+: key) :
+    prod.can "Api" ⟨.bucket, bucket, BucketOp.put key⟩ = false := by
+  have roles : prod.roles = computed% prod.roles := rfl
+  simp [Graph.can, roles, Access.permits, permitsOn, Kinds.covers, BucketOp.covers, bucket]
+  constructor
+  · intro same
+    cases same
+    exact elsewhere (List.prefix_refl _)
+  · cases prefixed : ["jobs"].isPrefixOf key with
+    | false => rfl
+    | true => exact absurd (List.isPrefixOf_iff_prefix.mp prefixed) elsewhere
 
 /-- Nothing but the Worker takes jobs off the queue. -/
-theorem onlyTheWorkerReceives (host : String)
-    (can : host ∈ prod.whoCan ⟨.queue, queue, QueueOp.receive⟩) : host = "Worker" := by
-  access [roles]
-  exact can.symm
+theorem onlyTheWorkerReceives : prod.only [worker] (SQS.receiving queue) := by
+  stack_rule in prod using [queue, worker]
 
 /-- The Auditor can count jobs, and can read none of them. -/
-theorem theAuditorReadsNothing (key : Path) :
-    prod.can "Auditor" ⟨.bucket, bucket, BucketOp.get key⟩ = false := by
-  access [roles, BucketOp.covers]
+theorem theAuditorReadsNothing : prod.never auditor (S3.reading bucket) := by
+  stack_rule in prod using [bucket, auditor]
 
 /-- No function can invoke another. -/
-theorem noFunctionInvokesAnother (target : Function) :
-    prod.whoCan ⟨.function, target, FunctionOp.invoke⟩ = [] := by
-  simp [Graph.whoCan, roles, Access.permits, permitsOn]
+theorem noFunctionInvokesAnother (target : Function) : prod.nobody (Lambda.invoking target) := by
+  stack_rule in prod
 
 /-! ## What is proved about the code -/
 
