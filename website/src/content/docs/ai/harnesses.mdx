@@ -1,0 +1,63 @@
+---
+title: Choose a harness
+description: A process names no coding agent. Provide Pi.HarnessLive or OpenCode.HarnessLive where its Layers are provided, and set the model sessions run on with AI.DefaultModel.
+---
+
+A process says what to do and what to do it with. It never says which coding agent runs it. That is one Layer, `AI.Harness`, provided where the process's other Layers are.
+
+## Run processes on Pi
+
+`Pi.HarnessLive` runs every session as a Pi conversation. It needs Pi's storage:
+
+```typescript title="src/Layers.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Layer from "effect/Layer";
+import { EngineerLive } from "./Engineer.process.ts";
+import { SmartLlama, Smart } from "./Models.ts";
+
+export const Live = EngineerLive.pipe(
+  Layer.provide(Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools, AI.DefaultModel(Smart))),
+  Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, SmartLlama)),
+);
+```
+
+See [Pi](/pi).
+
+## Run them on OpenCode instead
+
+Change the harness, its storage and its coding tools. The processes, their tools and their models stay as they are:
+
+```diff lang="typescript"
+export const Live = EngineerLive.pipe(
+-  Layer.provide(Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools, AI.DefaultModel(Smart))),
+-  Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, SmartLlama)),
++  Layer.provide(
++    Layer.mergeAll(OpenCode.HarnessLive, OpenCode.CodingTools, AI.DefaultModel(Smart)),
++  ),
++  Layer.provide(Layer.mergeAll(OpenCodeCloudflare.DurableObjectStorage, SmartLlama)),
+);
+```
+
+See [OpenCode](/opencode).
+
+## Set the default model
+
+Every process requires `AI.DefaultModel`: the model a session runs on when nobody chose one. Give it one of your models, whose Layer it then requires:
+
+```typescript
+AI.DefaultModel(Smart);
+```
+
+A process may mention other models. Those are choices for whoever starts a session, and for the session when it starts another. See [Mention a model](/ai/process-graphs#mention-a-model).
+
+## One harness for a place
+
+Every process provided with the same `AI.Harness` Layer runs on one harness, which opens once with every tool and model those processes mention. Yield processes where the runtime's dependencies are resolved, a Durable Object's outer Effect, so the harness knows all of them before its first session.
+
+## What a harness adds
+
+A harness may name tools its own way. OpenCode calls a tool of yours `alchemy_<name>`, and its own coding tools by their OpenCode names. The prose a session reads has each mention under the name that harness gives it, so the same process reads correctly on both.
+
+Everything a harness has beyond processes stays on its own API: Pi's [extensions](/pi/extensions) and conversation forks, OpenCode's [own client](/opencode/api).

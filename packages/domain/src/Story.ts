@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -1186,9 +1187,14 @@ const make =
   ): Effect.Effect<
     void,
     StoryFailure | LE,
+    // A story is a runtime of its own, in memory: its handlers need no other.
     Exclude<
       LR,
-      Provided | ExternalSystem.Identifier<Systems> | WorkflowEngine.WorkflowEngine | Vault
+      | Provided
+      | ExternalSystem.Identifier<Systems>
+      | WorkflowEngine.WorkflowEngine
+      | RuntimeContext
+      | Vault
     >
   > =>
     explore(steps, (scheduler) =>
@@ -2022,9 +2028,14 @@ const make =
     ) as Effect.Effect<
       void,
       StoryFailure | LE,
+      // A story is a runtime of its own, in memory: its handlers need no other.
       Exclude<
         LR,
-        Provided | ExternalSystem.Identifier<Systems> | WorkflowEngine.WorkflowEngine | Vault
+        | Provided
+        | ExternalSystem.Identifier<Systems>
+        | WorkflowEngine.WorkflowEngine
+        | RuntimeContext
+        | Vault
       >
     >;
 

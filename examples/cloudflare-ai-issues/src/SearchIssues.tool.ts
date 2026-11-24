@@ -5,9 +5,6 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { Repo } from "./Repo.ts";
 
-/** Hidden in every comment the bot posts, so it never answers itself. */
-export const MARKER = "<!-- issue-bot -->";
-
 /** Find issues and pull requests on the repository that mention some words. */
 export class SearchIssues extends AI.Tool<SearchIssues>()("search_issues", {
   description:

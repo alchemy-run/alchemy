@@ -1,5 +1,4 @@
 import type { Sandbox } from "@alchemy.run/ai/Sandbox";
-import type { SkillClass } from "@alchemy.run/ai/Skill";
 import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
 import type { JsonObject, ToolExecutionResult, ToolHookCall } from "@earendil-works/pi-durable";
 import type { ConversationId } from "@earendil-works/pi-durable";
@@ -96,7 +95,7 @@ export interface ExtensionClass<
 
 /** Any extension, structurally: what a harness reads off it. */
 export interface AnyExtension {
-  readonly [ExtensionTypeId]: "class" | "skill" | "codemode";
+  readonly [ExtensionTypeId]: "class" | "codemode";
   readonly key: string;
   readonly extensionName: string;
   readonly spec: ExtensionSpec;
@@ -107,11 +106,9 @@ export interface AnyExtension {
 export type ExtensionRequirements<T> =
   T extends ExtensionClass<any, any, infer Spec, infer Requires>
     ? Requires | ToolRequirements<NonNullable<Spec["tools"]>[number]>
-    : T extends SkillClass<any, infer Tools>
-      ? ToolRequirements<Tools[number]>
-      : T extends { readonly "~requires": infer Requires }
-        ? Requires
-        : never;
+    : T extends { readonly "~requires": infer Requires }
+      ? Requires
+      : never;
 
 /**
  * Declare an extension: a named bundle of prompt sections, tools and

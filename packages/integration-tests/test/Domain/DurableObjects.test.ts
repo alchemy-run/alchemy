@@ -841,3 +841,475 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
     { timeout: 30_000 },
   );
 });
+
+// ---------------------------------------------------------------- one projection key fed by many sources
+
+class Counted extends Domain.Event("Counted", { n: Schema.Number }) {}
+class Count extends Domain.Command("Count", {
+  input: { id: Schema.String },
+  events: [Counted],
+}) {}
+class Counter extends Domain.Aggregate("Counter", {
+  id: Schema.String,
+  state: Schema.Struct({ count: Schema.Number }),
+  initial: { count: 0 },
+  commands: [Count],
+  keyOf: (command) => command.id,
+  decide: { Count: (counter) => [new Counted({ n: counter.count + 1 })] },
+  evolve: { Counted: (_, e) => ({ count: e.n }) },
+}) {}
+/** Every counter feeds one key. */
+class AllCounts extends Domain.Projection("AllCounts", {
+  from: [Counter],
+  key: Schema.String,
+  keyOf: { Counter: () => "all" },
+  on: [Counted],
+}) {}
+class Counting extends Domain.Model("Counting", {
+  aggregates: [Counter],
+  projections: [AllCounts],
+}) {}
+/** The same model before the projection was deployed: the same objects. */
+class CountingBefore extends Domain.Model("Counting", { aggregates: [Counter] }) {}
+
+/** The key's class, and the one a `version: 1` deploy uses. */
+const COUNTS = "Counting.AllCountsProjection";
+const COUNTS_V1 = `${COUNTS}V1`;
+
+/** A sim host for one test, with what the projection's handler ran and a switch to fail it. */
+const countingSim = (
+  options: { readonly failPut?: (key: string) => boolean; readonly inputGate?: boolean } = {},
+) => {
+  const stats: Stats = { rowsRead: 0, bytesWritten: 0 };
+  /** What the key's object was sent, as a counter's outbox sends it. */
+  const received: Array<Record<string, unknown>> = [];
+  const sim = simHost(stats, {
+    ...options,
+    intercept: (call, run) => {
+      if (call.cls.startsWith(COUNTS) && call.method === "receive") {
+        received.push(call.args[1] as Record<string, unknown>);
+      }
+      return run;
+    },
+  });
+  const handled: Array<string> = [];
+  const store = { failing: false, attempts: 0 };
+  const layer = (version = 0, size = 100) =>
+    Counting.layer(
+      AllCounts.toLayer(
+        Effect.succeed(
+          Effect.fn(function* (batch) {
+            store.attempts += 1;
+            if (store.failing) return yield* Effect.die(new Error("the store is down"));
+            for (const { envelope } of batch) handled.push(`${envelope.stream}#${envelope.seq}`);
+          }),
+        ),
+        { batch: { size }, ...(version > 0 ? { version } : {}) },
+      ),
+    ).pipe(
+      Layer.provideMerge(DurableObjects.makePlatform(sim.host)),
+      Layer.provideMerge(SecureRandom.layerWebCrypto),
+    );
+  const before = CountingBefore.layer(Layer.empty).pipe(
+    Layer.provideMerge(DurableObjects.makePlatform(sim.host)),
+    Layer.provideMerge(SecureRandom.layerWebCrypto),
+  );
+  /** The key's stored rows. */
+  const rows = (cls = COUNTS) => sim.disk.objects.get(`${cls}/all`)?.data ?? new Map();
+  /** The key's rows under `prefix`, by what follows it. */
+  const prefixed = (prefix: string, cls = COUNTS) =>
+    Object.fromEntries(
+      [...rows(cls)]
+        .filter(([row]) => row.startsWith(prefix))
+        .map(([row, value]) => [row.slice(prefix.length), value]),
+    );
+  const meta = (cls = COUNTS) => rows(cls).get("meta") as Record<string, unknown>;
+  /** A failed drain has let go of the key: the next one runs at once, not after the lease. */
+  const released = eventually(() => !rows().has("drain-lease"));
+  /** Deliver to the key directly, as a counter's outbox does (at least once, so again too). */
+  const receive = (delivery: unknown, cls = COUNTS) =>
+    sim.call(cls, "all", "receive", "all", delivery);
+  const checkpoints = (sources?: ReadonlyArray<string>, cls = COUNTS) =>
+    sim.call(
+      cls,
+      "all",
+      "checkpoints",
+      ...(sources === undefined ? [] : [sources]),
+    ) as Effect.Effect<Record<string, number>, unknown>;
+  return {
+    sim,
+    stats,
+    received,
+    handled,
+    store,
+    layer,
+    before,
+    rows,
+    prefixed,
+    meta,
+    released,
+    receive,
+    checkpoints,
+  };
+};
+
+/** A delivery from counter `id` as its outbox sends one. */
+const counted = (id: string, seq: number) => ({
+  target: { kind: "projection", name: "AllCounts" },
+  key: "all",
+  source: `Counter/${id}`,
+  seq,
+  origin: "Counter",
+  tag: "Counted",
+  event: { _tag: "Counted", n: seq },
+  envelope: {
+    id,
+    stream: `Counter/${id}`,
+    seq,
+    at: Date.now(),
+    commandId: `c-${id}-${seq}`,
+    correlationId: `c-${id}-${seq}`,
+  },
+});
+
+/** Count once on counter `id`, and wait until the key has handled it. */
+const count = Effect.fn(function* (id: string) {
+  const receipt = yield* (yield* Counter).send(new Count({ id }));
+  yield* AllCounts.caughtUp(receipt, { timeout: "20 seconds" });
+  return receipt;
+});
+
+/** Changes each counter's first count, and keeps the others. */
+class Recount extends Domain.Rewrite("Recount", {
+  of: Counter,
+  events: { Counted: (e) => (e.n === 1 ? new Counted({ n: 100 }) : e) },
+}) {}
+class Recounting extends Domain.Model("Recounting", {
+  aggregates: [Counter],
+  projections: [AllCounts],
+  rewrites: [Recount],
+}) {}
+
+describe("a projection key fed by many sources", { tags: ["unit"] }, () => {
+  it.live(
+    "keeps meta to scalars, and a cursor row per source for intake and checkpoints",
+    () => {
+      const t = countingSim();
+      return Effect.gen(function* () {
+        yield* count("a");
+        yield* count("b");
+        yield* count("a");
+        expect(t.handled).toEqual(["Counter/a#1", "Counter/b#1", "Counter/a#2"]);
+        expect(Object.keys(t.meta()).sort()).toEqual([
+          "accepted",
+          "generation",
+          "key",
+          "processed",
+        ]);
+        expect(t.meta()).toMatchObject({ key: "all", accepted: 3, processed: 3 });
+        expect(t.prefixed("intake:")).toEqual({ "Counter/a": 2, "Counter/b": 1 });
+        expect(t.prefixed("ckpt:")).toEqual({ "Counter/a": 2, "Counter/b": 1 });
+        // A handled input leaves the log.
+        expect(t.prefixed("in:")).toEqual({});
+        // The deliveries these tests send are shaped like the ones a counter sent.
+        const sent = t.received[0]!;
+        expect(sent).toMatchObject({ ...counted("a", 1), envelope: expect.any(Object) });
+        expect(Object.keys(sent).sort()).toEqual(Object.keys(counted("a", 1)).sort());
+      }).pipe(Effect.scoped, Effect.provide(t.layer()));
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "drops a delivery it has accepted, by source and seq",
+    () => {
+      const t = countingSim();
+      return Effect.gen(function* () {
+        yield* count("a");
+        yield* count("a");
+        // The outbox sends seq 2 again, then an older one arrives late.
+        yield* t.receive(counted("a", 2));
+        yield* t.receive(counted("a", 1));
+        yield* t.receive(counted("a", 3));
+        yield* eventually(() => t.handled.length === 3);
+        yield* Effect.sleep("50 millis");
+        expect(t.handled).toEqual(["Counter/a#1", "Counter/a#2", "Counter/a#3"]);
+        expect(t.meta()).toMatchObject({ accepted: 3 });
+        expect(t.prefixed("intake:")).toEqual({ "Counter/a": 3 });
+      }).pipe(Effect.scoped, Effect.provide(t.layer()));
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "after an eviction, redelivered inputs are dropped and the log resumes in order",
+    () => {
+      const t = countingSim();
+      return Effect.gen(function* () {
+        yield* count("a");
+        // Accepted, but the handler fails, and then the instance is gone.
+        t.store.failing = true;
+        const attempts = t.store.attempts;
+        yield* t.receive(counted("b", 1));
+        yield* t.receive(counted("c", 1));
+        yield* eventually(() => t.store.attempts > attempts);
+        yield* t.released;
+        yield* t.sim.evict;
+        t.store.failing = false;
+        // The senders, not knowing, send both again; then something new arrives.
+        yield* t.receive(counted("b", 1));
+        yield* t.receive(counted("c", 1));
+        expect(t.meta()).toMatchObject({ accepted: 3 });
+        yield* t.receive(counted("b", 2));
+        yield* eventually(() => t.handled.length === 4);
+        expect(t.handled).toEqual(["Counter/a#1", "Counter/b#1", "Counter/c#1", "Counter/b#2"]);
+        expect(t.prefixed("ckpt:")).toEqual({ "Counter/a": 1, "Counter/b": 2, "Counter/c": 1 });
+      }).pipe(Effect.scoped, Effect.provide(t.layer()));
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "a checkpoint write that fails leaves neither cursor rows nor progress, and the batch runs again",
+    () => {
+      const failing = { next: 0 };
+      // The drain's `meta` write for a batch with b in it fails once, after its `ckpt:` rows.
+      const t = countingSim({
+        failPut: (key) =>
+          key === "meta" &&
+          t.rows().has("ckpt:Counter/b") &&
+          failing.next > 0 &&
+          failing.next-- > 0,
+      });
+      return Effect.gen(function* () {
+        yield* count("a");
+        failing.next = 1;
+        yield* t.receive(counted("b", 1));
+        yield* eventually(() => failing.next === 0);
+        yield* t.released;
+        // Rolled back together: no checkpoint for b, progress still at a's input.
+        expect(t.prefixed("ckpt:")).toEqual({ "Counter/a": 1 });
+        expect(t.meta()).toMatchObject({ processed: 1 });
+        // The next drain runs b again (at least once), then c.
+        yield* t.receive(counted("c", 1));
+        yield* eventually(() => t.handled.includes("Counter/c#1"));
+        expect(t.handled).toEqual(["Counter/a#1", "Counter/b#1", "Counter/b#1", "Counter/c#1"]);
+        expect(t.prefixed("ckpt:")).toEqual({ "Counter/a": 1, "Counter/b": 1, "Counter/c": 1 });
+        expect(t.meta()).toMatchObject({ processed: 3 });
+      }).pipe(Effect.scoped, Effect.provide(t.layer()));
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "a log from an earlier generation starts over, and its cursor rows with it",
+    () => {
+      const t = countingSim();
+      // What an earlier generation left in this key: a log, and cursors that would drop seq 1.
+      t.sim.disk.objects.set(`${COUNTS_V1}/all`, {
+        cls: COUNTS_V1,
+        name: "all",
+        alarm: undefined,
+        data: new Map<string, unknown>([
+          ["meta", { key: "all", accepted: 1, processed: 1, generation: 0 }],
+          ["in:000000000001", { position: 1, delivery: counted("a", 9), at: 0 }],
+          ["intake:Counter/a", 9],
+          ["ckpt:Counter/a", 9],
+          ["intake:Counter/old", 4],
+          ["ckpt:Counter/old", 4],
+        ]),
+      });
+      return Effect.gen(function* () {
+        // Before anything is written, the earlier generation's checkpoints read as none.
+        expect(yield* t.checkpoints(undefined, COUNTS_V1)).toEqual({});
+        expect(yield* t.checkpoints(["Counter/a"], COUNTS_V1)).toEqual({});
+        yield* count("a");
+        expect(t.handled).toEqual(["Counter/a#1"]);
+        expect(t.prefixed("intake:", COUNTS_V1)).toEqual({ "Counter/a": 1 });
+        expect(t.prefixed("ckpt:", COUNTS_V1)).toEqual({ "Counter/a": 1 });
+        expect(t.meta(COUNTS_V1)).toMatchObject({ accepted: 1, processed: 1, generation: 1 });
+        expect(yield* t.checkpoints(undefined, COUNTS_V1)).toEqual({ "Counter/a": 1 });
+      }).pipe(Effect.scoped, Effect.provide(t.layer(1)));
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "a meta written with the per-source maps still dedupes, and moves them to rows on its next write",
+    () => {
+      const t = countingSim();
+      // 300 sources: moving them writes 600 rows, more than one put takes.
+      const old: Record<string, number> = { "Counter/a": 1 };
+      for (let i = 0; i < 299; i++) old[`Counter/x${i}`] = 3;
+      return Effect.gen(function* () {
+        yield* count("a");
+        yield* t.sim.evict;
+        // Rewrite the key as earlier code stored it: the maps in `meta`, no cursor rows.
+        const data = t.rows();
+        for (const row of [...data.keys()]) {
+          if (row.startsWith("intake:") || row.startsWith("ckpt:")) data.delete(row);
+        }
+        const scalars = { ...t.meta() };
+        const taken = { "Counter/x0": 4 };
+        data.set("meta", { ...scalars, intake: old, checkpoints: old, taken });
+
+        expect(yield* t.checkpoints()).toEqual(old);
+        expect(yield* t.checkpoints(["Counter/a", "Counter/none"])).toEqual({ "Counter/a": 1 });
+        // Counter a's first event was handled before: sent again, it is dropped.
+        yield* t.receive(counted("a", 1));
+        expect(t.meta()).toEqual(scalars);
+        expect(t.prefixed("intake:")).toEqual(old);
+        expect(t.prefixed("ckpt:")).toEqual(old);
+        expect(t.prefixed("taken:")).toEqual(taken);
+        yield* t.receive(counted("x7", 3));
+        yield* t.receive(counted("a", 2));
+        yield* eventually(() => t.handled.length === 2);
+        expect(t.handled).toEqual(["Counter/a#1", "Counter/a#2"]);
+        expect(t.prefixed("ckpt:")["Counter/a"]).toBe(2);
+        expect(yield* t.checkpoints()).toEqual({ ...old, "Counter/a": 2 });
+      }).pipe(Effect.scoped, Effect.provide(t.layer()));
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "checkpoints reads every source's rows past one page, or only the sources asked for",
+    () => {
+      const t = countingSim();
+      const many = Array.from({ length: 1_203 }, (_, i) => `x${i}`);
+      return Effect.gen(function* () {
+        yield* count("a");
+        for (const id of many) yield* t.receive(counted(id, 1));
+        yield* eventually(() => t.handled.length === 1 + many.length, "30 seconds");
+        yield* Effect.sleep("50 millis");
+        const all = yield* t.checkpoints();
+        expect(Object.keys(all).length).toBe(1 + many.length);
+        expect(all["Counter/x1202"]).toBe(1);
+        // What `caughtUp` asks for: the streams it waits on, a row each.
+        const asked = yield* rowsReadBy(t.stats, t.checkpoints(["Counter/a", "Counter/none"]));
+        expect(asked.result).toEqual({ "Counter/a": 1 });
+        expect(asked.rows).toBeLessThanOrEqual(3);
+        // And read-your-writes still holds.
+        yield* count("a");
+      }).pipe(Effect.scoped, Effect.provide(t.layer()));
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "history committed before the projection was deployed reaches the key through the same intake",
+    () => {
+      const t = countingSim();
+      return Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          const counters = yield* Counter;
+          yield* counters.send(new Count({ id: "a" }));
+          yield* counters.send(new Count({ id: "a" }));
+          yield* counters.send(new Count({ id: "b" }));
+        }).pipe(Effect.scoped, Effect.provide(t.before));
+        yield* t.sim.evict;
+        // The deploy that adds the projection: the first live input starts the backfill of a and b.
+        yield* Effect.gen(function* () {
+          yield* count("c");
+          yield* eventually(() => t.handled.length === 4);
+          expect([...t.handled].sort()).toEqual([
+            "Counter/a#1",
+            "Counter/a#2",
+            "Counter/b#1",
+            "Counter/c#1",
+          ]);
+          expect(t.handled.indexOf("Counter/a#1")).toBeLessThan(t.handled.indexOf("Counter/a#2"));
+          yield* count("a");
+          expect(t.handled.at(-1)).toBe("Counter/a#3");
+          expect(t.handled.length).toBe(5);
+          expect(t.prefixed("ckpt:")).toEqual({ "Counter/a": 3, "Counter/b": 1, "Counter/c": 1 });
+        }).pipe(Effect.scoped, Effect.provide(t.layer()));
+      });
+    },
+    { timeout: 90_000 },
+  );
+
+  it.live(
+    "what one delivery writes does not grow with the sources the key has heard from",
+    () => {
+      const t = countingSim();
+      return Effect.gen(function* () {
+        yield* count("warm");
+        const perDelivery = Effect.fn(function* (from: number, n: number) {
+          const before = t.stats.bytesWritten!;
+          for (let i = from; i < from + n; i++) yield* t.receive(counted(`s${i}`, 1));
+          yield* eventually(() => t.handled.length === 1 + from + n, "30 seconds");
+          yield* Effect.sleep("20 millis");
+          return (t.stats.bytesWritten! - before) / n;
+        });
+        const small = yield* perDelivery(0, 50);
+        yield* perDelivery(50, 1_950);
+        const large = yield* perDelivery(2_000, 50);
+        // With both maps in `meta`, each delivery rewrote ~2,000 entries twice (> 100 kB).
+        expect(large).toBeLessThan(small * 1.2);
+        expect(large).toBeLessThan(5_000);
+      }).pipe(Effect.scoped, Effect.provide(t.layer()));
+    },
+    { timeout: 90_000 },
+  );
+
+  it.live(
+    "a key behind an input gate, as Rivet runs one, writes its checkpoints in a transaction",
+    () => {
+      const t = countingSim({ inputGate: true });
+      return Effect.gen(function* () {
+        // The drain's checkpoint write is a transaction, which holds the gate.
+        yield* count("a").pipe(Effect.timeout("20 seconds"));
+        yield* t.sim.evict;
+        yield* count("b").pipe(Effect.timeout("20 seconds"));
+        yield* count("a").pipe(Effect.timeout("20 seconds"));
+        expect(t.handled).toEqual(["Counter/a#1", "Counter/b#1", "Counter/a#2"]);
+        expect(t.prefixed("ckpt:")).toEqual({ "Counter/a": 2, "Counter/b": 1 });
+      }).pipe(Effect.scoped, Effect.provide(t.layer()));
+    },
+    { timeout: 90_000 },
+  );
+
+  it.live(
+    "a rewrite's revisions of handled events leave each source's checkpoint where it was",
+    () => {
+      const sim = simHost({ rowsRead: 0 });
+      const revised: Array<string> = [];
+      const layer = Recounting.layer(
+        AllCounts.toLayer(
+          Effect.succeed({
+            write: () => Effect.void,
+            rewrite: Effect.fn(function* (batch) {
+              for (const { envelope } of batch) revised.push(`${envelope.stream}#${envelope.seq}`);
+            }),
+          }),
+          { batch: { size: 100 } },
+        ),
+      ).pipe(
+        Layer.provideMerge(DurableObjects.makePlatform(sim.host)),
+        Layer.provideMerge(SecureRandom.layerWebCrypto),
+      );
+      const ckpt = () =>
+        Object.fromEntries(
+          [...(sim.disk.objects.get("Recounting.AllCountsProjection/all")?.data ?? new Map())]
+            .filter(([row]) => row.startsWith("ckpt:"))
+            .map(([row, seq]) => [row.slice("ckpt:".length), seq]),
+        );
+      return Effect.gen(function* () {
+        const counters = yield* Counter;
+        yield* count("a");
+        const last = yield* count("a");
+        yield* count("b");
+        expect(ckpt()).toEqual({ "Counter/a": 2, "Counter/b": 1 });
+        // Only seq 1 changes: its revision, then the rewrite's `done` (seq 0), reach the key.
+        yield* counters.rewritten(yield* counters.rewrite("a", new Recount()));
+        expect(revised).toEqual(["Counter/a#1"]);
+        expect(ckpt()).toEqual({ "Counter/a": 2, "Counter/b": 1 });
+        yield* AllCounts.caughtUp(last, { timeout: "5 seconds" });
+        yield* count("a");
+        expect(ckpt()).toEqual({ "Counter/a": 3, "Counter/b": 1 });
+      }).pipe(Effect.scoped, Effect.provide(layer));
+    },
+    { timeout: 60_000 },
+  );
+});

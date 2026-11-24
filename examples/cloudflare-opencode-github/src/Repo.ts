@@ -12,3 +12,6 @@ export const Repo = GitHub.Repository("Repo", {
     "Issues here are answered by an OpenCode agent (alchemy example cloudflare-opencode-github)",
   autoInit: true,
 });
+
+/** Hidden in every comment the bot posts, so it never answers itself. */
+export const MARKER = "<!-- issue-bot -->";
