@@ -432,6 +432,10 @@ const base: ReadonlyArray<Group> = [
       `(({ a: x, ...rest }) => [x, rest])({ a, b, c: 1 })`,
       `Optic.id().key("n").replace(a, { n: 0, m: b })`,
       `Optic.id().key("n").modify((n) => n + a)({ n: 1 })`,
+      `Optic.modify({ n: a, m: b }, Optic.id().key("n"), (n) => n + 1)`,
+      `pipe({ n: a, m: b }, Optic.modify(Optic.id().key("n"), (n) => n + 1))`,
+      `Optic.replace({ n: a, m: b }, Optic.id().key("m"), a)`,
+      `pipe({ n: a, m: b }, Optic.replace(Optic.id().key("m"), a))`,
     ],
   },
   {
@@ -613,6 +617,8 @@ const base: ReadonlyArray<Group> = [
       `String.empty`,
       `String.camelToSnake("camelCase" + text)`,
       `String.snakeToCamel("snake_case")`,
+      ...d("String.at", "text", "1"),
+      ...d("String.charAt", "text", "0"),
     ],
   },
   {

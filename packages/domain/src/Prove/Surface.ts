@@ -33,3 +33,12 @@ export const forms = async (source: string): Promise<ReadonlySet<string>> => {
     throw new Error(`the source does not parse: ${parsed.errors[0]?.message ?? ""}: ${source}`);
   return Syntax.formsOf(parsed.program);
 };
+
+/** A source text as the tree the prover reads: what a test walks to find how a table calls a function. */
+export const parse = async (source: string): Promise<unknown> => {
+  const oxc = await import("oxc-parser");
+  const parsed = oxc.parseSync("surface.ts", source);
+  if (parsed.errors.length > 0)
+    throw new Error(`the source does not parse: ${parsed.errors[0]?.message ?? ""}: ${source}`);
+  return parsed.program;
+};
