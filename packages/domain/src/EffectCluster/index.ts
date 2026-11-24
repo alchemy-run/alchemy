@@ -7,9 +7,11 @@ import {
 } from "@alchemy.run/effect-cluster/Entity";
 import {
   HasNoPool,
+  InstanceSockets,
   InstanceStorage,
   makeNamespace,
   RunnerHost,
+  SOCKET_HEADER,
 } from "@alchemy.run/effect-cluster/Host";
 import type { PoolLayer } from "@alchemy.run/effect-cluster/Pool";
 import type { Providers } from "@alchemy.run/effect-cluster/Providers";
@@ -21,6 +23,7 @@ import type { Providers } from "@alchemy.run/effect-cluster/Providers";
 import { PgClient } from "@effect/sql-pg";
 import type { Callbacks } from "alchemy/Callback";
 import type { HttpEffect } from "alchemy/Http";
+import { decodeRpcArgs, encodeRpcArgs } from "alchemy/Rpc";
 import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeInputGate } from "alchemy/Workers/InputGate";
@@ -33,7 +36,7 @@ import {
   payloadCodec,
 } from "alchemy/WorkflowEncoding";
 import type * as Cause from "effect/Cause";
-import { ClusterSchema, DeliverAt, Entity as EffectEntity } from "effect/cluster";
+import { ClusterSchema, DeliverAt, Entity as EffectEntity, Sharding } from "effect/cluster";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -109,6 +112,20 @@ type LiveFrame = typeof LiveFrame.Type;
 const LIVE_METHOD = "~live";
 
 /**
+ * The method a stub opens a live read's WebSocket to the instance's own
+ * object with, where the pool gives it one: `undefined` elsewhere.
+ */
+const CONNECT_METHOD = "~connect";
+
+/**
+ * The socket the current `Connect` call carries: the instance's object
+ * accepted it, and `accept` takes it.
+ */
+const ConnectCall = Context.Reference<string | undefined>("alchemy/Domain/Cluster/ConnectCall", {
+  defaultValue: () => undefined,
+});
+
+/**
  * The live read the current `Live` call serves: `accept` hands its socket
  * to the object, which pushes into the call's frames.
  */
@@ -151,8 +168,35 @@ const connectTo = (namespace: Namespace, key: string, subscription: Subscription
     const request = yield* HttpServerRequest;
     const stub = namespace.getByName(key) as unknown as {
       readonly [LIVE_METHOD]: (attachment: string) => Stream.Stream<LiveFrame, unknown>;
+      readonly [CONNECT_METHOD]: (
+        request: Request,
+        attachment: string,
+      ) => Effect.Effect<Response | undefined, unknown>;
     };
-    const frames = stub[LIVE_METHOD](JSON.stringify({ key, subscription } satisfies Attachment));
+    const attachment = JSON.stringify({ key, subscription } satisfies Attachment);
+    // Where the instance has an object of its own (a Durable Object), the
+    // object holds the socket, hibernating in between commits.
+    const upgrade = new Request(new URL(request.url, "http://instance/"), {
+      headers: request.headers as Record<string, string>,
+    });
+    const forwarded = yield* stub[CONNECT_METHOD](upgrade, attachment).pipe(
+      Effect.filterOrFail(
+        (response) => response === undefined || response.status === 101,
+        (response) => new Error(`Live read upgrade answered ${response?.status}`),
+      ),
+      // An object still running the previous deploy's code cannot upgrade.
+      Effect.retry({ schedule: Schedule.exponential("200 millis"), times: 5 }),
+    );
+    if (forwarded !== undefined) {
+      const webSocket = (forwarded as unknown as { readonly webSocket: unknown }).webSocket;
+      return HttpServerResponse.raw(
+        new Response(null, { status: 101, webSocket } as ResponseInit),
+        {
+          status: 101,
+        },
+      );
+    }
+    const frames = stub[LIVE_METHOD](attachment);
     const socket = yield* request.upgrade;
     const writer = yield* socket.writer;
     // The client closed: stop the read.
@@ -188,6 +232,12 @@ const rpcs = [
     payload: { attachment: Schema.String },
     success: LiveFrame,
     stream: true,
+  }),
+  // A live read whose WebSocket the instance's object holds: the instance
+  // takes the socket the call carries, and answers the upgrade's status.
+  Rpc.make("Connect", {
+    payload: { attachment: Schema.String },
+    success: Schema.Number,
   }),
 ] as const;
 
@@ -287,12 +337,20 @@ const remote =
                       client.Live({ attachment }),
                     ),
                   )
-              : (...args: ReadonlyArray<unknown>) =>
-                  Effect.flatMap(namespace.getByName(`${cls}/${key}`), (client) =>
-                    client
-                      .Call({ method: String(method), args: JSON.stringify(args) })
-                      .pipe(Effect.map((result) => JSON.parse(result) as unknown)),
-                  ),
+              : method === CONNECT_METHOD
+                ? (request: Request, attachment: string) =>
+                    namespace.connect === undefined
+                      ? Effect.succeed(undefined)
+                      : namespace.connect(`${cls}/${key}`, request, {
+                          tag: "Connect",
+                          payload: { attachment },
+                        })
+                : (...args: ReadonlyArray<unknown>) =>
+                    Effect.flatMap(namespace.getByName(`${cls}/${key}`), (client) =>
+                      client
+                        .Call({ method: String(method), args: encodeRpcArgs(args) })
+                        .pipe(Effect.map((result) => JSON.parse(result) as unknown)),
+                    ),
         },
       ) as never,
   });
@@ -534,8 +592,11 @@ export interface EntitiesOptions<PoolReq> {
  * The model's sagas run on Effect Cluster's workflow engine. Over
  * `Domain.protocolWebSocket`, the caller holds a live read's WebSocket and
  * the instance that owns the key pushes every commit to it, over a
- * streamed call through the pool's gateway. Over `Domain.protocolHttp`,
- * live reads are streamed responses that poll the owning instance.
+ * streamed call through the pool's gateway. On
+ * `ClusterCloudflare.DurableObjectPool`, called from a Worker, the
+ * instance's Durable Object holds the WebSocket instead, and hibernates
+ * between commits. Over `Domain.protocolHttp`, live reads are streamed
+ * responses that poll the owning instance.
  *
  * ### Hosting a model on Effect Cluster
  * **Example:** The model's Layer, served from a container
@@ -635,6 +696,7 @@ export const layerEntities = <PoolReq>(
             Call: () => Effect.die(notHosted),
             Live: () =>
               Stream.make({ _tag: "Close", code: 1011, reason: notHosted.message } as const),
+            Connect: () => Effect.die(notHosted),
             Wake: () => Effect.void,
           });
         }
@@ -642,6 +704,8 @@ export const layerEntities = <PoolReq>(
         // The instance's own object where the pool gives it one; otherwise
         // its rows in the cluster's Postgres.
         const native = yield* Effect.serviceOption(InstanceStorage);
+        // The object's WebSockets, where it holds them: they outlive the instance.
+        const nativeSockets = Option.getOrUndefined(yield* Effect.serviceOption(InstanceSockets));
         // A Durable Object's storage has Cloudflare's input gate already, so it
         // doesn't go through this one: a transaction's callback runs in a
         // fiber of its own, which this gate would hold behind the transaction.
@@ -675,6 +739,13 @@ export const layerEntities = <PoolReq>(
           sockets: {
             accept: () =>
               Effect.gen(function* () {
+                const connecting = yield* ConnectCall;
+                if (connecting !== undefined && nativeSockets !== undefined) {
+                  const socket = yield* nativeSockets.accept(connecting);
+                  if (socket !== undefined) {
+                    return [HttpServerResponse.empty({ status: 101 }), socket] as const;
+                  }
+                }
                 const queue = yield* LiveCall;
                 if (queue === undefined) {
                   return yield* Effect.die(
@@ -686,7 +757,11 @@ export const layerEntities = <PoolReq>(
                   liveSocket(queue, open),
                 ] as const;
               }),
-            all: () => Effect.sync(() => [...open.keys()]),
+            all: () =>
+              Effect.map(nativeSockets?.all ?? Effect.succeed([]), (held) => [
+                ...held,
+                ...open.keys(),
+              ]),
           },
         };
         const record = yield* build.pipe(
@@ -699,8 +774,13 @@ export const layerEntities = <PoolReq>(
               Effect.suspend(() => {
                 const method = record[payload.method];
                 return typeof method === "function"
-                  ? (method as (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown>)(
-                      ...(JSON.parse(payload.args) as ReadonlyArray<unknown>),
+                  ? decodeRpcArgs(payload.args).pipe(
+                      Effect.orDie,
+                      Effect.flatMap((args) =>
+                        (method as (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown>)(
+                          ...args,
+                        ),
+                      ),
                     )
                   : Effect.die(new Error(`${id} has no method ${payload.method}`));
               }).pipe(Effect.map((result) => JSON.stringify(result ?? null))),
@@ -749,6 +829,27 @@ export const layerEntities = <PoolReq>(
                 );
               }),
             ),
+          // The object accepted the read's WebSocket; the instance takes it
+          // as it would its own, and pushes every commit to it.
+          Connect: ({ payload, headers }) =>
+            Effect.gen(function* () {
+              const fetch = record.fetch as HttpEffect | undefined;
+              if (fetch === undefined) return 501;
+              const request = ServerRequest.fromWeb(
+                new Request("http://object/", {
+                  headers: { upgrade: "websocket", [SUBSCRIPTION_HEADER]: payload.attachment },
+                }),
+              );
+              const response = yield* gate.call(
+                fetch.pipe(
+                  Effect.provideService(HttpServerRequest, request),
+                  Effect.provideService(ConnectCall, headers[SOCKET_HEADER]),
+                  Effect.scoped,
+                  Effect.orDie,
+                ),
+              );
+              return response.status;
+            }),
           Wake: ({ payload }) =>
             gate.call(
               Effect.gen(function* () {
@@ -786,6 +887,11 @@ export const layerEntities = <PoolReq>(
             new HasNoPool({ message: `${name} did not finish its Construction phase.` }),
           );
         }
+        // The runner's Sharding, once it has joined the cluster: a call the model
+        // makes on its own (not inside an entity's handler) routes through it.
+        const joined = yield* Deferred.make<Sharding.Sharding["Service"]>();
+        // The runner's scope: the runs it begins live as long as it does.
+        const scope = yield* Effect.scope;
         const registrations = yield* Ref.make<
           ReadonlyArray<
             readonly [Workflow.Any, (payload: any, id: string) => Effect.Effect<any, any, any>]
@@ -801,6 +907,7 @@ export const layerEntities = <PoolReq>(
             for (const [workflow, execute] of yield* Ref.get(registrations))
               yield* sagas.register(workflow as never, execute as never);
             yield* Deferred.succeed(engine, clusterEngine);
+            yield* Deferred.succeed(joined, yield* Sharding.Sharding);
             // Retention sweeps the rows of the cluster's database. A pool with
             // none (the Durable Object pool) keeps them in each instance's own
             // storage, and its runners have nothing to sweep.
@@ -866,6 +973,21 @@ export const layerEntities = <PoolReq>(
             }),
           lookup: ({ modelName }, cls) => self(className(modelName, cls)),
           connect: connectTo,
+          // A deploy's new runs begin once the runner has joined, not on the
+          // first call a caller makes: a model that nothing calls still catches up.
+          begin: (runs) =>
+            Deferred.await(joined).pipe(
+              Effect.flatMap((sharding) =>
+                runs.pipe(
+                  Effect.provideService(Sharding.Sharding, sharding),
+                  Effect.retry({ schedule: Schedule.spaced("1 second"), times: 60 }),
+                ),
+              ),
+              // Still pending: the next call begins them.
+              Effect.ignore,
+              Effect.forkIn(scope),
+              Effect.asVoid,
+            ),
           claimKey: runtimeClaim(name),
         };
         return Layer.merge(

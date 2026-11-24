@@ -31,6 +31,12 @@ export interface ServicePoolOptions extends PoolSettings {
  * Every Durable Object given the same pool shares its nodes: declare the
  * pool once and provide it to each class.
  *
+ * Railway's API has no way to keep a variable's value out of the
+ * Service's configuration: a variable can only be sealed in the dashboard.
+ * So the control plane's token, and every secret a class reads as
+ * config, are service variables, readable by anyone who can read the
+ * project's variables.
+ *
  * ### Running Durable Objects on Railway
  * **Example:** Nodes on Railway, control plane on Fly
  * ```typescript

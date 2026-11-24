@@ -10,8 +10,7 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
 import { conformanceTests, waitForReady } from "../Cloudflare/Workers/conformance/spec.ts";
-import { ensureDockerSwarm } from "../Docker/Runtime.ts";
-import { FRONT_PORT } from "./fixtures/cluster.ts";
+import { ensureDockerSwarm, publishedUrl } from "../Docker/Runtime.ts";
 import Front from "./fixtures/front.ts";
 import { ReentrantLive } from "./fixtures/reentrant.ts";
 
@@ -21,7 +20,8 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 // previous (interrupted or NO_DESTROY) run left behind.
 const sharedStack = Core.scratchStack(testOptions, "RivetConformance", import.meta.url);
 
-const baseUrl = `http://localhost:${FRONT_PORT}`;
+// The front's port is one Swarm picks, read from the deploy.
+let baseUrl = "";
 
 // The engine conformance spec, run against Rivet Durable Objects on a local
 // Docker control plane, called from a Docker service through the gateway.
@@ -37,10 +37,11 @@ describe.skipIf(!!process.env.FAST)(
         const outputs = yield* sharedStack.deploy(
           Effect.gen(function* () {
             const front = yield* Front;
-            return { front: front.name };
+            return { front: front.name, ports: front.ports };
           }).pipe(Effect.provide(ReentrantLive)),
         );
         expect(outputs.front).toBeTruthy();
+        baseUrl = publishedUrl(outputs.ports);
         yield* waitForReady(baseUrl, { attempts: 40, base: "3 seconds" });
       }),
       { timeout: 400_000 },
@@ -415,6 +416,40 @@ describe.skipIf(!!process.env.FAST)(
       );
 
       test(
+        "a class's sleepTimeout puts an idle instance to sleep that soon",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "put?value=3&class=quick");
+          // QuickLifecycle sleeps 2 seconds after its last call, not RivetKit's 30.
+          const hooks = yield* step<Hooks>(name, "hooks").pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (hooks) => hooks.slept > 0,
+              times: 6,
+            }),
+          );
+          expect(hooks).toEqual({ slept: 1, destroyed: 0 });
+          expect(yield* step<{ value: number | null }>(name, "value?class=quick")).toEqual({
+            value: 3,
+          });
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a call still running past a class's sleepGracePeriod fails as one that never arrived",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          // QuickLifecycle closes storage 3 seconds into the sleep, not 15; the
+          // call writes at 6.
+          expect(yield* step<{ late: string }>(name, "late?ms=6000&class=quick")).toEqual({
+            late: "RpcCallError 503",
+          });
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
         "onSleep and onDestroy can't be called as methods",
         Effect.gen(function* () {
           const name = crypto.randomUUID();
@@ -653,7 +688,7 @@ describe.skipIf(!!process.env.FAST)(
       /** A WebSocket to `path` on the front, read one JSON frame at a time. */
       const connect = (path: string) =>
         Effect.gen(function* () {
-          const socket = yield* Socket.makeWebSocket(`ws://localhost:${FRONT_PORT}${path}`);
+          const socket = yield* Socket.makeWebSocket(`${baseUrl.replace(/^http/, "ws")}${path}`);
           const { pull } = yield* socket.reader;
           const writer = yield* socket.writer;
           const frames: Array<unknown> = [];

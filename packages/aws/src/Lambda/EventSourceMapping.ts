@@ -65,7 +65,7 @@ export interface EventSourceMappingProps {
   /**
    * The maximum number of records in each batch that Lambda pulls and sends to the function.
    *
-   * - SQS: default 10, max 10,000 (FIFO max 10)
+   * - SQS: default 10, max 10,000 (FIFO max 10, or 10,000 with `provisionedPollerConfig`)
    * - Kinesis: default 100, max 10,000
    * - DynamoDB Streams: default 100, max 10,000
    */

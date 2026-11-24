@@ -5,11 +5,8 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
 import { materializeIsolatedProject, removeIsolatedProject } from "../IsolatedProject.ts";
-import IsolatedProjectService, {
-  SERVICE_EXTERNAL_PORT,
-  project,
-} from "./fixtures/isolated-project-service.ts";
-import { ensureDockerSwarm } from "./Runtime.ts";
+import IsolatedProjectService, { project } from "./fixtures/isolated-project-service.ts";
+import { ensureDockerSwarm, publishedUrl } from "./Runtime.ts";
 
 const { test } = Test.make({ providers: Docker.providers() });
 
@@ -36,7 +33,7 @@ test.provider(
         );
         expect(service.replicas).toBe(1);
 
-        const base = `http://localhost:${SERVICE_EXTERNAL_PORT}`;
+        const base = publishedUrl(service.ports);
         const health = yield* HttpClient.get(`${base}/health`).pipe(
           Effect.flatMap((res) =>
             res.status === 200

@@ -334,7 +334,8 @@ export const GlossariesCategoryProvider = () =>
             description: news.description,
             displayName: news.displayName,
             labels: desiredLabels,
-            parent: resolved.parent,
+            glossary: resolved.parent,
+            parent: hierarchyParent,
             categoryId,
           })
           .pipe(

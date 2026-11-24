@@ -12,7 +12,7 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { SANDBOX_FRONT_PORT, SandboxControlPlane, SandboxServices } from "./sandbox-cluster.ts";
+import { SandboxControlPlane, SandboxServices } from "./sandbox-cluster.ts";
 
 const decoder = new TextDecoder();
 
@@ -23,7 +23,7 @@ export default class SandboxFront extends Docker.Service<SandboxFront>()(
     return {
       main: import.meta.url,
       port: 3000,
-      ports: [{ external: SANDBOX_FRONT_PORT, internal: 3000 }],
+      ports: [{ internal: 3000 }],
       networks: cluster.network?.kind === "docker" ? [{ name: cluster.network.name }] : [],
     };
   }).pipe(Effect.provide(SandboxControlPlane)),

@@ -17,6 +17,8 @@ export interface TraceInput {
   readonly base: string;
   readonly root: string;
   readonly next: boolean;
+  /** Alchemy's runtime directory (`.alchemy` or `ALCHEMY_DIR`), and its real path. */
+  readonly runtimeDirs?: ReadonlyArray<string>;
 }
 
 /** Keep dependency-parser heaps outside the long-lived deployment process. */

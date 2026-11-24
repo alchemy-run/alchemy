@@ -2043,6 +2043,8 @@ export default defineConfig({
                 { label: "Query", link: "/domain/query" },
                 { label: "Policy", link: "/domain/policy" },
                 { label: "Saga", link: "/domain/saga" },
+                { label: "Rewrite", link: "/domain/rewrite" },
+                { label: "Compaction", link: "/domain/compaction" },
                 { label: "External System", link: "/domain/external-system" },
                 { label: "Api", link: "/domain/api" },
                 { label: "Annotations", link: "/domain/annotations" },
@@ -2096,6 +2098,8 @@ export default defineConfig({
               items: [
                 { label: "Unique values", link: "/domain/unique-values" },
                 { label: "Deadlines", link: "/domain/deadlines" },
+                { label: "Erasing personal data", link: "/domain/erasing-personal-data" },
+                { label: "Closing the books", link: "/domain/closing-the-books" },
               ],
             },
             {
@@ -2510,6 +2514,7 @@ export default defineConfig({
                 { label: "Tools", link: "/ai/tools" },
                 { label: "Coding tools", link: "/ai/coding-tools" },
                 { label: "MCP servers", link: "/ai/mcp-servers" },
+                { label: "Code mode", link: "/ai/code-mode" },
                 { label: "Skills", link: "/ai/skills" },
               ],
             },
@@ -2586,6 +2591,7 @@ export default defineConfig({
               items: [
                 { label: "Tools", link: "/opencode/tools" },
                 { label: "MCP servers", link: "/opencode/mcp-servers" },
+                { label: "Code mode", link: "/opencode/code-mode" },
                 { label: "Skills", link: "/opencode/skills" },
               ],
             },

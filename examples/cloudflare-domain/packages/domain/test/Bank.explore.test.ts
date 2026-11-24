@@ -105,8 +105,11 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const report = yield* bank(3);
-      // Every way the saga says it can end is reached.
-      expect(report.endings.filter((ending) => !ending.story)).toEqual([]);
+      // Every way the transfer saga says it can end is reached. No command starts the
+      // erasure, so the explorer never runs it: `Bank.story.test.ts` does.
+      expect(
+        report.endings.filter((ending) => ending.saga !== "EraseCustomer" && !ending.story),
+      ).toEqual([]);
       // The debit ran, the credit was refused, and the refund ran before the failure was recorded.
       const refunded = report.endings.find(
         (ending) => ending.ending === "fails with DestinationClosed",

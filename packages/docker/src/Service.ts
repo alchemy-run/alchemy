@@ -1,5 +1,5 @@
 import { Unowned } from "alchemy/AdoptPolicy";
-import { deepEqual, isResolved } from "alchemy/Diff";
+import { deepEqual, isResolved, stripEffects } from "alchemy/Diff";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
@@ -585,6 +585,15 @@ type ServiceInspect = {
       }>;
     };
   };
+  /** What Swarm applied, including the published ports it assigned. */
+  Endpoint?: {
+    Ports?: Array<{
+      PublishedPort?: number;
+      TargetPort?: number;
+      Protocol?: "tcp" | "udp";
+      PublishMode?: "ingress" | "host";
+    }>;
+  };
 };
 
 export const ServiceProvider = () =>
@@ -650,7 +659,16 @@ export const ServiceProvider = () =>
           const owned = yield* hasAlchemyTags(id, live.Spec.Labels ?? undefined);
           return owned ? attrs : Unowned(attrs);
         }),
-        diff: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
+        diff: Effect.fn(function* ({ id, instanceId, news: desired, olds, output }) {
+          // A bundled program's runtime exports stay unevaluated while
+          // planning. The content hash below stands for them, so they must
+          // not stop a code change from reaching it.
+          const news =
+            typeof desired === "object" && desired !== null && "exports" in desired
+              ? (Object.assign({}, desired, {
+                  exports: stripEffects(desired.exports),
+                }) as typeof desired)
+              : desired;
           if (!isResolved(news)) return undefined;
 
           const oldDesired = yield* normalizeDesired(id, olds, instanceId);
@@ -1146,7 +1164,11 @@ const toServiceAttributes = (
   networks: (service.Spec.TaskTemplate?.Networks ?? []).flatMap((n) =>
     n.Target ? [n.Target] : [],
   ),
-  ports: (service.Spec.EndpointSpec?.Ports ?? []).flatMap((port) => {
+  // The spec omits a port Swarm assigns; `Endpoint` has it once applied.
+  ports: (service.Endpoint?.Ports?.length
+    ? service.Endpoint.Ports
+    : (service.Spec.EndpointSpec?.Ports ?? [])
+  ).flatMap((port) => {
     if (port.PublishedPort === undefined || port.TargetPort === undefined) {
       return [];
     }

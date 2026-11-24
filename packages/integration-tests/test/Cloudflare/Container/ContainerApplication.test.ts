@@ -588,11 +588,17 @@ describe.concurrent(
           Effect.gen(function* () {
             yield* stack.destroy();
             const provider = yield* Provider.findProvider(ContainerPlatform);
+            // A fresh image for each run: the repository outlives the stack.
+            const run = yield* FileSystem.FileSystem.pipe(
+              Effect.flatMap((fs) => fs.makeTempDirectoryScoped({ prefix: "alchemy-recovery-" })),
+            );
             const program = (includeSecond = false) =>
               Effect.gen(function* () {
                 expect(yield* Provider.findProvider(ContainerPlatform)).toBe(provider);
                 return yield* recoveryApplications(
                   failure === "interrupted" ? 10 : 0,
+                  `alchemy-publication-${failure}-${stack.stage.toLowerCase()}`,
+                  run,
                   includeSecond,
                 );
               });
@@ -696,7 +702,8 @@ describe.concurrent(
           for (const [kind, context] of Object.entries(contexts)) {
             yield* fs.makeDirectory(context);
             yield* fs.writeFileString(path.join(context, ".gitignore"), "payload.txt\n");
-            yield* fs.writeFileString(path.join(context, "payload.txt"), kind);
+            // The temp root makes each run's images new: the repository outlives the stack.
+            yield* fs.writeFileString(path.join(context, "payload.txt"), `${kind}-${root}`);
             yield* fs.writeFileString(path.join(context, "input.txt"), "first");
             yield* fs.writeFileString(
               path.join(context, "Dockerfile"),
@@ -708,7 +715,10 @@ describe.concurrent(
               ].join("\n"),
             );
           }
-          const program = publicationApplications(contexts);
+          const program = publicationApplications(
+            contexts,
+            `alchemy-publication-${stack.stage.toLowerCase()}`,
+          );
           const first = yield* stack.deploy(program);
           const history = yield* buildHistory;
           expect(history.filter((build) => build.status === "Completed")).toHaveLength(3);
@@ -1205,6 +1215,68 @@ describe.concurrent(
           logLevel,
         ),
       { timeout: 120_000 },
+    );
+
+    // https://github.com/alchemy-run/alchemy/issues/3653
+    test.provider(
+      "publishes one context to each application's own repository",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const context = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-one-context-" });
+          yield* fs.writeFileString(path.join(context, "payload.txt"), context);
+          yield* fs.writeFileString(
+            path.join(context, "Dockerfile"),
+            'FROM alpine:3.19\nCOPY payload.txt /payload.txt\nCMD ["sleep", "3600"]\n',
+          );
+          const program = (maxInstances: number) =>
+            Effect.gen(function* () {
+              return {
+                first: yield* Cloudflare.Container("OneContextFirst", { context, maxInstances })
+                  .Application,
+                second: yield* Cloudflare.Container("OneContextSecond", { context, maxInstances })
+                  .Application,
+              };
+            });
+
+          const initial = yield* stack.deploy(program(1));
+          expect(initial.first.hash?.digest).toBe(initial.second.hash?.digest);
+          for (const app of [initial.first, initial.second]) {
+            expect(app.configuration.image).toBe(
+              `registry.cloudflare.com/${app.accountId}/${app.applicationName.toLowerCase()}@${app.hash?.digest}`,
+            );
+          }
+
+          // An unchanged image with a configuration update takes the
+          // unchanged-image path, which rolls out each application's own
+          // repository at the recorded digest.
+          const updated = yield* stack.deploy(program(2));
+          for (const app of [updated.first, updated.second]) {
+            expect(app.maxInstances).toBe(2);
+            expect(app.configuration.image).toBe(
+              `registry.cloudflare.com/${app.accountId}/${app.applicationName.toLowerCase()}@${app.hash?.digest}`,
+            );
+          }
+
+          yield* stack.destroy();
+          for (const app of [initial.first, initial.second]) {
+            const deleted = yield* Containers.getContainerApplication({
+              accountId: app.accountId,
+              applicationId: app.applicationId,
+            }).pipe(
+              Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+              Effect.repeat({
+                schedule: Schedule.spaced("1 second"),
+                until: (app) => app === undefined,
+                times: 8,
+              }),
+            );
+            expect(deleted).toBeUndefined();
+          }
+        }).pipe(withBuilder("alchemy-one-context", { attestations: false }), logLevel),
+      { timeout: 180_000 },
     );
 
     for (const fixture of [

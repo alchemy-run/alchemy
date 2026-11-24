@@ -226,7 +226,10 @@ deployAsRole.test.provider(
         secretAccessKey: Redacted.isRedacted(assumed.Credentials!.SecretAccessKey)
           ? assumed.Credentials!.SecretAccessKey
           : Redacted.make(assumed.Credentials!.SecretAccessKey),
-        sessionToken: Redacted.make(assumed.Credentials!.SessionToken),
+        sessionToken:
+          typeof assumed.Credentials!.SessionToken === "string"
+            ? Redacted.make(assumed.Credentials!.SessionToken)
+            : assumed.Credentials!.SessionToken,
         region,
         expiration: assumed.Credentials!.Expiration?.getTime(),
       };

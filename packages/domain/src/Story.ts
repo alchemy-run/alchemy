@@ -15,6 +15,7 @@ import * as Schema from "effect/Schema";
 import type { DurableDeferred, WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
 import type * as Command from "./Command.ts";
+import type * as Compaction from "./Compaction.ts";
 import * as ExternalSystem from "./ExternalSystem.ts";
 import * as InMemory from "./InMemory.ts";
 import type * as Key from "./Key.ts";
@@ -98,6 +99,27 @@ export type Step =
   | { readonly _tag: "Replied"; readonly reply: unknown }
   | { readonly _tag: "State"; readonly ref: Aggregate.Ref; readonly expected: unknown }
   | {
+      readonly _tag: "Rewrite";
+      readonly ref: Aggregate.Ref;
+      readonly rewrite: { readonly _tag: string };
+      /** The next `then` sees nothing of it: see {@link quietly}. */
+      readonly quiet?: true;
+    }
+  | {
+      readonly _tag: "Compact";
+      readonly ref: Aggregate.Ref;
+      readonly compaction: Compaction.Any;
+      readonly quiet?: true;
+    }
+  | { readonly _tag: "Probe"; readonly run: (probed: Probed) => Effect.Effect<void, string> }
+  | { readonly _tag: "Loose" }
+  | {
+      readonly _tag: "Start";
+      readonly saga: Saga.Any;
+      readonly key: unknown;
+      readonly input: unknown;
+    }
+  | {
       readonly _tag: "View";
       readonly view: View.Any;
       /** A ref, or the value of a Schema key. */
@@ -166,6 +188,17 @@ export type Step =
       readonly service: Context.Key<unknown, unknown>;
       readonly value: unknown;
     };
+
+/**
+ * What a {@link probe} is given of the run so far.
+ *
+ * @internal
+ */
+export interface Probed {
+  readonly internals: Model.Internals["Service"];
+  /** Every instance that has committed, in the order each first did. */
+  readonly instances: ReadonlyArray<{ readonly aggregate: string; readonly id: string }>;
+}
 
 /** The step with this `_tag`. */
 export type StepOf<Tag extends Step["_tag"]> = Extract<Step, { readonly _tag: Tag }>;
@@ -273,6 +306,26 @@ const given = <A extends Aggregate.Any>(
   ref,
   events: events as ReadonlyArray<{ readonly _tag: string }>,
 });
+
+/**
+ * Run a `Domain.Rewrite` on one instance, and wait until every view and
+ * projection reflects it. The story fails when the rewrite would break one
+ * of the aggregate's invariants. A `then` after it sees only events
+ * committed later.
+ */
+const rewrite = <A extends Aggregate.Any>(
+  ref: Aggregate.Ref<A>,
+  rewrite: { readonly _tag: string },
+): StepOf<"Rewrite"> => ({ _tag: "Rewrite", ref, rewrite });
+
+/**
+ * Compact one instance with a `Domain.Compaction` now. The story fails when
+ * the roll-up would lose state. A `then` after it sees the roll-up's events.
+ */
+const compact = <A extends Aggregate.Any>(
+  ref: Aggregate.Ref<A>,
+  compaction: Compaction.Any,
+): StepOf<"Compact"> => ({ _tag: "Compact", ref, compaction });
 
 /**
  * Send a command. Whatever implements it in the model handles it: the
@@ -609,6 +662,17 @@ const signal = <S extends Saga.Any, Success extends Schema.Constraint>(
 ): StepOf<"Signal"> => ({ _tag: "Signal", saga, key, deferred, value });
 
 /**
+ * Start a saga run from outside the model, as an operation of your own does
+ * (a policy starts the ones the model's events cause). It runs until it
+ * finishes or suspends, like a command's policies.
+ */
+const start = <S extends Saga.Any>(
+  saga: S,
+  key: SagaKeyOf<S>,
+  input: SagaClientOf<S> extends Saga.Client<any, infer Input, any, any> ? Input : never,
+): StepOf<"Start"> => ({ _tag: "Start", saga, key, input });
+
+/**
  * Check where a saga run is: running, completed with a result, rejected,
  * interrupted, or died. `{ _tag: "Died" }` matches any defect; with a
  * `defect`, it must read the same.
@@ -704,6 +768,36 @@ const advanceDuration = (by: Duration.Input) =>
 const showDurationInput = (by: Duration.Input): string =>
   typeof by === "string" ? by : Formatter.format(by);
 
+/**
+ * Look at the model where a story has got to: `Verify` reads what its
+ * instances hold. It fails the story with the text it fails with.
+ *
+ * @internal
+ */
+export const probe = (run: (probed: Probed) => Effect.Effect<void, string>): Step => ({
+  _tag: "Probe",
+  run,
+});
+
+/**
+ * From here on a command may be rejected without a step that says so: the
+ * steps before changed what the ones after meet.
+ *
+ * @internal
+ */
+export const loose: Step = { _tag: "Loose" };
+
+/**
+ * A rewrite or a compaction the `then`s after it see nothing of: a story
+ * `Verify` found goes on as it was written.
+ *
+ * @internal
+ */
+export const quietly = (step: StepOf<"Rewrite"> | StepOf<"Compact">): Step => ({
+  ...step,
+  quiet: true,
+});
+
 /** A one-line summary of a step, before it runs. */
 const describeStep = (s: Step): string => {
   switch (s._tag) {
@@ -724,6 +818,13 @@ const describeStep = (s: Step): string => {
       return `${refName(s.ref)}: ${s.events.length === 0 ? "nothing new" : clip(briefExpected(s.events), 80)}`;
     case "When":
       return summarize(s.command);
+    case "Rewrite":
+      return `${refName(s.ref)}: ${summarize(s.rewrite)}`;
+    case "Compact":
+      return `${refName(s.ref)}: ${s.compaction.compactionName}`;
+    case "Probe":
+    case "Loose":
+      return "";
     case "Rejected":
       return summarize(s.rejection);
     case "Replied":
@@ -767,6 +868,8 @@ const describeStep = (s: Step): string => {
       }`;
     case "Signal":
       return `${s.saga.sagaName} ${summarize(s.key)}: ${summarize(s.value)}`;
+    case "Start":
+      return `${s.saga.sagaName} ${summarize(s.key)}`;
     case "Saga":
       return `${s.saga.sagaName} ${summarize(s.key)}: ${s.expected._tag}`;
   }
@@ -1175,6 +1278,8 @@ const make =
               }
             | undefined;
           let provided = Context.empty() as Context.Context<unknown>;
+          // Set by `loose`: a rejection no step asserts is no longer a failure.
+          let lenient = false;
           const assertedDeaths = new Set<string>();
 
           const storeOf = (ref: Aggregate.Ref) => internals.aggregates.get(ref.aggregate)!;
@@ -1189,19 +1294,14 @@ const make =
                   if (call.exit === undefined) yield* Deferred.await(call.done);
                 }
                 yield* platform.control.drain;
-                yield* Effect.yieldNow;
                 if (yield* platform.control.idle) {
-                  yield* Effect.yieldNow;
-                  yield* platform.control.drain;
-                  if (yield* platform.control.idle) {
-                    if (platform.control.failures.length > 0) {
-                      return yield* new StepFailed({
-                        step,
-                        message: `a policy or projection failed: ${String(platform.control.failures[0])}`,
-                      });
-                    }
-                    return;
+                  if (platform.control.failures.length > 0) {
+                    return yield* new StepFailed({
+                      step,
+                      message: `a policy or projection failed: ${String(platform.control.failures[0])}`,
+                    });
                   }
+                  return;
                 }
               }
               return yield* new StepFailed({
@@ -1286,6 +1386,54 @@ const make =
                 yield* settle(step);
                 break;
               }
+              case "Rewrite":
+              case "Compact": {
+                const client = yield* Aggregate.refClass(s.ref) as unknown as Context.Key<
+                  never,
+                  Aggregate.ClientImpl
+                >;
+                const stream = `${s.ref.aggregate}/${s.ref.id}`;
+                // The last event a `then` has seen: those after it are still new afterwards.
+                const before = yield* committed(s.ref);
+                const seen = before[(cursors.get(stream) ?? 0) - 1]?.envelope.seq ?? 0;
+                if (s._tag === "Rewrite") {
+                  const result = yield* client
+                    .rewrite(s.ref, s.rewrite, { rewriteId: `story:${step}` })
+                    .pipe(Effect.result);
+                  if (result._tag === "Failure") return yield* fail(result.failure.message);
+                  yield* settle(step);
+                  const settled = yield* client.rewritten(result.success).pipe(Effect.result);
+                  if (settled._tag === "Failure") {
+                    return yield* fail(
+                      `${settled.failure.view}(${settled.failure.key}) never took the rewrite`,
+                    );
+                  }
+                } else {
+                  const result = yield* client.compact(s.ref, s.compaction).pipe(Effect.result);
+                  if (result._tag === "Failure") return yield* fail(result.failure.message);
+                }
+                yield* settle(step);
+                const now = yield* committed(s.ref);
+                cursors.set(
+                  stream,
+                  s.quiet ? now.length : now.filter((event) => event.envelope.seq <= seen).length,
+                );
+                break;
+              }
+              case "Loose": {
+                lenient = true;
+                break;
+              }
+              case "Probe": {
+                const instances = new Map<string, { aggregate: string; id: string }>();
+                for (const { aggregate, id } of platform.control.commits)
+                  instances.set(`${aggregate}/${id}`, { aggregate, id });
+                const result = yield* s
+                  .run({ internals, instances: [...instances.values()] })
+                  .pipe(Effect.result);
+                if (result._tag === "Failure") return yield* fail(result.failure);
+                break;
+              }
               case "When": {
                 // Whatever implements the command in the model, as an Api sends it.
                 const client = internals.commands.get(s.command._tag);
@@ -1302,7 +1450,7 @@ const make =
                     _tag: "Rejected",
                     rejection: result.failure as { readonly _tag: string },
                   };
-                  unassertedRejection = { step, rejection: last.rejection };
+                  if (!lenient) unassertedRejection = { step, rejection: last.rejection };
                 }
                 yield* settle(step);
                 break;
@@ -1626,6 +1774,15 @@ const make =
                   Saga.Client<unknown, unknown, unknown, unknown>
                 >;
                 yield* client.get(s.key).signal(s.deferred as never, s.value);
+                yield* settle(step);
+                break;
+              }
+              case "Start": {
+                const client = yield* s.saga as unknown as Context.Key<
+                  never,
+                  Saga.Client<unknown, unknown, unknown, unknown>
+                >;
+                yield* client.start(s.key, s.input).pipe(Effect.provide(provided));
                 yield* settle(step);
                 break;
               }
@@ -1966,6 +2123,8 @@ export const Story = {
   when,
   // oxlint-disable-next-line unicorn/no-thenable -- `then` is the given/when/then vocabulary
   then,
+  rewrite,
+  compact,
   anyOrder,
   inOrder,
   rejected,
@@ -1986,6 +2145,7 @@ export const Story = {
   advance,
   provide,
   signal,
+  start,
   saga,
   /** Marker for "the view key does not exist". */
   none,

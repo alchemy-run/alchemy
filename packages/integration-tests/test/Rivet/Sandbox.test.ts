@@ -7,8 +7,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import { ensureDockerSwarm } from "../Docker/Runtime.ts";
-import { SANDBOX_FRONT_PORT } from "./fixtures/sandbox-cluster.ts";
+import { ensureDockerSwarm, publishedUrl } from "../Docker/Runtime.ts";
 import SandboxFront from "./fixtures/sandbox-front.ts";
 
 const testOptions = { providers: Layer.mergeAll(Docker.providers(), Rivet.providers()) };
@@ -17,7 +16,8 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 // previous (interrupted or NO_DESTROY) run left behind.
 const stack = Core.scratchStack(testOptions, "RivetSandbox", import.meta.url);
 
-const url = `http://localhost:${SANDBOX_FRONT_PORT}`;
+// The front's port is one Swarm picks, read from the deploy.
+let url = "";
 
 /** GET a front route as JSON; a 500 carries the failure's cause. */
 const get = <T>(path: string) =>
@@ -41,10 +41,11 @@ describe.skipIf(!!process.env.FAST)(
         const outputs = yield* stack.deploy(
           Effect.gen(function* () {
             const front = yield* SandboxFront;
-            return { front: front.name };
+            return { front: front.name, ports: front.ports };
           }),
         );
         expect(outputs.front).toBeTruthy();
+        url = publishedUrl(outputs.ports);
         // The Services nodes take a while to start: wait until a VM answers.
         yield* get<ExecResult>(`/exec/probe-${crypto.randomUUID().slice(0, 8)}?command=true`).pipe(
           Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 60 }),

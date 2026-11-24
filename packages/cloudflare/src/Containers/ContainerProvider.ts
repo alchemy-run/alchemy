@@ -782,7 +782,9 @@ export const LiveContainerProvider = () =>
         const key = JSON.stringify([
           accountId,
           props.registryId ?? "registry.cloudflare.com",
-          props.publish?.repository,
+          // Applications from one context derive different repositories from
+          // their names; each must receive the image it is deployed from.
+          repositoryFromImageRef(imageRef),
           publicationPlatform,
           build.kind,
           reuseRemotePublication,

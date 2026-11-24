@@ -94,29 +94,29 @@
         "default": "./lib/DNS/index.js"
       },
       "./Runtime/Bootstrap": {
-        "types": "./src/Runtime/Bootstrap.ts",
+        "types": "./lib/Runtime/Bootstrap.d.ts",
         "bun": "./src/Runtime/Bootstrap.ts",
-        "default": "./src/Runtime/Bootstrap.ts"
+        "default": "./lib/Runtime/Bootstrap.js"
       },
       "./Runtime/ContainerBun": {
-        "types": "./src/Runtime/ContainerBun.ts",
+        "types": "./lib/Runtime/ContainerBun.d.ts",
         "bun": "./src/Runtime/ContainerBun.ts",
-        "default": "./src/Runtime/ContainerBun.ts"
+        "default": "./lib/Runtime/ContainerBun.js"
       },
       "./Runtime/ContainerNode": {
-        "types": "./src/Runtime/ContainerNode.ts",
+        "types": "./lib/Runtime/ContainerNode.d.ts",
         "bun": "./src/Runtime/ContainerNode.ts",
-        "default": "./src/Runtime/ContainerNode.ts"
+        "default": "./lib/Runtime/ContainerNode.js"
       },
       "./Runtime/ContainerProcess": {
-        "types": "./src/Runtime/ContainerProcess.ts",
+        "types": "./lib/Runtime/ContainerProcess.d.ts",
         "bun": "./src/Runtime/ContainerProcess.ts",
-        "default": "./src/Runtime/ContainerProcess.ts"
+        "default": "./lib/Runtime/ContainerProcess.js"
       },
       "./Runtime/ManagedHttpShutdown": {
-        "types": "./src/Runtime/ManagedHttpShutdown.ts",
+        "types": "./lib/Runtime/ManagedHttpShutdown.d.ts",
         "bun": "./src/Runtime/ManagedHttpShutdown.ts",
-        "default": "./src/Runtime/ManagedHttpShutdown.ts"
+        "default": "./lib/Runtime/ManagedHttpShutdown.js"
       },
       "./Secrets": {
         "types": "./lib/Secrets/index.d.ts",
