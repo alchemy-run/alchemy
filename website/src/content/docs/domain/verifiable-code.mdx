@@ -1987,7 +1987,7 @@ Object.values({ a, b });
 
 ## The rest of Effect
 
-Every module of Effect is either supported as above, run as it is, or not supported on purpose.
+Every module of Effect is either supported as above, run as it is, or [not supported](#not-supported) on purpose.
 
 **Run as it is, on values the code writes.** A pure function that is not on the list above is computed by the library itself when every argument is known: a constant, or something made from constants. That covers `SemVer`, `SemVerRange`, `ByteSize`, `Trie`, `TextDiff`, `JsonPatch`, `JsonPointer`, `Glob`, `RegExp.escape`, `Formatter`, `LogLevel`, `Cron.parse` and `Cron.match`, and the functions of the modules above that are not listed, such as `Array.rotate`, `String.camelToSnake` and `Duration.format`.
 
@@ -1996,18 +1996,150 @@ const MINIMUM = SemVer.parseUnsafe("1.9.3");
 const LIMIT = ByteSize.mebibytes(5);
 ```
 
-Called on a value from the state or a command, or given a function of yours, such a function is not supported, and the report names it. `Combiner` and `Reducer` are made from functions, and `Bytes` works on byte arrays, so they are not supported: write the fold.
+Called on a value from the state or a command, or given a function of yours, such a function is not supported, and the report names it.
 
 Every name on these lists has a line in a table the tests run: each call is tried on values the code writes and on values of a command, and both have to be what the real code gives. The language is a list of the same kind, one entry for each way a piece of it is written, marked as supported or not. A test fails when a function, a method or a form of the language has no line in a table, and when a table is written with a form the list does not have.
 
-**Not supported.** A call to one of these is reported with its name, and the rule is not proved.
+## Not supported
 
-- **The outside world.** `Random`, `Config`, `ConfigProvider`, `FileSystem`, `Path`, `Terminal`, `Stdio`, `Effect.promise`, and the packages under `effect/http`, `effect/sql`, `effect/rpc`, `effect/ai`, `effect/cluster`, `effect/workflow` and the others. A handler is a function of the state, the command and the time. What it needs from outside comes in as a field of the command.
-- **Time passing and things running together.** `Effect.sleep`, `timeout`, `retry`, `repeat`, `race` and `fork`, `Schedule`, `Scheduler`, `Fiber`, `FiberHandle`, `FiberMap`, `FiberSet`, `Deferred`, `Latch`, `Semaphore`, `PartitionedSemaphore`, `Queue`, `PubSub`, `Pool`, `Cache`, `ScopedCache`, `Request`, `RequestResolver`, `Channel`, `Pull`, `Take`, `SubscriptionRef`, `SynchronizedRef`, `ExecutionPlan` and the `Tx` modules. Which of two things happens first is not something a handler decides, and a handler does not wait. `Cron.next`, `prev` and `sequence` read the clock when they are given no time.
-- **Wiring.** `Layer`, `LayerMap`, `LayerRef`, `Context`, `References`, `Scope`, `ScopedRef`, `RcMap`, `RcRef`, `Resource`, `Runtime`, `ManagedRuntime`, `Logger`, `Tracer`, `Metric`, `ErrorReporter`. They say how a program is put together and watched, not what it decides. A request context a handler yields is supported, as above.
-- **Schemas as code.** `Schema.decode`, `encode`, `is`, and `SchemaAST`, `SchemaGetter`, `SchemaIssue`, `SchemaParser`, `SchemaRepresentation`, `SchemaTransformation`, `ChannelSchema`, `JsonSchema`, `StandardSchema`, `Arbitrary`. A schema is supported where it describes the state, a command or an event. Decoding with one inside a handler is not.
-- **Values changed in place, or known by where they are.** `Graph`, `HashRing`, `MutableList`, and `Hash`. A graph and a ring are built by changing one, and a hash of an object is where it sits in memory. Put a call to one in an exported function, which is then [opaque](#opaque-functions).
-- **Nothing to run.** `Types`, `HKT`, `Unify`, `Utils`, `Pipeable`, `Effectable`, `Differ`, `PlatformError`, `Redactable`, `Version`, and `Newtype` and `Brand` beyond the two functions above.
+A call to one of these is reported with its name, and the rule is not proved.
+
+A handler depends on the state, the command and the time. What it needs from the outside world comes in as a field of the command.
+
+```typescript title="The outside world"
+import * as Random from "effect/Random";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Terminal from "effect/Terminal";
+import * as Stdio from "effect/Stdio";
+// and every package under effect/http, effect/sql, effect/rpc, effect/ai, effect/cluster, effect/workflow
+
+Effect.promise(() => fetch(url));
+Effect.tryPromise(() => fetch(url));
+```
+
+Which of two things happens first is not something a handler decides, and a handler does not wait.
+
+```typescript title="Time passing and things running together"
+import * as Schedule from "effect/Schedule";
+import * as Scheduler from "effect/Scheduler";
+import * as Fiber from "effect/Fiber";
+import * as FiberHandle from "effect/FiberHandle";
+import * as FiberMap from "effect/FiberMap";
+import * as FiberSet from "effect/FiberSet";
+import * as Deferred from "effect/Deferred";
+import * as Latch from "effect/Latch";
+import * as Semaphore from "effect/Semaphore";
+import * as PartitionedSemaphore from "effect/PartitionedSemaphore";
+import * as Queue from "effect/Queue";
+import * as PubSub from "effect/PubSub";
+import * as Pool from "effect/Pool";
+import * as Cache from "effect/Cache";
+import * as ScopedCache from "effect/ScopedCache";
+import * as Request from "effect/Request";
+import * as RequestResolver from "effect/RequestResolver";
+import * as Channel from "effect/Channel";
+import * as Pull from "effect/Pull";
+import * as Take from "effect/Take";
+import * as SubscriptionRef from "effect/SubscriptionRef";
+import * as SynchronizedRef from "effect/SynchronizedRef";
+import * as ExecutionPlan from "effect/ExecutionPlan";
+import * as TxChunk from "effect/TxChunk";
+import * as TxDeferred from "effect/TxDeferred";
+import * as TxHashMap from "effect/TxHashMap";
+import * as TxHashSet from "effect/TxHashSet";
+import * as TxPriorityQueue from "effect/TxPriorityQueue";
+import * as TxPubSub from "effect/TxPubSub";
+import * as TxQueue from "effect/TxQueue";
+import * as TxReentrantLock from "effect/TxReentrantLock";
+import * as TxRef from "effect/TxRef";
+import * as TxSemaphore from "effect/TxSemaphore";
+import * as TxSubscriptionRef from "effect/TxSubscriptionRef";
+
+Effect.sleep("1 second");
+Effect.timeout(effect, "1 second");
+Effect.retry(effect, { times: 3 });
+Effect.repeat(effect, { times: 3 });
+Effect.race(first, second);
+Effect.fork(effect);
+
+Cron.next(cron); // next, prev and sequence use the clock when they are given no time
+```
+
+These say how a program is put together and watched, not what it decides. A [request context](#effects-and-failures) a handler yields is supported.
+
+```typescript title="Wiring"
+import * as Layer from "effect/Layer";
+import * as LayerMap from "effect/LayerMap";
+import * as LayerRef from "effect/LayerRef";
+import * as Context from "effect/Context";
+import * as References from "effect/References";
+import * as Scope from "effect/Scope";
+import * as ScopedRef from "effect/ScopedRef";
+import * as RcMap from "effect/RcMap";
+import * as RcRef from "effect/RcRef";
+import * as Resource from "effect/Resource";
+import * as Runtime from "effect/Runtime";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Logger from "effect/Logger";
+import * as Tracer from "effect/Tracer";
+import * as Metric from "effect/Metric";
+import * as ErrorReporter from "effect/ErrorReporter";
+```
+
+A schema is supported where it describes the state, a command or an event. Decoding with one inside a handler is not.
+
+```typescript title="Schemas as code"
+import * as SchemaAST from "effect/SchemaAST";
+import * as SchemaGetter from "effect/SchemaGetter";
+import * as SchemaIssue from "effect/SchemaIssue";
+import * as SchemaParser from "effect/SchemaParser";
+import * as SchemaRepresentation from "effect/SchemaRepresentation";
+import * as SchemaTransformation from "effect/SchemaTransformation";
+import * as ChannelSchema from "effect/ChannelSchema";
+import * as JsonSchema from "effect/JsonSchema";
+import * as StandardSchema from "effect/StandardSchema";
+import * as Arbitrary from "effect/Arbitrary";
+
+Schema.decodeUnknownSync(Ticket)(input); // and every other decode, encode and is
+Schema.encodeSync(Ticket)(ticket);
+Schema.is(Ticket)(input);
+```
+
+A graph and a ring are built by changing one, and a hash of an object is where it sits in memory. Put a call to one in an exported function, which is then [opaque](#opaque-functions).
+
+```typescript title="Values changed in place, or known by where they are"
+import * as Graph from "effect/Graph";
+import * as HashRing from "effect/HashRing";
+import * as MutableList from "effect/MutableList";
+import * as Hash from "effect/Hash";
+```
+
+`Combiner` and `Reducer` are made from functions, and `Bytes` works on byte arrays: write the fold.
+
+```typescript title="Made from functions, or working on bytes"
+import * as Combiner from "effect/Combiner";
+import * as Reducer from "effect/Reducer";
+import * as Bytes from "effect/Bytes";
+```
+
+These hold types and the library's own machinery, with nothing for a handler to call.
+
+```typescript title="Nothing to run"
+import * as Types from "effect/Types";
+import * as HKT from "effect/HKT";
+import * as Unify from "effect/Unify";
+import * as Utils from "effect/Utils";
+import * as Pipeable from "effect/Pipeable";
+import * as Effectable from "effect/Effectable";
+import * as Differ from "effect/Differ";
+import * as PlatformError from "effect/PlatformError";
+import * as Redactable from "effect/Redactable";
+import * as Version from "effect/Version";
+// and effect/Newtype and effect/Brand beyond Newtype.value and Brand.nominal
+```
 
 ## Effects and failures
 
