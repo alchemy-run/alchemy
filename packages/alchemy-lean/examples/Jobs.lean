@@ -203,6 +203,49 @@ theorem jobsWithoutACloudTouchNothing (request : Request) (memory : Memory) :
     have := permitted t (by rw [attempts]; exact List.mem_cons_self)
     simp [JobStorageNowhere, Layer.make] at this
 
+/-! ## Layers that ask for their dependencies
+
+`JobStorageS3` brings its own S3 clients. A layer can instead ask for them, and
+be given them where the application is wired, so two services that read the same
+objects share one client.
+-/
+
+section Shared
+variable {In : Service Kind}
+
+/-- Jobs kept as objects, on whatever S3 clients it is given. -/
+def JobStorageOnS3 (bucket : Bucket) [Uses In (S3.GetObject.Client bucket ["jobs"])]
+    [Uses In (S3.PutObject.Client bucket ["jobs"])] : Layer In JobStorage :=
+  .make do
+    let objects ← S3.GetObject bucket ["jobs"]
+    let store ← S3.PutObject bucket ["jobs"]
+    return {
+      put := fun id content => store.call id content
+      get := fun id =>
+        (objects.call id).mapError fun
+          | S3.GetObjectError.noSuchKey _ => JobNotFound.mk id }
+
+/-- Whether a job exists. -/
+structure JobIndex (access : Access Kind) where
+  has : String → Run access Never Bool
+
+/-- Answered from the same objects. -/
+def JobIndexOnS3 (bucket : Bucket) [Uses In (S3.GetObject.Client bucket ["jobs"])] :
+    Layer In JobIndex :=
+  .make do
+    let objects ← S3.GetObject bucket ["jobs"]
+    return { has := fun id => do
+      match ← (objects.call id).result with
+      | .ok _ => return true
+      | .error (_ : S3.GetObjectError) => return false }
+
+/-- Both services, with S3 provided once. -/
+def JobServices (bucket : Bucket) : Layer Nothing (Both JobStorage JobIndex) :=
+  (JobStorageOnS3 bucket ++ JobIndexOnS3 bucket).provide
+    (S3.GetObjectLive bucket ["jobs"] ++ S3.PutObjectLive bucket ["jobs"])
+
+end Shared
+
 /-! ## Tests of the stack, run when this file compiles -/
 
 abbrev Test := List (Graph.Step Kind InMemory)

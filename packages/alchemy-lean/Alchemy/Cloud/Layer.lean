@@ -75,7 +75,7 @@ def merge (a : Layer In R) (b : Layer In T) : Layer In (Both R T) where
       right := b.build (Access.le_trans (Access.le_union_right _ _) le) services }
 
 /-- `a ++ b`: both layers' services. -/
-instance : HAppend (Layer In R) (Layer In T) (Layer In (Both R T)) := ⟨merge⟩
+@[default_instance] instance : HAppend (Layer In R) (Layer In T) (Layer In (Both R T)) := ⟨merge⟩
 
 @[simp] theorem needs_merge (a : Layer In R) (b : Layer In T) :
     (a ++ b).needs = a.needs ∪ b.needs := rfl
