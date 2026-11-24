@@ -521,6 +521,21 @@ export const make = (
         after: [...more, ...items],
       })),
     ),
+    "effect/MutableList:appendAllUnsafe": onList(
+      "MutableList.appendAllUnsafe",
+      (items, [given], site) =>
+        Effect.map(iterated("MutableList.appendAllUnsafe", given, site), (more) => ({
+          after: [...items, ...more],
+          gives: Value.num(more.length),
+        })),
+    ),
+    "effect/MutableList:prependAllUnsafe": onList(
+      "MutableList.prependAllUnsafe",
+      (items, [given], site) =>
+        Effect.map(iterated("MutableList.prependAllUnsafe", given, site), (more) => ({
+          after: [...more, ...items],
+        })),
+    ),
     "effect/MutableList:clear": onList("MutableList.clear", () => Effect.succeed({ after: [] })),
     "effect/MutableList:take": onList("MutableList.take", (items) =>
       Effect.succeed(

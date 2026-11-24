@@ -514,6 +514,9 @@ export const make = (
       }),
     ),
     "effect/Sink:catch": on("Sink.catch", (to, self, [f]) => Sink.catch(self, failed(to.fn(f)))),
+    "effect/Sink:catchCause": on("Sink.catchCause", (to, self, [f]) =>
+      Sink.catchCause(self, (cause) => Effect.flatMap(to.cause(cause), (held) => to.fn(f)(held))),
+    ),
     "effect/Sink:ensuring": on("Sink.ensuring", (to, self, [effect]) =>
       Sink.ensuring(self, tools.sure(to.eff(effect))),
     ),

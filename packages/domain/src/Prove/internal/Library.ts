@@ -1904,6 +1904,14 @@ export const make = (host: Host) => {
   /** A failure the code can handle: not a defect, and not what stops the prover. */
   const failure = (stop: Value.Stop): stop is Value.Rejected =>
     stop._tag === "Rejected" && stop.defect !== true;
+  /** A failure or a defect of the code: what a cause holds. */
+  const rejection = (stop: Value.Stop): stop is Value.Rejected => stop._tag === "Rejected";
+  /** A failure or a defect, as the cause the code reads. */
+  const causeOf = (stop: Value.Rejected, site: Site): Eval<V> =>
+    exits.models[stop.defect === true ? "effect/Cause:die" : "effect/Cause:fail"]!(
+      [stop.rejection],
+      site,
+    );
   /** A function that is its argument: `Layer.satisfiesSuccessType<Db>()(layer)`. */
   const itself =
     (name: string): Model =>
@@ -2149,6 +2157,35 @@ export const make = (host: Host) => {
           )
         : wrongArguments(site, "Layer.catchTag");
     }),
+    // What the layer failed with, as a cause the code reads.
+    "effect/Layer:catchCause": dual("Layer.catchCause", 2, ([self, f], site) =>
+      f
+        ? Effect.succeed(
+            layerOf((at) =>
+              Effect.catchIf(built("Layer.catchCause", self, at), rejection, (stop) =>
+                Effect.flatMap(causeOf(stop, at), (cause) =>
+                  Effect.flatMap(host.call(f, [cause], at), (made) =>
+                    built("Layer.catchCause", made, at),
+                  ),
+                ),
+              ),
+            ),
+          )
+        : wrongArguments(site, "Layer.catchCause"),
+    ),
+    "effect/Layer:tapCause": dual("Layer.tapCause", 2, ([self, f], site) =>
+      f
+        ? Effect.succeed(
+            layerOf((at) =>
+              Effect.catchIf(built("Layer.tapCause", self, at), rejection, (stop) =>
+                Effect.flatMap(causeOf(stop, at), (cause) =>
+                  Effect.andThen(ranBy("Layer.tapCause", f, [cause], at), Effect.fail(stop)),
+                ),
+              ),
+            ),
+          )
+        : wrongArguments(site, "Layer.tapCause"),
+    ),
     "effect/Layer:orDie": ([self]) =>
       Effect.succeed(
         layerOf((at) =>

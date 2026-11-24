@@ -1513,6 +1513,8 @@ MutableList.toArrayN(list, 1);
 MutableList.filter(list, (n, index) => n > 0 && index < 2);
 MutableList.remove(list, a);
 MutableList.clear(list);
+MutableList.appendAllUnsafe(list, [1, 2]);
+MutableList.prependAllUnsafe(list, [b]);
 ```
 
 ```typescript title="effect/Combiner and effect/Reducer"
@@ -1565,6 +1567,11 @@ Newtype.makeReducer(Number.ReducerSum);
 ```
 
 ```typescript title="effect/MutableHashMap"
+MutableHashMap.forEach(held, (value, key) => {
+  seen.push(key);
+});
+MutableHashMap.isMutableHashMap(held);
+MutableHashSet.isMutableHashSet(set);
 (() => {
   const held = MutableHashMap.make(["a", a]);
   MutableHashMap.modifyAt(held, "b", () => Option.some(1));
@@ -2045,6 +2052,7 @@ Queue.takeBetween(line, 1, 2);
 Queue.fail(line, new Odd({ n: b }));
 Queue.end(line);
 Queue.await(queue); // until the queue has ended
+Queue.flush(queue);
 Queue.failCauseUnsafe(queue, Cause.fail(a));
 Queue.shutdown(line);
 Queue.takeAll(line);
@@ -2138,6 +2146,9 @@ Cache.refresh(prices, "tea");
 Cache.size(prices);
 Cache.getSuccess(prices, "tea");
 Cache.values(prices);
+Cache.keys(prices);
+Cache.entries(prices);
+Cache.invalidateWhen(prices, "tea", (n) => n > b);
 const jobs = yield* FiberMap.make(); // in a scope
 FiberMap.run(jobs, "one", Effect.andThen(Effect.sleep(3), log(seen, "one again"))); // stops the fiber the key had
 FiberMap.get(jobs, "one");
@@ -2155,6 +2166,9 @@ FiberMap.isFiberMap(jobs);
 const pool = yield* Pool.make({ acquire: Ref.updateAndGet(made, (n) => n + 1), size: 2 });
 Pool.get(pool); // in a scope: waits for an item to be given back
 Pool.isPool(pool);
+Pool.use(pool, (item) => Effect.succeed(item + b)); // an item for as long as the effect runs
+Pool.reserve(pool, item);
+Pool.stats(pool);
 Pool.makeWithTTL({
   acquire: Ref.updateAndGet(made, (n) => n + 1),
   min: 1,
@@ -2250,6 +2264,8 @@ const slots = yield* PartitionedSemaphore.make({ permits: 2 }); // permits share
 PartitionedSemaphore.take(permits, "x", 1);
 PartitionedSemaphore.release(permits, 1);
 PartitionedSemaphore.available(permits);
+PartitionedSemaphore.makeUnsafe({ permits: 2 });
+PartitionedSemaphore.capacity(permits);
 PartitionedSemaphore.withPermit(permits, 3)(Effect.succeed(a));
 PartitionedSemaphore.withPermits(permits, "y", 1, Effect.succeed(b));
 const files = yield* ScopedCache.make({
@@ -2296,6 +2312,9 @@ pipe(ask({ n }), Effect.request(answers));
 Request.succeed(entry, entry.request.n + b);
 Request.fail(entry, new Odd({ n: entry.request.n }));
 Request.completeEffect(entry, even(entry.request.n + a));
+Request.complete(entry, Exit.succeed(entry.request.n + b));
+Request.failCause(entry, Cause.fail(new Odd({ n: entry.request.n + a })));
+Request.isRequest(a);
 ```
 
 ```typescript title="effect/TxHashMap, effect/TxHashSet and effect/TxPriorityQueue"
@@ -3010,6 +3029,7 @@ Sink.mapInputArrayEffect(Sink.collect(), (chunk) => Effect.succeed([chunk.length
 Sink.flatMap(Sink.take(1), ([first]) => Sink.map(Sink.take(2), (next) => [first, ...next])); // the second is given what the first left
 Sink.orElse(Sink.fail(a), (error) => Sink.map(Sink.head(), (head) => [error, Option.isSome(head)]));
 Sink.catch(Sink.fail(a), (error) => Effect.succeed(error + b));
+Sink.catchCause((cause) => Effect.succeed(Cause.hasFails(cause)));
 Sink.ensuring(log(seen, "ended"));
 Sink.onExit((exit) => log(seen, Exit.isSuccess(exit)));
 Sink.summarized(Sink.forEach(() => Ref.update(turns, (n) => n + 1)), Ref.get(turns), (start, end) => end - start);
@@ -3040,6 +3060,8 @@ Layer.flatMap((context) => Layer.mergeAll(Layer.succeedContext(context), Layer.s
 Layer.tap((context) => Ref.update(seen, (all) => [...all, Context.get(context, Fee).flat]));
 Layer.tapError((error) => Ref.update(seen, (all) => [...all, error.n]));
 Layer.catch((error) => Layer.succeed(Rate, { percent: error.n }));
+Layer.catchCause((cause) => Layer.succeed(Rate, { percent: Cause.hasDies(cause) ? -1 : a })); // a defect too
+Layer.tapCause((cause) => Ref.update(seen, (all) => [...all, Cause.hasFails(cause)]));
 Layer.catchTag(Layer.effect(Rate, Effect.fail(new Odd({ n: a }))), "Odd", (error) => Layer.succeed(Rate, { percent: error.n + 1 }));
 Layer.orDie(Layer.effect(Rate, Effect.fail(new Odd({ n: a }))));
 Layer.mock(Fee, { flat: 1 });

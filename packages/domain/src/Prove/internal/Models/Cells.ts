@@ -147,6 +147,12 @@ export const make = (
     });
 
   /** A mutable hash set or hash map, made as the one it holds is. */
+  /** Whether a value is a mutable cell that holds a hash map, or a hash set. */
+  const holds = (value: V | undefined, kind: "HashMap" | "HashSet"): boolean => {
+    const fields = cellOf(value);
+    const inside = fields ? held(fields) : undefined;
+    return inside?._tag === "Obj" && inside.brand?.kind === kind;
+  };
   const holding =
     (key: string): Model =>
     (args, site) =>
@@ -373,6 +379,16 @@ export const make = (
     "effect/MutableHashMap:empty": holding("effect/HashMap:empty"),
     "effect/MutableHashMap:make": holding("effect/HashMap:make"),
     "effect/MutableHashMap:fromIterable": holding("effect/HashMap:fromIterable"),
+    "effect/MutableHashMap:isMutableHashMap": ([value]) =>
+      Effect.succeed(Value.bool(holds(value, "HashMap"))),
+    "effect/MutableHashSet:isMutableHashSet": ([value]) =>
+      Effect.succeed(Value.bool(holds(value, "HashSet"))),
+    "effect/MutableHashMap:forEach": delegated(
+      "MutableHashMap.forEach",
+      "effect/HashMap:forEach",
+      2,
+      false,
+    ),
     "effect/MutableHashMap:get": delegated("MutableHashMap.get", "effect/HashMap:get", 2, false),
     "effect/MutableHashMap:has": delegated("MutableHashMap.has", "effect/HashMap:has", 2, false),
     "effect/MutableHashMap:set": delegated("MutableHashMap.set", "effect/HashMap:set", 3, true),

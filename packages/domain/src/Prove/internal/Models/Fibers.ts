@@ -3198,6 +3198,17 @@ export const make = (
     "effect/Request:fail": onEntry("fail", (entry, [error]) =>
       Request.fail(entry, new Value.Rejected({ rejection: error ?? Value.undef })),
     ),
+    // Ends the request as the `Exit` says.
+    "effect/Request:complete": onEntry("complete", (entry, [exit]) => {
+      const real = ended(exit);
+      return real ? Request.complete(entry, real) : undefined;
+    }),
+    "effect/Request:failCause": onEntry("failCause", (entry, [cause]) => {
+      const real = realCause(cause);
+      return real ? Request.failCause(entry, real) : undefined;
+    }),
+    "effect/Request:isRequest": ([value]) =>
+      Effect.succeed(bool(heldOf<unknown>("Request", value) !== undefined)),
     "effect/Request:completeEffect": onEntry(
       "completeEffect",
       (entry, [effect], timeline, site) => {
@@ -5207,6 +5218,85 @@ export const make = (
       (held) => Cache.values(held),
       (all) => arr([...all]),
     ),
+    "effect/Pool:use": later<PL, V>(
+      "Pool",
+      "use",
+      2,
+      (held, [f], site, timeline) =>
+        f
+          ? Effect.succeed(Pool.use(held, (item) => called(timeline, f, site)(item)))
+          : wrongArguments(site, "Pool.use"),
+      same,
+      "waits for an item of a Pool that nothing gives back",
+    ),
+    "effect/Pool:reserve": dual("Pool.reserve", 2, ([self, item], site) => {
+      const held = heldOf<PL>("Pool", self);
+      return held
+        ? Effect.succeed(
+            scoped("Pool.reserve", site, () => Pool.reserve(held, item ?? Value.undef), none),
+          )
+        : wrongArguments(site, "Pool.reserve");
+    }),
+    "effect/Pool:stats": on<PL, Pool.Stats>(
+      "Pool",
+      "stats",
+      1,
+      (held) => Pool.stats(held),
+      (stats) =>
+        Value.obj({
+          idle: num(stats.idle),
+          used: num(stats.used),
+          pending: num(stats.pending),
+          min: num(stats.min),
+          max: num(stats.max),
+        }),
+    ),
+    "effect/Queue:flush": on<Q, void>("Queue", "flush", 1, (held) => Queue.flush(held), none),
+    "effect/Cache:keys": on<C, Iterable<Key>>(
+      "Cache",
+      "keys",
+      1,
+      (held) => Cache.keys(held),
+      (all) => arr([...all].map(keyed)),
+    ),
+    "effect/Cache:entries": on<C, Iterable<readonly [Key, V]>>(
+      "Cache",
+      "entries",
+      1,
+      (held) => Cache.entries(held),
+      (all) => arr([...all].map(([key, value]) => arr([keyed(key), value]))),
+    ),
+    // Forgotten where what is kept for the key is a value the function holds of.
+    "effect/Cache:invalidateWhen": later<C, boolean>(
+      "Cache",
+      "invalidateWhen",
+      3,
+      (held, [key, f], site, timeline) =>
+        f
+          ? Effect.map(keyOf("Cache.invalidateWhen", key, site), (read) =>
+              Effect.flatMap(Cache.getSuccess(held, read), (found) =>
+                Option.isNone(found)
+                  ? Effect.succeed(false)
+                  : Effect.flatMap(holding(timeline, f, found.value, site), (holds) =>
+                      holds ? Effect.as(Cache.invalidate(held, read), true) : Effect.succeed(false),
+                    ),
+              ),
+            )
+          : wrongArguments(site, "Cache.invalidateWhen"),
+      bool,
+    ),
+    "effect/PartitionedSemaphore:capacity": now<PS, number>(
+      "PartitionedSemaphore",
+      "capacity",
+      1,
+      (held) => PartitionedSemaphore.capacity(held),
+      num,
+    ),
+    "effect/PartitionedSemaphore:makeUnsafe": ([given_], site) =>
+      Effect.map(
+        options<{ permits: number }>("PartitionedSemaphore.makeUnsafe", given_, site),
+        (read) => wrap("PartitionedSemaphore", PartitionedSemaphore.makeUnsafe<Key>(read)),
+      ),
     "effect/Pool:isPool": ([value]) =>
       Effect.succeed(bool(heldOf<PL>("Pool", value) !== undefined)),
 

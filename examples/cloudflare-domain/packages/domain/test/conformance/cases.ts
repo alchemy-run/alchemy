@@ -2437,6 +2437,7 @@ const rest: ReadonlyArray<Group> = [
       `Rational.equals(Rational.divideUnsafe(ratio(a), third), ratio(a * 3))`,
       `Match.value(a > 0 ? { _tag: "Up" } : { _tag: "Down" }).pipe(Match.tags({ Down: () => "down", Up: () => "up" }), Match.orElseAbsurd)`,
       `(() => { const held = MutableHashMap.make(["a", a], ["b", b]); return [Array.sort(Array.fromIterable(MutableHashMap.keys(held)), Order.String), Array.sort(Array.fromIterable(MutableHashMap.values(held)), Order.Number)]; })()`,
+      `(() => { const held = MutableHashMap.make(["a", a], ["b", b]); const set = MutableHashSet.make(a); const seen = []; MutableHashMap.forEach(held, (value, key) => { seen.push(key); }); return [seen.sort(), MutableHashMap.isMutableHashMap(held), MutableHashMap.isMutableHashMap(set), MutableHashSet.isMutableHashSet(set), MutableHashSet.isMutableHashSet(a)]; })()`,
       `new Plain({ code: a }).code`,
       `Newtype.value(a)`,
     ],
@@ -2961,6 +2962,7 @@ const rest: ReadonlyArray<Group> = [
       // Requests asked for together are answered together, in one call of the resolver.
       `Effect.gen(function* () { const batches = yield* Ref.make([]); const GetPrice = Request.tagged("GetPrice"); const prices = RequestResolver.make((entries) => Effect.andThen(log(batches, entries.length), Effect.forEach(entries, (entry) => Request.succeed(entry, entry.request.item * 2 + a), { discard: true }))); const price = (item) => Effect.request(GetPrice({ item }), prices); const together = yield* Effect.all([price(1), price(2), price(3)], { concurrency: "unbounded" }); const apart = yield* Effect.all([price(4), price(5)]); return [together, apart, yield* Ref.get(batches)]; })`,
       `Effect.gen(function* () { const batches = yield* Ref.make([]); const ask = Request.of(); const answers = RequestResolver.make((entries) => Effect.andThen(log(batches, entries.length), Effect.forEach(entries, (entry) => (entry.request.n % 2 === 0 ? Request.succeed(entry, entry.request.n + b) : Request.fail(entry, new Odd({ n: entry.request.n }))), { discard: true }))).pipe(RequestResolver.batchN(2)); const made = yield* Effect.all([1, 2, 3, 4, 5].map((n) => Effect.result(pipe(ask({ n }), Effect.request(answers)))), { concurrency: "unbounded" }); return [made, yield* Ref.get(batches)]; })`,
+      `Effect.gen(function* () { const ask = Request.of(); const answers = RequestResolver.make((entries) => Effect.forEach(entries, (entry) => (entry.request.n > 1 ? Request.complete(entry, Exit.succeed(entry.request.n + b)) : Request.failCause(entry, Cause.fail(new Odd({ n: entry.request.n + a })))), { discard: true })); const got = yield* Effect.all([Effect.result(Effect.request(ask({ n: 2 }), answers)), Effect.result(Effect.request(ask({ n: 1 }), answers))], { concurrency: 2 }); return [got, Request.isRequest(ask({ n: 1 })), Request.isRequest(a)]; })`,
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const ask = Request.tagged("Double"); const doubled = RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n * 2 + a)).pipe(RequestResolver.setDelay("1 second")); const made = yield* Effect.all([Effect.request(ask({ n: 1 }), doubled), Effect.andThen(Effect.sleep(5), Effect.request(ask({ n: 2 }), doubled))], { concurrency: 2 }); return [made, yield* Ref.get(seen)]; })`,
       `Effect.gen(function* () { const ask = Request.tagged("Checked"); const checked = RequestResolver.make((entries) => Effect.forEach(entries, (entry) => Request.completeEffect(entry, even(entry.request.n + a)), { discard: true })); return yield* Effect.all([Effect.result(Effect.request(ask({ n: 0 }), checked)), Effect.result(Effect.request(ask({ n: 1 }), checked))], { concurrency: 2 }); })`,
     ],
@@ -3229,6 +3231,7 @@ const rest: ReadonlyArray<Group> = [
       `(() => { const list = MutableList.make(); MutableList.append(list, a); MutableList.prepend(list, b); MutableList.appendAll(list, [1, 2]); MutableList.prependAll(list, [8, 9]); return [MutableList.toArray(list), list.length]; })()`,
       `(() => { const list = listed(a, b, 3); const first = MutableList.take(list); return [first, MutableList.toArray(list), MutableList.appendAll(list, [a]), list.length]; })()`,
       `(() => { const list = MutableList.make(); return [MutableList.take(list) === MutableList.Empty, MutableList.takeAll(list)]; })()`,
+      `(() => { const list = MutableList.make(); MutableList.append(list, a); const added = MutableList.appendAllUnsafe(list, [1, 2]); MutableList.prependAllUnsafe(list, [b]); return [added, MutableList.toArray(list)]; })()`,
       `(() => { const list = listed(a, b, 3, 4); return [MutableList.takeN(list, 2), MutableList.toArrayN(list, 1), MutableList.takeN(list, 5), list.length]; })()`,
       `(() => { const list = listed(a, b, 3, 4); MutableList.takeNVoid(list, 1); MutableList.filter(list, (n, index) => n > 0 && index < 2); return MutableList.takeAll(list); })()`,
       `(() => { const list = listed(a, b, a, 5); MutableList.remove(list, a); const left = MutableList.toArray(list); MutableList.clear(list); return [left, list.length]; })()`,
@@ -3476,6 +3479,8 @@ const rest: ReadonlyArray<Group> = [
     ],
     both: [
       `Effect.provideService(Effect.map(Rate, (rate) => rate.percent + a), Rate, { percent: b })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const got = yield* priced.pipe(Effect.provide(Layer.succeed(Fee, { flat: b })), Effect.provide(Layer.effect(Rate, Effect.fail(new Odd({ n: a }))).pipe(Layer.tapCause((cause) => Ref.update(seen, (all) => [...all, Cause.hasFails(cause)])), Layer.catchCause((cause) => Layer.succeed(Rate, { percent: Cause.hasDies(cause) ? -1 : a }))))); return [got, yield* Ref.get(seen)]; })`,
+      `priced.pipe(Effect.provide(Layer.succeed(Fee, { flat: b })), Effect.provide(Layer.effect(Rate, Effect.die(a)).pipe(Layer.catchCause((cause) => Layer.succeed(Rate, { percent: Cause.hasDies(cause) ? 1 : 2 })))))`,
       `Effect.succeed([Context.get(Context.make(Rate, { percent: a }), Rate).percent, Context.getUnsafe(Context.make(Fee, { flat: b }), Fee).flat, Context.getOrUndefined(Context.empty(), Rate) === undefined, Context.getOrElse(Context.empty(), Fee, () => a)])`,
       `Effect.succeed([Context.getOption(Context.addOrOmit(Context.make(Rate, { percent: a }), Rate, Option.none()), Rate), Context.getOption(Context.addOrOmit(Context.empty(), Fee, Option.some({ flat: b })), Fee)])`,
       `priced.pipe(Effect.provide(Context.mergeAll(Context.make(Rate, { percent: a }), Context.make(Fee, { flat: b }))))`,
@@ -3754,6 +3759,7 @@ const rest: ReadonlyArray<Group> = [
     ],
     both: [
       `Stream.run(four(a, b), Sink.takeWhile((n) => n < 3))`,
+      `Stream.run(four(a, b), Sink.fail(a).pipe(Sink.catchCause((cause) => Effect.succeed(Cause.hasFails(cause)))))`,
       `Stream.runCollect(Stream.aggregateWithin(four(a, b), Sink.foldUntil(() => 0, 2, (total, n) => Effect.succeed(total + n)), Schedule.spaced("1 second")))`,
       `Stream.run(four(a, b), Sink.takeWhileFilter((n) => (n < 3 ? Result.succeed(n * 2) : Result.fail(n))))`,
       `Stream.run(four(a, b), Sink.takeWhileFilterEffect((n) => Effect.succeed(n !== b ? Result.succeed(n) : Result.fail(n))))`,
@@ -3813,6 +3819,7 @@ const rest: ReadonlyArray<Group> = [
     ...numbers,
     effectful: true,
     prelude: [
+      `import * as PartitionedSemaphore from "effect/PartitionedSemaphore";`,
       `import * as Cache from "effect/Cache";`,
       `import * as TxDeferred from "effect/TxDeferred";`,
       `import * as TxSubscriptionRef from "effect/TxSubscriptionRef";`,
@@ -3862,6 +3869,11 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const cell = yield* TxSubscriptionRef.make(a); const told = yield* TxSubscriptionRef.modify(cell, (n) => [n + 1, n * b]); return [told, yield* TxSubscriptionRef.get(cell)]; })`,
       `Effect.gen(function* () { const cell = yield* TxSubscriptionRef.make(a); const done = yield* TxDeferred.make(); const chunk = yield* TxChunk.empty(); const lock = yield* TxReentrantLock.make(); const permits = yield* TxSemaphore.make(1); const set = yield* TxHashSet.empty(); return [TxSubscriptionRef.isTxSubscriptionRef(cell), TxDeferred.isTxDeferred(done), TxChunk.isTxChunk(chunk), TxReentrantLock.isTxReentrantLock(lock), TxSemaphore.isTxSemaphore(permits), TxHashSet.isTxHashSet(set), TxPriorityQueue.isTxPriorityQueue(set), TxDeferred.isTxDeferred(a)]; })`,
       `Effect.sync(() => { const cell = MutableRef.make(a); const first = MutableRef.compareAndSet(cell, a, b); const second = MutableRef.compareAndSet(cell, a, 0); return [first, second, MutableRef.get(cell)]; })`,
+      `Effect.scoped(Effect.gen(function* () { const pool = yield* Pool.make({ acquire: Effect.succeed(a), size: 2 }); const got = yield* Pool.use(pool, (item) => Effect.succeed(item + b)); const stats = yield* Pool.stats(pool); return [got, stats.max, stats.min]; }))`,
+      `Effect.scoped(Effect.gen(function* () { const pool = yield* Pool.make({ acquire: Effect.succeed(a), size: 1 }); const item = yield* Effect.scoped(Pool.get(pool)); yield* Pool.reserve(pool, item); return item; }))`,
+      `Effect.gen(function* () { const queue = yield* Queue.unbounded(); yield* Queue.offerAll(queue, [a, b]); yield* Queue.flush(queue); return yield* Queue.size(queue); })`,
+      `Effect.gen(function* () { const prices = yield* Cache.make({ capacity: 4, lookup: (name) => Effect.succeed(name.length + a) }); yield* Cache.get(prices, "tea"); yield* Cache.get(prices, "milk"); const keys = [...(yield* Cache.keys(prices))].sort(); const entries = [...(yield* Cache.entries(prices))].length; const gone = yield* Cache.invalidateWhen(prices, "tea", (n) => n > b); return [keys, entries, gone, yield* Cache.has(prices, "tea")]; })`,
+      `Effect.gen(function* () { const permits = PartitionedSemaphore.makeUnsafe({ permits: 2 }); return [PartitionedSemaphore.capacity(permits), yield* PartitionedSemaphore.withPermit(permits, "x", Effect.succeed(a))]; })`,
     ],
   },
   {
