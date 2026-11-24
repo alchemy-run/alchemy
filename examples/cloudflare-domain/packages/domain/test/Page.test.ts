@@ -134,6 +134,19 @@ it("every line under Library functions is a line of a conformance table, or a pa
   expect(missing).toEqual([]);
 });
 
+it("every line the page says to write in place of unsupported code is one it shows as supported", async () => {
+  const fixes = blocks.find((block) => block.title === "What the report says, and what to write");
+  expect(fixes).toBeDefined();
+  if (!fixes) return;
+  const shown = new Set<string>();
+  for (const block of [...library, ...run])
+    if (!block.title.startsWith("Not supported") && block.heading !== "Not supported")
+      for (const line of await linesOf(block)) shown.add(line.text);
+  const lines = await linesOf(fixes);
+  expect(lines.length).toBeGreaterThan(8);
+  expect(lines.filter((line) => !shown.has(line.text)).map((line) => line.source)).toEqual([]);
+});
+
 it("every function the prover has a model for is on the page", () => {
   // A function the page says is not supported is on the page too.
   const text = blocks.map((block) => block.code).join("\n");
