@@ -11,7 +11,7 @@ namespace Alchemy.Cloud
 /-- A resource of one kind, named by its logical id. -/
 structure Ref {K : Type} (kind : K) where
   id : String
-deriving DecidableEq, Repr
+deriving DecidableEq, Repr, Inhabited
 
 /-- The kinds of resource a cloud has, and the operations each kind allows. -/
 class Kinds (K : Type) where

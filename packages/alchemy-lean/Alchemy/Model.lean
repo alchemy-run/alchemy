@@ -481,3 +481,25 @@ theorem always {P : Rule m.signature.aggregates}
 
 end Model
 end Alchemy
+
+namespace Alchemy
+namespace Model
+
+/--
+A rule one aggregate keeps holds of every instance of it, in every world a
+model with no decisions can reach.
+-/
+theorem alwaysAt (m : Model) (noDecisions : m.decisions = []) (n : m.signature.aggregates.Name)
+    (P : (m.signature.aggregates.of n).State → Prop)
+    (initially : P (m.signature.aggregates.of n).initial)
+    (kept : (m.signature.aggregates.of n).Keeps P)
+    (w : World m.signature) (reach : m.Reachable w) (id : (m.signature.aggregates.of n).Id) :
+    P (w.state n id) := by
+  have all := m.always (P := fun n' s => ∀ h : n' = n, P (h ▸ s))
+    (by intro n' h; subst h; exact initially)
+    (by intro n' ctx s c es holds eq h; subst h; exact kept ctx s c es (holds rfl) eq)
+    (by rw [noDecisions]; intro d mem; cases mem) w reach
+  exact all n id rfl
+
+end Model
+end Alchemy

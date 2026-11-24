@@ -115,10 +115,12 @@ delivered twice.
 -/
 theorem everyOrderChargedOnce (w : Alchemy.World Signature) (reach : Shop.Reachable w)
     (id : String) : ChargedOnce (w.state .Order id) :=
-  Shop.always (P := fun | .Order => ChargedOnce)
-    (by intro n; cases n; simp [ChargedOnce])
-    (by intro n; cases n; exact chargedOnce)
-    (by intro d mem; cases mem) w reach .Order id
+  Order.always (by simp [ChargedOnce]) chargedOnce w reach id
+
+/-- And of the shop as deployed: whatever its journal holds. -/
+theorem deployedOrdersChargedOnce (journal : List String) (id : String) :
+    ChargedOnce ((served.replay journal).state .Order id) :=
+  Order.deployed (by simp [ChargedOnce]) chargedOnce journal id
 
 /-! These came with the model: nobody proved them here. -/
 
@@ -140,21 +142,6 @@ example : Shop.passes [
     .when ⟨.Order, (), .settle "o-1" "ch_2"⟩,
     .rejected .Order .notAwaitingPayment
   ] = true := by decide
-
-/-! ## How the shop is spoken to -/
-
-/-- Callers send order commands. Its history is written as JSON. -/
-def served : Served Shop where
-  Input := Order.Command
-  command := fun command => ⟨.Order, (), command⟩
-
-/--
-The rule holds of the shop as deployed: whatever its journal holds, every
-order it replays to was charged at most once.
--/
-theorem deployedOrdersChargedOnce (journal : List String) (id : String) :
-    ChargedOnce ((served.replay journal).state .Order id) :=
-  everyOrderChargedOnce _ (served.replay_reachable journal) id
 
 /-! ## The stack -/
 
@@ -180,17 +167,19 @@ def Api (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
       | .ship order item => queue.call s!"{order}:{item}"
 
     return fun request => do
-      match request.method, request.path, request.body.splitOn ":" with
-      | .post, ["orders", id], [item, amount] =>
-        let (answer, after) ← shop.send (.place id item amount.toNat!)
+      match request.method, request.path with
+      | .post, ["orders"] =>
+        let some command := Text.read (α := Order.Command) request.body
+          | return { status := 400, body := "not a command" }
+        let (answer, after) ← shop.send (.Order command)
         match answer with
-        | .ok _ => return describe (after.state .Order id)
+        | .ok _ => return describe (after.state .Order (Order.key command))
         | .error rejection => return { status := 409, body := reprStr rejection }
-      | .get, ["orders", id], _ =>
+      | .get, ["orders", id] =>
         return describe ((← shop.world).state .Order id)
-      | .get, ["revenue"], _ =>
+      | .get, ["revenue"] =>
         return { status := 200, body := toString (Revenue.stateAt (← shop.world).log ()) }
-      | _, _, _ => return { status := 404, body := "not found" }
+      | _, _ => return { status := 404, body := "not found" }
 
 /-- Consumes the shipments queue and files a packing slip for each. -/
 def Packer (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
@@ -205,8 +194,11 @@ def Packer (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
     return fun _ => return { status := 204 }
 
 structure Outputs where
+  orders : Bucket
+  shipments : Queue
   api : Function
   packer : Function
+deriving Inhabited
 
 def ShopStack : Stack Kind Outputs where
   name := "Shop"
@@ -215,14 +207,12 @@ def ShopStack : Stack Kind Outputs where
     let shipments ← SQS.Queue "Shipments"
     let api ← Api orders shipments
     let packer ← Packer orders shipments
-    return { api, packer }
+    return { orders, shipments, api, packer }
 
 def prod : Graph Kind := ShopStack.graph "prod"
 
-def orders : Bucket := ⟨"Orders"⟩
-def shipments : Queue := ⟨"Shipments"⟩
-def api : Function := ⟨"Api"⟩
-def packer : Function := ⟨"Packer"⟩
+/-- What the stack built, for stories and theorems to name. -/
+def out : Outputs := computed% (ShopStack.outputs "prod")
 
 example : ShopStack.problem "prod" = none ∧ prod.deployable = true := by decide
 
@@ -230,22 +220,18 @@ example : prod.order = ["Orders", "Shipments", "Api", "Packer"] := by decide
 
 /-! ## Stories: the whole stack, run in memory -/
 
-abbrev Story := List (Graph.Step Kind InMemory)
+def anOrder : List (Graph.Step Kind InMemory) := [
+  post out.api "/orders" (Order.Command.place "o-1" "kettle" 40) ⇒ (200, "paid ch_o-1"),
+  .holds "the packer filed a slip" (·.object out.orders ["packed", "o-1"] == some "kettle"),
+  .holds "and took the shipment off the queue" (·.queued out.shipments == []),
+  get out.api "/orders/o-1" ⇒ (200, "paid ch_o-1"),
+  post out.api "/orders" (Order.Command.place "o-1" "kettle" 40)
+    ⇒ (409, "Order.Rejection.alreadyPlaced"),
+  get out.api "/revenue" ⇒ (200, "40") ]
 
-def anOrder : Story := [
-  .request api { method := .post, path := ["orders", "o-1"], body := "kettle:40" }
-    (responds { status := 200, body := "paid ch_o-1" }),
-  .holds "the packer filed a slip" (·.object orders ["packed", "o-1"] == some "kettle"),
-  .holds "and took the shipment off the queue" (·.queued shipments == []),
-  .request api { path := ["orders", "o-1"] } (responds { status := 200, body := "paid ch_o-1" }),
-  .request api { method := .post, path := ["orders", "o-1"], body := "kettle:40" }
-    (responds { status := 409, body := "Order.Rejection.alreadyPlaced" }),
-  .request api { path := ["revenue"] } (responds { status := 200, body := "40" }) ]
-
-def anOrderTooLarge : Story := [
-  .request api { method := .post, path := ["orders", "o-2"], body := "yacht:5000" }
-    (responds { status := 402, body := "over the limit" }),
-  .holds "nothing was packed" (·.object orders ["packed", "o-2"] == none) ]
+def anOrderTooLarge : List (Graph.Step Kind InMemory) := [
+  post out.api "/orders" (Order.Command.place "o-2" "yacht" 5000) ⇒ (402, "over the limit"),
+  .holds "nothing was packed" (·.object out.orders ["packed", "o-2"] == none) ]
 
 example : prod.passes anOrder = true := by native_decide
 example : prod.passes anOrderTooLarge = true := by native_decide
@@ -254,15 +240,15 @@ example : prod.passes anOrderTooLarge = true := by native_decide
 
 /-- Only the Api can write the shop's history. -/
 theorem onlyTheApiWritesHistory (key : Path) (history : ["journal"] <+: key) (host : String)
-    (can : host ∈ prod.whoCan ⟨.bucket, orders, BucketOp.put key⟩) : host = "Api" := by
+    (can : host ∈ prod.whoCan ⟨.bucket, out.orders, BucketOp.put key⟩) : host = "Api" := by
   obtain ⟨rest, rfl⟩ := history
-  access in prod using [BucketOp.covers, orders]
+  access in prod using [BucketOp.covers, out]
   grind
 
 /-- The Packer can read nothing: no order, and none of the history. -/
 theorem thePackerReadsNothing (key : Path) :
-    prod.can "Packer" ⟨.bucket, orders, BucketOp.get key⟩ = false := by
-  access in prod using [BucketOp.covers, orders]
+    prod.can "Packer" ⟨.bucket, out.orders, BucketOp.get key⟩ = false := by
+  access in prod using [BucketOp.covers, out]
 
 /--
 Least privilege: no function holds a grant it does not need. For each one there

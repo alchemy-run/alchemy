@@ -1,5 +1,6 @@
 import Lean
 import Alchemy.Model
+import Alchemy.Cloud.Hosted
 
 /-!
 # `model … where`
@@ -192,6 +193,42 @@ macro_rules
         policies := [$[$(policies.map (under m ·.getId))],*]
         views := [$[$(views.map (under m ·.getId))],*]
         projections := [$[$(projections.map (under m ·.getId))],*]))
+    -- What callers send, how the model is served, and each aggregate's rules lifted to the model.
+    commands := commands.push (← `(command| namespace $m))
+    let input := mkIdent `Input
+    let inputCtors ← aggregates.mapM fun a =>
+      `(Command.ctor| | $a:ident (command : $(rooted a `Command)))
+    commands := commands.push (← `(command|
+      /-- What callers send: a command for one of the aggregates. -/
+      inductive $input where $inputCtors* deriving Lean.ToJson, Lean.FromJson))
+    let commandAlts ← aggregates.mapM fun a =>
+      `(Term.matchAltExpr| | $(under input a.getId):ident command =>
+          ⟨$(under name a.getId), (), command⟩)
+    let served := mkIdent `served
+    commands := commands.push (← `(command|
+      /-- How the model is spoken to: callers send commands, and its history is written as JSON. -/
+      abbrev $served : Alchemy.Cloud.Served $(rooted m) where
+        Input := $input
+        command := fun input => match input with $commandAlts:matchAlt*))
+    for a in aggregates do
+      let always := mkIdent (a.getId ++ `always)
+      commands := commands.push (← `(command|
+        /-- A rule the aggregate keeps holds of every instance, in every world the model can reach. -/
+        theorem $always {P : $(rooted a `State) → Prop}
+            (initially : P (Alchemy.Aggregate.initial $(rooted a)))
+            (kept : Alchemy.Aggregate.Keeps $(rooted a) P)
+            (w : Alchemy.World $signature) (reach : Alchemy.Model.Reachable $(rooted m) w)
+            (id : String) : P (w.state $(under name a.getId) id) :=
+          Alchemy.Model.alwaysAt $(rooted m) rfl $(under name a.getId) P initially kept w reach id))
+      commands := commands.push (← `(command|
+        /-- And of the model as deployed, whatever its journal holds. -/
+        theorem $(mkIdent (a.getId ++ `deployed)) {P : $(rooted a `State) → Prop}
+            (initially : P (Alchemy.Aggregate.initial $(rooted a)))
+            (kept : Alchemy.Aggregate.Keeps $(rooted a) P)
+            (journal : List String) (id : String) :
+            P ((Alchemy.Cloud.Served.replay $served journal).state $(under name a.getId) id) :=
+          $always initially kept _ (Alchemy.Cloud.Served.replay_reachable $served journal) id))
+    commands := commands.push (← `(command| end $m))
     return mkNullNode commands
 
 end Alchemy
