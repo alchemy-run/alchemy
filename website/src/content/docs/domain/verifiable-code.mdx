@@ -2195,6 +2195,33 @@ Stream.runCollect(Stream.unwrap(Effect.succeed(Stream.make(a))));
 stream.pipe(Stream.withSpan("s"), Stream.runCount);
 stream.pipe(Stream.zip(Stream.make("x", "y")), Stream.runCollect);
 stream.pipe(Stream.zipWithIndex, Stream.runCollect);
+
+// Streams over time, and streams run together.
+const paced = (millis, ...items) =>
+  Stream.fromIterable(items).pipe(
+    Stream.mapEffect((item) => Effect.as(Effect.sleep(millis), item)),
+  );
+Stream.tick("1 second").pipe(Stream.take(3), Stream.runCount);
+Stream.fromSchedule(Schedule.spaced("1 second")).pipe(Stream.take(3), Stream.runCollect);
+Stream.fromQueue(line).pipe(Stream.take(3), Stream.runCollect);
+Stream.merge(paced(3, a, b), paced(5, "x", "y")).pipe(Stream.runCollect);
+Stream.mergeAll([paced(7, "slow"), paced(2, a), paced(4, b)], { concurrency: 2 });
+Stream.zipLatest(paced(3, a, b), paced(5, "x", "y")).pipe(Stream.runCollect);
+Stream.make(3, 1, 2).pipe(
+  Stream.mapEffect((n) => Effect.as(Effect.sleep(n * 2 + 1), n + a), { concurrency: 3 }),
+  Stream.runCollect,
+);
+Stream.make(5, 1).pipe(
+  Stream.flatMap((n) => paced(n, n, n + a), { concurrency: 2 }),
+  Stream.runCollect,
+);
+paced(4, a, b, 1).pipe(Stream.timeout(10), Stream.runCollect);
+Stream.concat(paced(1, a, b), paced(20, 1)).pipe(Stream.debounce(5), Stream.runCollect);
+Stream.concat(paced(1, a, b, 1), paced(20, 2)).pipe(Stream.groupedWithin(2, 10), Stream.runCollect);
+Stream.make(a, b, 1).pipe(Stream.schedule(Schedule.spaced("1 second")), Stream.runCollect);
+Stream.make(a, b).pipe(Stream.repeat(Schedule.recurs(1)), Stream.runCollect);
+paced(3, a, b, 1).pipe(Stream.interruptWhen(Effect.sleep(7)), Stream.runCollect);
+paced(3, a, b, 1).pipe(Stream.haltWhen(Effect.sleep(7)), Stream.runCollect);
 ```
 
 ```typescript title="effect/Sink"
@@ -2487,15 +2514,17 @@ const kept = yield* Stream.fromIterable(command.readings).pipe(
 
 A step that runs an effect for each item takes the items one at a time, so a stream that stops early runs the effects the real one runs and no others: above, a reading after the second is never checked, and a failure it would have given never happens.
 
+A stream over time, and streams run together, are run by the library on the handler's [timeline](#time-and-fibers): `Stream.tick`, `debounce`, `merge`, `mapEffect` with a `concurrency`, a stream of a queue.
+
 Every function of `effect/Stream` and `effect/Sink` that is supported is under [Library functions](#library-functions). A sink that has what it wants pulls nothing more.
 
 ```typescript title="Not supported"
 Stream.iterate(1, (n) => n + 1).pipe(Stream.runCollect); // a stream with no end: cut it with Stream.take(3)
 Stream.take(stream, command.count); // a count an input decides
-Stream.tick("1 second"); // a stream of time: tick, debounce, throttle, a schedule
-Stream.fromQueue(queue); // of a queue or a pub-sub
-Stream.merge(first, second); // which item comes first is not something the code decides
-Stream.mapEffect(stream, checked, { concurrency: 2 });
+Stream.tick("1 second").pipe(Stream.runCollect); // a stream of time with no end: cut it with Stream.take(3)
+Stream.never.pipe(Stream.runCollect); // a stream that gives nothing and does not end
+Stream.merge(paced(3, a), paced(3, b)).pipe(Stream.runCollect); // two items that come at the same moment
+Stream.throttle(stream, options); // and Stream.fromPubSub, broadcast, share
 ```
 
 ## Your own files

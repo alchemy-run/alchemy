@@ -1515,5 +1515,19 @@ export const make = (kit: Kit, base: Models) => {
     ...concurrent,
   };
 
-  return { models, sited, member };
+  /** What the models of streams over time are made with. */
+  const tools = {
+    span,
+    written,
+    count,
+    items,
+    together,
+    flag,
+    called,
+    effectOf,
+    scheduleOf,
+    heldOf,
+  };
+
+  return { models, sited, member, tools };
 };

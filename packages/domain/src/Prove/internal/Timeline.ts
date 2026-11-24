@@ -93,7 +93,7 @@ class Fatal {
  * handle is a failure, a defect is a defect, and what stops the prover is
  * kept, so that no race and no fiber loses it.
  */
-export const real = (timeline: Timeline, self: Eval<V>): Effect.Effect<V, Value.Rejected> =>
+export const real = <A>(timeline: Timeline, self: Eval<A>): Effect.Effect<A, Value.Rejected> =>
   Effect.catch(self, (stop) => {
     if (stop._tag === "Rejected")
       return stop.defect === true ? Effect.die(new Defect(stop.rejection)) : Effect.fail(stop);
@@ -139,14 +139,14 @@ export const stopOf = (timeline: Timeline, cause: Cause.Cause<unknown>): Stop | 
 };
 
 /** What the library gave, as an effect of the code. An interrupt goes on as one. */
-export const back = <A>(
+export const back = <A, B = V>(
   timeline: Timeline,
   self: Effect.Effect<A, unknown>,
-  give: (value: A) => V,
-): Eval<V> =>
+  give: (value: A) => B,
+): Eval<B> =>
   Effect.matchCauseEffect(self, {
     onSuccess: (value) => Effect.succeed(give(value)),
-    onFailure: (cause): Eval<V> => {
+    onFailure: (cause): Eval<B> => {
       const stop = stopOf(timeline, cause);
       return stop ? Effect.fail(stop) : Effect.failCause(cause as Cause.Cause<never>);
     },

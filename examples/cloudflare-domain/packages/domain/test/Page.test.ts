@@ -76,7 +76,7 @@ const sections: Readonly<Record<string, Section>> = {
   Streams: {
     base: lists,
     prelude: [`import * as Queue from "effect/Queue";`],
-    context: `const command = { readings: items, count: a }; const stream = Stream.fromIterable(items); const first = stream; const second = stream; const checked = (reading) => Effect.succeed(reading + 1); const queue = yield* Queue.unbounded();`,
+    context: `const command = { readings: items, count: a }; const stream = Stream.fromIterable(items); const first = stream; const second = stream; const checked = (reading) => Effect.succeed(reading + 1); const paced = (millis, ...items) => Stream.fromIterable(items).pipe(Stream.mapEffect((item) => Effect.as(Effect.sleep(millis), item))); const options = { cost: () => 1, units: 1, duration: 1 }; const b = a + 1; const queue = yield* Queue.unbounded();`,
     effectful: true,
     // A stream does nothing until it is run.
     runs: (line) =>

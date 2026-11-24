@@ -85,7 +85,8 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
           const chunk = yield* pull;
           if (chunk === undefined || !(yield* each(chunk))) return;
         }
-      }).pipe(Effect.ensuring(Effect.sync(() => void depth--)));
+        // What the stream opened is closed when the run ends, wherever it stops.
+      }).pipe(Effect.scoped, Effect.ensuring(Effect.sync(() => void depth--)));
     });
 
   /** A function of a stream, written with the stream first or last. */
@@ -1244,6 +1245,7 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
               Effect.suspend(() => {
                 if (depth++ === 0) pulls = 0;
                 return Effect.flatMap(self.open, (pull) => feed(pull, site)).pipe(
+                  Effect.scoped,
                   Effect.ensuring(Effect.sync(() => void depth--)),
                 );
               }),

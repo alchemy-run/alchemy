@@ -37,6 +37,7 @@ import * as Decimals from "./Models/Decimals.ts";
 import * as Effects from "./Models/Effects.ts";
 import * as Exits from "./Models/Exits.ts";
 import * as Fibers from "./Models/Fibers.ts";
+import * as Flows from "./Models/Flows.ts";
 import * as Hashes from "./Models/Hashes.ts";
 import * as Numbers from "./Models/Numbers.ts";
 import * as Rationals from "./Models/Rationals.ts";
@@ -1331,6 +1332,9 @@ export const make = (host: Host) => {
   const fibers = Fibers.make(kit, { ...written });
   Object.assign(written, fibers.models);
   Object.assign(clocks, fibers.sited);
+  const flows = Flows.make(kit, { ...written }, fibers.tools);
+  Object.assign(written, flows.models);
+  Object.assign(clocks, flows.sited);
 
   // A `Chunk` and an `Iterable` are read as the array of their items: the
   // functions the three modules share do the same to one.

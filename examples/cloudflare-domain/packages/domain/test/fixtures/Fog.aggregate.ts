@@ -74,10 +74,10 @@ export class Fog extends Domain.Aggregate("Fog", {
   ],
   keyOf: (command) => command.id,
   decide: {
-    // Several items at a time: which finishes first is not a thing the code decides.
+    // A stream held to a rate, which the prover has no model for.
     Race: Effect.fn(function* (_fog, command) {
       const seen = yield* Stream.make(command.n, 1).pipe(
-        Stream.mapEffect((n) => Effect.succeed(n), { concurrency: 2 }),
+        Stream.throttle({ cost: () => 1, units: 1, duration: "1 second" }),
         Stream.runCollect,
       );
       return [new Seen({ n: seen.length })];
