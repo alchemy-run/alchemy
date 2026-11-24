@@ -1,4 +1,4 @@
-import Alchemy.Cloud.Run
+import Alchemy.Cloud.Layer
 
 /-!
 # The resource graph
@@ -151,11 +151,27 @@ def host (k : K) (id : String) (props : Cloud.Props k) (body : Construct K (Serv
   declare { kind := k, ref := ⟨id⟩, props, serve := some serve }
   return ⟨id⟩
 
-/-- What a host runs. Written last in a host's body. -/
-def serve {k : K} (access : Access K)
-    (fetch : Cloud.Request k → Run access Failure (Cloud.Response k))
-    (on : List (Subscription access) := []) : Construct K (Serve k) :=
-  return { access, fetch, on }
+/-- Code that listens to a resource, written against the services it needs. -/
+structure Listener (R : Service K) where
+  kind : K
+  source : Ref kind
+  /-- What listening exercises of the host's access. -/
+  needs : List (Attempt K) := []
+  handle : Cloud.Event kind → Effect R Failure Unit
+
+/--
+What a host runs, and the layer that gives it its services. Written last in a
+host's body. The host's access is what the layer needs, and nothing else.
+-/
+def serve {k : K} {R : Service K} (layer : Layer Nothing R)
+    (fetch : Cloud.Request k → Effect R Failure (Cloud.Response k))
+    (on : List (Listener R) := []) : Construct K (Serve k) :=
+  return {
+    access := layer.needs
+    fetch := fun request => (fetch request).provide layer
+    on := on.map fun listener =>
+      { kind := listener.kind, source := listener.source, needs := listener.needs
+        handle := fun event => (listener.handle event).provide layer } }
 
 /-- A stack: a named construct, and what it reports once deployed. -/
 structure Stack (K : Type) [Cloud K] (Out : Type) where

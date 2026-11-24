@@ -11,6 +11,8 @@ import Alchemy.Host
 import Alchemy.Html
 import Alchemy.Cloud.Access
 import Alchemy.Cloud.Run
+import Alchemy.Cloud.Effect
+import Alchemy.Cloud.Layer
 import Alchemy.Cloud.Graph
 import Alchemy.Cloud.Sim
 import Alchemy.Cloud.AWS

@@ -13,52 +13,64 @@ open Alchemy Cloud AWS
 
 namespace Jobs
 
-/-! ## A service, written against whatever access it is given -/
+/-! ## A service, and a layer that gives it -/
 
+/-- Where jobs are kept. Code that uses it does not know where that is. -/
 structure JobStorage (access : Access Kind) where
   put : String → String → Run access Failure Unit
   get : String → Run access Failure (Option String)
 
-/-- Jobs kept as objects under `jobs/`. Usable by any code that may read and write there. -/
-def JobStorage.s3 {access : Access Kind} (bucket : Bucket)
-    [Has access (S3.Get bucket ["jobs"])] [Has access (S3.Put bucket ["jobs"])] :
-    JobStorage access where
-  put id content := S3.putObject bucket ["jobs"] id content
-  get id := S3.getObject bucket ["jobs"] id
+variable {R : Service Kind}
+
+def putJob [Uses R JobStorage] (id content : String) : Effect R Failure Unit :=
+  use JobStorage (·.put id content)
+
+def getJob [Uses R JobStorage] (id : String) : Effect R Failure (Option String) :=
+  use JobStorage (·.get id)
+
+/--
+Jobs kept as objects under `jobs/`. Built from the two S3 services it calls,
+so it needs what they need: read and write under that prefix.
+-/
+def JobStorageS3 (bucket : Bucket) : Layer Nothing JobStorage :=
+  .from (S3.GetObjectLive bucket ["jobs"] ++ S3.PutObjectLive bucket ["jobs"]) fun s3 =>
+    { put := fun id content => (S3.putObject bucket ["jobs"] id content).run s3
+      get := fun id => (S3.getObject bucket ["jobs"] id).run s3 }
 
 /-! ## The functions -/
+
+/-- Answers a request for a job. It names the service it needs, and no resource. -/
+def jobs [Uses R JobStorage] (request : Request) : Effect R Failure Response := do
+  match request.method, request.path with
+  | .get, [id] =>
+    match ← getJob id with
+    | some content => return { status := 200, body := content }
+    | none => return { status := 404, body := "Job not found" }
+  | .post, [id] =>
+    if request.body.isEmpty then return { status := 400, body := "Job content is required" }
+    putJob id request.body
+    return { status := 201, body := id }
+  | _, _ => return { status := 404, body := "Not found" }
 
 def Api (bucket : Bucket) (queue : Queue) : Construct Kind Function := do
   let stage ← stage
   Lambda.Function "Api" { url := true, memory := if stage = "prod" then 1024 else 512 } do
-    serve (S3.Get bucket ["jobs"] ∪ S3.Put bucket ["jobs"] ∪ SQS.Send queue)
-      (fun request => do
-        let storage := JobStorage.s3 bucket
-        match request.method, request.path with
-        | .get, [id] =>
-          match ← storage.get id with
-          | some content => return { status := 200, body := content }
-          | none => return { status := 404, body := "Job not found" }
-        | .post, [id] =>
-          if request.body.isEmpty then return { status := 400, body := "Job content is required" }
-          storage.put id request.body
-          return { status := 201, body := id }
-        | _, _ => return { status := 404, body := "Not found" })
+    serve (JobStorageS3 bucket ++ SQS.SendMessageLive queue) jobs
       [S3.onObjectCreated bucket fun key => do
         let some id := key.getLast? | return
-        let some content ← S3.getObject bucket ["jobs"] id | throw s!"job {id} is missing"
+        let some content ← getJob id | throw s!"job {id} is missing"
         SQS.sendMessage queue content]
 
 def Worker (queue : Queue) : Construct Kind Function :=
   Lambda.Function "Worker" {} do
-    serve (SQS.Receive queue) fun _ => do
+    serve (SQS.ReceiveMessageLive queue) fun _ => do
       match ← SQS.receiveMessage queue with
       | some job => return { status := 200, body := job }
       | none => return { status := 204 }
 
 def Auditor (bucket : Bucket) : Construct Kind Function :=
   Lambda.Function "Auditor" {} do
-    serve (S3.List bucket) fun _ => do
+    serve (S3.ListObjectsLive bucket) fun _ => do
       let keys ← S3.listObjects bucket
       return { status := 200, body := toString keys.length }
 
@@ -104,7 +116,10 @@ example : prod.edges = [
 
 /-! ## What is proved about access -/
 
-/-- Each function's access, pinned: a change to it fails the build. -/
+/--
+Each function's access, pinned. Nobody wrote these down: each is what the
+function's layers need. Give a function another layer and this fails.
+-/
 theorem roles : prod.roles = [
     ("JobsBucket", ∅),
     ("JobsQueue", ∅),
@@ -150,6 +165,22 @@ theorem theApiStaysInItsRole (request : Request) (memory : Memory) :
   split
   · exact Run.exec_permitted _ _ _
   · trivial
+
+/-- The same code with jobs kept in memory of its own needs no access at all. -/
+def JobStorageNowhere : Layer Nothing JobStorage :=
+  .make fun _ => { put := fun _ _ => pure (), get := fun _ => pure none }
+
+example : JobStorageNowhere.needs = ∅ := rfl
+
+/-- And so makes no call, whatever it is asked. -/
+theorem jobsWithoutACloudTouchNothing (request : Request) (memory : Memory) :
+    (((jobs request).provide JobStorageNowhere).exec InMemory memory).attempts = [] := by
+  have permitted := Effect.provide_permitted InMemory (jobs request) JobStorageNowhere memory
+  cases attempts : (((jobs request).provide JobStorageNowhere).exec InMemory memory).attempts with
+  | nil => rfl
+  | cons t _ =>
+    have := permitted t (by rw [attempts]; exact List.mem_cons_self)
+    simp [JobStorageNowhere, Layer.make] at this
 
 /-! ## Stories, run when this file compiles -/
 

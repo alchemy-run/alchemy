@@ -66,6 +66,15 @@ theorem exec_permitted (sim : Sim K) (run : Run access ε α) (s : sim.State) :
 
 end Run
 
+/--
+Code given its services by a layer only does what that layer asks for: every
+call it makes, against any cloud in any state, is one the layer's needs allow.
+-/
+theorem Effect.provide_permitted {R : Service K} {ε α : Type} (sim : Sim K) (effect : Effect R ε α)
+    (layer : Layer Nothing R) (s : sim.State) :
+    ∀ t ∈ ((effect.provide layer).exec sim s).attempts, layer.needs.permits t = true :=
+  Run.exec_permitted sim _ s
+
 /-- A stack running in memory. -/
 structure Running (K : Type) [Cloud K] (sim : Sim K) where
   state : sim.State

@@ -171,26 +171,60 @@ abbrev Put (bucket : AWS.Bucket) (under : Path := []) : Access Kind := .on bucke
 
 abbrev List (bucket : AWS.Bucket) : Access Kind := .on bucket BucketOp.list
 
-variable {access : Access Kind} {ε : Type}
+variable {R : Service Kind}
 
-/-- Read `under/name`. Needs read access to `under`. -/
+/-- Reads the objects of a bucket under a prefix. -/
+structure GetObject (bucket : AWS.Bucket) (under : Path) (access : Access Kind) where
+  call : String → Run access Failure (Option String)
+
+/-- Writes the objects of a bucket under a prefix. -/
+structure PutObject (bucket : AWS.Bucket) (under : Path) (access : Access Kind) where
+  call : String → String → Run access Failure Unit
+
+/-- Lists the keys of a bucket. -/
+structure ListObjects (bucket : AWS.Bucket) (access : Access Kind) where
+  call : Run access Failure (_root_.List Path)
+
+/-- `GetObject` on the bucket itself. Grants read access to the prefix. -/
+def GetObjectLive (bucket : AWS.Bucket) (under : Path := []) :
+    Layer Nothing (GetObject bucket under) where
+  needs := Get bucket under
+  build le _ :=
+    { call := fun name =>
+        Run.performUnder bucket (BucketCall.getObject (under ++ [name])) (BucketOp.get under) ⟨le⟩
+          (by simp [Cloud.needs, AWS.needs, Kinds.covers, BucketOp.covers]) }
+
+/-- `PutObject` on the bucket itself. Grants write access to the prefix. -/
+def PutObjectLive (bucket : AWS.Bucket) (under : Path := []) :
+    Layer Nothing (PutObject bucket under) where
+  needs := Put bucket under
+  build le _ :=
+    { call := fun name body =>
+        Run.performUnder bucket (BucketCall.putObject (under ++ [name]) body) (BucketOp.put under)
+          ⟨le⟩ (by simp [Cloud.needs, AWS.needs, Kinds.covers, BucketOp.covers]) }
+
+/-- `ListObjects` on the bucket itself. Grants listing its keys. -/
+def ListObjectsLive (bucket : AWS.Bucket) : Layer Nothing (ListObjects bucket) where
+  needs := List bucket
+  build le _ := { call := Run.perform bucket BucketCall.listObjects ⟨le⟩ }
+
+/-- Read `under/name`. -/
 def getObject (bucket : AWS.Bucket) (under : Path) (name : String)
-    [h : Has access (Get bucket under)] : Run access ε (Option String) :=
-  Run.performUnder bucket (BucketCall.getObject (under ++ [name])) (BucketOp.get under) h
-    (by simp [Cloud.needs, AWS.needs, Kinds.covers, BucketOp.covers])
+    [Uses R (GetObject bucket under)] : Effect R Failure (Option String) :=
+  use (GetObject bucket under) (·.call name)
 
-/-- Write `under/name`. Needs write access to `under`. -/
+/-- Write `under/name`. -/
 def putObject (bucket : AWS.Bucket) (under : Path) (name : String) (body : String)
-    [h : Has access (Put bucket under)] : Run access ε Unit :=
-  Run.performUnder bucket (BucketCall.putObject (under ++ [name]) body) (BucketOp.put under) h
-    (by simp [Cloud.needs, AWS.needs, Kinds.covers, BucketOp.covers])
+    [Uses R (PutObject bucket under)] : Effect R Failure Unit :=
+  use (PutObject bucket under) (·.call name body)
 
-def listObjects (bucket : AWS.Bucket) [h : Has access (List bucket)] : Run access ε (_root_.List Path) :=
-  Run.perform bucket BucketCall.listObjects h
+def listObjects (bucket : AWS.Bucket) [Uses R (ListObjects bucket)] :
+    Effect R Failure (_root_.List Path) :=
+  use (ListObjects bucket) (·.call)
 
 /-- Run this whenever an object is created in the bucket. -/
-def onObjectCreated (bucket : AWS.Bucket) (handle : Path → Run access Failure Unit) :
-    Subscription access where
+def onObjectCreated (bucket : AWS.Bucket) (handle : Path → Effect R Failure Unit) :
+    Listener R where
   kind := .bucket
   source := bucket
   handle := fun
@@ -206,15 +240,33 @@ def Queue (id : String) (props : QueueProps := {}) : Construct Kind AWS.Queue :=
 abbrev Send (queue : AWS.Queue) : Access Kind := .on queue QueueOp.send
 abbrev Receive (queue : AWS.Queue) : Access Kind := .on queue QueueOp.receive
 
-variable {access : Access Kind} {ε : Type}
+variable {R : Service Kind}
 
-def sendMessage (queue : AWS.Queue) (body : String) [h : Has access (Send queue)] :
-    Run access ε Unit :=
-  Run.perform queue (QueueCall.sendMessage body) h
+/-- Sends messages to a queue. -/
+structure SendMessage (queue : AWS.Queue) (access : Access Kind) where
+  call : String → Run access Failure Unit
 
-def receiveMessage (queue : AWS.Queue) [h : Has access (Receive queue)] :
-    Run access ε (Option String) :=
-  Run.perform queue QueueCall.receiveMessage h
+/-- Takes messages off a queue. -/
+structure ReceiveMessage (queue : AWS.Queue) (access : Access Kind) where
+  call : Run access Failure (Option String)
+
+/-- `SendMessage` on the queue itself. Grants sending to it. -/
+def SendMessageLive (queue : AWS.Queue) : Layer Nothing (SendMessage queue) where
+  needs := Send queue
+  build le _ := { call := fun body => Run.perform queue (QueueCall.sendMessage body) ⟨le⟩ }
+
+/-- `ReceiveMessage` on the queue itself. Grants receiving from it. -/
+def ReceiveMessageLive (queue : AWS.Queue) : Layer Nothing (ReceiveMessage queue) where
+  needs := Receive queue
+  build le _ := { call := Run.perform queue QueueCall.receiveMessage ⟨le⟩ }
+
+def sendMessage (queue : AWS.Queue) (body : String) [Uses R (SendMessage queue)] :
+    Effect R Failure Unit :=
+  use (SendMessage queue) (·.call body)
+
+def receiveMessage (queue : AWS.Queue) [Uses R (ReceiveMessage queue)] :
+    Effect R Failure (Option String) :=
+  use (ReceiveMessage queue) (·.call)
 
 end SQS
 
