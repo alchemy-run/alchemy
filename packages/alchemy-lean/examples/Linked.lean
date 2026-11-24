@@ -282,7 +282,12 @@ example : ((aPayout .bank).state .Account "a-1").balance = 300 ∧
     (aPayout .wires).state .Transfer "p-1" = { sent := 200, count := 1 } := by
   native_decide
 
-/-- A payout over the desk's limit: the wire desk refuses, and the bank puts the money back. -/
+/--
+A payout over the desk's limit: the wire desk refuses, and the bank puts the
+money back. The refund is itself a large deposit, so compliance screens it, and
+flags it: the account ends up frozen. Nobody wrote that down; it is what the
+three models do together.
+-/
 def aPayoutTooLarge : institution.Worlds := institution.run [.bank, .compliance, .wires] [
   ⟨.bank, .send ⟨.Account, (), .open "a-1" "Sam"⟩⟩,
   ⟨.bank, .send ⟨.Account, (), .deposit "a-1" 40000⟩⟩,
@@ -291,7 +296,8 @@ def aPayoutTooLarge : institution.Worlds := institution.run [.bank, .compliance,
   ⟨.bank, .send ⟨.Account, (), .requestPayout "a-1" "p-1" 110000⟩⟩ ]
 
 example : ((aPayoutTooLarge .bank).state .Account "a-1").balance = 120000 ∧
+    ((aPayoutTooLarge .bank).state .Account "a-1").status = .frozen "over the reporting threshold" ∧
     (aPayoutTooLarge .bank).sagas (.Payout, "p-1") = .failed (.Payout .bounced) ∧
-    (aPayoutTooLarge .compliance).state .Watch "a-1" = { assessed := 3, flagged := 0 } ∧
+    (aPayoutTooLarge .compliance).state .Watch "a-1" = { assessed := 4, flagged := 1 } ∧
     (aPayoutTooLarge .wires).state .Transfer "p-1" = {} := by
   native_decide
