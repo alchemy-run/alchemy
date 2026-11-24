@@ -832,6 +832,11 @@ Fiber.await(fiber);
 Fiber.interrupt(fiber);
 Fiber.joinAll([first, second]);
 Fiber.interruptAll([first, second]);
+Fiber.isFiber(fiber);
+Fiber.awaitAll([one, two]);
+Fiber.interruptAs(fiber, 7);
+Fiber.interruptAllAs([one, two], 7);
+Fiber.runIn(fiber, scope); // interrupted when the scope closes
 Effect.uninterruptible(Effect.andThen(Effect.sleep(5), log(seen, "kept")));
 Effect.interruptible(Effect.andThen(Effect.sleep(5), log(seen, "never")));
 Effect.exit(Effect.interrupt);
@@ -1970,6 +1975,7 @@ Deferred.dieSync(done, () => "gone");
 Deferred.await(done); // waits for the fiber that completes it
 Deferred.completeWith(done, even(a));
 Deferred.interrupt(done);
+Deferred.interruptWith(done, 7);
 Deferred.isDone(done);
 Deferred.isDoneUnsafe(done);
 Deferred.poll(done);
@@ -2033,6 +2039,8 @@ Queue.take(line); // waits for a fiber to offer
 Queue.takeBetween(line, 1, 2);
 Queue.fail(line, new Odd({ n: b }));
 Queue.end(line);
+Queue.await(queue); // until the queue has ended
+Queue.failCauseUnsafe(queue, Cause.fail(a));
 Queue.shutdown(line);
 Queue.takeAll(line);
 Queue.takeN(line, 1);
@@ -2100,6 +2108,8 @@ Cache.invalidate(prices, "tea");
 Cache.invalidateAll(prices);
 Cache.refresh(prices, "tea");
 Cache.size(prices);
+Cache.getSuccess(prices, "tea");
+Cache.values(prices);
 const jobs = yield* FiberMap.make(); // in a scope
 FiberMap.run(jobs, "one", Effect.andThen(Effect.sleep(3), log(seen, "one again"))); // stops the fiber the key had
 FiberMap.get(jobs, "one");
@@ -2110,6 +2120,7 @@ FiberMap.size(jobs);
 FiberMap.awaitEmpty(jobs);
 const pool = yield* Pool.make({ acquire: Ref.updateAndGet(made, (n) => n + 1), size: 2 });
 Pool.get(pool); // in a scope: waits for an item to be given back
+Pool.isPool(pool);
 Pool.makeWithTTL({
   acquire: Ref.updateAndGet(made, (n) => n + 1),
   min: 1,
@@ -2452,6 +2463,8 @@ const scope = yield* Scope.make();
 Scope.make("parallel");
 Effect.scope; // the scope around: inside Effect.scoped
 Scope.fork(scope, "sequential");
+Scope.makeUnsafe();
+Scope.forkUnsafe(scope, "sequential");
 Scope.addFinalizer(scope, log(seen, a));
 Scope.addFinalizerExit(scope, (exit) => log(seen, Exit.isSuccess(exit)));
 Scope.provide(opened(seen, "x"), scope);
@@ -2536,6 +2549,24 @@ Console.withTime("t");
 // A change that is made only where the function gives one.
 Ref.updateSome(ref, (n) => (n > 0 ? Option.some(n * 2) : Option.none()));
 Ref.updateSomeAndGet(ref, (n) => Option.some(n + 1));
+Ref.modifySome(ref, (n) => [n + 1, n > b ? Option.some(b) : Option.none()]); // what to give back, and a new value where there is one
+SynchronizedRef.updateSome(cell, (n) => (n > 1 ? Option.some(n * 2) : Option.none()));
+SynchronizedRef.updateSomeAndGet(cell, (n) => Option.some(n + b));
+SynchronizedRef.getAndUpdateSome(cell, () => Option.none());
+SynchronizedRef.modifySome(cell, (n) => [n > b, n > b ? Option.some(0) : Option.none()]);
+SynchronizedRef.updateSomeEffect(cell, (n) => Effect.succeed(n > 1 ? Option.some(n * 2) : Option.none()));
+SynchronizedRef.updateSomeAndGetEffect(cell, (n) => Effect.succeed(Option.some(n + b)));
+SynchronizedRef.getAndUpdateSomeEffect(cell, () => Effect.succeed(Option.none()));
+SynchronizedRef.modifySomeEffect(cell, (n) => Effect.succeed([n > b, n > b ? Option.some(0) : Option.none()]));
+SubscriptionRef.updateSome(cell, (n) => (n > 1 ? Option.some(n * 2) : Option.none()));
+SubscriptionRef.updateSomeAndGet(cell, (n) => Option.some(n + b));
+SubscriptionRef.getAndUpdateSome(cell, () => Option.none());
+SubscriptionRef.modifySome(cell, (n) => [n > b, n > b ? Option.some(0) : Option.none()]);
+SubscriptionRef.updateSomeEffect(cell, (n) => Effect.succeed(n > 1 ? Option.some(n * 2) : Option.none()));
+SubscriptionRef.updateSomeAndGetEffect(cell, (n) => Effect.succeed(Option.some(n + b)));
+SubscriptionRef.getAndUpdateSomeEffect(cell, () => Effect.succeed(Option.none()));
+SubscriptionRef.modifySomeEffect(cell, (n) => Effect.succeed([n > b, n > b ? Option.some(0) : Option.none()]));
+SubscriptionRef.isSubscriptionRef(cell);
 Ref.getAndUpdateSome(ref, () => Option.none());
 
 // What a value is, as a matcher asks.
@@ -2776,7 +2807,98 @@ Stream.failSync(() => a);
 Stream.fromArrays([a, b], [3]);
 Stream.runForEachArray(Stream.make(a, b), (chunk) => log(seen, chunk.length));
 Stream.runIntoQueue(Stream.make(a, b), queue);
+Stream.runIntoPubSub(Stream.make(a, b), hub);
+Stream.toQueue(Stream.make(a, b), { capacity: 4 }); // in a scope, as are the next two
+Stream.toPubSub(paced(2, a, b), { capacity: 4 });
+Stream.broadcastN(paced(2, a, b), { n: 2, capacity: 4 });
 Stream.isStream(a);
+Stream.zipLeft(Stream.make(a, b, a), Stream.make(1, 2));
+Stream.zipRight(Stream.make(b, a, 1));
+Stream.zipFlatten(Stream.make([a, 1], [b, 2]), Stream.make("x", "y"));
+Stream.zipWithNext;
+Stream.zipWithPrevious;
+Stream.zipWithPreviousAndNext;
+Stream.zipLatestWith(paced(2, a, b), paced(3, 10, 20), (l, r) => l + r);
+Stream.zipLatestAll(paced(2, a, b), paced(3, 10, 20), paced(5, "x"));
+Stream.raceAll(paced(3, a), paced(2, b, 7), paced(5, 9));
+Stream.interleaveWith(Stream.make(a, 1, 2), Stream.make(b, 3), Stream.make(true, false, a > b, true, true));
+Stream.when(Effect.succeed(a > 1));
+Stream.failCause(Cause.fail(new Odd({ n: a })));
+Stream.failCauseSync(() => Cause.die(a));
+Stream.catchDefect((defect) => Stream.make(defect, b));
+Stream.tapDefect((defect) => log(seen, defect));
+Stream.tapErrorTag("Odd", (error) => log(seen, error.n));
+Stream.mapArray((chunk, i) => chunk.map((n) => n + i)); // a chunk at a time, as are the next three
+Stream.mapArrayEffect((chunk) => Effect.succeed([chunk.length, ...chunk]));
+Stream.mapAccumArray(() => 0, (sum, chunk) => [sum + chunk.length, [sum, ...chunk]]);
+Stream.mapAccumArrayEffect(() => a, (sum, chunk) => Effect.succeed([sum + 1, [sum + chunk[0]]]));
+Stream.bufferArray({ capacity: 2 });
+Stream.changesWithEffect((x, y) => Effect.succeed(x === y));
+Stream.drainFork(Stream.fromEffect(log(seen, "ran")));
+Stream.mergeResult(paced(2, a, b), paced(3, 7));
+Stream.scoped;
+Stream.slidingSize(2, 2);
+Stream.accumulate;
+Stream.collect;
+Stream.bindEffect("y", ({ x }) => Effect.succeed(x + 1));
+Stream.throttleEffect({ cost: (chunk) => Effect.succeed(chunk.length), units: 1, duration: "1 second" });
+Stream.transduce(Sink.take(3)); // the sink, run again and again over the stream
+Stream.aggregate(four(a, b), Sink.foldUntil(() => 0, 2, (total, n) => Effect.succeed(total + n)));
+Stream.tapSink(Sink.forEach((n) => log(seen, n)));
+Stream.peel(four(a, b), Sink.take(1)); // what the sink gives, and a stream of the rest
+```
+
+```typescript title="More of effect/Sink"
+// What a sink takes, and what it leaves over for the next one.
+Sink.takeWhile((n) => n < 3);
+Sink.takeWhileEffect((n) => Effect.succeed(n !== b));
+Sink.takeUntil((n) => n > a);
+Sink.takeUntilEffect((n) => Effect.succeed(n === 3));
+Sink.findEffect((n) => Effect.succeed(n > a));
+Sink.reduceEffect(() => 0, (total, n) => Effect.succeed(total + n));
+Sink.reduceArray(() => 0, (total, chunk) => total + chunk.length);
+Sink.reduceWhile(() => 0, (total) => total < 5, (total, n) => total + n);
+Sink.reduceWhileEffect(() => a, (total) => total < 5, (total, n) => Effect.succeed(total + n));
+Sink.reduceWhileArray(() => 0, (total) => total < 2, (total, chunk) => total + chunk.length);
+Sink.reduceWhileArrayEffect(() => 0, (total) => total < a, (total, chunk) => Effect.succeed(total + chunk[0]));
+Sink.foldArray(() => 0, (total) => total < 3, (total, chunk) => Effect.succeed(total + chunk.length));
+Sink.foldUntil(() => 0, 3, (total, n) => Effect.succeed(total + n));
+Sink.forEachArray((chunk) => log(seen, chunk.length));
+Sink.forEachWhile((n) => Effect.as(log(seen, n), n < 3));
+Sink.forEachWhileArray((chunk) => Effect.as(log(seen, chunk), chunk[0] > a));
+
+// A sink made of a value, an effect, a queue or another sink.
+Sink.sync(() => a + b);
+Sink.failSync(() => a);
+Sink.failCause(Cause.fail(new Odd({ n: a })));
+Sink.failCauseSync(() => Cause.die("gone"));
+Sink.die(a);
+Sink.fromEffect(Effect.succeed(a));
+Sink.fromEffectEnd(Effect.succeed([a, [b]])); // a value, and what is left over
+Sink.fromQueue(queue);
+Sink.fromPubSub(hub);
+Sink.suspend(() => Sink.take(a > 1 ? 2 : 1));
+Sink.unwrap(Effect.succeed(Sink.head()));
+Sink.isSink(a);
+
+// A function of a sink.
+Sink.as(Sink.take(1), b);
+Sink.mapEffect((taken) => positive(taken[0]));
+Sink.mapEnd(Sink.take(1), ([taken, left]) => [taken.length + (left ? left.length : 0)]);
+Sink.mapEffectEnd(Sink.take(1), ([taken]) => Effect.succeed([taken[0] + 1]));
+Sink.mapLeftover((n) => n + 10);
+Sink.ignoreLeftover;
+Sink.mapError((n) => n + 1);
+Sink.mapInput((n) => n * 2);
+Sink.mapInputEffect(Sink.collect(), (n) => Effect.succeed(n + 1));
+Sink.mapInputArray(Sink.count, (chunk) => [...chunk, 0]);
+Sink.mapInputArrayEffect(Sink.collect(), (chunk) => Effect.succeed([chunk.length]));
+Sink.flatMap(Sink.take(1), ([first]) => Sink.map(Sink.take(2), (next) => [first, ...next])); // the second is given what the first left
+Sink.orElse(Sink.fail(a), (error) => Sink.map(Sink.head(), (head) => [error, Option.isSome(head)]));
+Sink.catch(Sink.fail(a), (error) => Effect.succeed(error + b));
+Sink.ensuring(log(seen, "ended"));
+Sink.onExit((exit) => log(seen, Exit.isSuccess(exit)));
+Sink.summarized(Sink.forEach(() => Ref.update(turns, (n) => n + 1)), Ref.get(turns), (start, end) => end - start);
 ```
 
 ```typescript title="effect/Layer, effect/Context and services"

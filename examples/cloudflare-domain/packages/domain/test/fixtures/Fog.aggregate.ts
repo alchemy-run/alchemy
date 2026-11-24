@@ -74,14 +74,11 @@ export class Fog extends Domain.Aggregate("Fog", {
   ],
   keyOf: (command) => command.id,
   decide: {
-    // A stream held to a rate by an effect, which the prover has no model for.
-    Race: Effect.fn(function* (_fog, command) {
-      const seen = yield* Stream.make(command.n, 1).pipe(
-        Stream.throttleEffect({ cost: () => Effect.succeed(1), units: 1, duration: "1 second" }),
-        Stream.runCollect,
-      );
-      return [new Seen({ n: seen.length })];
-    }),
+    // A stream as what `for await` goes over, which the prover has no model for.
+    Race: (_fog, command) => {
+      const seen = Stream.toAsyncIterable(Stream.make(command.n, 1));
+      return [new Seen({ n: Symbol.asyncIterator in seen ? 1 : 0 })];
+    },
     // A division the library rounds where it does not end.
     Share: (_fog, command) =>
       Option.match(BigDecimal.divide(command.price, BigDecimal.fromNumberUnsafe(3)), {

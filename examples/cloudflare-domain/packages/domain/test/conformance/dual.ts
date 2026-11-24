@@ -24,6 +24,8 @@ const ONE_WAY: ReadonlySet<string> = new Set([
   ...["effect/Effect:gen", "effect/Filter:fromPredicate", "effect/Function:dual"],
   ...["effect/HashMap:isHashMap", "effect/HashSet:isHashSet", "effect/Match:typeTags"],
   ...["effect/Sink:find", "effect/Filter:tagged"],
+  // Each is written as an overloaded function and has one way to be called.
+  ...["effect/Sink:takeWhile", "effect/Sink:takeWhileEffect"],
   // Each of these takes the latch or the semaphore first either way, and then the effect.
   ...["effect/Latch:whenOpen", "effect/Semaphore:withPermit", "effect/Semaphore:withPermits"],
   "effect/Semaphore:withPermitsIfAvailable",

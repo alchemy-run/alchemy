@@ -53,6 +53,11 @@ export interface Tools {
   readonly plainOf: (v: V | undefined) => unknown;
   readonly exitOf: (timeline: Timeline.Timeline, exit: Exit.Exit<unknown, unknown>) => Eval<V>;
   readonly sure: <A>(self: Effect.Effect<A, Held>) => Effect.Effect<A>;
+  readonly wrap: (kind: "Queue" | "PubSub", held: unknown) => V;
+  /** A cause of the code, as one the library holds. */
+  readonly realCause: (cause: V | undefined) => Cause.Cause<Held> | undefined;
+  /** What the code died with, of a defect the library holds. */
+  readonly defectOf: (defect: unknown) => V | undefined;
 }
 
 /**
@@ -829,6 +834,304 @@ export const make = (kit: Kit, base: Models, tools: Tools) => {
     }),
   });
 
+  // ---- Yet more of `Stream`.
+
+  const wrongStream = (to: Handing): Stream.Stream<never, Held> =>
+    Stream.unwrap(Effect.as(to.wrong<never>(), Stream.empty));
+  /** A function of the code, called for what it gives: an effect it gives is a value, and is not run. */
+  const straight =
+    (to: Handing, f: V | undefined) =>
+    (...args: ReadonlyArray<V>): Effect.Effect<V, Held> =>
+      f && callable(f) ? to.read(host.call(f, args, to.site)) : to.wrong();
+  const option = (value: Option.Option<V>): V =>
+    Option.isSome(value) ? Value.some(value.value) : Value.none;
+  const some = (to: Handing, v: V): Effect.Effect<readonly [V, ...Array<V>], Held> =>
+    Effect.flatMap(to.read(tools.items(to.name, v, to.site)), (all) =>
+      all.length > 0 ? Effect.succeed(all as readonly [V, ...Array<V>]) : to.wrong(),
+    );
+  /** A state and the values to give, of the pair a function of the code gives. */
+  const stepped = (to: Handing, pair: V): Effect.Effect<readonly [V, ReadonlyArray<V>], Held> =>
+    Effect.gen(function* () {
+      const [next, out] = yield* to.read(tools.items(to.name, pair, to.site));
+      const values = yield* to.read(tools.items(to.name, out, to.site));
+      return [next ?? Value.undef, values] as const;
+    });
+  const unset = (v: V | undefined): boolean => v === undefined || v._tag === "Undef";
+  const tagged = (rejection: V, tags: V | undefined): boolean => {
+    const tag = rejection._tag === "Obj" ? rejection.fields._tag : undefined;
+    const wanted = tags?._tag === "Arr" ? tags.items : tags ? [tags] : [];
+    return tag?._tag === "Str" && wanted.some((w) => w._tag === "Str" && w.value === tag.value);
+  };
+  /** An effect of a stream that makes what lives in a scope. */
+  const scoped_ = (
+    name: string,
+    body: (
+      to: Handing,
+      self: Real,
+      rest: ReadonlyArray<V>,
+    ) => Effect.Effect<V, unknown, Scope.Scope>,
+  ): Model =>
+    dualBy(name, isFlow, ([self, ...rest], site) =>
+      isFlow(self)
+        ? Effect.succeed<V>({
+            _tag: "Effect",
+            run: Effect.gen(function* () {
+              const timeline = yield* Timeline.current(site, `calls ${name}`);
+              const scope = yield* Effect.serviceOption(Scope.Scope);
+              if (Option.isNone(scope))
+                return yield* Value.notTranslated(site, `calls ${name} outside Effect.scoped`);
+              return yield* Timeline.back(
+                timeline,
+                Effect.provideService(
+                  body(handing(timeline, name, site), real(timeline, self), rest),
+                  Scope.Scope,
+                  scope.value,
+                ),
+                same,
+              );
+            }),
+          })
+        : wrongArguments(site, name),
+    );
+
+  const interleaveWith = lift2("Stream.interleaveWith", (to, self, that, [decider]) =>
+    Stream.interleaveWith(
+      self,
+      that,
+      Stream.mapEffect(to.sub(decider), (v) => to.read(host.decide(v, to.site))),
+    ),
+  );
+
+  Object.assign(models, {
+    "effect/Stream:zipLeft": lift2("Stream.zipLeft", (_, self, that) => Stream.zipLeft(self, that)),
+    "effect/Stream:zipRight": lift2("Stream.zipRight", (_, self, that) =>
+      Stream.zipRight(self, that),
+    ),
+    "effect/Stream:zipFlatten": lift2("Stream.zipFlatten", (to, self, that) =>
+      Stream.mapEffect(Stream.zip(self, that), ([left, right]) =>
+        Effect.map(to.read(tools.items(to.name, left, to.site)), (all): V => arr([...all, right])),
+      ),
+    ),
+    "effect/Stream:zipWithNext": lift("Stream.zipWithNext", (_, self) =>
+      Stream.map(Stream.zipWithNext(self), ([item, next]): V => arr([item, option(next)])),
+    ),
+    "effect/Stream:zipWithPrevious": lift("Stream.zipWithPrevious", (_, self) =>
+      Stream.map(Stream.zipWithPrevious(self), ([before, item]): V => arr([option(before), item])),
+    ),
+    "effect/Stream:zipWithPreviousAndNext": lift("Stream.zipWithPreviousAndNext", (_, self) =>
+      Stream.map(Stream.zipWithPreviousAndNext(self), ([before, item, next]): V =>
+        arr([option(before), item, option(next)]),
+      ),
+    ),
+    "effect/Stream:zipLatestWith": lift2("Stream.zipLatestWith", (to, self, that, [f]) =>
+      Stream.mapEffect(Stream.zipLatest(self, that), ([left, right]) =>
+        straight(to, f)(left, right),
+      ),
+    ),
+    "effect/Stream:zipLatestAll": source("Stream.zipLatestAll", (to, args) =>
+      Stream.map(Stream.zipLatestAll(...args.map(to.sub)), (all): V => arr(all)),
+    ),
+    "effect/Stream:raceAll": source("Stream.raceAll", (to, args) =>
+      Stream.raceAll(...args.map(to.sub)),
+    ),
+    // Three streams: the first is the one `pipe` gives when there are two.
+    "effect/Stream:interleaveWith": (args: ReadonlyArray<V>, site: Site) =>
+      args.length === 2
+        ? Effect.succeed(
+            native("Stream.interleaveWith", ([self], at) =>
+              interleaveWith([self ?? Value.undef, ...args], at),
+            ),
+          )
+        : interleaveWith(args, site),
+    "effect/Stream:when": lift("Stream.when", (to, self, [test]) =>
+      Stream.when(
+        self,
+        Effect.flatMap(to.eff(test), (v) => to.read(host.decide(v, to.site))),
+      ),
+    ),
+    "effect/Stream:failCause": source("Stream.failCause", (to, [cause]) => {
+      const held = tools.realCause(cause);
+      return held ? Stream.failCause(held) : wrongStream(to);
+    }),
+    "effect/Stream:failCauseSync": source("Stream.failCauseSync", (to, [f]) =>
+      Stream.unwrap(
+        Effect.map(straight(to, f)(), (cause) => {
+          const held = tools.realCause(cause);
+          return held ? Stream.failCause(held) : wrongStream(to);
+        }),
+      ),
+    ),
+    "effect/Stream:catchDefect": lift("Stream.catchDefect", (to, self, [f]) =>
+      Stream.catchDefect(self, (defect): Stream.Stream<V, unknown> => {
+        const held = tools.defectOf(defect);
+        return held ? to.inner(f)(held) : Stream.die(defect);
+      }),
+    ),
+    "effect/Stream:tapDefect": lift("Stream.tapDefect", (to, self, [f]) =>
+      Stream.tapDefect(self, (defect) => {
+        const held = tools.defectOf(defect);
+        return held ? to.fn(f)(held) : Effect.succeed(Value.undef);
+      }),
+    ),
+    "effect/Stream:tapErrorTag": lift("Stream.tapErrorTag", (to, self, [tags, f]) =>
+      Stream.tapError(
+        self,
+        failed((rejection) =>
+          tagged(rejection, tags) ? to.fn(f)(rejection) : Effect.succeed(Value.undef),
+        ),
+      ),
+    ),
+    "effect/Stream:mapArray": lift("Stream.mapArray", (to, self, [f]) =>
+      Stream.mapArrayEffect(self, (chunk, index) =>
+        Effect.flatMap(straight(to, f)(arr(chunk), Value.num(index)), (out) => some(to, out)),
+      ),
+    ),
+    "effect/Stream:mapArrayEffect": lift("Stream.mapArrayEffect", (to, self, [f]) =>
+      Stream.mapArrayEffect(self, (chunk, index) =>
+        Effect.flatMap(to.fn(f)(arr(chunk), Value.num(index)), (out) => some(to, out)),
+      ),
+    ),
+    "effect/Stream:mapAccumArray": lift("Stream.mapAccumArray", (to, self, [initial, f, given]) =>
+      unset(given)
+        ? Stream.unwrap(
+            Effect.map(straight(to, initial)(), (first) =>
+              Stream.mapAccumArrayEffect(
+                self,
+                () => first,
+                (state: V, chunk) =>
+                  Effect.flatMap(straight(to, f)(state, arr(chunk)), (pair) => stepped(to, pair)),
+              ),
+            ),
+          )
+        : wrongStream(to),
+    ),
+    "effect/Stream:mapAccumArrayEffect": lift(
+      "Stream.mapAccumArrayEffect",
+      (to, self, [initial, f, given]) =>
+        unset(given)
+          ? Stream.unwrap(
+              Effect.map(straight(to, initial)(), (first) =>
+                Stream.mapAccumArrayEffect(
+                  self,
+                  () => first,
+                  (state: V, chunk) =>
+                    Effect.flatMap(to.fn(f)(state, arr(chunk)), (pair) => stepped(to, pair)),
+                ),
+              ),
+            )
+          : wrongStream(to),
+    ),
+    "effect/Stream:bufferArray": lift("Stream.bufferArray", (to, self, [given]) => {
+      const options = readOptions<never>(given);
+      return options ? Stream.bufferArray(self, options) : wrongStream(to);
+    }),
+    "effect/Stream:changesWithEffect": lift("Stream.changesWithEffect", (to, self, [f]) =>
+      Stream.changesWithEffect(self, (x, y) => to.test(f)(x, y)),
+    ),
+    "effect/Stream:drainFork": lift2("Stream.drainFork", (_, self, that) =>
+      Stream.drainFork(self, that),
+    ),
+    "effect/Stream:mergeResult": lift2("Stream.mergeResult", (_, self, that) =>
+      Stream.map(Stream.mergeResult(self, that), (result) =>
+        Result.isSuccess(result) ? Brands.success(result.success) : Brands.failure(result.failure),
+      ),
+    ),
+    "effect/Stream:scoped": lift("Stream.scoped", (_, self) => Stream.scoped(self)),
+    "effect/Stream:slidingSize": on("Stream.slidingSize", (timeline, self, [n, step], site) =>
+      Effect.flatMap(tools.count("Stream.slidingSize", n, site), (size) =>
+        Effect.map(tools.count("Stream.slidingSize", step, site), (by) =>
+          flow(timeline, Stream.slidingSize(self, size, by), site, (window): V => arr([...window])),
+        ),
+      ),
+    ),
+    "effect/Stream:accumulate": lift("Stream.accumulate", (_, self) =>
+      Stream.map(Stream.accumulate(self), (all): V => arr([...all])),
+    ),
+    "effect/Stream:collect": lift("Stream.collect", (_, self) =>
+      Stream.map(Stream.collect(self), (all): V => arr([...all])),
+    ),
+    "effect/Stream:bindEffect": lift("Stream.bindEffect", (to, self, [name, f, given]) =>
+      name?._tag === "Str"
+        ? Stream.mapEffect(
+            self,
+            (item) =>
+              Effect.flatMap(to.fn(f)(item), (value) =>
+                item._tag === "Obj" && !item.brand
+                  ? Effect.succeed<V>(Value.obj({ ...item.fields, [name.value]: value }))
+                  : to.wrong<V>(),
+              ),
+            readOptions(given),
+          )
+        : wrongStream(to),
+    ),
+    "effect/Stream:throttleEffect": on("Stream.throttleEffect", (timeline, self, [given], site) => {
+      const fields = given?._tag === "Obj" && !given.brand ? given.fields : undefined;
+      const cost = fields?.cost;
+      if (!fields || !cost || !callable(cost)) return wrongArguments(site, "Stream.throttleEffect");
+      const to = handing(timeline, "Stream.throttleEffect", site);
+      return Effect.gen(function* () {
+        const units = yield* tools.count("Stream.throttleEffect", fields.units, site);
+        const duration = yield* tools.written("Stream.throttleEffect", fields.duration, site);
+        const burst = unset(fields.burst)
+          ? undefined
+          : yield* tools.count("Stream.throttleEffect", fields.burst, site);
+        const strategy = fields.strategy?._tag === "Str" ? fields.strategy.value : undefined;
+        if (strategy !== undefined && strategy !== "enforce" && strategy !== "shape")
+          return yield* wrongArguments(site, "Stream.throttleEffect");
+        return flow(
+          timeline,
+          Stream.throttleEffect(self, {
+            cost: (chunk) =>
+              Effect.flatMap(to.fn(cost)(arr(chunk)), (v) =>
+                v._tag === "Num"
+                  ? Effect.succeed(v.value)
+                  : to.read(
+                      Value.notTranslated(
+                        site,
+                        "gives Stream.throttleEffect a cost that an input decides",
+                      ),
+                    ),
+              ),
+            units,
+            duration,
+            burst,
+            strategy,
+          }),
+          site,
+          same,
+        );
+      });
+    }),
+    "effect/Stream:runIntoPubSub": ran_("Stream.runIntoPubSub", (to, self, [pubsub, given]) => {
+      const held = tools.heldOf<PubSub.PubSub<V>>("PubSub", pubsub);
+      return held
+        ? Effect.as(Stream.runIntoPubSub(self, held, readOptions(given)), Value.undef)
+        : to.wrong<V>();
+    }),
+    "effect/Stream:toQueue": scoped_("Stream.toQueue", (to, self, [given]) => {
+      const options = readOptions<never>(given);
+      return options
+        ? Effect.map(Stream.toQueue(self, options), (queue) => tools.wrap("Queue", queue))
+        : to.wrong<V>();
+    }),
+    "effect/Stream:toPubSub": scoped_("Stream.toPubSub", (to, self, [given]) => {
+      const options = readOptions<never>(given);
+      return options
+        ? Effect.map(Stream.toPubSub(self, options), (pubsub) => tools.wrap("PubSub", pubsub))
+        : to.wrong<V>();
+    }),
+    "effect/Stream:broadcastN": scoped_("Stream.broadcastN", (to, self, [given]) => {
+      const options = readOptions<never>(given);
+      return options
+        ? Effect.map(
+            Stream.broadcastN(self, options),
+            (all: ReadonlyArray<Stream.Stream<V, unknown>>): V =>
+              arr(all.map((each) => flow(to.timeline, each, to.site, same))),
+          )
+        : to.wrong<V>();
+    }),
+  });
+
   /** A stream many may read, made in a scope: `Stream.broadcast` and `Stream.share`. */
   const shared = (
     name: string,
@@ -875,5 +1178,10 @@ export const make = (kit: Kit, base: Models, tools: Tools) => {
       ),
   };
 
-  return { models, sited, real, flow };
+  const lifts = { handing, lift, ran_, scoped_, straight, failed, some, flow };
+  return { models, sited, real, flow, lifts };
 };
+
+/** What the models of streams are written with, for the models of what streams are run into. */
+export type Lifts = ReturnType<typeof make>["lifts"];
+export type Handing = ReturnType<Lifts["handing"]>;

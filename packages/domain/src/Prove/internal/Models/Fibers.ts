@@ -5118,8 +5118,102 @@ export const make = (
         : wrongArguments(site, "Effect.callback"),
   };
 
+  // ---- The last few of Fiber, Queue, PubSub, Deferred, Scope, Cache and Pool.
+
+  const id = (v: V | undefined): number | undefined => (v?._tag === "Num" ? v.value : undefined);
+  const lastFew: Models = {
+    "effect/Fiber:isFiber": ([value]) =>
+      Effect.succeed(bool(heldOf<F>("Fiber", value) !== undefined)),
+    "effect/Fiber:awaitAll": (args, site) =>
+      Effect.map(fibersOf("Fiber.awaitAll", args[0], site), (held) =>
+        timed(
+          "Fiber.awaitAll",
+          (timeline) =>
+            Effect.flatMap(
+              Timeline.waiting(timeline, FIBER_WAIT, site, Fiber.awaitAll(held)),
+              (exits) =>
+                Effect.map(
+                  Effect.forEach(exits, (exit) => exitOf(timeline, exit)),
+                  list,
+                ),
+            ),
+          site,
+        ),
+      ),
+    "effect/Fiber:interruptAs": on<F, void>(
+      "Fiber",
+      "interruptAs",
+      2,
+      (held, [by]) => Fiber.interruptAs(held, id(by)),
+      none,
+    ),
+    "effect/Fiber:interruptAllAs": dual("Fiber.interruptAllAs", 2, ([fibers_, by], site) =>
+      Effect.map(fibersOf("Fiber.interruptAllAs", fibers_, site), (held) =>
+        given("Fiber.interruptAllAs", Fiber.interruptAllAs(held, id(by) ?? 0), none, site),
+      ),
+    ),
+    // The fiber is interrupted when the scope closes: it is the fiber it was.
+    "effect/Fiber:runIn": dual("Fiber.runIn", 2, ([self, scope], site) => {
+      const fiber = heldOf<F>("Fiber", self);
+      const held = heldOf<Scope.Scope>("Scope", scope);
+      return self && fiber && held
+        ? Effect.sync(() => {
+            Fiber.runIn(fiber, held);
+            return self;
+          })
+        : wrongArguments(site, "Fiber.runIn");
+    }),
+    "effect/Queue:await": on<Q, void>(
+      "Queue",
+      "await",
+      1,
+      (held) => Queue.await(held),
+      none,
+      "waits for a Queue that nothing ends",
+    ),
+    "effect/Queue:failCauseUnsafe": dual("Queue.failCauseUnsafe", 2, ([self, cause], site) => {
+      const held = heldOf<Q>("Queue", self);
+      const real = realCause(cause);
+      return held && real
+        ? Effect.sync(() => bool(Queue.failCauseUnsafe(held, real)))
+        : wrongArguments(site, "Queue.failCauseUnsafe");
+    }),
+    "effect/Deferred:interruptWith": on<D, boolean>(
+      "Deferred",
+      "interruptWith",
+      2,
+      (held, [by]) => Deferred.interruptWith(held, id(by) ?? 0),
+      bool,
+    ),
+    "effect/Scope:makeUnsafe": ([given_]) =>
+      Effect.sync(() => wrap("Scope", Scope.makeUnsafe(strategy(given_)))),
+    "effect/Scope:forkUnsafe": ([scope, given_], site) => {
+      const held = heldOf<Scope.Scope>("Scope", scope);
+      return held
+        ? Effect.sync(() => wrap("Scope", Scope.forkUnsafe(held, strategy(given_))))
+        : wrongArguments(site, "Scope.forkUnsafe");
+    },
+    "effect/Cache:getSuccess": byKey<C, Option.Option<V>>(
+      "Cache",
+      "getSuccess",
+      2,
+      (held, key) => Effect.succeed(Cache.getSuccess(held, key)),
+      option,
+    ),
+    "effect/Cache:values": on<C, Iterable<V>>(
+      "Cache",
+      "values",
+      1,
+      (held) => Cache.values(held),
+      (all) => arr([...all]),
+    ),
+    "effect/Pool:isPool": ([value]) =>
+      Effect.succeed(bool(heldOf<PL>("Pool", value) !== undefined)),
+  };
+
   const models: Models = {
     ...yetMore,
+    ...lastFew,
     ...turns,
     ...rest,
     ...more,
@@ -5161,6 +5255,8 @@ export const make = (
     exitOf,
     outputOf,
     sure,
+    realCause,
+    defectOf: (defect: unknown): V | undefined => (isOurDefect(defect) ? defect.defect : undefined),
     plainOf: (v: V | undefined): unknown => {
       const read = plainOf(v);
       return read === NOT_PLAIN ? undefined : read;

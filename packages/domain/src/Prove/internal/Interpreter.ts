@@ -1691,6 +1691,7 @@ export const make = (given: Loader, run: Run): Interpreter => {
         if (got) return yield* call(bound(got.fn, value, got.cls), [], site);
         const method = methodOf(value, key, "method", true);
         if (method) return bound(method.fn, value, method.cls);
+        if (key === "pipe" && library.piped(value)) return piping(value);
         return yield* fail(site, `reads .${key} of a function`);
       }
       case "List":

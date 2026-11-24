@@ -45,6 +45,7 @@ import * as Numbers from "./Models/Numbers.ts";
 import * as Rationals from "./Models/Rationals.ts";
 import * as Results from "./Models/Results.ts";
 import * as Schemas from "./Models/Schemas.ts";
+import * as Sinks from "./Models/Sinks.ts";
 import * as Streams from "./Models/Streams.ts";
 import * as Strings from "./Models/Strings.ts";
 import type { Term } from "./Smt.ts";
@@ -1882,6 +1883,11 @@ export const make = (host: Host) => {
   const channels = Channels.make(kit, { ...fibers.tools, real: flows.real, flow: flows.flow });
   Object.assign(written, channels.models);
   Object.assign(clocks, channels.sited);
+  const sinks = Sinks.make(kit, { ...written }, streams.values, fibers.tools, {
+    ...flows.lifts,
+    read: streams.isSink,
+  });
+  Object.assign(written, sinks.models);
 
   // A `Chunk` and an `Iterable` are read as the array of their items: the
   // functions the three modules share do the same to one.
@@ -1948,6 +1954,7 @@ export const make = (host: Host) => {
     ...decimals.values,
     ...rationals.values,
     ...streams.values,
+    ...sinks.values,
     ...folds.constants,
     "effect/Layer:empty": layerOf(() => Effect.succeed([])),
     "effect/Console:clear": done,
@@ -2111,6 +2118,8 @@ export const make = (host: Host) => {
     /** A member of a latch or a semaphore: `latch.open`, `semaphore.withPermits`. */
     waitMember: (value: V, key: string, site: Site): V | undefined =>
       fibers.member(value, key, site) ?? folds.member(value, key),
+    /** A sink: `Sink.count.pipe(Sink.map(f))` gives it to each function in turn. */
+    piped: sinks.isSink,
     /** An instance of a class of the library that a file exports, other than one of `effect/Data`'s. */
     constructHost: fibers.constructs,
     /** A helper of a tagged union of `effect/Schema`, as a value the code calls. */

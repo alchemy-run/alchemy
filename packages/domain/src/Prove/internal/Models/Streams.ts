@@ -60,7 +60,13 @@ const rejected = (rejection: V, defect = false) =>
  * runs, and no others. A stream of time, of a queue or of several fibers is
  * not read.
  */
-export const make = (kit: Kit): { readonly models: Models; readonly values: Record<string, V> } => {
+export const make = (
+  kit: Kit,
+): {
+  readonly models: Models;
+  readonly values: Record<string, V>;
+  readonly isSink: (v: V) => boolean;
+} => {
   const { host, ran } = kit;
 
   /** How many items a stream takes or drops: a count the code writes, or a small one an input decides. */
@@ -1396,5 +1402,10 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
     ),
   };
 
-  return { models: { ...models, ...sinkModels } as Models, values };
+  return {
+    models: { ...models, ...sinkModels } as Models,
+    values,
+    /** A sink the prover reads itself. */
+    isSink: (v: V): boolean => sinks.has(v),
+  };
 };
