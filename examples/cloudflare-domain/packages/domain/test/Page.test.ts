@@ -207,7 +207,7 @@ for (const block of run) {
 
 it("the page has blocks to run", () => {
   expect(made.length).toBeGreaterThan(15);
-  expect(byForm.length).toBeGreaterThan(10);
+  expect(byForm.length).toBeGreaterThan(5);
 });
 
 const only = process.env.PAGE_ONLY;

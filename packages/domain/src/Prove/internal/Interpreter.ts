@@ -239,6 +239,8 @@ const PURE: ReadonlySet<string> = new Set([
  * The errors the language has: `new Error("no")`. One is what it says, its
  * `message` and its `name`. A stack and a cause are not read.
  */
+/** The class each error the code made was made with: `thrown instanceof TypeError`. */
+const errorNames = new WeakMap<object, string>();
 const ERRORS: ReadonlyMap<string, V> = new Map(
   ["Error", "TypeError", "RangeError"].map((name) => [
     name,
@@ -246,7 +248,11 @@ const ERRORS: ReadonlyMap<string, V> = new Map(
       _tag: "Native",
       name,
       call: ([message]) =>
-        Effect.succeed(Value.obj({ name: Value.str(name), message: message ?? Value.str("") })),
+        Effect.sync(() => {
+          const error = Value.obj({ name: Value.str(name), message: message ?? Value.str("") });
+          errorNames.set(error, name);
+          return error;
+        }),
     } satisfies V,
   ]),
 );
@@ -2134,6 +2140,24 @@ export const make = (given: Loader, run: Run): Interpreter => {
         return (node.operator === "&&") === truthy ? yield* evaluate(node.right, env) : kept;
       }
       case "UnaryExpression": {
+        if (node.operator === "delete") {
+          const target: Node = node.argument;
+          if (target.type !== "MemberExpression" || target.optional)
+            return yield* fail(site, "deletes something that is not a property");
+          const object = yield* evaluate(target.object, env);
+          const key = target.computed
+            ? yield* evaluate(target.property, env)
+            : Value.str(target.property.name);
+          if (object._tag !== "Obj" || object.brand || (key._tag !== "Str" && key._tag !== "Num"))
+            return yield* fail(site, "deletes a property of a value the prover cannot see into");
+          if (!mine(object))
+            return yield* reaches(
+              site,
+              "changes a value it was given: the prover reads code that changes only what it wrote itself",
+            );
+          delete (object.fields as Record<string, V>)[String(key.value)];
+          return Value.bool(true);
+        }
         const argument = yield* evaluate(node.argument, env);
         if (node.operator === "!") {
           const t = yield* truthOf(argument, site);
@@ -2213,7 +2237,51 @@ export const make = (given: Loader, run: Run): Interpreter => {
             Object.hasOwn((forced(right) as typeof right).fields, String(left.value)),
           );
         }
+        if (node.operator === "instanceof") {
+          const value = forced(left);
+          if (value._tag === "Opaque" || value._tag === "Applied" || value._tag === "Pending")
+            return yield* fail(
+              site,
+              inside("uses instanceof on", value) ?? "uses instanceof on a value it cannot see",
+            );
+          // An array of the language, whatever name the file gives `Array`.
+          if (right._tag === "Lib" && right.module === "Array" && right.path.length === 0)
+            return Value.bool(value._tag === "Arr");
+          if (right._tag === "Native" && ERROR_CLASSES.has(right)) {
+            const named = value._tag === "Obj" ? errorNames.get(value) : undefined;
+            return Value.bool(
+              named !== undefined && (right.name === "Error" || right.name === named),
+            );
+          }
+          if (right._tag === "Host" && typeof right.value === "function") {
+            const cls: unknown =
+              value._tag === "Obj" && value.brand && "cls" in value.brand
+                ? value.brand.cls
+                : undefined;
+            return Value.bool(
+              typeof cls === "function" &&
+                (cls === right.value ||
+                  Object.prototype.isPrototypeOf.call(right.value.prototype, cls.prototype)),
+            );
+          }
+          return yield* fail(site, "uses instanceof with a class the prover cannot see");
+        }
         return yield* fail(site, `uses ${node.operator}, which the prover does not translate`);
+      }
+      case "TaggedTemplateExpression": {
+        // The function is given the text between the values, and then each value.
+        const tag = yield* evaluate(node.tag, env);
+        const quasi: Node = node.quasi;
+        const texts: V = made<V>({
+          _tag: "Arr",
+          items: (quasi.quasis as ReadonlyArray<Node>).map((each) =>
+            Value.str(each.value.cooked ?? ""),
+          ),
+        });
+        const values: Array<V> = [];
+        for (const each of quasi.expressions as ReadonlyArray<Node>)
+          values.push(yield* evaluate(each, env));
+        return yield* call(tag, [texts, ...values], site);
       }
       case "ObjectExpression": {
         const fields: Record<string, V> = {};

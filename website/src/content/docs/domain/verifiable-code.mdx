@@ -137,6 +137,9 @@ total &= a; // the bits of a number an input holds: and |=, ^=, <<=, >>=, >>>=
 `${text}:${a}:${flag}:${null}`; // each value written as JavaScript writes it
 "n" + a;
 
+new Error("no") instanceof Error; // and a class of effect/Data, and the language's own Array
+tag`x${a}`; // a tagged template: the function is given the text and then each value
+delete made.n; // of an object the code made
 items[a]; // a place an input decides: one of the places the list has, or undefined
 a.toString(); // as a template writes it
 a ** 2; // a power the code writes
@@ -218,10 +221,8 @@ identity<number>(a);
 2 ** a; // a power an input decides
 a & b; // the bits of a number an input holds: and |, ^, ~, <<, >>, >>>
 a == "1"; // == and != between two kinds of value: write === and !==
-items instanceof Array;
+a instanceof Local; // a class the prover cannot see: one a function declares
 /a+/.test(text); // regular expressions
-tag`x${a}`; // tagged templates
-delete made.n;
 this;
 ({ get n() { return a; } }); // a getter or a setter
 import.meta.url;
@@ -1444,6 +1445,7 @@ JSON.parse('{"n":1,"list":[true,null,"x"]}');
 structuredClone(made); // a copy the code may change
 Symbol("s"); // equal only to itself
 globalThis.String(a);
+[a] instanceof Array;
 Infinity;
 NaN;
 ```

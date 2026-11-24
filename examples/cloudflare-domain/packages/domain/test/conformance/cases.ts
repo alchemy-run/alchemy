@@ -1917,6 +1917,12 @@ const syntax: ReadonlyArray<Group> = [
     both: [
       // Powers, loose equality between two of a kind, the comma, and helpers of arrays and objects.
       `a ** 2`,
+      // delete, instanceof and a tagged template.
+      `(() => { const made = { n: a, m: b }; const gone = delete made.n; delete made["m"]; return [made, gone]; })()`,
+      `(() => { try { throw new TypeError("no"); } catch (thrown) { return [thrown instanceof TypeError, thrown instanceof Error, thrown instanceof RangeError, ({}) instanceof Error]; } })()`,
+      `[new Point({ x: a, y: b }) instanceof Point, new Circle({ radius: a }) instanceof Point, new Odd({ n: a }) instanceof Odd, a instanceof Point]`,
+      `((parts, first, second) => parts.join("|") + first + second)\`x\${a}y\${b}z\``,
+      `((parts) => parts.length)\`plain\``,
       // A place an input decides, and a number as text.
       `[10, 20, 30][a]`,
       `[[10, b, 30][a], [10, 20].at(a), [10, 20].at(b)]`,
@@ -2071,7 +2077,7 @@ const syntax: ReadonlyArray<Group> = [
       [`a << 1`, /applies << to a number an input holds/],
       [`a >> 1`, reported],
       [`a >>> 1`, reported],
-      [`[a] instanceof Array`, reported],
+      [`a instanceof Small`, /uses instanceof with a class the prover cannot see/],
       [`/a+/.test("aa" + a)`, reported],
       [`new Date(a).getTime()`, reported],
       [`Math.random() + a`, reported],
@@ -2079,9 +2085,7 @@ const syntax: ReadonlyArray<Group> = [
       [`class { n = a }`, reported],
       [`new (class { n = a })().n`, reported],
       [`(function () { return this; })()`, reported],
-      [`((strings) => strings.length)\`x\${a}\``, reported],
       [`(async () => a)()`, reported],
-      [`delete ({ a }).a`, reported],
       [`globalThis.a`, reported],
       [`parseInt("1" + a)`, reported],
       [`JSON.stringify({ a })`, reported],
@@ -2244,7 +2248,6 @@ const syntax: ReadonlyArray<Group> = [
       [body(`items[0] = 1; return items.length;`), reported],
       [body(`items.sort(); return items.length;`), reported],
       [body(`items.reverse(); return items.length;`), reported],
-      [body(`const made = { n: a }; delete made.n; return made;`), reported],
       [`(async () => { for await (const n of items) {} return a; })()`, reported],
       [body(`let x = a; x &= 3; return x;`), /applies & to a number an input holds/],
       [body(`let x = a; x <<= 1; return x;`), reported],
@@ -3252,6 +3255,8 @@ const rest: ReadonlyArray<Group> = [
       `[Number.MAX_SAFE_INTEGER, Number.MIN_SAFE_INTEGER]`,
       `[parseInt("42px"), parseInt("ff", 16), parseFloat("1.5e2"), Number.parseInt("7"), Number.parseFloat("2.5")]`,
       `[Array.isArray([a]), Array.isArray(a), Array.isArray("s")]`,
+      `[[a] instanceof Array, a instanceof Array, "s" instanceof Array]`,
+      `[Infinity === Infinity, NaN === NaN, typeof Infinity, Number.isFinite(Infinity), Number.isNaN(NaN)]`,
       `Array.of(a, b, 3)`,
       `Array.from([a, b])`,
       `Array.from([a, b], (n, index) => n + index)`,
