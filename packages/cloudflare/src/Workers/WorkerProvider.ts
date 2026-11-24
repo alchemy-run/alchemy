@@ -1638,24 +1638,38 @@ export const LiveWorkerProvider = () =>
         /** user-provided `version.alias` attached to the uploaded version */
         uploadedVersionAlias?: string;
       }) {
-        const { workersDev, scriptName } = params;
         const urls = yield* computeStableWorkerUrls(params);
-        if (workersDev.previewsEnabled) {
-          const { accountId } = yield* yield* CloudflareEnvironment;
-          const accountSubdomain = yield* getAccountSubdomain(accountId);
-          if (params.uploadedVersionId !== undefined) {
-            if (params.uploadedVersionAlias !== undefined) {
-              urls.push(
-                `https://${params.uploadedVersionAlias}-${scriptName}.${accountSubdomain}.workers.dev`,
-              );
-            }
+        return [...urls, ...(yield* computePreviewUrls(params))];
+      });
+
+      /**
+       * The preview URLs a Worker serves at (step 4 of
+       * {@link computeWorkerUrls}). `read` uses it too, so a deploy's `urls`
+       * read back unchanged and don't report drift.
+       */
+      const computePreviewUrls = Effect.fn(function* (params: {
+        scriptName: string;
+        workersDev: Pick<ResolvedWorkersDev, "enabled" | "previewsEnabled">;
+        uploadedVersionId?: string;
+        uploadedVersionAlias?: string;
+      }) {
+        const { workersDev, scriptName } = params;
+        if (!workersDev.previewsEnabled) return [];
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const accountSubdomain = yield* getAccountSubdomain(accountId);
+        const urls: string[] = [];
+        if (params.uploadedVersionId !== undefined) {
+          if (params.uploadedVersionAlias !== undefined) {
             urls.push(
-              `https://${params.uploadedVersionId.split("-")[0]}-${scriptName}.${accountSubdomain}.workers.dev`,
+              `https://${params.uploadedVersionAlias}-${scriptName}.${accountSubdomain}.workers.dev`,
             );
-          } else if (!workersDev.enabled) {
-            const previewUrl = yield* getPreviewUrl(scriptName, accountSubdomain);
-            if (previewUrl) urls.push(previewUrl);
           }
+          urls.push(
+            `https://${params.uploadedVersionId.split("-")[0]}-${scriptName}.${accountSubdomain}.workers.dev`,
+          );
+        } else if (!workersDev.enabled) {
+          const previewUrl = yield* getPreviewUrl(scriptName, accountSubdomain);
+          if (previewUrl) urls.push(previewUrl);
         }
         return urls;
       });
@@ -5440,11 +5454,20 @@ export const LiveWorkerProvider = () =>
             const drift = [...observed].filter((h) => !classified.has(h));
             const serving = [...(keptName ? [keptName] : []), ...keptAliases, ...drift];
             const observedDomain = resolveObservedWorkerDomain(serving, keptRedirects, declared);
+            // A self-rollout's version is the one its deploy uploaded, as
+            // when the deploy assembled `urls`.
+            const rollout = olds !== undefined && getSelfRolloutTraffic(olds) !== undefined;
             const urls = [
               ...serving.map((h) => `https://${h}`),
               ...(subdomain.enabled
                 ? [`https://${workerName}.${yield* getAccountSubdomain(accountId)}.workers.dev`]
                 : []),
+              ...(yield* computePreviewUrls({
+                scriptName: workerName,
+                workersDev: subdomain,
+                uploadedVersionId: rollout ? uploadedVersionId : undefined,
+                uploadedVersionAlias: rollout ? olds?.version?.alias : undefined,
+              })),
             ];
             const crons = observeCrons ? yield* getWorkerCrons(workerName) : [];
             yield* Effect.logInfo(`Cloudflare Worker read: found ${workerName}`);

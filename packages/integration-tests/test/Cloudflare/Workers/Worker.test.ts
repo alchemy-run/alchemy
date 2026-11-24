@@ -1672,6 +1672,12 @@ export default { fetch() { return new Response("adopted"); } };
           expect(worker.urls).toEqual([worker.url]);
           expect(worker.domain).toBeUndefined();
 
+          // #3720: `read` must reproduce the preview URL, or a previews-only
+          // Worker compares unequal to state on every drift check.
+          const detected = yield* Drift.detect(stack).pipe(Effect.provide(stack.state));
+          expect(detected.resources.PreviewOnlyWorker?.action).toBe("unchanged");
+          expect(detected.resources.PreviewOnlyWorker?.attr.urls).toEqual(worker.urls);
+
           yield* stack.destroy();
           yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
         }).pipe(logLevel),
