@@ -10,6 +10,9 @@ export const DEFAULT_COMPATIBILITY_DATE = "2026-11-17";
 
 export const NODEJS_COMPAT_DEFAULT_ON = "2026-08-04";
 
+/** workerd turns the new module registry on by default from this date, and refuses the flag from then on. */
+export const NEW_MODULE_REGISTRY_DEFAULT_ON = "2026-11-17";
+
 /** Apply language and runtime defaults while preserving explicit opt-outs. */
 export const withDefaultFlags = (
   flags: Array<string> | undefined,
@@ -35,7 +38,7 @@ export const withDefaultFlags = (
   if (python) {
     defaults.add("python_workers");
   } else {
-    if (!defaults.has("legacy_module_registry")) {
+    if (!defaults.has("legacy_module_registry") && date < NEW_MODULE_REGISTRY_DEFAULT_ON) {
       defaults.add("new_module_registry");
     }
     // Older external workers must not select Node's legacy v1 mode.

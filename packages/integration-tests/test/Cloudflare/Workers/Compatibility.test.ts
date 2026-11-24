@@ -64,8 +64,21 @@ describe(
 
     test("defaults both Effect and external workers to the new module registry", () => {
       for (const isExternal of [false, true]) {
-        const { flags } = getCompatibility({ isExternal } as WorkerProps);
+        const { flags } = getCompatibility({
+          isExternal,
+          compatibility: { date: "2026-11-16" },
+        } as WorkerProps);
         expect(flags).toContain("new_module_registry");
+      }
+    });
+
+    // workerd turns the new module registry on by date from 2026-11-17, and
+    // refuses a flag that is already a default.
+    test("leaves the new module registry to the date from 2026-11-17", () => {
+      for (const isExternal of [false, true]) {
+        const { date, flags } = getCompatibility({ isExternal } as WorkerProps);
+        expect(date).toBe("2026-11-17");
+        expect(flags).not.toContain("new_module_registry");
       }
     });
 
