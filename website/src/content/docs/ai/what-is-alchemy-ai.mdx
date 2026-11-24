@@ -151,8 +151,6 @@ export const AnsweringLive = Answering.toLayer({
 `;
 ```
 
-`Answering` is what other systems call a **skill**: instructions an agent reads when it needs them. Here a skill is a process like any other. There is no second concept and no separate file format.
-
 ```typescript title="src/Triage.process.ts"
 export const TriageLive = Triage.toLayer({
   description: "Answer one issue and say what kind of issue it is.",
@@ -163,7 +161,17 @@ export const TriageLive = Triage.toLayer({
 
 `Triage` mentions the name `Answering`, not its prose, so `AnsweringLive` can change without `Triage` knowing.
 
-Starting a process instead is what other systems call a subagent. Both are a process, and the prose says which to do: follow it or start it. Processes that mention each other are how you model a team or an organization.
+Other systems have two concepts here: a **skill**, instructions read into the current conversation, and a **subagent**, a separate conversation with its own instructions. Here there is one. `Answering` is a process, and it is not a skill or a subagent by nature. The prose that mentions it says which to do:
+
+```typescript
+`Follow ${Answering}, then post your answer with ${PostAnswer}.`
+```
+
+```typescript
+`Start ${Answering} to draft the answer, then post it with ${PostAnswer}.`
+```
+
+The first reads `Answering` into the same conversation. The second runs it as a session of its own. Processes that mention each other are how you model a team or an organization.
 
 See [Processes that use processes](/ai/process-graphs).
 
