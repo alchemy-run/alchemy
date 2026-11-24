@@ -176,6 +176,7 @@ new Set([a, b]).size;
 a ** 2; // a power the code writes
 (a, b); // the comma: both are run, and the last is what it gives
 a == b; // == and != between two values of one kind, as === and !==
+1 == "1"; // and between two values the code writes, of whatever kinds
 
 // Whole numbers
 a + b;
@@ -251,7 +252,7 @@ identity<number>(a);
 ```typescript title="Not supported"
 2 ** a; // a power an input decides
 a & b; // the bits of a number an input holds: and |, ^, ~, <<, >>, >>>
-a == "1"; // == and != between two kinds of value: write === and !==
+a == "1"; // == and != between two kinds of value, one an input holds: write === and !==
 a instanceof Small; // something that is not a class
 /a+/.test("aa" + a); // a regular expression on text an input decides
 import.meta.url;
@@ -359,6 +360,7 @@ text.length;
 text[0]; // the letter at a place, or undefined past the end
 text.charCodeAt(0);
 text.repeat(2); // a number of times the code writes
+text.padStart(3, "-"); // to a width the code writes: and padEnd
 
 text.startsWith(other);
 text.endsWith("z");
@@ -398,7 +400,6 @@ String.startsWith("ab")(text); // effect/String has the same as functions
 text.toUpperCase(); // changing the letters of a string an input holds
 text.toLowerCase();
 text.trim();
-text.padStart(4, "-");
 
 text.split(""); // into letters
 text.split(other); // by a separator an input holds
@@ -429,6 +430,7 @@ items.at(-1);
 [...items, a];
 items.concat([a], 7);
 items.toSorted((x, y) => x - y);
+[10, 9, 1].toSorted(); // with no function, by the text of each: 1, 10, 9
 items.lastIndexOf(a);
 [a, ...items].with(0, 1); // throws for a place the list does not have
 items.reduceRight((total, n) => total + n, 0);
@@ -473,7 +475,7 @@ items.push(1); // changing a list the handler was given: so are sort, reverse, s
 items.sort();
 items.reverse();
 
-items.toSorted(); // by the text of each item, where they are not text the code writes
+items.toSorted(); // by the text of each item, where an input holds one
 Array.from(items);
 ```
 
@@ -2917,6 +2919,7 @@ Stream.make(5, 1).pipe(
 );
 paced(4, a, b, 1).pipe(Stream.timeout(10), Stream.runCollect);
 Stream.concat(paced(1, a, b), paced(20, 1)).pipe(Stream.debounce(5), Stream.runCollect);
+Stream.make(a, b, 3).pipe(Stream.throttle({ cost: (chunk) => chunk.length, units: 1, duration: "1 second" }), Stream.runCollect); // a cost the code works out
 Stream.concat(paced(1, a, b, 1), paced(20, 2)).pipe(Stream.groupedWithin(2, 10), Stream.runCollect);
 Stream.make(a, b, 1).pipe(Stream.schedule(Schedule.spaced("1 second")), Stream.runCollect);
 Stream.make(a, b).pipe(Stream.repeat(Schedule.recurs(1)), Stream.runCollect);
@@ -3199,7 +3202,7 @@ Stream.take(stream, command.count); // a count an input decides
 Stream.tick("1 second").pipe(Stream.runCollect); // a stream of time with no end: cut it with Stream.take(3)
 Stream.never.pipe(Stream.runCollect); // a stream that gives nothing and does not end
 Stream.merge(paced(3, a), paced(3, b)).pipe(Stream.runCollect); // two items that come at the same moment
-Stream.throttle(stream, options); // a rate worked out by a function the library calls at once
+Stream.throttle(stream, { cost: (chunk) => chunk[0], units: 1, duration: 1 }); // a cost an input decides: the library asks for it at once
 ```
 
 ## Your own files

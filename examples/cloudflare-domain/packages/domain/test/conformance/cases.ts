@@ -1701,6 +1701,7 @@ const cut: ReadonlyArray<Group> = [
         : `const text = command.text; const a = command.a; const b = command.b;`,
     chunk: 4,
     both: [
+      `[text.padStart(3, "-"), text.padEnd(3), text.padStart(0, "x"), "ab".padStart(5, "xy")]`,
       // A letter by its place, its number, and text a number of times.
       `[text[0], text[1], "abc"[1], "abc"[5]]`,
       `[text.charCodeAt(0), text.charCodeAt(1), "a".charCodeAt(0)]`,
@@ -1923,6 +1924,9 @@ const syntax: ReadonlyArray<Group> = [
       `[Math.pow(a, 2), Math.pow(2, 5), Math.pow(a, 0), Math.sign(a), Math.sign(-3)]`,
       `[Math.sqrt(16), Math.cbrt(27), Math.hypot(3, 4), Math.log2(8), Math.atan2(0, 1), Math.imul(3, 4), Math.clz32(1)]`,
       `[Math.atan(0), Math.cos(0), Math.sin(0), Math.tan(0), Math.exp(0), Math.log(1), Math.log10(100), Math.fround(1.5)]`,
+      // == between two values the code writes, of whatever kinds, and items ordered by their text.
+      `[1 == "1", 0 == "", "a" == "b", true == 1, 2n == 2, null == 0]`,
+      `[[10, 9, 1].toSorted(), [true, "b", 3].toSorted()]`,
       // Powers, loose equality between two of a kind, the comma, and helpers of arrays and objects.
       `a ** 2`,
       // A getter and a setter of an object, and `this` in its methods.
@@ -2830,6 +2834,8 @@ const rest: ReadonlyArray<Group> = [
     ],
     both: [
       `Stream.tick("1 second").pipe(Stream.take(3), Stream.runCount)`,
+      `Stream.make(a, b, 3).pipe(Stream.throttle({ cost: (chunk) => chunk.length, units: 1, duration: "1 second" }), Stream.runCollect)`,
+      `Stream.runCollect(Stream.throttle(Stream.make(a, b), { cost: () => 1, units: 2, duration: 10, burst: 1, strategy: "shape" }))`,
       `Stream.tick(10).pipe(Stream.as(a), Stream.take(2), Stream.runCollect)`,
       `Stream.fromSchedule(Schedule.spaced("1 second")).pipe(Stream.take(3), Stream.runCollect)`,
       `Stream.fromSchedule(Schedule.recurs(2)).pipe(Stream.runCollect)`,

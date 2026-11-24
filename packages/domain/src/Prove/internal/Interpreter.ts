@@ -345,6 +345,15 @@ const toLabel = (kind: "break" | "continue", label: string): V => {
 };
 /** How deep one function may call another before the prover stops: one that calls itself with no end is not read. */
 const MAX_DEPTH = 500;
+/** A number, text, a boolean or a bigint the code writes. */
+const primitive = (v: V): { readonly value: number | string | boolean | bigint } | undefined =>
+  v._tag === "Num" || v._tag === "Str" || v._tag === "Bool" || v._tag === "Big"
+    ? { value: v.value }
+    : undefined;
+/** `==`, as the language has it between two values that are not objects. */
+const loosely = (a: unknown, b: unknown): boolean =>
+  // oxlint-disable-next-line eqeqeq
+  a == b;
 /** The operators of the bits of a whole number. */
 const BITS: ReadonlySet<string> = new Set(["&", "|", "^", "<<", ">>", ">>>"]);
 /** The highest power a number an input holds is raised to, as that many multiplications. */
@@ -1023,17 +1032,15 @@ export const make = (given: Loader, run: Run): Interpreter => {
     toSorted: (self, [compare], at) =>
       compare && compare._tag !== "Undef"
         ? library.call({ _tag: "Lib", module: "effect/Array", path: ["sort"] }, [self, compare], at)
-        : self.items.every((item) => item._tag === "Str")
-          ? Effect.succeed(
+        : self.items.every((item) => primitive(item) !== undefined)
+          ? // With no function, the language orders items by their text: `10` comes before `9`.
+            Effect.succeed(
               made<V>({
                 _tag: "Arr",
-                items: [...self.items].sort((a, b) =>
-                  a._tag === "Str" && b._tag === "Str" && a.value !== b.value
-                    ? a.value < b.value
-                      ? -1
-                      : 1
-                    : 0,
-                ),
+                items: [...self.items].sort((a, b) => {
+                  const [x, y] = [String(primitive(a)?.value), String(primitive(b)?.value)];
+                  return x === y ? 0 : x < y ? -1 : 1;
+                }),
               }),
             )
           : fail(at, "sorts items by their text, which the prover does not translate"),
@@ -2934,6 +2941,9 @@ export const make = (given: Loader, run: Run): Interpreter => {
             return fromTruth(
               node.operator === "==" ? equal : typeof equal === "boolean" ? !equal : Smt.not(equal),
             );
+          // Two values the code writes: the language's own `==`, whatever it turns into what.
+          const [l, r] = [primitive(left), primitive(right)];
+          if (l && r) return Value.bool(loosely(l.value, r.value) === (node.operator === "=="));
           if (!nothing(left) && !nothing(right))
             return yield* fail(site, `uses ${node.operator}, where the prover reads ===`);
           const other = nothing(left) ? right : left;

@@ -108,6 +108,25 @@ export const make = (kit: Kit, base: Models, tools: Tools) => {
 
   const same = (value: V): V => value;
 
+  /**
+   * A function of the code the library calls at once, for a number: it is
+   * run where it stands. One that an input decides cannot be, and stops the
+   * prover.
+   */
+  const atOnce =
+    (timeline: Timeline.Timeline, fn: V, site: Site) =>
+    (chunk: ReadonlyArray<V>): number => {
+      const exit = Effect.runSyncExit(
+        Effect.provideService(host.call(fn, [arr(chunk)], site), Timeline.Current, timeline),
+      );
+      if (exit._tag === "Success" && exit.value._tag === "Num") return exit.value.value;
+      timeline.fatal ??= Value.notTranslated(
+        site,
+        "calls Stream.throttle with a cost the prover cannot work out at once",
+      );
+      return 0;
+    };
+
   /** A stream made on the handler's timeline, when it is opened. */
   const timed = (
     name: string,
@@ -252,6 +271,35 @@ export const make = (kit: Kit, base: Models, tools: Tools) => {
     "effect/Stream:race": pairing("Stream.race", (timeline, self, that, _, site) =>
       Effect.succeed(flow(timeline, Stream.race(self, that), site, same)),
     ),
+    // The cost of a chunk is asked for at once, so it is what the function gives of values it can see.
+    "effect/Stream:throttle": on("Stream.throttle", (timeline, self, [given], site) => {
+      const fields = given?._tag === "Obj" && !given.brand ? given.fields : undefined;
+      const cost = fields?.cost;
+      if (!fields || !cost || !callable(cost)) return wrongArguments(site, "Stream.throttle");
+      return Effect.gen(function* () {
+        const units = yield* tools.count("Stream.throttle", fields.units, site);
+        const duration = yield* tools.written("Stream.throttle", fields.duration, site);
+        const burst =
+          fields.burst && fields.burst._tag !== "Undef"
+            ? yield* tools.count("Stream.throttle", fields.burst, site)
+            : undefined;
+        const strategy = fields.strategy?._tag === "Str" ? fields.strategy.value : undefined;
+        if (strategy !== undefined && strategy !== "enforce" && strategy !== "shape")
+          return yield* wrongArguments(site, "Stream.throttle");
+        return flow(
+          timeline,
+          Stream.throttle(self, {
+            cost: atOnce(timeline, cost, site),
+            units,
+            duration,
+            burst,
+            strategy,
+          }),
+          site,
+          same,
+        );
+      });
+    }),
     "effect/Stream:debounce": on("Stream.debounce", (timeline, self, [duration], site) =>
       Effect.map(tools.written("Stream.debounce", duration, site), (time) =>
         flow(timeline, Stream.debounce(self, time), site, same),

@@ -86,6 +86,38 @@ export const make = (kit: Kit) => {
                   : unread(site, name);
     };
 
+  /**
+   * `padStart` and `padEnd`, of text an input holds: how much is added is
+   * decided by how long the text is, one length at a time up to the width.
+   */
+  function padded(
+    name: "padStart" | "padEnd",
+    order: (pad: string, text: string) => readonly [string, string],
+  ): Method {
+    return (self, args, site) => {
+      const text = known(self);
+      const width = index(args[0]);
+      const fill = absent(args[1]) ? " " : known(args[1]);
+      const term = Compare.textual(self);
+      if (text !== undefined || width === undefined || !fill || width > 32 || !term)
+        return computed(name, (held, [n, with_]) =>
+          held[name](Number(n), with_ as string | undefined),
+        )(self, args, site);
+      const length = `(str.len ${term.text})`;
+      return Effect.gen(function* () {
+        for (let has = 0; has < width; has++)
+          if (yield* host.decide(Value.term("Bool", `(= ${length} ${has})`), site)) {
+            const [first, second] = order(
+              Smt.string("".padStart(width - has, fill)).text,
+              term.text,
+            );
+            return Value.term("String", `(str.++ ${first} ${second})`);
+          }
+        return self;
+      });
+    };
+  }
+
   /** A test of one string against another: `startsWith`, `endsWith`, `includes`. */
   const test =
     (
@@ -453,12 +485,8 @@ export const make = (kit: Kit) => {
     trim: computed("trim", (self) => self.trim()),
     trimStart: computed("trimStart", (self) => self.trimStart()),
     trimEnd: computed("trimEnd", (self) => self.trimEnd()),
-    padStart: computed("padStart", (self, [n, fill]) =>
-      self.padStart(Number(n), fill as string | undefined),
-    ),
-    padEnd: computed("padEnd", (self, [n, fill]) =>
-      self.padEnd(Number(n), fill as string | undefined),
-    ),
+    padStart: padded("padStart", (pad, text) => [pad, text]),
+    padEnd: padded("padEnd", (pad, text) => [text, pad]),
     // Text an input holds, a number of times the code writes: that many of it, one after another.
     repeat: (self, args, site) => {
       const text = known(self);

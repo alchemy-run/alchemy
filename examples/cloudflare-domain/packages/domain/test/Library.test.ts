@@ -226,7 +226,7 @@ it.effect(
           ]),
         ),
       ).toEqual({
-        Race: "calls Stream.throttle, which the prover has no model for",
+        Race: "calls Stream.throttleEffect, which the prover has no model for",
         Share:
           "BigDecimal.divide divides decimals an input holds, which BigDecimal rounds and the prover does not",
         Walk: "reads the 5 items of a HashSet in order, which is the order of their hashes: the prover reads up to 4 in every order",
