@@ -202,7 +202,7 @@ example : Shop.passes aKettle = true := by decide
 A stack declares resources. A function calls what it needs, and its permissions are worked out from those calls.
 
 ```lean
-helper theShop {role : Access Kind} (orders : Bucket) (shipments : Queue) : Hosted served role :=
+effect def theShop {role : Access Kind} (orders : Bucket) (shipments : Queue) : Hosted served role :=
   served.host (S3.journal orders) fun
     | .charge order amount => pure (sandboxCharge order amount)
     | .ship order item => SQS.sendMessage shipments s!"{order}:{item}"
@@ -231,7 +231,7 @@ def ShopStack : Stack Kind Outputs where
     return { orders, shipments, api, warehouse }
 ```
 
-**Reading it.** `def name (inputs) : Type := body` defines a function, and `fun x => …` is an anonymous one. `helper` defines a function whose permissions are read off its body, so nobody lists them. `theShop` hosts the model: its history is a journal in the bucket, and it says who answers `charge` and `ship`. `SQS.consume` registers the function as the queue's consumer.
+**Reading it.** `def name (inputs) : Type := body` defines a function, and `fun x => …` is an anonymous one. `effect def` defines a function whose permissions are read off its body, so nobody lists them. `theShop` hosts the model: its history is a journal in the bucket, and it says who answers `charge` and `ship`. `SQS.consume` registers the function as the queue's consumer.
 
 ## 9. Prove who can touch what
 

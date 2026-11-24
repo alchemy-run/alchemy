@@ -41,7 +41,7 @@ def Upload (files : Bucket) (scans : Queue) : Construct Kind Function :=
 -- Scans one upload: a clean file is published, an infected one is set aside.
 -- Nobody lists what it needs: reading `incoming/`, and writing `clean/` and
 -- `quarantine/`, are read off its body.
-helper scan {role : Access Kind} (files : Bucket) (name : String) : Run role Never Unit := do
+effect def scan {role : Access Kind} (files : Bucket) (name : String) : Run role Never Unit := do
   match ← (S3.getObject files ["incoming"] name).result with
   | .ok body =>
     if infected body then S3.putObject files ["quarantine"] name body

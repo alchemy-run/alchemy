@@ -414,7 +414,7 @@ def Warehouse (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
 `served.host` runs a domain model on a journal, and says who answers each call the model makes to the outside.
 
 ```lean
-helper theShop {role : Access Kind} (orders : Bucket) (shipments : Queue) : Hosted served role :=
+effect def theShop {role : Access Kind} (orders : Bucket) (shipments : Queue) : Hosted served role :=
   served.host (S3.journal orders) fun
     | .charge order amount => pure (sandboxCharge order amount)
     | .ship order item => SQS.sendMessage shipments s!"{order}:{item}"

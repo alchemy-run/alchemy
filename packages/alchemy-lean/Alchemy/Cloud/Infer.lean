@@ -33,8 +33,8 @@ private partial def askedFor (stand : Expr) (e : Expr) (found : Array Expr) : Ar
   | .mdata _ b | .proj _ _ b => askedFor stand b found
   | _ => found
 
-/-- For each helper, the call in its body that asks for each of its grants, in order. -/
-initialize helperSites : SimplePersistentEnvExtension (Name × Array String) (NameMap (Array String)) ←
+/-- For each effect, the call in its body that asks for each of its grants, in order. -/
+initialize effectSites : SimplePersistentEnvExtension (Name × Array String) (NameMap (Array String)) ←
   registerSimplePersistentEnvExtension {
     addEntryFn := fun map (name, sites) => map.insert name sites
     addImportedFn := fun imported =>
@@ -64,7 +64,7 @@ private def sitesOf (body : Syntax) (role blockType : Expr) : TermElabM (Array (
       let _ ← elabTermEnsuringType body blockType
       synthesizeSyntheticMVars (postpone := .yes)
       let mut found := #[]
-      -- How many grants each call has asked for so far: a helper asks for several, in order.
+      -- How many grants each call has asked for so far: an effect asks for several, in order.
       let mut asked : Array (String.Pos.Raw × Nat) := #[]
       for waiting in (← get).pendingMVars.reverse do
         let some decl ← getSyntheticMVarDecl? waiting | continue
@@ -76,11 +76,11 @@ private def sitesOf (body : Syntax) (role blockType : Expr) : TermElabM (Array (
           asked := (asked.filter (·.1 != position)).push (position, index + 1)
           unless need.hasMVar do
             let here ← siteOf decl.stx
-            -- A call to a helper: point at the call inside it.
+            -- A call to an effect: point at the call inside it.
             let head := if decl.stx.isIdent then decl.stx else decl.stx[0]
             let inside ← try
                 let name ← realizeGlobalConstNoOverload head
-                pure (((helperSites.getState (← getEnv)).find? name).bind (·[index]?))
+                pure (((effectSites.getState (← getEnv)).find? name).bind (·[index]?))
               catch _ => pure none
             match inside with
             | some site => found := found.push (need, s!"{site}   (in {head.getId})")
@@ -158,15 +158,15 @@ namespace Alchemy.Cloud
 open Lean Elab Term Meta Command
 
 /--
-`helper name (params) : type := body` defines a function a host's code can
+`effect def name (params) : type := body` defines a function a host's code can
 call, and works out the grants its body asks for. They become the function's
 own requirements, so nobody lists them: a host that calls it is asked for them.
 The type names the role as `role`.
 -/
-syntax (name := helperCommand) (docComment)? "helper " ident bracketedBinder* " : " term " := " term : command
+syntax (name := effectCommand) (docComment)? "effect " "def " ident bracketedBinder* " : " term " := " term : command
 
-@[command_elab helperCommand] def elabHelper : CommandElab := fun stx => do
-  let `($[$doc:docComment]? helper $name:ident $binders* : $type := $body) := stx | throwUnsupportedSyntax
+@[command_elab effectCommand] def elabEffect : CommandElab := fun stx => do
+  let `($[$doc:docComment]? effect def $name:ident $binders* : $type := $body) := stx | throwUnsupportedSyntax
   let declName := (← getCurrNamespace) ++ name.getId
   let needsClass ← IO.mkRef (none : Option (Array (TSyntax ``Parser.Term.bracketedBinder) × Array (Ident × Term) × Array Ident))
   runTermElabM fun _ => do
@@ -174,7 +174,7 @@ syntax (name := helperCommand) (docComment)? "helper " ident bracketedBinder* " 
       -- The role is the parameter the result's type runs under.
       let roleParam? ← params.findM? fun param => do
         return (← inferType param).isAppOf ``Alchemy.Cloud.Access
-      let some role := roleParam? | throwError "a helper takes its role as a parameter: {lit}role : Access K{rit}"
+      let some role := roleParam? | throwError "an effect takes its role as a parameter: {lit}role : Access K{rit}"
       let access ← inferType role
       let resultType ← Term.elabType type
       let places ← sitesOf body role resultType
@@ -184,7 +184,7 @@ syntax (name := helperCommand) (docComment)? "helper " ident bracketedBinder* " 
         let value ← elabTermEnsuringType body resultType
         synthesizeSyntheticMVarsNoPostponing
         mkLambdaFVars #[stand] (← instantiateMVars value)
-      let .lam _ _ blockBody _ := block | throwError "helper: unexpected body"
+      let .lam _ _ blockBody _ := block | throwError "effect: unexpected body"
       let marker := Lean.mkConst `Alchemy.Cloud.Infer.marker
       let marked := blockBody.instantiate1 marker
       let needs := askedFor marker marked #[]
@@ -212,7 +212,7 @@ syntax (name := helperCommand) (docComment)? "helper " ident bracketedBinder* " 
           addAndCompile <| .defnDecl {
             name := declName, levelParams := [], type := declType, value
             hints := .abbrev, safety := .safe }
-          -- What the helper needs, as one requirement a theorem about it can name.
+          -- What the effect needs, as one requirement a theorem about it can name.
           let used := params.filter fun param =>
             param == role || needs.any fun need => need.containsFVar param.fvarId!
           let binders ← used.mapM fun param => do
@@ -231,10 +231,10 @@ syntax (name := helperCommand) (docComment)? "helper " ident bracketedBinder* " 
               if site.isEmpty then
                 if ← withoutModifyingState (isDefEq asked need) then site := place
             sites := sites.push site
-          modifyEnv fun env => helperSites.addEntry env (declName, sites)
+          modifyEnv fun env => effectSites.addEntry env (declName, sites)
           if let some doc := doc then addDocString declName (mkNullNode binders) doc
       go 0 #[]
-  -- `name.Needs`: everything the helper needs, as one requirement.
+  -- `name.Needs`: everything the effect needs, as one requirement.
   if let some (classBinders, fields, arguments) ← needsClass.get then
     let needsId := mkIdentFrom name (name.getId ++ `Needs)
     let names := fields.map (·.1)

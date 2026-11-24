@@ -377,7 +377,7 @@ end Routes
 -- The shop, hosted: its history is a journal in the bucket, and each call it
 -- makes to the outside is answered here. Charging goes to a sandbox gateway;
 -- shipping is a message on the queue. What it needs is read off its body.
-helper theShop {role : Access Kind} (orders : Bucket) (shipments : Queue) : Hosted served role :=
+effect def theShop {role : Access Kind} (orders : Bucket) (shipments : Queue) : Hosted served role :=
   served.host (S3.journal orders) fun
     | .charge order amount => pure (sandboxCharge order amount)
     | .ship order item => SQS.sendMessage shipments s!"{order}:{item}"

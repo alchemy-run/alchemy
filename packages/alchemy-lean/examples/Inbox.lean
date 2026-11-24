@@ -28,7 +28,7 @@ abbrev Api : Rpc where
 /-! ## The Workers -/
 
 /-- Stores a message under the next number. -/
-helper store {role : Access Kind} (mail : Bucket) (message : String) : Run role Never Unit := do
+effect def store {role : Access Kind} (mail : Bucket) (message : String) : Run role Never Unit := do
   let stored ← R2.list mail
   R2.put mail (toString stored.length) message
 
