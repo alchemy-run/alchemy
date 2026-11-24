@@ -50,6 +50,9 @@ variable (a : Aggregate)
 def apply (s : a.State) (es : List a.Event) (time : Time) : a.State :=
   es.foldl (fun s e => a.evolve s e time) s
 
+/-- The state of an instance these events were recorded on, in order: the "given" of a scenario. -/
+def after (es : List a.Event) : a.State := a.apply a.initial es 0
+
 /-- The state after one command: unchanged when the command is rejected. -/
 def step (ctx : Context a.Actor) (s : a.State) (c : a.Command) : a.State :=
   match a.decide ctx s c with

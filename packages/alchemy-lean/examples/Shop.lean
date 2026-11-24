@@ -98,6 +98,42 @@ model Shop where
 
 namespace Shop
 
+/-! ## Behaviour, proved for every order
+
+Each of these reads like a story: given what was recorded, when a command
+arrives, then this happens. Unlike a story it holds for every id, item, amount
+and charge, not for the one case written down.
+-/
+
+/-- Given a new order, when it is placed for a price, then it is recorded as placed. -/
+theorem aNewOrderIsPlaced (id item : String) (amount : Nat) (priced : amount ≠ 0) :
+    Order.decide (Order.after []) (.place id item amount) = .ok [.placed item amount] := by
+  simp [Aggregate.after, Aggregate.apply, Order.decide, priced]
+
+/-- Given a placed order, when it is placed again, then it is refused. -/
+theorem anOrderIsPlacedOnce (id item again : String) (amount more : Nat) :
+    Order.decide (Order.after [.placed item amount]) (.place id again more)
+      = .error .alreadyPlaced := by
+  simp [Aggregate.after, Aggregate.apply, Order.decide, Order.evolve]
+
+/-- Given a placed order, when the gateway approves, then it is paid for exactly what it costs. -/
+theorem settlingChargesWhatTheOrderCosts (id item charge : String) (amount : Nat) :
+    Order.decide (Order.after [.placed item amount]) (.settle id charge)
+      = .ok [.paid charge item amount] := by
+  simp [Aggregate.after, Aggregate.apply, Order.decide, Order.evolve]
+
+/-- Given a paid order, when a second charge arrives, then it is refused. -/
+theorem aPaidOrderIsNeverChargedAgain (id item charge again : String) (amount : Nat) :
+    Order.decide (Order.after [.placed item amount, .paid charge item amount]) (.settle id again)
+      = .error .notAwaitingPayment := by
+  simp [Aggregate.after, Aggregate.apply, Order.decide, Order.evolve]
+
+/-- Given a declined order, when a charge arrives late, then it is refused. -/
+theorem aDeclinedOrderIsNeverCharged (id item reason charge : String) (amount : Nat) :
+    Order.decide (Order.after [.placed item amount, .declined reason]) (.settle id charge)
+      = .error .notAwaitingPayment := by
+  simp [Aggregate.after, Aggregate.apply, Order.decide, Order.evolve]
+
 /-! ## Rules about the domain -/
 
 /-- An order is charged at most once, and never more than it costs. -/
@@ -186,8 +222,8 @@ def Api (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
       | _, _ => return { status := 404, body := "not found" }
 
 /-- Consumes the shipments queue and files a packing slip for each. -/
-def Packer (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
-  Lambda.Function "Packer" {} do
+def Warehouse (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
+  Lambda.Function "Warehouse" {} do
     let slips ← S3.PutObject orders ["packed"]
 
     SQS.consume shipments fun shipment => do
@@ -201,7 +237,7 @@ structure Outputs where
   orders : Bucket
   shipments : Queue
   api : Function
-  packer : Function
+  warehouse : Function
 deriving Inhabited
 
 def ShopStack : Stack Kind Outputs where
@@ -210,8 +246,8 @@ def ShopStack : Stack Kind Outputs where
     let orders ← S3.Bucket "Orders"
     let shipments ← SQS.Queue "Shipments"
     let api ← Api orders shipments
-    let packer ← Packer orders shipments
-    return { orders, shipments, api, packer }
+    let warehouse ← Warehouse orders shipments
+    return { orders, shipments, api, warehouse }
 
 def prod : Graph Kind := ShopStack.graph "prod"
 
@@ -220,7 +256,7 @@ def out : Outputs := computed% (ShopStack.outputs "prod")
 
 example : ShopStack.problem "prod" = none ∧ prod.deployable = true := by decide
 
-example : prod.order = ["Orders", "Shipments", "Api", "Packer"] := by decide
+example : prod.order = ["Orders", "Shipments", "Api", "Warehouse"] := by decide
 
 /-! ## What is proved about the Api's code -/
 
@@ -261,7 +297,7 @@ theorem theApiRecordsWhatItApplies {role : Access Kind} (orders : Bucket) (shipm
 
 def anOrder : List (Graph.Step Kind InMemory) := [
   post out.api "/orders" (Order.Command.place "o-1" "kettle" 40) ⇒ (200, "paid ch_o-1"),
-  .holds "the packer filed a slip" (·.object out.orders ["packed", "o-1"] == some "kettle"),
+  .holds "the warehouse filed a slip" (·.object out.orders ["packed", "o-1"] == some "kettle"),
   .holds "and took the shipment off the queue" (·.queued out.shipments == []),
   get out.api "/orders/o-1" ⇒ (200, "paid ch_o-1"),
   post out.api "/orders" (Order.Command.place "o-1" "kettle" 40)
@@ -284,9 +320,9 @@ theorem onlyTheApiWritesHistory (key : Path) (history : ["journal"] <+: key) (ho
   access in prod using [BucketOp.covers, out]
   grind
 
-/-- The Packer can read nothing: no order, and none of the history. -/
-theorem thePackerReadsNothing (key : Path) :
-    prod.can "Packer" ⟨.bucket, out.orders, BucketOp.get key⟩ = false := by
+/-- The Warehouse can read nothing: no order, and none of the history. -/
+theorem theWarehouseReadsNothing (key : Path) :
+    prod.can "Warehouse" ⟨.bucket, out.orders, BucketOp.get key⟩ = false := by
   access in prod using [BucketOp.covers, out]
 
 /--
@@ -306,13 +342,13 @@ def deploy (g : Graph Kind) (w : Cloud.World Kind Control.Service) :
 
 /-- The first deploy creates everything, each resource after what it needs. -/
 example : plan Control.providers prod fresh.state = [
-    ("Orders", .create), ("Shipments", .create), ("Api", .create), ("Packer", .create)] := by
+    ("Orders", .create), ("Shipments", .create), ("Api", .create), ("Warehouse", .create)] := by
   native_decide
 
 /-- It succeeds, and deploying again has nothing to do. -/
 example : (deploy prod fresh).2 = true ∧
     plan Control.providers prod (deploy prod fresh).1.state = [
-      ("Orders", .noop), ("Shipments", .noop), ("Api", .noop), ("Packer", .noop)] := by
+      ("Orders", .noop), ("Shipments", .noop), ("Api", .noop), ("Warehouse", .noop)] := by
   native_decide
 
 end Shop
