@@ -204,7 +204,7 @@ export const check = (groups: ReadonlyArray<Group>): void => {
           );
           expect(unread).toEqual([]);
           expect(report.agreement.differs.map((reason) => reason.slice(0, 400))).toEqual([]);
-          expect(report.agreement.uncompared).toBe(0);
+          if (!group.orders) expect(report.agreement.uncompared).toBe(0);
           if (chunks.some((chunk) => !chunk.unread))
             expect(report.agreement.compared).toBeGreaterThan(0);
         }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

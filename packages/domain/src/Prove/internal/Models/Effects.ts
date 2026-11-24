@@ -161,30 +161,57 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
     );
   };
 
+  /** `Schedule.recurs(n)`: so many more runs, each at once. It is the one schedule that does not wait. */
+  const RECURS = "~recurs";
+  const recursOf = (schedule: V | undefined): number | undefined => {
+    const count = schedule?._tag === "Obj" && !schedule.brand ? schedule.fields[RECURS] : undefined;
+    return count?._tag === "Num" && Number.isInteger(count.value) && count.value >= 0
+      ? count.value
+      : undefined;
+  };
+
   /** How often an effect is run again: a count the code writes, and a test of what the last run gave. */
   const again = (
     name: string,
     options: V | undefined,
     site: Site,
-  ): Eval<{ readonly times: number; readonly goesOn: (last: V) => Eval<boolean> }> => {
+  ): Eval<{
+    readonly times: number;
+    readonly goesOn: (last: V) => Eval<boolean>;
+    /** Given the schedule alone, `repeat` gives what the schedule does: how many times it ran again. */
+    readonly counts?: boolean;
+  }> => {
+    const always = { goesOn: () => Effect.succeed(true) };
+    // `Effect.retry(effect, Schedule.recurs(3))`.
+    const recurs = recursOf(options);
+    if (recurs !== undefined) return Effect.succeed({ times: recurs, counts: true, ...always });
     const fields = options?._tag === "Obj" && !options.brand ? options.fields : undefined;
-    const times = fields?.times;
-    // A schedule waits between runs, and a handler does not wait.
-    if (!fields || !Object.keys(fields).every((key) => ["times", "while", "until"].includes(key)))
+    const scheduled = fields && "schedule" in fields ? recursOf(fields.schedule) : undefined;
+    // Any other schedule waits between runs, and a handler does not wait.
+    if (
+      !fields ||
+      !Object.keys(fields).every((key) => ["times", "while", "until", "schedule"].includes(key)) ||
+      ("schedule" in fields && scheduled === undefined)
+    )
       return Effect.fail(
         Value.notTranslated(
           site,
-          `calls ${name} with a schedule: the prover reads a count of times, with while or until`,
+          `calls ${name} with a schedule that waits: the prover reads a count of times or Schedule.recurs, with while or until`,
         ),
       );
-    if (times?._tag !== "Num" || !Number.isInteger(times.value) || times.value < 0)
+    const times = fields.times;
+    const counted =
+      times?._tag === "Num" && Number.isInteger(times.value) && times.value >= 0
+        ? times.value
+        : undefined;
+    if ((times !== undefined && counted === undefined) || (counted ?? scheduled) === undefined)
       return Effect.fail(
         Value.notTranslated(site, `calls ${name} without a count of times the prover can see`),
       );
     const whilst = fields.while;
     const until = fields.until;
     return Effect.succeed({
-      times: times.value,
+      times: Math.min(counted ?? Infinity, scheduled ?? Infinity),
       goesOn: (last) =>
         Effect.gen(function* () {
           if (whilst && !(yield* kit.holds(whilst, [last], site))) return false;
@@ -211,15 +238,21 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
   /** The effect run again while it succeeds: what it gives is what its last run gave. */
   const repeat: Model = onEffect("Effect.repeat", 1, (self, [options], site) =>
     Effect.gen(function* () {
-      const { times, goesOn } = yield* again("Effect.repeat", options, site);
+      const { times, goesOn, counts } = yield* again("Effect.repeat", options, site);
       for (let left = times; ; left--) {
         const made = yield* self;
-        if (left <= 0 || !(yield* goesOn(made))) return made;
+        if (left <= 0 || !(yield* goesOn(made))) return counts ? Value.num(times) : made;
       }
     }),
   );
 
   const models: Models = {
+    "effect/Schedule:recurs": ([count], site) =>
+      count?._tag === "Num" && Number.isInteger(count.value) && count.value >= 0
+        ? Effect.succeed(Value.obj({ [RECURS]: count }))
+        : Effect.fail(
+            Value.notTranslated(site, "calls Schedule.recurs without a count the prover can see"),
+          ),
     "effect/Effect:as": onEffect("Effect.as", 1, (self, [value]) =>
       Effect.as(self, value ?? Value.undef),
     ),
