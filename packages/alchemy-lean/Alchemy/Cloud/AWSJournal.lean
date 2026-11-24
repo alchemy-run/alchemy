@@ -1,6 +1,7 @@
 import Std.Data.String.ToNat
 import Alchemy.Cloud.AWSLaws
 import Alchemy.Cloud.HostedLaws
+import Alchemy.Cloud.Tactics
 
 /-!
 # A journal in S3
@@ -287,5 +288,48 @@ def Asked.answers (asked : Asked) (expected : Nat × String) : Graph.Step Kind I
   .request asked.function asked.request (responds { status := expected.1, body := expected.2 })
 
 @[inherit_doc] infix:50 " ⇒ " => Asked.answers
+
+end Alchemy.AWS
+
+/-! ## What can be done to a resource, in words -/
+
+namespace Alchemy.AWS
+open Alchemy.Cloud
+
+namespace S3
+
+/-- Writing a bucket's objects under a prefix. With no prefix, any of them. -/
+abbrev writing (bucket : AWS.Bucket) (under : Path := []) : Doing Kind :=
+  ⟨Path, fun rest => ⟨.bucket, bucket, BucketOp.put (under ++ rest)⟩⟩
+
+/-- Reading a bucket's objects under a prefix. With no prefix, any of them. -/
+abbrev reading (bucket : AWS.Bucket) (under : Path := []) : Doing Kind :=
+  ⟨Path, fun rest => ⟨.bucket, bucket, BucketOp.get (under ++ rest)⟩⟩
+
+/-- Listing a bucket's keys. -/
+abbrev listing (bucket : AWS.Bucket) : Doing Kind :=
+  ⟨Unit, fun _ => ⟨.bucket, bucket, BucketOp.list⟩⟩
+
+end S3
+
+namespace SQS
+
+/-- Putting messages on a queue. -/
+abbrev sending (queue : AWS.Queue) : Doing Kind :=
+  ⟨Unit, fun _ => ⟨.queue, queue, QueueOp.send⟩⟩
+
+/-- Taking messages off a queue. -/
+abbrev receiving (queue : AWS.Queue) : Doing Kind :=
+  ⟨Unit, fun _ => ⟨.queue, queue, QueueOp.receive⟩⟩
+
+end SQS
+
+namespace Lambda
+
+/-- Invoking a function. -/
+abbrev invoking (function : AWS.Function) : Doing Kind :=
+  ⟨Unit, fun _ => ⟨.function, function, FunctionOp.invoke⟩⟩
+
+end Lambda
 
 end Alchemy.AWS

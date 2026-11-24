@@ -343,17 +343,40 @@ example : prod.passes anOrderTooLarge = true := by native_decide
 
 /-! ## What is proved about access -/
 
-/-- Only the Api can write the shop's history. -/
-theorem onlyTheApiWritesHistory (key : Path) (history : ["journal"] <+: key) (host : String)
-    (can : host ∈ prod.whoCan ⟨.bucket, out.orders, BucketOp.put key⟩) : host = "Api" := by
-  obtain ⟨rest, rfl⟩ := history
-  access in prod using [BucketOp.covers, out]
-  grind
+/-- Only the Api writes the shop's history. -/
+theorem onlyTheApiWritesHistory :
+    prod.only [out.api] (S3.writing out.orders ["journal"]) := by
+  stack_rule in prod using [out, BucketOp.covers]
 
-/-- The Warehouse can read nothing: no order, and none of the history. -/
-theorem theWarehouseReadsNothing (key : Path) :
-    prod.can "Warehouse" ⟨.bucket, out.orders, BucketOp.get key⟩ = false := by
-  access in prod using [BucketOp.covers, out]
+/-- Only the Warehouse files packing slips. -/
+theorem onlyTheWarehouseFilesSlips :
+    prod.only [out.warehouse] (S3.writing out.orders ["packed"]) := by
+  stack_rule in prod using [out, BucketOp.covers]
+
+/-- The Warehouse reads nothing in the bucket: no order, and none of the history. -/
+theorem theWarehouseReadsNothing :
+    prod.never out.warehouse (S3.reading out.orders) := by
+  stack_rule in prod using [out, BucketOp.covers]
+
+/-- Nothing can list the bucket. -/
+theorem nobodyListsTheOrders : prod.nobody (S3.listing out.orders) := by
+  stack_rule in prod using [out, BucketOp.covers]
+
+/-- Only the Api asks for a shipment, and only the Warehouse takes one. -/
+theorem shipmentsGoOneWay :
+    prod.only [out.api] (SQS.sending out.shipments) ∧
+      prod.only [out.warehouse] (SQS.receiving out.shipments) := by
+  constructor <;> stack_rule in prod using [out]
+
+/-- Neither function can invoke the other. -/
+theorem noFunctionInvokesAnother (function : Function) :
+    prod.nobody (Lambda.invoking function) := by
+  stack_rule in prod using [out]
+
+/-- The Api can read back all of the history it writes. -/
+theorem theApiReadsItsHistory :
+    prod.may out.api (S3.reading out.orders ["journal"]) := by
+  stack_rule in prod using [out, BucketOp.covers]
 
 /--
 Least privilege: no function holds a grant it does not need. For each one there

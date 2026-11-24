@@ -37,6 +37,55 @@ macro_rules
 
 end Alchemy.Cloud
 
+namespace Alchemy.Cloud
+
+variable {K : Type} [Cloud K]
+
+/-- A kind of thing that can be done to a resource: "writing this bucket under this prefix". -/
+structure Doing (K : Type) [Cloud K] where
+  /-- What tells one such attempt from another: the rest of a key, say. -/
+  Detail : Type
+  attempt : Detail → Attempt K
+
+namespace Graph
+
+/-- Only these hosts can do this. -/
+def only (g : Graph K) {k : K} (hosts : List (Ref k)) (action : Doing K) : Prop :=
+  ∀ detail host, host ∈ g.whoCan (action.attempt detail) → host ∈ hosts.map (·.id)
+
+/-- Nothing in the stack can do this. -/
+def nobody (g : Graph K) (action : Doing K) : Prop :=
+  ∀ detail host, host ∉ g.whoCan (action.attempt detail)
+
+/-- This host can never do this. -/
+def never (g : Graph K) {k : K} (host : Ref k) (action : Doing K) : Prop :=
+  ∀ detail, g.can host.id (action.attempt detail) = false
+
+/-- This host can do this, whatever the detail. -/
+def may (g : Graph K) {k : K} (host : Ref k) (action : Doing K) : Prop :=
+  ∀ detail, g.can host.id (action.attempt detail) = true
+
+end Graph
+
+/--
+Proves a rule about who can do what in a stack: `stack_rule in prod using [out]`. The
+list names what the rule is stated with: the stack's outputs, and how grants
+cover one another.
+-/
+syntax "stack_rule" " in " term " using " "[" Lean.Parser.Tactic.simpLemma,* "]" : tactic
+
+macro_rules
+  | `(tactic| stack_rule in $g using [$lemmas,*]) =>
+    `(tactic| (
+        simp only [Graph.only, Graph.nobody, Graph.never, Graph.may]
+        intros
+        have roles : Graph.roles $g = computed% (Graph.roles $g) := rfl
+        simp [Graph.mem_whoCan, Graph.can, Access.permits, permitsOn, Kinds.covers,
+          roles, $lemmas,*] at *
+        try grind))
+
+end Alchemy.Cloud
+
 namespace Alchemy
 
 /--
