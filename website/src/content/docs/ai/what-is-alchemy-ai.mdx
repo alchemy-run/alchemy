@@ -60,7 +60,7 @@ export const TriageLive = Triage.toLayer({
 `;
 ```
 
-Everything in Alchemy AI is split this way. A tool, an LLM, the harness and the sandbox are each a name and a Layer that says how it is done. Code depends on the name, so any Layer can be swapped for another without changing the code that uses it.
+Everything in Alchemy AI is split this way. A tool, an LLM, the harness and the sandbox are each a name, and a Layer provides its implementation. Code depends on the name, so one implementation can be swapped for another without changing the code that uses it.
 
 A process is not an agent with an identity. It describes work, and it can run any number of times.
 
@@ -208,9 +208,9 @@ The two work in both directions. A policy of the model decides when there is wor
 
 See [Processes and Domain models](/ai/domain).
 
-## Layers: how each thing is done
+## Layers: implementations of each name
 
-A tool and a model get their Layers the same way a process does. A tool's Layer is its handler, an Effect that runs in your program:
+A Layer provides the implementation of a name, and connects it to the outside world through resources and bindings. A tool's Layer is its handler. This one binds to a GitHub repository, so the tool comments on a real issue:
 
 ```typescript title="src/PostAnswer.tool.ts"
 export const PostAnswerLive = PostAnswer.make(
@@ -307,6 +307,6 @@ Every reference above is typed, so the graph is checked from end to end. `Triage
 
 Alchemy deploys that graph. The binding in `PostAnswerLive` is also what gives the Worker its GitHub token and the repository to comment on. A process can do what its tools can do, and a tool can do what its bindings allow.
 
-So a process says what the work is, and Layers say how it is done. The same process runs on another harness, another LLM or another sandbox platform by changing a Layer.
+So a process describes the work, and Layers connect it to real implementations: an LLM, a harness, a sandbox, your resources. The same process runs on another harness, another LLM or another sandbox platform by changing a Layer.
 
 Next, build one: the [tutorial](/ai/tutorial/part-1) puts these ideas to work on an issue board, one step at a time. Or read each concept in depth, starting with [Processes](/ai/processes).
