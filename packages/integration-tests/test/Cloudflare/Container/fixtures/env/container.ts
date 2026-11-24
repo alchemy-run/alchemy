@@ -17,7 +17,6 @@ export class EnvContainer extends Cloudflare.Container<
 export default EnvContainer.make(
   {
     main: import.meta.filename,
-    image: "oven/bun:latest",
     env: envValues,
   },
   Effect.gen(function* () {

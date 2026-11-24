@@ -19,6 +19,7 @@ import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import Stack from "../alchemy.run.ts";
+import { Address } from "../packages/domain/src/Customer/Address.ts";
 import { CustomerId } from "../packages/domain/src/Customer/Customer.id.ts";
 import { CustomerDashboard } from "../packages/domain/src/Customer/CustomerDashboard.view.ts";
 import { CustomerApi } from "../packages/domain/src/CustomerApi.api.ts";
@@ -109,6 +110,14 @@ test(
     expect((yield* sam.DepositMoney({ accountId: samMain, amount: 100 })).reply).toEqual({
       balance: 100,
     });
+
+    // a sealed field: stored under a key kept in D1, opened by a query for its owner alone
+    const samId = CustomerId.make("c-1");
+    yield* sam.SetAddress({ customerId: samId, address: Address.plain(samId, "1 Main St") });
+    expect(yield* sam.CustomerAddress({ customerId: samId })).toEqual({ address: "1 Main St" });
+    expect((yield* alex.CustomerAddress({ customerId: samId }).pipe(Effect.flip))._tag).toBe(
+      "Forbidden",
+    );
 
     // MFA middleware, and ownership enforced by the aggregate against the session's actor
     expect(

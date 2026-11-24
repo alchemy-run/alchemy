@@ -453,6 +453,24 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           ),
         );
       }
+      if (declaration?._tag === "Pattern") {
+        // `const { a } = made`: what the pattern gives the name, of what the file made.
+        frames.push(0);
+        const env = moduleEnv(module);
+        const bound = child(env.scope);
+        return yield* evaluate(declaration.init, env).pipe(
+          Effect.flatMap((made) =>
+            bind(declaration.pattern, made, bound, { ...env, scope: bound }),
+          ),
+          Effect.ensuring(Effect.sync(() => void frames.pop())),
+          Effect.map(() => bound.variables.get(name) ?? Value.undef),
+          Effect.catchTag("NotTranslated", (error) =>
+            name in module.exports
+              ? Effect.succeed(fromHost(module.exports[name], name))
+              : Effect.fail(error),
+          ),
+        );
+      }
       if (declaration?._tag === "Function") {
         return exported(
           { _tag: "Fn", node: declaration.node, env: moduleEnv(module), effectful: false },
@@ -798,7 +816,9 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     site: Site,
   ) {
     switch (value._tag) {
-      case "Obj":
+      case "Obj": {
+        const waiting = library.waitMember(value, key);
+        if (waiting) return waiting;
         // A duration, a decimal, a hash set and a hash map are read through their modules, never by what they are made of.
         if (value.brand && Brands.SEALED.has(value.brand.kind) && key !== "pipe")
           return yield* fail(site, `reads .${key} of a ${value.brand.kind}`);
@@ -822,6 +842,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         return (
           (held?._tag === "Pending" ? Symbolic.resolve(held, current.run) : held) ?? Value.undef
         );
+      }
       case "List":
         // The first and the last part of a split string are known, however many parts there are.
         if (value.split && key === "0") return value.split.first;
@@ -892,6 +913,8 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         return library.valueOf(next, site) ?? next;
       }
       case "Namespace": {
+        // A namespace has what its file exports, and nothing else the file declares.
+        if (!(key in value.module.exports)) return Value.undef;
         const found = yield* top(value.module, key, site);
         return found ?? fromHost(value.module.exports[key], key);
       }

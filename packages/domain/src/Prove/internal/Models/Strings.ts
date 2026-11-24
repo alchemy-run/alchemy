@@ -388,7 +388,24 @@ export const make = (kit: Kit) => {
             ),
       );
     },
-    at: computed("at", (self, [i]) => self.at(Number(i ?? 0))),
+    at: (self, [at], site) => {
+      const text = known(self);
+      const i = absent(at) ? 0 : index(at);
+      if (i === undefined) return unread(site, "at");
+      if (text !== undefined) {
+        const found = text.at(i);
+        return Effect.succeed(found === undefined ? Value.undef : Value.str(found));
+      }
+      const term = Compare.textual(self);
+      if (!term) return unread(site, "at");
+      // A place from the end is counted back from the length; one past either end has nothing.
+      const length = `(str.len ${term.text})`;
+      const [outside, place] =
+        i >= 0 ? [`(<= ${length} ${i})`, `${i}`] : [`(< ${length} ${-i})`, `(- ${length} ${-i})`];
+      return Effect.map(host.decide(Value.term("Bool", outside), site), (missing) =>
+        missing ? Value.undef : Value.term("String", `(str.at ${term.text} ${place})`),
+      );
+    },
     toUpperCase: computed("toUpperCase", (self) => self.toUpperCase()),
     toLowerCase: computed("toLowerCase", (self) => self.toLowerCase()),
     trim: computed("trim", (self) => self.trim()),
@@ -462,20 +479,35 @@ export const make = (kit: Kit) => {
   };
 
   /** A place in a string, as an `Option`: nothing where the method gives `""`, `undefined` or `-1`. */
+  const placed = (
+    name: string,
+    key: string,
+    nothing: V,
+    self: V | undefined,
+    args: ReadonlyArray<V>,
+    site: Site,
+  ): Eval<V> =>
+    self && Compare.textual(self)
+      ? Effect.gen(function* () {
+          const made = yield* methods[key]!(self, args, site);
+          const missing = yield* host.decide(yield* host.equal(made, nothing, site), site);
+          return missing ? Value.none : Value.some(made);
+        })
+      : wrongArguments(site, `String.${name}`);
+
+  /** `String.indexOf(needle)(self)`: the string is always given second. */
   const optional =
     (name: string, key: string, nothing: V): Model =>
     (args) =>
       Effect.succeed(
-        native(`String.${name}`, ([self], site) =>
-          self && Compare.textual(self)
-            ? Effect.gen(function* () {
-                const made = yield* methods[key]!(self, args, site);
-                const missing = yield* host.decide(yield* host.equal(made, nothing, site), site);
-                return missing ? Value.none : Value.some(made);
-              })
-            : wrongArguments(site, `String.${name}`),
-        ),
+        native(`String.${name}`, ([self], site) => placed(name, key, nothing, self, args, site)),
       );
+
+  /** `String.at(self, index)`, or `String.at(index)` then the string. */
+  const optionalDual = (name: string, key: string, nothing: V): Model =>
+    dual(`String.${name}`, 2, ([self, ...args], site) =>
+      placed(name, key, nothing, self, args, site),
+    );
 
   const first = (text: string, change: (head: string) => string): string =>
     text === "" ? text : change(text[0]!) + text.slice(1);
@@ -516,8 +548,8 @@ export const make = (kit: Kit) => {
         : wrongArguments(site, "String.takeLeft"),
     ),
     "effect/String:takeRight": dual("String.takeRight", 2, (args, site) => takeRight(args, site)),
-    "effect/String:charAt": optional("charAt", "charAt", Value.str("")),
-    "effect/String:at": optional("at", "at", Value.undef),
+    "effect/String:charAt": optionalDual("charAt", "charAt", Value.str("")),
+    "effect/String:at": optionalDual("at", "at", Value.undef),
     "effect/String:indexOf": optional("indexOf", "indexOf", Value.num(-1)),
     "effect/String:lastIndexOf": optional("lastIndexOf", "lastIndexOf", Value.num(-1)),
     "effect/String:trim": direct("trim"),

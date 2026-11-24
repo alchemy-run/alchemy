@@ -18,6 +18,7 @@ import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
+import type { ContainerRuntime } from "./ContainerRuntime.ts";
 import { Docker, dockerEngineContextName, dockerPhysicalName } from "./Docker.ts";
 import { healthcheckCommand, isHealthcheckDisabled } from "./HealthcheckCommand.ts";
 import type { Providers } from "./Providers.ts";
@@ -109,7 +110,7 @@ export interface ImageServiceProps extends ServicePropsBase {
 /**
  * Bundle an inline Effect program (`main`) into a generated image built
  * against the service's Docker context. The optional `image` is the
- * environment base (`FROM`) and must be able to run the bun runtime.
+ * environment base (`FROM`) and must support the selected container runtime.
  */
 export interface BundledServiceProps extends ServicePropsBase {
   /**
@@ -120,11 +121,17 @@ export interface BundledServiceProps extends ServicePropsBase {
   main: string;
   /**
    * Environment image used as the generated Dockerfile's `FROM`. Must be
-   * able to run the bun runtime.
+   * able to run the {@link runtime}.
    *
-   * @default "oven/bun:1"
+   * @default the {@link runtime}'s base image (`node:26-slim`)
    */
   image?: string;
+  /**
+   * Runtime the program runs on: `node` or `bun`, optionally with the
+   * version the base image is tagged with (`"node24"`, `"bun1.3.13"`).
+   * @default "node" (`node:26-slim`)
+   */
+  runtime?: ContainerRuntime;
   /**
    * Container port the bundled HTTP server listens on. Baked into the image
    * as `ENV PORT` + `EXPOSE`; publish it to the swarm ingress with `ports`.

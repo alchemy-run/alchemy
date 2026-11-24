@@ -1391,6 +1391,20 @@ A package can ship an agent skill under `packages/{package}/skills/{name}/` (e.g
 When you automatically open a PR, it MUST follow this structure:
 
 - **Title**: Use conventional commit format (e.g. `fix(website): mobile theme metas`, `feat(aws/s3): add bucket lifecycle rules`).
+- **Breaking changes**: When a PR removes, renames or reshapes a public API, or changes behavior users rely on, mark the title with `!` (`feat(effect-cluster)!: …`) and put a `> [!CAUTION]` callout right after the opening summary. The callout must show how to adapt, as a ` ```diff ` of the old and new usage, and list what to look out for: behavior that changes without a type error, and defaults that differ from before. Say which usages are unaffected.
+
+  ````md
+  > [!CAUTION]
+  > **Breaking:** `EcsPool`'s `securityGroupId` became `securityGroup`. To keep the same group, look it up by id:
+  >
+  > ```diff
+  > -  securityGroupId,
+  > +  securityGroup: EC2.SecurityGroup.lookup({ groupId: securityGroupId }),
+  > ```
+  >
+  > Look out for:
+  > - **Leaving `securityGroup` out** creates a new group, which your database doesn't admit yet.
+  ````
 - **Description heading levels**: NEVER use `#` or `##` in the PR description. The smallest heading allowed is `###`. The PR description must NOT begin with its own title heading — GitHub already renders the PR title above it.
 - **Content**: Aim for the minimal content needed to convey the idea.
   - Use simple sentences. If there are multiple discrete changes, use bullet points.

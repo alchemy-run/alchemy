@@ -1,13 +1,16 @@
 import * as AWS from "@alchemy.run/aws";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
+import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as Alchemy from "alchemy";
 import * as State from "alchemy/State";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { expectedEnv, getJson } from "../../EnvValues.ts";
+import { expectedBound, expectedEnv, getJson } from "../../EnvValues.ts";
 import { jsonStrings } from "../../JsonStrings.ts";
 import EnvStringsFunctionLive, { EnvStringsFunction } from "./fixtures/env-handler.ts";
 import EnvWebFunctionLive, { EnvWebFunction, webEnv } from "./fixtures/web/env-web.ts";
@@ -24,7 +27,11 @@ const Stack = Alchemy.Stack(
   Effect.gen(function* () {
     const fn = yield* EnvStringsFunction;
     const web = yield* EnvWebFunction;
-    return { url: fn.functionUrl.as<string>(), webUrl: web.url };
+    return {
+      url: fn.functionUrl.as<string>(),
+      webUrl: web.url,
+      functionName: fn.functionName.as<string>(),
+    };
   }).pipe(Effect.provide(EnvStringsFunctionLive), Effect.provide(EnvWebFunctionLive)),
 );
 
@@ -47,6 +54,7 @@ test(
       runtime: { ...jsonStrings, JSON_FALSE_BOOL: false, JSON_NUM_NUMBER: 42 },
       env: jsonStrings,
       values: expectedEnv,
+      bound: expectedBound,
     });
   }).pipe(logLevel),
   { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 90_000 },
@@ -57,6 +65,39 @@ test(
   Effect.gen(function* () {
     const { webUrl } = yield* stack;
     expect(yield* getJson(webUrl)).toEqual(webEnv.expected);
+  }).pipe(logLevel),
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 90_000 },
+);
+
+test(
+  "a Lambda's configuration names its secret env values, never holds them (#3498)",
+  Effect.gen(function* () {
+    const { functionName } = yield* stack;
+    const config = yield* Core.withProviders(
+      Lambda.getFunctionConfiguration({ FunctionName: functionName }),
+      { providers: AWS.providers() },
+      "AlchemyLambdaEnvStringsStack",
+    );
+    const variables = Object.fromEntries(
+      Object.entries(config.Environment?.Variables ?? {}).map(([key, value]) => [
+        key,
+        Redacted.isRedacted(value) ? Redacted.value(value) : value,
+      ]),
+    );
+    // The `env` prop's `Redacted`s, and one bound in Init.
+    for (const key of ["ENV_SECRET", "ENV_SECRET_OBJECT", "ENV_BOUND_SECRET"]) {
+      expect(variables[key]).toBeUndefined();
+    }
+    const text = JSON.stringify(variables);
+    // Nor under another key: a bound secret is packed with a Redacted marker.
+    expect(text).not.toContain("s3cret");
+    expect(text).not.toContain("Redacted");
+    // Plain values stay; secrets are one version-pinned SSM parameter.
+    expect(variables.ENV_PLAIN).toBe("hello");
+    expect(variables.ENV_BOUND_PLAIN).toBe("my-queue");
+    expect(variables.ALCHEMY_SECRET_ENV).toMatch(
+      new RegExp(`^/alchemy/lambda/${functionName}:\\d+$`),
+    );
   }).pipe(logLevel),
   { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 90_000 },
 );

@@ -55,6 +55,7 @@ it.effect(
         "Account.OnlyAnAgentChangesTheOwner": "proved",
         // Registering is a decision across a customer and a username: its rules are proved too.
         "UsernameClaim.AClaimedNameStaysWithItsHolder": "proved",
+        "ContactDetails.AnAddressIsSealedForItsCustomer": "proved",
         "RegisterCustomer.TheNameGoesToWhoRegistered": "proved",
         "RegisterCustomer.OnlyAFreeNameIsClaimed": "proved",
         // These are about several instances: no sequence of two commands breaks them.

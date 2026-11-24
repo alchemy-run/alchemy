@@ -65,10 +65,10 @@ const program = Effect.gen(function* () {
 }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.R2.ReadWriteBucketHttp, ProbeEnvBinding)));
 
 /** The program on its default, Durable Object-managed application. */
-export default MyContainer.make({ main: import.meta.url, image: "oven/bun:latest" }, program);
+export default MyContainer.make({ main: import.meta.url }, program);
 
 /** The same program on a fleet-scheduled application. */
 export const MyFleetContainerLive = MyContainer.make(
-  { schedulingPolicy: "default", main: import.meta.url, image: "oven/bun:latest" },
+  { schedulingPolicy: "default", main: import.meta.url },
   program,
 );
