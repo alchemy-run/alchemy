@@ -30,7 +30,7 @@ import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Scope from "effect/Scope";
-import { loadSecretEnv } from "../Lambda/SecretEnv.ts";
+import { SecretEnvLive } from "../Lambda/SecretEnv.ts";
 
 /**
  * The `host:port` Lambda routes requests to, or `127.0.0.1:3000` when
@@ -71,15 +71,15 @@ export const bootstrap = (entrypoint: unknown): Promise<void> => {
 
   const services = entrypointLayer(entrypoint).pipe(
     Layer.provideMerge(stackFromEnv),
-    // Secrets the function's configuration only names, read into
-    // `process.env` before the entrypoint's Construction reads them.
-    Layer.provideMerge(Layer.effectDiscard(loadSecretEnv)),
     Layer.provideMerge(Credentials.fromEnv()),
     Layer.provideMerge(Region.fromEnv()),
     Layer.provideMerge(Endpoint.fromEnv()),
     Layer.provideMerge(NodeHttpServer({ hostname: host, port })),
     Layer.provideMerge(platform),
     Layer.provideMerge(RuntimeConfigProviderLive),
+    // Secrets the function's configuration only names, read into
+    // `process.env` first: the runtime ConfigProvider snapshots it.
+    Layer.provideMerge(SecretEnvLive),
     Layer.provideMerge(Layer.succeed(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info")),
   );
 

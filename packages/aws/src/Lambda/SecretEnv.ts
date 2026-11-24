@@ -8,9 +8,14 @@
  *
  * @internal
  */
+import * as Credentials from "@distilled.cloud/aws/Credentials";
+import * as Endpoint from "@distilled.cloud/aws/Endpoint";
+import * as Region from "@distilled.cloud/aws/Region";
 import * as ssm from "@distilled.cloud/aws/ssm";
 import { envString } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 
 /**
@@ -125,3 +130,19 @@ export const loadSecretEnv = Effect.gen(function* () {
   ) as Record<string, string>;
   yield* Effect.sync(() => Object.assign(process.env, values));
 });
+
+/**
+ * {@link loadSecretEnv} as a Layer with its own AWS client, for a bootstrap
+ * to build before anything reads the environment: the runtime
+ * `ConfigProvider` snapshots `process.env` when it builds.
+ */
+export const SecretEnvLive = Layer.effectDiscard(loadSecretEnv).pipe(
+  Layer.provide(
+    Layer.mergeAll(
+      Credentials.fromEnv(),
+      Region.fromEnv(),
+      Endpoint.fromEnv(),
+      FetchHttpClient.layer,
+    ),
+  ),
+);
