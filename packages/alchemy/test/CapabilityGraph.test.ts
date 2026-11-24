@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 /**
  * What each part of a runtime can reach is recorded from its build, never
  * declared (src/CapabilityGraph.ts):
@@ -63,13 +64,31 @@ interface Store extends Binding.Service<
   (name: string) => Effect.Effect<{
     readonly put: (value: string) => Effect.Effect<string>;
     readonly count: Effect.Effect<number>;
+    readonly watch: Stream.Stream<string>;
   }>
 > {}
+/** A binding whose client is a function. */
+interface Send extends Binding.Service<
+  Send,
+  "Test.Send",
+  (name: string) => Effect.Effect<(value: string) => Effect.Effect<string>>
+> {}
+const Send = Binding.Service<Send>("Test.Send");
+const SendLive = Layer.succeed(
+  Send,
+  Effect.fn(function* (_name: string) {
+    return (value: string) => Effect.succeed(`sent ${value}`);
+  }),
+);
 const Store = Binding.Service<Store>("Test.Store");
 const StoreLive = Layer.succeed(
   Store,
   Effect.fn(function* (_name: string) {
-    return { put: (value: string) => Effect.succeed(`put ${value}`), count: Effect.succeed(1) };
+    return {
+      put: (value: string) => Effect.succeed(`put ${value}`),
+      count: Effect.succeed(1),
+      watch: Stream.make("one"),
+    };
   }),
 );
 
@@ -300,6 +319,90 @@ describe("CapabilityGraph", { tags: ["unit"] }, () => {
       expect(yield* calling("Tool", "audit")(handler("a"))).toBe("put a");
       expect(Exit.isFailure(yield* Effect.exit(calling("Tool", "other")(handler("b"))))).toBe(true);
     }),
+  );
+
+  it.effect("each tool gets the Layer it was given, when two Layers provide one service", () =>
+    Effect.gen(function* () {
+      const graph = makeCapabilityGraph();
+      yield* observed(
+        graph,
+        Effect.all([
+          framed(
+            "Tool",
+            "a",
+          )(Effect.asVoid(Jobs)).pipe(
+            Effect.provide(Layer.effect(Jobs, Effect.as(Store("a"), { run: Effect.void }))),
+          ),
+          framed(
+            "Tool",
+            "b",
+          )(Effect.asVoid(Jobs)).pipe(
+            Effect.provide(Layer.effect(Jobs, Effect.as(Send("b"), { run: Effect.void }))),
+          ),
+        ]),
+      );
+      const reach = (name: string) => graph.ofFrame("Tool", name).map((each) => each.binding);
+      expect([reach("a"), reach("b")]).toEqual([["Test.Store"], ["Test.Send"]]);
+    }).pipe(Effect.provide(Layer.mergeAll(StoreLive, SendLive))),
+  );
+
+  it.effect("two tools that look one service up both reach what it bound", () =>
+    Effect.gen(function* () {
+      const graph = makeCapabilityGraph();
+      yield* observed(
+        graph,
+        Effect.all([
+          framed("Tool", "a")(Effect.asVoid(Jobs)),
+          framed("Tool", "b")(Effect.asVoid(Jobs)),
+          framed("Tool", "c")(Effect.void),
+        ]).pipe(
+          Effect.provide(Layer.effect(Jobs, Effect.as(Store("shared"), { run: Effect.void }))),
+        ),
+      );
+      const reach = (name: string) => graph.ofFrame("Tool", name).map((each) => each.binding);
+      expect([reach("a"), reach("b"), reach("c")]).toEqual([["Test.Store"], ["Test.Store"], []]);
+    }).pipe(Effect.provide(StoreLive)),
+  );
+
+  it.effect("a binding bound while a Layer is unwrapped belongs to the service it makes", () =>
+    Effect.gen(function* () {
+      const JobsUnwrapped = Layer.unwrap(
+        Effect.map(Store("unwrapped"), () => Layer.succeed(Jobs, { run: Effect.void })),
+      );
+      const graph = makeCapabilityGraph();
+      yield* observed(
+        graph,
+        Effect.all([
+          framed("Tool", "a")(Effect.asVoid(Jobs)),
+          framed("Tool", "b")(Effect.void),
+        ]).pipe(Effect.provide(JobsUnwrapped)),
+      );
+      expect(graph.ofFrame("Tool", "a").map((each) => each.binding)).toEqual(["Test.Store"]);
+      // A tool that never looked the service up does not reach it.
+      expect(graph.ofFrame("Tool", "b")).toEqual([]);
+    }).pipe(Effect.provide(StoreLive)),
+  );
+
+  it.effect("a client that is a function, and one that gives a stream, are held too", () =>
+    Effect.gen(function* () {
+      const policy = { bindings: [], terms: { "Tool:peek": [] } };
+      const store = yield* Store("notes").pipe(Effect.provideService(CurrentPolicy, policy));
+      const send = yield* Send("notes").pipe(Effect.provideService(CurrentPolicy, policy));
+      const denied = (effect: Effect.Effect<unknown>) =>
+        Effect.map(
+          Effect.exit(calling("Tool", "peek")(effect)),
+          (exit) =>
+            Exit.isFailure(exit) &&
+            (Cause.squash(exit.cause) as { readonly _tag?: string })._tag === "CapabilityDenied",
+        );
+      expect(yield* send("a")).toBe("sent a");
+      expect(yield* denied(send("a"))).toBe(true);
+      expect(yield* Stream.runCollect(store.watch)).toEqual(["one"]);
+      expect(yield* denied(Stream.runCollect(store.watch))).toBe(true);
+      // Passed through a helper and an object first: it is the same client.
+      const holder = { run: (value: string) => store.put(value) };
+      expect(yield* denied(holder.run("b"))).toBe(true);
+    }).pipe(Effect.provide(Layer.mergeAll(StoreLive, SendLive))),
   );
 
   it.effect("without a graph in context every recorder does nothing", () =>

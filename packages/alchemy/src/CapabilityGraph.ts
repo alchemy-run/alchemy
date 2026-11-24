@@ -163,14 +163,22 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
     return providersByKey.get(key) ?? new Set();
   };
 
+  /**
+   * A Layer reached through a lookup gives what its own build bound and
+   * looked up. The Layers built inside it are not followed: a Layer that
+   * composes others (`Layer.provideMerge`) has every one of them inside it,
+   * and passes on services none of them made.
+   */
   const collect = (
     frame: Frame,
     via: ReadonlyArray<string>,
     out: Map<string, Permission>,
-    visited: Set<Frame>,
+    visited: Set<string>,
+    inside = true,
   ): void => {
-    if (visited.has(frame)) return;
-    visited.add(frame);
+    const seen = `${frame.id}:${inside}`;
+    if (visited.has(seen) || visited.has(`${frame.id}:true`)) return;
+    visited.add(seen);
     for (const acquisition of acquisitions.get(frame)?.values() ?? []) {
       const id = keyOf(acquisition);
       const existing = out.get(id);
@@ -179,19 +187,21 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
         out.set(id, { ...acquisition, via });
       }
     }
-    for (const child of children.get(frame) ?? []) {
-      collect(child, via, out, visited);
+    if (inside) {
+      for (const child of children.get(frame) ?? []) {
+        collect(child, via, out, visited);
+      }
     }
     for (const [key, value] of uses.get(frame) ?? []) {
       for (const provider of providersOf(key, value)) {
-        collect(provider, [...via, key], out, visited);
+        collect(provider, [...via, key], out, visited, provider.kind !== "Layer");
       }
     }
   };
 
   const closure = (roots: Iterable<Frame>): ReadonlyArray<Permission> => {
     const out = new Map<string, Permission>();
-    const visited = new Set<Frame>();
+    const visited = new Set<string>();
     for (const root of roots) collect(root, [], out, visited);
     return [...out.values()].sort((a, b) =>
       a.via.length !== b.via.length
@@ -251,21 +261,25 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
       /** The named frames a frame reaches without passing through another named frame. */
       const reached = (root: Frame): ReadonlyArray<Frame> => {
         const out = new Map<string, Frame>();
-        const visited = new Set<Frame>([root]);
-        const walk = (frame: Frame): void => {
-          const next = [
-            ...(children.get(frame) ?? []),
-            ...[...(uses.get(frame) ?? [])].flatMap(([key, value]) => [...providersOf(key, value)]),
+        const visited = new Set<string>([`${root.id}:true`]);
+        const walk = (frame: Frame, inside: boolean): void => {
+          const next: Array<readonly [Frame, boolean]> = [
+            ...(inside ? (children.get(frame) ?? []) : []).map((each) => [each, true] as const),
+            // As in `collect`: a Layer reached through a lookup is not entered.
+            ...[...(uses.get(frame) ?? [])].flatMap(([key, value]) =>
+              [...providersOf(key, value)].map((each) => [each, false] as const),
+            ),
           ];
-          for (const each of next) {
-            if (visited.has(each)) continue;
-            visited.add(each);
+          for (const [each, entered] of next) {
+            const seen = `${each.id}:${entered}`;
+            if (visited.has(seen) || visited.has(`${each.id}:true`)) continue;
+            visited.add(seen);
             if (each.kind !== "Layer" && each.name !== undefined) {
               if (idOf(each) !== idOf(root)) out.set(idOf(each), each);
-            } else walk(each);
+            } else walk(each, entered);
           }
         };
-        walk(root);
+        walk(root, true);
         return [...out.values()];
       };
       const byId = new Map<string, Array<Frame>>();
@@ -335,10 +349,15 @@ export const framed =
   <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     Effect.flatMap(
       Effect.all([Effect.serviceOption(CapabilityGraph), CurrentFrame]),
-      ([graph, parent]) =>
-        Option.isNone(graph)
-          ? effect
-          : Effect.provideService(effect, CurrentFrame, graph.value.frame(kind, name, parent)),
+      ([graph, parent]) => {
+        if (Option.isNone(graph)) return effect;
+        const frame = graph.value.frame(kind, name, parent);
+        // What the term's build gives is the term: a lookup that receives it
+        // (a tool's handler, through the Layer around it) reaches this frame.
+        return Effect.tap(Effect.provideService(effect, CurrentFrame, frame), (made) =>
+          Effect.sync(() => graph.value.provides(frame, new Map([[`${kind}:${name}`, made]]))),
+        );
+      },
     );
 
 /** `Layer.MemoMap`'s brand — not exported by Effect. */
@@ -374,15 +393,38 @@ export const observeLayerBuilds = (
     real.getOrElseMemoize(layer, scope, (_, layerScope) =>
       Effect.flatMap(CurrentFrame, (parent) => {
         const frame = graph.frame("Layer", undefined, parent);
-        return Effect.tap(
+        return Effect.map(
           Effect.provideService(build(self, layerScope), CurrentFrame, frame),
-          (out) =>
-            Effect.sync(() => {
-              const services = out.mapUnsafe;
-              graph.provides(frame, services);
-              const first = services.keys().next();
-              if (!first.done) graph.label(frame, first.value);
-            }),
+          (out) => {
+            const services = out.mapUnsafe;
+            graph.provides(frame, services);
+            const first = services.keys().next();
+            if (!first.done) graph.label(frame, first.value);
+            // A Layer this build made (`Layer.unwrap`) is built later, apart
+            // from it. What that Layer provides was made here, with what
+            // this build bound and looked up.
+            let made = out;
+            for (const [key, value] of services) {
+              if (!Layer.isLayer(value)) continue;
+              made = Context.makeUnsafe(
+                new Map(made.mapUnsafe).set(
+                  key,
+                  Layer.fromBuild((memoMap, scope) =>
+                    Effect.tap(
+                      Effect.provideService(
+                        // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- a Layer of any services: the map is generic over what it builds
+                        Layer.buildWithMemoMap(value, memoMap, scope),
+                        CurrentFrame,
+                        frame,
+                      ),
+                      (built) => Effect.sync(() => graph.provides(frame, built.mapUnsafe)),
+                    ),
+                  ),
+                ),
+              );
+            }
+            return made;
+          },
         );
       }),
     );
