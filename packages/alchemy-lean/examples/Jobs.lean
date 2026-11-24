@@ -234,10 +234,12 @@ example : prod.passes workingAJob = true := by native_decide
 example : prod.passes auditing = true := by native_decide
 
 /--
-Least privilege, checked: between them the stories use every grant of every
-function. Give a function a grant it does not need and this fails.
+Least privilege: no function holds a grant it does not need. For each one there
+is a run in which that function makes a call the grant is what permits. Give a
+function a grant it never uses and this fails.
 -/
-example : prod.exercised [workingAJob, auditing] = true := by native_decide
+theorem leastPrivilege : prod.LeastPrivilege InMemory :=
+  .of_stories [workingAJob, auditing] (by native_decide)
 
 /-! ## Deploying it -/
 

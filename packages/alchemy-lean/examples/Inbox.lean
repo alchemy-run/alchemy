@@ -101,22 +101,6 @@ example : InboxStack.problem "prod" = none ∧ prod.deployable = true := by deci
 example : prod.edges = [
     ("Inbox", "Mail"), ("Inbox", "Incoming"), ("Web", "Inbox")] := by decide
 
-/-! ## What is proved about access -/
-
-/-- Each Worker's bindings. Nobody wrote these down: each is what its block asked for. -/
-theorem roles : prod.roles = [
-    ("Mail", ∅),
-    ("Incoming", ∅),
-    ("Inbox", .on mail BucketOp.read ∪ .on mail BucketOp.write ∪ .on incoming QueueOp.send),
-    ("Web", .on inbox WorkerOp.call)] := by
-  rfl
-
-/-- Only the Inbox can touch the mail, to read it or to write it. -/
-theorem onlyTheInboxTouchesTheMail (op : BucketOp) (host : String)
-    (can : host ∈ prod.whoCan ⟨.bucket, mail, op⟩) : host = "Inbox" := by
-  access [roles]
-  grind
-
 /-! ## Stories, run against the stack in memory -/
 
 abbrev Story := List (Graph.Step Kind (InMemory prod))
@@ -136,7 +120,25 @@ def aMessage : Story := [
 
 example : prod.passes aMessage = true := by native_decide
 
-/-- Least privilege, checked: the story uses every binding of every Worker. -/
-example : prod.exercised [aMessage] = true := by native_decide
+/-! ## What is proved about access -/
+
+/--
+Least privilege. No Worker holds a binding it does not need: for each one,
+there is a run in which that Worker makes a call only that binding permits.
+Bind something a Worker never uses and this fails.
+-/
+theorem leastPrivilege : prod.LeastPrivilege (InMemory prod) :=
+  .of_stories [aMessage] (by native_decide)
+
+/-- Only the Inbox can touch the mail, to read it or to write it. -/
+theorem onlyTheInboxTouchesTheMail (op : BucketOp) :
+    prod.whoCan ⟨.bucket, mail, op⟩ = ["Inbox"] := by
+  cases op <;> rfl
+
+/-- Nothing but the Web can call the Inbox, and nothing can call the Web. -/
+theorem whoCallsWhom :
+    prod.whoCan ⟨.worker, inbox, WorkerOp.call⟩ = ["Web"] ∧
+      prod.whoCan ⟨.worker, web, WorkerOp.call⟩ = [] := by
+  constructor <;> rfl
 
 end Inbox

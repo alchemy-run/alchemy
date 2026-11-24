@@ -192,3 +192,34 @@ def exercised (g : Graph K) (stories : List (List (Step K sim))) : Bool :=
 end Graph
 
 end Alchemy.Cloud
+
+namespace Alchemy.Cloud.Graph
+
+variable {K : Type} [Cloud K] {sim : Sim K}
+
+/--
+Least privilege: no host holds a grant it never needs. For every grant of
+every host there is a run of the stack in which that host makes a call the
+grant is what permits.
+-/
+def LeastPrivilege (g : Graph K) (sim : Sim K) : Prop :=
+  ∀ node ∈ g.nodes, ∀ grant ∈ node.access.atoms,
+    ∃ (story : List (Step K sim)) (w : Running K sim) (t : Attempt K),
+      g.play story = some w ∧ (node.id, t) ∈ w.used ∧ permitsOn grant.ref grant.op t = true
+
+/-- Stories that between them use every grant are the runs that prove it. -/
+theorem LeastPrivilege.of_stories {g : Graph K} (stories : List (List (Step K sim)))
+    (exercised : g.exercised stories = true) : g.LeastPrivilege sim := by
+  intro node nodeMem grant grantMem
+  simp only [Graph.exercised, unused, List.isEmpty_iff, List.flatMap_eq_nil_iff,
+    List.map_eq_nil_iff, List.filter_eq_nil_iff] at exercised
+  have used := exercised node nodeMem grant grantMem
+  rw [Bool.not_eq_true, Bool.not_eq_false'] at used
+  obtain ⟨⟨host, t⟩, mem, ok⟩ := List.any_eq_true.mp used
+  simp only [Bool.and_eq_true, beq_iff_eq] at ok
+  obtain ⟨story, _, mem⟩ := List.mem_flatMap.mp mem
+  split at mem
+  · next w played => exact ⟨story, w, t, played, ok.1 ▸ mem, ok.2⟩
+  · cases mem
+
+end Alchemy.Cloud.Graph

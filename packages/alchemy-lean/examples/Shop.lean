@@ -321,8 +321,12 @@ def anOrderTooLarge : Story := [
 example : prod.passes anOrder = true := by native_decide
 example : prod.passes anOrderTooLarge = true := by native_decide
 
-/-- Least privilege, checked: the stories use every grant of every function. -/
-example : prod.exercised [anOrder] = true := by native_decide
+/--
+Least privilege: no function holds a grant it does not need. For each one there
+is a run in which that function makes a call the grant is what permits.
+-/
+theorem leastPrivilege : prod.LeastPrivilege InMemory :=
+  .of_stories [anOrder] (by native_decide)
 
 /-! ## Deploying it -/
 
