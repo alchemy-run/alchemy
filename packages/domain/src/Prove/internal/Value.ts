@@ -30,6 +30,8 @@ export interface Module {
 
 export type Declaration =
   | { readonly _tag: "Const"; readonly init: Node | undefined }
+  /** A name a pattern binds: `const { a, b: [c] } = made` declares `a` and `c`. */
+  | { readonly _tag: "Pattern"; readonly pattern: Node; readonly init: Node }
   | { readonly _tag: "Function"; readonly node: Node }
   | { readonly _tag: "Class"; readonly node: Node };
 
@@ -133,6 +135,32 @@ export type V =
        * items, or no two keys, are equal.
        */
       readonly distinct?: "items" | "keys";
+      /**
+       * The list is what `split` gave of a string an input holds. Its first
+       * and last parts are known without counting the parts; looking at the
+       * rest gives it a number of parts, which the run chooses.
+       */
+      readonly split?: {
+        readonly self: V;
+        readonly separator: string;
+        readonly first: V;
+        /** `undefined` where the last part is not what follows the last separator. */
+        readonly last?: V;
+        readonly parts: (run: Run) => V;
+      };
+    }
+  /**
+   * A field of an input, before the code looks at it: whether an optional
+   * field is there, which member of a union it is. It is only ever a field
+   * of an object. Reading the field makes the choice, which the run takes
+   * each way; a field no code reads is never chosen.
+   */
+  | {
+      readonly _tag: "Pending";
+      readonly name: string;
+      readonly ast: unknown;
+      /** Whether the field may be left out. */
+      readonly optional: boolean;
     }
   | {
       readonly _tag: "Fn";
@@ -199,6 +227,9 @@ export const term = (sort: Sort, text: string): V => ({ _tag: "Term", term: { so
 export const obj = (fields: Readonly<Record<string, V>>, brand?: Brand): V =>
   brand ? { _tag: "Obj", fields, brand } : { _tag: "Obj", fields };
 
+/** What a run keeps for an optional field it chose to leave out. */
+export const absent: V = { _tag: "Undef" };
+
 const OPTION: Brand = { kind: "Option", cls: undefined };
 
 /** `Option.none()`: there is one, as in the library. */
@@ -250,6 +281,8 @@ export const keyOf = (v: V): string => {
       return `(time ${v.millis.text})`;
     case "List":
       return `(list ${JSON.stringify(v.name)})`;
+    case "Pending":
+      return `(pending ${JSON.stringify(v.name)})`;
     case "Arr":
       return `[${v.items.map(keyOf).join(",")}]`;
     case "Obj":
@@ -277,6 +310,20 @@ export const applied = (
   args,
   why,
   key: `(call #${identityOf(call)} ${args.map(keyOf).join(" ")})`,
+});
+
+/** A part of what an opaque function returned: the real function's result, read the same way. */
+export const derived = (
+  from: V & { readonly _tag: "Applied" },
+  what: string,
+  part: (value: unknown) => unknown,
+): V & { readonly _tag: "Applied" } => ({
+  _tag: "Applied",
+  name: from.name,
+  call: (...args) => part(from.call(...args)),
+  args: from.args,
+  why: from.why,
+  key: `(${what} ${from.key})`,
 });
 
 /** Whether a value is a `bigint`. */
@@ -366,8 +413,14 @@ export class Run {
   readonly applications = new Map<string, Application>();
   /** The request contexts the code read, by key: each is an input, made once. */
   readonly contexts = new Map<string, { readonly tag: unknown; readonly value: V }>();
-  /** The lists the code looked at, by name, with the items this path gave each. */
+  /**
+   * The lists the code looked at, by name, with the items this path gave
+   * each; and under `?name`, the fields it looked at, with what this path
+   * chose for each.
+   */
   readonly lists = new Map<string, V>();
+  /** Each object an input holds with every field chosen, as this run settled it. */
+  readonly settled = new WeakMap<object, V>();
   /** The lists tried only up to a length, by name: longer ones were not looked at. */
   readonly bounds = new Map<string, number>();
   /** The constants that are a `bigint`: they have no largest value. */
@@ -387,7 +440,15 @@ export class Run {
    * Each result of an opaque function the code tested, by the call's key:
    * whether it is truthy is an input, which the real function decides.
    */
-  readonly tests = new Map<string, { readonly term: Term; readonly applied: V }>();
+  readonly tests = new Map<
+    string,
+    {
+      readonly term: Term;
+      readonly applied: V;
+      /** What the real result says of the term: `undefined` when it is not of the kind the code took it for. */
+      readonly read: (value: unknown) => number | bigint | string | boolean | undefined;
+    }
+  >();
   /**
    * The command being run, when a run has several: a prefix on the name of
    * each request context it reads, so every command reads its own.
@@ -460,10 +521,26 @@ export class Run {
 
   /** Whether what an opaque function returned is truthy: an input, the same for the same call. */
   truthy(applied: V & { readonly _tag: "Applied" }): Term {
-    const known = this.tests.get(applied.key);
+    return this.observe(applied, "is truthy", "Bool", Boolean);
+  }
+
+  /**
+   * Something the code reads of what an opaque function returned: the text
+   * it is, how many items it has, whether it is a `Some`. It is an input,
+   * the same for the same call, and the real function says what it is on
+   * the arguments the solver picks.
+   */
+  observe(
+    applied: V & { readonly _tag: "Applied" },
+    what: string,
+    sort: Sort,
+    read: (value: unknown) => number | bigint | string | boolean | undefined,
+  ): Term {
+    const key = `${what} ${applied.key}`;
+    const known = this.tests.get(key);
     if (known) return known.term;
-    const term = this.constant(`${applied.name} call ${this.tests.size + 1} is truthy`, "Bool");
-    this.tests.set(applied.key, { term, applied });
+    const term = this.constant(`${applied.name} call ${this.tests.size + 1} ${what}`, sort);
+    this.tests.set(key, { term, applied, read });
     return term;
   }
 

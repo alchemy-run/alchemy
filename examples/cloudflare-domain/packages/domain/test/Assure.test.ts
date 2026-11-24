@@ -39,7 +39,12 @@ it.effect(
     Effect.gen(function* () {
       const report = yield* Verify.aggregate(Covered);
       // Pay, Reserve refused and accepted, and Capture with and without money reserved.
-      expect(report.proof.agreement).toEqual({ compared: 5, uncompared: 0, differs: [] });
+      expect(report.proof.agreement).toEqual({
+        compared: 5,
+        uncompared: 0,
+        unordered: 0,
+        differs: [],
+      });
       expect(Verify.render(report)).toContain(
         "Agreed with the real code: inputs picked for each of 5 paths through the commands did what the prover read",
       );

@@ -63,6 +63,7 @@ import * as Rewrite from "./Rewrite.ts";
 import * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
 import * as Telemetry from "./Telemetry.ts";
+import * as Vault from "./Vault.ts";
 import * as View from "./View.ts";
 import * as Watch from "./Watch.ts";
 
@@ -667,6 +668,10 @@ const build = <A, E, R>(
     });
     const kernel = yield* Kernel.make(definitions, telemetry);
     const random = yield* SecureRandom.SecureRandom;
+    // A command's values that wait to be sealed are sealed here, before the command is stored.
+    const vault = yield* Effect.serviceOption(Vault.Vault);
+    const settle: Settle = <A>(json: A) =>
+      Effect.orDie(Vault.settle(json, vault)) as Effect.Effect<A>;
 
     const aggregateStores = new Map<string, AggregateStore>();
     const viewStores = new Map<string, ViewStore>();
@@ -770,6 +775,7 @@ const build = <A, E, R>(
         aggregate,
         aggregateStores.get(aggregate.aggregateName)!,
         random,
+        settle,
         { views: viewStores, projections: projectionStores },
       );
       hosts = Context.add(hosts, aggregate, client);
@@ -781,6 +787,7 @@ const build = <A, E, R>(
         decision,
         decisionStores.get(decision.decisionName)!,
         random,
+        settle,
       );
       hosts = Context.add(hosts, decision, client);
       // An Api and a story send every command the same way.
@@ -1176,11 +1183,15 @@ const rewriteSettled = (
     });
   }).pipe(Effect.withSpan("Domain.rewritten", { attributes: { "domain.stream": receipt.stream } }));
 
+/** Seals what waits to be sealed in an encoded command; dies when it can't. */
+type Settle = <A>(json: A) => Effect.Effect<A>;
+
 const aggregateClient = (
   kernel: Kernel.Kernel,
   aggregate: Aggregate.Any,
   store: AggregateStore,
   random: SecureRandom.SecureRandom["Service"],
+  settle: Settle,
   consumers: Consumers,
 ): Aggregate.ClientImpl => {
   /** What a send carries besides the command: its id, context, flow and trace. */
@@ -1239,7 +1250,7 @@ const aggregateClient = (
         // The span records a rejection as an outcome; the caller still fails with it.
         const result = yield* Effect.gen(function* () {
           const { id, meta } = yield* metaFor(target, command, options, false);
-          const encoded = yield* kernel.encodeCommand(aggregate, command);
+          const encoded = yield* settle(yield* kernel.encodeCommand(aggregate, command));
           const result = yield* store.send(id, encoded, meta);
           yield* Effect.annotateCurrentSpan(
             "domain.outcome",
@@ -1270,7 +1281,7 @@ const aggregateClient = (
         const at = yield* store.schedule(
           id,
           name,
-          yield* kernel.encodeCommand(aggregate, command),
+          yield* settle(yield* kernel.encodeCommand(aggregate, command)),
           meta,
           options.at !== undefined
             ? { at: DateTime.toEpochMillis(options.at) }
@@ -1426,6 +1437,7 @@ const decisionClient = (
   decision: Decision.Any,
   store: DecisionStore,
   random: SecureRandom.SecureRandom["Service"],
+  settle: Settle,
 ): Decision.ClientImpl => ({
   send: (command, options) =>
     Effect.gen(function* () {
@@ -1439,7 +1451,8 @@ const decisionClient = (
           "domain.correlation_id": correlationId,
         });
         const trace = yield* Telemetry.currentTrace;
-        const result = yield* store.send(yield* kernel.encodeDecisionCommand(decision, command), {
+        const encoded = yield* settle(yield* kernel.encodeDecisionCommand(decision, command));
+        const result = yield* store.send(encoded, {
           commandId,
           context,
           correlationId,

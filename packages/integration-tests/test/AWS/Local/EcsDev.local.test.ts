@@ -616,10 +616,9 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
         const program = Effect.gen(function* () {
           const cluster = yield* AWS.ECS.Cluster("EcsReloadMainCluster");
           // Declared WITHOUT an inline impl — the platform marks it
-          // external and the bundle runs as-is (a plain Bun server).
+          // external and the bundle runs as-is (a plain Node.js server).
           const task = yield* AWS.ECS.Task("EcsReloadMainTask", {
             main: mainPath,
-            image: "oven/bun:1",
             port: MAIN_RELOAD_PORT,
             cpu: 256,
             memory: 512,
@@ -781,7 +780,6 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
           const service = yield* AWS.ECS.Service("EcsSvcMainService", {
             cluster,
             main: path.join(clone, "server.ts"),
-            image: "oven/bun:1",
             port: MAIN_RELOAD_PORT,
             cpu: 256,
             memory: 512,

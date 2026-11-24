@@ -18,7 +18,8 @@ type TestFn = (
 
 export interface CrashOptions {
   readonly test: TestFn;
-  readonly url: string;
+  /** The front's URL, known once the suite deploys it. */
+  readonly url: () => string;
   /** The deployed stack and stage: the runners are the Swarm tasks of its pool service. */
   readonly stack: { readonly name: string; readonly stage: string };
 }
@@ -109,7 +110,7 @@ const get = <T>(base: string, path: string) =>
 const RECOVERY = 180_000;
 
 export const crash = ({ test, url, stack }: CrashOptions) => {
-  const call = <T>(path: string) => get<T>(url, path);
+  const call = <T>(path: string) => Effect.suspend(() => get<T>(url(), path));
   /** Call until it answers, while the cluster recovers. */
   const untilAnswered = <T>(path: string) =>
     call<T>(path).pipe(

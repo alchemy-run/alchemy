@@ -11,14 +11,15 @@ import * as Path from "effect/Path";
 // accident: a call to any function of any of them is reported, by name.
 
 const READ = new Set([
-  ...["Array", "BigDecimal", "BigInt", "Boolean", "Brand", "ByteSize", "Bytes", "Cause", "Chunk"],
-  ...["Clock", "Combiner", "Console", "Cron", "Data", "DateTime", "Duration", "Effect", "Equal"],
+  ...["Array", "BigDecimal", "BigInt", "Boolean", "Brand", "ByteSize", "Cause", "Chunk"],
+  ...["Clock", "Console", "Cron", "Data", "DateTime", "Duration", "Effect", "Equal"],
   ...["Equivalence", "Exit", "Filter", "Formatter", "Function", "Glob", "HashMap", "HashSet"],
   ...["Inspectable", "Iterable", "JsonPatch", "JsonPointer", "LogLevel", "Match", "MutableHashMap"],
   ...["MutableHashSet", "MutableRef", "Newtype", "NonEmptyIterable", "Number", "Optic", "Option"],
-  ...["Order", "Ordering", "Predicate", "PrimaryKey", "Rational", "Record", "Redacted", "Reducer"],
+  ...["Order", "Ordering", "Predicate", "PrimaryKey", "Rational", "Record", "Redacted"],
   ...["Ref", "RegExp", "Result", "SemVer", "SemVerRange", "Sink", "Stream", "String", "Struct"],
-  ...["Symbol", "TextDiff", "Trie", "Tuple", "UndefinedOr", "index"],
+  ...["SubscriptionRef", "Symbol", "SynchronizedRef", "TextDiff", "Trie", "Tuple", "UndefinedOr"],
+  ...["Deferred", "Latch", "Queue", "Schedule", "Semaphore", "index"],
 ]);
 
 const NAME = /^[A-Za-z_$][\w$]*$/;

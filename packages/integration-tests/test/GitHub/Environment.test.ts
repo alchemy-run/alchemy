@@ -48,7 +48,11 @@ const listBranchPolicies = (name: string) =>
         environment_name: name,
         per_page: 100,
       }),
-    ).pipe(Effect.map((data) => (data.branch_policies ?? []).map((policy) => policy.name)));
+    ).pipe(
+      Effect.map((data) =>
+        (data.branch_policies ?? []).map((policy) => `${policy.type ?? "branch"}:${policy.name}`),
+      ),
+    );
   });
 
 test.provider.skipIf(!owner)(
@@ -60,7 +64,7 @@ test.provider.skipIf(!owner)(
       // Clean up any leftovers from a previous run before deploying.
       yield* stack.destroy();
 
-      // Create — environment with a wait timer and custom branch patterns.
+      // Create — environment with a wait timer, custom branch patterns and a tag pattern.
       // `Repository` defaults to `retain`, so the host repo is created once
       // and reused across runs (reconcile is idempotent).
       const created = yield* stack.deploy(
@@ -83,6 +87,7 @@ test.provider.skipIf(!owner)(
             preventSelfReview: true,
             deploymentBranchPolicy: {
               customBranchPolicies: ["main", "release/*"],
+              customTagPolicies: ["v*"],
             },
           }).pipe(destroy());
         }),
@@ -105,9 +110,10 @@ test.provider.skipIf(!owner)(
       ).toEqual(5);
 
       const patterns = yield* listBranchPolicies(name);
-      expect(patterns.sort()).toEqual(["main", "release/*"]);
+      expect(patterns.sort()).toEqual(["branch:main", "branch:release/*", "tag:v*"]);
 
-      // Update — drop the wait timer, converge the pattern list, same
+      // Update — drop the wait timer, converge the pattern list (a tag pattern
+      // that shares a branch pattern's name stays its own policy), same
       // logical ID → same environmentId (update in place, not replace).
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -124,6 +130,7 @@ test.provider.skipIf(!owner)(
             name,
             deploymentBranchPolicy: {
               customBranchPolicies: ["main"],
+              customTagPolicies: ["main"],
             },
           }).pipe(destroy());
         }),
@@ -135,7 +142,31 @@ test.provider.skipIf(!owner)(
         (rule) => rule.type === "wait_timer",
       );
       expect(waitAfterUpdate).toBeUndefined();
-      expect(yield* listBranchPolicies(name)).toEqual(["main"]);
+      expect((yield* listBranchPolicies(name)).sort()).toEqual(["branch:main", "tag:main"]);
+
+      // Tags only — the branch policies are removed, so no branch can deploy.
+      const tagsOnly = yield* stack.deploy(
+        Effect.gen(function* () {
+          const repository = yield* GitHub.Repository("Repo", {
+            owner,
+            name: repo,
+            description: "alchemy-effect environment test",
+            visibility: "public",
+          });
+
+          return yield* GitHub.Environment("Env", {
+            owner,
+            repository: repoName(repository),
+            name,
+            deploymentBranchPolicy: { customTagPolicies: ["v*"] },
+          }).pipe(destroy());
+        }),
+      );
+
+      expect(tagsOnly.environmentId).toEqual(created.environmentId);
+      expect(yield* listBranchPolicies(name)).toEqual(["tag:v*"]);
+      const afterTagsOnly = yield* getEnvironment(name);
+      expect(afterTagsOnly?.deployment_branch_policy?.custom_branch_policies).toBe(true);
 
       // Switch the policy mode to protected branches only.
       const switched = yield* stack.deploy(
