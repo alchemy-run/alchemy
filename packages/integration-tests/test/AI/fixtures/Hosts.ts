@@ -7,6 +7,8 @@ import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import { Adder, Operator, ProcessesLive } from "./Processes.ts";
 
 /** What a test asks of a session. */
@@ -35,10 +37,28 @@ const sessions = Effect.gen(function* () {
       return yield* Match.value(ask.action).pipe(
         Match.when("send", () => Effect.as(session.send(ask.text ?? "", sent), { ok: true })),
         Match.when("prompt", () => session.prompt(ask.text ?? "", sent)),
-        Match.when("wait", () => Effect.as(session.wait, { ok: true })),
-        Match.when("abort", () => Effect.as(session.abort, { ok: true })),
+        Match.when("steer", () => Effect.as(session.steer(ask.text ?? "", sent), { ok: true })),
+        // Idle with nothing queued: every message it was given has been answered.
+        Match.when("wait", () =>
+          session.events().pipe(
+            Stream.filter(
+              (event) =>
+                event.type === "status" && event.status === "idle" && event.queued.length === 0,
+            ),
+            Stream.runHead,
+            Effect.as({ ok: true }),
+          ),
+        ),
+        Match.when("interrupt", () => Effect.as(session.interrupt, { ok: true })),
+        Match.when("status", () =>
+          Effect.map(Stream.runHead(session.events()), (first) => ({
+            messages: JSON.stringify(Option.getOrUndefined(first)),
+          })),
+        ),
         Match.when("messages", () =>
-          Effect.map(session.messages, (messages) => ({ messages: JSON.stringify(messages) })),
+          Effect.map(session.history({ take: 200 }), (page) => ({
+            messages: JSON.stringify(page.items),
+          })),
         ),
         Match.orElse(() => Effect.succeed(undefined)),
         Effect.orDie,

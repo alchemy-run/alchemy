@@ -6,10 +6,12 @@ import {
   type EngineSession,
   type Harness as AiHarness,
   type SendOptions,
+  type SessionEvent,
 } from "@alchemy.run/ai/Harness";
 import type { AnyModel } from "@alchemy.run/ai/Model";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import type { NotOnHarness, OpenCodeError } from "./Errors.ts";
 import { Harness } from "./Harness.ts";
 import { Storage } from "./Storage.ts";
@@ -87,10 +89,15 @@ export const HarnessLive: Layer.Layer<AiHarness, never, Storage> = makeHarness<S
             exists,
             open: (opened) =>
               Effect.mapError(opencode.open(opened?.model ?? session.model), failed),
-            submit: (text, sent) =>
+            send: (text, sent) =>
               Effect.flatMap(optionsOf(sent), (options) =>
                 Effect.mapError(opencode.submit(text, options), failed),
               ),
+            steer: (text, sent) =>
+              Effect.flatMap(optionsOf(sent), (options) =>
+                Effect.mapError(opencode.submit(text, { ...options, delivery: "steer" }), failed),
+              ),
+            withdraw: (id) => whenStarted(opencode.withdraw(id), undefined),
             prompt: (text, sent) =>
               Effect.flatMap(optionsOf(sent), (options) =>
                 opencode.prompt(text, options).pipe(
@@ -98,12 +105,16 @@ export const HarnessLive: Layer.Layer<AiHarness, never, Storage> = makeHarness<S
                   Effect.mapError(failed),
                 ),
               ),
-            wait: whenStarted(opencode.wait, undefined),
-            abort: whenStarted(opencode.abort, undefined),
-            messages: whenStarted(
-              opencode.messages as Effect.Effect<ReadonlyArray<unknown>, OpenCodeError, any>,
-              [],
-            ),
+            interrupt: whenStarted(opencode.abort, undefined),
+            events: (options) =>
+              Stream.unwrap(
+                Effect.map(exists, (started) =>
+                  started
+                    ? Stream.mapError(opencode.events(options), failed)
+                    : Stream.make<[SessionEvent]>({ type: "status", status: "idle", queued: [] }),
+                ),
+              ),
+            history: (options) => whenStarted(opencode.history(options), { items: [] }),
           };
         },
       }),

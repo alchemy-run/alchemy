@@ -7,6 +7,13 @@ import {
   type Evaluator,
 } from "@alchemy.run/ai/CodeMode";
 import type { DeclaredNamespace, DeclaredTool, JsonSchema } from "@alchemy.run/ai/Declarations";
+import type {
+  HistoryOptions,
+  QueuedMessage,
+  SessionEntry,
+  SessionEvent,
+  SessionPage,
+} from "@alchemy.run/ai/Harness";
 import { isMcpServer, type AnyMcpServer, type McpServerService } from "@alchemy.run/ai/McpServer";
 import type { AnyModel, ModelService } from "@alchemy.run/ai/Model";
 import { Sandbox, SandboxError, Sandboxes, sandboxOf } from "@alchemy.run/ai/Sandbox";
@@ -34,6 +41,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
 import { NotOnHarness, OpenCodeError } from "./Errors.ts";
 import { chatResponse, complete, type ChatRequest } from "./internal/chat.ts";
 import { Storage, type Host } from "./Storage.ts";
@@ -102,6 +110,12 @@ export interface PromptOptions {
    * for the original and gets its answer.
    */
   readonly requestId?: string;
+  /**
+   * What a busy session does with the prompt: `queue` runs it after the
+   * turn that is running, `steer` gives it to that turn at its next step.
+   * @default "queue"
+   */
+  readonly delivery?: "queue" | "steer";
 }
 
 /**
@@ -179,6 +193,19 @@ export interface Session {
     text: string,
     options?: PromptOptions,
   ) => Effect.Effect<void, OpenCodeError | NotOnHarness, RuntimeContext>;
+  /** Take back a prompt that is still in the session's inbox. */
+  readonly withdraw: (id: string) => Effect.Effect<void, OpenCodeError, RuntimeContext>;
+  /**
+   * Whether the session is working and what is in its inbox, then every
+   * transcript item after `after`, then what happens next.
+   */
+  readonly events: (options?: {
+    readonly after?: number;
+  }) => Stream.Stream<SessionEvent, OpenCodeError, RuntimeContext>;
+  /** A page of the transcript, numbered as `events` numbers it. */
+  readonly history: (
+    options?: HistoryOptions,
+  ) => Effect.Effect<SessionPage, OpenCodeError, RuntimeContext>;
   /** Return once the session has nothing left to run. */
   readonly wait: Effect.Effect<void, OpenCodeError, RuntimeContext>;
   /** Stop the prompt that is running. */
@@ -1219,6 +1246,175 @@ export const Harness = <
 
     /** One prompt at a time per session: a second waits for the first. */
     const locks = new Map<string, Semaphore.Semaphore>();
+    /** One event of a session's log, as OpenCode stores it. */
+    interface LogEvent {
+      readonly type: string;
+      readonly durable?: { readonly seq: number };
+      readonly data?: { readonly [key: string]: any };
+    }
+    const contentText = (content: unknown): string =>
+      Array.isArray(content)
+        ? content
+            .flatMap((part: { readonly type?: string; readonly text?: string }) =>
+              part.type === "text" && part.text !== undefined ? [part.text] : [],
+            )
+            .join("")
+        : "";
+    /**
+     * Reads a session's log into transcript items. It is given every event
+     * from the first, since a tool's name and a prompt's text are in
+     * earlier events than the one that places them.
+     */
+    const folder = () => {
+      const names = new Map<string, string>();
+      const texts = new Map<string, string>();
+      return (
+        event: LogEvent,
+      ): { readonly entry?: SessionEntry; readonly status?: true } | undefined => {
+        const seq = event.durable?.seq ?? 0;
+        const data = event.data ?? {};
+        switch (event.type) {
+          case "session.inbox.enqueued":
+            if (data.item?.type === "user") texts.set(data.inboxID, data.item.payload?.text ?? "");
+            return { status: true };
+          case "session.inbox.cancelled":
+          case "session.inbox.delivery.changed":
+          case "session.execution.started":
+          case "session.execution.succeeded":
+          case "session.execution.failed":
+          case "session.execution.interrupted":
+            return { status: true };
+          case "session.inbox.delivered": {
+            const text = texts.get(data.inboxID);
+            return text === undefined
+              ? { status: true }
+              : { status: true, entry: { seq, item: { type: "user", text } } };
+          }
+          case "session.tool.input.started":
+            names.set(data.id, data.name);
+            return undefined;
+          case "session.tool.called":
+            return {
+              entry: {
+                seq,
+                item: {
+                  type: "assistant",
+                  text: "",
+                  toolCalls: [{ id: data.id, name: names.get(data.id) ?? "", input: data.input }],
+                },
+              },
+            };
+          case "session.tool.success":
+            return {
+              entry: {
+                seq,
+                item: {
+                  type: "tool",
+                  callId: data.id,
+                  name: names.get(data.id) ?? "",
+                  output: contentText(data.content),
+                  isError: false,
+                },
+              },
+            };
+          case "session.tool.failed":
+            return {
+              entry: {
+                seq,
+                item: {
+                  type: "tool",
+                  callId: data.id,
+                  name: names.get(data.id) ?? "",
+                  output: contentText(data.content) || String(data.error?.message ?? ""),
+                  isError: true,
+                },
+              },
+            };
+          case "session.text.ended":
+            return {
+              entry: { seq, item: { type: "assistant", text: data.text ?? "", toolCalls: [] } },
+            };
+          default:
+            return undefined;
+        }
+      };
+    };
+    /** Whether OpenCode is working on a session, and what is in its inbox. */
+    const statusOf = (sessionID: string) =>
+      use(async (client): Promise<Extract<SessionEvent, { type: "status" }>> => {
+        const [working, inbox] = await Promise.all([
+          client.session.active(),
+          client.session.inbox.list({ sessionID }),
+        ]);
+        return {
+          type: "status",
+          status: sessionID in working ? "working" : "idle",
+          queued: inbox.flatMap((item): ReadonlyArray<QueuedMessage> =>
+            item.type === "user"
+              ? [{ id: item.id, text: item.payload.text, delivery: item.delivery }]
+              : [],
+          ),
+        };
+      }, "status");
+    /** Every transcript item the session has stored. */
+    const stored = (sessionID: string) =>
+      use(async (client) => {
+        const fold = folder();
+        const entries: Array<SessionEntry> = [];
+        for await (const event of client.experimental.session.log({ sessionID })) {
+          const entry = fold(event as LogEvent)?.entry;
+          if (entry !== undefined) entries.push(entry);
+        }
+        return entries;
+      }, "log");
+    const eventsOf = (sessionID: string, after: number) =>
+      Stream.unwrap(
+        Effect.gen(function* () {
+          // The host stays open for as long as the log is read.
+          const client = yield* Effect.acquireRelease(
+            Effect.andThen(
+              Effect.sync(() => host.inFlight++),
+              open,
+            ),
+            () => Effect.sync(() => host.inFlight--),
+          );
+          const fold = folder();
+          let live = false;
+          let last = "";
+          const status = Effect.map(statusOf(sessionID), (next): Array<SessionEvent> => {
+            const key = JSON.stringify(next);
+            if (key === last) return [];
+            last = key;
+            return [next];
+          });
+          return Stream.concat(
+            Stream.fromIterableEffect(status),
+            Stream.fromAsyncIterable(
+              client.experimental.session.log({ sessionID, follow: true }),
+              (cause) => failureOf("log", cause),
+            ).pipe(
+              Stream.mapEffect((event) =>
+                Effect.gen(function* () {
+                  // Everything stored has been read: what follows is live.
+                  if ((event as LogEvent).type === "log.synced") {
+                    live = true;
+                    return yield* status;
+                  }
+                  const folded = fold(event as LogEvent);
+                  const events: Array<SessionEvent> = [];
+                  if (folded?.entry !== undefined && folded.entry.seq > after) {
+                    events.push({ type: "item", ...folded.entry });
+                  }
+                  if (live && folded?.status === true) events.push(...(yield* status));
+                  return events;
+                }),
+              ),
+              Stream.flatMap((events) => Stream.fromIterable(events)),
+            ),
+          );
+        }),
+      );
+
     const lockOf = (session: string) => {
       let lock = locks.get(session);
       if (lock === undefined) {
@@ -1296,7 +1492,13 @@ export const Harness = <
           yield* armWake(sessionID);
           if (!known) {
             yield* use(
-              (client) => client.session.prompt({ sessionID, id: messageID, text }),
+              (client) =>
+                client.session.prompt({
+                  sessionID,
+                  id: messageID,
+                  text,
+                  ...(chosen.delivery === undefined ? {} : { delivery: chosen.delivery }),
+                }),
               "prompt",
             );
           }
@@ -1348,6 +1550,32 @@ export const Harness = <
         prompt: (text, promptOptions = {}) => run(text, { ...defaults, ...promptOptions }, true),
         submit: (text, promptOptions = {}) =>
           Effect.asVoid(run(text, { ...defaults, ...promptOptions }, false)),
+        withdraw: (id) =>
+          Effect.flatMap(sessionIdOf(sessionName), (sessionID) =>
+            use((client) => client.session.inbox.cancel({ sessionID, inboxID: id }), "withdraw"),
+          ),
+        events: (eventOptions) =>
+          Stream.unwrap(
+            Effect.map(sessionIdOf(sessionName), (sessionID) =>
+              eventsOf(sessionID, eventOptions?.after ?? 0),
+            ),
+          ),
+        history: (historyOptions = {}) =>
+          Effect.gen(function* () {
+            const entries = yield* stored(yield* sessionIdOf(sessionName));
+            const take = historyOptions.take ?? 50;
+            const after = historyOptions.after;
+            const ordered =
+              historyOptions.order === "desc"
+                ? entries.filter((entry) => after === undefined || entry.seq < after).reverse()
+                : entries.filter((entry) => after === undefined || entry.seq > after);
+            const items = ordered.slice(0, take);
+            const lastItem = items.at(-1);
+            return {
+              items,
+              ...(ordered.length > take && lastItem !== undefined ? { next: lastItem.seq } : {}),
+            };
+          }).pipe(Effect.ensuring(closeSoon)),
         wait: Effect.flatMap(sessionIdOf(sessionName), (sessionID) =>
           use((client) => client.experimental.session.wait({ sessionID }), "wait"),
         ).pipe(Effect.ensuring(closeSoon)),

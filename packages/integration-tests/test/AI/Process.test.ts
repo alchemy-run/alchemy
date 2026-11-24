@@ -5,6 +5,7 @@ import { LanguageModel } from "effect/ai";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { recording } from "./fixtures/recording.ts";
 
 class Fast extends AI.Model<Fast>()("fast") {}
@@ -68,6 +69,74 @@ const run = <A, E>(
   });
 
 describe("AI.Process", { tags: ["unit"] }, () => {
+  it.effect("steers and interrupts the session it names", () =>
+    run((harness) =>
+      Effect.gen(function* () {
+        const session = (yield* Research).get("q1");
+        yield* session.send("Where is the parser?");
+        yield* session.steer("Only look in src.");
+        yield* session.interrupt;
+
+        const recorded = harness.sessions.get("Research/q1")!;
+        expect(recorded.messages).toEqual([
+          { text: "Where is the parser?", model: "smart" },
+          { text: "Only look in src.", model: "smart", steered: true },
+        ]);
+        expect(recorded.interrupts).toBe(1);
+      }),
+    ),
+  );
+
+  it.effect("reports its status, then its items after a seq", () =>
+    run(() =>
+      Effect.gen(function* () {
+        const session = (yield* Research).get("q1");
+        yield* session.send("one");
+        yield* session.send("two");
+        yield* session.send("three");
+
+        const events = yield* Stream.runCollect(session.events({ after: 1 }));
+        expect(Array.from(events)).toEqual([
+          { type: "status", status: "idle", queued: [] },
+          { type: "item", seq: 2, item: { type: "user", text: "two" } },
+          { type: "item", seq: 3, item: { type: "user", text: "three" } },
+        ]);
+      }),
+    ),
+  );
+
+  it.effect("pages its history in either order", () =>
+    run(() =>
+      Effect.gen(function* () {
+        const session = (yield* Research).get("q1");
+        yield* session.send("one");
+        yield* session.send("two");
+        yield* session.send("three");
+
+        const first = yield* session.history({ take: 2 });
+        expect(first.items.map((entry) => entry.seq)).toEqual([1, 2]);
+        expect(first.next).toBe(2);
+        const rest = yield* session.history({ take: 2, after: first.next! });
+        expect(rest.items.map((entry) => entry.seq)).toEqual([3]);
+        expect(rest.next).toBeUndefined();
+
+        const newest = yield* session.history({ take: 2, order: "desc" });
+        expect(newest.items.map((entry) => entry.seq)).toEqual([3, 2]);
+      }),
+    ),
+  );
+
+  it.effect("a session nobody started is idle and empty", () =>
+    run(() =>
+      Effect.gen(function* () {
+        const session = (yield* Research).get("nobody");
+        const events = yield* Stream.runCollect(session.events());
+        expect(Array.from(events)).toEqual([{ type: "status", status: "idle", queued: [] }]);
+        expect(yield* session.history()).toEqual({ items: [] });
+      }),
+    ),
+  );
+
   it.effect("is told what to do in the messages it is sent", () =>
     run((harness) =>
       Effect.gen(function* () {

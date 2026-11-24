@@ -4,8 +4,18 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { isCodeMode, type CodeModeConvention, type CodeModeGroup } from "./CodeMode.ts";
-import { Harness, HarnessError, type Engine, type Reply, type SendOptions } from "./Harness.ts";
+import {
+  Harness,
+  HarnessError,
+  type Engine,
+  type HistoryOptions,
+  type Reply,
+  type SendOptions,
+  type SessionEvent,
+  type SessionPage,
+} from "./Harness.ts";
 import { isMcpServer, type McpServerClass } from "./McpServer.ts";
 import { isModel, type AnyModel, type ModelClass } from "./Model.ts";
 import {
@@ -86,24 +96,43 @@ export class NotStarted extends Data.TaggedError("NotStarted")<{
 export interface Session {
   /**
    * Give the session a message and return once it is stored, without
-   * waiting for the answer. The session works on, and resumes if its host
-   * is evicted.
+   * waiting for the answer. A session that is working reads it when its turn
+   * ends. The session works on, and resumes if its host is evicted.
    */
   readonly send: (
     text: string,
     options?: SendOptions,
   ) => Effect.Effect<void, NotStarted | HarnessError, RuntimeContext>;
-  /** Send a message and wait for the answer, through every tool call it takes. */
+  /**
+   * Give a working session a message to read at its next step, without
+   * ending its turn. A session with nothing running starts a turn, as `send`
+   * does. A harness that cannot steer queues the message.
+   */
+  readonly steer: (
+    text: string,
+    options?: Pick<SendOptions, "requestId">,
+  ) => Effect.Effect<void, NotStarted | HarnessError, RuntimeContext>;
+  /** Take back a queued message, by the `id` a `status` event lists it with. */
+  readonly withdraw: (id: string) => Effect.Effect<void, HarnessError, RuntimeContext>;
+  /** Stop the turn that is running. The session keeps its transcript and its queue. */
+  readonly interrupt: Effect.Effect<void, HarnessError, RuntimeContext>;
+  /**
+   * What the session is doing, live. The first event is its `status`:
+   * whether it is working, and what is queued. Then every stored item after
+   * `after`, then each new item and each change of status as it happens.
+   */
+  readonly events: (options?: {
+    readonly after?: number;
+  }) => Stream.Stream<SessionEvent, HarnessError, RuntimeContext>;
+  /** A page of the transcript: the items the session has stored. */
+  readonly history: (
+    options?: HistoryOptions,
+  ) => Effect.Effect<SessionPage, HarnessError, RuntimeContext>;
+  /** `send`, then wait for the answer, through every tool call it takes. */
   readonly prompt: (
     text: string,
     options?: SendOptions,
   ) => Effect.Effect<Reply, NotStarted | HarnessError, RuntimeContext>;
-  /** Return once the session has nothing left to run. */
-  readonly wait: Effect.Effect<void, HarnessError, RuntimeContext>;
-  /** Stop what is running. The session keeps its transcript. */
-  readonly abort: Effect.Effect<void, HarnessError, RuntimeContext>;
-  /** The transcript, oldest first, as the harness stores it. */
-  readonly messages: Effect.Effect<ReadonlyArray<unknown>, HarnessError, RuntimeContext>;
 }
 
 /** What starting a session takes. */
@@ -699,12 +728,16 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
         }),
       get: (key: string): Session => ({
         send: (text, options) =>
-          Effect.flatMap(started(key), (session) => session.submit(text, options)),
+          Effect.flatMap(started(key), (session) => session.send(text, options)),
+        steer: (text, options) =>
+          Effect.flatMap(started(key), (session) => session.steer(text, options)),
+        withdraw: (id) => Effect.flatMap(sessionOf(key), (session) => session.withdraw(id)),
+        interrupt: Effect.flatMap(sessionOf(key), (session) => session.interrupt),
+        events: (options) =>
+          Stream.unwrap(Effect.map(sessionOf(key), (session) => session.events(options))),
+        history: (options) => Effect.flatMap(sessionOf(key), (session) => session.history(options)),
         prompt: (text, options) =>
           Effect.flatMap(started(key), (session) => session.prompt(text, options)),
-        wait: Effect.flatMap(sessionOf(key), (session) => session.wait),
-        abort: Effect.flatMap(sessionOf(key), (session) => session.abort),
-        messages: Effect.flatMap(sessionOf(key), (session) => session.messages),
       }),
     };
     state.services.set(definition, service);

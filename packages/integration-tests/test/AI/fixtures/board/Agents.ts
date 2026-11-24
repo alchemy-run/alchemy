@@ -85,10 +85,13 @@ export default class BoardAgents extends Cloudflare.DurableObject<BoardAgents>()
             Effect.orDie,
           ),
       transcript: (issue) =>
-        triage.get(issue).messages.pipe(
-          Effect.map((messages) => JSON.stringify(messages)),
-          Effect.orDie,
-        ),
+        triage
+          .get(issue)
+          .history({ take: 200 })
+          .pipe(
+            Effect.map((page) => JSON.stringify(page.items)),
+            Effect.orDie,
+          ),
     } satisfies Agent);
   }).pipe(Effect.provide(Live)),
 ) {}

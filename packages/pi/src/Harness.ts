@@ -199,6 +199,8 @@ export interface Conversation {
   /** Start a new context; older entries stay in storage. A handoff note becomes its first message. */
   readonly reset: (handoff?: string) => Effect.Effect<void, PiError, RuntimeContext>;
   readonly compact: (instructions?: string) => Effect.Effect<void, PiError, RuntimeContext>;
+  /** Withdraw one queued submission of this conversation. Does nothing once it was placed. */
+  readonly withdraw: (id: SubmissionId) => Effect.Effect<void, PiError, RuntimeContext>;
   /** Stop: withdraw queued inputs, abort running work, wait until idle. */
   readonly abort: (options?: {
     readonly background?: boolean;
@@ -214,6 +216,10 @@ export interface Conversation {
   readonly entries: (options?: {
     readonly limit?: number;
     readonly order?: "ascending" | "descending";
+    /** Only entries with an id above this one. */
+    readonly after?: EntryId;
+    /** Only entries with an id below this one. */
+    readonly before?: EntryId;
   }) => Effect.Effect<ReadonlyArray<EntryRecord>, PiError, RuntimeContext>;
   /** The conversation's live view: the newest entries, the running generation, the inbox. */
   readonly watch: (
@@ -1014,6 +1020,10 @@ export const Harness = <
           on((conversation) =>
             Effect.asVoid(fromPi((context) => conversation.compact(instructions, context))),
           ),
+        withdraw: (submissionId) =>
+          on((_, harness) =>
+            Effect.asVoid(fromPi((context) => harness.abortSubmission(submissionId, context, id))),
+          ),
         abort: (abortOptions) =>
           on((conversation) => fromPi((context) => conversation.abort(context, abortOptions))),
         waitForIdle: on((conversation) => fromPi((context) => conversation.waitForIdle(context))),
@@ -1041,7 +1051,15 @@ export const Harness = <
           on((conversation) =>
             fromPi((context) =>
               conversation.entries(
-                { order: query.order ?? "ascending" },
+                {
+                  order: query.order ?? "ascending",
+                  ...(query.after === undefined
+                    ? {}
+                    : { minEntryId: (query.after + 1) as EntryId }),
+                  ...(query.before === undefined
+                    ? {}
+                    : { maxEntryId: (query.before - 1) as EntryId }),
+                },
                 query.limit ?? 100,
                 undefined,
                 context,
@@ -1055,7 +1073,9 @@ export const Harness = <
                 Effect.acquireRelease(
                   fromPi((context) => conversation.watch(context, window)).pipe(
                     Effect.tap((handle) =>
-                      Effect.sync(() =>
+                      Effect.sync(() => {
+                        // The handle holds the view as it is now; the listener gets each change.
+                        Queue.offerUnsafe(queue, handle.value);
                         handle.start(async (call) => {
                           if (call.kind === "value") Queue.offerUnsafe(queue, call.value);
                           else
@@ -1063,8 +1083,8 @@ export const Harness = <
                               queue,
                               Cause.fail(new PiError({ message: messageOf(call.error) })),
                             );
-                        }),
-                      ),
+                        });
+                      }),
                     ),
                   ),
                   (handle) => Effect.promise(() => handle.stop()),

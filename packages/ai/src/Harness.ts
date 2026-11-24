@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
+import type * as Stream from "effect/Stream";
 import type { AnyModel } from "./Model.ts";
 
 /** A harness could not run what a process asked of it. */
@@ -31,6 +32,73 @@ export interface SendOptions {
   readonly model?: AnyModel;
 }
 
+/** A message a session has stored and not yet read. */
+export interface QueuedMessage {
+  /** What `withdraw` takes. */
+  readonly id: string;
+  readonly text: string;
+  /** `steer` joins the turn that is running; `queue` waits for it to end. */
+  readonly delivery: "queue" | "steer";
+}
+
+/** One thing in a session's transcript. */
+export type SessionItem =
+  | { readonly type: "user"; readonly text: string }
+  | {
+      readonly type: "assistant";
+      readonly text: string;
+      /** The tools this answer asked for. */
+      readonly toolCalls: ReadonlyArray<{
+        readonly id: string;
+        readonly name: string;
+        readonly input: unknown;
+      }>;
+    }
+  | {
+      readonly type: "tool";
+      /** The call this is the result of. */
+      readonly callId: string;
+      readonly name: string;
+      readonly output: string;
+      readonly isError: boolean;
+    };
+
+/** A transcript item and where it sits. `seq` grows with every item of the session. */
+export interface SessionEntry {
+  readonly seq: number;
+  readonly item: SessionItem;
+}
+
+/**
+ * What a session reports. `status` says whether it is working and what is
+ * queued: it is the first event of every `events` stream, and is sent again
+ * whenever either changes. `item` is a transcript item, stored and numbered.
+ */
+export type SessionEvent =
+  | {
+      readonly type: "status";
+      readonly status: "idle" | "working";
+      readonly queued: ReadonlyArray<QueuedMessage>;
+    }
+  | ({ readonly type: "item" } & SessionEntry);
+
+/** Which stored items `history` returns. */
+export interface HistoryOptions {
+  /** Only items after this `seq` (before it, when `order` is `"desc"`). */
+  readonly after?: number;
+  /** @default 50 */
+  readonly take?: number;
+  /** @default "asc" */
+  readonly order?: "asc" | "desc";
+}
+
+/** A page of a session's items. */
+export interface SessionPage {
+  readonly items: ReadonlyArray<SessionEntry>;
+  /** The `after` of the next page. Absent on the last one. */
+  readonly next?: number;
+}
+
 /** What a harness runs a session with. */
 export interface EngineSessionOptions {
   /** The process's prose, as the model reads it. */
@@ -53,22 +121,36 @@ export interface EngineSession {
   readonly open: (options?: {
     readonly model?: AnyModel;
   }) => Effect.Effect<string, HarnessError, RuntimeContext>;
-  /** Store a message and return without waiting for the answer. */
-  readonly submit: (
+  /** Store a message and return without waiting for the answer. It runs after what is running. */
+  readonly send: (
     text: string,
     options?: SendOptions,
   ) => Effect.Effect<void, HarnessError, RuntimeContext>;
+  /**
+   * Store a message for the turn that is running to read at its next step.
+   * With nothing running it starts a turn, as `send` does.
+   */
+  readonly steer: (
+    text: string,
+    options?: Pick<SendOptions, "requestId">,
+  ) => Effect.Effect<void, HarnessError, RuntimeContext>;
+  /** Take back a queued message, by its `QueuedMessage` id. Does nothing once it was read. */
+  readonly withdraw: (id: string) => Effect.Effect<void, HarnessError, RuntimeContext>;
   /** Send a message and wait for the answer. */
   readonly prompt: (
     text: string,
     options?: SendOptions,
   ) => Effect.Effect<Reply, HarnessError, RuntimeContext>;
-  /** Return once the session has nothing left to run. */
-  readonly wait: Effect.Effect<void, HarnessError, RuntimeContext>;
-  /** Stop what is running. */
-  readonly abort: Effect.Effect<void, HarnessError, RuntimeContext>;
-  /** The transcript, oldest first, as the harness stores it. */
-  readonly messages: Effect.Effect<ReadonlyArray<unknown>, HarnessError, RuntimeContext>;
+  /** Stop the turn that is running. Queued messages stay queued. */
+  readonly interrupt: Effect.Effect<void, HarnessError, RuntimeContext>;
+  /** The session's status, then every item after `after`, then what happens next. */
+  readonly events: (options?: {
+    readonly after?: number;
+  }) => Stream.Stream<SessionEvent, HarnessError, RuntimeContext>;
+  /** A page of the stored items. */
+  readonly history: (
+    options?: HistoryOptions,
+  ) => Effect.Effect<SessionPage, HarnessError, RuntimeContext>;
 }
 
 /** Small values kept beside the sessions, in the same storage. */

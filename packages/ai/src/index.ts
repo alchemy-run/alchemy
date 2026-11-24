@@ -33,8 +33,14 @@ export {
   type EngineSession,
   type EngineSessionOptions,
   type EngineValues,
+  type HistoryOptions,
+  type QueuedMessage,
   type Reply,
   type SendOptions,
+  type SessionEntry,
+  type SessionEvent,
+  type SessionItem,
+  type SessionPage,
 } from "./Harness.ts";
 export {
   Acting,

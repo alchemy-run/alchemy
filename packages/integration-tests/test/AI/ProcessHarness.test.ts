@@ -1,3 +1,4 @@
+import type * as AI from "@alchemy.run/ai";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -167,6 +168,75 @@ for (const harness of ["pi", "opencode"] as const) {
           expect(messages).toContain("1042");
         }),
         { timeout: 240_000 },
+      );
+
+      test(
+        "a session reports its status and its transcript in order",
+        Effect.gen(function* () {
+          yield* call(`${harness}/Adder/total-5/prompt`, { text: "Add 7 and 8." });
+          yield* call(`${harness}/Adder/total-5/wait`);
+
+          const status = yield* call(`${harness}/Adder/total-5/status`);
+          expect(JSON.parse(status.messages!)).toEqual({
+            type: "status",
+            status: "idle",
+            queued: [],
+          });
+
+          const { messages } = yield* call(`${harness}/Adder/total-5/messages`);
+          const entries = JSON.parse(messages!) as ReadonlyArray<AI.SessionEntry>;
+          const items = entries.map((entry) => entry.item);
+          expect(items[0]).toEqual({ type: "user", text: "Add 7 and 8." });
+          const calls = items.flatMap((item) => (item.type === "assistant" ? item.toolCalls : []));
+          expect(calls.some((each) => each.name.includes("add"))).toBe(true);
+          const results = items.flatMap((item) => (item.type === "tool" ? [item] : []));
+          expect(results.some((each) => each.output.includes("1015") && !each.isError)).toBe(true);
+          expect(calls.map((each) => each.id)).toContain(results[0]!.callId);
+          // Items are numbered in the order they were stored.
+          const seqs = entries.map((entry) => entry.seq);
+          expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
+        }),
+        { timeout: 180_000 },
+      );
+
+      test(
+        "a steered message reaches the session",
+        Effect.gen(function* () {
+          yield* call(`${harness}/Adder/total-6/send`, { text: "Add 20 and 22.", requestId: "a" });
+          yield* call(`${harness}/Adder/total-6/steer`, {
+            text: "Also say the word PERSIMMON in your answer.",
+            requestId: "b",
+          });
+          yield* call(`${harness}/Adder/total-6/wait`);
+
+          const { messages } = yield* call(`${harness}/Adder/total-6/messages`).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("3 seconds"),
+              until: (answer) => answer.messages?.includes("PERSIMMON") === true,
+              times: 20,
+            }),
+          );
+          const users = (JSON.parse(messages!) as ReadonlyArray<AI.SessionEntry>).flatMap((entry) =>
+            entry.item.type === "user" ? [entry.item.text] : [],
+          );
+          expect(users).toEqual(["Add 20 and 22.", "Also say the word PERSIMMON in your answer."]);
+        }),
+        { timeout: 240_000 },
+      );
+
+      test(
+        "an interrupted session is idle and keeps its transcript",
+        Effect.gen(function* () {
+          yield* call(`${harness}/Adder/total-7/send`, { text: "Add 1 and 2.", requestId: "a" });
+          yield* call(`${harness}/Adder/total-7/interrupt`);
+          yield* call(`${harness}/Adder/total-7/wait`);
+
+          const status = yield* call(`${harness}/Adder/total-7/status`);
+          expect(JSON.parse(status.messages!).status).toBe("idle");
+          const { messages } = yield* call(`${harness}/Adder/total-7/messages`);
+          expect(messages).toContain("Add 1 and 2.");
+        }),
+        { timeout: 180_000 },
       );
     },
   );
