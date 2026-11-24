@@ -114,7 +114,7 @@ it.live("a reply reaches the agent, and the page shows what it did with it", () 
   }).pipe(Effect.scoped, Effect.provide(Live), Effect.provide(RuntimeContext.phantom)),
 );
 
-it.live("a page opened later reads the whole transcript", () =>
+it.live("a refreshed page resumes: it reads the whole transcript again", () =>
   Effect.gen(function* () {
     yield* playing;
     const first = yield* open({ issueId: IssueId.make("44"), page: "a" });

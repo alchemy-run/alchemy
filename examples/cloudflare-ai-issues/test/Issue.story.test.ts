@@ -3,6 +3,7 @@ import * as Option from "effect/Option";
 import { Command, given, message, model, story } from "foldkit/story";
 import { IssueId } from "../src/Board/Issue.id.ts";
 import { BoardClient, init, Message, update } from "../web/src/Issue.ts";
+import { issueOf } from "../web/src/Location.ts";
 
 const issueId = IssueId.make("42");
 const fresh = init({ issueId, page: "p" }).model;
@@ -90,3 +91,11 @@ test("a failed read is shown and does not lose what the page has", () =>
       expect(model.items).toHaveLength(1);
     }),
   ));
+
+test("a URL that names no issue is given one, and then keeps it across a refresh", () => {
+  const first = issueOf("https://board.example/", () => "web-1");
+  expect(first).toEqual({ issueId: "web-1", url: "https://board.example/?issue=web-1" });
+  // The refresh loads the URL the first load left in the address bar.
+  const refreshed = issueOf(first.url, () => "web-2");
+  expect(refreshed).toEqual(first);
+});
