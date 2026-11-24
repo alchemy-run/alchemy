@@ -12,18 +12,34 @@ open Alchemy Cloud
 
 /-! ## The compliance model -/
 
+/-- Who sends compliance a command: the bank's systems, or a compliance officer. -/
+inductive Watch.Who where
+  | system
+  | officer (name : String)
+deriving DecidableEq, Repr, Inhabited
+
+derive_tokens Watch.Who
+
 aggregate Watch where
+  actor : Who
+
   command
     | assess (account : String) (amount : Nat)
         records cleared, flagged
         rejects nothingToAssess
+    | dismiss (account : String)
+        records dismissed
+        rejects notAnOfficer, nothingFlagged
 
   event
     | cleared (amount : Nat)
     | flagged (amount : Nat)
+    | dismissed (by_ : String)
 
   rejection
     | nothingToAssess
+    | notAnOfficer
+    | nothingFlagged
 
   -- what compliance knows about one account: how often it looked, and how often it objected
   state
@@ -31,14 +47,18 @@ aggregate Watch where
     flagged : Nat := 0
 
   decide
-    | _, .assess _ amount =>
+    | _, _, .assess _ amount =>
       if amount = 0 then .error .nothingToAssess
       else if amount ≥ 50000 then .ok [.flagged amount]
       else .ok [.cleared amount]
+    | .officer name, s, .dismiss _ =>
+      if s.flagged = 0 then .error .nothingFlagged else .ok [.dismissed name]
+    | .system, _, .dismiss _ => .error .notAnOfficer
 
   evolve
     | s, .cleared _ => { s with assessed := s.assessed + 1 }
     | s, .flagged _ => { assessed := s.assessed + 1, flagged := s.flagged + 1 }
+    | s, .dismissed _ => { s with flagged := s.flagged - 1 }
 
 model Compliance where
   aggregate Watch
@@ -51,6 +71,11 @@ def FlagsAreAssessments (s : Watch.State) : Prop := s.flagged ≤ s.assessed
 theorem flagsAreAssessments_kept : Watch.Keeps FlagsAreAssessments := by
   aggregate_rule
 
+/-- Only an officer dismisses a flag: whatever the account holds, the bank's systems are refused. -/
+theorem onlyAnOfficerDismisses (account : String) (s : Watch.State) :
+    Watch.decide .system s (.dismiss account) = .error .notAnOfficer := by
+  simp [Watch.decide]
+
 theorem everyWatchIsSound (w : Alchemy.World Signature) (reach : Compliance.Reachable w)
     (account : String) : FlagsAreAssessments (w.state .Watch account) :=
   Watch.always (by simp [FlagsAreAssessments]) flagsAreAssessments_kept w reach account
@@ -62,7 +87,7 @@ end Compliance
 /-- The bank's screening call is answered by the compliance model. -/
 def screening : Link Bank Compliance where
   ask
-    | .screen account amount => some ⟨.Watch, (), .assess account amount⟩
+    | .screen account amount => some ⟨.Watch, .system, .assess account amount⟩
     | .wire .. => none
   reply
     | .screen .., ⟨.Watch, _, _⟩, .ok [.flagged _] => .flagged "over the reporting threshold"

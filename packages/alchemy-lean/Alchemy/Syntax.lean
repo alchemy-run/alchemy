@@ -54,6 +54,11 @@ syntax &"decide" modelAlt+ : aggregateItem
 syntax &"evolve" modelAlt+ : aggregateItem
 /-- What an accepted command answers its caller, from the state it left: `| state, command => …`. -/
 syntax &"reply" " : " term modelAlt+ : aggregateItem
+/--
+Who sends its commands. With it, `decide` is given the actor first:
+`| actor, state, command => …`. A policy sends as the type's default.
+-/
+syntax &"actor" " : " term : aggregateItem
 
 /--
 An aggregate: its commands, events, rejections and state, and how it decides,
@@ -98,8 +103,21 @@ macro_rules
     let mut commands : Array Command := #[← `(command| namespace $a)]
     let mut hasReply := false
     let mut checks : Array Command := #[]
+    -- Who sends the commands, if the aggregate says.
+    let mut actor : Option Term := none
+    for item in items do
+      if let `(aggregateItem| actor : $type:term) := item then actor := some type
+    let actorType : Term ← match actor with
+      | some type => pure type
+      | none => `(Unit)
+    commands := commands.push (← `(command| abbrev $(n `Actor) : Type := $actorType))
+    -- `decide` takes the actor first when there is one.
+    let decideCall : Term ← match actor with
+      | some _ => `($(n `decide) actor)
+      | none => `($(n `decide))
     for item in items do
       match item with
+      | `(aggregateItem| actor : $_) => pure ()
       | `(aggregateItem| command $cases*) =>
         let mut plain : Array (TSyntax ``caseOf) := #[]
         for case in cases do
@@ -123,12 +141,12 @@ macro_rules
               checks := checks.push (← withRef name <| do lenient (← `(command|
                 /-- The command records only the events it says it records. -/
                 theorem $(mkIdentFrom name (`records ++ name.getId)):ident
-                    (state : $(n `State)) $bracketed* (events : List $(n `Event))
-                    (accepted : $(n `decide) state $sent = .ok events) :
+                    (actor : $(n `Actor)) (state : $(n `State)) $bracketed* (events : List $(n `Event))
+                    (accepted : $decideCall state $sent = .ok events) :
                     ∀ event ∈ events, (match event with $allowed:matchAlt*) := by
                   simp only [$(n `decide):ident] at accepted
                   (repeat' split at accepted) <;>
-                    first | (cases accepted <;> simp) | simp_all | grind | fail "this command can record an event that its records line does not list")))
+                    first | (simp_all; done) | (cases accepted <;> simp_all; done) | (cases accepted <;> simp; done) | grind | fail "this command can record an event that its records line does not list")))
             if let some rejections := rejections then
               let allowed ← rejections.getElems.mapM fun rejection =>
                 `(Term.matchAltExpr|
@@ -138,12 +156,12 @@ macro_rules
               checks := checks.push (← withRef name <| do lenient (← `(command|
                 /-- The command answers only the rejections it says it answers. -/
                 theorem $(mkIdentFrom name (`rejects ++ name.getId)):ident
-                    (state : $(n `State)) $bracketed* (rejection : $(n `Rejection))
-                    (rejected : $(n `decide) state $sent = .error rejection) :
+                    (actor : $(n `Actor)) (state : $(n `State)) $bracketed* (rejection : $(n `Rejection))
+                    (rejected : $decideCall state $sent = .error rejection) :
                     (match rejection with $allowed:matchAlt*) := by
                   simp only [$(n `decide):ident] at rejected
                   (repeat' split at rejected) <;>
-                    first | (cases rejected <;> simp) | simp_all | grind | fail "this command can be refused with a rejection that its rejects line does not list")))
+                    first | (simp_all; done) | (cases rejected <;> simp_all; done) | (cases rejected <;> simp; done) | grind | fail "this command can be refused with a rejection that its rejects line does not list")))
           | _ => Macro.throwUnsupported
         let (ctors, names) ← casesOf (n `Command) plain
         commands := commands.push (← `(command|
@@ -180,11 +198,19 @@ macro_rules
           deriving DecidableEq, Repr))
       | `(aggregateItem| decide $alts:modelAlt*) =>
         let alts ← altsOf alts
-        commands := commands.push (← `(command|
-          /-- The events a command records, or why it is refused. -/
-          def $(n `decide) (state : $(n `State)) (command : $(n `Command)) :
-              Except $(n `Rejection) (List $(n `Event)) :=
-            match state, command with $alts:matchAlt*))
+        match actor with
+        | some _ =>
+          commands := commands.push (← `(command|
+            /-- The events a command records, or why it is refused, given who sends it. -/
+            def $(n `decide) (actor : $(n `Actor)) (state : $(n `State)) (command : $(n `Command)) :
+                Except $(n `Rejection) (List $(n `Event)) :=
+              match actor, state, command with $alts:matchAlt*))
+        | none =>
+          commands := commands.push (← `(command|
+            /-- The events a command records, or why it is refused. -/
+            def $(n `decide) (state : $(n `State)) (command : $(n `Command)) :
+                Except $(n `Rejection) (List $(n `Event)) :=
+              match state, command with $alts:matchAlt*))
       | `(aggregateItem| evolve $alts:modelAlt*) =>
         let alts ← altsOf alts
         commands := commands.push (← `(command|
@@ -205,7 +231,27 @@ macro_rules
       commands := commands.push (← `(command|
         def $(n `reply) (_ : $(n `State)) (_ : $(n `Command)) : $(n `Reply) := ()))
     commands := commands ++ checks
+    let decideField : Term ← match actor with
+      | some _ => `(fun ctx state command => $(mkIdentFrom a (`_root_ ++ a.getId ++ `decide)) ctx.actor state command)
+      | none => `(fun _ state command => $(mkIdentFrom a (`_root_ ++ a.getId ++ `decide)) state command)
+    let r (name : Name) : Ident := mkIdentFrom a (`_root_ ++ a.getId ++ name)
     commands := commands.push (← `(command| end $a))
+    commands := commands.push (← `(command|
+      /-- The aggregate: its types and functions, tied together. -/
+      abbrev $a:ident : Alchemy.Aggregate where
+        name := $(Syntax.mkStrLit (toString a.getId))
+        Id := String
+        State := $(r `State)
+        Command := $(r `Command)
+        Event := $(r `Event)
+        Rejection := $(r `Rejection)
+        Actor := $(r `Actor)
+        initial := {}
+        keyOf := $(r `key)
+        decide := $decideField
+        evolve := fun state event _ => $(r `evolve) state event
+        Reply := $(r `Reply)
+        reply := $(r `reply)))
     return mkNullNode commands
 
 /-- An aggregate, by the namespace that defines it. -/
@@ -408,23 +454,6 @@ macro_rules
             Alchemy.Program.signalSaga (σ := $signature) id signal))
       | _ => Macro.throwUnsupported
     let mut commands : Array Command := #[]
-    -- Each aggregate, from the namespace that defines it.
-    for a in aggregates do
-      commands := commands.push (← `(command|
-        abbrev $a:ident : Alchemy.Aggregate where
-          name := $(text a)
-          Id := String
-          State := $(rooted a `State)
-          Command := $(rooted a `Command)
-          Event := $(rooted a `Event)
-          Rejection := $(rooted a `Rejection)
-          Actor := Unit
-          initial := {}
-          keyOf := $(rooted a `key)
-          decide := fun _ state command => $(rooted a `decide) state command
-          evolve := fun state event _ => $(rooted a `evolve) state event
-          Reply := $(rooted a `Reply)
-          reply := $(rooted a `reply)))
     commands := commands.push (← `(command| namespace $m))
     let nameCtors ← aggregates.mapM fun a => `(Command.ctor| | $a:ident)
     commands := commands.push (← `(command|
@@ -466,19 +495,20 @@ macro_rules
     for a in aggregates do
       commands := commands.push (← `(command|
         /-- Send this aggregate a command, from a policy. -/
-        def $(under a `send):ident (command : $(rooted a `Command)) :
-            Alchemy.Program $signature Unit :=
-          Alchemy.Program.tell ⟨$(under name a.getId), (), command⟩))
+        def $(under a `send):ident (command : $(rooted a `Command))
+            (actor : $(rooted a `Actor) := by exact default) : Alchemy.Program $signature Unit :=
+          Alchemy.Program.tell ⟨$(under name a.getId), actor, command⟩))
       commands := commands.push (← `(command|
         /-- Send this aggregate a command; a rejection fails the saga with what `explain` makes of it. -/
         def $(under a `must):ident (command : $(rooted a `Command))
-            (explain : $(rooted a `Rejection) → $sagaFailure) : Alchemy.Program $signature Unit :=
-          Alchemy.Program.step ⟨$(under name a.getId), (), command⟩ explain))
+            (explain : $(rooted a `Rejection) → $sagaFailure)
+            (actor : $(rooted a `Actor) := by exact default) : Alchemy.Program $signature Unit :=
+          Alchemy.Program.step ⟨$(under name a.getId), actor, command⟩ explain))
       commands := commands.push (← `(command|
         /-- From here on, if the saga fails, send this aggregate this command. -/
-        def $(under a `undoWith):ident (command : $(rooted a `Command)) :
-            Alchemy.Program $signature Unit :=
-          Alchemy.Program.undoWith fun _ => ⟨$(under name a.getId), (), command⟩))
+        def $(under a `undoWith):ident (command : $(rooted a `Command))
+            (actor : $(rooted a `Actor) := by exact default) : Alchemy.Program $signature Unit :=
+          Alchemy.Program.undoWith fun _ => ⟨$(under name a.getId), actor, command⟩))
       commands := commands.push (← `(command|
         /-- An event to record on an instance of this aggregate, in a decision. -/
         def $(under a `record):ident (id : String) (event : $(rooted a `Event)) :
@@ -507,14 +537,15 @@ macro_rules
     commands := commands.push (← `(command| namespace $m))
     let input := mkIdent `Input
     let inputCtors ← aggregates.mapM fun a =>
-      `(Command.ctor| | $a:ident (command : $(rooted a `Command)))
+      `(Command.ctor| | $a:ident (command : $(rooted a `Command))
+          (actor : $(rooted a `Actor) := by exact default))
     commands := commands.push (← `(command|
       /-- What callers send: a command for one of the aggregates. -/
-      inductive $input where $inputCtors* deriving Lean.ToJson, Lean.FromJson))
+      inductive $input where $inputCtors*))
     commands := commands.push (← `(command| derive_tokens $input))
     let commandAlts ← aggregates.mapM fun a =>
-      `(Term.matchAltExpr| | $(under input a.getId):ident command =>
-          ⟨$(under name a.getId), (), command⟩)
+      `(Term.matchAltExpr| | $(under input a.getId):ident command actor =>
+          ⟨$(under name a.getId), actor, command⟩)
     let served := mkIdent `served
     if decisions.isEmpty then
       commands := commands.push (← `(command|
