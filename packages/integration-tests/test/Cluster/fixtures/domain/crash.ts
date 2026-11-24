@@ -5,6 +5,7 @@ import * as NodeChildProcess from "node:child_process";
  * the other runner (and the one Swarm starts again) makes of it.
  */
 import { expect } from "@alchemy.run/test";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -170,6 +171,34 @@ export const crash = ({ test, url, stack }: CrashOptions) => {
           yield* eventually<{ total: number }>(`/echo/${id}`, (echo) => echo.total > 0),
         ).toEqual({ total: 1 });
       }
+      yield* bothRunning(stack, killed);
+    }),
+    options,
+  );
+
+  test(
+    "a killed runner's keys answer again within seconds, not when its registration expires",
+    Effect.gen(function* () {
+      // Enough keys that some live on each runner.
+      const counters = Array.from({ length: 16 }, (_, i) => fresh(`moved${i}`));
+      yield* Effect.forEach(counters, (id) => call(`/increment/${id}?by=1&command=${fresh("c")}`), {
+        concurrency: 8,
+        discard: true,
+      });
+      const killedAt = yield* Clock.currentTimeMillis;
+      const killed = yield* killOne(stack);
+      // Swarm starts a new task under a new address: the killed runner's
+      // registration only leaves through a health check, or once it expires
+      // (35 s). Every key must answer well before that.
+      yield* Effect.forEach(counters, (id) => untilAnswered(`/counter/${id}`), {
+        concurrency: 16,
+        discard: true,
+      });
+      const movedAfter = (yield* Clock.currentTimeMillis) - killedAt;
+      yield* Effect.log(`killed ${killed}; every key answered again after ${movedAfter} ms`);
+      expect(movedAfter).toBeLessThan(20_000);
+      for (const id of counters)
+        expect(yield* untilAnswered(`/counter/${id}`)).toEqual({ total: 1 });
       yield* bothRunning(stack, killed);
     }),
     options,

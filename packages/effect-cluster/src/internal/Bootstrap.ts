@@ -10,7 +10,7 @@ import { spawn } from "node:child_process";
 import { lookup } from "node:dns/promises";
 import { createServer } from "node:http";
 import { networkInterfaces } from "node:os";
-import { NodeClusterHttp, NodeHttpServer, NodeServices } from "@effect/platform-node";
+import { NodeClusterHttp, NodeCrypto, NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { PgClient } from "@effect/sql-pg";
 import { RuntimeConfigProviderLive } from "alchemy/Runtime";
 import {
@@ -24,11 +24,18 @@ import {
   ClusterSchema,
   ClusterWorkflowEngine,
   Entity as EffectEntity,
+  Runner,
   RunnerAddress,
+  Runners,
+  RunnerStorage,
+  ShardingConfig,
   Singleton,
+  SqlMessageStorage,
+  SqlRunnerStorage,
 } from "effect/cluster";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -40,6 +47,7 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
 import type { Rpc, RpcGroup } from "effect/rpc";
+import * as Schedule from "effect/Schedule";
 import type { Workflow as EffectWorkflow } from "effect/workflow";
 import type { HostedCron } from "../Cron.ts";
 import { databaseMaxConnections } from "../Database.ts";
@@ -193,6 +201,86 @@ export class ExternalProgramExited extends Data.TaggedError("Cluster.ExternalPro
   readonly code: number | null;
 }> {}
 
+/** How often the pool checks that its runners are reachable. */
+const RUNNER_HEALTH_CHECK_INTERVAL = Duration.seconds(5);
+
+/**
+ * Effect Cluster's own runner health check is a singleton in the `default`
+ * shard group, which no pool serves (an external program's entities live
+ * there), so it never runs: a runner that crashed kept its shards until its
+ * registration expired, 35 seconds later. The pool runs the check itself,
+ * on every runner and without a singleton, so the crash of the runner doing
+ * it can't stall it either:
+ *
+ * - Every runner orders the pool's registered runners by address. The first
+ *   one that answers a ping is the checker: it pings every runner, marks one
+ *   that doesn't answer unhealthy (which takes its shards off it) and one
+ *   that answers again healthy. The last healthy runner is never marked.
+ * - Every other runner pings the runners before it, in order, and stops at
+ *   the first that answers. Only when none does, as when the checker itself
+ *   crashed, does it check the pool.
+ *
+ * So a pool of n runners pings about 2(n - 1) times and reads its runners n
+ * times per interval, and a crashed checker is replaced at the next one.
+ */
+const runnerHealthCheck = (group: string, self: RunnerAddress.RunnerAddress) =>
+  Layer.effectDiscard(
+    Effect.gen(function* () {
+      const storage = yield* RunnerStorage.RunnerStorage;
+      const runners = yield* Runners.Runners;
+      const key = (address: RunnerAddress.RunnerAddress) => `${address.host}:${address.port}`;
+      const isAlive = (address: RunnerAddress.RunnerAddress) =>
+        key(address) === key(self)
+          ? Effect.succeed(true)
+          : runners
+              .ping(address)
+              .pipe(
+                Effect.timeout("3 seconds"),
+                Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 3 }),
+                Effect.isSuccess,
+              );
+      /** Mark every runner of the pool by whether it answers. */
+      const checkAll = (registered: ReadonlyArray<readonly [Runner.Runner, boolean]>) =>
+        Effect.gen(function* () {
+          let healthy = registered.filter(([, isHealthy]) => isHealthy).length;
+          yield* Effect.forEach(
+            registered,
+            ([runner, isHealthy]) =>
+              Effect.flatMap(isAlive(runner.address), (alive) => {
+                if (alive === isHealthy || (!alive && healthy <= 1)) return Effect.void;
+                healthy += alive ? 1 : -1;
+                return Effect.logInfo(
+                  `Effect Cluster runner ${key(runner.address)} is ${alive ? "reachable again" : "unreachable"}`,
+                ).pipe(Effect.andThen(storage.setRunnerHealth(runner.address, alive)));
+              }),
+            { concurrency: 10, discard: true },
+          );
+        });
+      /** Whether a runner before this one in the order answers: then it checks. */
+      const anEarlierAnswers = (earlier: ReadonlyArray<Runner.Runner>): Effect.Effect<boolean> =>
+        earlier.length === 0
+          ? Effect.succeed(false)
+          : Effect.flatMap(isAlive(earlier[0]!.address), (alive) =>
+              alive ? Effect.succeed(true) : anEarlierAnswers(earlier.slice(1)),
+            );
+      const check = Effect.gen(function* () {
+        const registered = (yield* storage.getRunners)
+          .filter(([runner]) => runner.groups.includes(group))
+          .toSorted(([a], [b]) => key(a.address).localeCompare(key(b.address)));
+        const earlier = registered
+          .filter(([runner]) => key(runner.address).localeCompare(key(self)) < 0)
+          .map(([runner]) => runner);
+        if (yield* anEarlierAnswers(earlier)) return;
+        yield* checkAll(registered);
+      }).pipe(Effect.catchCause((cause) => Effect.logWarning("Runner health check failed", cause)));
+      yield* check.pipe(
+        Effect.andThen(Effect.sleep(RUNNER_HEALTH_CHECK_INTERVAL)),
+        Effect.forever,
+        Effect.forkScoped,
+      );
+    }),
+  );
+
 /** The shard groups this pool serves, and every group in the cluster. */
 const shardGroupsConfig = () => {
   const list = (name: string) =>
@@ -300,18 +388,29 @@ export const bootstrap = (
         // So does the entity itself: its RPCs' middleware is provided to its Layer.
         .pipe(Layer.provide(Layer.succeedContext(entry.context))),
     );
+    const shardingConfig = {
+      runnerAddress: Option.some(RunnerAddress.make(host, RUNNER_PORT)),
+      // Fly's private network is IPv6 only.
+      runnerListenAddress: Option.some(
+        RunnerAddress.make(env("CLUSTER_LISTEN_HOST") ?? "0.0.0.0", RUNNER_PORT),
+      ),
+      runnerHealthCheckInterval: RUNNER_HEALTH_CHECK_INTERVAL,
+      ...shardGroupsConfig(),
+    };
+    // The SQL storage Effect Cluster's `sql` option builds, built here so the
+    // runner health check below can mark runners in it.
+    const storage = Layer.mergeAll(
+      SqlMessageStorage.layer.pipe(Layer.provide(NodeCrypto.layerDigest)),
+      Layer.orDie(SqlRunnerStorage.layer),
+    ).pipe(
+      Layer.provide(ShardingConfig.layerFromEnv(shardingConfig)),
+      Layer.provide(clusterDatabase),
+    );
     const cluster = NodeClusterHttp.layer({
       transport: "http",
-      storage: "sql",
-      shardingConfig: {
-        runnerAddress: Option.some(RunnerAddress.make(host, RUNNER_PORT)),
-        // Fly's private network is IPv6 only.
-        runnerListenAddress: Option.some(
-          RunnerAddress.make(env("CLUSTER_LISTEN_HOST") ?? "0.0.0.0", RUNNER_PORT),
-        ),
-        ...shardGroupsConfig(),
-      },
-    }).pipe(Layer.provide(clusterDatabase));
+      storage: "byo",
+      shardingConfig,
+    }).pipe(Layer.provideMerge(storage));
     // Singletons and crons run in this pool's shard group too, each with
     // the services its Construction phase had.
     const scheduled = hosted.flatMap((entry) =>
@@ -358,6 +457,7 @@ export const bootstrap = (
         // What the classes' Construction phases handed the runner.
         ...launched,
         gateway,
+        runnerHealthCheck(group, RunnerAddress.make(host, RUNNER_PORT)),
       ).pipe(
         // Workflows run on Effect Cluster's own engine, over the cluster.
         Layer.provide(ClusterWorkflowEngine.layer),
