@@ -3,13 +3,14 @@ import Alchemy
 /-!
 # A bank
 
-How a verified domain model is built up, in five steps:
+How a verified domain model is built up, in six steps:
 
 1. the domain: what an account can be asked, what it records, why it refuses;
 2. behaviour: given this history, when this command arrives, then this happens;
 3. invariants: facts about an account's state that no command can break;
 4. consequences: what follows from the invariants, for every history;
-5. the model: the same facts in every world the bank can reach, and as deployed.
+5. across accounts: a transfer, decided over two accounts at once, creates no money;
+6. the model: the same facts in every world the bank can reach, and as deployed.
 -/
 
 open Alchemy Cloud
@@ -30,6 +31,8 @@ inductive Event where
   | opened (owner : String)
   | deposited (amount : Nat)
   | withdrawn (amount : Nat)
+  | transferredOut (amount : Nat)
+  | transferredIn (amount : Nat)
   | frozen (reason : String)
   | closed
 deriving DecidableEq, Repr
@@ -94,6 +97,10 @@ def evolve (s : State) : Event → State
     { s with balance := s.balance + amount, deposited := s.deposited + amount }
   | .withdrawn amount =>
     { s with balance := s.balance - amount, withdrawn := s.withdrawn + amount }
+  | .transferredOut amount =>
+    { s with balance := s.balance - amount, withdrawn := s.withdrawn + amount }
+  | .transferredIn amount =>
+    { s with balance := s.balance + amount, deposited := s.deposited + amount }
   | .frozen reason => { s with status := .frozen reason }
   | .closed => { s with status := .closed }
 
@@ -105,8 +112,36 @@ inductive Screening where
   | flagged (reason : String)
 deriving DecidableEq, Repr, Lean.ToJson, Lean.FromJson
 
+/-- Move money from one account to another. -/
+structure TransferRequest where
+  source : String
+  destination : String
+  amount : Nat
+deriving DecidableEq, Repr
+
+inductive TransferRefused where
+  | sameAccount
+  | nothingToMove
+  | sourceNotOpen
+  | destinationNotOpen
+  | insufficientFunds (balance requested : Nat)
+deriving DecidableEq, Repr
+
 model Bank where
   aggregate Account
+
+  -- A transfer is decided across two accounts at once: both record it, or neither does.
+  decision Transfer (TransferRequest) : TransferRefused
+    | accounts, ⟨source, destination, amount⟩ =>
+      if source = destination then .error .sameAccount
+      else if amount = 0 then .error .nothingToMove
+      else if (Account.of accounts source).status ≠ .open then .error .sourceNotOpen
+      else if (Account.of accounts destination).status ≠ .open then .error .destinationNotOpen
+      else if (Account.of accounts source).balance < amount then
+        .error (.insufficientFunds (Account.of accounts source).balance amount)
+      else .ok [
+        Account.record source (.transferredOut amount),
+        Account.record destination (.transferredIn amount)]
 
   call screen (account : String) (amount : Nat) : Screening
 
@@ -230,26 +265,157 @@ theorem onlyAWithdrawalLowersTheBalance :
   cases c <;> simp only [Account.decide] at eq <;> (repeat' split at eq) <;>
     grind [Aggregate.apply, Account.evolve]
 
-/-! ## 5. The model: every world the bank can reach
+/-! ## 5. Across accounts: a transfer
 
-The bank is more than one account: there are many, a policy reacts to
-deposits, and an outside system answers whatever it likes. The invariants hold
-all the same, of every account, and of the bank as it is deployed.
+A transfer touches two accounts, so no one account's rule can speak for it. It
+is a decision: it reads both accounts and records on both, or on neither. Two
+things are proved of it. Each account it touches still keeps its invariants.
+And across all accounts, it moves money without making any.
 -/
+
+/-- What the transfer records when it accepts, and what was true for it to accept. -/
+theorem transfer_accepted {accounts : States Aggregates} {request : TransferRequest}
+    {records : List (Record Aggregates)} (accepted : Transfer.decide accounts request = .ok records) :
+    request.source ≠ request.destination ∧
+      (accounts .Account request.source).status = .open ∧
+      (accounts .Account request.destination).status = .open ∧
+      request.amount ≤ (accounts .Account request.source).balance ∧
+      records = [⟨.Account, request.source, .transferredOut request.amount⟩,
+        ⟨.Account, request.destination, .transferredIn request.amount⟩] := by
+  obtain ⟨source, destination, amount⟩ := request
+  simp only [Transfer.decide, Account.of, Account.record] at accepted
+  by_cases same : source = destination
+  · simp [same] at accepted
+  by_cases none : amount = 0
+  · simp [same, none] at accepted
+  by_cases sourceOpen : (accounts .Account source).status = .open
+  · by_cases destinationOpen : (accounts .Account destination).status = .open
+    · by_cases short : (accounts .Account source).balance < amount
+      · simp [same, none, sourceOpen, destinationOpen, short] at accepted
+      · simp [same, none, sourceOpen, destinationOpen, short] at accepted
+        exact ⟨same, sourceOpen, destinationOpen, Nat.le_of_not_lt short, accepted.symm⟩
+    · simp [same, none, sourceOpen, destinationOpen] at accepted
+  · simp [same, none, sourceOpen] at accepted
+
+/-- A rule about one account survives every decision of the bank. -/
+abbrev SurvivesDecisions (P : Account.State → Prop) : Prop :=
+  ∀ d ∈ Bank.decisions, ∀ (r : Recorded Aggregates) (ctx : Context d.Actor) c,
+    (∀ id, P (r.state .Account id)) → ∀ id, P ((r.decide d ctx c).state .Account id)
+
+/--
+A rule about one account survives a transfer, if it survives money leaving an
+open account that holds enough, and money arriving in an open account.
+-/
+theorem transfer_keeps {P : Account.State → Prop}
+    (leaving : ∀ s amount, P s → s.status = .open → amount ≤ s.balance →
+      P (Account.evolve s (.transferredOut amount)))
+    (arriving : ∀ s amount, P s → s.status = .open → P (Account.evolve s (.transferredIn amount))) :
+    SurvivesDecisions P := by
+  intro d mem
+  simp only [List.mem_singleton] at mem
+  subst mem
+  intro r ctx request holds id
+  simp only [Recorded.decide]
+  cases accepted : Transfer.decide r.state request with
+  | error _ => exact holds id
+  | ok records =>
+    obtain ⟨differ, sourceOpen, destinationOpen, enough, rfl⟩ := transfer_accepted accepted
+    simp only [Recorded.records, List.foldl, Recorded.record_state]
+    by_cases toHere : request.destination = id
+    · have notSource : ¬request.source = request.destination := differ
+      simp only [toHere, ite_true]
+      subst toHere
+      simp only [notSource, ite_false]
+      exact arriving _ _ (holds _) destinationOpen
+    · simp only [toHere, ite_false]
+      by_cases fromHere : request.source = id
+      · subst fromHere
+        simp only [ite_true]
+        exact leaving _ _ (holds _) sourceOpen enough
+      · simp only [fromHere, ite_false]
+        exact holds id
+
+/-- Money moved out by transfers, and money moved in, as each event records it. -/
+def movedOut : Account.Event → Nat
+  | .transferredOut amount => amount
+  | _ => 0
+
+def movedIn : Account.Event → Nat
+  | .transferredIn amount => amount
+  | _ => 0
+
+/-- Across every account: all the money transfers took out equals all the money they put in. -/
+def Conserved (r : Recorded Aggregates) : Prop :=
+  ((r.eventsOf .Account).map movedOut).sum = ((r.eventsOf .Account).map movedIn).sum
+
+/-- No command sent to one account moves money between accounts. -/
+theorem commands_move_nothing {s : Account.State} {command : Account.Command}
+    {events : List Account.Event} (accepted : Account.decide s command = .ok events) :
+    (events.map movedOut).sum = 0 ∧ (events.map movedIn).sum = 0 := by
+  cases command <;> simp only [Account.decide] at accepted <;> (repeat' split at accepted) <;>
+    first | cases accepted | skip
+  all_goals simp [movedOut, movedIn]
+
+/--
+No transfer creates or destroys money. In every world the bank can reach,
+whatever is sent to any account and whatever transfers are decided, in any
+order, what transfers took out of accounts is exactly what they put into accounts.
+-/
+theorem noTransferCreatesMoney (w : Alchemy.World Signature) (reach : Bank.Reachable w) :
+    Conserved w.toRecorded := by
+  refine Bank.invariant (rule := Conserved) (by simp [Conserved, Recorded.eventsOf, Recorded.start]) ⟨?_, ?_⟩ w reach
+  · intro r now s conserved
+    rcases r.dispatch_cases now s with same | ⟨events, accepted, recorded⟩
+    · rw [same]; exact conserved
+    · obtain ⟨to, actor, command⟩ := s
+      cases to
+      have nothing := commands_move_nothing (s := r.state .Account (Account.key command)) accepted
+      rw [recorded]
+      simp only [Conserved, Recorded.eventsOf_record_self, List.map_append, List.sum_append] at *
+      omega
+  · intro d mem r ctx request conserved
+    simp only [List.mem_singleton] at mem
+    subst mem
+    simp only [Recorded.decide]
+    cases accepted : Transfer.decide r.state request with
+    | error _ => exact conserved
+    | ok records =>
+      obtain ⟨_, _, _, _, rfl⟩ := transfer_accepted accepted
+      simp only [Conserved, Recorded.records, List.foldl, Recorded.eventsOf_record_self,
+        List.map_append, List.sum_append, List.map_cons, List.map_nil, List.sum_cons, List.sum_nil,
+        movedOut, movedIn] at *
+      omega
+
+/-! ## 6. The model: every world the bank can reach
+
+The bank is many accounts, transfers between them, a policy that reacts to
+deposits, and an outside system that answers whatever it likes. The invariants
+hold all the same, of every account, and of the bank as it is deployed.
+-/
+
+theorem transfer_balanced : SurvivesDecisions Balanced :=
+  transfer_keeps
+    (by intro s amount h _ enough; simp only [Balanced, Account.evolve] at *; omega)
+    (by intro s amount h _; simp only [Balanced, Account.evolve] at *; omega)
+
+theorem transfer_closedIsEmpty : SurvivesDecisions ClosedIsEmpty :=
+  transfer_keeps
+    (by intro s amount _ isOpen _; simp [ClosedIsEmpty, Account.evolve, isOpen])
+    (by intro s amount _ isOpen; simp [ClosedIsEmpty, Account.evolve, isOpen])
 
 /--
 In every world the bank can reach, every account is balanced: whatever callers
-send, whatever compliance answers, in any order of delivery, with any event
-delivered twice.
+send, whatever transfers are decided, whatever compliance answers, in any order
+of delivery, with any event delivered twice.
 -/
 theorem everyAccountBalanced (w : Alchemy.World Signature) (reach : Bank.Reachable w)
     (id : String) : Balanced (w.state .Account id) :=
-  Account.always (by simp [Balanced]) balanced_kept w reach id
+  Account.always (by simp [Balanced]) balanced_kept w reach id transfer_balanced
 
 /-- And of the bank as deployed: whatever its journal holds. -/
 theorem deployedAccountsBalanced (journal : List Journal.Line) (id : String) :
     Balanced ((served.replay journal).state .Account id) :=
-  Account.deployed (by simp [Balanced]) balanced_kept journal id
+  Account.deployed (by simp [Balanced]) balanced_kept journal id transfer_balanced
 
 /-- So the deployed bank never pays out of an account more than was paid into it. -/
 theorem theBankNeverPaysOutMoreThanCameIn (journal : List Journal.Line) (id : String) :
@@ -263,7 +429,8 @@ theorem theBankNeverPaysOutMoreThanCameIn (journal : List Journal.Line) (id : St
 theorem deployedClosedAccountsAreEmpty (journal : List Journal.Line) (id : String)
     (closed : ((served.replay journal).state .Account id).status = .closed) :
     ((served.replay journal).state .Account id).balance = 0 :=
-  (Account.deployed (by simp [ClosedIsEmpty]) closedIsEmpty_kept journal id : ClosedIsEmpty _) closed
+  (Account.deployed (by simp [ClosedIsEmpty]) closedIsEmpty_kept journal id
+    transfer_closedIsEmpty : ClosedIsEmpty _) closed
 
 /-! What is read from the bank. These came with the model. -/
 
@@ -280,11 +447,17 @@ example : Bank.passes [
     .when ⟨.Account, (), .deposit "a-1" 500⟩,
     .when ⟨.Account, (), .withdraw "a-1" 200⟩,
     .view Holdings () 300,
+    .when ⟨.Account, (), .open "a-2" "Alex"⟩,
+    .decide Transfer () ⟨"a-1", "a-2", 100⟩,
+    .state .Account "a-2" { status := .open, owner := "Alex", balance := 100, deposited := 100 },
+    .decide Transfer () ⟨"a-1", "a-2", 5000⟩ (some (.insufficientFunds 200 5000)),
+    .view Holdings () 300,
     .when ⟨.Account, (), .deposit "a-1" 25000⟩,
     .call (.screen "a-1" 25000),
     .answer (.screen "a-1" 25000) (.flagged "source of funds"),
-    .recorded .Account "a-1" [.opened "Sam", .deposited 500, .withdrawn 200, .deposited 25000,
-      .frozen "source of funds"],
+    .recorded .Account "a-1" [.opened "Sam", .deposited 500, .withdrawn 200, .transferredOut 100,
+      .deposited 25000, .frozen "source of funds"],
+    .recorded .Account "a-2" [.opened "Alex", .transferredIn 100],
     .when ⟨.Account, (), .withdraw "a-1" 100⟩,
     .rejected .Account (.frozen "source of funds")
   ] = true := by decide

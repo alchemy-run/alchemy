@@ -179,5 +179,11 @@ theorem play_answer_reachable (fuel : Nat) (w : World m.signature) (c : m.signat
   · next w' h => exact m.settle_reachable fuel _ (.step reach (m.answer_step w w' c reply h))
   · exact reach
 
+/-- Deciding, and letting what follows run, stays within what the model can reach. -/
+theorem play_decide_reachable (m : Model) (fuel : Nat) (w : World m.signature)
+    (d : Decision m.signature.aggregates) (mem : d ∈ m.decisions) (actor : d.Actor) (c : d.Command)
+    (reach : m.Reachable w) : m.Reachable (m.play fuel w (.decide d actor c)) :=
+  m.settle_reachable fuel _ (.step reach (.decide w d actor c mem))
+
 end Model
 end Alchemy

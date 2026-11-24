@@ -503,3 +503,47 @@ theorem alwaysAt (m : Model) (noDecisions : m.decisions = []) (n : m.signature.a
 
 end Model
 end Alchemy
+
+namespace Alchemy
+namespace Model
+
+/--
+A rule one aggregate keeps, and every decision keeps, holds of every instance
+of it in every world the model can reach.
+-/
+theorem alwaysAtWith (m : Model) (n : m.signature.aggregates.Name)
+    (P : (m.signature.aggregates.of n).State → Prop)
+    (initially : P (m.signature.aggregates.of n).initial)
+    (kept : (m.signature.aggregates.of n).Keeps P)
+    (decided : ∀ d ∈ m.decisions, ∀ (r : Recorded m.signature.aggregates) (ctx : Context d.Actor) c,
+      (∀ id, P (r.state n id)) → ∀ id, P ((r.decide d ctx c).state n id))
+    (w : World m.signature) (reach : m.Reachable w) (id : (m.signature.aggregates.of n).Id) :
+    P (w.state n id) := by
+  have all := m.always (P := fun n' s => ∀ h : n' = n, P (h ▸ s))
+    (by intro n' h; subst h; exact initially)
+    (by intro n' ctx s c es holds eq h; subst h; exact kept ctx s c es (holds rfl) eq)
+    (by
+      intro d mem r ctx c holds n' id' h
+      subst h
+      exact decided d mem r ctx c (fun id => holds _ id rfl) id')
+    w reach
+  exact all n id rfl
+
+end Model
+end Alchemy
+
+namespace Alchemy
+namespace Recorded
+
+variable {g : Aggregates}
+
+/-- What recording on one instance does to the states of its aggregate. -/
+theorem record_state (r : Recorded g) (time : Time) (n : g.Name) (id id' : (g.of n).Id)
+    (es : List (g.of n).Event) :
+    (r.record time n id es).state n id'
+      = if id = id' then (g.of n).apply (r.state n id) es time else r.state n id' := by
+  simp only [record, States.set]
+  split <;> simp_all
+
+end Recorded
+end Alchemy

@@ -35,6 +35,17 @@ syntax &"view " ident &" on " ident " : " term " := " term modelAlt+ : modelItem
 /-- Rows written for an aggregate's events: `| id, event => […]`. -/
 syntax &"projection " ident &" on " ident " : " term modelAlt+ : modelItem
 
+/--
+A command decided across several instances at once: `| states, command => …`
+answers the events to record on each, or a rejection.
+-/
+syntax &"decision " ident "(" term ")" " : " term modelAlt+ : modelItem
+/--
+A process with several steps, started by a policy: `| id, input => …`. It is
+given what it is started with, may be told a signal while it waits, and may fail.
+-/
+syntax &"saga " ident "(" term ")" "(" term ")" " : " term modelAlt+ : modelItem
+
 syntax (name := modelCommand) "model " ident " where" many1Indent(modelItem) : command
 
 private def under (parent : Ident) (child : Name) : Ident :=
@@ -54,6 +65,14 @@ private def withFallback (alts : Array (TSyntax ``modelAlt)) (fallback : TSyntax
     | _ => Macro.throwUnsupported
   return (alts.push fallback).map fun alt => ⟨alt.raw⟩
 
+/-- The cases of a block as `match` alternatives, as written. -/
+private def exactly (alts : Array (TSyntax ``modelAlt)) : MacroM (Array (TSyntax ``Term.matchAlt)) := do
+  let alts ← alts.mapM fun alt =>
+    match alt with
+    | `(modelAlt| | $patterns,* => $result) => `(Term.matchAltExpr| | $patterns,* => $result)
+    | _ => Macro.throwUnsupported
+  return alts.map fun alt => ⟨alt.raw⟩
+
 /-- A command, allowed alternatives that can never match. -/
 private def lenient (command : Command) : MacroM Command :=
   `(command| set_option match.ignoreUnusedAlts true in $command:command)
@@ -68,6 +87,11 @@ macro_rules
     let mut policies : Array Ident := #[]
     let mut views : Array Ident := #[]
     let mut projections : Array Ident := #[]
+    let mut decisions : Array Ident := #[]
+    let mut saga : Option Ident := none
+    let mut sagaInput : Term ← `(Unit)
+    let mut sagaSignal : Term ← `(Unit)
+    let mut sagaFailure : Term ← `(Unit)
     let name := mkIdent `Name
     let signature := mkIdent `Signature
     let aggregatesId := mkIdent `Aggregates
@@ -135,6 +159,42 @@ macro_rules
           theorem $(under p `exact):ident (log : List (Alchemy.Emitted $aggregatesId)) :
               Alchemy.Projection.table $p log = log.flatMap $rows :=
             Alchemy.Projection.each_exact _ _ log))
+      | `(modelItem| decision $d:ident ($command:term) : $rejection:term $alts:modelAlt*) =>
+        decisions := decisions.push d
+        let run := under d `decide
+        let alts ← exactly alts
+        later := later.push (← `(command|
+          def $run:ident (states : Alchemy.States $aggregatesId) (command : $command) :
+              Except $rejection (List (Alchemy.Record $aggregatesId)) :=
+            match states, command with $alts:matchAlt*))
+        later := later.push (← `(command|
+          abbrev $d:ident : Alchemy.Decision $aggregatesId where
+            name := $(text d)
+            Command := $command
+            Rejection := $rejection
+            Actor := Unit
+            decide := fun _ states command => $run states command))
+      | `(modelItem| saga $g:ident ($input:term) ($signal:term) : $failure:term $alts:modelAlt*) =>
+        saga := some g
+        sagaInput := input
+        sagaSignal := signal
+        sagaFailure := failure
+        let alts ← exactly alts
+        later := later.push (← `(command|
+          /-- The saga's steps, for one run. -/
+          def $(under g `run):ident (id : String) (input : $input) :
+              Alchemy.Program $signature Unit :=
+            match id, input with $alts:matchAlt*))
+        later := later.push (← `(command|
+          /-- Start a run of the saga, from a policy. A run already started is left alone. -/
+          def $(under g `start):ident (id : String) (input : $input) :
+              Alchemy.Program $signature Unit :=
+            Alchemy.Program.startSaga (σ := $signature) id input))
+        later := later.push (← `(command|
+          /-- Tell a run of the saga something, from a policy. -/
+          def $(under g `signal):ident (id : String) (signal : $signal) :
+              Alchemy.Program $signature Unit :=
+            Alchemy.Program.signalSaga (σ := $signature) id signal))
       | _ => Macro.throwUnsupported
     let mut commands : Array Command := #[]
     -- Each aggregate, from the namespace that defines it.
@@ -166,17 +226,29 @@ macro_rules
     commands := commands.push (← `(command|
       /-- The calls the model makes to systems outside it. -/
       inductive $callId where $callCtors* deriving DecidableEq, Repr))
-    commands := commands.push (← `(command|
-      abbrev $(mkIdent `Reply) : $callId → Type := fun c => match c with $replyAlts:matchAlt*))
+    if replyAlts.isEmpty then
+      commands := commands.push (← `(command|
+        abbrev $(mkIdent `Reply) : $callId → Type := fun c => nomatch c))
+    else
+      commands := commands.push (← `(command|
+        abbrev $(mkIdent `Reply) : $callId → Type := fun c => match c with $replyAlts:matchAlt*))
     commands := commands.push (← `(command|
       abbrev $signature : Alchemy.Signature where
         aggregates := $aggregatesId
         Call := $callId
         Reply := $(mkIdent `Reply)
-        Saga := Unit
-        SagaInput := Unit
-        Signal := Unit
-        Failure := Unit))
+        Saga := String
+        SagaInput := $sagaInput
+        Signal := $sagaSignal
+        Failure := $sagaFailure))
+    commands := commands.push (← `(command|
+      /-- Wait for the next signal sent to this run of the saga. -/
+      def $(mkIdent `awaitSignal) : Alchemy.Program $signature $sagaSignal :=
+        Alchemy.Program.awaitSignal (σ := $signature)))
+    commands := commands.push (← `(command|
+      /-- Stop the saga: what it registered to undo is undone, newest first. -/
+      def $(mkIdent `failWith) {α : Type} (failure : $sagaFailure) : Alchemy.Program $signature α :=
+        Alchemy.Program.fail failure))
     commands := commands ++ callDefs
     for a in aggregates do
       commands := commands.push (← `(command|
@@ -184,15 +256,40 @@ macro_rules
         def $(under a `send):ident (command : $(rooted a `Command)) :
             Alchemy.Program $signature Unit :=
           Alchemy.Program.tell ⟨$(under name a.getId), (), command⟩))
+      commands := commands.push (← `(command|
+        /-- Send this aggregate a command; a rejection fails the saga with what `explain` makes of it. -/
+        def $(under a `must):ident (command : $(rooted a `Command))
+            (explain : $(rooted a `Rejection) → $sagaFailure) : Alchemy.Program $signature Unit :=
+          Alchemy.Program.step ⟨$(under name a.getId), (), command⟩ explain))
+      commands := commands.push (← `(command|
+        /-- From here on, if the saga fails, send this aggregate this command. -/
+        def $(under a `undoWith):ident (command : $(rooted a `Command)) :
+            Alchemy.Program $signature Unit :=
+          Alchemy.Program.undoWith fun _ => ⟨$(under name a.getId), (), command⟩))
+      commands := commands.push (← `(command|
+        /-- An event to record on an instance of this aggregate, in a decision. -/
+        def $(under a `record):ident (id : String) (event : $(rooted a `Event)) :
+            Alchemy.Record $aggregatesId :=
+          ⟨$(under name a.getId), id, event⟩))
+      commands := commands.push (← `(command|
+        /-- The state of an instance of this aggregate, in a decision. -/
+        def $(under a `of):ident (states : Alchemy.States $aggregatesId) (id : String) :
+            $(rooted a `State) :=
+          states $(under name a.getId) id))
     commands := commands ++ later
     commands := commands.push (← `(command| end $m))
+    let sagaRun : Term ← match saga with
+      | some g => `($(under m (g.getId ++ `run)))
+      | none => `(fun _ _ => Alchemy.Program.pure ())
     commands := commands.push (← `(command|
       abbrev $m:ident : Alchemy.Model where
         name := $(text m)
         signature := $(under m `Signature)
+        decisions := [$[$(decisions.map (under m ·.getId))],*]
         policies := [$[$(policies.map (under m ·.getId))],*]
         views := [$[$(views.map (under m ·.getId))],*]
-        projections := [$[$(projections.map (under m ·.getId))],*]))
+        projections := [$[$(projections.map (under m ·.getId))],*]
+        saga := $sagaRun))
     -- What callers send, how the model is served, and each aggregate's rules lifted to the model.
     commands := commands.push (← `(command| namespace $m))
     let input := mkIdent `Input
@@ -212,22 +309,35 @@ macro_rules
         command := fun input => match input with $commandAlts:matchAlt*))
     for a in aggregates do
       let always := mkIdent (a.getId ++ `always)
+      let here := under name a.getId
       commands := commands.push (← `(command|
-        /-- A rule the aggregate keeps holds of every instance, in every world the model can reach. -/
+        /--
+        A rule the aggregate keeps holds of every instance, in every world the
+        model can reach. With decisions in the model, they must keep it too.
+        -/
         theorem $always {P : $(rooted a `State) → Prop}
             (initially : P (Alchemy.Aggregate.initial $(rooted a)))
             (kept : Alchemy.Aggregate.Keeps $(rooted a) P)
             (w : Alchemy.World $signature) (reach : Alchemy.Model.Reachable $(rooted m) w)
-            (id : String) : P (w.state $(under name a.getId) id) :=
-          Alchemy.Model.alwaysAt $(rooted m) rfl $(under name a.getId) P initially kept w reach id))
+            (id : String)
+            (decided : ∀ d ∈ Alchemy.Model.decisions $(rooted m),
+              ∀ (r : Alchemy.Recorded $aggregatesId) (ctx : Alchemy.Context d.Actor) c,
+                (∀ id, P (r.state $here id)) → ∀ id, P ((r.decide d ctx c).state $here id) := by
+              intro d mem; cases mem) :
+            P (w.state $here id) :=
+          Alchemy.Model.alwaysAtWith $(rooted m) $here P initially kept decided w reach id))
       commands := commands.push (← `(command|
         /-- And of the model as deployed, whatever its journal holds. -/
         theorem $(mkIdent (a.getId ++ `deployed)) {P : $(rooted a `State) → Prop}
             (initially : P (Alchemy.Aggregate.initial $(rooted a)))
             (kept : Alchemy.Aggregate.Keeps $(rooted a) P)
-            (journal : List Alchemy.Cloud.Journal.Line) (id : String) :
-            P ((Alchemy.Cloud.Served.replay $served journal).state $(under name a.getId) id) :=
-          $always initially kept _ (Alchemy.Cloud.Served.replay_reachable $served journal) id))
+            (journal : List Alchemy.Cloud.Journal.Line) (id : String)
+            (decided : ∀ d ∈ Alchemy.Model.decisions $(rooted m),
+              ∀ (r : Alchemy.Recorded $aggregatesId) (ctx : Alchemy.Context d.Actor) c,
+                (∀ id, P (r.state $here id)) → ∀ id, P ((r.decide d ctx c).state $here id) := by
+              intro d mem; cases mem) :
+            P ((Alchemy.Cloud.Served.replay $served journal).state $here id) :=
+          $always initially kept _ (Alchemy.Cloud.Served.replay_reachable $served journal) id decided))
     commands := commands.push (← `(command| end $m))
     return mkNullNode commands
 
