@@ -956,6 +956,47 @@ urlTestFor(deletedMidDeploy).test.provider(
   { tags },
 );
 
+for (const withRecord of [false, true]) {
+  const reread = makeUrlCloud();
+  urlTestFor(reread).test.provider(
+    `${withRecord ? "with dns" : "without dns"}, an unverified row is read again on each deploy with one GET and no verify request, and a verified one is not read again`,
+    (stack) =>
+      Effect.gen(function* () {
+        reread.reset({ fromZone: withRecord, verifiesAs: "unverified", txt: "absent" });
+        yield* stack.destroy();
+        const program = dnsStack({ dns: withRecord });
+        const first = yield* stack.deploy(program);
+        expect(first.status).toBe("unverified");
+        const id = first.domainOwnershipId;
+        const txtChecks = reread.state.txtChecked.length;
+
+        reread.fake.captured.length = 0;
+        const still = yield* stack.deploy(program);
+        expect(still.status).toBe("unverified");
+        expect(NOT_GET(reread)).toEqual([]);
+        expect(reread.state.txtChecked).toHaveLength(txtChecks);
+
+        reread.ownerships.set(id, { ...reread.ownerships.get(id)!, status: "verified" });
+        reread.fake.captured.length = 0;
+        const second = yield* stack.deploy(program);
+
+        expect(second.status).toBe("verified");
+        expect(
+          reread.routes().filter((route) => route.startsWith(`GET /v1/domain-ownerships/`)),
+        ).toEqual([`GET /v1/domain-ownerships/${id}`]);
+        expect(NOT_GET(reread)).toEqual([]);
+        expect(reread.state.txtChecked).toHaveLength(txtChecks);
+
+        reread.fake.captured.length = 0;
+        yield* stack.deploy(program);
+        expect(reread.routes()).toEqual([]);
+
+        yield* stack.destroy();
+      }),
+    { tags },
+  );
+}
+
 /** A record whose value reports what `found` resolved to, so a deploy shows the lookup's attributes. */
 const lookupProbe = (found: DomainOwnership) =>
   DnsRecords("Probe", {

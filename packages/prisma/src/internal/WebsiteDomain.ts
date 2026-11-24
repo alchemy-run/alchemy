@@ -73,21 +73,15 @@ const doesNotCover = (hostname: string, ownershipDomain: string) => {
   });
 };
 
-/**
- * What a domain ownership that is not verified means for the hostnames it
- * covers. A looked-up one's status is Prisma's, read while the deploy is
- * planned; a declared one's is what the stack last saved.
- */
+/** What a domain ownership that is not verified means for the hostnames it covers. */
 const notVerifiedWarning = (
   hostname: string,
   { domain, status, expiresAt, recordName, recordValue }: OwnershipState,
-  lookedUp: boolean,
 ) => {
-  const is = lookedUp ? "is" : "was, when this stack last saved it,";
   const record = `TXT ${recordName} = ${recordValue}`;
   return status === "expiring"
-    ? `The domain ownership of '${domain}' ${is} expiring: hostnames it covers that serve, such as '${hostname}', keep serving until Prisma lapses it after ${expiresAt ?? "its expiry"}, and none starts serving, unless ${record} is published or another verified domain ownership covers them.`
-    : `The domain ownership of '${domain}' ${is} ${status}: it does not make hostnames it covers, such as '${hostname}', serve until Prisma finds ${record}, unless another verified domain ownership covers them.`;
+    ? `The domain ownership of '${domain}' is expiring. Hostnames it covers, such as '${hostname}', that already serve keep serving until Prisma lapses it after ${expiresAt ?? "its expiry"}, and none starts serving, unless ${record} is published or another verified domain ownership covers them.`
+    : `The domain ownership of '${domain}' is ${status}: it does not make hostnames it covers, such as '${hostname}', serve until Prisma finds ${record}, unless another verified domain ownership covers them.`;
 };
 
 /**
@@ -123,9 +117,7 @@ const appOnceOwned = (
         return Effect.die(doesNotCover(hostname, state.domain));
       }
       return status !== "verified" && warnsOn.includes(status)
-        ? Effect.logWarning(
-            notVerifiedWarning(hostname, state, Output.isLookupExpr(ownership)),
-          ).pipe(Effect.as(appId))
+        ? Effect.logWarning(notVerifiedWarning(hostname, state)).pipe(Effect.as(appId))
         : Effect.succeed(appId);
     },
   )(

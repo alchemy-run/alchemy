@@ -184,9 +184,23 @@ const ProviderLive = () =>
           if (!output || !isInputObject(news) || typeof news.domain !== "string") {
             return undefined;
           }
-          return normalizeHostname(news.domain) === normalizeHostname(output.domain)
+          if (normalizeHostname(news.domain) !== normalizeHostname(output.domain)) {
+            return { action: "replace" } as const;
+          }
+          // Prisma verifies or lapses a row on its own, so a saved status
+          // other than `verified` is read again on every deploy.
+          return output.status === "verified"
             ? undefined
-            : ({ action: "replace" } as const);
+            : ({
+                action: "update",
+                stables: [
+                  "domainOwnershipId",
+                  "workspaceId",
+                  "domain",
+                  "recordName",
+                  "recordValue",
+                ],
+              } as const);
         }),
         read: Effect.fn(function* ({ output, olds }) {
           const domainOwnershipId = isPrismaDevId(output?.domainOwnershipId)
@@ -200,7 +214,7 @@ const ProviderLive = () =>
           const existing = yield* findOwnership(workspaceId, normalizeHostname(olds.domain));
           return existing ? Unowned(attrsFrom(existing)) : undefined;
         }),
-        reconcile: Effect.fn(function* ({ news, output }) {
+        reconcile: Effect.fn(function* ({ news, olds, output }) {
           const workspaceId = yield* resolveWorkspaceId(news.project);
           const domain = normalizeHostname(news.domain);
           yield* ensureSameWorkspace(domain, output?.workspaceId, workspaceId);
@@ -212,8 +226,14 @@ const ProviderLive = () =>
             recorded && normalizeHostname(recorded.domain) === domain
               ? recorded
               : yield* findOwnership(workspaceId, domain);
+          // A verify request before the record is published makes Prisma's
+          // resolver cache the miss, so only a deploy that first takes the row
+          // or first publishes its record asks Prisma to look; later deploys
+          // read what Prisma found on its own.
+          const asksPrismaToLook =
+            olds === undefined || (news.publishesRecord === true && olds.publishesRecord !== true);
           const ownership =
-            existing?.status === "verified"
+            existing?.status === "verified" || (existing !== undefined && !asksPrismaToLook)
               ? existing
               : news.publishesRecord === true
                 ? yield* ensureWithPublishedRecord(workspaceId, domain, existing)

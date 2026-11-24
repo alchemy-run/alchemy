@@ -67,11 +67,11 @@ const PROJECT = "proj-1";
 const EXPIRES_AT = "2026-12-01T00:00:00.000Z";
 
 const record = (domain: string) => `TXT ${txtFor(domain).name} = ${txtFor(domain).value}`;
-const unverifiedWarning = (domain: string, hostname: string, is = "is") =>
-  `The domain ownership of '${domain}' ${is} unverified: it does not make hostnames it covers, such as '${hostname}', serve until Prisma finds ${record(domain)}, unless another verified domain ownership covers them.`;
-const expiringWarning = (domain: string, hostname: string, is = "is") =>
-  `The domain ownership of '${domain}' ${is} expiring: hostnames it covers that serve, such as '${hostname}', keep serving until Prisma lapses it after ${EXPIRES_AT}, and none starts serving, unless ${record(domain)} is published or another verified domain ownership covers them.`;
-const LAST_SAVED = "was, when this stack last saved it,";
+const unverifiedWarning = (domain: string, hostname: string) =>
+  `The domain ownership of '${domain}' is unverified: it does not make hostnames it covers, such as '${hostname}', serve until Prisma finds ${record(domain)}, unless another verified domain ownership covers them.`;
+const expiringWarning = (domain: string, hostname: string) =>
+  `The domain ownership of '${domain}' is expiring. Hostnames it covers, such as '${hostname}', that already serve keep serving until Prisma lapses it after ${EXPIRES_AT}, and none starts serving, unless ${record(domain)} is published or another verified domain ownership covers them.`;
+const verifies = (cloud: UrlCloud) => cloud.routes().filter((route) => route.endsWith("/verify"));
 const unitTags = [
   "unit",
   "provider:prisma",
@@ -489,7 +489,7 @@ testFor(apexMismatch).test.provider(
 
 const declaredUnverified = makeUrlCloud();
 testFor(declaredUnverified).test.provider(
-  "a site given an unverified domain ownership declared in the stack warns once per deploy, about the status the stack last saved",
+  "a domain ownership declared in the stack is read again while it is unverified, so the site warns until Prisma verifies it, and a verified one is not read again",
   (stack) =>
     Effect.gen(function* () {
       declaredUnverified.reset();
@@ -498,13 +498,28 @@ testFor(declaredUnverified).test.provider(
         const example = yield* sharedOwnership("*.example.com", false);
         return yield* siteDomain({ name: SITE_HOST, ownership: example });
       });
-      const expected = unverifiedWarning("*.example.com", SITE_HOST, LAST_SAVED);
+      const expected = unverifiedWarning("*.example.com", SITE_HOST);
 
       const first = yield* warningsOf(stack.deploy(program));
       expect(first.warnings).toEqual([expected]);
 
+      declaredUnverified.fake.captured.length = 0;
       const again = yield* warningsOf(stack.deploy(program));
       expect(again.warnings).toEqual([expected]);
+      expect(verifies(declaredUnverified)).toEqual([]);
+      expect(ownershipWrites(declaredUnverified)).toEqual([]);
+
+      const [row] = [...declaredUnverified.ownerships.values()];
+      declaredUnverified.ownerships.set(row!.id, { ...row!, status: "verified" });
+      declaredUnverified.fake.captured.length = 0;
+      const verified = yield* warningsOf(stack.deploy(program));
+      expect(verified.warnings).toEqual([]);
+      expect(verified.result.ownership.status).toBe("verified");
+      expect(ownershipWrites(declaredUnverified)).toEqual([]);
+
+      declaredUnverified.fake.captured.length = 0;
+      yield* stack.deploy(program);
+      expect(declaredUnverified.routes()).toEqual([]);
 
       yield* stack.destroy();
     }),
@@ -562,7 +577,7 @@ for (const withRecords of [true, false]) {
 
   const adopted = makeUrlCloud();
   testFor(adopted).test.provider(
-    `${how}, a released site adopted with adopt(true) on the site takes the existing domain ownership, ${withRecords ? "verifies it without a warning" : "warns that it stays expiring until a forced deploy saves it verified"}, and destroying it deletes the row`,
+    `${how}, a released site adopted with adopt(true) on the site takes the existing domain ownership, ${withRecords ? "verifies it without a warning" : "warns that it stays expiring until Prisma verifies it"}, and destroying it deletes the row`,
     (stack) =>
       Effect.gen(function* () {
         adopted.reset({ fromZone: true });
@@ -574,9 +589,7 @@ for (const withRecords of [true, false]) {
           stack.deploy(siteDomain(domain).pipe(adopt(true))),
         );
 
-        expect(warnings).toEqual(
-          withRecords ? [] : [expiringWarning(SITE_HOST, SITE_HOST, LAST_SAVED)],
-        );
+        expect(warnings).toEqual(withRecords ? [] : [expiringWarning(SITE_HOST, SITE_HOST)]);
         expect(taken.ownership.domainOwnershipId).toBe("do-backfill");
         expect(taken.ownership.status).toBe(withRecords ? "verified" : "expiring");
         expect(adopted.zone.records.filter((record) => record.type === "TXT")).toEqual(
@@ -587,11 +600,11 @@ for (const withRecords of [true, false]) {
         if (!withRecords) {
           const row = adopted.ownerships.get("do-backfill")!;
           adopted.ownerships.set(row.id, { ...row, status: "verified", expiresAt: null });
-          const stale = yield* warningsOf(stack.deploy(siteDomain(domain)));
-          expect(stale.warnings).toEqual([expiringWarning(SITE_HOST, SITE_HOST, LAST_SAVED)]);
-          const forced = yield* warningsOf(stack.deploy(siteDomain(domain), { force: true }));
-          expect(forced.warnings).toEqual([]);
-          expect(forced.result.ownership.status).toBe("verified");
+          adopted.fake.captured.length = 0;
+          const next = yield* warningsOf(stack.deploy(siteDomain(domain)));
+          expect(next.warnings).toEqual([]);
+          expect(next.result.ownership.status).toBe("verified");
+          expect(ownershipWrites(adopted)).toEqual([]);
         }
 
         yield* stack.deploy(siteDomain(domain));

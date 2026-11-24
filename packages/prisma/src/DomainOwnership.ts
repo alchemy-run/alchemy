@@ -65,8 +65,9 @@ export interface DomainOwnershipProps {
  * called, when a hostname it covers is created, updated or checked, and once
  * 10 minutes after a lookup that did not find the record. Each covered
  * RoutingUrl becomes `active` on its own once it is verified.
- * `status` is as of the deploy's last write or verify request, and an
- * unchanged redeploy does not read it again; the Domains page shows it live.
+ * `status` is as of the deploy: a domain ownership that is not `verified` is
+ * read again on every deploy, with no verify request, and a verified one is
+ * not read again. The Domains page shows it live.
  *
  * Destroying it deletes the domain ownership and, with `dns`, the record. A
  * domain ownership the stack did not create, made in the Console, by a
