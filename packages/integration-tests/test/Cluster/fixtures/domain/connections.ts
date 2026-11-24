@@ -20,7 +20,8 @@ type TestFn = (
 
 export interface ConnectionsOptions {
   readonly test: TestFn;
-  readonly url: string;
+  /** The front's URL, known once the suite deploys it. */
+  readonly url: () => string;
   readonly stack: DeployedStack;
 }
 
@@ -49,7 +50,7 @@ export const connections = ({ test, url, stack }: ConnectionsOptions) =>
       const container = yield* clusterPostgres(stack);
       const run = crypto.randomUUID().slice(0, 8);
       const send = (path: string) =>
-        client.get(`${url}${path}`).pipe(
+        client.get(`${url()}${path}`).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.void

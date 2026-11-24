@@ -133,12 +133,40 @@ const nameOf = (node: Node | undefined): string | undefined =>
         ? node.value
         : undefined;
 
+/** The names a pattern binds, wherever in it they are. */
+const boundBy = (pattern: Node | null | undefined): ReadonlyArray<string> => {
+  if (!pattern) return [];
+  switch (pattern.type) {
+    case "Identifier":
+      return [pattern.name as string];
+    case "ObjectPattern":
+      return (pattern.properties as ReadonlyArray<Node>).flatMap((property) =>
+        boundBy(property.type === "RestElement" ? property.argument : property.value),
+      );
+    case "ArrayPattern":
+      return (pattern.elements as ReadonlyArray<Node | null>).flatMap(boundBy);
+    case "AssignmentPattern":
+      return boundBy(pattern.left);
+    case "RestElement":
+      return boundBy(pattern.argument);
+    default:
+      return [];
+  }
+};
+
 const declare = (declarations: Map<string, Declaration>, node: Node): void => {
   if (node.type === "VariableDeclaration") {
     for (const declarator of node.declarations as ReadonlyArray<Node>) {
       const name = nameOf(declarator.id);
       if (name !== undefined)
         declarations.set(name, { _tag: "Const", init: declarator.init ?? undefined });
+      else if (declarator.init)
+        for (const bound of boundBy(declarator.id))
+          declarations.set(bound, {
+            _tag: "Pattern",
+            pattern: declarator.id,
+            init: declarator.init,
+          });
     }
   } else if (node.type === "FunctionDeclaration") {
     const name = nameOf(node.id);
@@ -306,9 +334,26 @@ export const loader = (
             }
           }
         } else if (statement.type === "ExportAllDeclaration") {
-          if (statement.exportKind === "type" || statement.exported) continue;
-          stars.push(statement.source.value as string);
-          specifiers.add(statement.source.value as string);
+          if (statement.exportKind === "type") continue;
+          const specifier = statement.source.value as string;
+          specifiers.add(specifier);
+          // `export * as packed from "./more"`: the other file, under a name.
+          const exported = nameOf(statement.exported);
+          if (exported === undefined) stars.push(specifier);
+          else imports.set(exported, { specifier, imported: "*" });
+        } else if (statement.type === "ExportDefaultDeclaration") {
+          // What a file exports by default is declared under `default`, and under its own name where it has one.
+          const made = statement.declaration as Node;
+          if (made.type === "FunctionDeclaration" || made.type === "ClassDeclaration") {
+            declare(declarations, made);
+            declarations.set(
+              "default",
+              made.type === "FunctionDeclaration"
+                ? { _tag: "Function", node: made }
+                : { _tag: "Class", node: made },
+            );
+          } else if (!made.type.startsWith("TS") || made.type === "TSAsExpression")
+            declarations.set("default", { _tag: "Const", init: made });
         } else declare(declarations, statement);
       }
       const resolved = new Map<string, string>();

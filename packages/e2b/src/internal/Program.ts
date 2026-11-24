@@ -2,7 +2,7 @@
  * How a template runs its `main` program.
  *
  * `@alchemy.run/docker/BuildPlan` bundles `main` and adds the layer that
- * runs it with Bun from `/app`; E2B starts that command when it builds the
+ * runs it from `/app`; E2B starts that command when it builds the
  * template and captures it running in the template's snapshot, so every
  * sandbox boots with it already serving on `PORT`. An Effect program (the
  * class form) is wrapped in the generated bootstrap entry; an async program
@@ -11,6 +11,7 @@
 import { envStrings } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
+import { shellCommand } from "./TemplatePlan.ts";
 
 /** The port a template's program serves on unless `port` says otherwise. */
 export const DEFAULT_PORT = 3000;
@@ -51,5 +52,5 @@ export const programEnv = Effect.fn(function* (
 });
 
 /** The template's snapshot is taken once the program answers HTTP. */
-export const programReadyCmd = (port: number) =>
-  `bun -e "fetch('http://127.0.0.1:${port}/').then(()=>process.exit(0),()=>process.exit(1))"`;
+export const programReadyCmd = (port: number, command: readonly string[]) =>
+  `${shellCommand(command)} -e "fetch('http://127.0.0.1:${port}/').then(()=>process.exit(0),()=>process.exit(1))"`;

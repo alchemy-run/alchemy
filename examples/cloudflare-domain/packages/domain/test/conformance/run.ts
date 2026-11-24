@@ -34,14 +34,17 @@ const MODULES = [
   ...["Stream", "String", "Struct", "Tuple", "UndefinedOr"],
 ];
 
-const PRELUDE = [
+export const PRELUDE = [
   "// @ts-nocheck",
   `import * as Domain from "@alchemy.run/domain";`,
   ...MODULES.map((module) => `import * as ${module} from "effect/${module}";`),
   `import * as BigInts from "effect/BigInt";`,
-  ...["ByteSize", "Cron", "RegExp", "SemVer", "Trie"].map(
-    (module) => `import * as ${module} from "effect/${module}";`,
-  ),
+  ...[
+    ...["ByteSize", "Bytes", "Clock", "Combiner", "Console", "Cron", "Formatter", "Glob"],
+    ...["Inspectable", "JsonPatch", "JsonPointer", "LogLevel", "Newtype", "NonEmptyIterable"],
+    ...["PrimaryKey", "Reducer", "RegExp", "SemVer", "SemVerRange", "TextDiff", "Trie"],
+  ].map((module) => `import * as ${module} from "effect/${module}";`),
+  `import { absurd } from "effect/Function";`,
   `import { apply, cast, compose, constant, constFalse, constNull, constTrue, constUndefined, constVoid, dual, flip, flow, identity, memoize, pipe, satisfies, tupled, untupled } from "effect/Function";`,
   `const Small = Schema.Int.check(Schema.isBetween({ minimum: -20, maximum: 20 }));`,
   `export class Done extends Domain.Event("Done", { results: Schema.Unknown }) {}`,
@@ -65,9 +68,11 @@ interface Chunk {
   readonly command: string;
   readonly known: boolean;
   readonly expressions: ReadonlyArray<string>;
+  /** What the report has to say, for a command the prover is not to read. */
+  readonly unread?: RegExp;
 }
 
-const chunksOf = (group: Group): ReadonlyArray<Chunk> => {
+export const chunksOf = (group: Group): ReadonlyArray<Chunk> => {
   const out: Array<Chunk> = [];
   const add = (expressions: ReadonlyArray<string>, modes: ReadonlyArray<boolean>) => {
     const size = group.chunk ?? CHUNK;
@@ -81,12 +86,21 @@ const chunksOf = (group: Group): ReadonlyArray<Chunk> => {
   };
   add(group.both, [true, false]);
   add(group.known ?? [], [true]);
+  // One command for each form the prover is not to read, on inputs the solver holds.
+  for (const [expression, unread] of group.unread ?? [])
+    out.push({
+      command: `${group.name}${out.length}Unread`,
+      known: false,
+      expressions: [expression],
+      unread,
+    });
   return out;
 };
 
-const sourceOf = (group: Group, chunks: ReadonlyArray<Chunk>): string =>
+export const sourceOf = (group: Group, chunks: ReadonlyArray<Chunk>): string =>
   [
     ...PRELUDE,
+    ...(group.prelude ?? []),
     `const PINS = ${group.pins};`,
     `const input = { id: Schema.String, pick: Schema.Literals(PINS.map((_, index) => index)), ${group.input} };`,
     ...chunks.map(
@@ -135,9 +149,16 @@ export const check = (groups: ReadonlyArray<Group>): void => {
             process.env.KEEP_GENERATED ? Effect.void : Effect.ignore(fs.remove(file)),
           );
           const url = yield* path.toFileUrl(file);
-          const fixture: { readonly Bench: Parameters<typeof Prove.report>[0] } =
-            yield* Effect.promise(() => import(/* @vite-ignore */ url.href));
-          const report = yield* Prove.report(fixture.Bench, { source: url });
+          const fixture: {
+            readonly Bench: Parameters<typeof Prove.report>[0];
+            readonly [name: string]: unknown;
+          } = yield* Effect.promise(() => import(/* @vite-ignore */ url.href));
+          const report = yield* Prove.report(fixture.Bench, {
+            source: url,
+            opaque: (group.opaque ?? []).map(
+              (name) => fixture[name] as (...args: ReadonlyArray<never>) => unknown,
+            ),
+          });
           if (process.env.CONFORMANCE_DUMP)
             yield* fs.writeFileString(
               path.join(process.env.CONFORMANCE_DUMP, `probe-${group.name}.json`),
@@ -153,8 +174,23 @@ export const check = (groups: ReadonlyArray<Group>): void => {
               ),
             );
           // What was not read, with the expressions the command computes.
+          const stopped = new Map(
+            chunks.flatMap((chunk) => (chunk.unread ? [[chunk.command, chunk]] : [])),
+          );
+          // A form the prover does not read is reported, with the reason the table gives.
+          const misreported = report.commands.flatMap((command) => {
+            const chunk = stopped.get(command.command);
+            if (!chunk?.unread) return [];
+            const reason = "reason" in command.schema ? command.schema.reason : "";
+            return command.schema._tag === "NotTranslated" && chunk.unread.test(reason)
+              ? []
+              : [{ expression: chunk.expressions[0], verdict: command.schema._tag, reason }];
+          });
+          expect(misreported).toEqual([]);
           const unread = report.commands.flatMap((command) =>
-            command.schema._tag === "Proved" || command.schema._tag === "Bounded"
+            command.schema._tag === "Proved" ||
+            command.schema._tag === "Bounded" ||
+            stopped.has(command.command)
               ? []
               : [
                   {
@@ -168,8 +204,9 @@ export const check = (groups: ReadonlyArray<Group>): void => {
           );
           expect(unread).toEqual([]);
           expect(report.agreement.differs.map((reason) => reason.slice(0, 400))).toEqual([]);
-          expect(report.agreement.uncompared).toBe(0);
-          expect(report.agreement.compared).toBeGreaterThan(0);
+          if (!group.orders) expect(report.agreement.uncompared).toBe(0);
+          if (chunks.some((chunk) => !chunk.unread))
+            expect(report.agreement.compared).toBeGreaterThan(0);
         }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
       600_000,
     );

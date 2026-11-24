@@ -127,7 +127,8 @@ it.effect(
       // does not give is left uncompared, never said to differ.
       expect(verdictsOf(report, "ALeadIsAMember").Lead).toMatchObject(bounded("state.members"));
       expect(report.agreement.differs).toEqual([]);
-      expect(report.agreement.compared).toBeGreaterThan(100);
+      // The lead is chosen only by the commands and rules that read it.
+      expect(report.agreement.compared).toBeGreaterThan(50);
       expect(report.unread).toEqual([]);
     }).pipe(Effect.provide(NodeServices.layer)),
   180_000,
@@ -230,7 +231,8 @@ it.effect(
         // Each of these was checked against the package: none is a function of the command alone.
         Remember: "calls Cache.make, which the prover has no model for",
         Borrow: "calls Effect.scoped, which the prover has no model for",
-        Guard: "calls Semaphore.make, which the prover has no model for",
+        Guard:
+          "waits for more permits of a Semaphore than are free: a handler runs to its end without waiting, so it never would",
         Configure: "calls Config.Int, which the prover has no model for",
         Link: "calls Graph.directed, which the prover has no model for",
         Tick: "calls Cron.next, which the prover has no model for",

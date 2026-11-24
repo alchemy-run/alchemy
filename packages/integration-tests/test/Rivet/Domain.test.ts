@@ -5,12 +5,11 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { ensureDockerSwarm } from "../Docker/Runtime.ts";
+import { ensureDockerSwarm, publishedUrl } from "../Docker/Runtime.ts";
 import { conformance, rebuild, waitForReady } from "../Domain/conformance/conformance.ts";
 import { latency } from "../Domain/conformance/latency.ts";
 import DomainFrontV1 from "./fixtures/domain-front-v1.ts";
 import DomainFront from "./fixtures/domain-front.ts";
-import { publishedUrl } from "./fixtures/published.ts";
 
 const testOptions = { providers: Layer.mergeAll(Docker.providers(), Rivet.providers()) };
 const { test, beforeAll, afterAll } = Test.make(testOptions);

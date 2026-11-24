@@ -10,11 +10,13 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../Utils/Telemetry.ts";
+import BunService from "./fixtures/runtime/bun.ts";
+import NodeService from "./fixtures/runtime/node.ts";
 import TestServiceV2Scaled from "./fixtures/service-v2-scaled.ts";
 import TestServiceV2 from "./fixtures/service-v2.ts";
-import TestService, { SERVICE_EXTERNAL_PORT } from "./fixtures/service.ts";
-import TracedService, { TRACED_EXTERNAL_PORT } from "./fixtures/traced.ts";
-import { ensureDockerSwarm } from "./Runtime.ts";
+import TestService from "./fixtures/service.ts";
+import TracedService from "./fixtures/traced.ts";
+import { ensureDockerSwarm, publishedUrl } from "./Runtime.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(Docker.providers(), Cloudflare.providers()),
@@ -59,19 +61,20 @@ test.provider(
         ),
       );
       expect(bundled).toContain("/ticks");
+      // Swarm picks the published port, so suites run side by side.
       expect(service.ports).toEqual([
         {
-          external: SERVICE_EXTERNAL_PORT,
+          external: expect.any(Number),
           internal: 3000,
           protocol: "tcp",
           mode: "ingress",
         },
       ]);
 
-      // The swarm ingress publishes the fixed external port on the local
-      // node. Retry through task startup (image already local, so this is
-      // just container boot + routing-mesh programming).
-      const base = `http://localhost:${SERVICE_EXTERNAL_PORT}`;
+      // The swarm ingress publishes the port on the local node. Retry through
+      // task startup (image already local, so this is just container boot +
+      // routing-mesh programming).
+      const base = publishedUrl(service.ports);
       const health = yield* HttpClient.get(`${base}/health`).pipe(
         Effect.flatMap((res) =>
           res.status === 200
@@ -122,6 +125,8 @@ test.provider(
         }),
       );
       expect(updated.id).toBe(service.id);
+      // An update keeps the port Swarm picked.
+      expect(updated.ports).toEqual(service.ports);
       expect(updated.code?.hash).not.toBe(service.code?.hash);
       expect(updated.image).toContain(updated.code!.hash);
 
@@ -205,7 +210,7 @@ test.provider(
       for (const file of ["service.ts", "message.ts"]) {
         yield* fs.copyFile(path.join(fixtures, file), path.join(dir, file));
       }
-      const { default: CodeChangeService, CODE_CHANGE_EXTERNAL_PORT } = yield* Effect.promise(
+      const { default: CodeChangeService } = yield* Effect.promise(
         () =>
           import(path.join(dir, "service.ts")) as Promise<
             typeof import("./fixtures/code-change/service.ts")
@@ -214,8 +219,8 @@ test.provider(
       const program = Effect.gen(function* () {
         return yield* CodeChangeService;
       });
-      const message = (expected: string) =>
-        HttpClient.get(`http://localhost:${CODE_CHANGE_EXTERNAL_PORT}/`).pipe(
+      const message = (url: string, expected: string) =>
+        HttpClient.get(`${url}/`).pipe(
           Effect.flatMap((res) => res.text),
           Effect.repeat({
             schedule: Schedule.spaced("2 seconds"),
@@ -225,7 +230,7 @@ test.provider(
         );
 
       const first = yield* stack.deploy(program);
-      expect(yield* message("v1")).toBe("v1");
+      expect(yield* message(publishedUrl(first.ports), "v1")).toBe("v1");
 
       yield* fs.writeFileString(path.join(dir, "message.ts"), 'export const MESSAGE = "v2";\n');
       const plan = yield* stack.plan(program);
@@ -233,7 +238,7 @@ test.provider(
       const second = yield* stack.deploy(program);
       expect(second.id).toBe(first.id);
       expect(second.code?.hash).not.toBe(first.code?.hash);
-      expect(yield* message("v2")).toBe("v2");
+      expect(yield* message(publishedUrl(second.ports), "v2")).toBe("v2");
 
       yield* stack.destroy();
     }).pipe(Effect.scoped),
@@ -254,7 +259,7 @@ test.provider(
 
       // The traced program binds the collector url at deploy, so it deploys first.
       const collector = yield* stack.deploy(OtelCollector());
-      yield* stack
+      const traced = yield* stack
         .deploy(
           Effect.gen(function* () {
             yield* OtelCollector();
@@ -263,9 +268,7 @@ test.provider(
         )
         .pipe(withCollectorUrl(collector.url!));
 
-      expect(yield* doWork(`http://localhost:${TRACED_EXTERNAL_PORT}`, "docker")).toBe(
-        "did work docker",
-      );
+      expect(yield* doWork(publishedUrl(traced.ports), "docker")).toBe("did work docker");
       const traces = yield* waitForWorkSpan(collector.url!, "docker");
       expect(traces).toContain("work:docker");
       expect(traces).toContain("docker-service-e2e");
@@ -283,3 +286,51 @@ test.provider(
     timeout: 300_000,
   },
 );
+
+// A service's `runtime` picks the image its program runs on, down to the
+// release, and moving it to another runtime rolls the service onto a new image.
+test.provider(
+  "a service runs on the runtime and version it names",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* ensureDockerSwarm;
+      yield* stack.destroy();
+
+      const versionsOf = (
+        ports: Parameters<typeof publishedUrl>[0],
+        until: (body: Versions) => boolean,
+      ) =>
+        HttpClient.get(publishedUrl(ports)).pipe(
+          Effect.flatMap((res) => res.json),
+          Effect.map((body) => body as unknown as Versions),
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+          Effect.repeat({ schedule: Schedule.spaced("2 seconds"), until, times: 30 }),
+        );
+
+      const bun = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* BunService;
+        }),
+      );
+      const onBun = yield* versionsOf(bun.ports, (body) => body.bun !== null);
+      expect(onBun.bun).toBe("1.3.13");
+
+      const node = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* NodeService;
+        }),
+      );
+      expect(node.id).toBe(bun.id);
+      expect(node.code?.hash).not.toBe(bun.code?.hash);
+      const onNode = yield* versionsOf(node.ports, (body) => body.bun === null);
+      expect(onNode.node.split(".")[0]).toBe("24");
+
+      yield* stack.destroy();
+    }),
+  { timeout: 300_000, tags: ["provider:docker", "provider:docker:service", "local"] },
+);
+
+interface Versions {
+  readonly bun: string | null;
+  readonly node: string;
+}

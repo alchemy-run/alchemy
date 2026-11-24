@@ -350,6 +350,42 @@ yield* accounts.rewritten(receipt); // every view, projection and stream has cau
 
 More: [Rewrite](https://alchemy.run/domain/rewrite), [Erasing personal data](https://alchemy.run/domain/erasing-personal-data).
 
+## Sealed fields and the Vault
+
+Seal personal data under a key kept per subject, and erase it everywhere by deleting the key: backups, archives and exported copies included.
+
+```ts
+// Customer/Address.ts
+export const Address = Domain.Sealed(Schema.String);
+
+// Customer/SetAddress.command.ts
+export class AddressSet extends Domain.Event("AddressSet", { address: Address }) {}
+export class SetAddress extends Domain.Command("SetAddress", {
+  input: { customerId: CustomerId, address: Address },
+  events: [AddressSet],
+  rejects: [NotYourAddress],
+}) {}
+
+// a client: the model seals the value when the command arrives
+yield* bank.SetAddress({ customerId, address: Address.plain(customerId, "1 Main St") });
+
+// a query, policy or saga step: open it, or shred the subject's key
+const vault = yield* Domain.Vault;
+const address = yield* vault.open(Address, contact.address); // Option; None once shredded
+yield* vault.shred(customerId);
+```
+
+- `decide`, `evolve` and views see `{ subject, box }`, never the value. In `decide`, reject a value whose `subject` is not the instance's own.
+- Keep ids, unique values and anything a rule compares plain; remove those with a rewrite.
+- Provide `Domain.VaultLive` where the model's Layer is built, over a `Domain.KeyStore` (where each subject's key is kept) and a `Domain.KeyWrap` (what is stored of it).
+- Stores: `Domain.HostKeyStore` (the model's own host), `DomainCloudflare.D1KeyStore`, `DomainAWS.DynamoKeyStore`, `DomainGCP.FirestoreKeyStore`, `SqlKeyStore`, `Domain.MemoryKeyStore`.
+- Wraps: `DomainCloudflare.SecretKeyWrap`, `DomainAWS.KmsKeyWrap`, `DomainGCP.KmsKeyWrap`, `Domain.RootKeyWrap`, `Domain.NoKeyWrap`. Any store pairs with any wrap.
+- A KMS wrap calls KMS on every seal and open. `KmsKeyWrap(RootKey, { intermediateKey: { keep: "5 minutes" } })` calls it once per process instead; it puts an intermediate key in memory and drops per-subject KMS logs. Shredding is unchanged.
+- A restored backup of the key store brings shredded keys back: keep its backups off or expiring.
+- Stories run with a test Vault: expect values with `Domain.sealedInTest(Address, subject, value)`, shred with `Story.shred(subject)`.
+
+More: [Sealed Value](https://alchemy.run/domain/sealed-value), [Crypto-shredding](https://alchemy.run/domain/crypto-shredding), [Choose where the keys are kept](https://alchemy.run/domain/crypto-shredding#choose-where-the-keys-are-kept), [Call KMS less often](https://alchemy.run/domain/crypto-shredding#call-kms-less-often), [Erasing personal data: Or seal it under a key you can delete](https://alchemy.run/domain/erasing-personal-data#or-seal-it-under-a-key-you-can-delete).
+
 ## Compaction
 
 Replaces an instance's history with a roll-up of its state, so its log stops growing. The declaration says what the roll-up is. Its Layer says where the replaced events go and when an instance compacts.

@@ -1036,8 +1036,11 @@ export interface WorkerProps<
    * When Alchemy bundles {@link main}, rules add to the built-in ones
    * (`.wasm`, `.bin`, `.txt`, `.html`, `.sql`) and are checked first: an
    * imported file that matches is uploaded as a module instead of bundled.
-   * JavaScript, TypeScript and JSON are always bundled, and imports inside
-   * nested `?worker` modules don't use rules. For files outside the entry's
+   * JavaScript and TypeScript are always bundled, and imports inside
+   * nested `?worker` modules don't use rules. JSON is bundled unless a rule
+   * matches it: `{ type: "Text", globs: ["**\/openapi.json"] }` uploads a
+   * large document as a string module instead of an object literal the
+   * Worker builds at startup. For files outside the entry's
    * directory, globs may start with `../` or be absolute. `!` globs exclude
    * across your rules; an excluded `.txt` or `.wasm` still matches the
    * built-in rules.
@@ -2971,10 +2974,14 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  */
 export const Worker: ResourceClassLike<Worker> & {
   /**
-   * Reference a deployed Worker — in the current stack/stage by default, or
-   * in another via `options`. Pass the Worker's declaration instead of its
-   * logical id to keep its type, including its RPC methods, for service
-   * bindings from another stack.
+   * Reference a Worker by its logical id, in the current stack/stage by
+   * default or in another via `options`. Another Worker this program
+   * declares in the same stack and stage is bound to that declaration (no
+   * earlier deploy needed), so a ref breaks a cycle between two Workers that
+   * bind each other; any other ref, including one to the Worker itself,
+   * reads the deployed Worker from state. Pass
+   * the Worker's declaration instead of its logical id to keep its type,
+   * including its RPC methods, for service bindings from another stack.
    */
   ref: WorkerRef;
   /**
