@@ -563,10 +563,11 @@ export interface EntitiesOptions<PoolReq> {
   /**
    * How long the host keeps rows that only dedupe needs: command receipts,
    * policy delivery marks, cancelled scheduled commands, and Effect
-   * Cluster's processed messages to the entity. Every runner sweeps them
-   * each `interval`. Only pools with a cluster database sweep: on
-   * `ClusterCloudflare.DurableObjectPool`, each instance keeps these rows in
-   * its own storage, and they are kept.
+   * Cluster's processed messages to the entity. On a pool with a cluster
+   * database, every runner sweeps them each `interval`. On
+   * `ClusterCloudflare.DurableObjectPool`, each instance keeps its rows in
+   * its own storage and deletes a few past their window each time it
+   * commits; `messages` and `interval` don't apply there.
    *
    * @default { receipts: "30 days", deliveries: "7 days", cancelled: "7 days", messages: "7 days", interval: "1 hour" }
    */
@@ -876,6 +877,12 @@ export const layerEntities = <PoolReq>(
 
       const runner = yield* Effect.serviceOption(RunnerHost);
       if (Option.isSome(runner)) {
+        // A pool with a cluster database keeps every instance's rows in it,
+        // and its runners sweep them there. The Durable Object pool has none:
+        // each instance keeps its rows in its own storage, and prunes them itself.
+        const database = yield* Config.option(Config.Redacted("CLUSTER_DATABASE_URL")).pipe(
+          Effect.orDie,
+        );
         // A runner of the pool: host the entity, as the bootstrap hosts an
         // exported one, with the classes the model declares here.
         const context = yield* Layer.build(entrypointLayer(Objects[PlatformDeclaration]));
@@ -908,12 +915,6 @@ export const layerEntities = <PoolReq>(
               yield* sagas.register(workflow as never, execute as never);
             yield* Deferred.succeed(engine, clusterEngine);
             yield* Deferred.succeed(joined, yield* Sharding.Sharding);
-            // Retention sweeps the rows of the cluster's database. A pool with
-            // none (the Durable Object pool) keeps them in each instance's own
-            // storage, and its runners have nothing to sweep.
-            const database = yield* Config.option(Config.Redacted("CLUSTER_DATABASE_URL")).pipe(
-              Effect.orDie,
-            );
             if (Option.isSome(database)) {
               // Each runner sweeps on its own; a sweep that fails runs at the next interval.
               yield* Effect.forkScoped(
@@ -991,7 +992,9 @@ export const layerEntities = <PoolReq>(
           claimKey: runtimeClaim(name),
         };
         return Layer.merge(
-          makePlatform(host),
+          makePlatform(host, {
+            retention: Option.isSome(database) ? false : (options.retention ?? {}),
+          }),
           Layer.succeed(WorkflowEngine.WorkflowEngine, deferredEngine),
         ).pipe(Layer.provideMerge(SecureRandom.layerWebCrypto));
       }
