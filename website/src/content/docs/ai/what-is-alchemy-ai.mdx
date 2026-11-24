@@ -210,7 +210,7 @@ See [Processes and Domain models](/ai/domain).
 
 ## Layers: providing implementations
 
-A Layer provides the implementation of a name, and connects it to the outside world through resources and bindings. A tool's Layer is its handler. This one binds to a GitHub repository, so the tool comments on a real issue:
+A **Layer** provides an implementation. It connects a tool, a model or a process to something concrete in the outside world, through resources and bindings. A tool's Layer is its handler. This one binds to a GitHub repository, so the tool comments on a real issue:
 
 ```typescript title="src/PostAnswer.tool.ts"
 export const PostAnswerLive = PostAnswer.make(
