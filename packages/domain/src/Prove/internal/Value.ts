@@ -50,6 +50,8 @@ export interface Scope {
 export interface Env {
   readonly scope: Scope;
   readonly module: Module;
+  /** The label of the statement being run: `outer: for (...)`. */
+  readonly label?: string | undefined;
 }
 
 /** A domain class instance: an event, a rejection or a command. */

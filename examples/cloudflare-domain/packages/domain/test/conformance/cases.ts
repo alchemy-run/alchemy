@@ -1913,6 +1913,23 @@ const syntax: ReadonlyArray<Group> = [
     chunk: 1,
     ...numbers,
     both: [
+      // Powers, loose equality between two of a kind, the comma, and helpers of arrays and objects.
+      `a ** 2`,
+      `[a ** 0, a ** 3, 2 ** 5]`,
+      `[a == b, a != b, "x" == "x", flag == true]`,
+      `(a, b)`,
+      `[a, b, 3].toSorted((x, y) => x - y)`,
+      `["b", "a", "c"].toSorted()`,
+      `[a, b, a].lastIndexOf(a)`,
+      `[[a, b].with(1, 9), [a, b].with(-2, 7)]`,
+      `(() => { try { return [a].with(2, 0); } catch (thrown) { return thrown.name; } })()`,
+      `[a, ...[b, 3]].with(0, 1)`,
+      `[a, b, 1].reduceRight((total, n) => total - n)`,
+      `[a, b].reduceRight((total, n, index) => total + n * index, 0)`,
+      `Object.assign({ x: a }, { y: b }, { x: 1 })`,
+      `Object.fromEntries([["x", a], ["y", b]])`,
+      `[Object.hasOwn({ x: a }, "x"), Object.hasOwn({ x: a }, "y")]`,
+      `[Math.round(a / 2), Math.round(a / -4), Math.round(2.5), Math.round(-2.5), Math.round(a)]`,
       // Literals and templates.
       `[1, 1.5, "s", true, false, null, undefined]`,
       `10n + BigInt(a)`,
@@ -2023,23 +2040,29 @@ const syntax: ReadonlyArray<Group> = [
       `new Circle({ radius: a })._tag`,
       `new Odd({ n: a }).n`,
     ],
-    known: [`a + b * 2 - a / 2`, `a / 3 + 0.5`, `(a / 4) * 4`],
+    known: [
+      `a + b * 2 - a / 2`,
+      `a / 3 + 0.5`,
+      `(a / 4) * 4`,
+      // The bits of a number the code writes.
+      `[a & b, a | b, a ^ b, ~a, a << 1, a >> 1, a >>> 1, 2 ** a]`,
+      `[BigInt(a) & 3n, BigInt(a) | 4n, BigInt(a) ^ 1n, ~BigInt(a), BigInt(a) << 2n, BigInt(a) >> 1n].map((n) => n === 0n)`,
+    ],
     unread: [
-      // `==` is read only against `null` and `undefined`.
-      [`a == b`, /uses ==, where the prover reads ===/],
-      [`a != b`, /uses !=, where the prover reads ===/],
+      // `==` between two kinds turns one into the other, which is not read.
+      [`a == "1"`, /uses ==, where the prover reads ===/],
+      [`a != flag`, /uses !=, where the prover reads ===/],
       [`({ get n() { return a; } }).n`, /declares a getter/],
       [`({ set n(value) {} }).n ?? a`, /declares a setter/],
-      [`a ** 2`, reported],
-      [`a & b`, reported],
-      [`a | b`, reported],
-      [`a ^ b`, reported],
-      [`~a`, reported],
-      [`a << 1`, reported],
+      [`2 ** a`, /raises a number to a power the prover cannot see/],
+      [`a & b`, /applies & to a number an input holds/],
+      [`a | b`, /applies \| to a number an input holds/],
+      [`a ^ b`, /applies \^ to a number an input holds/],
+      [`~a`, /applies ~ to a number an input holds/],
+      [`a << 1`, /applies << to a number an input holds/],
       [`a >> 1`, reported],
       [`a >>> 1`, reported],
       [`[a] instanceof Array`, reported],
-      [`(a, b)`, reported],
       [`/a+/.test("aa" + a)`, reported],
       [`new Date(a).getTime()`, reported],
       [`Math.random() + a`, reported],
@@ -2165,6 +2188,18 @@ const syntax: ReadonlyArray<Group> = [
       body(`a; "use strict"; return a;`),
       body(`return;`) + ` ?? "nothing"`,
       body(``) + ` ?? "nothing"`,
+      // Labels, the comma, and a statement that does nothing.
+      body(
+        `let total = 0; outer: for (const n of items) { for (const m of [1, 2]) { if (n < 0) continue outer; if (m > a) break outer; total += n * m; } } return total;`,
+      ),
+      body(
+        `let total = 0; outer: for (let i = 0; i < 3; i++) { for (let j = 0; j < 3; j++) { if (j === 1) continue outer; if (i === 2) break outer; total += a; } } return total;`,
+      ),
+      body(`let seen = 0; block: { seen = 1; if (a > 1) break block; seen = 2; } return seen;`),
+      body(`let x = a; debugger; return ((x += 1), x * 2);`),
+      body(
+        `let x = 2; x **= 3; let y = 6; y <<= 1; y >>= 2; y >>>= 0; y &= 7; y |= 8; y ^= 1; return [x, y];`,
+      ),
       // try, catch, finally and throw.
       body(`try { if (a > 2) throw "big"; return a; } catch (thrown) { return thrown; }`),
       body(
@@ -2193,7 +2228,6 @@ const syntax: ReadonlyArray<Group> = [
     ],
     known: [body(`let x = a; x /= 4; return x;`), body(`let x = 9; x /= 2; x += a; return x;`)],
     unread: [
-      [body(`outer: for (const n of items) { break outer; } return a;`), reported],
       [body(`class Local { n = a; } return new Local().n;`), reported],
       [body(`let i = 0; while (i < a) i++; return i;`), reported],
       [body(`for (let i = 0; i < a; i++) {} return a;`), reported],
@@ -2202,9 +2236,8 @@ const syntax: ReadonlyArray<Group> = [
       [body(`items.sort(); return items.length;`), reported],
       [body(`items.reverse(); return items.length;`), reported],
       [body(`const made = { n: a }; delete made.n; return made;`), reported],
-      [body(`debugger; return a;`), reported],
       [`(async () => { for await (const n of items) {} return a; })()`, reported],
-      [body(`let x = a; x **= 2; return x;`), reported],
+      [body(`let x = a; x &= 3; return x;`), /applies & to a number an input holds/],
       [body(`let x = a; x <<= 1; return x;`), reported],
       [body(`let x = a; x >>= 1; return x;`), reported],
       [body(`let x = a; x >>>= 1; return x;`), reported],

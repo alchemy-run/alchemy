@@ -253,6 +253,20 @@ const ERRORS: ReadonlyMap<string, V> = new Map(
 const ERROR_CLASSES: ReadonlySet<V> = new Set(ERRORS.values());
 
 const BREAK: V = { _tag: "Opaque", what: "break" };
+/** `break outer` and `continue outer`: one value for each label, to find the statement it names. */
+const labelled = new Map<string, V>();
+const toLabel = (kind: "break" | "continue", label: string): V => {
+  const key = `${kind} ${label}`;
+  const known = labelled.get(key);
+  if (known) return known;
+  const made: V = { _tag: "Opaque", what: key };
+  labelled.set(key, made);
+  return made;
+};
+/** The operators of the bits of a whole number. */
+const BITS: ReadonlySet<string> = new Set(["&", "|", "^", "<<", ">>", ">>>"]);
+/** The highest power a number an input holds is raised to, as that many multiplications. */
+const MAX_POWER = 16;
 /** Goes on to the next turn of the loop it is in. */
 const CONTINUE: V = { _tag: "Opaque", what: "continue" };
 
@@ -778,6 +792,15 @@ export const make = (given: Loader, run: Run): Interpreter => {
         yield* call(fn, [item, Value.num(index)], at);
       return Value.undef;
     }),
+    reduceRight: Effect.fnUntraced(function* (items, fn, initial, at) {
+      if (items.length === 0 && initial === undefined)
+        return yield* fail(at, "reduces an empty array with no first value");
+      let from = items.length - 1;
+      let total = initial ?? items[from--]!;
+      for (let index = from; index >= 0; index--)
+        total = yield* call(fn, [total, items[index]!, Value.num(index)], at);
+      return total;
+    }),
     reduce: Effect.fnUntraced(function* (items, fn, initial, at) {
       if (initial === undefined && items.length === 0)
         return yield* fail(at, "reduces an empty array with no first value");
@@ -892,6 +915,64 @@ export const make = (given: Loader, run: Run): Interpreter => {
         : fail(at, "flattens an array to a depth the prover does not read"),
     toReversed: (self) =>
       Effect.succeed(made<V>({ _tag: "Arr", items: [...self.items].reverse() })),
+    // In the order the function gives: with none, the items have to be text the code writes.
+    toSorted: (self, [compare], at) =>
+      compare && compare._tag !== "Undef"
+        ? library.call({ _tag: "Lib", module: "effect/Array", path: ["sort"] }, [self, compare], at)
+        : self.items.every((item) => item._tag === "Str")
+          ? Effect.succeed(
+              made<V>({
+                _tag: "Arr",
+                items: [...self.items].sort((a, b) =>
+                  a._tag === "Str" && b._tag === "Str" && a.value !== b.value
+                    ? a.value < b.value
+                      ? -1
+                      : 1
+                    : 0,
+                ),
+              }),
+            )
+          : fail(at, "sorts items by their text, which the prover does not translate"),
+    lastIndexOf: Effect.fnUntraced(function* (self, [wanted], at) {
+      for (let index = self.items.length - 1; index >= 0; index--) {
+        const item = self.items[index]!;
+        const equal = sameAs(item, wanted ?? Value.undef);
+        if (equal === undefined)
+          return yield* fail(
+            at,
+            inside("looks for", item, wanted) ?? "looks for a value the prover does not model",
+          );
+        if (typeof equal === "boolean" ? equal : yield* branch(equal)) return Value.num(index);
+      }
+      return Value.num(-1);
+    }),
+    with: (self, [index, value], at) => {
+      const size = self.items.length;
+      const place =
+        index?._tag === "Num" && Number.isInteger(index.value)
+          ? index.value < 0
+            ? index.value + size
+            : index.value
+          : undefined;
+      if (place === undefined) return fail(at, "puts an item at a place the prover cannot see");
+      // A place the array does not have: the language throws.
+      return place < 0 || place >= size
+        ? Effect.fail(
+            new Value.Rejected({
+              rejection: Value.obj({
+                name: Value.str("RangeError"),
+                message: Value.str("Invalid index : " + String(place < 0 ? place - size : place)),
+              }),
+              defect: true,
+            }),
+          )
+        : Effect.succeed(
+            made<V>({
+              _tag: "Arr",
+              items: self.items.map((item, at_) => (at_ === place ? (value ?? Value.undef) : item)),
+            }),
+          );
+    },
     push: (self, args, at) => {
       if (!mine(self)) return reaches(at, "pushes onto an array it was given, which changes it");
       (self.items as Array<V>).push(...args);
@@ -1390,10 +1471,71 @@ export const make = (given: Loader, run: Run): Interpreter => {
   );
 
   /** One turn of a loop: `BREAK` to leave it, a value to return, or nothing to go on. */
-  const turn = (body: Node, env: Env): Eval<V | undefined> =>
+  const turn = (body: Node, env: Env, label?: string): Eval<V | undefined> =>
     execute([body], env).pipe(
-      Effect.map((returned) => (returned === CONTINUE ? undefined : returned)),
+      Effect.map((returned) =>
+        returned === CONTINUE || (label && returned === toLabel("continue", label))
+          ? undefined
+          : label && returned === toLabel("break", label)
+            ? BREAK
+            : returned,
+      ),
     );
+
+  /** `**` and the operators of bits: worked out where the numbers are ones the code writes. */
+  const beyond = (operator: string, left: V, right: V, site: Site): Eval<V> | undefined => {
+    if (operator === "**") {
+      if (left._tag === "Num" && right._tag === "Num")
+        return Effect.succeed(Value.num(left.value ** right.value));
+      const power =
+        right._tag === "Num" ? right.value : right._tag === "Big" ? Number(right.value) : undefined;
+      if (power === undefined || !Number.isInteger(power) || power < 0 || power > MAX_POWER)
+        return fail(site, "raises a number to a power the prover cannot see");
+      const big = Value.isBig(left);
+      if (big !== (right._tag === "Big")) return fail(site, "applies ** to a bigint and a number");
+      return Effect.gen(function* () {
+        let out: V = big ? { _tag: "Big", value: 1n } : Value.num(1);
+        for (let turns = 0; turns < power; turns++) out = yield* arithmetic("*", out, left, site);
+        return out;
+      });
+    }
+    if (!BITS.has(operator)) return undefined;
+    if (left._tag === "Num" && right._tag === "Num") {
+      const [l, r] = [left.value, right.value];
+      return Effect.succeed(
+        Value.num(
+          operator === "&"
+            ? l & r
+            : operator === "|"
+              ? l | r
+              : operator === "^"
+                ? l ^ r
+                : operator === "<<"
+                  ? l << r
+                  : operator === ">>"
+                    ? l >> r
+                    : l >>> r,
+        ),
+      );
+    }
+    if (left._tag === "Big" && right._tag === "Big" && operator !== ">>>") {
+      const [l, r] = [left.value, right.value];
+      return Effect.succeed<V>({
+        _tag: "Big",
+        value:
+          operator === "&"
+            ? l & r
+            : operator === "|"
+              ? l | r
+              : operator === "^"
+                ? l ^ r
+                : operator === "<<"
+                  ? l << r
+                  : l >> r,
+      });
+    }
+    return fail(site, `applies ${operator} to a number an input holds`);
+  };
 
   /** Whether a loop goes on. What an input decides, the prover cannot count the turns of. */
   const goesOn: (test: Node | null, env: Env, site: Site) => Eval<boolean> = Effect.fnUntraced(
@@ -1881,6 +2023,13 @@ export const make = (given: Loader, run: Run): Interpreter => {
               ),
             )
           : yield* fail(site, "yields without a star");
+      case "SequenceExpression": {
+        // `(a, b)`: each is run, and the last is what it gives.
+        let last: V = Value.undef;
+        for (const each of node.expressions as ReadonlyArray<Node>)
+          last = yield* evaluate(each, env);
+        return last;
+      }
       case "ConditionalExpression":
         return (yield* decide(yield* evaluate(node.test, env), site))
           ? yield* evaluate(node.consequent, env)
@@ -1928,6 +2077,12 @@ export const make = (given: Loader, run: Run): Interpreter => {
           const kind = kindOf(argument);
           if (kind !== undefined) return Value.str(kind);
         }
+        if (node.operator === "~")
+          return argument._tag === "Num"
+            ? Value.num(~argument.value)
+            : argument._tag === "Big"
+              ? made<V>({ _tag: "Big", value: ~argument.value })
+              : yield* fail(site, "applies ~ to a number an input holds");
         return yield* fail(site, `uses ${node.operator}, which the prover does not translate`);
       }
       case "BinaryExpression": {
@@ -1946,9 +2101,24 @@ export const make = (given: Loader, run: Run): Interpreter => {
         }
         if (["+", "-", "*", "/", "%", "<", "<=", ">", ">="].includes(node.operator))
           return yield* arithmetic(node.operator, left, right, site);
+        const more = beyond(node.operator, left, right, site);
+        if (more) return yield* more;
         if (node.operator === "==" || node.operator === "!=") {
           // `x == null`: nothing, of either kind.
           const nothing = (v: V) => v._tag === "Null" || v._tag === "Undef";
+          // Two values of one kind are `==` when they are `===`: nothing is turned into anything.
+          const kind = kindOf(left);
+          const alikeKinds =
+            kind !== undefined &&
+            kind === kindOf(right) &&
+            kind !== "object" &&
+            kind !== "function";
+          const equal =
+            !nothing(left) && !nothing(right) && alikeKinds ? sameAs(left, right) : undefined;
+          if (equal !== undefined)
+            return fromTruth(
+              node.operator === "==" ? equal : typeof equal === "boolean" ? !equal : Smt.not(equal),
+            );
           if (!nothing(left) && !nothing(right))
             return yield* fail(site, `uses ${node.operator}, where the prover reads ===`);
           const other = nothing(left) ? right : left;
@@ -2046,7 +2216,12 @@ export const make = (given: Loader, run: Run): Interpreter => {
               : before;
         else if (["+", "-", "*", "/", "%"].includes(operator))
           value = yield* arithmetic(operator, before, yield* evaluate(node.right, env), site);
-        else return yield* fail(site, `uses ${node.operator}, which the prover does not translate`);
+        else {
+          const more = beyond(operator, before, yield* evaluate(node.right, env), site);
+          if (!more)
+            return yield* fail(site, `uses ${node.operator}, which the prover does not translate`);
+          value = yield* more;
+        }
         yield* assign(node.left, value, env, site);
         return value;
       }
@@ -2075,7 +2250,10 @@ export const make = (given: Loader, run: Run): Interpreter => {
 
   /** Run statements in order. The result is what they returned, or `undefined` when they did not. */
   const execute: (statements: ReadonlyArray<Node>, env: Env) => Eval<V | undefined> =
-    Effect.fnUntraced(function* (statements: ReadonlyArray<Node>, env: Env) {
+    Effect.fnUntraced(function* (statements: ReadonlyArray<Node>, given: Env) {
+      // A label names the one statement it is written on, and nothing inside it.
+      const label = given.label;
+      const env: Env = label === undefined ? given : { ...given, label: undefined };
       // A function a block declares is there from the block's first line.
       for (const statement of statements)
         if (statement.type === "FunctionDeclaration" && !env.scope.variables.has(statement.id.name))
@@ -2187,9 +2365,18 @@ export const make = (given: Loader, run: Run): Interpreter => {
             break;
           }
           case "BreakStatement":
-            return statement.label ? yield* fail(site, "breaks to a label") : BREAK;
+            return statement.label ? toLabel("break", statement.label.name) : BREAK;
           case "ContinueStatement":
-            return statement.label ? yield* fail(site, "continues to a label") : CONTINUE;
+            return statement.label ? toLabel("continue", statement.label.name) : CONTINUE;
+          case "LabeledStatement": {
+            const name: string = statement.label.name;
+            const returned = yield* execute([statement.body], { ...env, label: name });
+            // `break outer` in a block that is no loop leaves the block.
+            if (returned && returned !== toLabel("break", name)) return returned;
+            break;
+          }
+          case "DebuggerStatement":
+            break;
           case "ForOfStatement":
           case "ForInStatement": {
             if (statement.await) return yield* reaches(site, "loops with for await");
@@ -2217,7 +2404,7 @@ export const make = (given: Loader, run: Run): Interpreter => {
               if (left.type === "VariableDeclaration")
                 yield* bind(left.declarations[0].id, item, scope, inner);
               else yield* assign(left, item, env, site);
-              const returned = yield* turn(statement.body, inner);
+              const returned = yield* turn(statement.body, inner, label);
               if (returned === BREAK) break;
               if (returned) return returned;
             }
@@ -2238,7 +2425,11 @@ export const make = (given: Loader, run: Run): Interpreter => {
               first = false;
               if (++turns > MAX_TURNS)
                 return yield* fail(site, `loops more than ${MAX_TURNS} times`);
-              const returned = yield* turn(statement.body, { ...inner, scope: child(inner.scope) });
+              const returned = yield* turn(
+                statement.body,
+                { ...inner, scope: child(inner.scope) },
+                label,
+              );
               if (returned === BREAK) break;
               if (returned) return returned;
               if (statement.update) yield* evaluate(statement.update, inner);

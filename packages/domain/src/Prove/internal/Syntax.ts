@@ -144,7 +144,7 @@ export const FORMS: ReadonlyArray<Form> = [
   form("NewExpression", kind("NewExpression")),
   form("ImportExpression", kind("ImportExpression"), false),
   form("ParenthesizedExpression", kind("ParenthesizedExpression")),
-  form("SequenceExpression", kind("SequenceExpression"), false),
+  form("SequenceExpression", kind("SequenceExpression")),
   form("ConditionalExpression", kind("ConditionalExpression")),
 
   // Functions.
@@ -236,16 +236,18 @@ export const FORMS: ReadonlyArray<Form> = [
   // Operators.
   ...operators(
     "BinaryExpression",
-    ["+", "-", "*", "/", "%", "<", "<=", ">", ">=", "===", "!==", "==", "!=", "in"],
-    ["**", "&", "|", "^", "<<", ">>", ">>>", "instanceof"],
+    ["+", "-", "*", "/", "%", "<", "<=", ">", ">=", "===", "!==", "==", "!=", "in", "**"],
+    ["instanceof"],
   ),
+  ...operators("BinaryExpression", ["&", "|", "^", "<<", ">>", ">>>"], []),
   ...operators("LogicalExpression", ["&&", "||", "??"], []),
-  ...operators("UnaryExpression", ["!", "-", "+", "void", "typeof"], ["~", "delete"]),
+  ...operators("UnaryExpression", ["!", "-", "+", "void", "typeof", "~"], ["delete"]),
   ...operators(
     "AssignmentExpression",
-    ["=", "+=", "-=", "*=", "/=", "%=", "??=", "||=", "&&="],
-    ["**=", "<<=", ">>=", ">>>=", "&=", "|=", "^="],
+    ["=", "+=", "-=", "*=", "/=", "%=", "??=", "||=", "&&=", "**=", "<<=", ">>=", ">>>="],
+    [],
   ),
+  ...operators("AssignmentExpression", ["&=", "|=", "^="], []),
   form(
     "AssignmentExpression: to a variable",
     (n) => n.type === "AssignmentExpression" && n.left.type === "Identifier",
@@ -305,9 +307,8 @@ export const FORMS: ReadonlyArray<Form> = [
   form(
     "a break or a continue to a label",
     (n) => (n.type === "BreakStatement" || n.type === "ContinueStatement") && Boolean(n.label),
-    false,
   ),
-  form("LabeledStatement", kind("LabeledStatement"), false),
+  form("LabeledStatement", kind("LabeledStatement")),
   form("ForOfStatement", (n) => n.type === "ForOfStatement" && !n.await),
   form("ForOfStatement: for await", (n) => n.type === "ForOfStatement" && n.await === true, false),
   form(
@@ -327,7 +328,7 @@ export const FORMS: ReadonlyArray<Form> = [
   form("TryStatement", kind("TryStatement")),
   form("CatchClause", kind("CatchClause")),
   form("ThrowStatement", kind("ThrowStatement")),
-  form("DebuggerStatement", kind("DebuggerStatement"), false),
+  form("DebuggerStatement", kind("DebuggerStatement")),
   form("ClassExpression", kind("ClassExpression"), false),
   form(
     "ClassDeclaration: in a function",

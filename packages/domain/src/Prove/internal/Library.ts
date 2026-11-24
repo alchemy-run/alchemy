@@ -894,6 +894,34 @@ export const make = (host: Host) => {
     "effect/Record:isEmptyReadonlyRecord": onRecord("Record.isEmptyReadonlyRecord", 1, (fields) =>
       Effect.succeed(Value.bool(Object.keys(fields).length === 0)),
     ),
+    // The fields of each after the first are written into the first, which is what it gives.
+    "Object:assign": ([target, ...sources], site) => {
+      if (target?._tag !== "Obj" || target.brand) return wrongArguments(site, "Object.assign");
+      for (const source of sources) {
+        if (source._tag === "Undef" || source._tag === "Null") continue;
+        if (source._tag !== "Obj" || source.brand) return wrongArguments(site, "Object.assign");
+        Object.assign(target.fields as Record<string, V>, source.fields);
+      }
+      return Effect.succeed(target);
+    },
+    "Object:fromEntries": ([entries], site) =>
+      Effect.flatMap(entries ? kit.iterate(entries, site) : Effect.succeed(undefined), (items) => {
+        const fields: Record<string, V> = {};
+        for (const entry of items ?? []) {
+          const pair = kit.itemsOf(entry);
+          const key = pair?.[0];
+          if (!pair || (key?._tag !== "Str" && key?._tag !== "Num"))
+            return wrongArguments(site, "Object.fromEntries");
+          fields[String(key.value)] = pair[1] ?? Value.undef;
+        }
+        return items
+          ? Effect.succeed(Value.obj(fields))
+          : wrongArguments(site, "Object.fromEntries");
+      }),
+    "Object:hasOwn": ([object, key], site) =>
+      object?._tag === "Obj" && !object.brand && (key?._tag === "Str" || key?._tag === "Num")
+        ? Effect.succeed(Value.bool(Object.hasOwn(object.fields, String(key.value))))
+        : wrongArguments(site, "Object.hasOwn"),
     "Object:keys": onRecord("Object.keys", 1, (fields) =>
       Effect.succeed(arr(Object.keys(fields).map(Value.str))),
     ),
@@ -952,6 +980,17 @@ export const make = (host: Host) => {
       index?._tag === "Num"
         ? Effect.succeed(items[index.value] ? Value.some(items[index.value]!) : Value.none)
         : wrongArguments(site, "Array.get"),
+    ),
+    // A half goes up, as the language rounds one.
+    "Math:round": whole(
+      "Math.round",
+      Math.round,
+      (text) => `(to_int (+ ${text} 0.5))`,
+      // Half more than the quotient, as one quotient: the solver divides it exactly.
+      (dividend, divisor) =>
+        divisor > 0
+          ? floorOf(`(+ (* 2 ${dividend}) ${divisor})`, 2 * divisor)
+          : floorOf(`(+ (* 2 (- ${dividend})) ${-divisor})`, -2 * divisor),
     ),
     "Math:floor": whole("Math.floor", Math.floor, (text) => `(to_int ${text})`, floorOf),
     "Math:ceil": whole("Math.ceil", Math.ceil, (text) => `(- (to_int (- ${text})))`, ceilOf),

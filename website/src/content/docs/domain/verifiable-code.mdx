@@ -26,6 +26,7 @@ total = total + fee; // assignment to a local variable
 [total, count] = [count, total]; // to several at once
 ({ total } = { total: 0 }); // into a pattern
 total += fee; // and -=, *=, /=, %=, ??=, ||=, &&=
+total **= 2;
 count++; // and count--, ++count, --count
 
 const made = { n: 0, list: [0] }; // an object or an array the code made can be changed
@@ -77,6 +78,15 @@ function countdown(n: number): number {
   return n <= 0 ? 0 : 1 + countdown(n - 1); // a function that calls itself, on a number the code writes
 }
 
+outer: for (const n of items) {
+  for (const m of [1, 2]) {
+    if (n < 0) continue outer; // a label, on a loop or on a block
+    if (m > a) break outer;
+    total += n * m;
+  }
+}
+debugger; // does nothing
+
 try {
   if (a > 2) throw new Error("too many"); // caught by the try around it
   total += a;
@@ -96,7 +106,6 @@ A `try` catches what code throws. An effect that fails where it is yielded leave
 
 ```typescript title="Not supported"
 await saved; // async, await and for await
-outer: for (const n of items) break outer; // labels
 function* each() {
   yield a;
 } // a generator, other than the one given to Effect.gen, Effect.fn, Option.gen and Result.gen
@@ -108,7 +117,6 @@ enum Kind {
   Gift,
 }
 using held = resource;
-debugger;
 
 while (count < a) count++; // a loop that an input decides the length of
 for (let i = 0; i < a; i++) count++;
@@ -118,7 +126,7 @@ items[0] = 1;
 items.sort();
 items.reverse();
 
-total **= 2; // and <<=, >>=, >>>=, &=, |=, ^=
+total &= a; // the bits of a number an input holds: and |=, ^=, <<=, >>=, >>>=
 ```
 
 ## Expressions
@@ -128,6 +136,10 @@ total **= 2; // and <<=, >>=, >>>=, &=, |=, ^=
 [1, 1.5, "text", true, false, null, undefined, 10n];
 `${text}:${a}:${flag}:${null}`; // each value written as JavaScript writes it
 "n" + a;
+
+a ** 2; // a power the code writes
+(a, b); // the comma: both are run, and the last is what it gives
+a == b; // == and != between two values of one kind, as === and !==
 
 // Whole numbers
 a + b;
@@ -201,11 +213,10 @@ identity<number>(a);
 ```
 
 ```typescript title="Not supported"
-a ** 2;
-a & b; // and |, ^, ~, <<, >>, >>>
-a == b; // == and != between two values: write === and !==
+2 ** a; // a power an input decides
+a & b; // the bits of a number an input holds: and |, ^, ~, <<, >>, >>>
+a == "1"; // == and != between two kinds of value: write === and !==
 items instanceof Array;
-(a, b); // the comma operator
 /a+/.test(text); // regular expressions
 tag`x${a}`; // tagged templates
 delete made.n;
@@ -241,6 +252,7 @@ A whole number is exact, and a `bigint` is exact with no limit. A number is assu
 ```typescript title="Supported"
 a + b * 2 - 1;
 a % 3;
+Math.round(a / 2); // a half goes up
 10n + BigInt(a) * 2n;
 
 a / 4; // a division by a whole number the code writes
@@ -265,7 +277,6 @@ a / 3 + 0.5; // arithmetic on a number that may not be whole
 (a / 3) * 3;
 a * 0.5;
 
-Math.round(a / 2);
 Math.sqrt(a);
 Math.pow(a, 2);
 Number.isInteger(a);
@@ -390,6 +401,13 @@ items[0];
 items.at(-1);
 [...items, a];
 items.concat([a], 7);
+items.toSorted((x, y) => x - y);
+items.lastIndexOf(a);
+[a, ...items].with(0, 1); // throws for a place the list does not have
+items.reduceRight((total, n) => total + n, 0);
+Object.assign({ x: a }, { y: a });
+Object.fromEntries([["x", a], ["y", a]]);
+Object.hasOwn({ x: a }, "x");
 items.slice(1);
 items.includes(a);
 items.indexOf(a);
@@ -428,15 +446,8 @@ items.push(1); // changing a list the handler was given
 items.sort(); // and every method that changes an array in place:
 items.reverse(); // sort, reverse, splice, fill, pop, shift, unshift
 
-items.toSorted();
-items.reduceRight((total, n) => total + n, 0);
-items.lastIndexOf(a);
-items.with(0, a);
+items.toSorted(); // by the text of each item, where they are not text the code writes
 Array.from(items);
-
-Object.assign({}, made);
-Object.fromEntries([["a", a]]);
-Object.hasOwn(made, "n");
 ```
 
 A list of the state or a command has no known length, so it is tried with every length up to two items more than its schema asks for. A rule that passes that way is `Checked`, not `Proved`, and the report says how long the lists were.
