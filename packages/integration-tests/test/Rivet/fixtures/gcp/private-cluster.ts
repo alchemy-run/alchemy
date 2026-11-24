@@ -97,7 +97,7 @@ export const PrivateCluster = Layer.unwrap(
       endpoint: Output.interpolate`http://${engine.natIP}:${API_PORT}`,
       token: token.text,
       nodeEndpoint: Output.interpolate`http://${engine.networkIP}:${API_PORT}`,
-      network: { kind: "gcp", network: "default", subnetwork: "default", region },
+      network: RivetGCP.Network({ network: "default", subnetwork: "default", region }),
     });
   }),
 );

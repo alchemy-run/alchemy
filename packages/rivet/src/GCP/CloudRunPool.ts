@@ -6,7 +6,7 @@ import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import type { ClusterNetwork, ClusterShape } from "../Cluster.ts";
+import type { ClusterShape } from "../Cluster.ts";
 import {
   isImageProgram,
   makePoolLayer,
@@ -15,6 +15,7 @@ import {
   splitNodeEnvironment,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
+import type { Network } from "./Network.ts";
 
 export interface CloudRunPoolOptions extends PoolSettings {
   /**
@@ -128,7 +129,7 @@ export const nodeTemplate = (
     readonly serviceAccount?: Input<string>;
     readonly secretEnv?: Array<Input<Run.WorkerPoolEnvVar>>;
   } = {},
-  joined?: Extract<ClusterNetwork, { kind: "gcp" }>,
+  joined?: Network,
 ) => {
   // A pool that names its own network is on that one alone; one that names
   // only a subnetwork takes it in the control plane's network.

@@ -7,6 +7,7 @@ import { Cluster } from "../Cluster.ts";
 import { adminToken } from "../internal/AdminToken.ts";
 import { Namespace } from "../Namespace.ts";
 import type { Providers as RivetProviders } from "../Providers.ts";
+import { Network } from "./Network.ts";
 
 /** The engine release `RivetDocker.SwarmControlPlane` runs by default. */
 export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.1.1";
@@ -117,7 +118,7 @@ export const SwarmControlPlane = (
         nodeEndpoint: "http://rivet-engine:6420",
         // `localhost` is the deploying machine's; callers run on the network.
         clientEndpoint: "http://rivet-engine:6420",
-        network: { kind: "docker", name: network.name },
+        network: Network({ name: network.name }),
         token: token.text,
         namespace: namespace.name,
       };

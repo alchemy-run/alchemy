@@ -13,6 +13,7 @@ import { Cluster } from "../Cluster.ts";
 import { adminToken } from "../internal/AdminToken.ts";
 import { stackDnsLabel } from "../internal/PoolHost.ts";
 import { Namespace } from "../Namespace.ts";
+import { Network } from "./Network.ts";
 
 /** The engine release `RivetGCP.ComputeEngineControlPlane` runs by default. */
 export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.1.1";
@@ -322,12 +323,11 @@ export const ComputeEngineControlPlane = (id: string, props: ComputeEngineContro
       });
       return {
         endpoint,
-        network: {
-          kind: "gcp",
+        network: Network({
           network: network.networkName,
           subnetwork: subnet.subnetworkName,
           region,
-        },
+        }),
         token: token.text,
         namespace: namespace.name,
       };

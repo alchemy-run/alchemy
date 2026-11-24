@@ -4,42 +4,19 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
+import type { Network as AwsNetwork } from "./AWS/Network.ts";
+import type { Network as DockerNetwork } from "./Docker/Network.ts";
+import type { Network as GcpNetwork } from "./GCP/Network.ts";
+import type { Network as KubernetesNetwork } from "./Kubernetes/Network.ts";
 import { Namespace } from "./Namespace.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
- * The private network a node must join to reach {@link ClusterShape.nodeEndpoint}.
- * A host Layer matches on `kind` and refuses a network it cannot join.
+ * The private network a node must join to reach {@link ClusterShape.nodeEndpoint}:
+ * `RivetGCP.Network`, `RivetAWS.Network`, `RivetDocker.Network` or
+ * `RivetKubernetes.Network`. A host Layer refuses a network it cannot join.
  */
-export type ClusterNetwork =
-  | {
-      /** A Docker network; the node's container joins it by name. */
-      readonly kind: "docker";
-      readonly name: Input<string>;
-    }
-  | {
-      /** A Kubernetes cluster; nodes run in its namespace and reach {@link ClusterShape.nodeEndpoint}. */
-      readonly kind: "kubernetes";
-      /** The cluster (a `Kubernetes.ClusterLike`). */
-      readonly cluster: unknown;
-      readonly namespace: string;
-    }
-  | {
-      /** A GCP VPC network; nodes on Compute Engine run in its subnetwork. */
-      readonly kind: "gcp";
-      readonly network: Input<string>;
-      readonly subnetwork: Input<string>;
-      readonly region: string;
-    }
-  | {
-      /** An AWS VPC; nodes run in its subnets with its node security group. */
-      readonly kind: "aws";
-      readonly vpcId: Input<string>;
-      /** Subnets with a route to the internet, for nodes that need no NAT. */
-      readonly subnetIds: ReadonlyArray<Input<string>>;
-      /** The security group nodes run with. */
-      readonly securityGroupId: Input<string>;
-    };
+export type ClusterNetwork = GcpNetwork | AwsNetwork | DockerNetwork | KubernetesNetwork;
 
 /** What pools and clients need to reach a Rivet control plane. */
 export interface ClusterShape {
@@ -124,12 +101,11 @@ export interface ControlPlaneProps {
  *   endpoint: "https://rivet.example.com",
  *   token: Config.Redacted("RIVET_TOKEN"),
  *   nodeEndpoint: "http://10.0.0.2:6420",
- *   network: {
- *     kind: "gcp",
+ *   network: RivetGCP.Network({
  *     network: "rivet",
  *     subnetwork: "rivet-us-central1",
  *     region: "us-central1",
- *   },
+ *   }),
  * });
  *
  * // Joins the "rivet" network and connects its nodes to nodeEndpoint.
