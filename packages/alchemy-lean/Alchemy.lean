@@ -37,3 +37,4 @@ import Alchemy.Cloud.Engine
 import Alchemy.Cloud.Cli
 import Alchemy.Cloud.AWSControl
 import Alchemy.Cloud.SQSQueue
+import Alchemy.Ranking

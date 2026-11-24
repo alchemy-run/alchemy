@@ -67,7 +67,7 @@ An aggregate: its commands, events, rejections and state, and how it decides,
 evolves and replies. It writes a namespace of that name holding plain types and
 plain functions, which is what a `model` and every theorem refer to.
 -/
-syntax (name := aggregateCommand) "aggregate " ident " where" many1Indent(aggregateItem) : command
+syntax (name := aggregateCommand) (docComment)? "aggregate " ident " where" many1Indent(aggregateItem) : command
 
 /-- A command, allowed alternatives that can never match. -/
 private def lenient (command : Command) : MacroM Command :=
@@ -100,7 +100,7 @@ private def altsOf (alts : Array (TSyntax ``modelAlt)) : MacroM (Array (TSyntax 
   return alts.map fun alt => ⟨alt.raw⟩
 
 macro_rules
-  | `(aggregate $a:ident where $items*) => do
+  | `($[$doc:docComment]? aggregate $a:ident where $items*) => do
     let n (name : Name) : Ident := mkIdentFrom a name
     let mut commands : Array Command := #[← `(command| namespace $a)]
     let mut hasReply := false
@@ -244,8 +244,7 @@ macro_rules
     let r (name : Name) : Ident := mkIdentFrom a (`_root_ ++ a.getId ++ name)
     commands := commands.push (← `(command| end $a))
     commands := commands.push (← `(command|
-      /-- The aggregate: its types and functions, tied together. -/
-      abbrev $a:ident : Alchemy.Aggregate where
+      $[$doc:docComment]? abbrev $a:ident : Alchemy.Aggregate where
         name := $(Syntax.mkStrLit (toString a.getId))
         Id := $(r `Id)
         State := $(r `State)
@@ -289,7 +288,7 @@ given what it is started with, may be told a signal while it waits, and may fail
 -/
 syntax &"saga " ident "(" term ")" "(" term ")" " : " term modelAlt+ : modelItem
 
-syntax (name := modelCommand) "model " ident " where" many1Indent(modelItem) : command
+syntax (name := modelCommand) (docComment)? "model " ident " where" many1Indent(modelItem) : command
 
 private def under (parent : Ident) (child : Name) : Ident :=
   mkIdentFrom parent (parent.getId ++ child)
@@ -317,7 +316,7 @@ private def exactly (alts : Array (TSyntax ``modelAlt)) : MacroM (Array (TSyntax
   return alts.map fun alt => ⟨alt.raw⟩
 
 macro_rules
-  | `(model $m:ident where $items*) => do
+  | `($[$doc:docComment]? model $m:ident where $items*) => do
     let mut aggregates : Array Ident := #[]
     let mut callCtors := #[]
     let mut replyAlts := #[]
@@ -645,7 +644,7 @@ macro_rules
         | some (g, _, _, _) => `($(under m (g.getId ++ `run)))
         | none => `(fun _ _ => Alchemy.Program.pure ())
     commands := commands.push (← `(command|
-      abbrev $m:ident : Alchemy.Model where
+      $[$doc:docComment]? abbrev $m:ident : Alchemy.Model where
         name := $(text m)
         signature := $(under m `Signature)
         decisions := [$[$(decisions.map (under m ·.getId))],*]

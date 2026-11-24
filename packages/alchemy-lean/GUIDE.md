@@ -167,6 +167,14 @@ theorem anApprovedOrderIsPaidAndShipped (id item charge : String) (amount : Nat)
 
 **Reading it.** `.send` is a caller sending a command. `.answer` is the theorem saying "suppose the gateway replies this". `let shop := …` names the world after the script. `(priced : amount ≠ 0)` is an assumption the proof may use. `behaviour` runs the script with `id` and `amount` left as unknowns.
 
+One line proves that the whole model stops, from any world it can reach. It finds the measure itself.
+
+```lean
+comes_to_rest Shop
+```
+
+**Reading it.** The command gives every event, command and saga a weight so that each step lowers the total, then states `Shop.comesToRest`. If some reaction feeds itself, no weights exist and the line fails.
+
 ## 7. Show one concrete case: a story
 
 The same thing with real values, so a person can read it and check it is what they meant.

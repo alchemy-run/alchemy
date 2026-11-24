@@ -248,51 +248,28 @@ theorem aRefusedOrderEventuallyEnds (id item reason : String) (amount : Nat)
 
 Those two are about one flow. This is about every world the shop can reach:
 whatever was sent and answered, in any order, the shop left to run comes to rest.
-It is proved with a measure: each event weighs more than the reactions to it,
-each command at least what it records, so every step lowers the total.
+`comes_to_rest` proves it: it finds a weight for each event, more than the
+reactions to it, and for each command, at least what it records, so every step
+lowers the total. Nobody chooses the weights.
 -/
 
-/-- Every reaction of the shop's policies only calls outside, tells an aggregate, and ends. -/
-theorem policiesAreCalm : ∀ p ∈ Shop.policies, ∀ history e, Calm (p.react history e) := by
-  intro p mem history e
-  obtain ⟨source, id, event, seq, time⟩ := e
-  simp only [List.mem_cons, List.mem_nil_iff, or_false] at mem
-  rcases mem with rfl | rfl | rfl <;> cases source <;> cases event <;>
-    first
-      | exact .done
-      | exact .tell _
-      | exact .call _ _ (fun reply => by cases reply <;> first | exact .done | exact .tell _)
+end Shop
 
-/-- What each event and each command weighs. -/
-def weights : Shop.Weights where
-  event
-    | .Order, .placed .. => 3
-    | .Order, .paid .. => 8
-    | .Order, .declined _ => 4
-    | .Shipment, .scheduled _ => 3
-  send
-    | ⟨.Order, _, .place ..⟩ => 3
-    | ⟨.Order, _, .settle ..⟩ => 8
-    | ⟨.Order, _, .decline ..⟩ => 4
-    | ⟨.Shipment, _, .schedule ..⟩ => 3
-  reacts := by
-    intro history e
-    obtain ⟨source, id, event, seq, time⟩ := e
-    cases source <;> cases event <;>
-      simp [Model.weigh, behaviour, Program.pure_eq, Program.bind_eq]
-  emits := by
-    intro n ctx state command es accepted
-    cases n <;> cases command <;>
-      simp only [Order.decide, Shipment.decide] at accepted <;>
-      (repeat' split at accepted) <;> first | (cases accepted; simp) | cases accepted
+comes_to_rest Shop
+
+namespace Shop
 
 /--
 The shop comes to rest. From any world it can reach, left to run, it stops:
 nothing more can happen without a caller, an outside answer or the clock.
 -/
 theorem theShopComesToRest (w : Alchemy.World Signature) (reach : Shop.Reachable w) :
-    Shop.AtRest (Shop.settle (weights.measure w) w) :=
-  weights.comesToRest policiesAreCalm w reach
+    ∃ steps, Shop.AtRest (Shop.settle steps w) :=
+  Shop.comesToRest w reach
+
+/-- The weights it found, to read: a paid order weighs more than the shipment it leads to. -/
+example : ranking.event .Order (.paid "ch-1" "kettle" 20) > ranking.event .Shipment (.scheduled "kettle") := by
+  decide
 
 /-! ## Rules about the domain -/
 

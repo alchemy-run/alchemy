@@ -1,4 +1,5 @@
 import Alchemy.Engine
+import Alchemy.Attr
 
 /-!
 # Coming to rest, for models with policies
@@ -595,6 +596,130 @@ theorem Ranking.eventually (ranking : m.Ranking) (reacts : ranking.Reacts)
   obtain ⟨steps, rest⟩ := ranking.comesToRest reacts w reach
   exact ⟨steps, rest, atRest _ (m.settle_reachable _ w reach) rest⟩
 
+/-! ## Ranks, found by the checker
+
+The same rules with the rank of what follows worked out from the rank given, so
+a proof never has to name one: `ranked` walks a program and spends its rank as
+it goes.
+-/
+
+theorem Ranked.mono {ranking : m.Ranking} {p : Program m.signature Unit} {a b : Nat}
+    (h : Ranked ranking p a) (le : a ≤ b) : Ranked ranking p b := by
+  induction h generalizing b with
+  | pure one => exact .pure (by omega)
+  | fail failure one => exact .fail failure (by omega)
+  | send s k each fits _ => exact .send s k each (by omega)
+  | call c k each fits _ => exact .call c k each (by omega)
+  | await k each fits _ => exact .await k each (by omega)
+  | compensate undo k small rest fits _ => exact .compensate undo k small rest (by omega)
+  | start saga input k rest run fits _ _ => exact .start saga input k rest run (by omega)
+  | signal saga told k rest fits _ => exact .signal saga told k rest (by omega)
+  | schedule after s k rest fits _ => exact .schedule after s k rest (by omega)
+
+variable {ranking : m.Ranking} {t : Nat}
+
+theorem Ranked.send' (s : Send m.signature.aggregates) (k)
+    (each : ∀ r, Ranked ranking (k r) (t - (2 + ranking.send s))) (fits : 2 + ranking.send s + 1 ≤ t) :
+    Ranked ranking (.send s k) t := .send s k each (by omega)
+
+theorem Ranked.call' (c : m.signature.Call) (k) (each : ∀ r, Ranked ranking (k r) t) :
+    Ranked ranking (.call c k) t := .call c k each (Nat.le_refl _)
+
+theorem Ranked.await' (k : m.signature.Signal → Program m.signature Unit)
+    (each : ∀ signal, Ranked ranking (k signal) (t - 1)) (fits : 2 ≤ t) :
+    Ranked ranking (.await k) t := .await k each (by omega)
+
+theorem Ranked.compensate' (undo : m.signature.Failure → Send m.signature.aggregates) (k)
+    (s : Send m.signature.aggregates) (same : ∀ failure, undo failure = s)
+    (rest : Ranked ranking k (t - (3 + ranking.send s))) (fits : 3 + ranking.send s + 1 ≤ t) :
+    Ranked ranking (.compensate undo k) t :=
+  .compensate undo k (b := ranking.send s) (fun failure => by rw [same]; exact Nat.le_refl _) rest
+    (by omega)
+
+theorem Ranked.start' {j : Nat} (saga) (input) (k)
+    (run : Ranked ranking (m.saga saga input) j) (rest : Ranked ranking k (t - (1 + j)))
+    (fits : 1 + j + 1 ≤ t) : Ranked ranking (.start saga input k) t :=
+  .start saga input k rest run (by omega)
+
+theorem Ranked.signal' (saga) (told) (k) (rest : Ranked ranking k (t - 1)) (fits : 2 ≤ t) :
+    Ranked ranking (.signal saga told k) t := .signal saga told k rest (by omega)
+
+theorem Ranked.schedule' (after) (s) (k) (rest : Ranked ranking k (t - 1)) (fits : 2 ≤ t) :
+    Ranked ranking (.schedule after s k) t := .schedule after s k rest (by omega)
+
+/-- A reaction with no undos registered, at its program's rank. -/
+theorem Ranking.plain (ranking : m.Ranking) {program : Program m.signature Unit} {rank : Nat}
+    (ranked : Ranked ranking program rank) :
+    ranking.fiber { owner := none, program, undo := [] } rank :=
+  ⟨rank, 0, ranked, .nil, Nat.le_refl _⟩
+
+/-- The reactions to one event, each a program with a rank. -/
+inductive Ranking.programs (ranking : m.Ranking) : List (Program m.signature Unit) → Nat → Prop where
+  | nil : Ranking.programs ranking [] 0
+  | cons {p r ps n} : Ranked ranking p r → Ranking.programs ranking ps n →
+      Ranking.programs ranking (p :: ps) (r + n)
+
+theorem Ranking.programs_fibers (ranking : m.Ranking) {ps : List (Program m.signature Unit)}
+    {n : Nat} (h : ranking.programs ps n) :
+    ranking.fibers (ps.map fun program => { owner := none, program, undo := [] }) n := by
+  induction h with
+  | nil => exact .nil
+  | cons ranked _ ih => exact .cons (ranking.plain ranked) ih
+
+/-- An event outweighs the reactions to it, once each reaction has a rank. -/
+theorem Ranking.reacting (ranking : m.Ranking) {history} {e : Emitted m.signature.aggregates}
+    {total : Nat} (ranked : ranking.programs (m.policies.map fun p => p.react history e) total)
+    (fits : 1 + total ≤ ranking.event e.source e.event) :
+    ∃ total, ranking.fibers
+        (m.policies.map fun p => { owner := none, program := p.react history e, undo := [] }) total
+      ∧ 1 + total ≤ ranking.event e.source e.event := by
+  refine ⟨total, ?_, fits⟩
+  simpa [List.map_map, Function.comp_def] using ranking.programs_fibers ranked
+
 end Model
+
+/-- Settles an inequality between a rank and what a step costs. -/
+syntax "ranked_fits " ident : tactic
+
+macro_rules
+  | `(tactic| ranked_fits $ranking) =>
+    `(tactic| first
+      | decide
+      | (simp [$ranking:ident]; done)
+      | (simp [$ranking:ident]; omega)
+      | omega)
+
+/--
+Proves that a program has the rank given: `ranked Bank.ranking [Bank.Payout.ranked]`.
+It walks the program, spending the rank as it goes; the list is the ranks of
+the sagas it may start.
+-/
+syntax "ranked " ident " [" term,* "]" : tactic
+
+macro_rules
+  | `(tactic| ranked $ranking [$sagas,*]) => do
+    let again ← `(tactic| ranked $ranking [$sagas,*])
+    let starts ← sagas.getElems.mapM fun saga =>
+      `(tactic| (refine Alchemy.Model.Ranked.start' _ _ _ ($saga _ _) ?_ (by ranked_fits $ranking)
+                 $again:tactic))
+    let start ← if starts.isEmpty then `(tactic| fail "no saga's rank was given")
+      else `(tactic| first $[| $starts:tactic]*)
+    `(tactic| first
+      | exact Alchemy.Model.Ranked.pure (by ranked_fits $ranking)
+      | exact Alchemy.Model.Ranked.fail _ (by ranked_fits $ranking)
+      | (refine Alchemy.Model.Ranked.send' _ _ (fun r => ?_) (by ranked_fits $ranking)
+         first | $again:tactic | (cases r <;> $again:tactic))
+      | (refine Alchemy.Model.Ranked.call' _ _ (fun r => ?_)
+         first | $again:tactic | (cases r <;> $again:tactic))
+      | (refine Alchemy.Model.Ranked.await' _ (fun r => ?_) (by ranked_fits $ranking)
+         first | $again:tactic | (cases r <;> $again:tactic))
+      | (refine Alchemy.Model.Ranked.compensate' _ _ _ (fun _ => rfl) ?_ (by ranked_fits $ranking)
+         $again:tactic)
+      | $start:tactic
+      | (refine Alchemy.Model.Ranked.signal' _ _ _ ?_ (by ranked_fits $ranking)
+         $again:tactic)
+      | (refine Alchemy.Model.Ranked.schedule' _ _ _ ?_ (by ranked_fits $ranking)
+         $again:tactic)
+      | (split <;> $again:tactic))
 
 end Alchemy

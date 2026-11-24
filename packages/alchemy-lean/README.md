@@ -340,36 +340,22 @@ theorem anApprovedOrderEventuallyShips (id item charge : String) (amount : Nat)
   refine Shop.eventually_now _ ?_ ?_ <;> behaviour
 ```
 
-That a model comes to rest from any world it can reach is proved with weights: each event weighs more than the reactions to it, and each command at least what it records.
+`comes_to_rest` proves that a model stops from any world it can reach. It finds a weight for each event, command and saga so that every step lowers the total; nobody writes the weights.
 
 ```lean
-def weights : Shop.Weights where
-  event
-    | .Order, .placed .. => 3
-    | .Order, .paid .. => 8
-    | .Order, .declined _ => 4
-    | .Shipment, .scheduled _ => 3
-  send
-    | ⟨.Order, _, .place ..⟩ => 3
-    | ⟨.Order, _, .settle ..⟩ => 8
-    | ⟨.Order, _, .decline ..⟩ => 4
-    | ⟨.Shipment, _, .schedule ..⟩ => 3
-  …
+comes_to_rest Shop
 
 theorem theShopComesToRest (w : Alchemy.World Signature) (reach : Shop.Reachable w) :
-    Shop.AtRest (Shop.settle (weights.measure w) w) :=
-  weights.comesToRest policiesAreCalm w reach
+    ∃ steps, Shop.AtRest (Shop.settle steps w) :=
+  Shop.comesToRest w reach
 ```
 
-A model with sagas gets the same, from a rank for each saga's program. The bank, with two sagas and their undos, comes to rest from any world it can reach.
+The same line covers sagas and their undos. The weights it found can be read.
 
 ```lean
-theorem payout_ranked (payout : String) (input : PayoutRequest) :
-    Model.Ranked ranking (Bank.Payout.run payout input) 17 := by
+comes_to_rest Bank
 
-theorem theBankComesToRest (w : Alchemy.World Signature) (reach : Bank.Reachable w) :
-    ∃ steps, Bank.AtRest (Bank.settle steps w) :=
-  ranking.comesToRest reacts w reach
+example : ranking.event .Account (.payoutRequested "p-1" 200) = 21 := rfl
 ```
 
 ## A stack
