@@ -181,6 +181,8 @@ export const Sealing = Domain.VaultLive.pipe(
 
 A key's object holds only that key, apart from every aggregate's storage.
 
+On Rivet and Effect Cluster, provide the Vault inside the Layer the pool loads (its `handler`), so the pool's nodes host the keys' objects too.
+
 ## Wrap the keys under a root key
 
 A `Domain.KeyWrap` makes each subject's key and decides what the store keeps of it. `Domain.NoKeyWrap` stores the key as it is, so whoever can read the store can open what it sealed.
