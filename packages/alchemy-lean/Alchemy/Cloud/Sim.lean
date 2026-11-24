@@ -148,14 +148,14 @@ def settle (g : Graph K) : Nat → Running K sim → Running K sim
     | [] => w
     | e :: rest => g.settle fuel (g.nodes.foldl (fun w node => deliverTo node e w) { w with pending := rest })
 
-/-- A step of a story about a stack. -/
+/-- A step of a test of a stack: a request and what it must answer, or a fact about the cloud. -/
 inductive Step (K : Type) [Cloud K] (sim : Sim K) where
   /-- A request to a host, and what the answer must be. -/
   | request {k : K} (host : Ref k) (request : Cloud.Request k) (expect : Cloud.Response k → Bool)
   /-- Something that must be true of the cloud now. -/
   | holds (what : String) (check : sim.State → Bool)
 
-/-- Play a story. `none` once a step fails. -/
+/-- Run a test. `none` once a step fails. -/
 def play (g : Graph K) (steps : List (Step K sim)) : Option (Running K sim) :=
   steps.foldl (init := some (g.start sim)) fun w step =>
     match w, step with
@@ -168,7 +168,7 @@ def play (g : Graph K) (steps : List (Step K sim)) : Option (Running K sim) :=
       | _ => none
     | some w, .holds _ check => if check w.state then some w else none
 
-/-- Whether a story plays out as written. -/
+/-- Whether a test passes. -/
 def passes (g : Graph K) (steps : List (Step K sim)) : Bool := (g.play steps).isSome
 
 /-- The grants a world never exercised, with the host that holds each. -/
@@ -179,12 +179,12 @@ def unused (g : Graph K) (w : Running K sim) : List (String × Attempt K) :=
         fun grant => (node.id, grant)
 
 /--
-Whether the stories together exercise every grant of every host. A grant no
-story needs is one to remove, or a story to write.
+Whether the tests together exercise every grant of every host. A grant no
+test needs is one to remove, or a test to write.
 -/
-def exercised (g : Graph K) (stories : List (List (Step K sim))) : Bool :=
-  let used := stories.flatMap fun story =>
-    match g.play story with
+def exercised (g : Graph K) (tests : List (List (Step K sim))) : Bool :=
+  let used := tests.flatMap fun test =>
+    match g.play test with
     | some w => w.used
     | none => []
   (g.unused { state := sim.init, used }).isEmpty
@@ -207,9 +207,9 @@ def LeastPrivilege (g : Graph K) (sim : Sim K) : Prop :=
     ∃ (story : List (Step K sim)) (w : Running K sim) (t : Attempt K),
       g.play story = some w ∧ (node.id, t) ∈ w.used ∧ permitsOn grant.ref grant.op t = true
 
-/-- Stories that between them use every grant are the runs that prove it. -/
-theorem LeastPrivilege.of_stories {g : Graph K} (stories : List (List (Step K sim)))
-    (exercised : g.exercised stories = true) : g.LeastPrivilege sim := by
+/-- Tests that between them use every grant are the runs that prove it. -/
+theorem LeastPrivilege.of_tests {g : Graph K} (tests : List (List (Step K sim)))
+    (exercised : g.exercised tests = true) : g.LeastPrivilege sim := by
   intro node nodeMem grant grantMem
   simp only [Graph.exercised, unused, List.isEmpty_iff, List.flatMap_eq_nil_iff,
     List.map_eq_nil_iff, List.filter_eq_nil_iff] at exercised

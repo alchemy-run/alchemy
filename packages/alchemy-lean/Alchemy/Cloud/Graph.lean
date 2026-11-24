@@ -198,7 +198,7 @@ def graph (s : Stack K Out) (stage : String) : Graph K :=
   | .ok (_, graph) => graph
   | .error _ => {}
 
-/-- What the stack reports at a stage: its handles, for stories and theorems to name. -/
+/-- What the stack reports at a stage: its handles, for tests and theorems to name. -/
 def outputs [Inhabited Out] (s : Stack K Out) (stage : String) : Out :=
   match s.build stage with
   | .ok (out, _) => out

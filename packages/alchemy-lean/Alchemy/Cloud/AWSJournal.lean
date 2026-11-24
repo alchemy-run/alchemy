@@ -267,9 +267,9 @@ end Alchemy.AWS.S3
 namespace Alchemy.AWS
 open Alchemy.Cloud
 
-/-! ## Requests, in a story -/
+/-! ## Requests, in a test -/
 
-/-- A request on its way to a function, in a story. -/
+/-- A request on its way to a function, in a test. -/
 structure Asked where
   function : AWS.Function
   request : Request

@@ -350,7 +350,7 @@ def InMemory (g : Graph Kind) (depth : Nat := 8) : Sim Kind where
   init := {}
   call := simulate g depth
 
-/-- A story's expectation: the Worker answers exactly this over HTTP. -/
+/-- A test's expectation: the Worker answers exactly this over HTTP. -/
 def responds (expected : Response) : Cloud.Response Kind.worker → Bool :=
   fun (got : Outgoing) => got == .http expected
 

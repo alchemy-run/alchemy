@@ -328,12 +328,12 @@ theorem shipmentsGoOneWay :
   constructor <;> stack_rule in prod using [out]
 ```
 
-## Stories for a stack
+## Testing a stack
 
-Requests and what they must answer, run against the whole stack in memory.
+Requests and what they must answer, run against the whole stack in memory. These are tests of the wiring, in HTTP and buckets; stories stay in the domain's language.
 
 ```lean
-def anOrder : List (Graph.Step Kind InMemory) := [
+def postingAnOrder : List (Graph.Step Kind InMemory) := [
   post out.api "/orders" (Order.Command.place "o-1" "kettle" 40) ⇒ (200, "paid ch_o-1"),
   .holds "the warehouse filed a slip" (·.object out.orders ["packed", "o-1"] == some "kettle"),
   .holds "and took the shipment off the queue" (·.queued out.shipments == []),
@@ -342,12 +342,12 @@ def anOrder : List (Graph.Step Kind InMemory) := [
     ⇒ (409, "Order.Rejection.alreadyPlaced"),
   get out.api "/revenue" ⇒ (200, "40") ]
 
-example : prod.passes anOrder = true := by native_decide
+example : prod.passes postingAnOrder = true := by native_decide
 ```
 
 ## Least privilege
 
-Every grant of every function is asked for by a call written in that function. It is read off the code, with no story.
+Every grant of every function is asked for by a call written in that function. It is read off the code, with no test.
 
 ```lean
 theorem everyGrantIsCalledFor : prod.EveryGrantIsCalledFor := by decide
@@ -358,9 +358,9 @@ theorem everyGrantIsCalledFor : prod.EveryGrantIsCalledFor := by decide
 ```
   Api
     may        read Orders/journal
-                 ← Shop.lean:273  theShop _ orders shipments
+                 ← Shop.lean:280  theShop _ orders shipments
     may        send to Shipments
-                 ← Shop.lean:273  theShop _ orders shipments
+                 ← Shop.lean:280  theShop _ orders shipments
   Warehouse
     may        write Orders/packed
                  ← Shop.lean:279  S3.putObject orders ["packed"] order item
@@ -368,11 +368,11 @@ theorem everyGrantIsCalledFor : prod.EveryGrantIsCalledFor := by decide
                  ← Shop.lean:277  SQS.consume shipments fun shipment => do match shipment.s…
 ```
 
-A story gives the stronger claim: each grant is not only written but used in a run.
+A test gives the stronger claim: each grant is not only written but used in a run.
 
 ```lean
 theorem leastPrivilege : prod.LeastPrivilege InMemory :=
-  .of_stories [anOrder] (by native_decide)
+  .of_tests [postingAnOrder] (by native_decide)
 ```
 
 ## Behaviour of a function

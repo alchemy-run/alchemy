@@ -359,7 +359,7 @@ def FunctionWith (id : String) (props : FunctionProps := {})
 
 end Lambda
 
-/-- A story's expectation: the function answers exactly this. -/
+/-- A test's expectation: the function answers exactly this. -/
 def responds (expected : Response) : Cloud.Response Kind.function → Bool :=
   fun (got : Response) => got == expected
 

@@ -4,7 +4,7 @@ import Alchemy
 # A shop
 
 One program, end to end: a domain model, the stack that hosts it, the rules
-proved about both, and stories the compiler runs.
+proved about both, and stories and tests the compiler runs.
 -/
 
 open Alchemy Cloud AWS
@@ -307,7 +307,7 @@ def ShopStack : Stack Kind Outputs where
 
 def prod : Graph Kind := ShopStack.graph "prod"
 
-/-- What the stack built, for stories and theorems to name. -/
+/-- What the stack built, for tests and theorems to name. -/
 def out : Outputs := computed% (ShopStack.outputs "prod")
 
 example : ShopStack.problem "prod" = none ∧ prod.deployable = true := by decide
@@ -423,9 +423,13 @@ example (id : String) :
 
 end ApiBehaviour
 
-/-! ## Stories: the whole stack, run in memory -/
+/-! ## Tests of the stack
 
-def anOrder : List (Graph.Step Kind InMemory) := [
+These are not stories: they speak HTTP and buckets, not the shop's language.
+They check the wiring end to end, in memory.
+-/
+
+def postingAnOrder : List (Graph.Step Kind InMemory) := [
   post out.api "/orders" (Order.Command.place "o-1" "kettle" 40) ⇒ (200, "paid ch_o-1"),
   .holds "the warehouse filed a slip" (·.object out.orders ["packed", "o-1"] == some "kettle"),
   .holds "and took the shipment off the queue" (·.queued out.shipments == []),
@@ -434,12 +438,12 @@ def anOrder : List (Graph.Step Kind InMemory) := [
     ⇒ (409, "Order.Rejection.alreadyPlaced"),
   get out.api "/revenue" ⇒ (200, "40") ]
 
-def anOrderTooLarge : List (Graph.Step Kind InMemory) := [
+def postingAnOrderTooLarge : List (Graph.Step Kind InMemory) := [
   post out.api "/orders" (Order.Command.place "o-2" "yacht" 5000) ⇒ (402, "over the limit"),
   .holds "nothing was packed" (·.object out.orders ["packed", "o-2"] == none) ]
 
-example : prod.passes anOrder = true := by native_decide
-example : prod.passes anOrderTooLarge = true := by native_decide
+example : prod.passes postingAnOrder = true := by native_decide
+example : prod.passes postingAnOrderTooLarge = true := by native_decide
 
 /-! ## What is proved about access -/
 
@@ -483,11 +487,11 @@ Least privilege: no function holds a grant it does not need. For each one there
 is a run in which that function makes a call the grant is what permits.
 -/
 theorem leastPrivilege : prod.LeastPrivilege InMemory :=
-  .of_stories [anOrder] (by native_decide)
+  .of_tests [postingAnOrder] (by native_decide)
 
 /--
 The same, read off the code: every grant of every function is asked for by a
-call written in that function. No story is needed.
+call written in that function. No test is needed.
 -/
 theorem everyGrantIsCalledFor : prod.EveryGrantIsCalledFor := by decide
 

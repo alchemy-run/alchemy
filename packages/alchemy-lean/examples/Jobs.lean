@@ -209,11 +209,11 @@ theorem jobsWithoutACloudTouchNothing (request : Request) (memory : Memory) :
     have := permitted t (by rw [attempts]; exact List.mem_cons_self)
     simp [JobStorageNowhere, Layer.make] at this
 
-/-! ## Stories, run when this file compiles -/
+/-! ## Tests of the stack, run when this file compiles -/
 
-abbrev Story := List (Graph.Step Kind InMemory)
+abbrev Test := List (Graph.Step Kind InMemory)
 
-def storingAJob : Story := [
+def storingAJob : Test := [
   .request api { method := .post, path := ["j-1"], body := "resize the logo" }
     (responds { status := 201, body := "j-1" }),
   .holds "the job is stored" (·.object bucket ["jobs", "j-1"] == some "resize the logo"),
@@ -221,12 +221,12 @@ def storingAJob : Story := [
   .request api { path := ["j-1"] } (responds { status := 200, body := "resize the logo" }),
   .request api { path := ["j-2"] } (responds { status := 404, body := "Job j-2 not found" }) ]
 
-def workingAJob : Story := storingAJob ++ [
+def workingAJob : Test := storingAJob ++ [
   .request worker {} (responds { status := 200, body := "resize the logo" }),
   .holds "the queue is empty" (·.queued queue == []),
   .request worker {} (responds { status := 204 }) ]
 
-def auditing : Story := storingAJob ++ [
+def auditing : Test := storingAJob ++ [
   .request auditor {} (responds { status := 200, body := "1" }) ]
 
 example : prod.passes storingAJob = true := by native_decide
@@ -239,7 +239,7 @@ is a run in which that function makes a call the grant is what permits. Give a
 function a grant it never uses and this fails.
 -/
 theorem leastPrivilege : prod.LeastPrivilege InMemory :=
-  .of_stories [workingAJob, auditing] (by native_decide)
+  .of_tests [workingAJob, auditing] (by native_decide)
 
 /-! ## Deploying it -/
 

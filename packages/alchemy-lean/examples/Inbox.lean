@@ -101,14 +101,14 @@ example : InboxStack.problem "prod" = none ∧ prod.deployable = true := by deci
 example : prod.edges = [
     ("Inbox", "Mail"), ("Inbox", "Incoming"), ("Web", "Inbox")] := by decide
 
-/-! ## Stories, run against the stack in memory -/
+/-! ## Tests of the stack, run in memory -/
 
-abbrev Story := List (Graph.Step Kind (InMemory prod))
+abbrev Test := List (Graph.Step Kind (InMemory prod))
 
 def post (body : String) : Incoming := .fetch { method := "POST", path := "/messages", body }
 def get (path : String) : Incoming := .fetch { path }
 
-def aMessage : Story := [
+def aMessage : Test := [
   .request web (get "/") (responds { body := "0 messages" }),
   .request web (get "/latest") (responds { status := 404, body := "the inbox is empty" }),
   .request inbox (post "hello") (responds { status := 202 }),
@@ -128,7 +128,7 @@ there is a run in which that Worker makes a call only that binding permits.
 Bind something a Worker never uses and this fails.
 -/
 theorem leastPrivilege : prod.LeastPrivilege (InMemory prod) :=
-  .of_stories [aMessage] (by native_decide)
+  .of_tests [aMessage] (by native_decide)
 
 /-- Only the Inbox can touch the mail, to read it or to write it. -/
 theorem onlyTheInboxTouchesTheMail (op : BucketOp) :
