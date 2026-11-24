@@ -145,6 +145,9 @@ export const rows = Effect.fn(function* (
         accepted ||= undefined;
       }
       if (outcome._tag === "Stopped") {
+        // A path no input takes says nothing of the code: what stopped the prover on it is never met.
+        const reached = yield* Check.solve(solver, taken.run, "false");
+        if (reached._tag === "Unsat") continue;
         const unread = notRead(outcome.error);
         all(unread);
         fits = worse(fits, unread);

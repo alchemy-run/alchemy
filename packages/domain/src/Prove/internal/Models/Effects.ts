@@ -1,4 +1,6 @@
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Brands from "../Brands.ts";
 import type { Kit, Model, Models } from "../Kit.ts";
 import {
@@ -161,98 +163,7 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
     );
   };
 
-  /** `Schedule.recurs(n)`: so many more runs, each at once. It is the one schedule that does not wait. */
-  const RECURS = "~recurs";
-  const recursOf = (schedule: V | undefined): number | undefined => {
-    const count = schedule?._tag === "Obj" && !schedule.brand ? schedule.fields[RECURS] : undefined;
-    return count?._tag === "Num" && Number.isInteger(count.value) && count.value >= 0
-      ? count.value
-      : undefined;
-  };
-
-  /** How often an effect is run again: a count the code writes, and a test of what the last run gave. */
-  const again = (
-    name: string,
-    options: V | undefined,
-    site: Site,
-  ): Eval<{
-    readonly times: number;
-    readonly goesOn: (last: V) => Eval<boolean>;
-    /** Given the schedule alone, `repeat` gives what the schedule does: how many times it ran again. */
-    readonly counts?: boolean;
-  }> => {
-    const always = { goesOn: () => Effect.succeed(true) };
-    // `Effect.retry(effect, Schedule.recurs(3))`.
-    const recurs = recursOf(options);
-    if (recurs !== undefined) return Effect.succeed({ times: recurs, counts: true, ...always });
-    const fields = options?._tag === "Obj" && !options.brand ? options.fields : undefined;
-    const scheduled = fields && "schedule" in fields ? recursOf(fields.schedule) : undefined;
-    // Any other schedule waits between runs, and a handler does not wait.
-    if (
-      !fields ||
-      !Object.keys(fields).every((key) => ["times", "while", "until", "schedule"].includes(key)) ||
-      ("schedule" in fields && scheduled === undefined)
-    )
-      return Effect.fail(
-        Value.notTranslated(
-          site,
-          `calls ${name} with a schedule that waits: the prover reads a count of times or Schedule.recurs, with while or until`,
-        ),
-      );
-    const times = fields.times;
-    const counted =
-      times?._tag === "Num" && Number.isInteger(times.value) && times.value >= 0
-        ? times.value
-        : undefined;
-    if ((times !== undefined && counted === undefined) || (counted ?? scheduled) === undefined)
-      return Effect.fail(
-        Value.notTranslated(site, `calls ${name} without a count of times the prover can see`),
-      );
-    const whilst = fields.while;
-    const until = fields.until;
-    return Effect.succeed({
-      times: Math.min(counted ?? Infinity, scheduled ?? Infinity),
-      goesOn: (last) =>
-        Effect.gen(function* () {
-          if (whilst && !(yield* kit.holds(whilst, [last], site))) return false;
-          if (until && (yield* kit.holds(until, [last], site))) return false;
-          return true;
-        }),
-    });
-  };
-
-  /** The effect run again while it fails: nothing waits, so each run follows the last at once. */
-  const retry: Model = onEffect("Effect.retry", 1, (self, [options], site) =>
-    Effect.gen(function* () {
-      const { times, goesOn } = yield* again("Effect.retry", options, site);
-      for (let left = times; ; left--) {
-        const made = yield* attempt(self);
-        const read = Brands.resultOf(made);
-        if (!read) return yield* wrongArguments(site, "Effect.retry");
-        if (read._tag === "Success") return read.success;
-        if (left <= 0 || !(yield* goesOn(read.failure))) return yield* rejected(read.failure);
-      }
-    }),
-  );
-
-  /** The effect run again while it succeeds: what it gives is what its last run gave. */
-  const repeat: Model = onEffect("Effect.repeat", 1, (self, [options], site) =>
-    Effect.gen(function* () {
-      const { times, goesOn, counts } = yield* again("Effect.repeat", options, site);
-      for (let left = times; ; left--) {
-        const made = yield* self;
-        if (left <= 0 || !(yield* goesOn(made))) return counts ? Value.num(times) : made;
-      }
-    }),
-  );
-
   const models: Models = {
-    "effect/Schedule:recurs": ([count], site) =>
-      count?._tag === "Num" && Number.isInteger(count.value) && count.value >= 0
-        ? Effect.succeed(Value.obj({ [RECURS]: count }))
-        : Effect.fail(
-            Value.notTranslated(site, "calls Schedule.recurs without a count the prover can see"),
-          ),
     "effect/Effect:as": onEffect("Effect.as", 1, (self, [value]) =>
       Effect.as(self, value ?? Value.undef),
     ),
@@ -556,16 +467,18 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
           )
         : wrongArguments(site, "Effect.fromResult");
     },
-    // The finalizer runs after the effect, whether it gave a value or failed.
+    // The finalizer runs after the effect, whether it gave a value, failed or was interrupted.
     "effect/Effect:ensuring": onEffect("Effect.ensuring", 1, (self, [finalizer], site) =>
       finalizer?._tag === "Effect"
-        ? Effect.matchEffect(self, {
-            onSuccess: (value) => Effect.as(finalizer.run, value),
-            onFailure: (stop) =>
-              stop._tag === "Rejected"
-                ? Effect.flatMap(finalizer.run, () => Effect.fail(stop))
-                : Effect.fail(stop),
-          })
+        ? Effect.onExit(self, (exit) =>
+            // What stops the prover stops it: nothing more of the path is read.
+            Exit.isFailure(exit) &&
+            exit.cause.reasons.some(
+              (reason) => Cause.isFailReason(reason) && reason.error._tag !== "Rejected",
+            )
+              ? Effect.void
+              : (finalizer.run as Effect.Effect<V>),
+          )
         : wrongArguments(site, "Effect.ensuring"),
     ),
     "effect/Effect:bind": onEffect("Effect.bind", 2, (self, [name, f], site) => {
@@ -608,14 +521,6 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
       self?._tag === "Effect"
         ? onFailure(self.run, (error) => rejected(error, true))
         : wrongArguments(site, "Effect.runSync"),
-    "effect/Effect:retry": retry,
-    "effect/Effect:repeat": repeat,
-    // Nothing in a handler waits, so an effect is done before any time is up.
-    "effect/Effect:timeout": onEffect("Effect.timeout", 1, (self) => self),
-    "effect/Effect:timeoutOption": onEffect("Effect.timeoutOption", 1, (self) =>
-      Effect.map(self, Value.some),
-    ),
-    "effect/Effect:timeoutOrElse": onEffect("Effect.timeoutOrElse", 1, (self) => self),
     "effect/Effect:withSpan": transparent("Effect.withSpan"),
     "effect/Effect:annotateSpans": transparent("Effect.annotateSpans"),
     "effect/Effect:annotateLogs": transparent("Effect.annotateLogs"),
@@ -626,7 +531,6 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
 
   const values: Record<string, V> = {
     "effect/Effect:Do": lazy(() => Effect.sync(() => Value.obj({}))),
-    "effect/Effect:yieldNow": done,
     "effect/Effect:succeedNone": lazy(() => Effect.succeed(Value.none)),
   };
 

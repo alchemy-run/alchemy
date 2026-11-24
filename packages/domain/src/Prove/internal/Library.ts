@@ -36,13 +36,13 @@ import * as Collections from "./Models/Collections.ts";
 import * as Decimals from "./Models/Decimals.ts";
 import * as Effects from "./Models/Effects.ts";
 import * as Exits from "./Models/Exits.ts";
+import * as Fibers from "./Models/Fibers.ts";
 import * as Hashes from "./Models/Hashes.ts";
 import * as Numbers from "./Models/Numbers.ts";
 import * as Rationals from "./Models/Rationals.ts";
 import * as Results from "./Models/Results.ts";
 import * as Streams from "./Models/Streams.ts";
 import * as Strings from "./Models/Strings.ts";
-import * as Waits from "./Models/Waits.ts";
 import type { Term } from "./Smt.ts";
 import * as Smt from "./Smt.ts";
 import * as Symbolic from "./Symbolic.ts";
@@ -349,7 +349,7 @@ export const make = (host: Host) => {
     );
 
   /** The library's values that read the clock. */
-  const clocks: Readonly<Record<string, (site: Site) => V>> = {
+  const clocks: Record<string, (site: Site) => V> = {
     "effect/Clock:currentTimeNanos": (site) =>
       clock("Clock.currentTimeNanos", site, (now) => ({
         _tag: "Term",
@@ -1311,7 +1311,6 @@ export const make = (host: Host) => {
   const cells = Cells.make(kit, (key, args, site) => models[key]!(args, site));
   const exits = Exits.make(kit);
   const rationals = Rationals.make(kit);
-  const waits = Waits.make(kit);
 
   const written: Record<string, Model> = {
     ...own,
@@ -1328,8 +1327,10 @@ export const make = (host: Host) => {
     ...cells.models,
     ...exits.models,
     ...rationals.models,
-    ...waits.models,
   };
+  const fibers = Fibers.make(kit, { ...written });
+  Object.assign(written, fibers.models);
+  Object.assign(clocks, fibers.sited);
 
   // A `Chunk` and an `Iterable` are read as the array of their items: the
   // functions the three modules share do the same to one.
@@ -1549,7 +1550,7 @@ export const make = (host: Host) => {
     },
     opticMember,
     /** A member of a latch or a semaphore: `latch.open`, `semaphore.withPermits`. */
-    waitMember: waits.member,
+    waitMember: fibers.member,
     /** A helper of a tagged union of `effect/Schema`, as a value the code calls. */
     unionMember,
     /** A method of a string, as a value the code calls. */

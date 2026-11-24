@@ -2226,16 +2226,8 @@ const syntax: ReadonlyArray<Group> = [
         `Effect.gen(function* () { return yield* Effect.promise(() => Promise.resolve(a)); })`,
         reported,
       ],
-      [
-        `Effect.gen(function* () { return yield* Effect.sleep("1 second").pipe(Effect.as(a)); })`,
-        reported,
-      ],
       [`Effect.gen(function* () { return yield a; })`, reported],
       [`Effect.tryPromise(async () => a)`, reported],
-      [
-        `Effect.gen(function* () { return yield* Effect.succeed(a).pipe(Effect.delay("1 second")); })`,
-        reported,
-      ],
     ],
   },
 ];
@@ -2351,21 +2343,17 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const cell = yield* SubscriptionRef.make(a); return yield* cell.pipe(SubscriptionRef.updateAndGetEffect((n) => positive(n)), Effect.result); })`,
     ],
     unread: [
-      // A schedule that waits between runs.
-      [`Effect.retry(even(a), Schedule.spaced("1 second"))`, reported],
-      [
-        `Effect.retry(even(a), { schedule: Schedule.exponential("1 second"), times: 2 })`,
-        /Schedule\.exponential/,
-      ],
-      [
-        `Effect.repeat(Effect.succeed(a), { schedule: Schedule.spaced("1 second") })`,
-        /Schedule\.spaced/,
-      ],
-      [`Effect.retry(even(a), Schedule.recurs(b))`, /without a count the prover can see/],
-      [`Effect.retry(even(a), { schedule: { times: 2 } })`, /with a schedule that waits/],
       // How often is a number the code writes.
       [`Effect.retry(even(a), { times: b })`, /without a count of times/],
-      [`Effect.repeat(Effect.succeed(a), {})`, /without a count of times/],
+      [`Effect.retry(even(a), Schedule.recurs(b))`, /without a count the prover can see/],
+      [`Effect.retry(even(a), { schedule: { times: 2 } })`, reported],
+      // An effect run again with nothing to stop it never ends.
+      [`Effect.repeat(Effect.succeed(a), {})`, /runs an effect again more than/],
+      [
+        `Effect.repeat(Effect.succeed(a), { schedule: Schedule.spaced("1 second") })`,
+        /runs an effect again more than/,
+      ],
+      [`Effect.retry(even(a), Schedule.jittered(Schedule.spaced("1 second")))`, reported],
       [
         `Effect.gen(function* () { const cell = yield* SubscriptionRef.make(a); return yield* Stream.runCollect(Stream.take(SubscriptionRef.changes(cell), 1)); })`,
         reported,
@@ -2383,6 +2371,7 @@ const rest: ReadonlyArray<Group> = [
       `import * as Latch from "effect/Latch";`,
       `import * as Queue from "effect/Queue";`,
       `import * as Semaphore from "effect/Semaphore";`,
+      `import * as Fiber from "effect/Fiber";`,
     ],
     both: [
       `Effect.gen(function* () { const done = yield* Deferred.make(); const first = yield* Deferred.succeed(done, a); const second = yield* Deferred.succeed(done, b); return [first, second, yield* Deferred.await(done), yield* Deferred.isDone(done)]; })`,
@@ -2404,39 +2393,46 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const line = yield* Queue.unbounded(); Queue.offerUnsafe(line, a); yield* pipe(line, Queue.offer(b)); yield* pipe(line, Queue.offerAll([1, 2])); return [yield* pipe(line, Queue.takeN(2)), yield* Queue.clear(line), yield* Queue.clear(line)]; })`,
     ],
     unread: [
-      // Each of these would wait, and in a handler nothing comes: the real code never ends.
+      // Each of these waits for what no fiber of the handler does: the real code never ends.
       [
         `Effect.gen(function* () { const done = yield* Deferred.make(); return yield* Deferred.await(done); })`,
-        /waits for a Deferred the handler has not completed/,
+        /waits for a Deferred that nothing completes/,
       ],
       [
         `Effect.gen(function* () { const gate = yield* Latch.make(); return yield* gate.await; })`,
-        /waits for a Latch the handler has not opened/,
+        /waits for a Latch that nothing opens/,
       ],
       [
         `Effect.gen(function* () { const gate = yield* Latch.make(); return yield* gate.whenOpen(Effect.succeed(a)); })`,
-        /waits for a Latch the handler has not opened/,
+        /waits for a Latch that nothing opens/,
       ],
       [
         `Effect.gen(function* () { const permits = yield* Semaphore.make(1); return yield* permits.withPermits(2)(Effect.succeed(a)); })`,
-        /waits for more permits of a Semaphore than are free/,
+        /waits for permits of a Semaphore that nothing releases/,
       ],
       [
         `Effect.gen(function* () { const permits = yield* Semaphore.make(1); yield* permits.take(1); return yield* permits.take(1); })`,
-        /waits for more permits of a Semaphore than are free/,
+        /waits for permits of a Semaphore that nothing releases/,
       ],
       [
         `Effect.gen(function* () { const line = yield* Queue.unbounded(); return yield* Queue.take(line); })`,
-        /takes from a Queue with nothing in it/,
+        /takes from a Queue that nothing offers to/,
       ],
       [
         `Effect.gen(function* () { const line = yield* Queue.unbounded(); return yield* Queue.takeAll(line); })`,
-        /takes from a Queue with nothing in it/,
+        /takes from a Queue that nothing offers to/,
       ],
       [
         `Effect.gen(function* () { const line = yield* Queue.bounded(1); yield* Queue.offer(line, a); return yield* Queue.offer(line, b); })`,
-        /offers to a Queue that is full/,
+        /offers to a full Queue that nothing takes from/,
       ],
+      [
+        `Effect.gen(function* () { const fiber = yield* Effect.forkChild(Effect.never); return yield* Fiber.join(fiber); })`,
+        /would never end/,
+      ],
+      [`Effect.never`, /waits for Effect.never/],
+      // A handler that stops itself records nothing.
+      [`Effect.interrupt`, /the handler interrupts itself/],
       // How many is a number the code writes.
       [
         `Effect.gen(function* () { const permits = yield* Semaphore.make(a); return yield* permits.take(1); })`,
@@ -2446,22 +2442,157 @@ const rest: ReadonlyArray<Group> = [
         `Effect.gen(function* () { const line = yield* Queue.bounded(a); return yield* Queue.size(line); })`,
         /a Queue of a size the prover cannot see/,
       ],
-      // A queue that drops what does not fit, and one that ends.
+    ],
+  },
+  {
+    // Time: a sleep, a delay and a time limit, on time that passes only when nothing can run.
+    name: "Time2",
+    chunk: 3,
+    ...numbers,
+    effectful: true,
+    prelude: [
+      `import * as Schedule from "effect/Schedule";`,
+      `const log = (cell, entry) => Ref.update(cell, (entries) => [...entries, entry]);`,
+    ],
+    both: [
+      `Effect.sleep("1 second").pipe(Effect.as(a))`,
+      `Effect.succeed(a).pipe(Effect.delay("1 second"))`,
+      `Effect.gen(function* () { yield* Effect.sleep(Duration.seconds(2)); yield* Effect.sleep(0); yield* Effect.yieldNow; return a + b; })`,
+      `Effect.result(Effect.timeout(Effect.as(Effect.sleep("2 seconds"), a), "1 second")).pipe(Effect.map((made) => Result.isFailure(made) ? made.failure._tag : made.success))`,
+      `Effect.timeout(Effect.as(Effect.sleep("1 second"), a), "2 seconds")`,
+      `Effect.timeout(Effect.succeed(a), "1 second")`,
+      `Effect.result(Effect.timeout(even(a), 1000))`,
+      `Effect.timeoutOption(Effect.as(Effect.sleep("2 seconds"), a), "1 second")`,
+      `Effect.timeoutOption(Effect.as(Effect.sleep(5), a), 10)`,
+      `Effect.timeoutOrElse(Effect.as(Effect.sleep("2 seconds"), a), { duration: "1 second", orElse: () => Effect.succeed(b) })`,
+      `Effect.timeoutOrElse(Effect.as(Effect.sleep(1), a), { duration: "1 second", orElse: () => Effect.succeed(b) })`,
+      // A time limit stops the effect where it is: what it did before is done, and its finalizers run.
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const made = yield* Effect.timeoutOption(Effect.gen(function* () { yield* log(seen, "one"); yield* Effect.sleep(20); yield* log(seen, "two"); return a; }).pipe(Effect.ensuring(log(seen, "closed"))), 10); return [made, yield* Ref.get(seen)]; })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const made = yield* Effect.timeoutOption(Effect.gen(function* () { yield* log(seen, "one"); yield* Effect.sleep(5); yield* log(seen, "two"); return a; }).pipe(Effect.ensuring(log(seen, "closed"))), 10); return [made, yield* Ref.get(seen)]; })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.timeoutOption(Effect.onInterrupt(Effect.sleep(20), () => log(seen, "stopped")), 10); yield* Effect.timeoutOption(Effect.onInterrupt(Effect.sleep(5), () => log(seen, "never")), 10); return yield* Ref.get(seen); })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.timeoutOption(Effect.onExit(Effect.sleep(20), (exit) => log(seen, Exit.isSuccess(exit) ? "done" : Exit.hasInterrupts(exit) ? "interrupted" : "failed")), 10); yield* Effect.onExit(even(a), (exit) => log(seen, Exit.isSuccess(exit) ? "even" : "odd")).pipe(Effect.ignore); return yield* Ref.get(seen); })`,
+      // A time an input decides: each order of the two is a path.
+      `Effect.timeoutOption(Effect.as(Effect.sleep(a * 10), "slept"), b * 10 + 5)`,
+      `Effect.gen(function* () { yield* Effect.sleep(Duration.millis(a)); return b; })`,
+      // An effect run again on a schedule that waits.
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => (n < 3 ? Effect.fail(n) : Effect.succeed(n + a))); return [yield* Effect.retry(step, Schedule.spaced("1 second")), yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => Effect.fail(n + a)); const made = yield* Effect.result(Effect.retry(step, { schedule: Schedule.exponential("1 second"), times: 3 })); return [made, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => Effect.fail(n + a)); const made = yield* Effect.result(Effect.timeout(Effect.retry(step, Schedule.exponential("1 second")), "10 seconds")); return [Result.isFailure(made) ? made.failure._tag : "none", yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => Effect.fail(n + a)); const made = yield* Effect.result(Effect.timeout(Effect.retry(step, Schedule.fibonacci("1 second")), "10500 millis")); return [Result.isFailure(made) ? made.failure._tag : "none", yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(a); const step = Ref.updateAndGet(ran, (n) => n + 1); return [yield* Effect.repeat(step, { schedule: Schedule.spaced("1 second"), times: 2 }), yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(a); const step = Ref.updateAndGet(ran, (n) => n + 1); return [yield* Effect.repeat(step, { schedule: Schedule.fixed("1 second"), until: (n) => n === a + 3, times: 5 }), yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(a); const step = Ref.updateAndGet(ran, (n) => n + 1); const count = yield* Effect.repeat(step, Schedule.spaced("1 second").pipe(Schedule.upTo({ times: 2 }))); return [count, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => Effect.fail(n + a)); const made = yield* Effect.result(Effect.retry(step, Schedule.max([Schedule.recurs(2), Schedule.spaced("1 second")]))); return [made, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => Effect.fail(n + a)); const made = yield* Effect.result(Effect.retry(step, Schedule.min([Schedule.recurs(2), Schedule.recurs(4)]))); return [made, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => Effect.fail(n + a)); const made = yield* Effect.result(Effect.retry(step, Schedule.concat(Schedule.recurs(1), Schedule.recurs(2)))); return [made, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => Effect.fail(n + a)); const made = yield* Effect.result(Effect.retry(step, Schedule.once)); return [made, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => Effect.fail(n + a)); const made = yield* Effect.result(Effect.retry(step, { schedule: Schedule.forever, times: 2 })); return [made, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => Effect.fail(n + a)); const made = yield* Effect.result(Effect.retry(step, Schedule.duration("1 second"))); return [made, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => Effect.fail(n + a)); const made = yield* Effect.result(Effect.retry(step, Schedule.windowed("1 second").pipe(Schedule.upTo({ times: 2 })))); return [made, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(a); const step = Ref.updateAndGet(ran, (n) => n + 1); return yield* Effect.repeat(step, Schedule.passthrough(Schedule.recurs(2))); })`,
+    ],
+    unread: [
+      // Two waits that end at the same moment: which the deployed handler ends first is not known.
       [
-        `Effect.gen(function* () { const line = yield* Queue.dropping(1); return yield* Queue.size(line); })`,
-        reported,
+        `Effect.timeoutOption(Effect.as(Effect.sleep("1 second"), a), "1 second")`,
+        /two waits end at the same moment/,
+      ],
+      [`Effect.sleep(text)`.replace("text", `"soon"`), reported],
+    ],
+  },
+  {
+    // Fibers: effects run together, as the library runs them.
+    name: "Fibers",
+    chunk: 3,
+    ...numbers,
+    effectful: true,
+    prelude: [
+      `import * as Deferred from "effect/Deferred";`,
+      `import * as Fiber from "effect/Fiber";`,
+      `import * as Latch from "effect/Latch";`,
+      `import * as Queue from "effect/Queue";`,
+      `import * as Semaphore from "effect/Semaphore";`,
+      `const log = (cell, entry) => Ref.update(cell, (entries) => [...entries, entry]);`,
+    ],
+    both: [
+      // A race: the first to give a value, and the other is stopped.
+      `Effect.race(Effect.succeed(a), Effect.succeed(b))`,
+      `Effect.race(Effect.as(Effect.sleep(20), a), Effect.as(Effect.sleep(10), b))`,
+      `Effect.result(Effect.race(even(a), Effect.as(Effect.sleep(10), b)))`,
+      `Effect.result(Effect.raceFirst(even(a), Effect.as(Effect.sleep(10), b)))`,
+      `Effect.result(Effect.race(even(a), positive(b)))`,
+      `Effect.as(Effect.sleep(20), a).pipe(Effect.race(Effect.as(Effect.sleep(10), b)))`,
+      `Effect.raceAll([Effect.as(Effect.sleep(30), "slow"), Effect.as(Effect.sleep(10), "fast"), Effect.as(Effect.sleep(20), "middle")])`,
+      `Effect.result(Effect.raceAllFirst([Effect.as(Effect.sleep(30), a), Effect.andThen(Effect.sleep(10), even(a))]))`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const won = yield* Effect.race(Effect.as(log(seen, "first"), a), Effect.as(log(seen, "second"), b)); return [won, yield* Ref.get(seen)]; })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const won = yield* Effect.race(Effect.as(Effect.sleep(5), a), Effect.ensuring(Effect.andThen(log(seen, "began"), Effect.sleep(10)), log(seen, "closed"))); return [won, yield* Ref.get(seen)]; })`,
+      // Which of two wins, where an input decides how long each takes.
+      `Effect.race(Effect.as(Effect.sleep(a * 2 + 41), "first"), Effect.as(Effect.sleep(b * 2 + 42), "second"))`,
+      // A fiber: begun when the one that made it gives way.
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const fiber = yield* Effect.forkChild(Effect.as(log(seen, "child"), a)); yield* log(seen, "parent"); const made = yield* Fiber.join(fiber); yield* log(seen, "after"); return [made, yield* Ref.get(seen)]; })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.forkChild(log(seen, "child")); yield* log(seen, "parent"); return yield* Ref.get(seen); })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.forkChild(log(seen, "child")); yield* Effect.yieldNow; yield* log(seen, "parent"); return yield* Ref.get(seen); })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.forkChild(Effect.andThen(Effect.sleep(2), log(seen, "two"))); yield* Effect.forkChild(Effect.andThen(Effect.sleep(1), log(seen, "one"))); yield* Effect.sleep(3); return yield* Ref.get(seen); })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.forkChild(Effect.ensuring(Effect.andThen(Effect.sleep(5), log(seen, "late")), log(seen, "closed"))); yield* Effect.sleep(1); return yield* Ref.get(seen); })`,
+      `Effect.gen(function* () { const fiber = yield* Effect.forkChild(even(a)); const exit = yield* Fiber.await(fiber); return [Exit.isSuccess(exit), Exit.hasFails(exit), Exit.hasInterrupts(exit)]; })`,
+      `Effect.gen(function* () { const fiber = yield* Effect.forkChild(Effect.as(Effect.sleep(10), a)); yield* Effect.sleep(1); yield* Fiber.interrupt(fiber); const exit = yield* Fiber.await(fiber); return [Exit.isSuccess(exit), Exit.hasFails(exit), Exit.hasInterrupts(exit)]; })`,
+      `Effect.gen(function* () { const fiber = yield* Effect.forkChild(Effect.die("gone")); const exit = yield* Fiber.await(fiber); return [Exit.hasDies(exit), Exit.hasInterrupts(exit)]; })`,
+      `Effect.gen(function* () { const fiber = yield* Effect.forkChild(even(a)); return yield* Effect.result(Fiber.join(fiber)); })`,
+      `Effect.gen(function* () { const first = yield* Effect.forkChild(Effect.as(Effect.sleep(2), a)); const second = yield* Effect.forkChild(Effect.as(Effect.sleep(1), b)); return yield* Fiber.joinAll([first, second]); })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const first = yield* Effect.forkChild(Effect.onInterrupt(Effect.sleep(20), () => log(seen, "first"))); const second = yield* Effect.forkChild(Effect.onInterrupt(Effect.sleep(20), () => log(seen, "second"))); yield* Effect.sleep(1); yield* Fiber.interruptAll([first, second]); return yield* Ref.get(seen); })`,
+      `Effect.gen(function* () { const fiber = yield* even(a).pipe(Effect.forkChild); return yield* fiber.pipe(Fiber.join, Effect.result); })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const fiber = yield* Effect.forkDetach(Effect.andThen(Effect.sleep(1), log(seen, "detached"))); yield* Fiber.join(fiber); return yield* Ref.get(seen); })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const fiber = yield* Effect.forkChild(Effect.uninterruptible(Effect.andThen(Effect.sleep(5), log(seen, "kept")))); yield* Effect.sleep(1); yield* Fiber.interrupt(fiber); return yield* Ref.get(seen); })`,
+      // What one fiber waits on another for.
+      `Effect.gen(function* () { const done = yield* Deferred.make(); yield* Effect.forkChild(Effect.andThen(Effect.sleep(5), Deferred.succeed(done, a))); return yield* Deferred.await(done); })`,
+      `Effect.gen(function* () { const done = yield* Deferred.make(); yield* Effect.forkChild(Deferred.completeWith(done, even(a))); return yield* Effect.result(Deferred.await(done)); })`,
+      `Effect.gen(function* () { const line = yield* Queue.unbounded(); yield* Effect.forkChild(Queue.offer(line, a)); return yield* Queue.take(line); })`,
+      `Effect.gen(function* () { const line = yield* Queue.bounded(1); const seen = yield* Ref.make([]); yield* Effect.forkChild(Effect.forEach([a, b, 3], (n) => Effect.andThen(Queue.offer(line, n), log(seen, "offered")))); const taken = [yield* Queue.take(line), yield* Queue.take(line), yield* Queue.take(line)]; return [taken, yield* Ref.get(seen)]; })`,
+      `Effect.gen(function* () { const line = yield* Queue.dropping(1); return [yield* Queue.offer(line, a), yield* Queue.offer(line, b), yield* Queue.takeAll(line)]; })`,
+      `Effect.gen(function* () { const line = yield* Queue.sliding(1); return [yield* Queue.offer(line, a), yield* Queue.offer(line, b), yield* Queue.takeAll(line)]; })`,
+      `Effect.gen(function* () { const line = yield* Queue.unbounded(); yield* Queue.offerAll(line, [a, b, 1]); return [yield* Queue.takeBetween(line, 1, 2), yield* Queue.size(line)]; })`,
+      `Effect.gen(function* () { const gate = yield* Latch.make(); const seen = yield* Ref.make([]); yield* Effect.forkChild(Effect.andThen(gate.await, log(seen, "through"))); yield* Effect.yieldNow; yield* log(seen, "opening"); yield* gate.open; yield* Effect.yieldNow; return yield* Ref.get(seen); })`,
+      `Effect.gen(function* () { const permits = yield* Semaphore.make(1); const seen = yield* Ref.make([]); const work = (name) => permits.withPermit(Effect.andThen(log(seen, name + " in"), Effect.andThen(Effect.sleep(5), log(seen, name + " out")))); yield* Effect.all([work("one"), work("two")], { concurrency: 2 }); return yield* Ref.get(seen); })`,
+      `Effect.gen(function* () { const line = yield* Queue.unbounded(); yield* Queue.offer(line, a); const failed = yield* Queue.fail(line, new Odd({ n: b })); return [failed, yield* Queue.take(line), yield* Effect.result(Queue.take(line))]; })`,
+      `Effect.gen(function* () { const line = yield* Queue.unbounded(); const failed = yield* pipe(line, Queue.fail(new Odd({ n: a }))); return [failed, yield* Effect.result(Queue.take(line))]; })`,
+      `Effect.gen(function* () { const line = yield* Queue.unbounded(); yield* Queue.offer(line, a); const ended = yield* Queue.end(line); return [ended, yield* Queue.take(line), Result.isFailure(yield* Effect.result(Queue.take(line))), yield* Queue.offer(line, b)]; })`,
+      `Effect.gen(function* () { const line = yield* Queue.unbounded(); yield* Queue.offer(line, a); const shut = yield* Queue.shutdown(line); return [shut, yield* Queue.size(line), yield* Queue.offer(line, b)]; })`,
+      `Effect.gen(function* () { const done = yield* Deferred.make(); const stopped = yield* Deferred.interrupt(done); const exit = yield* Effect.exit(Deferred.await(done)); return [stopped, Exit.hasInterrupts(exit), Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause), Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)]; })`,
+      `Effect.gen(function* () { const exit = yield* Effect.exit(Effect.interrupt); return [Exit.hasInterrupts(exit), Exit.hasFails(exit)]; })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const fiber = yield* Effect.forkChild(Effect.uninterruptible(Effect.andThen(Effect.sleep(5), Effect.interruptible(Effect.andThen(Effect.sleep(5), log(seen, "never")))).pipe(Effect.ensuring(log(seen, "closed"))))); yield* Effect.sleep(1); yield* Fiber.interrupt(fiber); return yield* Ref.get(seen); })`,
+      // Effects run together.
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const made = yield* Effect.all([Effect.as(Effect.andThen(Effect.sleep(2), log(seen, "a")), a), Effect.as(Effect.andThen(Effect.sleep(1), log(seen, "b")), b), Effect.as(log(seen, "c"), 1)], { concurrency: "unbounded" }); return [made, yield* Ref.get(seen)]; })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.all([Effect.andThen(Effect.sleep(2), log(seen, "a")), Effect.andThen(Effect.sleep(1), log(seen, "b")), log(seen, "c"), Effect.andThen(Effect.sleep(4), log(seen, "d"))], { concurrency: 2, discard: true }); return yield* Ref.get(seen); })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.all([Effect.andThen(Effect.sleep(2), log(seen, "a")), Effect.andThen(Effect.sleep(1), log(seen, "b"))]); return yield* Ref.get(seen); })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const made = yield* Effect.result(Effect.all([Effect.andThen(Effect.sleep(2), log(seen, "a")), Effect.andThen(Effect.sleep(1), even(a)), log(seen, "c")], { concurrency: "unbounded" })); return [made, yield* Ref.get(seen)]; })`,
+      `Effect.all({ slow: Effect.as(Effect.sleep(2), a), fast: Effect.as(Effect.sleep(1), b) }, { concurrency: 2 })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const made = yield* Effect.forEach([3, 1, 2], (n) => Effect.as(Effect.andThen(Effect.sleep(n), log(seen, n)), n + a), { concurrency: "unbounded" }); return [made, yield* Ref.get(seen)]; })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.forEach([5, 1, 2], (n) => Effect.andThen(Effect.sleep(n), log(seen, n)), { concurrency: 2, discard: true }); return yield* Ref.get(seen); })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const made = yield* Effect.zip(Effect.as(Effect.andThen(Effect.sleep(2), log(seen, "left")), a), Effect.as(Effect.andThen(Effect.sleep(1), log(seen, "right")), b), { concurrent: true }); return [made, yield* Ref.get(seen)]; })`,
+      `Effect.zipWith(Effect.as(Effect.sleep(2), a), Effect.as(Effect.sleep(1), b), (x, y) => x - y, { concurrent: true })`,
+    ],
+    unread: [
+      // Two that end at the same moment.
+      [
+        `Effect.race(Effect.as(Effect.sleep(10), a), Effect.as(Effect.sleep(10), b))`,
+        /two waits end at the same moment/,
       ],
       [
-        `Effect.gen(function* () { const line = yield* Queue.sliding(1); return yield* Queue.size(line); })`,
-        reported,
+        `Effect.all([Effect.sleep(1), Effect.sleep(1)], { concurrency: 2 })`,
+        /two waits end at the same moment/,
       ],
       [
-        `Effect.gen(function* () { const line = yield* Queue.unbounded(); return yield* Queue.end(line); })`,
-        reported,
+        `Effect.all([Effect.succeed(a)], { concurrency: b })`,
+        /a concurrency the prover cannot see/,
+      ],
+      // What stops the prover in one fiber stops it, whichever fiber wins.
+      [
+        `Effect.race(Effect.as(Effect.sleep(1), a), Effect.andThen(Effect.sleep(2), Effect.promise(() => Promise.resolve(b))))`,
+        /Effect\.promise/,
       ],
       [
-        `Effect.gen(function* () { const line = yield* Queue.unbounded(); return yield* Queue.shutdown(line); })`,
-        reported,
+        `Effect.gen(function* () { yield* Effect.forkChild(Effect.promise(() => Promise.resolve(b))); yield* Effect.yieldNow; return a; })`,
+        /Effect\.promise/,
       ],
     ],
   },

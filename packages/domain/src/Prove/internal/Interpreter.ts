@@ -8,6 +8,7 @@ import * as Library from "./Library.ts";
 import * as Smt from "./Smt.ts";
 import type { Loader, OpaqueFunction } from "./Source.ts";
 import * as Symbolic from "./Symbolic.ts";
+import * as Timeline from "./Timeline.ts";
 import type { Brand, Env, Eval, Module, Node, Run, Scope, Site, V } from "./Value.ts";
 import * as Value from "./Value.ts";
 
@@ -236,7 +237,15 @@ const kindOf = (v: V): string | undefined => {
  * model for each library function it knows, and stops with `NotTranslated`
  * at anything else.
  */
-export const make = (loader: Loader, run: Run): Interpreter => {
+export const make = (given: Loader, run: Run): Interpreter => {
+  // Reading a file takes no time of the handler's, and no other fiber of it runs meanwhile.
+  const loader: Loader = {
+    ...given,
+    load: (file) => Timeline.outside(given.load(file)),
+    resolve: (from, specifier) => Timeline.outside(given.resolve(from, specifier)),
+    runtime: (from, specifier) => Timeline.outside(given.runtime(from, specifier)),
+    parse: (file, text) => Timeline.outside(given.parse(file, text)),
+  };
   const current = { run };
   const hooks: Hooks = {
     service: undefined,
@@ -817,7 +826,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
   ) {
     switch (value._tag) {
       case "Obj": {
-        const waiting = library.waitMember(value, key);
+        const waiting = library.waitMember(value, key, site);
         if (waiting) return waiting;
         // A duration, a decimal, a hash set and a hash map are read through their modules, never by what they are made of.
         if (value.brand && Brands.SEALED.has(value.brand.kind) && key !== "pipe")

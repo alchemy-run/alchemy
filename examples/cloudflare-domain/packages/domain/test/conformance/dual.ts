@@ -27,6 +27,8 @@ const ONE_WAY: ReadonlySet<string> = new Set([
   // Each of these takes the latch or the semaphore first either way, and then the effect.
   ...["effect/Latch:whenOpen", "effect/Semaphore:withPermit", "effect/Semaphore:withPermits"],
   "effect/Semaphore:withPermitsIfAvailable",
+  // An effect and a function of how it ended: the effect comes first either way.
+  ...["effect/Effect:forkChild", "effect/Effect:forkDetach"],
 ]);
 
 const declared = new Map<string, ReadonlySet<string>>();

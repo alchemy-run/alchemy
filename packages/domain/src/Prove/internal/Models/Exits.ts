@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import type { Kit, Model, Models } from "../Kit.ts";
 import { arr, dual, lazy, onEffect, tagOf, wrongArguments } from "../Kit.ts";
@@ -50,7 +51,7 @@ export const make = (kit: Kit) => {
       Effect.flatMap(exitOf(name, self, site), (exit) => body(exit, rest, site, self!)),
     );
 
-  const found = (cause: V | undefined, tag: "Fail" | "Die"): V | undefined =>
+  const found = (cause: V | undefined, tag: "Fail" | "Die" | "Interrupt"): V | undefined =>
     reasonsOf(cause)?.find((reason) => tagOf(reason) === tag);
 
   const errorOf = (cause: V | undefined): V => {
@@ -61,7 +62,7 @@ export const make = (kit: Kit) => {
   };
 
   const has =
-    (name: string, tag: "Fail" | "Die"): Model =>
+    (name: string, tag: "Fail" | "Die" | "Interrupt"): Model =>
     ([cause], site) =>
       reasonsOf(cause)
         ? Effect.succeed(Value.bool(found(cause, tag) !== undefined))
@@ -74,6 +75,12 @@ export const make = (kit: Kit) => {
     // How the effect ended, as a value: a defect too, which nothing else here handles.
     "effect/Effect:exit": onEffect("Effect.exit", 0, (self) =>
       Effect.map(self, success).pipe(
+        // An effect stopped from inside, by a fiber or a Deferred that was interrupted.
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.succeed(failure(Value.obj({ _tag: Value.str("Interrupt") })))
+            : Effect.failCause(cause),
+        ),
         Effect.catchTag("Rejected", (rejected) =>
           // What stops a saga until a signal comes is not an end of the effect.
           rejected.rejection._tag === "Opaque"
@@ -144,6 +151,20 @@ export const make = (kit: Kit) => {
     "effect/Exit:hasDies": onExit("Exit.hasDies", 1, (exit) =>
       Effect.succeed(Value.bool("cause" in exit && found(exit.cause, "Die") !== undefined)),
     ),
+    "effect/Exit:hasInterrupts": onExit("Exit.hasInterrupts", 1, (exit) =>
+      Effect.succeed(Value.bool("cause" in exit && found(exit.cause, "Interrupt") !== undefined)),
+    ),
+    "effect/Cause:hasInterrupts": has("Cause.hasInterrupts", "Interrupt"),
+    "effect/Cause:hasInterruptsOnly": ([cause], site) => {
+      const reasons = reasonsOf(cause);
+      return reasons
+        ? Effect.succeed(
+            Value.bool(
+              reasons.length > 0 && reasons.every((reason) => tagOf(reason) === "Interrupt"),
+            ),
+          )
+        : wrongArguments(site, "Cause.hasInterruptsOnly");
+    },
     "effect/Cause:fail": ([error]) => Effect.succeed(causeOf(failed(error ?? Value.undef))),
     "effect/Cause:die": ([defect]) => Effect.succeed(causeOf(died(defect ?? Value.undef))),
     "effect/Cause:hasFails": has("Cause.hasFails", "Fail"),
