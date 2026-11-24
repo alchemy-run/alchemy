@@ -15,7 +15,7 @@ export interface SqlKeyStoreOptions {
 
 /**
  * A Vault's keys in a SQL database, one row per subject, over the
- * `SqlClient` you provide (Postgres or SQLite). Use a database whose backups
+ * `SqlClient` you provide, on Postgres. Use a database whose backups
  * you control: a restored backup brings shredded keys back.
  *
  * ### Keeping keys in Postgres
