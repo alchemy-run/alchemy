@@ -18,7 +18,12 @@ import type { LogLine, LogsInput } from "alchemy/Provider";
 import * as Provider from "alchemy/Provider";
 import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import type { FunctionContext, FunctionListener } from "alchemy/Runtime/Function";
-import { packEnvValue, RuntimeContext, unpackEnvValue, envStrings } from "alchemy/RuntimeContext";
+import {
+  envStrings,
+  packEnvValueKeepRedacted,
+  RuntimeContext,
+  unpackEnvValue,
+} from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, createTagsList, hasAlchemyTags, hasTags } from "alchemy/Tags";
 import { buildEventTelemetry } from "alchemy/Telemetry";
@@ -76,6 +81,13 @@ import {
   withInvocationDeadline,
 } from "./InvocationDeadline.ts";
 import type { RuntimeAlias } from "./RuntimeAlias.ts";
+import {
+  deleteSecretEnv,
+  SECRET_ENV,
+  secretEnvStatement,
+  splitSecretEnv,
+  syncSecretEnv,
+} from "./SecretEnv.ts";
 
 export class LambdaFunctionInvalidProps extends Data.TaggedError("LambdaFunctionInvalidProps")<{
   readonly message: string;
@@ -1655,10 +1667,13 @@ export const Function: Platform<
       set: (id: string, output: Output.Output) =>
         Effect.sync(() => {
           // Key is already canonical (see RuntimeContext.sanitizeKey); store it
-          // verbatim. `packEnvValue` marker-packs Redacted values so they
-          // survive the Output → Lambda env var round-trip.
+          // verbatim. The packed value carries a Redacted marker, so the
+          // runtime `get` rebuilds it.
           const key = id;
-          env[key] = output.pipe(Output.map(packEnvValue));
+          // `packEnvValueKeepRedacted` keeps a secret's `Redacted` on the
+          // outside, so the provider moves it to the function's secret
+          // parameter instead of its plain environment.
+          env[key] = output.pipe(Output.map(packEnvValueKeepRedacted));
           return key;
         }),
       get: <T>(key: string) =>
@@ -1848,14 +1863,17 @@ export const FunctionProvider = () =>
         roleName,
         policyName,
         // functionArn,
-        // functionName,
+        functionName,
         bindings,
         destinations,
+        userEnv,
       }: {
         roleName: string;
         policyName: string;
         functionArn: string;
         functionName: string;
+        /** The `env` prop, which joins the bindings' env. */
+        userEnv: Record<string, unknown> | undefined;
         bindings: ResourceBinding<Function["Binding"]>[];
         /** Async invocation destinations, which Lambda sends to as the function's role. */
         destinations: ReadonlyArray<string>;
@@ -1864,9 +1882,12 @@ export const FunctionProvider = () =>
           (binding: ResourceBinding<Function["Binding"]> & { action?: string }) =>
             binding.action !== "delete",
         );
-        const env = activeBindings
-          .map((binding) => binding?.data?.env)
-          .reduce((acc, env) => ({ ...acc, ...env }), {});
+        const env: Record<string, unknown> = {
+          ...activeBindings
+            .map((binding) => binding?.data?.env)
+            .reduce((acc, env) => ({ ...acc, ...env }), {}),
+          ...userEnv,
+        };
         const policyStatements = activeBindings.flatMap(
           (binding) =>
             binding?.data?.policyStatements?.map((stmt: IAM.PolicyStatement) => ({
@@ -1874,6 +1895,14 @@ export const FunctionProvider = () =>
               Sid: stmt.Sid?.replace(/[^A-Za-z0-9]+/gi, ""),
             })) ?? [],
         );
+        // A secret env value lives in the function's SSM parameter, which
+        // its role reads at start.
+        if (Object.values(env).some(Redacted.isRedacted)) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          policyStatements.push(
+            secretEnvStatement(partitionOf(region), region, accountId, functionName),
+          );
+        }
         policyStatements.push(
           ...destinations
             .flatMap(destinationStatements)
@@ -1922,6 +1951,20 @@ export const FunctionProvider = () =>
         }
 
         return { env, vpc, fileSystemConfigs };
+      });
+
+      /**
+       * Move the env's secret values to the function's SSM parameter, and
+       * name it, version-pinned, in their place: a new secret is a new
+       * configuration, so new environments start with it.
+       */
+      const separateSecretEnv = Effect.fn(function* (
+        functionName: string,
+        env: Record<string, unknown>,
+      ) {
+        const { plain, secret } = splitSecretEnv(env);
+        const ref = yield* syncSecretEnv(functionName, secret);
+        return ref === undefined ? plain : { ...plain, [SECRET_ENV]: ref };
       });
 
       const xrayWriteAccessPolicyName = "AWSXRayDaemonWriteAccess";
@@ -3576,6 +3619,7 @@ export const FunctionProvider = () =>
             functionArn,
             functionName,
             bindings,
+            userEnv: news.env,
             destinations: [
               invokeConfig?.destinationConfig?.OnSuccess?.Destination,
               invokeConfig?.destinationConfig?.OnFailure?.Destination,
@@ -3673,10 +3717,7 @@ export const FunctionProvider = () =>
             news,
             roleArn,
             code: prepared.deployment,
-            env: envStrings({
-              ...env,
-              ...news.env,
-            }),
+            env: envStrings(yield* separateSecretEnv(functionName, env)),
             functionName,
             // On update an omitted VpcConfig means "leave as-is"; detach
             // explicitly so a VPC attached out-of-band is removed. Managed
@@ -3876,6 +3917,7 @@ export const FunctionProvider = () =>
           yield* Lambda.deleteFunction({
             FunctionName: output.functionName,
           }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+          yield* deleteSecretEnv(output.functionName);
 
           if (output.code.image?.ownsRepository) {
             // Lambda must release its image before the owned repository is

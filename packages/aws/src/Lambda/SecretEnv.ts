@@ -1,0 +1,114 @@
+/**
+ * A Lambda function's secret environment: every `Redacted` env value (a
+ * user's `env`, or a binding's) is kept out of the function's configuration,
+ * where `lambda:GetFunctionConfiguration` returns it in plain text. The
+ * values go into one SSM SecureString parameter of the function's own, and
+ * the function names it, pinned to its version, in {@link SECRET_ENV}; the
+ * bootstrap loads it into `process.env` before any user code runs.
+ *
+ * @internal
+ */
+import * as ssm from "@distilled.cloud/aws/ssm";
+import { envString } from "alchemy/RuntimeContext";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+
+/** The env var naming the function's secret parameter, as `name:version`. */
+export const SECRET_ENV = "ALCHEMY_SECRET_ENV";
+
+/** The SSM parameter holding a function's secret environment. */
+export const secretEnvParameterName = (functionName: string) => `/alchemy/lambda/${functionName}`;
+
+/** Split an env record into the plain values and the `Redacted` ones. */
+export const splitSecretEnv = (env: Record<string, unknown>) => {
+  const plain: Record<string, unknown> = {};
+  const secret: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (Redacted.isRedacted(value)) {
+      const text = envString(value);
+      if (text !== undefined) secret[key] = text;
+    } else {
+      plain[key] = value;
+    }
+  }
+  return { plain, secret };
+};
+
+/**
+ * Converge the function's secret parameter on `secret`: write it only when
+ * its value differs, so an unchanged deploy keeps the version (and the
+ * function's configuration) as it is. Without secrets, the parameter is
+ * removed. Returns the `name:version` the function reads, if any.
+ */
+export const syncSecretEnv = Effect.fn(function* (
+  functionName: string,
+  secret: Record<string, string>,
+) {
+  const name = secretEnvParameterName(functionName);
+  if (Object.keys(secret).length === 0) {
+    yield* deleteSecretEnv(functionName);
+    return undefined;
+  }
+  const value = JSON.stringify(
+    Object.fromEntries(Object.entries(secret).sort(([a], [b]) => a.localeCompare(b))),
+  );
+  const observed = yield* ssm.getParameter({ Name: name, WithDecryption: true }).pipe(
+    Effect.map((result) => result.Parameter),
+    Effect.catchTag("ParameterNotFound", () => Effect.undefined),
+  );
+  const observedValue =
+    observed?.Value === undefined || !Redacted.isRedacted(observed.Value)
+      ? observed?.Value
+      : Redacted.value(observed.Value);
+  if (observedValue === value && observed?.Version !== undefined) {
+    return `${name}:${observed.Version}`;
+  }
+  const { Version } = yield* ssm.putParameter({
+    Name: name,
+    Type: "SecureString",
+    Value: Redacted.make(value),
+    Overwrite: true,
+    // Up to 4 KB stays in the free standard tier; past it, advanced.
+    Tier: "Intelligent-Tiering",
+    Description: `Secret environment of the Lambda function ${functionName}`,
+  });
+  return `${name}:${Version}`;
+});
+
+/** Remove the function's secret parameter; absent is fine. */
+export const deleteSecretEnv = (functionName: string) =>
+  ssm.deleteParameter({ Name: secretEnvParameterName(functionName) }).pipe(
+    Effect.asVoid,
+    Effect.catchTag("ParameterNotFound", () => Effect.void),
+  );
+
+/** The statement letting the function's role read its secret parameter. */
+export const secretEnvStatement = (
+  partition: string,
+  region: string,
+  accountId: string,
+  functionName: string,
+) => ({
+  Sid: "AlchemySecretEnv",
+  Effect: "Allow" as const,
+  Action: ["ssm:GetParameter"],
+  Resource: [
+    `arn:${partition}:ssm:${region}:${accountId}:parameter${secretEnvParameterName(functionName)}`,
+  ],
+});
+
+/**
+ * At a function's start: read its secret parameter, if it has one, into
+ * `process.env`.
+ */
+export const loadSecretEnv = Effect.gen(function* () {
+  // oxlint-disable-next-line effecttsgo/process-env-in-effect -- the function's own env, written by its provider, read before Config exists
+  const ref = process.env[SECRET_ENV];
+  if (ref === undefined || ref === "") return;
+  const { Parameter } = yield* ssm.getParameter({ Name: ref, WithDecryption: true });
+  const text = Parameter?.Value;
+  const values = JSON.parse(
+    text === undefined ? "{}" : Redacted.isRedacted(text) ? Redacted.value(text) : text,
+  ) as Record<string, string>;
+  yield* Effect.sync(() => Object.assign(process.env, values));
+});
