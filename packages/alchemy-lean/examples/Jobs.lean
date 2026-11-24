@@ -15,51 +15,75 @@ namespace Jobs
 
 /-! ## A service, and a layer that gives it -/
 
+/-- There is no job of this id. -/
+structure JobNotFound where
+  id : String
+deriving DecidableEq, Repr
+
 /-- Where jobs are kept. Code that uses it does not know where that is. -/
 structure JobStorage (access : Access Kind) where
-  put : String → String → Run access Failure Unit
-  get : String → Run access Failure (Option String)
+  put : String → String → Run access Never Unit
+  get : String → Run access JobNotFound String
 
-variable {R : Service Kind}
+variable {R : Service Kind} {ε : Type}
 
-def putJob [Uses R JobStorage] (id content : String) : Effect R Failure Unit :=
+def putJob [Uses R JobStorage] (id content : String) : Effect R ε Unit :=
   use JobStorage (·.put id content)
 
-def getJob [Uses R JobStorage] (id : String) : Effect R Failure (Option String) :=
+def getJob [Uses R JobStorage] [Raises ε JobNotFound] (id : String) : Effect R ε String :=
   use JobStorage (·.get id)
 
 /--
 Jobs kept as objects under `jobs/`. Built from the two S3 services it calls,
-so it needs what they need: read and write under that prefix.
+so it needs what they need: read and write under that prefix. S3's error
+becomes the service's own.
 -/
 def JobStorageS3 (bucket : Bucket) : Layer Nothing JobStorage :=
   .from (S3.GetObjectLive bucket ["jobs"] ++ S3.PutObjectLive bucket ["jobs"]) fun s3 =>
     { put := fun id content => (S3.putObject bucket ["jobs"] id content).run s3
-      get := fun id => (S3.getObject bucket ["jobs"] id).run s3 }
+      get := fun id =>
+        ((S3.getObject bucket ["jobs"] id).mapError fun
+          | S3.GetObjectError.noSuchKey _ => JobNotFound.mk id).run s3 }
 
 /-! ## The functions -/
 
-/-- Answers a request for a job. It names the service it needs, and no resource. -/
-def jobs [Uses R JobStorage] (request : Request) : Effect R Failure Response := do
+/--
+Answers a request for a job. It names the service it needs, and no resource.
+It handles the one error it can meet, so its type says it cannot fail.
+-/
+def jobs [Uses R JobStorage] (request : Request) : Effect R Never Response := do
   match request.method, request.path with
   | .get, [id] =>
-    match ← getJob id with
-    | some content => return { status := 200, body := content }
-    | none => return { status := 404, body := "Job not found" }
+    match ← (getJob id).result with
+    | .ok content => return { status := 200, body := content }
+    | .error (missing : JobNotFound) =>
+      return { status := 404, body := s!"Job {missing.id} not found" }
   | .post, [id] =>
     if request.body.isEmpty then return { status := 400, body := "Job content is required" }
     putJob id request.body
     return { status := 201, body := id }
   | _, _ => return { status := 404, body := "Not found" }
 
+/-- How forwarding a stored job can fail. -/
+inductive ForwardError where
+  | notAJob (key : Path)
+  | missing (job : JobNotFound)
+deriving DecidableEq, Repr
+
+instance : Raises ForwardError JobNotFound := ⟨.missing⟩
+
+/-- Sends a stored job to the queue. -/
+def forward (queue : Queue) [Uses R JobStorage] [Uses R (SQS.SendMessage queue)] (key : Path) :
+    Effect R ForwardError Unit := do
+  let some id := key.getLast? | throw (.notAJob key)
+  let content ← getJob id
+  SQS.sendMessage queue content
+
 def Api (bucket : Bucket) (queue : Queue) : Construct Kind Function := do
   let stage ← stage
   Lambda.Function "Api" { url := true, memory := if stage = "prod" then 1024 else 512 } do
     serve (JobStorageS3 bucket ++ SQS.SendMessageLive queue) jobs
-      [S3.onObjectCreated bucket fun key => do
-        let some id := key.getLast? | return
-        let some content ← getJob id | throw s!"job {id} is missing"
-        SQS.sendMessage queue content]
+      [S3.onObjectCreated bucket (forward queue)]
 
 def Worker (queue : Queue) : Construct Kind Function :=
   Lambda.Function "Worker" {} do
@@ -168,7 +192,7 @@ theorem theApiStaysInItsRole (request : Request) (memory : Memory) :
 
 /-- The same code with jobs kept in memory of its own needs no access at all. -/
 def JobStorageNowhere : Layer Nothing JobStorage :=
-  .make fun _ => { put := fun _ _ => pure (), get := fun _ => pure none }
+  .make fun _ => { put := fun _ _ => pure (), get := fun id => .fail ⟨id⟩ }
 
 example : JobStorageNowhere.needs = ∅ := rfl
 
@@ -192,7 +216,7 @@ def storingAJob : Story := [
   .holds "the job is stored" (·.object bucket ["jobs", "j-1"] == some "resize the logo"),
   .holds "and forwarded to the queue" (·.queued queue == ["resize the logo"]),
   .request api { path := ["j-1"] } (responds { status := 200, body := "resize the logo" }),
-  .request api { path := ["j-2"] } (responds { status := 404, body := "Job not found" }) ]
+  .request api { path := ["j-2"] } (responds { status := 404, body := "Job j-2 not found" }) ]
 
 def workingAJob : Story := storingAJob ++ [
   .request worker {} (responds { status := 200, body := "resize the logo" }),

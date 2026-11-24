@@ -82,6 +82,12 @@ abbrev Props : Kind → Type
   | .queue => QueueProps
   | .function => FunctionProps
 
+/-- A bucket has no object of this key. -/
+structure S3.NoSuchKey where
+  bucket : String
+  key : Path
+deriving DecidableEq, Repr
+
 inductive BucketCall where
   | getObject (key : Path)
   | putObject (key : Path) (body : String)
@@ -97,7 +103,7 @@ abbrev Call : Kind → Type
   | .function => Empty
 
 abbrev BucketCall.Reply : BucketCall → Type
-  | .getObject _ => Option String
+  | .getObject _ => Except S3.NoSuchKey String
   | .putObject .. => Unit
   | .listObjects => List Path
 
@@ -171,28 +177,36 @@ abbrev Put (bucket : AWS.Bucket) (under : Path := []) : Access Kind := .on bucke
 
 abbrev List (bucket : AWS.Bucket) : Access Kind := .on bucket BucketOp.list
 
-variable {R : Service Kind}
+variable {R : Service Kind} {ε : Type}
+
+/-- How reading an object can fail. -/
+inductive GetObjectError where
+  | noSuchKey (error : NoSuchKey)
+deriving DecidableEq, Repr
 
 /-- Reads the objects of a bucket under a prefix. -/
 structure GetObject (bucket : AWS.Bucket) (under : Path) (access : Access Kind) where
-  call : String → Run access Failure (Option String)
+  call : String → Run access GetObjectError String
 
 /-- Writes the objects of a bucket under a prefix. -/
 structure PutObject (bucket : AWS.Bucket) (under : Path) (access : Access Kind) where
-  call : String → String → Run access Failure Unit
+  call : String → String → Run access Never Unit
 
 /-- Lists the keys of a bucket. -/
 structure ListObjects (bucket : AWS.Bucket) (access : Access Kind) where
-  call : Run access Failure (_root_.List Path)
+  call : Run access Never (_root_.List Path)
 
 /-- `GetObject` on the bucket itself. Grants read access to the prefix. -/
 def GetObjectLive (bucket : AWS.Bucket) (under : Path := []) :
     Layer Nothing (GetObject bucket under) where
   needs := Get bucket under
   build le _ :=
-    { call := fun name =>
-        Run.performUnder bucket (BucketCall.getObject (under ++ [name])) (BucketOp.get under) ⟨le⟩
-          (by simp [Cloud.needs, AWS.needs, Kinds.covers, BucketOp.covers]) }
+    { call := fun name => do
+        let found ← Run.performUnder bucket (BucketCall.getObject (under ++ [name]))
+          (BucketOp.get under) ⟨le⟩ (by simp [Cloud.needs, AWS.needs, Kinds.covers, BucketOp.covers])
+        match found with
+        | .ok body => return body
+        | .error missing => throw (.noSuchKey missing) }
 
 /-- `PutObject` on the bucket itself. Grants write access to the prefix. -/
 def PutObjectLive (bucket : AWS.Bucket) (under : Path := []) :
@@ -210,23 +224,25 @@ def ListObjectsLive (bucket : AWS.Bucket) : Layer Nothing (ListObjects bucket) w
 
 /-- Read `under/name`. -/
 def getObject (bucket : AWS.Bucket) (under : Path) (name : String)
-    [Uses R (GetObject bucket under)] : Effect R Failure (Option String) :=
+    [Uses R (GetObject bucket under)] [Raises ε GetObjectError] : Effect R ε String :=
   use (GetObject bucket under) (·.call name)
 
 /-- Write `under/name`. -/
 def putObject (bucket : AWS.Bucket) (under : Path) (name : String) (body : String)
-    [Uses R (PutObject bucket under)] : Effect R Failure Unit :=
+    [Uses R (PutObject bucket under)] : Effect R ε Unit :=
   use (PutObject bucket under) (·.call name body)
 
 def listObjects (bucket : AWS.Bucket) [Uses R (ListObjects bucket)] :
-    Effect R Failure (_root_.List Path) :=
+    Effect R ε (_root_.List Path) :=
   use (ListObjects bucket) (·.call)
 
 /-- Run this whenever an object is created in the bucket. -/
-def onObjectCreated (bucket : AWS.Bucket) (handle : Path → Effect R Failure Unit) :
-    Listener R where
+def onObjectCreated {ε : Type} [Repr ε] (bucket : AWS.Bucket)
+    (handle : Path → Effect R ε Unit) : Listener R where
   kind := .bucket
   source := bucket
+  Error := ε
+  describe := reprStr
   handle := fun
     | .objectCreated key => handle key
 
@@ -240,15 +256,15 @@ def Queue (id : String) (props : QueueProps := {}) : Construct Kind AWS.Queue :=
 abbrev Send (queue : AWS.Queue) : Access Kind := .on queue QueueOp.send
 abbrev Receive (queue : AWS.Queue) : Access Kind := .on queue QueueOp.receive
 
-variable {R : Service Kind}
+variable {R : Service Kind} {ε : Type}
 
 /-- Sends messages to a queue. -/
 structure SendMessage (queue : AWS.Queue) (access : Access Kind) where
-  call : String → Run access Failure Unit
+  call : String → Run access Never Unit
 
 /-- Takes messages off a queue. -/
 structure ReceiveMessage (queue : AWS.Queue) (access : Access Kind) where
-  call : Run access Failure (Option String)
+  call : Run access Never (Option String)
 
 /-- `SendMessage` on the queue itself. Grants sending to it. -/
 def SendMessageLive (queue : AWS.Queue) : Layer Nothing (SendMessage queue) where
@@ -261,11 +277,11 @@ def ReceiveMessageLive (queue : AWS.Queue) : Layer Nothing (ReceiveMessage queue
   build le _ := { call := Run.perform queue QueueCall.receiveMessage ⟨le⟩ }
 
 def sendMessage (queue : AWS.Queue) (body : String) [Uses R (SendMessage queue)] :
-    Effect R Failure Unit :=
+    Effect R ε Unit :=
   use (SendMessage queue) (·.call body)
 
 def receiveMessage (queue : AWS.Queue) [Uses R (ReceiveMessage queue)] :
-    Effect R Failure (Option String) :=
+    Effect R ε (Option String) :=
   use (ReceiveMessage queue) (·.call)
 
 end SQS
@@ -301,7 +317,10 @@ def queued (m : Memory) (queue : AWS.Queue) : List String :=
 end Memory
 
 def simulate : {k : Kind} → Ref k → (c : Call k) → Memory → Reply c × Memory × List (Emitted Kind)
-  | .bucket, bucket, .getObject key, m => (m.object bucket key, m, [])
+  | .bucket, bucket, .getObject key, m =>
+    (match m.object bucket key with
+      | some body => .ok body
+      | none => .error { bucket := bucket.id, key }, m, [])
   | .bucket, bucket, .putObject key body, m =>
     ((), { m with
         objects := (m.objects.filter fun (id, k, _) => !(id == bucket.id && k == key))

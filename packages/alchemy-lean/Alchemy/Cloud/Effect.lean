@@ -18,6 +18,11 @@ whose fields are functions into `Run access`.
 -/
 abbrev Service (K : Type) [Cloud K] := Access K → Type
 
+/-- The error of code that cannot fail. -/
+abbrev Never := Empty
+
+instance : Repr Never := ⟨fun e _ => nomatch e⟩
+
 /-- No services. -/
 structure Nothing (access : Access K) : Type where
 
@@ -65,10 +70,34 @@ def result (effect : Effect R ε α) : Effect R ε' (Except ε α) :=
 def mapError (f : ε → ε') (effect : Effect R ε α) : Effect R ε' α :=
   ⟨fun services => (effect.run services).mapError f⟩
 
-/-- Call a service: `use JobStorage (·.get id)`. -/
-def use (S : Service K) [Uses R S] (f : {access : Access K} → S access → Run access ε α) :
-    Effect R ε α :=
-  ⟨fun services => f (Uses.get services)⟩
+/--
+`Raises ε e`: the errors `ε` include the error `e`. An error is a data type: a
+structure, or an inductive with a case for each way to fail. A sum of errors
+says how each of its parts goes into it.
+-/
+class Raises (ε : Type) (e : semiOutParam Type) where
+  raise : e → ε
+
+/-- Every error includes itself. -/
+instance (e : Type) : Raises e e := ⟨id⟩
+
+/-- Code that cannot fail runs where anything can. -/
+instance (ε : Type) : Raises ε Never := ⟨fun e => nomatch e⟩
+
+/-- Code that fails with `e`, where the errors include `e`. -/
+def raising {e : Type} [Raises ε e] (effect : Effect R e α) : Effect R ε α :=
+  effect.mapError Raises.raise
+
+/-- Fail with one of the errors `ε` includes. -/
+def raise {e : Type} [Raises ε e] (error : e) : Effect R ε α := ⟨fun _ => .fail (Raises.raise error)⟩
+
+/--
+Call a service: `use JobStorage (·.get id)`. The call's error is a data type
+`e`, and the result fails with any errors that include it.
+-/
+def use (S : Service K) [Uses R S] {e : Type} [Raises ε e]
+    (f : {access : Access K} → S access → Run access e α) : Effect R ε α :=
+  ⟨fun services => (f (Uses.get services)).mapError Raises.raise⟩
 
 /-- Run code that needs fewer services where more are available. -/
 def widen [Uses T R] (effect : Effect R ε α) : Effect T ε α :=
@@ -76,6 +105,6 @@ def widen [Uses T R] (effect : Effect R ε α) : Effect T ε α :=
 
 end Effect
 
-export Effect (use)
+export Effect (use raise Raises)
 
 end Alchemy.Cloud

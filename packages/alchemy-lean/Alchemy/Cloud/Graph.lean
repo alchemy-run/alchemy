@@ -12,7 +12,7 @@ namespace Alchemy.Cloud
 
 variable {K : Type} [Cloud K]
 
-/-- Why a host's code gave up. -/
+/-- An error a host left unhandled, as it is reported. -/
 abbrev Failure := String
 
 /-- A host listening to a resource. -/
@@ -157,21 +157,26 @@ structure Listener (R : Service K) where
   source : Ref kind
   /-- What listening exercises of the host's access. -/
   needs : List (Attempt K) := []
-  handle : Cloud.Event kind → Effect R Failure Unit
+  /-- How it can fail. -/
+  Error : Type
+  describe : Error → String
+  handle : Cloud.Event kind → Effect R Error Unit
 
 /--
 What a host runs, and the layer that gives it its services. Written last in a
-host's body. The host's access is what the layer needs, and nothing else.
+host's body. The host's access is what the layer needs, and nothing else. What
+answers a request has handled every error; a listener may leave one, and it is
+reported as it prints.
 -/
 def serve {k : K} {R : Service K} (layer : Layer Nothing R)
-    (fetch : Cloud.Request k → Effect R Failure (Cloud.Response k))
+    (fetch : Cloud.Request k → Effect R Never (Cloud.Response k))
     (on : List (Listener R) := []) : Construct K (Serve k) :=
   return {
     access := layer.needs
-    fetch := fun request => (fetch request).provide layer
+    fetch := fun request => ((fetch request).provide layer).mapError fun e => nomatch e
     on := on.map fun listener =>
       { kind := listener.kind, source := listener.source, needs := listener.needs
-        handle := fun event => (listener.handle event).provide layer } }
+        handle := fun event => ((listener.handle event).provide layer).mapError listener.describe } }
 
 /-- A stack: a named construct, and what it reports once deployed. -/
 structure Stack (K : Type) [Cloud K] (Out : Type) where
