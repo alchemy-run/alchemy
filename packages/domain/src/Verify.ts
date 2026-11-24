@@ -31,13 +31,8 @@ import type * as ModelSearch from "./Explore/internal/ModelSearch.ts";
 import * as Script from "./Explore/internal/Script.ts";
 import type * as Model from "./Model.ts";
 import * as Prove from "./Prove.ts";
-import * as Interpreter from "./Prove/internal/Interpreter.ts";
 import * as Lock from "./Prove/internal/Lock.ts";
-import * as Paths from "./Prove/internal/Paths.ts";
-import * as Recorded from "./Prove/internal/Recorded.ts";
-import * as Smt from "./Prove/internal/Smt.ts";
 import * as Symbolic from "./Prove/internal/Symbolic.ts";
-import * as Value from "./Prove/internal/Value.ts";
 import { Story } from "./Story.ts";
 import * as Histories from "./Verify/internal/Histories.ts";
 
@@ -1092,190 +1087,11 @@ export const aggregate = (
   });
 };
 
-export interface HistoryOptions {
-  /**
-   * The file the aggregate is declared in. Left out, it is found from the
-   * test file that calls.
-   */
-  readonly source?: URL | string;
-  /** What a pass may leave undone. */
-  readonly allow?: {
-    /**
-     * Pass with events no command of the aggregate records from the state
-     * they met: history written under rules that have since been made
-     * stricter, or imported.
-     */
-    readonly unexplained?: boolean;
-    /** Pass with events the prover could not tell of. */
-    readonly undecided?: boolean;
-  };
-}
-
-/** One event of an instance, as it was committed. */
-export interface HistoryEntry<Ev = { readonly _tag: string }> {
-  readonly event: Ev;
-  /**
-   * Where it sits: `stream` says which instance, `seq` its place, and
-   * `commandId` which events one command recorded together.
-   */
-  readonly envelope: Pick<Aggregate.Envelope, "id" | "stream" | "seq"> &
-    Partial<Pick<Aggregate.Envelope, "at" | "commandId">>;
-}
-
-export interface HistoryReport {
-  readonly aggregate: string;
-  /** Each instance whose events were given, and what its history shows. */
-  readonly instances: ReadonlyArray<Recorded.Report & { readonly stream: string }>;
-  /** Every rule a state along the way breaks, and every event `evolve` cannot fold. */
-  readonly broken: ReadonlyArray<string>;
-  /** The events no command of the aggregate records from the state they met. */
-  readonly unexplained: ReadonlyArray<string>;
-  /** Each part of the check that was not done. */
-  readonly undone: ReadonlyArray<string>;
-}
-
-/** A recorded history breaks a rule, holds events no command records, or was not all checked. */
-export class HistoryNotVerified extends Data.TaggedError("NotVerified")<{
-  readonly message: string;
-  readonly report: HistoryReport;
-}> {}
-
-const renderHistory = (report: HistoryReport): string => {
-  const sum = (of: (instance: HistoryReport["instances"][number]) => number) =>
-    report.instances.reduce((total, instance) => total + of(instance), 0);
-  const events = sum((instance) => instance.events);
-  const outside = sum((instance) => instance.outside);
-  const instances = report.instances.length;
-  const out: Array<string> = [
-    `${report.aggregate}: ${count(instances)} ${instances === 1 ? "instance" : "instances"}, ${count(events)} events`,
-    "",
-  ];
-  if (report.broken.length === 0)
-    out.push("  ✓ every state along the way keeps the rules and the state's schema");
-  if (report.unexplained.length === 0)
-    out.push(
-      `  ✓ ${count(sum((instance) => instance.explained))} events are what ${count(sum((instance) => instance.commands))} commands record, each from the state it met`,
-    );
-  if (outside > 0)
-    out.push(
-      `  - ${count(outside)} more are events no command of ${report.aggregate} records: a decision records them, or they were imported`,
-    );
-  out.push("");
-  if (report.broken.length > 0) out.push(...report.broken.map((line) => `✗ ${line}`), "");
-  if (report.unexplained.length > 0)
-    out.push(
-      "No command records these from the state they met",
-      ...report.unexplained.map((line) => `  ✗ ${line}`),
-      "",
-    );
-  if (report.undone.length > 0)
-    out.push("Not done", ...report.undone.map((reason) => `  ✗ ${reason}`), "");
-  return out.join("\n");
-};
-
-/**
- * Hold recorded events against an aggregate as it is written now. Each
- * instance's events are folded from its initial state, and the check fails
- * when a state along the way breaks an invariant, a transition or the
- * state's schema, or when no command records an event from the state it
- * met. A proof starts from any state the rules allow, so it says nothing of
- * an instance whose stored events have already left them.
- *
- * **Example:** In a test, on events read from where they are stored
- * ```typescript
- * it.effect("the accounts on record keep today's rules", () =>
- *   Verify.history(Account, entries).pipe(Effect.provide(NodeServices.layer)),
- * );
- * ```
- */
-export const history = <A extends Aggregate.Any>(
-  target: A,
-  entries: Iterable<HistoryEntry<Aggregate.EventOf<A>>>,
-  options: HistoryOptions = {},
-): Effect.Effect<HistoryReport, VerifyError | HistoryNotVerified, Requirements> => {
-  // The call stack is read here, while the test that calls is still on it.
-  const from = callers(new Error("caller").stack, OWN);
-  return Effect.gen(function* () {
-    const source = options.source ?? (yield* locate(target.aggregateName, "Aggregate", from));
-    const { loader, definition } = yield* Paths.load(target, source);
-    const solver = yield* Smt.solver;
-    const interpreter = Interpreter.make(loader, new Value.Run([]));
-    const streams = new Map<string, Array<HistoryEntry>>();
-    for (const entry of entries as Iterable<HistoryEntry>)
-      streams.set(entry.envelope.stream, [...(streams.get(entry.envelope.stream) ?? []), entry]);
-    const instances: Array<HistoryReport["instances"][number]> = [];
-    const broken: Array<string> = [];
-    const unexplained: Array<string> = [];
-    const undone: Array<string> = [];
-    for (const [stream, given] of streams) {
-      const ordered = given.toSorted((a, b) => a.envelope.seq - b.envelope.seq);
-      // A history is folded from an instance's first event: one that starts later has no state to start from.
-      const gap = ordered.findIndex((entry, index) => entry.envelope.seq !== index + 1);
-      if (gap >= 0) {
-        undone.push(
-          `${stream} has no event ${gap + 1}: a history is folded from an instance's first event, with none left out`,
-        );
-        continue;
-      }
-      const checked = yield* Recorded.check(
-        solver,
-        interpreter,
-        target,
-        definition,
-        ordered.map((entry) => ({
-          event: entry.event,
-          commandId: entry.envelope.commandId,
-          at: entry.envelope.at,
-        })),
-        ordered[0]?.envelope.id,
-      );
-      instances.push({ ...checked, stream });
-      for (const finding of checked.findings) {
-        const at = `${stream}, event ${finding.seq}`;
-        if (finding._tag === "Broken")
-          broken.push(
-            `${at}: ${finding.rule} does not hold of ${Symbolic.show(finding.state)}, the state it leaves`,
-          );
-        else if (finding._tag === "Unfolded") broken.push(`${at}: ${finding.reason}`);
-        else
-          unexplained.push(
-            `${at}: ${finding.events.map(Symbolic.show).join(", ")} from ${Symbolic.show(finding.state)}`,
-          );
-      }
-      if (options.allow?.undecided !== true)
-        undone.push(
-          ...checked.undecided.map(
-            (one) =>
-              `${stream}, event ${one.seq}: not known whether a command records it: ${one.reason} (allow: { undecided: true } passes with this)`,
-          ),
-        );
-    }
-    const made: HistoryReport = {
-      aggregate: target.aggregateName,
-      instances,
-      broken,
-      unexplained,
-      undone,
-    };
-    return made.broken.length > 0 ||
-      made.undone.length > 0 ||
-      (made.unexplained.length > 0 && options.allow?.unexplained !== true)
-      ? yield* new HistoryNotVerified({ message: `\n${renderHistory(made)}`, report: made })
-      : made;
-  }).pipe(
-    Effect.scoped,
-    Effect.catchTag(["LoadError", "SolverError"], (error) =>
-      Effect.fail(new VerifyError({ message: error.message })),
-    ),
-  );
-};
-
 const indent = (text: string, by: string): ReadonlyArray<string> =>
   text.split("\n").map((line) => `${by}${line}`);
 
 /** A report as text: what is proved, what is checked, what is broken and what is assumed. */
-export const render = (report: Report | AggregateReport | HistoryReport): string => {
-  if ("instances" in report) return renderHistory(report);
+export const render = (report: Report | AggregateReport): string => {
   if ("aggregate" in report) return renderAggregate(report);
   const explored = report.explored;
   const some = (n: number, one: string, many: string) =>

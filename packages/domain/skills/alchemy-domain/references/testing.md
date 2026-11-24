@@ -244,7 +244,6 @@ Rules of thumb:
 - Pin the rules that must stay proved with `require: { proved: ["Account.NeverOverdrawn"] }`: one that slips to `Checked` then fails the test.
 - Keep rules from being weakened with `lock: "./Bank.lock.json"`: the first run writes the file, commit it. A rule removed, or changed to allow more, then fails. Never set `UPDATE_VERIFY_LOCK=1` or edit the file to make a test pass: relocking a rule that says less is the user's call.
 - The report lists `Rejections no rule needs`: checks that can be removed without breaking a rule. Write the invariant or transition each one keeps, then pin it with `require: { guards: ["Account.WithdrawMoney.InsufficientFunds"] }`. Never delete the check to clear the list.
-- `Verify.history(Account, entries)` holds recorded events (`{ event, envelope }`) to the aggregate as written now: every state along the way keeps the rules, and each event is one a command records from the state it met. Run it on exported production events before tightening a `decide` or adding an invariant.
 - Where a proof fails from a state no sequence reaches, the report may print the invariant to add (`Add it to the invariants:`). Add it as written.
 - Never widen `allow` to get a pass. It names what the check may skip, and each entry is something no longer verified.
 - A rule that is true but not proved needs a second invariant that rules out the state the prover started from.

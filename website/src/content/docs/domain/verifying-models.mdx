@@ -675,47 +675,6 @@ An aggregate a decision records on can't be verified alone: what the decision do
 
 A proof also covers two things you didn't write down. Every command leaves the state in its schema, since each proof starts from a state the schema allows. And every command can record an event from some state: one that never can is reported, because a rule is true of it only because it does nothing.
 
-## Hold recorded events to the rules
-
-A proof starts from a state the rules allow. Events already on record may have left them: older code wrote them, they were imported, or a rule was added since. `Verify.history` folds each instance's events from its initial state and holds every step to the aggregate as it's written now.
-
-```typescript title="packages/domain/test/Account.history.test.ts"
-import * as Verify from "@alchemy.run/domain/Verify";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { it } from "@effect/vitest";
-import * as Effect from "effect/Effect";
-import { Account } from "../src/Account/Account.aggregate.ts";
-import { recorded } from "./recorded.ts";
-
-it.effect("the accounts on record keep today's rules", () =>
-  Verify.history(Account, recorded).pipe(Effect.provide(NodeServices.layer)),
-);
-```
-
-`recorded` is the events as they were committed, each `{ event, envelope }`, the way a projection is given them. They can be of many instances and in any order: the envelope's `stream` and `seq` sort them.
-
-```text
-Account: 2 instances, 5 events
-
-  ✓ every state along the way keeps the rules and the state's schema
-  ✓ 5 events are what 5 commands record, each from the state it met
-```
-
-The first line folds the events with `evolve` and checks every invariant and the schema on each state, and every transition on each step a command is found for. The second asks more: is each event one a command records from the state it met? The solver looks for that command, and the real `decide` is run on it to confirm. Here a withdrawal was written past the account, for more than it held:
-
-```text
-Account: 1 instance, 4 events
-
-  ✓ every state along the way keeps the rules and the state's schema
-
-No command records these from the state they met
-  ✗ Account/a-1, event 4: MoneyWithdrawn { amount: 900, balanceAfter: 10 } from { _tag: "Open", customerId: "ada", owner: "Ada", balance: 380, frozen: null, today: { day: "2026-03-01", withdrawn: 120 } }
-```
-
-No state broke a rule, because the event carries the balance it leaves. `decide` would never have recorded it.
-
-History written under older, looser code fails the same way. Pass `allow: { unexplained: true }` to keep only the first check. Events a decision recorded, or that were imported, are folded and counted, and not held to `decide`.
-
 ## Write handlers the prover can read
 
 The prover reads `decide`, `evolve` and the rules as written, so they have to be plain functions of their inputs. Most ordinary TypeScript is read: conditions, `switch`, spreads, rest patterns, local variables that change, `+=` and `++`, array and string methods, and Effect's own library: effects and their failures, `Option`, `Result`, `Match`, arrays, records, decimals, hash sets and maps, times, and a stream run to a value. The whole list is in [What the prover reads](/domain/verifiable-code).
