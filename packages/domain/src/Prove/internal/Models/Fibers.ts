@@ -13,6 +13,8 @@ import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
+import * as TxQueue from "effect/TxQueue";
+import * as TxRef from "effect/TxRef";
 import * as Brands from "../Brands.ts";
 import type { Kit, Model, Models } from "../Kit.ts";
 import { arr, callable, dual, dualBy, lazy, native, wrongArguments } from "../Kit.ts";
@@ -36,7 +38,10 @@ type Kind =
   | "PubSub"
   | "Subscription"
   | "FiberSet"
-  | "FiberHandle";
+  | "FiberHandle"
+  | "TxRef"
+  | "TxQueue"
+  | "Pool";
 
 /** How often effects may be run again in one handler before the prover stops reading. */
 const MAX_TURNS = 100;
@@ -1315,6 +1320,15 @@ export const make = (kit: Kit, base: Models) => {
         site,
       ),
     "effect/Effect:interrupt": () => lazy(() => Effect.interrupt),
+    // Begin the transaction again when what it read changes.
+    "effect/Effect:txRetry": (site) =>
+      lazy(() =>
+        Effect.flatMap(Effect.serviceOption(Effect.Transaction), (state) =>
+          Option.isSome(state)
+            ? Effect.provideService(Effect.txRetry, Effect.Transaction, state.value)
+            : unseen(site, "calls Effect.txRetry outside a transaction"),
+        ),
+      ),
     "effect/Schedule:forever": () => wrap("Schedule", Schedule.forever),
     "effect/Schedule:once": () => wrap("Schedule", Schedule.once),
   };
@@ -1788,7 +1802,163 @@ export const make = (kit: Kit, base: Models) => {
     ),
   };
 
+  // ---- Transactions: what a fiber reads and writes in one is seen by the others all at once.
+
+  type TR = TxRef.TxRef<V>;
+  type TQ = TxQueue.TxQueue<V, Held>;
+
+  /** What a function of the code gives of what a `TxRef` holds, in the transaction that reads it. */
+  const changing = (
+    name: string,
+    give: (before: V, made: V, site: Site) => Eval<{ readonly next: V; readonly gives: V }>,
+  ): Model =>
+    dual(`TxRef.${name}`, 2, ([self, f], site) => {
+      const held = heldOf<TR>("TxRef", self);
+      return held && f
+        ? Effect.succeed(
+            timed(
+              `TxRef.${name}`,
+              (timeline) =>
+                Timeline.back(
+                  timeline,
+                  held.pipe(
+                    TxRef.get,
+                    Effect.flatMap((before) =>
+                      Timeline.real(
+                        timeline,
+                        Effect.flatMap(host.call(f, [before], site), (called_) =>
+                          give(before, called_, site),
+                        ),
+                      ),
+                    ),
+                    Effect.flatMap((read) => Effect.as(TxRef.set(held, read.next), read.gives)),
+                    Effect.tx,
+                  ),
+                  same,
+                ),
+              site,
+            ),
+          )
+        : wrongArguments(site, `TxRef.${name}`);
+    });
+
+  const TX_EMPTY = "takes from a TxQueue that nothing offers to";
+
+  const transactions: Models = {
+    "effect/TxRef:make": made("TxRef", ([value]) => TxRef.make<V>(value ?? Value.undef)),
+    "effect/TxRef:makeUnsafe": madeNow("TxRef", ([value]) =>
+      Effect.sync(() => TxRef.makeUnsafe<V>(value ?? Value.undef)),
+    ),
+    "effect/TxRef:get": on<TR, V>("TxRef", "get", 1, (held) => TxRef.get(held), same),
+    "effect/TxRef:set": on<TR, void>(
+      "TxRef",
+      "set",
+      2,
+      (held, [value]) => TxRef.set(held, value ?? Value.undef),
+      none,
+    ),
+    "effect/TxRef:update": changing("update", (_, next) =>
+      Effect.succeed({ next, gives: Value.undef }),
+    ),
+    "effect/TxRef:modify": changing("modify", (_, pair, site) => {
+      const read = kit.itemsOf(pair);
+      return read && read.length === 2
+        ? Effect.succeed({ gives: read[0]!, next: read[1]! })
+        : wrongArguments(site, "TxRef.modify");
+    }),
+    "effect/Effect:tx": onEffect("Effect.tx", 0, (timeline, self, _, site) =>
+      Timeline.back(
+        timeline,
+        Timeline.waiting(
+          timeline,
+          "retries a transaction whose TxRefs nothing changes",
+          site,
+          Effect.tx(self),
+        ),
+        same,
+      ),
+    ),
+    "effect/TxQueue:unbounded": made("TxQueue", () => TxQueue.unbounded<V, Held>()),
+    "effect/TxQueue:bounded": made("TxQueue", ([size], site) =>
+      Effect.flatMap(capacity("TxQueue.bounded", size, site), (n) => TxQueue.bounded<V, Held>(n)),
+    ),
+    "effect/TxQueue:offer": on<TQ, boolean>(
+      "TxQueue",
+      "offer",
+      2,
+      (held, [value]) => TxQueue.offer(held, value ?? Value.undef),
+      bool,
+      "offers to a full TxQueue that nothing takes from",
+    ),
+    "effect/TxQueue:offerAll": later<TQ, ReadonlyArray<V>>(
+      "TxQueue",
+      "offerAll",
+      2,
+      (held, [values], site) =>
+        Effect.map(items("TxQueue.offerAll", values, site), (found) =>
+          TxQueue.offerAll(held, found),
+        ),
+      list,
+    ),
+    "effect/TxQueue:take": on<TQ, V>(
+      "TxQueue",
+      "take",
+      1,
+      (held) => TxQueue.take(held),
+      same,
+      TX_EMPTY,
+    ),
+    "effect/TxQueue:takeAll": on<TQ, ReadonlyArray<V>>(
+      "TxQueue",
+      "takeAll",
+      1,
+      (held) => TxQueue.takeAll(held),
+      list,
+      TX_EMPTY,
+    ),
+    "effect/TxQueue:takeN": later<TQ, ReadonlyArray<V>>(
+      "TxQueue",
+      "takeN",
+      2,
+      (held, [n], site) =>
+        Effect.map(count("TxQueue.takeN", n, site), (found) => TxQueue.takeN(held, found)),
+      list,
+      TX_EMPTY,
+    ),
+    "effect/TxQueue:peek": on<TQ, V>(
+      "TxQueue",
+      "peek",
+      1,
+      (held) => TxQueue.peek(held),
+      same,
+      TX_EMPTY,
+    ),
+    "effect/TxQueue:poll": on<TQ, Option.Option<V>>(
+      "TxQueue",
+      "poll",
+      1,
+      (held) => TxQueue.poll(held),
+      option,
+    ),
+    "effect/TxQueue:size": on<TQ, number>("TxQueue", "size", 1, (held) => TxQueue.size(held), num),
+    "effect/TxQueue:isEmpty": on<TQ, boolean>(
+      "TxQueue",
+      "isEmpty",
+      1,
+      (held) => TxQueue.isEmpty(held),
+      bool,
+    ),
+    "effect/TxQueue:isFull": on<TQ, boolean>(
+      "TxQueue",
+      "isFull",
+      1,
+      (held) => TxQueue.isFull(held),
+      bool,
+    ),
+  };
+
   const models: Models = {
+    ...transactions,
     ...sets,
     ...changes,
     ...pubsubs,

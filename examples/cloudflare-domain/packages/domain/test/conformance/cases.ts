@@ -2511,6 +2511,8 @@ const rest: ReadonlyArray<Group> = [
       `import * as Deferred from "effect/Deferred";`,
       `import * as FiberSet from "effect/FiberSet";`,
       `import * as FiberHandle from "effect/FiberHandle";`,
+      `import * as TxRef from "effect/TxRef";`,
+      `import * as TxQueue from "effect/TxQueue";`,
       `import * as Fiber from "effect/Fiber";`,
       `import * as Latch from "effect/Latch";`,
       `import * as Queue from "effect/Queue";`,
@@ -2581,6 +2583,12 @@ const rest: ReadonlyArray<Group> = [
       `Effect.scoped(Effect.gen(function* () { const set = yield* FiberSet.make(); yield* FiberSet.run(set, Effect.andThen(Effect.sleep(1), even(a))); yield* FiberSet.run(set, Effect.sleep(9)); const failed = yield* Effect.result(Effect.timeoutOption(FiberSet.join(set), 5)); yield* FiberSet.clear(set); return [failed, yield* FiberSet.size(set)]; }))`,
       `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.scoped(Effect.gen(function* () { const handle = yield* FiberHandle.make(); yield* FiberHandle.run(handle, Effect.onInterrupt(Effect.sleep(20), () => log(seen, "first stopped"))); yield* Effect.sleep(1); yield* FiberHandle.run(handle)(Effect.andThen(Effect.sleep(2), log(seen, "second done"))); yield* FiberHandle.awaitEmpty(handle); yield* FiberHandle.run(handle, Effect.onInterrupt(Effect.sleep(20), () => log(seen, "third stopped"))); yield* Effect.sleep(1); yield* FiberHandle.clear(handle); })); return yield* Ref.get(seen); })`,
       `Effect.scoped(Effect.gen(function* () { const handle = yield* FiberHandle.make(); yield* FiberHandle.run(handle, Effect.andThen(Effect.sleep(1), even(a))); return yield* Effect.result(Effect.timeoutOption(FiberHandle.join(handle), 5)); }))`,
+      // A transaction: what it reads and writes is seen by other fibers all at once, and it begins again when it retries.
+      `Effect.gen(function* () { const cell = yield* TxRef.make(a); yield* TxRef.set(cell, a + b); yield* TxRef.update(cell, (n) => n * 2); const before = yield* TxRef.modify(cell, (n) => [n, n + 1]); return [before, yield* TxRef.get(cell), yield* pipe(cell, TxRef.modify((n) => [n > b, n - 1])), yield* pipe(cell, TxRef.update((n) => n + 1), Effect.andThen(TxRef.get(cell)))]; })`,
+      `Effect.gen(function* () { const from = TxRef.makeUnsafe(10); const to = yield* TxRef.make(0); const seen = yield* Ref.make([]); const watcher = yield* Effect.forkChild(Effect.forEach([1, 2, 3], () => Effect.andThen(Effect.sleep(1), Effect.flatMap(Effect.tx(Effect.all([TxRef.get(from), TxRef.get(to)])), ([x, y]) => log(seen, x + y))))); yield* Effect.tx(Effect.gen(function* () { yield* TxRef.update(from, (n) => n - 4); yield* TxRef.update(to, (n) => n + 4); })); yield* Fiber.join(watcher); return yield* Ref.get(seen); })`,
+      `Effect.gen(function* () { const stock = yield* TxRef.make(0); const taken = yield* Effect.forkChild(Effect.tx(Effect.gen(function* () { const held = yield* TxRef.get(stock); if (held < 2) return yield* Effect.txRetry; yield* TxRef.set(stock, held - 2); return held; }))); yield* Effect.sleep(1); yield* TxRef.set(stock, 1); yield* Effect.sleep(1); yield* TxRef.set(stock, a + 30); return [yield* Fiber.join(taken), yield* TxRef.get(stock)]; })`,
+      `Effect.gen(function* () { const line = yield* TxQueue.unbounded(); const offered = yield* TxQueue.offer(line, a); yield* TxQueue.offerAll(line, [b, 1, 2]); return [offered, yield* TxQueue.take(line), yield* TxQueue.peek(line), yield* TxQueue.takeN(line, 1), yield* TxQueue.size(line), yield* TxQueue.isEmpty(line), yield* TxQueue.isFull(line), yield* TxQueue.poll(line), yield* TxQueue.takeAll(line), yield* TxQueue.poll(line)]; })`,
+      `Effect.gen(function* () { const line = yield* TxQueue.bounded(1); yield* Effect.forkChild(Effect.forEach([a, b], (n) => TxQueue.offer(line, n))); return [yield* TxQueue.take(line), yield* TxQueue.take(line)]; })`,
       // Effects run together.
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const made = yield* Effect.all([Effect.as(Effect.andThen(Effect.sleep(2), log(seen, "a")), a), Effect.as(Effect.andThen(Effect.sleep(1), log(seen, "b")), b), Effect.as(log(seen, "c"), 1)], { concurrency: "unbounded" }); return [made, yield* Ref.get(seen)]; })`,
       `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.all([Effect.andThen(Effect.sleep(2), log(seen, "a")), Effect.andThen(Effect.sleep(1), log(seen, "b")), log(seen, "c"), Effect.andThen(Effect.sleep(4), log(seen, "d"))], { concurrency: 2, discard: true }); return yield* Ref.get(seen); })`,
@@ -2607,6 +2615,15 @@ const rest: ReadonlyArray<Group> = [
         /a concurrency the prover cannot see/,
       ],
       [`Effect.acquireRelease(Effect.succeed(a), () => Effect.void)`, /outside Effect\.scoped/],
+      [
+        `Effect.tx(Effect.gen(function* () { const cell = yield* TxRef.make(a); if ((yield* TxRef.get(cell)) < 99) return yield* Effect.txRetry; return a; }))`,
+        /retries a transaction whose TxRefs nothing changes/,
+      ],
+      [`Effect.txRetry`, /outside a transaction/],
+      [
+        `Effect.gen(function* () { const line = yield* TxQueue.unbounded(); return yield* TxQueue.take(line); })`,
+        /takes from a TxQueue that nothing offers to/,
+      ],
       // What stops the prover in one fiber stops it, whichever fiber wins.
       [
         `Effect.race(Effect.as(Effect.sleep(1), a), Effect.andThen(Effect.sleep(2), Effect.promise(() => Promise.resolve(b))))`,

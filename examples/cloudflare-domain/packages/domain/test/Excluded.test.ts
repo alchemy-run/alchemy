@@ -20,7 +20,7 @@ const READ = new Set([
   ...["Ref", "RegExp", "Result", "SemVer", "SemVerRange", "Sink", "Stream", "String", "Struct"],
   ...["SubscriptionRef", "Symbol", "SynchronizedRef", "TextDiff", "Trie", "Tuple", "UndefinedOr"],
   ...["Deferred", "Fiber", "FiberHandle", "FiberSet", "Latch", "PubSub", "Queue", "Schedule"],
-  ...["Semaphore", "index"],
+  ...["Semaphore", "TxQueue", "TxRef", "index"],
 ]);
 
 const NAME = /^[A-Za-z_$][\w$]*$/;

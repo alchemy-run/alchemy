@@ -1910,6 +1910,30 @@ FiberHandle.awaitEmpty(handle);
 FiberHandle.clear(handle);
 ```
 
+```typescript title="effect/TxRef, effect/TxQueue and Effect.tx"
+// A transaction: what it reads and writes is seen by other fibers all at once.
+const cell = yield* TxRef.make(a);
+const from = TxRef.makeUnsafe(10);
+TxRef.get(cell);
+TxRef.set(cell, a + b);
+TxRef.update(cell, (n) => n * 2);
+TxRef.modify(cell, (n) => [n, n + 1]);
+Effect.tx(Effect.all([TxRef.get(from), TxRef.get(to)]));
+Effect.txRetry; // begin the transaction again when what it read changes
+const line = yield* TxQueue.unbounded();
+TxQueue.bounded(1);
+TxQueue.offer(line, a);
+TxQueue.offerAll(line, [b, 1, 2]);
+TxQueue.take(line); // waits for a fiber to offer
+TxQueue.takeAll(line);
+TxQueue.takeN(line, 1);
+TxQueue.peek(line);
+TxQueue.poll(line);
+TxQueue.size(line);
+TxQueue.isEmpty(line);
+TxQueue.isFull(line);
+```
+
 ```typescript title="effect/PubSub"
 // What is published reaches each one who subscribed before it was.
 const hub = yield* PubSub.unbounded();
@@ -2397,9 +2421,7 @@ import * as TxHashMap from "effect/TxHashMap";
 import * as TxHashSet from "effect/TxHashSet";
 import * as TxPriorityQueue from "effect/TxPriorityQueue";
 import * as TxPubSub from "effect/TxPubSub";
-import * as TxQueue from "effect/TxQueue";
 import * as TxReentrantLock from "effect/TxReentrantLock";
-import * as TxRef from "effect/TxRef";
 import * as TxSemaphore from "effect/TxSemaphore";
 import * as TxSubscriptionRef from "effect/TxSubscriptionRef";
 
