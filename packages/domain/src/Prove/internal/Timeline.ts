@@ -245,13 +245,10 @@ export const run = <A>(current: () => Run, site: Site, self: Eval<A>): Eval<A> =
     timeline.instant.onIdle = () => {
       if (settled || timeline.instant.busy > 0) return;
       const wait = timeline.waits.get(fiber.id) ?? [...timeline.waits.values()][0];
-      settle(
-        Effect.fail(
-          wait
-            ? Value.notTranslated(wait.site, `${wait.what}: the handler would never end`)
-            : Value.notTranslated(site, "waits for something that never comes"),
-        ),
-      );
+      const never = wait
+        ? Value.notTranslated(wait.site, `${wait.what}: the handler would never end`)
+        : Value.notTranslated(site, "waits for something that never comes");
+      settle(never.pipe(Effect.fail));
     };
     timeline.instant.pump();
     return Effect.sync(() => {

@@ -8,6 +8,7 @@ import * as Latch from "effect/Latch";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
+import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Brands from "../Brands.ts";
 import type { Kit, Model, Models } from "../Kit.ts";
@@ -78,7 +79,7 @@ export const make = (kit: Kit, base: Models) => {
       return Effect.succeed(millis.term.text);
     if (millis?._tag === "Str") {
       const read = Duration.fromInput(millis.value as Duration.Input);
-      if (read._tag === "Some") return Effect.succeed(Duration.toMillis(read.value));
+      if (read._tag === "Some") return read.value.pipe(Duration.toMillis, Effect.succeed);
     }
     return unseen(site, `calls ${name} with a duration the prover cannot see`);
   };
@@ -92,11 +93,12 @@ export const make = (kit: Kit, base: Models) => {
     );
 
   const durationOf = (duration: Duration.Duration): V =>
-    Brands.duration(Value.num(Duration.toMillis(duration)));
+    Brands.duration(duration.pipe(Duration.toMillis, Value.num));
 
   /** How an effect ended, as the code holds an `Exit`. */
-  const exitOf = (timeline: Timeline.Timeline, exit: Exit.Exit<V, unknown>): Eval<V> => {
-    if (Exit.isSuccess(exit)) return Effect.succeed(success(exit.value));
+  const exitOf = (timeline: Timeline.Timeline, exit: Exit.Exit<unknown, unknown>): Eval<V> => {
+    if (Exit.isSuccess(exit))
+      return Effect.succeed(success(isValue(exit.value) ? exit.value : Value.undef));
     const stop = Timeline.stopOf(timeline, exit.cause);
     if (stop && stop._tag !== "Rejected") return Effect.fail(stop);
     return Effect.succeed(
@@ -181,6 +183,10 @@ export const make = (kit: Kit, base: Models) => {
       return wrongArguments(site, name);
     };
   };
+
+  /** A finalizer, as the library takes one: it cannot fail, so a failure of it is a defect. */
+  const sure = <A>(self: Effect.Effect<A, Held>): Effect.Effect<A> =>
+    Effect.catch(self, (failed) => Effect.die(new Timeline.Defect(failed.rejection)));
 
   /** What a function of the code gives when the library calls it for an effect. */
   const called =
@@ -336,12 +342,8 @@ export const make = (kit: Kit, base: Models) => {
 
   // ---- Deferred, Queue, Latch and Semaphore: the library's own, holding values of the code.
 
-  /** The library's effect, where there is nothing to work out before it is made. */
-  const just = <A>(effect: Effect.Effect<A, unknown>): Eval<Effect.Effect<A, unknown>> =>
-    Effect.succeed(effect);
-
-  /** A function of one of these that gives an effect: `body` gives the library's, to be run. */
-  const on = <H, A>(
+  /** A function of one of these that gives an effect, where something is worked out before the library's is made. */
+  const later = <H, A>(
     kind: Kind,
     name: string,
     arity: number,
@@ -372,6 +374,17 @@ export const make = (kit: Kit, base: Models) => {
         ),
       );
     });
+
+  /** A function of one of these that gives an effect: `body` gives the library's, to be run. */
+  const on = <H, A>(
+    kind: Kind,
+    name: string,
+    arity: number,
+    body: (held: H, rest: ReadonlyArray<V>) => Effect.Effect<A, unknown>,
+    give: (value: A, timeline: Timeline.Timeline) => V,
+    wait?: string,
+  ): Model =>
+    later<H, A>(kind, name, arity, (held, rest) => Effect.succeed(body(held, rest)), give, wait);
 
   /** A function of one of these that gives a value at once. */
   const now = <H, A>(
@@ -420,10 +433,10 @@ export const make = (kit: Kit, base: Models) => {
       "Deferred",
       "succeed",
       2,
-      (held, [value]) => just(Deferred.succeed(held, value ?? Value.undef)),
+      (held, [value]) => Deferred.succeed(held, value ?? Value.undef),
       bool,
     ),
-    "effect/Deferred:sync": on<D, boolean>(
+    "effect/Deferred:sync": later<D, boolean>(
       "Deferred",
       "sync",
       2,
@@ -436,10 +449,10 @@ export const make = (kit: Kit, base: Models) => {
       "fail",
       2,
       (held, [error]) =>
-        just(Deferred.fail(held, new Value.Rejected({ rejection: error ?? Value.undef }))),
+        Deferred.fail(held, new Value.Rejected({ rejection: error ?? Value.undef })),
       bool,
     ),
-    "effect/Deferred:failSync": on<D, boolean>(
+    "effect/Deferred:failSync": later<D, boolean>(
       "Deferred",
       "failSync",
       2,
@@ -453,10 +466,10 @@ export const make = (kit: Kit, base: Models) => {
       "Deferred",
       "die",
       2,
-      (held, [defect]) => just(Deferred.die(held, new Timeline.Defect(defect ?? Value.undef))),
+      (held, [defect]) => Deferred.die(held, new Timeline.Defect(defect ?? Value.undef)),
       bool,
     ),
-    "effect/Deferred:dieSync": on<D, boolean>(
+    "effect/Deferred:dieSync": later<D, boolean>(
       "Deferred",
       "dieSync",
       2,
@@ -466,14 +479,14 @@ export const make = (kit: Kit, base: Models) => {
         ),
       bool,
     ),
-    "effect/Deferred:completeWith": on<D, boolean>(
+    "effect/Deferred:completeWith": later<D, boolean>(
       "Deferred",
       "completeWith",
       2,
       (held, [effect], site, timeline) => {
         const given = effectOf(timeline, effect, site);
         return given
-          ? just(Deferred.completeWith(held, given))
+          ? Effect.succeed(Deferred.completeWith(held, given))
           : wrongArguments(site, "Deferred.completeWith");
       },
       bool,
@@ -482,14 +495,14 @@ export const make = (kit: Kit, base: Models) => {
       "Deferred",
       "interrupt",
       1,
-      (held) => just(Deferred.interrupt(held)),
+      (held) => Deferred.interrupt(held),
       bool,
     ),
     "effect/Deferred:await": on<D, V>(
       "Deferred",
       "await",
       1,
-      (held) => just(Deferred.await(held)),
+      (held) => Deferred.await(held),
       same,
       "waits for a Deferred that nothing completes",
     ),
@@ -497,7 +510,7 @@ export const make = (kit: Kit, base: Models) => {
       "Deferred",
       "isDone",
       1,
-      (held) => just(Deferred.isDone(held)),
+      (held) => Deferred.isDone(held),
       bool,
     ),
     "effect/Deferred:isDoneUnsafe": now<D, boolean>(
@@ -511,7 +524,7 @@ export const make = (kit: Kit, base: Models) => {
       "Deferred",
       "poll",
       1,
-      (held) => just(Deferred.poll(held)),
+      (held) => Deferred.poll(held),
       (found, timeline) =>
         Option.isSome(found)
           ? Value.some(lazy(() => Timeline.back(timeline, found.value, same)))
@@ -549,7 +562,7 @@ export const make = (kit: Kit, base: Models) => {
       "Queue",
       "offer",
       2,
-      (held, [value]) => just(Queue.offer(held, value ?? Value.undef)),
+      (held, [value]) => Queue.offer(held, value ?? Value.undef),
       bool,
       FULL,
     ),
@@ -560,7 +573,7 @@ export const make = (kit: Kit, base: Models) => {
       (held, [value]) => Queue.offerUnsafe(held, value ?? Value.undef),
       bool,
     ),
-    "effect/Queue:offerAll": on<Q, ReadonlyArray<V>>(
+    "effect/Queue:offerAll": later<Q, ReadonlyArray<V>>(
       "Queue",
       "offerAll",
       2,
@@ -569,23 +582,16 @@ export const make = (kit: Kit, base: Models) => {
       list,
       FULL,
     ),
-    "effect/Queue:take": on<Q, V>(
-      "Queue",
-      "take",
-      1,
-      (held) => just(Queue.take(held)),
-      same,
-      EMPTY,
-    ),
+    "effect/Queue:take": on<Q, V>("Queue", "take", 1, (held) => Queue.take(held), same, EMPTY),
     "effect/Queue:takeAll": on<Q, ReadonlyArray<V>>(
       "Queue",
       "takeAll",
       1,
-      (held) => just(Queue.takeAll(held)),
+      (held) => Queue.takeAll(held),
       list,
       EMPTY,
     ),
-    "effect/Queue:takeN": on<Q, ReadonlyArray<V>>(
+    "effect/Queue:takeN": later<Q, ReadonlyArray<V>>(
       "Queue",
       "takeN",
       2,
@@ -594,7 +600,7 @@ export const make = (kit: Kit, base: Models) => {
       list,
       EMPTY,
     ),
-    "effect/Queue:takeBetween": on<Q, ReadonlyArray<V>>(
+    "effect/Queue:takeBetween": later<Q, ReadonlyArray<V>>(
       "Queue",
       "takeBetween",
       3,
@@ -607,37 +613,24 @@ export const make = (kit: Kit, base: Models) => {
       list,
       EMPTY,
     ),
-    "effect/Queue:peek": on<Q, V>(
-      "Queue",
-      "peek",
-      1,
-      (held) => just(Queue.peek(held)),
-      same,
-      EMPTY,
-    ),
+    "effect/Queue:peek": on<Q, V>("Queue", "peek", 1, (held) => Queue.peek(held), same, EMPTY),
     "effect/Queue:poll": on<Q, Option.Option<V>>(
       "Queue",
       "poll",
       1,
-      (held) => just(Queue.poll(held)),
+      (held) => Queue.poll(held),
       option,
     ),
     "effect/Queue:clear": on<Q, ReadonlyArray<V>>(
       "Queue",
       "clear",
       1,
-      (held) => just(Queue.clear(held)),
+      (held) => Queue.clear(held),
       list,
     ),
-    "effect/Queue:size": on<Q, number>("Queue", "size", 1, (held) => just(Queue.size(held)), num),
+    "effect/Queue:size": on<Q, number>("Queue", "size", 1, (held) => Queue.size(held), num),
     "effect/Queue:sizeUnsafe": now<Q, number>("Queue", "sizeUnsafe", 1, Queue.sizeUnsafe, num),
-    "effect/Queue:isFull": on<Q, boolean>(
-      "Queue",
-      "isFull",
-      1,
-      (held) => just(Queue.isFull(held)),
-      bool,
-    ),
+    "effect/Queue:isFull": on<Q, boolean>("Queue", "isFull", 1, (held) => Queue.isFull(held), bool),
     "effect/Queue:isFullUnsafe": now<Q, boolean>(
       "Queue",
       "isFullUnsafe",
@@ -649,22 +642,21 @@ export const make = (kit: Kit, base: Models) => {
       "Queue",
       "end",
       1,
-      (held) => just(Queue.end(held as unknown as Queue.Queue<V, Cause.Done>)),
+      (held) => Queue.end(held as unknown as Queue.Queue<V, Cause.Done>),
       bool,
     ),
     "effect/Queue:fail": on<Q, boolean>(
       "Queue",
       "fail",
       2,
-      (held, [error]) =>
-        just(Queue.fail(held, new Value.Rejected({ rejection: error ?? Value.undef }))),
+      (held, [error]) => Queue.fail(held, new Value.Rejected({ rejection: error ?? Value.undef })),
       bool,
     ),
     "effect/Queue:shutdown": on<Q, boolean>(
       "Queue",
       "shutdown",
       1,
-      (held) => just(Queue.shutdown(held)),
+      (held) => Queue.shutdown(held),
       bool,
     ),
   };
@@ -923,14 +915,7 @@ export const make = (kit: Kit, base: Models) => {
   const fibers: Models = {
     "effect/Effect:forkChild": forked("Effect.forkChild", (self) => Effect.forkChild(self)),
     "effect/Effect:forkDetach": forked("Effect.forkDetach", (self) => Effect.forkDetach(self)),
-    "effect/Fiber:join": on<F, V>(
-      "Fiber",
-      "join",
-      1,
-      (held) => just(Fiber.join(held)),
-      same,
-      FIBER_WAIT,
-    ),
+    "effect/Fiber:join": on<F, V>("Fiber", "join", 1, (held) => Fiber.join(held), same, FIBER_WAIT),
     "effect/Fiber:await": (args, site) => {
       const held = heldOf<F>("Fiber", args[0]);
       return held
@@ -951,7 +936,7 @@ export const make = (kit: Kit, base: Models) => {
       "Fiber",
       "interrupt",
       1,
-      (held) => just(Fiber.interrupt(held)),
+      (held) => Fiber.interrupt(held),
       none,
     ),
     "effect/Fiber:joinAll": (args, site) =>
@@ -1045,11 +1030,13 @@ export const make = (kit: Kit, base: Models) => {
 
   const exits =
     (timeline: Timeline.Timeline, fn: V, site: Site) =>
-    (exit: Exit.Exit<V, unknown>): Effect.Effect<void> =>
-      Timeline.real(
-        timeline,
-        Effect.flatMap(exitOf(timeline, exit), (held) => ran(fn, [held], site)),
-      ) as Effect.Effect<never>;
+    (exit: Exit.Exit<V, unknown>): Effect.Effect<V> =>
+      sure(
+        Timeline.real(
+          timeline,
+          Effect.flatMap(exitOf(timeline, exit), (held) => ran(fn, [held], site)),
+        ),
+      );
 
   const timing: Models = {
     "effect/Effect:sleep": ([duration], site) =>
@@ -1123,7 +1110,7 @@ export const make = (kit: Kit, base: Models) => {
       return finalizer
         ? Timeline.back(
             timeline,
-            Effect.onInterrupt(self, () => finalizer as Effect.Effect<V>),
+            Effect.onInterrupt(self, () => sure(finalizer)),
             same,
           )
         : wrongArguments(site, "Effect.onInterrupt");
@@ -1204,7 +1191,7 @@ export const make = (kit: Kit, base: Models) => {
     "effect/Schedule:exponential": schedule("Schedule.exponential", ([base, factor], site) =>
       Effect.flatMap(written("Schedule.exponential", base, site), (time) =>
         factor === undefined || factor._tag === "Undef"
-          ? Effect.succeed(Schedule.exponential(time))
+          ? time.pipe(Schedule.exponential, Effect.succeed)
           : factor._tag === "Num"
             ? Effect.succeed(Schedule.exponential(time, factor.value))
             : unseen(site, "calls Schedule.exponential with a factor the prover cannot see"),
@@ -1358,7 +1345,113 @@ export const make = (kit: Kit, base: Models) => {
     },
   };
 
+  // ---- Scopes: what is acquired is released when the scope closes, however it closes.
+
+  /** An effect that needs a scope, which `Effect.scoped` gives it. */
+  const scoped = <A>(
+    name: string,
+    site: Site,
+    body: (timeline: Timeline.Timeline) => Effect.Effect<A, unknown, Scope.Scope>,
+    give: (value: A) => V,
+  ): V =>
+    timed(
+      name,
+      (timeline) =>
+        Effect.flatMap(Effect.serviceOption(Scope.Scope), (scope) =>
+          Option.isSome(scope)
+            ? Timeline.back(
+                timeline,
+                Effect.provideService(body(timeline), Scope.Scope, scope.value),
+                give,
+              )
+            : unseen(site, `calls ${name} outside Effect.scoped`),
+        ),
+      site,
+    );
+
+  /** What a function of the code does when a scope closes, given how it closed. */
+  const closing =
+    (timeline: Timeline.Timeline, fn: V, site: Site, held: ReadonlyArray<V>) =>
+    (exit: Exit.Exit<unknown, unknown>): Effect.Effect<V> =>
+      sure(
+        Timeline.real(
+          timeline,
+          Effect.flatMap(exitOf(timeline, exit), (ended) => ran(fn, [...held, ended], site)),
+        ),
+      );
+
+  const scopes: Models = {
+    // `Effect.fn(body, Effect.scoped)` gives it the function's arguments after the effect.
+    "effect/Effect:scoped": ([self], site) =>
+      self?._tag === "Effect"
+        ? Effect.succeed(
+            timed(
+              "Effect.scoped",
+              (timeline) =>
+                Timeline.back(timeline, Effect.scoped(Timeline.real(timeline, self.run)), same),
+              site,
+            ),
+          )
+        : wrongArguments(site, "Effect.scoped"),
+    "effect/Effect:acquireRelease": ([acquire, release], site) =>
+      acquire?._tag === "Effect" && release
+        ? Effect.succeed(
+            scoped(
+              "Effect.acquireRelease",
+              site,
+              (timeline) =>
+                Effect.acquireRelease(Timeline.real(timeline, acquire.run), (held, exit) =>
+                  closing(timeline, release, site, [held])(exit),
+                ),
+              same,
+            ),
+          )
+        : wrongArguments(site, "Effect.acquireRelease"),
+    "effect/Effect:acquireUseRelease": ([acquire, use, release], site) =>
+      acquire?._tag === "Effect" && use && release
+        ? Effect.succeed(
+            timed(
+              "Effect.acquireUseRelease",
+              (timeline) =>
+                Timeline.back(
+                  timeline,
+                  Effect.acquireUseRelease(
+                    Timeline.real(timeline, acquire.run),
+                    (held) => called(timeline, use, site)(held),
+                    (held, exit) => closing(timeline, release, site, [held])(exit),
+                  ),
+                  same,
+                ),
+              site,
+            ),
+          )
+        : wrongArguments(site, "Effect.acquireUseRelease"),
+    "effect/Effect:addFinalizer": ([finalizer], site) =>
+      finalizer
+        ? Effect.succeed(
+            scoped(
+              "Effect.addFinalizer",
+              site,
+              (timeline) => Effect.addFinalizer(closing(timeline, finalizer, site, [])),
+              none,
+            ),
+          )
+        : wrongArguments(site, "Effect.addFinalizer"),
+    "effect/Effect:forkScoped": ([self], site) =>
+      self?._tag === "Effect"
+        ? Effect.succeed(
+            scoped(
+              "Effect.forkScoped",
+              site,
+              (timeline) => Effect.forkScoped(Timeline.real(timeline, self.run)),
+              (fiber) => wrap("Fiber", fiber),
+            ),
+          )
+        : wrongArguments(site, "Effect.forkScoped"),
+  };
+
   const models: Models = {
+    ...scopes,
     ...deferreds,
     ...queues,
     ...latches,

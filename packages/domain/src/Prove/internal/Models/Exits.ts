@@ -76,10 +76,8 @@ export const make = (kit: Kit) => {
     "effect/Effect:exit": onEffect("Effect.exit", 0, (self) =>
       Effect.map(self, success).pipe(
         // An effect stopped from inside, by a fiber or a Deferred that was interrupted.
-        Effect.catchCause((cause) =>
-          Cause.hasInterruptsOnly(cause)
-            ? Effect.succeed(failure(Value.obj({ _tag: Value.str("Interrupt") })))
-            : Effect.failCause(cause),
+        Effect.catchCauseIf(Cause.hasInterruptsOnly, () =>
+          Effect.succeed(failure(Value.obj({ _tag: Value.str("Interrupt") }))),
         ),
         Effect.catchTag("Rejected", (rejected) =>
           // What stops a saga until a signal comes is not an end of the effect.

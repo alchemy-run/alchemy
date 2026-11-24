@@ -64,10 +64,13 @@ const sections: Readonly<Record<string, Section>> = {
   },
   "Effects and failures": {
     base: numbers,
-    prelude: [`import * as Schedule from "effect/Schedule";`],
+    prelude: [
+      `import * as Schedule from "effect/Schedule";`,
+      `import * as Deferred from "effect/Deferred";`,
+    ],
     context: `const url = "https://example.com";`,
     // A cell is not a value an event carries.
-    quiet: /^const tries/,
+    quiet: /^const tries|^const answer|^yield\* Effect\.forkChild/,
     effectful: true,
   },
   Streams: {
@@ -84,6 +87,7 @@ const sections: Readonly<Record<string, Section>> = {
     prelude: [
       `import * as Schedule from "effect/Schedule";`,
       `import * as SubscriptionRef from "effect/SubscriptionRef";`,
+      `import * as Fiber from "effect/Fiber";`,
       `import * as Deferred from "effect/Deferred";`,
       `import * as Latch from "effect/Latch";`,
       `import * as Queue from "effect/Queue";`,

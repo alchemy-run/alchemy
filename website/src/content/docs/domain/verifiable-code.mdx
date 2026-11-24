@@ -692,28 +692,120 @@ Effect.zip(Effect.succeed(a), Effect.succeed(b));
 Effect.zipWith(Effect.succeed(a), Effect.succeed(b), (x, y) => x - y);
 ```
 
-```typescript title="effect/Effect: an effect run again, and a time limit"
+```typescript title="effect/Effect: time"
+// Time passes only when no fiber can run, so a handler that waits is read without waiting.
+Effect.sleep("1 second");
+Effect.sleep(Duration.seconds(2));
+Effect.sleep(Duration.millis(a)); // a time an input decides
+Effect.succeed(a).pipe(Effect.delay("1 second"));
+Effect.yieldNow;
+
+// A time limit stops the effect where it is, and its finalizers run.
+Effect.timeout(Effect.as(Effect.sleep("2 seconds"), a), "1 second"); // fails with a TimeoutError
+Effect.timeout(Effect.succeed(a), "1 second");
+Effect.timeoutOption(Effect.as(Effect.sleep("2 seconds"), a), "1 second");
+Effect.timeoutOption(Effect.as(Effect.sleep(a * 10), "slept"), b * 10 + 5); // each order of the two is tried
+Effect.timeoutOrElse(Effect.as(Effect.sleep("2 seconds"), a), {
+  duration: "1 second",
+  orElse: () => Effect.succeed(b),
+});
+Effect.onInterrupt(Effect.sleep(20), () => log(seen, "stopped"));
+Effect.onExit(even(a), (exit) => log(seen, Exit.isSuccess(exit) ? "even" : "odd"));
+```
+
+```typescript title="effect/Effect: an effect run again"
 const ran = yield* Ref.make(0);
 const step = Ref.updateAndGet(ran, (n) => n + 1);
 
-// Nothing in a handler waits, so each run follows the last at once.
 Effect.retry(even(a), { times: 2 }); // a count the code writes
 Effect.retry(even(a), { times: 5, while: (error) => error.n !== 2 });
 Effect.retry(even(a), { times: 5, until: (error) => error.n === 1 });
-Effect.retry(even(a), Schedule.recurs(2)); // the one schedule that does not wait
+Effect.retry(even(a), Schedule.recurs(2));
+Effect.retry(step, Schedule.spaced("1 second")); // a schedule that waits
+Effect.retry(step, { schedule: Schedule.exponential("1 second"), times: 3 });
+Effect.timeout(Effect.retry(step, Schedule.exponential("1 second")), "10 seconds");
 Effect.repeat(step, { times: 2 }); // gives what the last run gave
 Effect.repeat(step, { times: 4, while: (n) => n < a + 3 });
 Effect.repeat(step, { times: 4, until: (n) => n === a + 2 });
 Effect.repeat(step, { schedule: Schedule.recurs(2) });
-Effect.repeat(step, Schedule.recurs(2)); // gives how many times it ran again
+Effect.repeat(step, Schedule.recurs(2)); // gives what the schedule gives: how many times it ran again
+Effect.repeat(step, { schedule: Schedule.spaced("1 second"), times: 2 });
+```
 
-// An effect is done before any time is up.
-Effect.timeout(even(a), "1 second");
-Effect.timeoutOption(even(a), "1 second");
-Effect.timeoutOrElse(even(a), { duration: "1 second", orElse: () => Effect.succeed(b) });
+```typescript title="effect/Schedule"
+Schedule.recurs(2);
+Schedule.spaced("1 second");
+Schedule.fixed("1 second");
+Schedule.windowed("1 second");
+Schedule.duration("1 second");
+Schedule.exponential("1 second");
+Schedule.fibonacci("1 second");
+Schedule.forever;
+Schedule.once;
+Schedule.spaced("1 second").pipe(Schedule.upTo({ times: 2 }));
+Schedule.max([Schedule.recurs(2), Schedule.spaced("1 second")]);
+Schedule.min([Schedule.recurs(2), Schedule.recurs(4)]);
+Schedule.concat(Schedule.recurs(1), Schedule.recurs(2));
+Schedule.passthrough(Schedule.recurs(2));
+```
+
+```typescript title="effect/Effect: fibers, and effects run together"
+// A race: the first to give a value, and the other is stopped.
+Effect.race(Effect.as(Effect.sleep(20), a), Effect.as(Effect.sleep(10), b));
+Effect.race(even(a), positive(b));
+Effect.raceFirst(even(a), Effect.as(Effect.sleep(10), b));
+Effect.raceAll([
+  Effect.as(Effect.sleep(30), "slow"),
+  Effect.as(Effect.sleep(10), "fast"),
+  Effect.as(Effect.sleep(20), "middle"),
+]);
+Effect.raceAllFirst([Effect.as(Effect.sleep(30), a), Effect.andThen(Effect.sleep(10), even(a))]);
+
+// A fiber begins when the one that made it gives way.
+const fiber = yield* Effect.forkChild(even(a));
+Effect.forkDetach(Effect.andThen(Effect.sleep(1), log(seen, "detached")));
+Fiber.join(fiber);
+Fiber.await(fiber);
+Fiber.interrupt(fiber);
+Fiber.joinAll([first, second]);
+Fiber.interruptAll([first, second]);
+Effect.uninterruptible(Effect.andThen(Effect.sleep(5), log(seen, "kept")));
+Effect.interruptible(Effect.andThen(Effect.sleep(5), log(seen, "never")));
+Effect.exit(Effect.interrupt);
+
+// Effects run together, as many at once as the code says.
+Effect.all({ slow: Effect.as(Effect.sleep(2), a), fast: Effect.as(Effect.sleep(1), b) }, { concurrency: 2 });
+Effect.forEach([5, 1, 2], (n) => Effect.andThen(Effect.sleep(n), log(seen, n)), {
+  concurrency: 2,
+  discard: true,
+});
+Effect.zipWith(Effect.as(Effect.sleep(2), a), Effect.as(Effect.sleep(1), b), (x, y) => x - y, {
+  concurrent: true,
+});
+
+// A scope: what is acquired is released when it closes, last first, however it closes.
+Effect.scoped(
+  Effect.gen(function* () {
+    yield* Effect.addFinalizer((exit) => log(seen, Exit.isSuccess(exit) ? "after" : "failed"));
+    yield* log(seen, "body");
+  }),
+);
+Effect.acquireRelease(Effect.as(log(seen, "open one"), a), () => log(seen, "close one"));
+Effect.addFinalizer((exit) => log(seen, Exit.isSuccess(exit) ? "after" : "failed"));
+Effect.acquireUseRelease(
+  Effect.as(log(seen, "open"), a),
+  (n) => Effect.andThen(log(seen, "use"), even(n)),
+  (n, exit) => log(seen, Exit.isSuccess(exit) ? "closed" : "closed after a failure"),
+);
+Effect.forkScoped(
+  Effect.onInterrupt(Effect.andThen(Effect.sleep(20), log(seen, "late")), () =>
+    log(seen, "stopped with the scope"),
+  ),
+);
 ```
 
 ```typescript title="effect/Exit"
+Exit.hasInterrupts(exit);
 Effect.exit(even(a)).pipe(
   Effect.map((exit) => [
     Exit.isSuccess(exit),
@@ -758,6 +850,8 @@ Effect.exit(even(a)).pipe(
 ```
 
 ```typescript title="effect/Cause"
+Cause.hasInterrupts(exit.cause);
+Cause.hasInterruptsOnly(exit.cause);
 Effect.succeed([
   Cause.squash(Cause.fail(a)),
   Cause.hasDies(Cause.die(a)),
@@ -1695,7 +1789,7 @@ SubscriptionRef.modifyEffect(cell, (n) => Effect.succeed([n > b, n - 1]));
 ```
 
 ```typescript title="effect/Deferred"
-// A handler is one fiber, so a Deferred is what the handler itself completed it with.
+// A Deferred is completed once, by any fiber of the handler.
 const done = yield* Deferred.make();
 const made = Deferred.makeUnsafe();
 Deferred.succeed(done, a); // gives whether it was the first to complete it
@@ -1704,7 +1798,9 @@ Deferred.fail(done, new Odd({ n: a }));
 Deferred.failSync(done, () => a);
 Deferred.die(done, "gone");
 Deferred.dieSync(done, () => "gone");
-Deferred.await(done); // once the handler has completed it
+Deferred.await(done); // waits for the fiber that completes it
+Deferred.completeWith(done, even(a));
+Deferred.interrupt(done);
 Deferred.isDone(done);
 Deferred.isDoneUnsafe(done);
 Deferred.poll(done);
@@ -1716,7 +1812,7 @@ const made = Latch.makeUnsafe(false);
 gate.open;
 gate.close;
 gate.release;
-gate.await; // once the handler has opened it
+gate.await; // waits for the fiber that opens it
 gate.whenOpen(Effect.succeed(a));
 gate.isOpen();
 gate.openUnsafe();
@@ -1735,7 +1831,7 @@ Latch.closeUnsafe(gate);
 ```typescript title="effect/Semaphore"
 const permits = yield* Semaphore.make(2); // a count the code writes
 const made = Semaphore.makeUnsafe(1);
-permits.withPermits(1)(Effect.succeed(a)); // while there are that many free
+permits.withPermits(1)(Effect.succeed(a)); // waits for a fiber to give permits back
 permits.withPermit(Effect.succeed(b));
 permits.withPermitsIfAvailable(2)(Effect.succeed(b));
 permits.take(1);
@@ -1759,10 +1855,16 @@ Semaphore.releaseAll(permits);
 ```typescript title="effect/Queue"
 const line = yield* Queue.unbounded();
 const short = yield* Queue.bounded(2); // a size the code writes
-Queue.offer(line, a); // while there is room
+Queue.dropping(1);
+Queue.sliding(1);
+Queue.offer(line, a); // waits for room, where the queue is full
 Queue.offerAll(line, [b, a + b]);
 Queue.offerUnsafe(line, a);
-Queue.take(line); // while there is something in it
+Queue.take(line); // waits for a fiber to offer
+Queue.takeBetween(line, 1, 2);
+Queue.fail(line, new Odd({ n: b }));
+Queue.end(line);
+Queue.shutdown(line);
 Queue.takeAll(line);
 Queue.takeN(line, 1);
 Queue.peek(line);
@@ -2188,11 +2290,10 @@ Effect.promise(() => fetch(url));
 Effect.tryPromise(() => fetch(url));
 ```
 
-Which of two things happens first is not something a handler decides. A deployed handler can wait, but a proof is held against the handler run at once, without waiting, so a `sleep`, a `delay` and a schedule that waits are reported. A handler is one fiber that runs to its end, so a `Deferred`, a `Queue`, a `Semaphore` and a `Latch` are [supported](#library-functions) where the handler itself has done what the call waits for, and reported where it has not.
+A handler's sleeps, time limits, races and fibers are [supported](#time-and-fibers). What is left is a wait that never ends, two waits that end at the same moment, and what the library keeps between calls.
 
 ```typescript title="Time passing and things running together"
 import * as Scheduler from "effect/Scheduler";
-import * as Fiber from "effect/Fiber";
 import * as FiberHandle from "effect/FiberHandle";
 import * as FiberMap from "effect/FiberMap";
 import * as FiberSet from "effect/FiberSet";
@@ -2219,17 +2320,16 @@ import * as TxRef from "effect/TxRef";
 import * as TxSemaphore from "effect/TxSemaphore";
 import * as TxSubscriptionRef from "effect/TxSubscriptionRef";
 
-Effect.sleep("1 second");
-Effect.delay(effect, "1 second");
-Deferred.await(done); // a wait for what the handler has not done itself: it would never end
+Deferred.await(done); // a wait for what no fiber of the handler does: the handler would never end
 gate.await;
 Queue.take(line);
 permits.take(3);
-Effect.repeat(effect, { schedule: Schedule.spaced("1 second") }); // a schedule that waits: every one but Schedule.recurs
+Effect.never;
+Effect.race(Effect.as(Effect.sleep(10), a), Effect.as(Effect.sleep(10), b)); // two waits that end at the same moment
+Effect.repeat(effect, { schedule: Schedule.spaced("1 second") }); // an effect run again more than 100 times
 Effect.retry(effect, { times: command.attempts }); // a count an input decides
-Effect.race(first, second);
+Effect.retry(effect, Schedule.jittered(Schedule.spaced("1 second"))); // a schedule that draws a random number
 SubscriptionRef.changes(cell); // a stream of what a cell held
-Effect.forkChild(effect); // and every other way to start a fiber
 
 Cron.next(cron); // next, prev and sequence use the clock when they are given no time
 ```
@@ -2330,7 +2430,6 @@ Pack: Effect.fn(function* (parcel, command) {
 ```typescript title="Not supported"
 yield* Effect.promise(() => fetch(url)); // the outside world
 yield* Effect.tryPromise(() => fetch(url));
-yield* Effect.sleep("1 second"); // time passing: sleep, delay, a schedule that waits, race, a fiber
 yield a; // yield without the star
 yield* Option.some(a); // an Option or a Result in Effect.gen: use Option.gen, Result.gen, Effect.fromOption, Effect.fromResult
 ```
@@ -2355,7 +2454,23 @@ Each run can succeed or fail, and the proof takes both. Here `a` is a field of t
 
 `Effect.repeat(effect, { times: 2 })` gives what the last run gave. `Effect.repeat(effect, Schedule.recurs(2))` gives how many times it ran again, as Effect does.
 
-`Effect.all`, `forEach` and the others run one effect after another. Their `concurrency` option changes nothing a handler can see, since nothing in a handler waits.
+### Time and fibers
+
+A handler that sleeps, sets a time limit, races two effects or starts a fiber is read as the library runs it. The prover does not model these: it hands the library the handler's effects and lets it run them, on time that passes only when no fiber can run. A wait then ends in the order the durations give, and no test waits for one.
+
+```typescript title="Time and fibers"
+const answer = yield* Deferred.make<number>();
+yield* Effect.forkChild(Effect.andThen(Effect.sleep(5), Deferred.succeed(answer, a)));
+const made = yield* Deferred.await(answer).pipe(Effect.timeoutOption(10));
+```
+
+The fiber sleeps, completes the `Deferred` at 5 milliseconds, and the wait for it ends before its limit of 10. With a limit of 3 the wait is stopped first, and `made` is `Option.none()`.
+
+A duration may be a field of the command. Each order two waits can end in is then a way through the handler, and a rule is checked on each.
+
+Three things are taken for granted. Code between two waits takes no time, so a limit never stops a computation that does not wait. Two waits that end at the same moment are reported, since which the deployed handler ends first is not known. And a deployed handler really waits: one that sleeps for a second holds its aggregate for a second.
+
+`Effect.all`, `forEach` and `zip` run one effect after another unless their `concurrency` says otherwise.
 
 ## Streams
 
@@ -2573,15 +2688,18 @@ a === b;
 //   Fail with a Data.TaggedError and handle it with Effect.catchTag.
 
 // calls Effect.retry without a count of times the prover can see
-// calls Schedule.spaced, which the prover has no model for
+// Effect.repeat runs an effect again more than 100 times
 Effect.retry(even(a), { times: 2 }); // a count the code writes
 Effect.retry(even(a), Schedule.recurs(2));
 
-// takes from a Queue with nothing in it
-// waits for a Deferred the handler has not completed
-//   The deployed handler would never finish here. Ask without waiting:
+// takes from a Queue that nothing offers to: the handler would never end
+// waits for a Deferred that nothing completes: the handler would never end
+//   The deployed handler would never finish here. Ask without waiting, or give the wait a limit:
 Queue.poll(line);
 Deferred.poll(done);
+
+// two waits end at the same moment, and which the deployed handler ends first is not known
+//   Give the two different durations.
 ```
 
 ### The last line of a proof

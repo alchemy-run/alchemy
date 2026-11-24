@@ -2560,6 +2560,13 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const done = yield* Deferred.make(); const stopped = yield* Deferred.interrupt(done); const exit = yield* Effect.exit(Deferred.await(done)); return [stopped, Exit.hasInterrupts(exit), Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause), Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)]; })`,
       `Effect.gen(function* () { const exit = yield* Effect.exit(Effect.interrupt); return [Exit.hasInterrupts(exit), Exit.hasFails(exit)]; })`,
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const fiber = yield* Effect.forkChild(Effect.uninterruptible(Effect.andThen(Effect.sleep(5), Effect.interruptible(Effect.andThen(Effect.sleep(5), log(seen, "never")))).pipe(Effect.ensuring(log(seen, "closed"))))); yield* Effect.sleep(1); yield* Fiber.interrupt(fiber); return yield* Ref.get(seen); })`,
+      // A scope: what is acquired is released when it closes, last first, however it closes.
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const made = yield* Effect.scoped(Effect.gen(function* () { const one = yield* Effect.acquireRelease(Effect.as(log(seen, "open one"), a), () => log(seen, "close one")); const two = yield* Effect.acquireRelease(Effect.as(log(seen, "open two"), b), () => log(seen, "close two")); yield* log(seen, "used"); return one - two; })); return [made, yield* Ref.get(seen)]; })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const made = yield* Effect.result(Effect.scoped(Effect.gen(function* () { yield* Effect.acquireRelease(log(seen, "open"), (_, exit) => log(seen, Exit.isSuccess(exit) ? "closed well" : "closed badly")); return yield* even(a); }))); return [made, yield* Ref.get(seen)]; })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.scoped(Effect.gen(function* () { yield* Effect.addFinalizer((exit) => log(seen, Exit.isSuccess(exit) ? "after" : "failed")); yield* log(seen, "body"); })); return yield* Ref.get(seen); })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.timeoutOption(Effect.scoped(Effect.gen(function* () { yield* Effect.acquireRelease(log(seen, "open"), (_, exit) => log(seen, Exit.hasInterrupts(exit) ? "stopped" : "closed")); yield* Effect.sleep(20); })), 10); return yield* Ref.get(seen); })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const made = yield* Effect.result(Effect.acquireUseRelease(Effect.as(log(seen, "open"), a), (n) => Effect.andThen(log(seen, "use"), even(n)), (n, exit) => log(seen, Exit.isSuccess(exit) ? "closed" : "closed after a failure"))); return [made, yield* Ref.get(seen)]; })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.scoped(Effect.gen(function* () { yield* Effect.forkScoped(Effect.onInterrupt(Effect.andThen(Effect.sleep(20), log(seen, "late")), () => log(seen, "stopped with the scope"))); yield* Effect.sleep(1); })); return yield* Ref.get(seen); })`,
       // Effects run together.
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const made = yield* Effect.all([Effect.as(Effect.andThen(Effect.sleep(2), log(seen, "a")), a), Effect.as(Effect.andThen(Effect.sleep(1), log(seen, "b")), b), Effect.as(log(seen, "c"), 1)], { concurrency: "unbounded" }); return [made, yield* Ref.get(seen)]; })`,
       `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.all([Effect.andThen(Effect.sleep(2), log(seen, "a")), Effect.andThen(Effect.sleep(1), log(seen, "b")), log(seen, "c"), Effect.andThen(Effect.sleep(4), log(seen, "d"))], { concurrency: 2, discard: true }); return yield* Ref.get(seen); })`,
@@ -2585,6 +2592,7 @@ const rest: ReadonlyArray<Group> = [
         `Effect.all([Effect.succeed(a)], { concurrency: b })`,
         /a concurrency the prover cannot see/,
       ],
+      [`Effect.acquireRelease(Effect.succeed(a), () => Effect.void)`, /outside Effect\.scoped/],
       // What stops the prover in one fiber stops it, whichever fiber wins.
       [
         `Effect.race(Effect.as(Effect.sleep(1), a), Effect.andThen(Effect.sleep(2), Effect.promise(() => Promise.resolve(b))))`,
