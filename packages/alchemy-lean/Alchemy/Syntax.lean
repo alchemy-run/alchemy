@@ -25,6 +25,130 @@ syntax callBinder := "(" ident+ " : " term ")"
 /-- One case: `| pattern, pattern => result`. -/
 syntax modelAlt := ppLine "| " term,+ " => " term
 
+declare_syntax_cat aggregateItem (behavior := both)
+
+/-- One case of a command, an event or a rejection: a name and its fields. -/
+syntax caseOf := ppLine "| " rawIdent callBinder*
+/-- One thing the state remembers, and what it starts as. -/
+syntax fieldOf := atomic(ident " : ") term " := " term
+
+/-- What the aggregate can be asked. The first field of each is the instance it is for. -/
+syntax &"command" caseOf+ : aggregateItem
+/-- What it records. -/
+syntax &"event" caseOf+ : aggregateItem
+/-- Why it refuses. -/
+syntax &"rejection" caseOf+ : aggregateItem
+/-- What it remembers. -/
+syntax &"state" many1Indent(fieldOf) : aggregateItem
+/-- The events a command records, or why it is refused: `| state, command => …`. -/
+syntax &"decide" modelAlt+ : aggregateItem
+/-- What an event does to the state: `| state, event => …`. -/
+syntax &"evolve" modelAlt+ : aggregateItem
+/-- What an accepted command answers its caller, from the state it left: `| state, command => …`. -/
+syntax &"reply" " : " term modelAlt+ : aggregateItem
+
+/--
+An aggregate: its commands, events, rejections and state, and how it decides,
+evolves and replies. It writes a namespace of that name holding plain types and
+plain functions, which is what a `model` and every theorem refer to.
+-/
+syntax (name := aggregateCommand) "aggregate " ident " where" many1Indent(aggregateItem) : command
+
+/-- The cases as constructors of the type named `self`. -/
+private def casesOf (self : Ident) (cases : Array (TSyntax ``caseOf)) :
+    MacroM (Array (TSyntax ``Command.ctor) × Array Ident) := do
+  let mut ctors := #[]
+  let mut names := #[]
+  for case in cases do
+    match case with
+    | `(caseOf| | $name:ident $binders*) =>
+      let mut types : Array Term := #[]
+      for binder in binders do
+        match binder with
+        | `(callBinder| ($ids* : $type)) => types := types ++ ids.map fun _ => type
+        | _ => Macro.throwUnsupported
+      let type ← types.foldrM (fun type rest => `($type → $rest)) (← `($self))
+      ctors := ctors.push (← `(Command.ctor| | $name:ident : $type))
+      names := names.push name
+    | _ => Macro.throwUnsupported
+  return (ctors, names)
+
+private def altsOf (alts : Array (TSyntax ``modelAlt)) : MacroM (Array (TSyntax ``Term.matchAlt)) := do
+  let alts ← alts.mapM fun alt =>
+    match alt with
+    | `(modelAlt| | $patterns,* => $result) => `(Term.matchAltExpr| | $patterns,* => $result)
+    | _ => Macro.throwUnsupported
+  return alts.map fun alt => ⟨alt.raw⟩
+
+macro_rules
+  | `(aggregate $a:ident where $items*) => do
+    let n (name : Name) : Ident := mkIdentFrom a name
+    let mut commands : Array Command := #[← `(command| namespace $a)]
+    let mut hasReply := false
+    for item in items do
+      match item with
+      | `(aggregateItem| command $cases*) =>
+        let (ctors, names) ← casesOf (n `Command) cases
+        commands := commands.push (← `(command|
+          inductive $(n `Command) where $ctors*
+            deriving DecidableEq, Repr, Lean.ToJson, Lean.FromJson))
+        let keyAlts ← names.mapM fun name => do
+          let ctorName := mkIdentFrom name (`Command ++ name.getId)
+          `(Term.matchAltExpr| | $ctorName:ident id .. => id)
+        let keyAlts : Array (TSyntax ``Term.matchAlt) := keyAlts.map fun alt => ⟨alt.raw⟩
+        commands := commands.push (← `(command|
+          /-- The instance a command is for: its first field. -/
+          def $(n `key) (command : $(n `Command)) : String := match command with $keyAlts:matchAlt*))
+      | `(aggregateItem| event $cases*) =>
+        let (ctors, _) ← casesOf (n `Event) cases
+        commands := commands.push (← `(command|
+          inductive $(n `Event) where $ctors* deriving DecidableEq, Repr))
+      | `(aggregateItem| rejection $cases*) =>
+        let (ctors, _) ← casesOf (n `Rejection) cases
+        commands := commands.push (← `(command|
+          inductive $(n `Rejection) where $ctors* deriving DecidableEq, Repr))
+      | `(aggregateItem| state $fields*) =>
+        let mut ids : Array Ident := #[]
+        let mut types : Array Term := #[]
+        let mut starts : Array Term := #[]
+        for field in fields do
+          match field with
+          | `(fieldOf| $id:ident : $type := $start) =>
+            ids := ids.push id; types := types.push type; starts := starts.push start
+          | _ => Macro.throwUnsupported
+        commands := commands.push (← `(command|
+          structure $(n `State) where
+            $[$ids:ident : $types := $starts]*
+          deriving DecidableEq, Repr))
+      | `(aggregateItem| decide $alts:modelAlt*) =>
+        let alts ← altsOf alts
+        commands := commands.push (← `(command|
+          /-- The events a command records, or why it is refused. -/
+          def $(n `decide) (state : $(n `State)) (command : $(n `Command)) :
+              Except $(n `Rejection) (List $(n `Event)) :=
+            match state, command with $alts:matchAlt*))
+      | `(aggregateItem| evolve $alts:modelAlt*) =>
+        let alts ← altsOf alts
+        commands := commands.push (← `(command|
+          /-- What an event does to the state. -/
+          def $(n `evolve) (state : $(n `State)) (event : $(n `Event)) : $(n `State) :=
+            match state, event with $alts:matchAlt*))
+      | `(aggregateItem| reply : $type:term $alts:modelAlt*) =>
+        hasReply := true
+        let alts ← altsOf alts
+        commands := commands.push (← `(command| abbrev $(n `Reply) : Type := $type))
+        commands := commands.push (← `(command|
+          /-- What an accepted command answers its caller, from the state it left. -/
+          def $(n `reply) (state : $(n `State)) (command : $(n `Command)) : $(n `Reply) :=
+            match state, command with $alts:matchAlt*))
+      | _ => Macro.throwUnsupported
+    unless hasReply do
+      commands := commands.push (← `(command| abbrev $(n `Reply) : Type := Unit))
+      commands := commands.push (← `(command|
+        def $(n `reply) (_ : $(n `State)) (_ : $(n `Command)) : $(n `Reply) := ()))
+    commands := commands.push (← `(command| end $a))
+    return mkNullNode commands
+
 /-- An aggregate, by the namespace that defines it. -/
 syntax &"aggregate " ident : modelItem
 /-- A call to a system outside the model, and what it answers. -/
@@ -214,7 +338,9 @@ macro_rules
           initial := {}
           keyOf := $(rooted a `key)
           decide := fun _ state command => $(rooted a `decide) state command
-          evolve := fun state event _ => $(rooted a `evolve) state event))
+          evolve := fun state event _ => $(rooted a `evolve) state event
+          Reply := $(rooted a `Reply)
+          reply := $(rooted a `reply)))
     commands := commands.push (← `(command| namespace $m))
     let nameCtors ← aggregates.mapM fun a => `(Command.ctor| | $a:ident)
     commands := commands.push (← `(command|
@@ -345,7 +471,7 @@ macro_rules
     -- What a behaviour proof steps through: the model's own definitions.
     let mut stepped : Array Ident := #[]
     for a in aggregates do
-      stepped := stepped ++ #[rooted a `decide, rooted a `evolve, rooted a `key]
+      stepped := stepped ++ #[rooted a `decide, rooted a `evolve, rooted a `key, rooted a `reply]
       for helper in [`send, `must, `undoWith, `record, `of] do
         stepped := stepped.push (under m (a.getId ++ helper))
     for p in policies do stepped := stepped.push (under m p.getId)

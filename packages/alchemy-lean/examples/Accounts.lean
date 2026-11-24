@@ -17,100 +17,91 @@ open Alchemy Cloud
 
 /-! ## 1. The domain -/
 
-namespace Account
-
-inductive Command where
-  | open (id owner : String)
-  | deposit (id : String) (amount : Nat)
-  | withdraw (id : String) (amount : Nat)
-  | freeze (id reason : String)
-  | close (id : String)
-  | requestPayout (id payout : String) (amount : Nat)
-deriving DecidableEq, Repr, Lean.ToJson, Lean.FromJson
-
-inductive Event where
-  | opened (owner : String)
-  | deposited (amount : Nat)
-  | withdrawn (amount : Nat)
-  | transferredOut (amount : Nat)
-  | transferredIn (amount : Nat)
-  | frozen (reason : String)
-  | closed
-  | payoutRequested (payout : String) (amount : Nat)
-deriving DecidableEq, Repr
-
-inductive Rejection where
-  | alreadyOpen
-  | notOpen
-  | nothingToMove
-  | insufficientFunds (balance requested : Nat)
-  | frozen (reason : String)
-  | notEmpty (balance : Nat)
-deriving DecidableEq, Repr
-
-inductive Status where
+inductive Account.Status where
   | new
   | open
   | frozen (reason : String)
   | closed
 deriving DecidableEq, Repr
 
-/-- An account keeps its balance, and separately everything that ever came in and went out. -/
-structure State where
-  status : Status := .new
-  owner : String := ""
-  balance : Nat := 0
-  deposited : Nat := 0
-  withdrawn : Nat := 0
-deriving DecidableEq, Repr
+aggregate Account where
+  command
+    | open (id owner : String)
+    | deposit (id : String) (amount : Nat)
+    | withdraw (id : String) (amount : Nat)
+    | freeze (id reason : String)
+    | close (id : String)
+    | requestPayout (id payout : String) (amount : Nat)
 
-def key : Command → String
-  | .open id _ | .deposit id _ | .withdraw id _ | .freeze id _ | .close id
-  | .requestPayout id _ _ => id
+  event
+    | opened (owner : String)
+    | deposited (amount : Nat)
+    | withdrawn (amount : Nat)
+    | transferredOut (amount : Nat)
+    | transferredIn (amount : Nat)
+    | frozen (reason : String)
+    | closed
+    | payoutRequested (payout : String) (amount : Nat)
 
-/-- Decide: the events a command records, or why it is refused. -/
-def decide (s : State) : Command → Except Rejection (List Event)
-  | .open _ owner =>
-    if s.status = .new then .ok [.opened owner] else .error .alreadyOpen
-  | .deposit _ amount =>
-    if amount = 0 then .error .nothingToMove
-    else match s.status with
-      | .open => .ok [.deposited amount]
-      | .frozen reason => .error (.frozen reason)
-      | _ => .error .notOpen
-  | .withdraw _ amount =>
-    if amount = 0 then .error .nothingToMove
-    else match s.status with
-      | .open =>
-        if amount ≤ s.balance then .ok [.withdrawn amount]
-        else .error (.insufficientFunds s.balance amount)
-      | .frozen reason => .error (.frozen reason)
-      | _ => .error .notOpen
-  | .freeze _ reason =>
-    if s.status = .open then .ok [.frozen reason] else .error .notOpen
-  | .close _ =>
-    if s.status = .open then
-      if s.balance = 0 then .ok [.closed] else .error (.notEmpty s.balance)
-    else .error .notOpen
-  | .requestPayout _ payout amount =>
-    if s.status = .open then .ok [.payoutRequested payout amount] else .error .notOpen
+  rejection
+    | alreadyOpen
+    | notOpen
+    | nothingToMove
+    | insufficientFunds (balance requested : Nat)
+    | frozen (reason : String)
+    | notEmpty (balance : Nat)
 
-/-- Evolve: what an event does to the state. -/
-def evolve (s : State) : Event → State
-  | .opened owner => { s with status := .open, owner }
-  | .deposited amount =>
-    { s with balance := s.balance + amount, deposited := s.deposited + amount }
-  | .withdrawn amount =>
-    { s with balance := s.balance - amount, withdrawn := s.withdrawn + amount }
-  | .transferredOut amount =>
-    { s with balance := s.balance - amount, withdrawn := s.withdrawn + amount }
-  | .transferredIn amount =>
-    { s with balance := s.balance + amount, deposited := s.deposited + amount }
-  | .frozen reason => { s with status := .frozen reason }
-  | .closed => { s with status := .closed }
-  | .payoutRequested .. => s
+  -- the balance, and separately everything that ever came in and went out
+  state
+    status : Status := .new
+    owner : String := ""
+    balance : Nat := 0
+    deposited : Nat := 0
+    withdrawn : Nat := 0
 
-end Account
+  decide
+    | s, .open _ owner =>
+      if s.status = .new then .ok [.opened owner] else .error .alreadyOpen
+    | s, .deposit _ amount =>
+      if amount = 0 then .error .nothingToMove
+      else match s.status with
+        | .open => .ok [.deposited amount]
+        | .frozen reason => .error (.frozen reason)
+        | _ => .error .notOpen
+    | s, .withdraw _ amount =>
+      if amount = 0 then .error .nothingToMove
+      else match s.status with
+        | .open =>
+          if amount ≤ s.balance then .ok [.withdrawn amount]
+          else .error (.insufficientFunds s.balance amount)
+        | .frozen reason => .error (.frozen reason)
+        | _ => .error .notOpen
+    | s, .freeze _ reason =>
+      if s.status = .open then .ok [.frozen reason] else .error .notOpen
+    | s, .close _ =>
+      if s.status = .open then
+        if s.balance = 0 then .ok [.closed] else .error (.notEmpty s.balance)
+      else .error .notOpen
+    | s, .requestPayout _ payout amount =>
+      if s.status = .open then .ok [.payoutRequested payout amount] else .error .notOpen
+
+  evolve
+    | s, .opened owner => { s with status := .open, owner }
+    | s, .deposited amount =>
+      { s with balance := s.balance + amount, deposited := s.deposited + amount }
+    | s, .withdrawn amount =>
+      { s with balance := s.balance - amount, withdrawn := s.withdrawn + amount }
+    | s, .transferredOut amount =>
+      { s with balance := s.balance - amount, withdrawn := s.withdrawn + amount }
+    | s, .transferredIn amount =>
+      { s with balance := s.balance + amount, deposited := s.deposited + amount }
+    | s, .frozen reason => { s with status := .frozen reason }
+    | s, .closed => { s with status := .closed }
+    | s, .payoutRequested .. => s
+
+  -- an accepted command answers the balance it left
+  reply : Nat
+    | s, _ => s.balance
 
 /-- What the compliance check answers about a deposit. -/
 inductive Screening where
@@ -240,6 +231,13 @@ theorem aClosedAccountTakesNoDeposits (id owner : String) (amount : Nat) (some :
     Account.decide (Account.after [.opened owner, .closed]) (.deposit id amount)
       = .error .notOpen := by
   simp [Aggregate.after, Aggregate.apply, Account.decide, Account.evolve, some]
+
+/-- Given an open account, when money is withdrawn, then the caller is told the balance that is left. -/
+theorem aWithdrawalAnswersWhatIsLeft (id owner : String) (held amount : Nat) :
+    Account.reply (Account.after [.opened owner, .deposited held, .withdrawn amount])
+        (.withdraw id amount)
+      = held - amount := by
+  simp [Aggregate.after, Aggregate.apply, Account.reply, Account.evolve]
 
 /-! ## 3. Invariants: what no command can break
 
@@ -530,6 +528,7 @@ example (log : List (Emitted Aggregates)) :
 example : Bank.passes [
     .when ⟨.Account, (), .open "a-1" "Sam"⟩,
     .when ⟨.Account, (), .deposit "a-1" 500⟩,
+    .replies ⟨.Account, (), .withdraw "a-1" 200⟩ 300,
     .when ⟨.Account, (), .withdraw "a-1" 200⟩,
     .view Holdings () 300,
     .when ⟨.Account, (), .open "a-2" "Alex"⟩,

@@ -11,63 +11,55 @@ open Alchemy Cloud AWS
 
 /-! ## The domain -/
 
-namespace Order
-
-inductive Command where
-  | place (id item : String) (amount : Nat)
-  | settle (id charge : String)
-  | decline (id reason : String)
-deriving DecidableEq, Repr, Lean.ToJson, Lean.FromJson
-
-inductive Event where
-  | placed (item : String) (amount : Nat)
-  | paid (charge item : String) (amount : Nat)
-  | declined (reason : String)
-deriving DecidableEq, Repr
-
-inductive Rejection where
-  | alreadyPlaced
-  | nothingToCharge
-  | notAwaitingPayment
-deriving DecidableEq, Repr
-
-inductive Status where
+inductive Order.Status where
   | new
   | awaitingPayment
   | paid (charge : String)
   | declined (reason : String)
 deriving DecidableEq, Repr
 
-structure State where
-  status : Status := .new
-  item : String := ""
-  amount : Nat := 0
-  charged : Nat := 0
-deriving DecidableEq, Repr
+aggregate Order where
+  command
+    | place (id item : String) (amount : Nat)
+    | settle (id charge : String)
+    | decline (id reason : String)
 
-def key : Command → String
-  | .place id .. | .settle id _ | .decline id _ => id
+  event
+    | placed (item : String) (amount : Nat)
+    | paid (charge item : String) (amount : Nat)
+    | declined (reason : String)
 
-/-- Decide: the events a command records, or why it is refused. -/
-def decide (s : State) : Command → Except Rejection (List Event)
-  | .place _ item amount =>
-    if s.status ≠ .new then .error .alreadyPlaced
-    else if amount = 0 then .error .nothingToCharge
-    else .ok [.placed item amount]
-  | .settle _ charge =>
-    if s.status = .awaitingPayment then .ok [.paid charge s.item s.amount]
-    else .error .notAwaitingPayment
-  | .decline _ reason =>
-    if s.status = .awaitingPayment then .ok [.declined reason]
-    else .error .notAwaitingPayment
+  rejection
+    | alreadyPlaced
+    | nothingToCharge
+    | notAwaitingPayment
 
-/-- Evolve: what an event does to the state. -/
-def evolve (s : State) : Event → State
-  | .placed item amount => { s with status := .awaitingPayment, item, amount }
-  | .paid charge _ amount => { s with status := .paid charge, charged := s.charged + amount }
-  | .declined reason => { s with status := .declined reason }
+  state
+    status : Status := .new
+    item : String := ""
+    amount : Nat := 0
+    charged : Nat := 0
 
-end Order
+  decide
+    | s, .place _ item amount =>
+      if s.status ≠ .new then .error .alreadyPlaced
+      else if amount = 0 then .error .nothingToCharge
+      else .ok [.placed item amount]
+    | s, .settle _ charge =>
+      if s.status = .awaitingPayment then .ok [.paid charge s.item s.amount]
+      else .error .notAwaitingPayment
+    | s, .decline _ reason =>
+      if s.status = .awaitingPayment then .ok [.declined reason]
+      else .error .notAwaitingPayment
+
+  evolve
+    | s, .placed item amount => { s with status := .awaitingPayment, item, amount }
+    | s, .paid charge _ amount => { s with status := .paid charge, charged := s.charged + amount }
+    | s, .declined reason => { s with status := .declined reason }
+
+  -- what a caller is told: where the order stands once the command is applied
+  reply : Status
+    | s, _ => s.status
 
 /-- What the payment gateway answers. -/
 inductive Charge where

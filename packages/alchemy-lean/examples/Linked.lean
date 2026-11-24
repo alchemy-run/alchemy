@@ -12,41 +12,31 @@ open Alchemy Cloud
 
 /-! ## The compliance model -/
 
-namespace Watch
+aggregate Watch where
+  command
+    | assess (account : String) (amount : Nat)
 
-inductive Command where
-  | assess (account : String) (amount : Nat)
-deriving DecidableEq, Repr, Lean.ToJson, Lean.FromJson
+  event
+    | cleared (amount : Nat)
+    | flagged (amount : Nat)
 
-inductive Event where
-  | cleared (amount : Nat)
-  | flagged (amount : Nat)
-deriving DecidableEq, Repr
+  rejection
+    | nothingToAssess
 
-inductive Rejection where
-  | nothingToAssess
-deriving DecidableEq, Repr
+  -- what compliance knows about one account: how often it looked, and how often it objected
+  state
+    assessed : Nat := 0
+    flagged : Nat := 0
 
-/-- What compliance knows about one account: how often it looked, and how often it objected. -/
-structure State where
-  assessed : Nat := 0
-  flagged : Nat := 0
-deriving DecidableEq, Repr
+  decide
+    | _, .assess _ amount =>
+      if amount = 0 then .error .nothingToAssess
+      else if amount ≥ 50000 then .ok [.flagged amount]
+      else .ok [.cleared amount]
 
-def key : Command → String
-  | .assess account _ => account
-
-def decide (_ : State) : Command → Except Rejection (List Event)
-  | .assess _ amount =>
-    if amount = 0 then .error .nothingToAssess
-    else if amount ≥ 50000 then .ok [.flagged amount]
-    else .ok [.cleared amount]
-
-def evolve (s : State) : Event → State
-  | .cleared _ => { s with assessed := s.assessed + 1 }
-  | .flagged _ => { assessed := s.assessed + 1, flagged := s.flagged + 1 }
-
-end Watch
+  evolve
+    | s, .cleared _ => { s with assessed := s.assessed + 1 }
+    | s, .flagged _ => { assessed := s.assessed + 1, flagged := s.flagged + 1 }
 
 model Compliance where
   aggregate Watch
