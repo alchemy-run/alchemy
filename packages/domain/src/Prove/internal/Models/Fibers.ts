@@ -1,5 +1,6 @@
 import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
+import * as Chunk from "effect/Chunk";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -19,6 +20,7 @@ import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as ScopedCache from "effect/ScopedCache";
 import * as Semaphore from "effect/Semaphore";
+import * as TxChunk from "effect/TxChunk";
 import * as TxDeferred from "effect/TxDeferred";
 import * as TxPubSub from "effect/TxPubSub";
 import * as TxQueue from "effect/TxQueue";
@@ -61,7 +63,8 @@ type Kind =
   | "TxPubSub"
   | "TxSubscriptionRef"
   | "TxReentrantLock"
-  | "PartitionedSemaphore";
+  | "PartitionedSemaphore"
+  | "TxChunk";
 
 /** How often effects may be run again in one handler before the prover stops reading. */
 const MAX_TURNS = 100;
@@ -2854,7 +2857,195 @@ export const make = (kit: Kit, base: Models) => {
     },
   };
 
+  // ---- A chunk in a transaction. The prover holds a chunk as a list, and the library is given one of its own.
+
+  type TC = TxChunk.TxChunk<V>;
+
+  const chunkOf = (name: string, v: V | undefined, site: Site): Eval<Chunk.Chunk<V>> =>
+    Effect.map(items(name, v, site), (found) => Chunk.fromIterable(found));
+
+  const listed = (chunk: Chunk.Chunk<V>): V => chunk.pipe(Chunk.toReadonlyArray, arr);
+
+  /** What a function of the code makes of the chunk, in the transaction that reads it. */
+  const rechunked = (
+    name: string,
+    made_: (
+      chunk: ReadonlyArray<V>,
+      f: V,
+      site: Site,
+    ) => Eval<{ readonly next: V; readonly gives: V }>,
+  ): Model =>
+    dual(`TxChunk.${name}`, 2, ([self, f], site) => {
+      const held = heldOf<TC>("TxChunk", self);
+      return held && f
+        ? Effect.succeed(
+            timed(
+              `TxChunk.${name}`,
+              (timeline) =>
+                Timeline.back(
+                  timeline,
+                  held.pipe(
+                    TxChunk.get,
+                    Effect.flatMap((before) =>
+                      Timeline.real(
+                        timeline,
+                        Effect.flatMap(made_(Chunk.toReadonlyArray(before), f, site), (read) =>
+                          Effect.map(chunkOf(`TxChunk.${name}`, read.next, site), (next) => ({
+                            next,
+                            gives: read.gives,
+                          })),
+                        ),
+                      ),
+                    ),
+                    Effect.flatMap((read) => Effect.as(TxChunk.set(held, read.next), read.gives)),
+                    Effect.tx,
+                  ),
+                  same,
+                ),
+              site,
+            ),
+          )
+        : wrongArguments(site, `TxChunk.${name}`);
+    });
+
+  /** A function of a chunk and a count the code writes. */
+  const cutting = (
+    name: string,
+    cut: (held: TC, counts: ReadonlyArray<number>) => Effect.Effect<void>,
+    takes: number,
+  ): Model =>
+    later<TC, void>(
+      "TxChunk",
+      name,
+      takes + 1,
+      (held, rest, site) =>
+        Effect.map(
+          Effect.forEach(rest.slice(0, takes), (n) => count(`TxChunk.${name}`, n, site)),
+          (counts) => cut(held, counts),
+        ),
+      none,
+    );
+
+  const chunks: Models = {
+    "effect/TxChunk:make": made("TxChunk", ([chunk], site) =>
+      Effect.flatMap(chunkOf("TxChunk.make", chunk, site), (read) => TxChunk.make(read)),
+    ),
+    "effect/TxChunk:fromIterable": made("TxChunk", ([given_], site) =>
+      Effect.flatMap(items("TxChunk.fromIterable", given_, site), (read) =>
+        TxChunk.fromIterable(read),
+      ),
+    ),
+    "effect/TxChunk:empty": made("TxChunk", () => TxChunk.empty<V>()),
+    "effect/TxChunk:get": on<TC, Chunk.Chunk<V>>(
+      "TxChunk",
+      "get",
+      1,
+      (held) => TxChunk.get(held),
+      listed,
+    ),
+    "effect/TxChunk:set": later<TC, void>(
+      "TxChunk",
+      "set",
+      2,
+      (held, [chunk], site) =>
+        Effect.map(chunkOf("TxChunk.set", chunk, site), (read) => TxChunk.set(held, read)),
+      none,
+    ),
+    "effect/TxChunk:append": on<TC, void>(
+      "TxChunk",
+      "append",
+      2,
+      (held, [value]) => TxChunk.append(held, value ?? Value.undef),
+      none,
+    ),
+    "effect/TxChunk:prepend": on<TC, void>(
+      "TxChunk",
+      "prepend",
+      2,
+      (held, [value]) => TxChunk.prepend(held, value ?? Value.undef),
+      none,
+    ),
+    "effect/TxChunk:appendAll": later<TC, void>(
+      "TxChunk",
+      "appendAll",
+      2,
+      (held, [chunk], site) =>
+        Effect.map(chunkOf("TxChunk.appendAll", chunk, site), (read) =>
+          TxChunk.appendAll(held, read),
+        ),
+      none,
+    ),
+    "effect/TxChunk:prependAll": later<TC, void>(
+      "TxChunk",
+      "prependAll",
+      2,
+      (held, [chunk], site) =>
+        Effect.map(chunkOf("TxChunk.prependAll", chunk, site), (read) =>
+          TxChunk.prependAll(held, read),
+        ),
+      none,
+    ),
+    "effect/TxChunk:concat": later<TC, void>(
+      "TxChunk",
+      "concat",
+      2,
+      (held, [other], site) => {
+        const that = heldOf<TC>("TxChunk", other);
+        return that
+          ? Effect.succeed(TxChunk.concat(held, that))
+          : wrongArguments(site, "TxChunk.concat");
+      },
+      none,
+    ),
+    "effect/TxChunk:size": on<TC, number>("TxChunk", "size", 1, (held) => TxChunk.size(held), num),
+    "effect/TxChunk:isEmpty": on<TC, boolean>(
+      "TxChunk",
+      "isEmpty",
+      1,
+      (held) => TxChunk.isEmpty(held),
+      bool,
+    ),
+    "effect/TxChunk:isNonEmpty": on<TC, boolean>(
+      "TxChunk",
+      "isNonEmpty",
+      1,
+      (held) => TxChunk.isNonEmpty(held),
+      bool,
+    ),
+    "effect/TxChunk:take": cutting("take", (held, [n]) => TxChunk.take(held, n!), 1),
+    "effect/TxChunk:drop": cutting("drop", (held, [n]) => TxChunk.drop(held, n!), 1),
+    "effect/TxChunk:slice": cutting(
+      "slice",
+      (held, [start, end]) => TxChunk.slice(held, start!, end!),
+      2,
+    ),
+    "effect/TxChunk:update": rechunked("update", (chunk, f, site) =>
+      Effect.map(host.call(f, [arr(chunk)], site), (next) => ({ next, gives: Value.undef })),
+    ),
+    "effect/TxChunk:modify": rechunked("modify", (chunk, f, site) =>
+      Effect.flatMap(host.call(f, [arr(chunk)], site), (pair) => {
+        const read = kit.itemsOf(pair);
+        return read && read.length === 2
+          ? Effect.succeed({ gives: read[0]!, next: read[1]! })
+          : wrongArguments(site, "TxChunk.modify");
+      }),
+    ),
+    "effect/TxChunk:map": rechunked("map", (chunk, f, site) =>
+      Effect.map(
+        Effect.forEach(chunk, (item) => host.call(f, [item], site)),
+        (next) => ({ next: arr(next), gives: Value.undef }),
+      ),
+    ),
+    "effect/TxChunk:filter": rechunked("filter", (chunk, f, site) =>
+      Effect.map(
+        Effect.filter(chunk, (item) => kit.holds(f, [item], site)),
+        (next) => ({ next: arr(next), gives: Value.undef }),
+      ),
+    ),
+  };
+
   const models: Models = {
+    ...chunks,
     ...shared,
     ...kept,
     ...transactions,

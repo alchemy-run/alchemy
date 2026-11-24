@@ -21,7 +21,8 @@ const READ = new Set([
   ...["SubscriptionRef", "Symbol", "SynchronizedRef", "TextDiff", "Trie", "Tuple", "UndefinedOr"],
   ...["Cache", "Deferred", "Fiber", "FiberHandle", "FiberMap", "FiberSet", "Latch", "Pool"],
   ...["PubSub", "Queue", "Schedule"],
-  ...["PartitionedSemaphore", "ScopedCache", "Semaphore", "TxDeferred", "TxPubSub", "TxQueue"],
+  ...["PartitionedSemaphore", "ScopedCache", "Semaphore", "TxChunk", "TxDeferred", "TxPubSub"],
+  ...["TxQueue"],
   ...["TxReentrantLock", "TxRef", "TxSemaphore", "TxSubscriptionRef", "index"],
 ]);
 

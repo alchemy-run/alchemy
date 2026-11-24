@@ -1968,6 +1968,26 @@ Pool.invalidate(pool, item);
 ```
 
 ```typescript title="What a transaction shares, and what is shared by a key"
+const held = yield* TxChunk.make(Chunk.make(a, b));
+TxChunk.fromIterable([a, b, 1]);
+TxChunk.empty();
+TxChunk.get(held);
+TxChunk.set(other, Chunk.make(9));
+TxChunk.append(held, 1);
+TxChunk.prepend(held, 2);
+TxChunk.appendAll(held, Chunk.make(3, 4));
+TxChunk.prependAll(held, Chunk.make(5));
+TxChunk.concat(held, other);
+TxChunk.take(held, 5);
+TxChunk.drop(held, 1);
+TxChunk.slice(held, 1, 4);
+TxChunk.map(held, (n) => n * 2);
+TxChunk.filter(held, (n) => n > a);
+TxChunk.update(held, (chunk) => Chunk.append(chunk, a));
+TxChunk.modify(held, (chunk) => [Chunk.size(chunk), Chunk.drop(chunk, 1)]);
+TxChunk.size(held);
+TxChunk.isEmpty(held);
+TxChunk.isNonEmpty(held);
 const done = yield* TxDeferred.make();
 TxDeferred.succeed(done, a);
 TxDeferred.fail(done, new Odd({ n: a }));
@@ -2516,7 +2536,6 @@ import * as Channel from "effect/Channel";
 import * as Pull from "effect/Pull";
 import * as Take from "effect/Take";
 import * as ExecutionPlan from "effect/ExecutionPlan";
-import * as TxChunk from "effect/TxChunk";
 import * as TxHashMap from "effect/TxHashMap";
 import * as TxHashSet from "effect/TxHashSet";
 import * as TxPriorityQueue from "effect/TxPriorityQueue";
