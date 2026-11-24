@@ -10,14 +10,22 @@ import * as FiberMap from "effect/FiberMap";
 import * as FiberSet from "effect/FiberSet";
 import * as Latch from "effect/Latch";
 import * as Option from "effect/Option";
+import * as PartitionedSemaphore from "effect/PartitionedSemaphore";
 import * as Pool from "effect/Pool";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
+import * as ScopedCache from "effect/ScopedCache";
 import * as Semaphore from "effect/Semaphore";
+import * as TxDeferred from "effect/TxDeferred";
+import * as TxPubSub from "effect/TxPubSub";
 import * as TxQueue from "effect/TxQueue";
+import * as TxReentrantLock from "effect/TxReentrantLock";
 import * as TxRef from "effect/TxRef";
+import * as TxSemaphore from "effect/TxSemaphore";
+import * as TxSubscriptionRef from "effect/TxSubscriptionRef";
 import * as Brands from "../Brands.ts";
 import type { Kit, Model, Models } from "../Kit.ts";
 import { arr, callable, dual, dualBy, lazy, native, wrongArguments } from "../Kit.ts";
@@ -46,7 +54,14 @@ type Kind =
   | "TxQueue"
   | "Pool"
   | "FiberMap"
-  | "Cache";
+  | "Cache"
+  | "ScopedCache"
+  | "TxDeferred"
+  | "TxSemaphore"
+  | "TxPubSub"
+  | "TxSubscriptionRef"
+  | "TxReentrantLock"
+  | "PartitionedSemaphore";
 
 /** How often effects may be run again in one handler before the prover stops reading. */
 const MAX_TURNS = 100;
@@ -1980,7 +1995,7 @@ export const make = (kit: Kit, base: Models) => {
 
   /** A function of one of these and a key, which gives an effect. */
   const byKey = <H, A>(
-    kind: "FiberMap" | "Cache",
+    kind: "FiberMap" | "Cache" | "ScopedCache",
     name: string,
     arity: number,
     body: (
@@ -2214,7 +2229,633 @@ export const make = (kit: Kit, base: Models) => {
     ),
   };
 
+  // ---- The rest of what a transaction shares, and what is shared by a key.
+
+  type TD = TxDeferred.TxDeferred<V, Held>;
+  type TS = TxSemaphore.TxSemaphore;
+  type TP = TxPubSub.TxPubSub<V>;
+  type TSR = TxSubscriptionRef.TxSubscriptionRef<V>;
+  type TL = TxReentrantLock.TxReentrantLock;
+  type PS = PartitionedSemaphore.PartitionedSemaphore<Key>;
+  type SC = ScopedCache.ScopedCache<Key, V, Held>;
+
+  /**
+   * A function that runs an effect of the code inside what one of these
+   * holds: `f(self, ...given, effect)`, or `f(self, ...given)` then the effect.
+   */
+  const around2 = <H, A>(
+    kind: Kind,
+    name: string,
+    takes: number,
+    read: (rest: ReadonlyArray<V>, site: Site) => Eval<ReadonlyArray<unknown>>,
+    wrapped: (
+      held: H,
+      given_: ReadonlyArray<unknown>,
+      effect: Effect.Effect<V, Held>,
+    ) => Effect.Effect<A, unknown>,
+    give: (value: A) => V,
+    wait: string,
+  ): Model => {
+    const label = `${kind}.${name}`;
+    const start = (
+      held: H,
+      given_: ReadonlyArray<unknown>,
+      effect: V | undefined,
+      site: Site,
+    ): Eval<V> =>
+      effect?._tag === "Effect"
+        ? Effect.succeed(
+            timed(
+              label,
+              (timeline) =>
+                Timeline.back(
+                  timeline,
+                  Timeline.waiting(
+                    timeline,
+                    wait,
+                    site,
+                    wrapped(held, given_, Timeline.real(timeline, effect.run)),
+                  ),
+                  give,
+                ),
+              site,
+            ),
+          )
+        : wrongArguments(site, label);
+    return ([self, ...rest], site) => {
+      const held = heldOf<H>(kind, self);
+      // `f(effect)` then the one that holds it, where the function takes nothing else.
+      if (held === undefined && takes === 0 && self?._tag === "Effect" && rest.length === 0)
+        return Effect.succeed(
+          native(label, ([holder], at) => {
+            const found = heldOf<H>(kind, holder);
+            return found === undefined ? wrongArguments(at, label) : start(found, [], self, at);
+          }),
+        );
+      if (held === undefined) return wrongArguments(site, label);
+      return Effect.flatMap(read(rest.slice(0, takes), site), (given_) =>
+        rest.length > takes
+          ? start(held, given_, rest[takes], site)
+          : Effect.succeed(native(label, ([effect], at) => start(held, given_, effect, at))),
+      );
+    };
+  };
+
+  const nothing = (): Eval<ReadonlyArray<unknown>> => Effect.succeed([]);
+  const oneCount =
+    (name: string) =>
+    ([n]: ReadonlyArray<V>, site: Site): Eval<ReadonlyArray<unknown>> =>
+      Effect.map(permits(name, n, site), (found) => [found]);
+
+  /** What a function of the code makes of what a `TxSubscriptionRef` holds, in one transaction. */
+  const subscribed = (name: string, give: (before: V, after: V) => V): Model =>
+    dual(`TxSubscriptionRef.${name}`, 2, ([self, f], site) => {
+      const held = heldOf<TSR>("TxSubscriptionRef", self);
+      return held && f
+        ? Effect.succeed(
+            timed(
+              `TxSubscriptionRef.${name}`,
+              (timeline) =>
+                Timeline.back(
+                  timeline,
+                  held.pipe(
+                    TxSubscriptionRef.get,
+                    Effect.flatMap((before) =>
+                      Effect.map(
+                        Timeline.real(timeline, host.call(f, [before], site)),
+                        (after) => ({
+                          before,
+                          after,
+                        }),
+                      ),
+                    ),
+                    Effect.flatMap((read) =>
+                      Effect.as(
+                        TxSubscriptionRef.set(held, read.after),
+                        give(read.before, read.after),
+                      ),
+                    ),
+                    Effect.tx,
+                  ),
+                  same,
+                ),
+              site,
+            ),
+          )
+        : wrongArguments(site, `TxSubscriptionRef.${name}`);
+    });
+
+  const TX_PERMITS = "waits for permits of a TxSemaphore that nothing releases";
+  const TX_LOCK = "waits for a TxReentrantLock that nothing releases";
+  const PARTITION = "waits for permits of a PartitionedSemaphore that nothing releases";
+
+  const cacheOptions = (
+    name: string,
+    given_: V | undefined,
+    site: Site,
+  ): Eval<{
+    readonly lookup: V;
+    readonly capacity: number;
+    readonly timeToLive?: Duration.Duration;
+  }> => {
+    const fields = given_?._tag === "Obj" && !given_.brand ? given_.fields : undefined;
+    const lookup = fields?.lookup;
+    if (
+      !fields ||
+      !lookup ||
+      !Object.keys(fields).every((key) => ["lookup", "capacity", "timeToLive"].includes(key))
+    )
+      return wrongArguments(site, name);
+    return Effect.gen(function* () {
+      const size = yield* count(name, fields.capacity, site);
+      return fields.timeToLive
+        ? { lookup, capacity: size, timeToLive: yield* written(name, fields.timeToLive, site) }
+        : { lookup, capacity: size };
+    });
+  };
+
+  const shared: Models = {
+    "effect/TxDeferred:make": made("TxDeferred", () => TxDeferred.make<V, Held>()),
+    "effect/TxDeferred:succeed": on<TD, boolean>(
+      "TxDeferred",
+      "succeed",
+      2,
+      (held, [value]) => TxDeferred.succeed(held, value ?? Value.undef),
+      bool,
+    ),
+    "effect/TxDeferred:fail": on<TD, boolean>(
+      "TxDeferred",
+      "fail",
+      2,
+      (held, [error]) =>
+        TxDeferred.fail(held, new Value.Rejected({ rejection: error ?? Value.undef })),
+      bool,
+    ),
+    "effect/TxDeferred:await": on<TD, V>(
+      "TxDeferred",
+      "await",
+      1,
+      (held) => TxDeferred.await(held),
+      same,
+      "waits for a TxDeferred that nothing completes",
+    ),
+    "effect/TxDeferred:poll": on<TD, Option.Option<Result.Result<V, Held>>>(
+      "TxDeferred",
+      "poll",
+      1,
+      (held) => TxDeferred.poll(held),
+      (found) =>
+        Option.isSome(found)
+          ? Value.some(
+              Result.isSuccess(found.value)
+                ? Brands.success(found.value.success)
+                : Brands.failure(found.value.failure.rejection),
+            )
+          : Value.none,
+    ),
+    "effect/TxSemaphore:make": made("TxSemaphore", ([n], site) =>
+      Effect.flatMap(permits("TxSemaphore.make", n, site), (found) => TxSemaphore.make(found)),
+    ),
+    "effect/TxSemaphore:available": on<TS, number>(
+      "TxSemaphore",
+      "available",
+      1,
+      (held) => TxSemaphore.available(held),
+      num,
+    ),
+    "effect/TxSemaphore:capacity": on<TS, number>(
+      "TxSemaphore",
+      "capacity",
+      1,
+      (held) => TxSemaphore.capacity(held),
+      num,
+    ),
+    "effect/TxSemaphore:acquire": on<TS, void>(
+      "TxSemaphore",
+      "acquire",
+      1,
+      (held) => TxSemaphore.acquire(held),
+      none,
+      TX_PERMITS,
+    ),
+    "effect/TxSemaphore:acquireN": later<TS, void>(
+      "TxSemaphore",
+      "acquireN",
+      2,
+      (held, [n], site) =>
+        Effect.map(permits("TxSemaphore.acquireN", n, site), (found) =>
+          TxSemaphore.acquireN(held, found),
+        ),
+      none,
+      TX_PERMITS,
+    ),
+    "effect/TxSemaphore:tryAcquire": on<TS, boolean>(
+      "TxSemaphore",
+      "tryAcquire",
+      1,
+      (held) => TxSemaphore.tryAcquire(held),
+      bool,
+    ),
+    "effect/TxSemaphore:tryAcquireN": later<TS, boolean>(
+      "TxSemaphore",
+      "tryAcquireN",
+      2,
+      (held, [n], site) =>
+        Effect.map(permits("TxSemaphore.tryAcquireN", n, site), (found) =>
+          TxSemaphore.tryAcquireN(held, found),
+        ),
+      bool,
+    ),
+    "effect/TxSemaphore:release": on<TS, void>(
+      "TxSemaphore",
+      "release",
+      1,
+      (held) => TxSemaphore.release(held),
+      none,
+    ),
+    "effect/TxSemaphore:releaseN": later<TS, void>(
+      "TxSemaphore",
+      "releaseN",
+      2,
+      (held, [n], site) =>
+        Effect.map(permits("TxSemaphore.releaseN", n, site), (found) =>
+          TxSemaphore.releaseN(held, found),
+        ),
+      none,
+    ),
+    "effect/TxSemaphore:withPermit": around2<TS, V>(
+      "TxSemaphore",
+      "withPermit",
+      0,
+      nothing,
+      (held, _, effect) => TxSemaphore.withPermit(held, effect),
+      same,
+      TX_PERMITS,
+    ),
+    "effect/TxSemaphore:withPermits": around2<TS, V>(
+      "TxSemaphore",
+      "withPermits",
+      1,
+      oneCount("TxSemaphore.withPermits"),
+      (held, [n], effect) => TxSemaphore.withPermits(held, n as number, effect),
+      same,
+      TX_PERMITS,
+    ),
+    "effect/TxPubSub:unbounded": made("TxPubSub", () => TxPubSub.unbounded<V>()),
+    "effect/TxPubSub:bounded": made("TxPubSub", ([size], site) =>
+      Effect.flatMap(capacity("TxPubSub.bounded", size, site), (n) => TxPubSub.bounded<V>(n)),
+    ),
+    "effect/TxPubSub:dropping": made("TxPubSub", ([size], site) =>
+      Effect.flatMap(capacity("TxPubSub.dropping", size, site), (n) => TxPubSub.dropping<V>(n)),
+    ),
+    "effect/TxPubSub:sliding": made("TxPubSub", ([size], site) =>
+      Effect.flatMap(capacity("TxPubSub.sliding", size, site), (n) => TxPubSub.sliding<V>(n)),
+    ),
+    "effect/TxPubSub:publish": on<TP, boolean>(
+      "TxPubSub",
+      "publish",
+      2,
+      (held, [value]) => TxPubSub.publish(held, value ?? Value.undef),
+      bool,
+      "publishes to a full TxPubSub that nothing takes from",
+    ),
+    "effect/TxPubSub:publishAll": later<TP, boolean>(
+      "TxPubSub",
+      "publishAll",
+      2,
+      (held, [values], site) =>
+        Effect.map(items("TxPubSub.publishAll", values, site), (found) =>
+          TxPubSub.publishAll(held, found),
+        ),
+      bool,
+    ),
+    "effect/TxPubSub:subscribe": ([self], site) => {
+      const held = heldOf<TP>("TxPubSub", self);
+      return held
+        ? Effect.succeed(
+            scoped(
+              "TxPubSub.subscribe",
+              site,
+              () => TxPubSub.subscribe(held),
+              (queue) => wrap("TxQueue", queue),
+            ),
+          )
+        : wrongArguments(site, "TxPubSub.subscribe");
+    },
+    "effect/TxPubSub:size": on<TP, number>(
+      "TxPubSub",
+      "size",
+      1,
+      (held) => TxPubSub.size(held),
+      num,
+    ),
+    "effect/TxPubSub:isEmpty": on<TP, boolean>(
+      "TxPubSub",
+      "isEmpty",
+      1,
+      (held) => TxPubSub.isEmpty(held),
+      bool,
+    ),
+    "effect/TxPubSub:isFull": on<TP, boolean>(
+      "TxPubSub",
+      "isFull",
+      1,
+      (held) => TxPubSub.isFull(held),
+      bool,
+    ),
+    "effect/TxPubSub:shutdown": on<TP, void>(
+      "TxPubSub",
+      "shutdown",
+      1,
+      (held) => TxPubSub.shutdown(held),
+      none,
+    ),
+    "effect/TxPubSub:isShutdown": on<TP, boolean>(
+      "TxPubSub",
+      "isShutdown",
+      1,
+      (held) => TxPubSub.isShutdown(held),
+      bool,
+    ),
+    "effect/TxSubscriptionRef:make": made("TxSubscriptionRef", ([value]) =>
+      TxSubscriptionRef.make<V>(value ?? Value.undef),
+    ),
+    "effect/TxSubscriptionRef:get": on<TSR, V>(
+      "TxSubscriptionRef",
+      "get",
+      1,
+      (held) => TxSubscriptionRef.get(held),
+      same,
+    ),
+    "effect/TxSubscriptionRef:set": on<TSR, void>(
+      "TxSubscriptionRef",
+      "set",
+      2,
+      (held, [value]) => TxSubscriptionRef.set(held, value ?? Value.undef),
+      none,
+    ),
+    "effect/TxSubscriptionRef:getAndSet": on<TSR, V>(
+      "TxSubscriptionRef",
+      "getAndSet",
+      2,
+      (held, [value]) => TxSubscriptionRef.getAndSet(held, value ?? Value.undef),
+      same,
+    ),
+    "effect/TxSubscriptionRef:update": subscribed("update", () => Value.undef),
+    "effect/TxSubscriptionRef:updateAndGet": subscribed("updateAndGet", (_, after) => after),
+    "effect/TxSubscriptionRef:getAndUpdate": subscribed("getAndUpdate", (before) => before),
+    "effect/TxSubscriptionRef:changes": ([self], site) => {
+      const held = heldOf<TSR>("TxSubscriptionRef", self);
+      return held
+        ? Effect.succeed(
+            scoped(
+              "TxSubscriptionRef.changes",
+              site,
+              () => TxSubscriptionRef.changes(held),
+              (queue) => wrap("TxQueue", queue),
+            ),
+          )
+        : wrongArguments(site, "TxSubscriptionRef.changes");
+    },
+    "effect/TxReentrantLock:make": made("TxReentrantLock", () => TxReentrantLock.make()),
+    "effect/TxReentrantLock:acquireRead": on<TL, number>(
+      "TxReentrantLock",
+      "acquireRead",
+      1,
+      (held) => TxReentrantLock.acquireRead(held),
+      num,
+      TX_LOCK,
+    ),
+    "effect/TxReentrantLock:acquireWrite": on<TL, number>(
+      "TxReentrantLock",
+      "acquireWrite",
+      1,
+      (held) => TxReentrantLock.acquireWrite(held),
+      num,
+      TX_LOCK,
+    ),
+    "effect/TxReentrantLock:releaseRead": on<TL, number>(
+      "TxReentrantLock",
+      "releaseRead",
+      1,
+      (held) => TxReentrantLock.releaseRead(held),
+      num,
+    ),
+    "effect/TxReentrantLock:releaseWrite": on<TL, number>(
+      "TxReentrantLock",
+      "releaseWrite",
+      1,
+      (held) => TxReentrantLock.releaseWrite(held),
+      num,
+    ),
+    "effect/TxReentrantLock:readLocks": on<TL, number>(
+      "TxReentrantLock",
+      "readLocks",
+      1,
+      (held) => TxReentrantLock.readLocks(held),
+      num,
+    ),
+    "effect/TxReentrantLock:writeLocks": on<TL, number>(
+      "TxReentrantLock",
+      "writeLocks",
+      1,
+      (held) => TxReentrantLock.writeLocks(held),
+      num,
+    ),
+    "effect/TxReentrantLock:locked": on<TL, boolean>(
+      "TxReentrantLock",
+      "locked",
+      1,
+      (held) => TxReentrantLock.locked(held),
+      bool,
+    ),
+    "effect/TxReentrantLock:readLocked": on<TL, boolean>(
+      "TxReentrantLock",
+      "readLocked",
+      1,
+      (held) => TxReentrantLock.readLocked(held),
+      bool,
+    ),
+    "effect/TxReentrantLock:writeLocked": on<TL, boolean>(
+      "TxReentrantLock",
+      "writeLocked",
+      1,
+      (held) => TxReentrantLock.writeLocked(held),
+      bool,
+    ),
+    "effect/TxReentrantLock:withReadLock": around2<TL, V>(
+      "TxReentrantLock",
+      "withReadLock",
+      0,
+      nothing,
+      (held, _, effect) => TxReentrantLock.withReadLock(held, effect),
+      same,
+      TX_LOCK,
+    ),
+    "effect/TxReentrantLock:withWriteLock": around2<TL, V>(
+      "TxReentrantLock",
+      "withWriteLock",
+      0,
+      nothing,
+      (held, _, effect) => TxReentrantLock.withWriteLock(held, effect),
+      same,
+      TX_LOCK,
+    ),
+    "effect/TxReentrantLock:withLock": around2<TL, V>(
+      "TxReentrantLock",
+      "withLock",
+      0,
+      nothing,
+      (held, _, effect) => TxReentrantLock.withLock(held, effect),
+      same,
+      TX_LOCK,
+    ),
+    "effect/PartitionedSemaphore:make": made("PartitionedSemaphore", ([given_], site) =>
+      Effect.flatMap(
+        options<{ permits: number }>("PartitionedSemaphore.make", given_, site),
+        (read) => PartitionedSemaphore.make<Key>(read),
+      ),
+    ),
+    "effect/PartitionedSemaphore:available": on<PS, number>(
+      "PartitionedSemaphore",
+      "available",
+      1,
+      (held) => PartitionedSemaphore.available(held),
+      num,
+    ),
+    "effect/PartitionedSemaphore:take": later<PS, void>(
+      "PartitionedSemaphore",
+      "take",
+      3,
+      (held, [key, n], site) =>
+        Effect.flatMap(keyOf("PartitionedSemaphore.take", key, site), (read) =>
+          Effect.map(permits("PartitionedSemaphore.take", n, site), (found) =>
+            PartitionedSemaphore.take(held, read, found),
+          ),
+        ),
+      none,
+      PARTITION,
+    ),
+    "effect/PartitionedSemaphore:release": later<PS, number>(
+      "PartitionedSemaphore",
+      "release",
+      2,
+      (held, [n], site) =>
+        Effect.map(permits("PartitionedSemaphore.release", n, site), (found) =>
+          PartitionedSemaphore.release(held, found),
+        ),
+      num,
+    ),
+    "effect/PartitionedSemaphore:withPermits": around2<PS, V>(
+      "PartitionedSemaphore",
+      "withPermits",
+      2,
+      ([key, n], site) =>
+        Effect.flatMap(keyOf("PartitionedSemaphore.withPermits", key, site), (read) =>
+          Effect.map(permits("PartitionedSemaphore.withPermits", n, site), (found) => [
+            read,
+            found,
+          ]),
+        ),
+      (held, [key, n], effect) =>
+        PartitionedSemaphore.withPermits(held, key as Key, n as number, effect),
+      same,
+      PARTITION,
+    ),
+    "effect/PartitionedSemaphore:withPermit": around2<PS, V>(
+      "PartitionedSemaphore",
+      "withPermit",
+      1,
+      ([key], site) =>
+        Effect.map(keyOf("PartitionedSemaphore.withPermit", key, site), (read) => [read]),
+      (held, [key], effect) => PartitionedSemaphore.withPermit(held, key as Key, effect),
+      same,
+      PARTITION,
+    ),
+    "effect/ScopedCache:make": ([given_], site) =>
+      Effect.succeed(
+        scoped(
+          "ScopedCache.make",
+          site,
+          (timeline) =>
+            Effect.flatMap(
+              Timeline.real(timeline, cacheOptions("ScopedCache.make", given_, site)),
+              (read) =>
+                ScopedCache.make<Key, V, Held>({
+                  capacity: read.capacity,
+                  timeToLive: read.timeToLive,
+                  lookup: (key) => called(timeline, read.lookup, site)(keyed(key)),
+                }),
+            ),
+          (held) => wrap("ScopedCache", held),
+        ),
+      ),
+    "effect/ScopedCache:get": byKey<SC, V>(
+      "ScopedCache",
+      "get",
+      2,
+      (held, key) => Effect.succeed(ScopedCache.get(held, key)),
+      same,
+    ),
+    "effect/ScopedCache:has": byKey<SC, boolean>(
+      "ScopedCache",
+      "has",
+      2,
+      (held, key) => Effect.succeed(ScopedCache.has(held, key)),
+      bool,
+    ),
+    "effect/ScopedCache:set": byKey<SC, void>(
+      "ScopedCache",
+      "set",
+      3,
+      (held, key, [value]) => Effect.succeed(ScopedCache.set(held, key, value ?? Value.undef)),
+      none,
+    ),
+    "effect/ScopedCache:invalidate": byKey<SC, void>(
+      "ScopedCache",
+      "invalidate",
+      2,
+      (held, key) => Effect.succeed(ScopedCache.invalidate(held, key)),
+      none,
+    ),
+    "effect/ScopedCache:size": on<SC, number>(
+      "ScopedCache",
+      "size",
+      1,
+      (held) => ScopedCache.size(held),
+      num,
+    ),
+    "effect/Pool:makeWithTTL": ([given_], site) => {
+      const fields = given_?._tag === "Obj" && !given_.brand ? given_.fields : undefined;
+      const acquire = fields?.acquire;
+      if (!fields || acquire?._tag !== "Effect") return wrongArguments(site, "Pool.makeWithTTL");
+      const { acquire: _, ...rest } = fields;
+      return Effect.succeed(
+        scoped(
+          "Pool.makeWithTTL",
+          site,
+          (timeline) =>
+            Effect.flatMap(
+              Timeline.real(
+                timeline,
+                options<{
+                  readonly min: number;
+                  readonly max: number;
+                  readonly timeToLive: Duration.Input;
+                  readonly timeToLiveStrategy?: "creation" | "usage";
+                }>("Pool.makeWithTTL", Value.obj(rest), site),
+              ),
+              (read) =>
+                Pool.makeWithTTL({ ...read, acquire: Timeline.real(timeline, acquire.run) }),
+            ),
+          (held) => wrap("Pool", held),
+        ),
+      );
+    },
+  };
+
   const models: Models = {
+    ...shared,
     ...kept,
     ...transactions,
     ...sets,

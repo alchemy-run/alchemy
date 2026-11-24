@@ -1958,7 +1958,84 @@ FiberMap.size(jobs);
 FiberMap.awaitEmpty(jobs);
 const pool = yield* Pool.make({ acquire: Ref.updateAndGet(made, (n) => n + 1), size: 2 });
 Pool.get(pool); // in a scope: waits for an item to be given back
+Pool.makeWithTTL({
+  acquire: Ref.updateAndGet(made, (n) => n + 1),
+  min: 1,
+  max: 2,
+  timeToLive: "1 minute",
+});
 Pool.invalidate(pool, item);
+```
+
+```typescript title="What a transaction shares, and what is shared by a key"
+const done = yield* TxDeferred.make();
+TxDeferred.succeed(done, a);
+TxDeferred.fail(done, new Odd({ n: a }));
+TxDeferred.await(done);
+TxDeferred.poll(done);
+const permits = yield* TxSemaphore.make(3);
+TxSemaphore.acquire(permits);
+TxSemaphore.acquireN(permits, 2);
+TxSemaphore.tryAcquire(permits);
+TxSemaphore.tryAcquireN(permits, 2);
+TxSemaphore.release(permits);
+TxSemaphore.releaseN(permits, 2);
+TxSemaphore.available(permits);
+TxSemaphore.capacity(permits);
+TxSemaphore.withPermit(permits)(Effect.succeed(a));
+TxSemaphore.withPermits(permits, 1, Effect.succeed(b));
+const hub = yield* TxPubSub.unbounded();
+TxPubSub.bounded(2);
+TxPubSub.dropping(1);
+TxPubSub.sliding(1);
+const one = yield* TxPubSub.subscribe(hub); // in a scope: a TxQueue
+TxPubSub.publish(hub, a);
+TxPubSub.publishAll(hub, [b, 1]);
+TxPubSub.size(hub);
+TxPubSub.isEmpty(hub);
+TxPubSub.isFull(hub);
+TxPubSub.isShutdown(hub);
+TxPubSub.shutdown(hubs[0]);
+const cell = yield* TxSubscriptionRef.make(a);
+const changes = yield* TxSubscriptionRef.changes(cell); // in a scope: a TxQueue
+TxSubscriptionRef.get(cell);
+TxSubscriptionRef.set(cell, b);
+TxSubscriptionRef.getAndSet(cell, 1);
+TxSubscriptionRef.update(cell, (n) => n + a);
+TxSubscriptionRef.updateAndGet(cell, (n) => n * 2);
+TxSubscriptionRef.getAndUpdate(cell, (n) => n - 1);
+const lock = yield* TxReentrantLock.make();
+TxReentrantLock.acquireRead(lock);
+TxReentrantLock.acquireWrite(lock);
+TxReentrantLock.releaseRead(lock);
+TxReentrantLock.releaseWrite(lock);
+TxReentrantLock.readLocks(lock);
+TxReentrantLock.writeLocks(lock);
+TxReentrantLock.locked(lock);
+TxReentrantLock.readLocked(lock);
+TxReentrantLock.writeLocked(lock);
+TxReentrantLock.withLock(lock, log(seen, "locked"));
+TxReentrantLock.withReadLock(lock, Effect.andThen(log(seen, name + " reads"), Effect.sleep(millis)));
+TxReentrantLock.withWriteLock(lock, Effect.andThen(log(seen, "writes"), Effect.sleep(2)));
+pipe(lock, TxReentrantLock.withLock(Effect.succeed(a)));
+const slots = yield* PartitionedSemaphore.make({ permits: 2 }); // permits shared out by a key the code writes
+PartitionedSemaphore.take(permits, "x", 1);
+PartitionedSemaphore.release(permits, 1);
+PartitionedSemaphore.available(permits);
+PartitionedSemaphore.withPermit(permits, 3)(Effect.succeed(a));
+PartitionedSemaphore.withPermits(permits, "y", 1, Effect.succeed(b));
+const files = yield* ScopedCache.make({
+  capacity: 2,
+  lookup: (name) =>
+    Effect.acquireRelease(Effect.as(log(seen, "open " + name), name.length + a), () =>
+      log(seen, "close " + name),
+    ),
+}); // a Cache whose lookup may acquire: in a scope
+ScopedCache.get(files, "tea");
+ScopedCache.has(files, "milk");
+ScopedCache.set(files, "milk", b);
+ScopedCache.invalidate(files, "tea");
+ScopedCache.size(files);
 ```
 
 ```typescript title="effect/PubSub"
@@ -2433,8 +2510,6 @@ A handler's sleeps, time limits, races and fibers are [supported](#time-and-fibe
 
 ```typescript title="Time passing and things running together"
 import * as Scheduler from "effect/Scheduler";
-import * as PartitionedSemaphore from "effect/PartitionedSemaphore";
-import * as ScopedCache from "effect/ScopedCache";
 import * as Request from "effect/Request";
 import * as RequestResolver from "effect/RequestResolver";
 import * as Channel from "effect/Channel";
@@ -2442,14 +2517,9 @@ import * as Pull from "effect/Pull";
 import * as Take from "effect/Take";
 import * as ExecutionPlan from "effect/ExecutionPlan";
 import * as TxChunk from "effect/TxChunk";
-import * as TxDeferred from "effect/TxDeferred";
 import * as TxHashMap from "effect/TxHashMap";
 import * as TxHashSet from "effect/TxHashSet";
 import * as TxPriorityQueue from "effect/TxPriorityQueue";
-import * as TxPubSub from "effect/TxPubSub";
-import * as TxReentrantLock from "effect/TxReentrantLock";
-import * as TxSemaphore from "effect/TxSemaphore";
-import * as TxSubscriptionRef from "effect/TxSubscriptionRef";
 
 Deferred.await(done); // a wait for what no fiber of the handler does: the handler would never end
 gate.await;

@@ -31,6 +31,8 @@ const ONE_WAY: ReadonlySet<string> = new Set([
   ...["effect/Effect:forkChild", "effect/Effect:forkDetach"],
   // The set or the handle comes first either way, and then the effect.
   ...["effect/FiberSet:run", "effect/FiberHandle:run", "effect/FiberMap:run"],
+  ...["effect/TxSemaphore:withPermit", "effect/TxSemaphore:withPermits"],
+  ...["effect/PartitionedSemaphore:withPermit", "effect/PartitionedSemaphore:withPermits"],
 ]);
 
 const declared = new Map<string, ReadonlySet<string>>();

@@ -119,13 +119,17 @@ export class Fog extends Domain.Aggregate("Fog", {
       const cache = yield* Cache.make({ capacity: 8, lookup: (n: number) => Effect.succeed(n) });
       return [new Seen({ n: yield* Cache.get(cache, command.n) })];
     }),
-    // A pool that grows and shrinks with time, which the prover has no model for.
+    // A pool with a strategy of the code's own, which the prover has no model for.
     Borrow: Effect.fn(function* (_fog, command) {
-      const pool = yield* Pool.makeWithTTL({
+      const pool = yield* Pool.makeWithStrategy({
         acquire: Effect.succeed(command.n),
         min: 1,
         max: 2,
-        timeToLive: "1 second",
+        strategy: {
+          run: () => Effect.void,
+          onAcquire: () => Effect.void,
+          reclaim: () => Effect.succeed(undefined),
+        },
       });
       return [new Seen({ n: yield* Pool.get(pool) })];
     }, Effect.scoped),

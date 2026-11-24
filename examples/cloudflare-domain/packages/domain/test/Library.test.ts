@@ -237,7 +237,7 @@ it.effect(
         Turn: "calls Array.rotate, which the prover has no model for",
         // Each of these was checked against the package: none is a function of the command alone.
         Remember: "calls Cache.get with a key the prover cannot see",
-        Borrow: "calls Pool.makeWithTTL, which the prover has no model for",
+        Borrow: "calls Pool.makeWithStrategy, which the prover has no model for",
         Guard:
           "waits for permits of a Semaphore that nothing releases: the handler would never end",
         Configure: "calls Config.Int, which the prover has no model for",

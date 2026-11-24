@@ -21,7 +21,8 @@ const READ = new Set([
   ...["SubscriptionRef", "Symbol", "SynchronizedRef", "TextDiff", "Trie", "Tuple", "UndefinedOr"],
   ...["Cache", "Deferred", "Fiber", "FiberHandle", "FiberMap", "FiberSet", "Latch", "Pool"],
   ...["PubSub", "Queue", "Schedule"],
-  ...["Semaphore", "TxQueue", "TxRef", "index"],
+  ...["PartitionedSemaphore", "ScopedCache", "Semaphore", "TxDeferred", "TxPubSub", "TxQueue"],
+  ...["TxReentrantLock", "TxRef", "TxSemaphore", "TxSubscriptionRef", "index"],
 ]);
 
 const NAME = /^[A-Za-z_$][\w$]*$/;
@@ -106,7 +107,7 @@ it.effect(
         "calls M.f, which the prover has no model for",
         "compares values the prover does not model",
       ]);
-      expect(modules.length).toBeGreaterThan(60);
+      expect(modules.length).toBeGreaterThan(50);
       expect(calls.length).toBeGreaterThan(1500);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   300_000,
