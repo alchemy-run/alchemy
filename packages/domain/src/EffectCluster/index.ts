@@ -734,6 +734,11 @@ export const layerEntities = <PoolReq>(
         const open = new Map<ObjectSocket, Queue.Queue<LiveFrame, Cause.Done>>();
         const state: ObjectStateShape = {
           storage,
+          // One runner holds an entity's shard at a time. A runner that
+          // stalls past its shard lock keeps its activation while another
+          // starts one, so both may drain the same rows for a while: a
+          // duplicate delivery, which receipts and checkpoints absorb.
+          activation: yield* Effect.sync(() => crypto.randomUUID()),
           exclusive: (effect) => gate.exclusive(effect),
           // Background work stays part of the call that started it.
           waitUntil: (effect) => Effect.asVoid(Effect.forkIn(effect, instanceScope)),

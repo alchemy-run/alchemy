@@ -182,40 +182,70 @@ describe.concurrent.each([
     entries.filter((entry) => entry.startsWith(`${id}-answer-`));
 
   test(
-    "a projection whose object resets during a batch runs the batch once the lease ends",
+    "a projection whose object resets during a batch runs the batch in its next object, without waiting out the lease",
     Effect.gen(function* () {
       const { ping, pongs } = yield* group;
+      const started = yield* Clock.currentTimeMillis;
       // The batch runs after its 5-second wait; the projection's object resets
-      // in it, holding the batch's lease. The next object runs it when the
-      // lease ends, 60 seconds after it was taken.
+      // in it, holding the batch's lease. The next object is a new activation,
+      // so it takes the lease at once.
       yield* ping("reset-projection", { reset: "projection" });
       const answered = yield* pongs.pipe(
         Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
+          schedule: Schedule.spaced("1 second"),
           until: (entries) => entries.length > 0,
-          times: 70,
+          times: 140,
         }),
       );
       expect(answered).toEqual(["reset-projection"]);
+      // Reset about 10 seconds in. Waiting out the lease: answered after 70.
+      expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(45_000);
     }),
     { tags, timeout: 180_000 },
   );
 
   test(
-    "a policy whose object resets during a reaction runs it once the lease ends",
+    "a policy whose object resets during a reaction runs it in its next object, without waiting out the lease",
     Effect.gen(function* () {
       const { ping, pongs } = yield* group;
+      const started = yield* Clock.currentTimeMillis;
       yield* ping("reset-policy", { reset: "policy", answer: "now" });
       const answered = yield* pongs.pipe(
         Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
+          schedule: Schedule.spaced("1 second"),
           until: (entries) => answersTo(entries, "reset-policy").length > 0,
-          times: 70,
+          times: 140,
         }),
       );
       expect(answersTo(answered, "reset-policy")).toHaveLength(1);
       expect(answered).toContain("reset-policy");
+      // The inbox's backstop runs the reaction again 10 seconds in. Waiting
+      // out the lease: answered after 60, and then the batch wait.
+      expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(45_000);
     }),
     { tags, timeout: 180_000 },
+  );
+
+  test(
+    "a reaction that runs longer than its lease runs once",
+    Effect.gen(function* () {
+      const { ping, pongs } = yield* group;
+      // The reaction takes 70 seconds, past the 60-second lease. The inbox's
+      // backstop and every wake-up during it find the lease still held.
+      yield* ping("slow-policy", { answer: "slowly" });
+      yield* pongs.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (entries) => answersTo(entries, "slow-policy").length > 0,
+          times: 80,
+        }),
+      );
+      // A second run beside the first starts when the lease would end, 60
+      // seconds after the first, and answers 70 seconds later: about 60
+      // seconds after the first answer.
+      yield* Effect.sleep("75 seconds");
+      expect(answersTo(yield* pongs, "slow-policy")).toHaveLength(1);
+    }),
+    { tags, timeout: 300_000 },
   );
 });

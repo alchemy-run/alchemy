@@ -148,8 +148,11 @@ const engineState = (state: DurableObjectState["Service"]): EngineStateShape => 
 const objectState = (
   state: DurableObjectState["Service"],
   storage: ObjectStorage,
+  activation: string,
 ): ObjectStateShape => ({
   storage,
+  // Rivet runs one instance of an actor at a time.
+  activation,
   // The instance's input gate, held across the whole section.
   exclusive: (effect) => gateExclusive(effect),
   waitUntil: (effect) => state.waitUntil(effect),
@@ -287,12 +290,13 @@ const hostClassPhase = (name: string, classes: ReadonlyMap<string, InstanceBuild
         );
       }
       const storage = objectStorage(state.storage);
+      const activation = yield* Effect.sync(() => crypto.randomUUID());
       const callbacks = storageCallbacks(storage, {
         set: (at) => state.storage.setAlarm(at),
         get: state.storage.getAlarm(),
       });
       const record = yield* build.pipe(
-        Effect.provideService(ObjectState, objectState(state, storage)),
+        Effect.provideService(ObjectState, objectState(state, storage, activation)),
         Effect.provideService(EngineState, engineState(state)),
         Effect.provide(callbacks.callbacks),
       );

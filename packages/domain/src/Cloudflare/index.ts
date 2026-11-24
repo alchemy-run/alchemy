@@ -140,8 +140,11 @@ const hinted = (
 const objectState = (
   state: DurableObjectState["Service"],
   runtime: RuntimeContext["Service"],
+  activation: string,
 ): ObjectStateShape => ({
   storage: state.storage as unknown as ObjectStateShape["storage"],
+  // A Durable Object's next instance starts once its last one stopped.
+  activation,
   // Durable Objects run each event in its own I/O context, so in-memory
   // coordination across events is unsafe; the platform's gate is not.
   exclusive: (effect) =>
@@ -192,8 +195,9 @@ const onCloudflare = (impl: ObjectImpl): CloudflareImpl =>
     Effect.gen(function* () {
       const state = yield* DurableObjectState;
       const runtime = yield* RuntimeContext;
+      const activation = yield* Effect.sync(() => crypto.randomUUID());
       return yield* impl.pipe(
-        Effect.provideService(ObjectState, objectState(state, runtime)),
+        Effect.provideService(ObjectState, objectState(state, runtime, activation)),
         Effect.provide(DurableObjectCallbacks),
       );
     }),

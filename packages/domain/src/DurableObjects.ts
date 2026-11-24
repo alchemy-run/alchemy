@@ -158,6 +158,14 @@ export interface ObjectStateShape {
   /** Run `effect` in the background, keeping the instance alive until it ends. */
   waitUntil(effect: Effect.Effect<void>): Effect.Effect<void>;
   /**
+   * This instance's id, minted when the host built it. A host sets it only
+   * when a new instance means every earlier one has ended (a Durable
+   * Object's next instance starts after the last one stopped), so a drain
+   * lease another activation holds is taken at once: its drain is gone.
+   * Without it, a lease ends by the clock.
+   */
+  readonly activation?: string;
+  /**
    * Live reads pushed over WebSockets the object holds. Without it, live
    * reads are streamed responses that poll the object.
    */
@@ -601,26 +609,97 @@ const makeAging = (retention: Retention | false): Aging => {
   };
 };
 
-/** How long a queue drain may hold its lease before another drain may take over. */
+/**
+ * How long a drain's lease lasts unless the drain renews it. A running drain
+ * renews it every third of that, so only a drain that stopped lets it end.
+ */
 const LEASE_MS = 60_000;
 
 /**
- * Take a drain's lease: `undefined` once taken, or when the lease another
- * drain holds ends. That drain may have died with an earlier instance and
- * left work behind, so a drain that can't take the lease looks again then.
- * Run it exclusively.
+ * A drain's lease: which activation holds it, which run of its drain, and
+ * when it ends. Older hosts stored only when it ends.
+ */
+interface Lease {
+  readonly holder?: string;
+  readonly run: string;
+  readonly expires: number;
+}
+
+const leaseOf = (value: Lease | number | undefined): Lease | undefined =>
+  typeof value === "number" ? { run: "", expires: value } : value;
+
+/**
+ * Whether a lease stopped holding: it ended, or the activation that took it
+ * has ended (see {@link ObjectStateShape.activation}).
+ */
+const leaseFree = (state: ObjectStateShape, lease: Lease | undefined, now: number) =>
+  lease === undefined ||
+  lease.expires <= now ||
+  (state.activation !== undefined &&
+    lease.holder !== undefined &&
+    lease.holder !== state.activation);
+
+/**
+ * Take a drain's lease: the run that holds it once taken, or when the lease
+ * another drain holds ends. That drain may have died with an earlier
+ * instance and left work behind, so a drain that can't take the lease looks
+ * again then. Run it exclusively.
  */
 const acquireLease = (state: ObjectStateShape, lease: string) =>
   // One transaction: two copies of an instance never both take it.
   state.storage.transaction(
-    Effect.gen(function* () {
+    Effect.gen(function* (): Generator<any, { readonly run: string } | { readonly held: number }> {
       const now = yield* Clock.currentTimeMillis;
-      const held = yield* state.storage.get<number>(lease);
-      if (held !== undefined && held > now) return held;
-      yield* state.storage.put(lease, now + LEASE_MS);
-      return undefined;
+      const held = leaseOf(yield* state.storage.get<Lease | number>(lease));
+      if (!leaseFree(state, held, now)) return { held: held!.expires };
+      const run = yield* Effect.sync(() => crypto.randomUUID());
+      yield* state.storage.put<Lease>(lease, {
+        ...(state.activation === undefined ? {} : { holder: state.activation }),
+        run,
+        expires: now + LEASE_MS,
+      });
+      return { run };
     }),
   );
+
+/** Let go of a lease, unless another drain took it since. */
+const releaseLease = (state: ObjectStateShape, lease: string, run: string) =>
+  state.storage
+    .transaction(
+      Effect.gen(function* () {
+        const held = leaseOf(yield* state.storage.get<Lease | number>(lease));
+        if (held?.run === run) yield* state.storage.delete(lease);
+      }),
+    )
+    .pipe(Effect.ignore);
+
+/**
+ * Run `work` holding the lease `run` took: it is renewed while `work` runs,
+ * so a drain slower than {@link LEASE_MS} keeps it, and is let go once
+ * `work` ends however it ends.
+ */
+const holdingLease = <A, E, R>(
+  state: ObjectStateShape,
+  lease: string,
+  run: string,
+  work: Effect.Effect<A, E, R>,
+) => {
+  const renew = exclusively(
+    state.storage.transaction(
+      Effect.gen(function* () {
+        const held = leaseOf(yield* state.storage.get<Lease | number>(lease));
+        if (held?.run !== run) return;
+        yield* state.storage.put<Lease>(lease, {
+          ...held,
+          expires: (yield* Clock.currentTimeMillis) + LEASE_MS,
+        });
+      }),
+    ),
+  ).pipe(Effect.ignore, Effect.delay(LEASE_MS / 3), Effect.forever);
+  return Effect.raceFirst(work, renew as Effect.Effect<never>).pipe(
+    Effect.ensuring(exclusively(releaseLease(state, lease, run))),
+  );
+};
 
 /**
  * A durable, ordered work queue in the instance's storage. Rows are written
@@ -649,21 +728,27 @@ const queue = <Row>(
     const drain: Effect.Effect<void> = Effect.gen(function* () {
       // Nothing staged: nothing to do, and no lease to take.
       if ((yield* state.storage.list({ prefix, limit: 1 })).size === 0) return;
-      const held = yield* acquire;
-      if (held !== undefined) {
-        // Another drain holds the lease, or held it when its instance died
-        // (its rows are still here). Look again once the lease expires:
-        // nothing else may, if no more rows are staged.
-        yield* callback.schedule("drain", { at: held, payload: {} }).pipe(Effect.orDie);
+      const taken = yield* acquire;
+      if ("held" in taken) {
+        // Another drain of this activation holds the lease, and finds rows
+        // staged since once it ends; or one whose activation ended without a
+        // name, so its lease ends by the clock. Look again then: nothing
+        // else may, if no more rows are staged.
+        yield* callback.schedule("drain", { at: taken.held, payload: {} }).pipe(Effect.orDie);
         return;
       }
-      yield* Effect.gen(function* () {
-        const rows = yield* state.storage.list<Row>({ prefix });
-        for (const [key, row] of rows) {
-          yield* process(row);
-          yield* state.storage.delete(key);
-        }
-      }).pipe(Effect.ensuring(state.storage.delete(lease).pipe(Effect.ignore)));
+      yield* holdingLease(
+        state,
+        lease,
+        taken.run,
+        Effect.gen(function* () {
+          const rows = yield* state.storage.list<Row>({ prefix });
+          for (const [key, row] of rows) {
+            yield* process(row);
+            yield* state.storage.delete(key);
+          }
+        }),
+      );
       // Rows staged while this drain ran.
       const more = yield* state.storage.list({ prefix, limit: 1 });
       if (more.size > 0) yield* drain;
@@ -3049,6 +3134,8 @@ const projectionObject = (
     const waitMillis = kit.options.batch?.waitMillis ?? 0;
     const lease = "drain-lease";
     const acquire = exclusively(acquireLease(state, lease));
+    /** When a short batch is due: run once its wait is up, after the lease is let go. */
+    const due = (at: number) => ({ due: at }) as const;
     // Re-run the drain later: when a short batch has waited long enough, or after a failure.
     let wake: (at: number) => Effect.Effect<void> = () => Effect.void;
     // Each input's backstop advances this cursor: once an input arrives, a
@@ -3061,84 +3148,93 @@ const projectionObject = (
     });
     // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides its state and RuntimeContext on every event
     const drain: Effect.Effect<void> = Effect.gen(function* () {
-      const held = yield* acquire;
-      // Held by another drain, or by one whose instance died: look again once it expires.
-      if (held !== undefined) return yield* wake(held);
+      const taken = yield* acquire;
+      // Held by another drain of this activation, or by one whose activation
+      // ended without a name: look again once it expires.
+      if ("held" in taken) return yield* wake(taken.held);
       const exit = yield* Effect.exit(
-        Effect.gen(function* () {
-          while (true) {
-            const meta = yield* readMeta;
-            if (meta.key === null || meta.processed >= meta.accepted) return;
-            const rows = yield* state.storage.list<Accepted>({
-              prefix: "in:",
-              start: `in:${pad(meta.processed + 1)}`,
-              limit: size,
-            });
-            const run = [...rows.values()];
-            if (run.length === 0) return;
-            if (
-              run.length < size &&
-              waitMillis > 0 &&
-              (yield* Clock.currentTimeMillis) - run[0]!.at < waitMillis
-            ) {
-              return yield* wake(run[0]!.at + waitMillis);
-            }
-            yield* kit.run(meta.key, run);
-            // Read and written in one transaction: another copy of the instance
-            // may have accepted more inputs since (see `stillAt`).
-            yield* exclusively(
-              state.storage.transaction(
-                Effect.gen(function* () {
-                  const current = yield* upgrade(yield* readMeta);
-                  const handled: Record<string, number> = {};
-                  for (const { delivery } of run) {
-                    handled[delivery.source] = Math.max(
-                      handled[delivery.source] ?? 0,
-                      delivery.seq,
-                    );
-                    // Every revision of a rewrite from this source is handled.
-                    if (delivery.revision?.done) {
-                      yield* state.storage.put(
-                        `settled:${delivery.revision.root}|${delivery.source}`,
-                        true,
+        holdingLease(
+          state,
+          lease,
+          taken.run,
+          Effect.gen(function* (): Generator<any, ReturnType<typeof due> | undefined> {
+            while (true) {
+              const meta = yield* readMeta;
+              if (meta.key === null || meta.processed >= meta.accepted) return undefined;
+              const rows = yield* state.storage.list<Accepted>({
+                prefix: "in:",
+                start: `in:${pad(meta.processed + 1)}`,
+                limit: size,
+              });
+              const run = [...rows.values()];
+              if (run.length === 0) return undefined;
+              if (
+                run.length < size &&
+                waitMillis > 0 &&
+                (yield* Clock.currentTimeMillis) - run[0]!.at < waitMillis
+              ) {
+                return due(run[0]!.at + waitMillis);
+              }
+              yield* kit.run(meta.key, run);
+              // Read and written in one transaction: another copy of the instance
+              // may have accepted more inputs since (see `stillAt`).
+              yield* exclusively(
+                state.storage.transaction(
+                  Effect.gen(function* () {
+                    const current = yield* upgrade(yield* readMeta);
+                    const handled: Record<string, number> = {};
+                    for (const { delivery } of run) {
+                      handled[delivery.source] = Math.max(
+                        handled[delivery.source] ?? 0,
+                        delivery.seq,
                       );
+                      // Every revision of a rewrite from this source is handled.
+                      if (delivery.revision?.done) {
+                        yield* state.storage.put(
+                          `settled:${delivery.revision.root}|${delivery.source}`,
+                          true,
+                        );
+                      }
                     }
-                  }
-                  // A source's row moves forward only: a rewrite's revisions
-                  // carry the `seq` of events handled before, and its `done` 0.
-                  const ahead: Array<readonly [string, number]> = [];
-                  for (const [source, seq] of Object.entries(handled)) {
-                    if (seq > (yield* cursor(CHECKPOINT, source))) {
-                      ahead.push([CHECKPOINT + source, seq]);
+                    // A source's row moves forward only: a rewrite's revisions
+                    // carry the `seq` of events handled before, and its `done` 0.
+                    const ahead: Array<readonly [string, number]> = [];
+                    for (const [source, seq] of Object.entries(handled)) {
+                      if (seq > (yield* cursor(CHECKPOINT, source))) {
+                        ahead.push([CHECKPOINT + source, seq]);
+                      }
                     }
-                  }
-                  yield* putRows(state.storage, ahead);
-                  yield* state.storage.put("meta", {
-                    ...current,
-                    processed: Math.max(current.processed, run[run.length - 1]!.position),
-                  } satisfies ProjectionMeta);
-                  // A handled input is not kept: the store the handler wrote has it.
-                  yield* state.storage.delete(rows.size === 0 ? [] : [...rows.keys()]);
-                  // Inputs handled on 2.0.0-beta.87 and earlier stayed: a batch of them goes each run.
-                  if (!(yield* state.storage.get<boolean>("in-pruned"))) {
-                    const handled = yield* state.storage.list({
-                      prefix: "in:",
-                      end: `in:${pad(current.processed + 1)}`,
-                      limit: 128,
-                    });
-                    if (handled.size > 0) yield* state.storage.delete([...handled.keys()]);
-                    if (handled.size < 128) yield* state.storage.put("in-pruned", true);
-                  }
-                }),
-              ),
-            );
-          }
-        }),
+                    yield* putRows(state.storage, ahead);
+                    yield* state.storage.put("meta", {
+                      ...current,
+                      processed: Math.max(current.processed, run[run.length - 1]!.position),
+                    } satisfies ProjectionMeta);
+                    // A handled input is not kept: the store the handler wrote has it.
+                    yield* state.storage.delete(rows.size === 0 ? [] : [...rows.keys()]);
+                    // Inputs handled on 2.0.0-beta.87 and earlier stayed: a batch of them goes each run.
+                    if (!(yield* state.storage.get<boolean>("in-pruned"))) {
+                      const handled = yield* state.storage.list({
+                        prefix: "in:",
+                        end: `in:${pad(current.processed + 1)}`,
+                        limit: 128,
+                      });
+                      if (handled.size > 0) yield* state.storage.delete([...handled.keys()]);
+                      if (handled.size < 128) yield* state.storage.put("in-pruned", true);
+                    }
+                  }),
+                ),
+              );
+            }
+          }),
+        ),
       );
-      yield* state.storage.delete(lease).pipe(Effect.ignore);
       if (exit._tag === "Failure") {
         yield* Effect.logError(`projection ${kit.name} failed; retrying`, exit.cause);
         yield* wake((yield* Clock.currentTimeMillis) + PROJECTION_RETRY_MS);
+      } else if (exit.value !== undefined) {
+        // Scheduled once the lease is let go: a wake-up that came first would
+        // find it held, and wait the lease out.
+        yield* wake(exit.value.due);
       }
     }) as Effect.Effect<void>;
     const callback = yield* makeCallback("domain:projection", () => drain);
@@ -3215,8 +3311,11 @@ const projectionObject = (
         return false;
       }
       // A drain under way may be handling a waiting input: it is then left as it is.
-      const leased = yield* state.storage.get<number>(lease);
-      const idle = leased === undefined || leased <= (yield* Clock.currentTimeMillis);
+      const idle = leaseFree(
+        state,
+        leaseOf(yield* state.storage.get<Lease | number>(lease)),
+        yield* Clock.currentTimeMillis,
+      );
       if (idle) {
         const waiting = yield* state.storage.list<Accepted>({
           prefix: "in:",
