@@ -1,4 +1,5 @@
 import * as BuildPlan from "@alchemy.run/docker/BuildPlan";
+import type { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import * as app from "@distilled.cloud/modal/app";
 import * as mount from "@distilled.cloud/modal/mount";
 import * as workspace from "@distilled.cloud/modal/workspace";
@@ -116,6 +117,7 @@ export const entrypointMount = Effect.fn(function* (appId: string) {
 export interface RuntimeImageInput {
   readonly main: string;
   readonly image?: string;
+  readonly runtime?: ContainerRuntime;
   readonly commands?: ReadonlyArray<string>;
   readonly handler?: string;
   readonly build?: Bundle.BundleConfig;
@@ -139,7 +141,13 @@ export const planRuntimeImage = Effect.fn(function* (
 ) {
   yield* checkModalMounts(target, capabilities);
   const plan = yield* BuildPlan.plan(
-    { main: input.main, image: input.image, handler: input.handler, build: input.build },
+    {
+      main: input.main,
+      image: input.image,
+      runtime: input.runtime,
+      handler: input.handler,
+      build: input.build,
+    },
     {
       capabilities: { ...MODAL_CAPABILITIES, target },
       port,
