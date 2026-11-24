@@ -429,6 +429,30 @@ describe("Prisma authoritative DNS checks", { tags: ["unit", "provider:prisma", 
     }),
   );
 
+  it.effect(
+    "with one attempt and margin always, waits the margin only when it sees the record",
+    () =>
+      Effect.gen(function* () {
+        const name = "_prisma-verification.example.com";
+        const check = (dns: ReturnType<typeof fakeDns>) =>
+          checkAuthoritativeRecord(
+            { type: "TXT", name, value: "prisma-verification=abc" },
+            { margin: "always", nameservers: "parent", attempts: "once" },
+          ).pipe(Effect.provideService(DnsLookups, dns.lookups));
+
+        const published = exampleZone(onBoth({ [`TXT ${name}`]: ["prisma-verification=abc"] }));
+        const fiber = yield* Effect.forkChild(check(published));
+        yield* TestClock.adjust("9 seconds");
+        expect(fiber.pollUnsafe()).toBe(undefined);
+        yield* TestClock.adjust("1 second");
+        expect(yield* Fiber.join(fiber)).toBe("seen");
+
+        const missing = exampleZone({});
+        expect(yield* check(missing)).toBe("absent");
+        expect(missing.asked.filter((query) => query.endsWith(`TXT ${name}`))).toHaveLength(2);
+      }),
+  );
+
   it.effect("reports a record unknown for an apex searched from its parent", () =>
     Effect.gen(function* () {
       const dns = exampleZone(onBoth({ "CNAME example.com": [SWITCHBOARD] }));

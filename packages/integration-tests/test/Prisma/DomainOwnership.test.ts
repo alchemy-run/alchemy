@@ -478,7 +478,7 @@ const WARNED_RECORD = `TXT ${txtFor(URL_HOSTNAME).name} = ${txtFor(URL_HOSTNAME)
 const unverifiedWarning = (domain: string) =>
   `The domain ownership of '${domain}' is unverified: it does not make hostnames it covers serve until Prisma finds ${WARNED_RECORD}, unless another verified domain ownership covers them.`;
 const expiringWarning = (domain: string) =>
-  `The domain ownership of '${domain}' is expiring. Of the hostnames it covers those that already serve keep serving until Prisma lapses it after 2026-12-01T00:00:00.000Z, and none starts serving, unless ${WARNED_RECORD} is published or another verified domain ownership covers them.`;
+  `The domain ownership of '${domain}' is expiring. Of the hostnames it covers, those that already serve keep serving until Prisma lapses it after 2026-12-01T00:00:00.000Z, and none starts serving, unless ${WARNED_RECORD} is published or another verified domain ownership covers them.`;
 const warningsOf = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
     const warnings: string[] = [];
@@ -992,7 +992,7 @@ for (const withRecord of [false, true]) {
         expect(absent.warnings).toEqual([unverifiedWarning(URL_HOSTNAME)]);
         expect(NOT_GET(reread)).toEqual([]);
         expect(reread.state.txtOptions.at(-1)).toEqual({
-          margin: "if-unseen",
+          margin: "always",
           nameservers: "parent",
           attempts: "once",
         });

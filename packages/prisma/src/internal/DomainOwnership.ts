@@ -163,6 +163,6 @@ export const notVerifiedWarning = (
     example === undefined ? "hostnames it covers" : `hostnames it covers, such as '${example}',`;
   const record = `TXT ${ownership.recordName} = ${ownership.recordValue}`;
   return ownership.status === "expiring"
-    ? `The domain ownership of '${ownership.domain}' is expiring. Of the ${covered} those that already serve keep serving until Prisma lapses it after ${ownership.expiresAt ?? "its expiry"}, and none starts serving, unless ${record} is published or another verified domain ownership covers them.`
+    ? `The domain ownership of '${ownership.domain}' is expiring. Of the ${covered}, those that already serve keep serving until Prisma lapses it after ${ownership.expiresAt ?? "its expiry"}, and none starts serving, unless ${record} is published or another verified domain ownership covers them.`
     : `The domain ownership of '${ownership.domain}' is unverified: it does not make ${covered} serve until Prisma finds ${record}, unless another verified domain ownership covers them.`;
 };

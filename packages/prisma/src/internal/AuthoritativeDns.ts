@@ -235,10 +235,9 @@ const waitUntilVisible = <A>(
 ) =>
   Effect.gen(function* () {
     const first = yield* check;
-    if (attempts === "once") return first;
     if (visibilityOf(first) === "seen" && margin === "if-unseen") return first;
     const last =
-      visibilityOf(first) === "absent"
+      visibilityOf(first) === "absent" && attempts === "until-seen"
         ? yield* check.pipe(
             Effect.repeat({
               schedule: Schedule.spaced(RECHECK_INTERVAL),

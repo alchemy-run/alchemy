@@ -171,7 +171,7 @@ const ProviderLive = () =>
           const { name, value } = ownership.verification;
           const visibility = yield* checkRecord(
             { type: "TXT", name, value },
-            { margin: "if-unseen", nameservers: "parent", attempts: "once" },
+            { margin: "always", nameservers: "parent", attempts: "once" },
           );
           return visibility === "seen" ? yield* verify(ownership, 0) : ownership;
         });

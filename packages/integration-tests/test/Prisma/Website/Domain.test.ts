@@ -71,7 +71,7 @@ const record = (domain: string) => `TXT ${txtFor(domain).name} = ${txtFor(domain
 const unverifiedWarning = (domain: string, hostname?: string) =>
   `The domain ownership of '${domain}' is unverified: it does not make ${covered(hostname)} serve until Prisma finds ${record(domain)}, unless another verified domain ownership covers them.`;
 const expiringWarning = (domain: string, hostname?: string) =>
-  `The domain ownership of '${domain}' is expiring. Of the ${covered(hostname)} those that already serve keep serving until Prisma lapses it after ${EXPIRES_AT}, and none starts serving, unless ${record(domain)} is published or another verified domain ownership covers them.`;
+  `The domain ownership of '${domain}' is expiring. Of the ${covered(hostname)}, those that already serve keep serving until Prisma lapses it after ${EXPIRES_AT}, and none starts serving, unless ${record(domain)} is published or another verified domain ownership covers them.`;
 const covered = (hostname: string | undefined) =>
   hostname === undefined ? "hostnames it covers" : `hostnames it covers, such as '${hostname}',`;
 const verifies = (cloud: UrlCloud) => cloud.routes().filter((route) => route.endsWith("/verify"));
