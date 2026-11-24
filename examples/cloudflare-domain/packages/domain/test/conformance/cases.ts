@@ -79,6 +79,11 @@ export interface Group {
    * something else.
    */
   readonly unread?: ReadonlyArray<readonly [expression: string, reason: RegExp]>;
+  /**
+   * The expressions take the items of a hash set in order. The prover tries
+   * every order, and the real one gives one: a path for another is not compared.
+   */
+  readonly orders?: boolean;
   /** Lines the group's file declares before its commands. */
   readonly prelude?: ReadonlyArray<string>;
   /** The functions the prelude exports that the prover is told not to read. */
@@ -442,6 +447,7 @@ const base: ReadonlyArray<Group> = [
     name: "Rational",
     ...numbers,
     both: [
+      `Rational.isPositive(Rational.fromBigInt(BigInt(a)))`,
       ...d("Rational.sum", "ratio(a)", "third"),
       ...d("Rational.subtract", "ratio(a)", "third"),
       ...d("Rational.multiply", "ratio(a)", "third"),
@@ -1358,6 +1364,7 @@ const base: ReadonlyArray<Group> = [
     bind: (known) => `${lists.bind(known)} const stream = Stream.fromIterable(items);`,
     effectful: true,
     both: [
+      `Stream.runCollect(Stream.fromIterable(items))`,
       `stream.pipe(Stream.take(5), Stream.runCollect)`,
       `stream.pipe(Stream.take(2), Stream.runCollect)`,
       `stream.pipe(Stream.drop(0), Stream.runCollect)`,
@@ -2318,6 +2325,19 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const ran = yield* Ref.make(a); const step = Ref.updateAndGet(ran, (n) => n + 1); return [yield* Effect.repeat(step, { schedule: Schedule.recurs(2) }), yield* Ref.get(ran)]; })`,
       `Effect.gen(function* () { const ran = yield* Ref.make(a); const step = Ref.updateAndGet(ran, (n) => n + 1); return [yield* Effect.repeat(step, { schedule: Schedule.recurs(5), until: (n) => n === a + 2 }), yield* Ref.get(ran)]; })`,
       `Effect.gen(function* () { const ran = yield* Ref.make(a); const step = Ref.updateAndGet(ran, (n) => n + 1); return [yield* step.pipe(Effect.repeat({ schedule: Schedule.recurs(1), times: 4 })), yield* Ref.get(ran)]; })`,
+      `Effect.result(Effect.retry(even(a), { times: 5, while: (error) => error.n !== 2 }))`,
+      `Effect.result(Effect.retry(even(a), { times: 5, until: (error) => error.n === 1 }))`,
+      `Effect.result(Effect.retry(even(a), Schedule.recurs(2)))`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Ref.updateAndGet(ran, (n) => n + 1); return yield* Effect.repeat(step, { times: 4, until: (n) => n === a + 2 }); })`,
+      `Effect.result(Effect.timeout(even(a), "1 second"))`,
+      `Effect.result(Effect.timeoutOption(even(a), "1 second"))`,
+      `Effect.result(Effect.timeoutOrElse(even(a), { duration: "1 second", orElse: () => Effect.succeed(b) }))`,
+      `Effect.succeed(a).pipe(Effect.map((n) => n + 1), Effect.flatMap(even), Effect.result)`,
+      `Stream.make(a, b).pipe(Stream.map((n) => n + 1), Stream.runCollect)`,
+      `Effect.gen(function* () { const cell = yield* Ref.make(a); return yield* cell.pipe(Ref.updateAndGet((n) => n + 1)); })`,
+      `Effect.gen(function* () { const cell = yield* SynchronizedRef.make(a); return yield* Effect.result(SynchronizedRef.updateAndGetEffect(cell, (n) => positive(n))); })`,
+      `Effect.gen(function* () { const cell = yield* SubscriptionRef.make(a); return yield* Effect.result(SubscriptionRef.updateAndGetEffect(cell, (n) => positive(n))); })`,
+      `Stream.runCollect(Stream.fromIterable([a, b]))`,
       `Effect.timeout(Effect.succeed(a), "1 second")`,
       `even(a).pipe(Effect.timeout(1000), Effect.result)`,
       `Effect.timeoutOption(Effect.succeed(a), "1 second")`,

@@ -294,16 +294,25 @@ export const make = (kit: Kit) => {
     return Value.obj(fields, REF);
   };
 
-  /** A function of the module: the semaphore's own member, given the rest. */
+  /**
+   * A function of the module: the semaphore's own member, given the rest.
+   * `piped` is one written both ways, `Semaphore.take(n)` then the semaphore.
+   */
   const ofSemaphore =
-    (name: string, own: number): Model =>
+    (name: string, own: number, piped: boolean): Model =>
     (args, site) => {
-      // `Semaphore.take(n)` then the semaphore, where the first argument is not one.
-      if (!fieldsOf("Semaphore", args[0]))
-        return Effect.succeed(
-          native(`Semaphore.${name}`, ([self], at) => ofSemaphore(name, own)([self!, ...args], at)),
-        );
-      const member = fieldsOf("Semaphore", args[0])![`~${name}`]!;
+      const fields = fieldsOf("Semaphore", args[0]);
+      if (!fields)
+        return piped
+          ? Effect.succeed(
+              native(`Semaphore.${name}`, ([self], at) =>
+                self && fieldsOf("Semaphore", self)
+                  ? ofSemaphore(name, own, false)([self, ...args], at)
+                  : wrongArguments(at, `Semaphore.${name}`),
+              ),
+            )
+          : wrongArguments(site, `Semaphore.${name}`);
+      const member = fields[`~${name}`]!;
       const [, ...rest] = args;
       if (own === 0) return Effect.succeed(member);
       return Effect.flatMap(host.call(member, rest.slice(0, own), site), (given) =>
@@ -317,18 +326,18 @@ export const make = (kit: Kit) => {
     ),
     "effect/Semaphore:makeUnsafe": ([permits], site) =>
       Effect.map(count("Semaphore.makeUnsafe", permits, site), semaphore),
-    "effect/Semaphore:withPermits": ofSemaphore("withPermits", 1),
-    "effect/Semaphore:withPermitsIfAvailable": ofSemaphore("withPermitsIfAvailable", 1),
+    "effect/Semaphore:withPermits": ofSemaphore("withPermits", 1, false),
+    "effect/Semaphore:withPermitsIfAvailable": ofSemaphore("withPermitsIfAvailable", 1, false),
     "effect/Semaphore:withPermit": ([self, ...rest], site) => {
       const member = fieldsOf("Semaphore", self)?.["~withPermit"];
       if (!member) return wrongArguments(site, "Semaphore.withPermit");
       return rest.length === 0 ? Effect.succeed(member) : host.call(member, rest, site);
     },
-    "effect/Semaphore:take": ofSemaphore("take", 1),
-    "effect/Semaphore:takeIfAvailable": ofSemaphore("takeIfAvailable", 1),
-    "effect/Semaphore:release": ofSemaphore("release", 1),
-    "effect/Semaphore:resize": ofSemaphore("resize", 1),
-    "effect/Semaphore:releaseAll": ofSemaphore("releaseAll", 0),
+    "effect/Semaphore:take": ofSemaphore("take", 1, true),
+    "effect/Semaphore:takeIfAvailable": ofSemaphore("takeIfAvailable", 1, true),
+    "effect/Semaphore:release": ofSemaphore("release", 1, true),
+    "effect/Semaphore:resize": ofSemaphore("resize", 1, true),
+    "effect/Semaphore:releaseAll": ofSemaphore("releaseAll", 0, false),
   };
 
   // --- Queue: what the handler offered and has not taken, in order.

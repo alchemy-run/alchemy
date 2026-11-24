@@ -173,9 +173,9 @@ items.length;
 (n: number) => {
   return n;
 };
-function (n: number) {
+(function (n: number) {
   return n - 1;
-};
+});
 twice(...[a]);
 
 // Patterns, in a parameter or a declaration
@@ -206,8 +206,7 @@ tag`x${a}`; // tagged templates
 delete made.n;
 this;
 ({ get n() { return a; } }); // a getter or a setter
-made[text]; // a key an input decides
-items[a];
+items[a]; // a place an input decides
 import.meta.url;
 
 Date.now(); // globals that are not the same every time
@@ -226,6 +225,8 @@ new Map();
 new Set();
 Symbol("s");
 structuredClone(made);
+
+absurd(a); // what code calls where it cannot be: reaching it is reported
 ```
 
 ## Numbers
@@ -317,6 +318,7 @@ text.includes(other);
 text.indexOf(other);
 text.lastIndexOf("@"); // from the end, a separator the code writes
 text.charAt(0);
+text.at(0); // and text.at(-1), counted from the end
 text.concat(other, "!");
 text.replace("a", "o");
 text.replaceAll("a", "o");
@@ -351,7 +353,6 @@ text.trim();
 text.padStart(4, "-");
 text.repeat(2);
 
-text.at(0);
 text[0];
 text.charCodeAt(0);
 text.split(""); // into letters
@@ -401,9 +402,9 @@ items.findLastIndex((n) => n > a);
 items.some((n) => n > a);
 items.every((n) => n > a);
 items.reduce((total, n) => total + n, 0);
-items.forEach((n) => seen.push(n));
 
 const seen: Array<number> = []; // an array the code made
+items.forEach((n) => seen.push(n));
 seen.push(a);
 seen[0] = b;
 
@@ -447,7 +448,7 @@ Equal.equals(roster.members, other.members); // two sets, two maps, two decimals
 
 for (const person of roster.members) seen.push(person); // in order: tried in every order, for up to four items
 [...roster.members];
-HashMap.keys(roster.points);
+[...HashMap.keys(roster.points)];
 ```
 
 The library gives the items of a set and the pairs of a map in the order of their hashes, which the code did not choose. A rule about code that takes them in order is proved only if it holds in every order.
@@ -562,7 +563,6 @@ HashSet.make(a, b).pipe(HashSet.add(1), HashSet.has(a));
 HashMap.make(["x", a]).pipe(HashMap.set("y", b), HashMap.get("y"));
 Match.value(a).pipe(Match.when((n) => n > b, () => "more"), Match.orElse(() => "less"));
 cell.pipe(Ref.updateAndGet((n) => n + 1)); // a Ref, a SynchronizedRef and a SubscriptionRef
-Schema.String.pipe(Schema.brand("AccountId"));
 ```
 
 ```typescript title="effect/Effect"
@@ -700,9 +700,12 @@ const step = Ref.updateAndGet(ran, (n) => n + 1);
 Effect.retry(even(a), { times: 2 }); // a count the code writes
 Effect.retry(even(a), { times: 5, while: (error) => error.n !== 2 });
 Effect.retry(even(a), { times: 5, until: (error) => error.n === 1 });
+Effect.retry(even(a), Schedule.recurs(2)); // the one schedule that does not wait
 Effect.repeat(step, { times: 2 }); // gives what the last run gave
 Effect.repeat(step, { times: 4, while: (n) => n < a + 3 });
 Effect.repeat(step, { times: 4, until: (n) => n === a + 2 });
+Effect.repeat(step, { schedule: Schedule.recurs(2) });
+Effect.repeat(step, Schedule.recurs(2)); // gives how many times it ran again
 
 // An effect is done before any time is up.
 Effect.timeout(even(a), "1 second");
@@ -1691,6 +1694,86 @@ SubscriptionRef.getAndUpdateEffect(cell, (n) => Effect.succeed(n * 2));
 SubscriptionRef.modifyEffect(cell, (n) => Effect.succeed([n > b, n - 1]));
 ```
 
+```typescript title="effect/Deferred"
+// A handler is one fiber, so a Deferred is what the handler itself completed it with.
+const done = yield* Deferred.make();
+const made = Deferred.makeUnsafe();
+Deferred.succeed(done, a); // gives whether it was the first to complete it
+Deferred.sync(done, () => a + b);
+Deferred.fail(done, new Odd({ n: a }));
+Deferred.failSync(done, () => a);
+Deferred.die(done, "gone");
+Deferred.dieSync(done, () => "gone");
+Deferred.await(done); // once the handler has completed it
+Deferred.isDone(done);
+Deferred.isDoneUnsafe(done);
+Deferred.poll(done);
+```
+
+```typescript title="effect/Latch"
+const gate = yield* Latch.make(); // closed, or Latch.make(true)
+const made = Latch.makeUnsafe(false);
+gate.open;
+gate.close;
+gate.release;
+gate.await; // once the handler has opened it
+gate.whenOpen(Effect.succeed(a));
+gate.isOpen();
+gate.openUnsafe();
+gate.closeUnsafe();
+Latch.open(gate);
+Latch.close(gate);
+Latch.release(gate);
+Latch.await(gate);
+Latch.whenOpen(gate, even(a));
+Latch.whenOpen(gate)(Effect.succeed(b));
+Latch.isOpen(gate);
+Latch.openUnsafe(gate);
+Latch.closeUnsafe(gate);
+```
+
+```typescript title="effect/Semaphore"
+const permits = yield* Semaphore.make(2); // a count the code writes
+const made = Semaphore.makeUnsafe(1);
+permits.withPermits(1)(Effect.succeed(a)); // while there are that many free
+permits.withPermit(Effect.succeed(b));
+permits.withPermitsIfAvailable(2)(Effect.succeed(b));
+permits.take(1);
+permits.takeIfAvailable(2);
+permits.release(1);
+permits.releaseAll;
+permits.resize(3);
+Semaphore.withPermits(permits, 2)(Effect.succeed(a));
+Semaphore.withPermits(permits, 2, Effect.succeed(b));
+Semaphore.withPermit(permits, Effect.succeed(a));
+Semaphore.withPermit(permits)(Effect.succeed(b));
+Semaphore.withPermitsIfAvailable(permits, 4)(Effect.succeed(a));
+Semaphore.withPermitsIfAvailable(permits, 1, Effect.succeed(a));
+Semaphore.take(permits, 2);
+Semaphore.takeIfAvailable(permits, 2);
+Semaphore.release(permits, 1);
+Semaphore.resize(permits, 5);
+Semaphore.releaseAll(permits);
+```
+
+```typescript title="effect/Queue"
+const line = yield* Queue.unbounded();
+const short = yield* Queue.bounded(2); // a size the code writes
+Queue.offer(line, a); // while there is room
+Queue.offerAll(line, [b, a + b]);
+Queue.offerUnsafe(line, a);
+Queue.take(line); // while there is something in it
+Queue.takeAll(line);
+Queue.takeN(line, 1);
+Queue.peek(line);
+Queue.poll(line);
+Queue.clear(line);
+Queue.size(line);
+Queue.sizeUnsafe(line);
+Queue.isFull(line);
+Queue.isFullUnsafe(line);
+```
+
 ```typescript title="effect/MutableRef"
 (() => {
   const count = MutableRef.make(a);
@@ -2105,20 +2188,15 @@ Effect.promise(() => fetch(url));
 Effect.tryPromise(() => fetch(url));
 ```
 
-Which of two things happens first is not something a handler decides, and a handler does not wait.
+Which of two things happens first is not something a handler decides, and a handler does not wait. A handler is one fiber that runs to its end, so a `Deferred`, a `Queue`, a `Semaphore` and a `Latch` are [supported](#library-functions) where the handler itself has done what the call waits for, and reported where it has not.
 
 ```typescript title="Time passing and things running together"
-import * as Schedule from "effect/Schedule";
 import * as Scheduler from "effect/Scheduler";
 import * as Fiber from "effect/Fiber";
 import * as FiberHandle from "effect/FiberHandle";
 import * as FiberMap from "effect/FiberMap";
 import * as FiberSet from "effect/FiberSet";
-import * as Deferred from "effect/Deferred";
-import * as Latch from "effect/Latch";
-import * as Semaphore from "effect/Semaphore";
 import * as PartitionedSemaphore from "effect/PartitionedSemaphore";
-import * as Queue from "effect/Queue";
 import * as PubSub from "effect/PubSub";
 import * as Pool from "effect/Pool";
 import * as Cache from "effect/Cache";
@@ -2143,12 +2221,15 @@ import * as TxSubscriptionRef from "effect/TxSubscriptionRef";
 
 Effect.sleep("1 second");
 Effect.delay(effect, "1 second");
-Effect.retry(effect, Schedule.recurs(3)); // retry and repeat on a schedule: write { times: 3 }
-Effect.repeat(effect, { schedule: Schedule.spaced("1 second") });
+Deferred.await(done); // a wait for what the handler has not done itself: it would never end
+gate.await;
+Queue.take(line);
+permits.take(3);
+Effect.repeat(effect, { schedule: Schedule.spaced("1 second") }); // a schedule that waits: every one but Schedule.recurs
 Effect.retry(effect, { times: command.attempts }); // a count an input decides
 Effect.race(first, second);
 SubscriptionRef.changes(cell); // a stream of what a cell held
-Effect.fork(effect);
+Effect.forkChild(effect); // and every other way to start a fiber
 
 Cron.next(cron); // next, prev and sequence use the clock when they are given no time
 ```
@@ -2249,7 +2330,7 @@ Pack: Effect.fn(function* (parcel, command) {
 ```typescript title="Not supported"
 yield* Effect.promise(() => fetch(url)); // the outside world
 yield* Effect.tryPromise(() => fetch(url));
-yield* Effect.sleep("1 second"); // time passing: sleep, delay, a schedule, race, fork
+yield* Effect.sleep("1 second"); // time passing: sleep, delay, a schedule that waits, race, a fiber
 yield a; // yield without the star
 yield* Option.some(a); // an Option or a Result in Effect.gen: use Option.gen, Result.gen, Effect.fromOption, Effect.fromResult
 ```

@@ -24,6 +24,9 @@ const ONE_WAY: ReadonlySet<string> = new Set([
   ...["effect/Effect:gen", "effect/Filter:fromPredicate", "effect/Function:dual"],
   ...["effect/HashMap:isHashMap", "effect/HashSet:isHashSet", "effect/Match:typeTags"],
   ...["effect/Sink:find", "effect/Filter:tagged"],
+  // Each of these takes the latch or the semaphore first either way, and then the effect.
+  ...["effect/Latch:whenOpen", "effect/Semaphore:withPermit", "effect/Semaphore:withPermits"],
+  "effect/Semaphore:withPermitsIfAvailable",
 ]);
 
 const declared = new Map<string, ReadonlySet<string>>();

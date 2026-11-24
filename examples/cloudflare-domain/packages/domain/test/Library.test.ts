@@ -231,7 +231,8 @@ it.effect(
         // Each of these was checked against the package: none is a function of the command alone.
         Remember: "calls Cache.make, which the prover has no model for",
         Borrow: "calls Effect.scoped, which the prover has no model for",
-        Guard: "calls Semaphore.make, which the prover has no model for",
+        Guard:
+          "waits for more permits of a Semaphore than are free: a handler runs to its end without waiting, so it never would",
         Configure: "calls Config.Int, which the prover has no model for",
         Link: "calls Graph.directed, which the prover has no model for",
         Tick: "calls Cron.next, which the prover has no model for",

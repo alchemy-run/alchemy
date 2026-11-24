@@ -1606,7 +1606,7 @@ export const make = (host: Host) => {
       return Effect.fail(
         Value.notTranslated(
           site,
-          `calls ${lib.module.replace(/^effect\//, "")}.${lib.path.join(".")}, which the prover has no model for`,
+          `calls ${[lib.module.replace(/^effect\//, ""), ...lib.path].join(".")}, which the prover has no model for`,
           true,
         ),
       );
