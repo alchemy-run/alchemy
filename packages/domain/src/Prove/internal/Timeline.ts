@@ -186,6 +186,8 @@ export const outside = <A, E>(self: Effect.Effect<A, E>): Effect.Effect<A, E> =>
         self,
         Effect.sync(() => {
           timeline.instant.busy--;
+          // The fiber goes on by itself from here: what it comes to wait for has to be seen.
+          timeline.instant.kick();
         }),
       );
     });
@@ -249,6 +251,8 @@ export const run = <A>(current: () => Run, site: Site, self: Eval<A>): Eval<A> =
         ? Value.notTranslated(wait.site, `${wait.what}: the handler would never end`)
         : Value.notTranslated(site, "waits for something that never comes");
       settle(never.pipe(Effect.fail));
+      // What the handler began is stopped, so that what it left open is closed.
+      fiber.interruptUnsafe();
     };
     timeline.instant.pump();
     return Effect.sync(() => {

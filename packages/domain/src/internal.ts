@@ -437,6 +437,7 @@ export class Instant<T = number> {
         wake: () => resume(Effect.void),
       };
       this.sleepers.push(sleeper);
+      this.kick();
       return Effect.sync(() => {
         const index = this.sleepers.indexOf(sleeper);
         if (index >= 0) this.sleepers.splice(index, 1);
@@ -458,6 +459,15 @@ export class Instant<T = number> {
     // While work is under way outside the run, only the fiber that waits for it is scheduled.
     if (this.busy > 0) this.urgent.push(task);
     else this.queue(priority, [task], false);
+    this.kick();
+  }
+
+  /**
+   * See that what can run is run. A fiber that goes on after work outside
+   * the run does so on its own, not in a pump: what it then waits for is
+   * found by the pump this asks for.
+   */
+  kick(): void {
     if (this.defer && !this.pumping && !this.scheduled) {
       this.scheduled = true;
       this.defer(() => {
