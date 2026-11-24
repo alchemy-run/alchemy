@@ -1701,6 +1701,10 @@ const cut: ReadonlyArray<Group> = [
         : `const text = command.text; const a = command.a; const b = command.b;`,
     chunk: 4,
     both: [
+      // A letter by its place, its number, and text a number of times.
+      `[text[0], text[1], "abc"[1], "abc"[5]]`,
+      `[text.charCodeAt(0), text.charCodeAt(1), "a".charCodeAt(0)]`,
+      `[text.repeat(2), text.repeat(0), text.repeat(1), "ab".repeat(3)]`,
       `text.indexOf(",")`,
       `text.lastIndexOf(",")`,
       `text.indexOf("::")`,
@@ -2100,6 +2104,7 @@ const syntax: ReadonlyArray<Group> = [
     name: "Statements",
     chunk: 1,
     ...lists,
+    prelude: [`enum Size { Small, Large = 10, Huge }`],
     both: [
       // Declarations and assignment.
       body(`const x = a; return x;`),
@@ -2201,6 +2206,12 @@ const syntax: ReadonlyArray<Group> = [
       body(`a; "use strict"; return a;`),
       body(`return;`) + ` ?? "nothing"`,
       body(``) + ` ?? "nothing"`,
+      // An enum, in a function and at the top of the file.
+      body(
+        `enum Kind { Good, Gift = 5, Last } return [Kind.Good, Kind.Gift, Kind.Last, Kind[5], Kind.Good === 0, a > 1 ? Kind.Last : Kind.Good];`,
+      ),
+      body(`enum Tone { Warm = "warm", Cold = "cold" } return a > 0 ? Tone.Warm : Tone.Cold;`),
+      body(`return [Size.Small, Size.Large, Size.Huge, Size[10]];`),
       // Labels, the comma, and a statement that does nothing.
       body(
         `let total = 0; outer: for (const n of items) { for (const m of [1, 2]) { if (n < 0) continue outer; if (m > a) break outer; total += n * m; } } return total;`,
@@ -2266,7 +2277,6 @@ const syntax: ReadonlyArray<Group> = [
       ],
       [body(`const run = async () => a; return run();`), reported],
       [body(`function* each() { yield a; } return [...each()];`), reported],
-      [body(`enum Kind { A, B } return Kind.A + a;`), reported],
       [body(`using held = { [Symbol.dispose]() {} }; return a;`), reported],
       [body(`unknownName = a; return a;`), reported],
       [body(`return unknownName + a;`), reported],

@@ -78,6 +78,11 @@ function countdown(n: number): number {
   return n <= 0 ? 0 : 1 + countdown(n - 1); // a function that calls itself, on a number the code writes
 }
 
+enum Kind {
+  Good,
+  Gift = 5, // a member is found by its number too: Kind[5]
+}
+
 outer: for (const n of items) {
   for (const m of [1, 2]) {
     if (n < 0) continue outer; // a label, on a loop or on a block
@@ -112,10 +117,6 @@ function* each() {
 class Local {
   n = a;
 } // a class in a function
-enum Kind {
-  Good,
-  Gift,
-}
 using held = resource;
 
 while (count < a) count++; // a loop that an input decides the length of
@@ -325,6 +326,9 @@ text === other;
 text + other;
 `${text}:${other.length}`;
 text.length;
+text[0]; // the letter at a place, or undefined past the end
+text.charCodeAt(0);
+text.repeat(2); // a number of times the code writes
 
 text.startsWith(other);
 text.endsWith("z");
@@ -365,10 +369,7 @@ text.toUpperCase(); // changing the letters of a string an input holds
 text.toLowerCase();
 text.trim();
 text.padStart(4, "-");
-text.repeat(2);
 
-text[0];
-text.charCodeAt(0);
 text.split(""); // into letters
 text.split(other); // by a separator an input holds
 
@@ -3171,7 +3172,7 @@ export enum Kind { Good, Gift } // an exported enum or namespace
 ```
 
 ```typescript title="Not supported"
-enum Local { Good, Gift } // an enum or a namespace the file does not export
+namespace Local { export const n = 1; } // a namespace
 class Parcel {
   grams = 0; // a class with a body
 }

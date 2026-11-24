@@ -149,7 +149,8 @@ export const cases: ReadonlyArray<Case> = [
   // An exported enum and namespace are the values the file's module holds.
   read("ExportedEnum", `Level.High + a`),
   read("ExportedNamespace", `Space.inside + a`),
-  unread("OwnEnum", `OwnLevel.High + a`, /refers to OwnLevel, which the prover cannot find/),
+  // An enum the file keeps to itself is read where it is declared.
+  read("OwnEnum", `OwnLevel.High + a`),
   unread("OwnNamespace", `OwnSpace.inside + a`, /refers to OwnSpace, which the prover cannot find/),
   unread("OwnPlainClass", `new Plain(a).n`, /Plain is a class that its file does not export/),
   unread(

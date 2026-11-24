@@ -609,6 +609,7 @@ export const make = (given: Loader, run: Run): Interpreter => {
           ),
         );
       }
+      if (declaration?._tag === "Enum") return yield* enumOf(declaration.node, moduleEnv(module));
       if (declaration?._tag === "Function") {
         return exported(
           { _tag: "Fn", node: declaration.node, env: moduleEnv(module), effectful: false },
@@ -1019,6 +1020,39 @@ export const make = (given: Loader, run: Run): Interpreter => {
     }),
   });
 
+  /**
+   * `enum Kind { Good, Gift = 5, Last }`: an object of its members. One with
+   * no value is one more than the member before it, and a member that is a
+   * number is found by it too: `Kind[5]`.
+   */
+  const enumOf: (node: Node, env: Env) => Eval<V> = Effect.fnUntraced(function* (
+    node: Node,
+    env: Env,
+  ) {
+    const site: Site = { module: env.module, node };
+    const members = (node.body?.members ?? node.members ?? []) as ReadonlyArray<Node>;
+    const scope = child(env.scope);
+    const fields: Record<string, V> = {};
+    let next: number | undefined = 0;
+    for (const member of members) {
+      const name: string =
+        member.id.type === "Identifier" ? member.id.name : String(member.id.value);
+      const value: V = member.initializer
+        ? yield* evaluate(member.initializer, { ...env, scope })
+        : next === undefined
+          ? yield* fail(
+              site,
+              "declares an enum member with no value after one that is not a number",
+            )
+          : Value.num(next);
+      next = value._tag === "Num" ? value.value + 1 : undefined;
+      fields[name] = value;
+      if (value._tag === "Num") fields[String(value.value)] = Value.str(name);
+      scope.variables.set(name, value);
+    }
+    return Value.obj(fields);
+  });
+
   /** `n.toString()` and `n.toFixed(2)`: a number as text. */
   const numberMember = (value: V, key: string): V | undefined =>
     key === "toString"
@@ -1133,6 +1167,10 @@ export const make = (given: Loader, run: Run): Interpreter => {
             ? Value.undef
             : yield* fail(site, `reads .${key} of an array`);
       case "Str":
+        if (/^\d+$/.test(key))
+          return value.value[Number(key)] === undefined
+            ? Value.undef
+            : Value.str(value.value[Number(key)]!);
         return key === "length"
           ? Value.num(value.value.length)
           : (library.stringMember(value, key) ?? (yield* fail(site, `reads .${key} of a string`)));
@@ -1143,6 +1181,11 @@ export const make = (given: Loader, run: Run): Interpreter => {
         if (value.term.sort === "Int" || value.term.sort === "Real") {
           const method = numberMember(value, key);
           if (method) return method;
+        }
+        // `text[0]`: the letter at a place, or nothing past the end.
+        if (value.term.sort === "String" && /^\d+$/.test(key)) {
+          const at = library.stringMember(value, "at");
+          if (at) return yield* call(at, [Value.num(Number(key))], site);
         }
         return value.term.sort === "String" && key === "length"
           ? Value.term("Int", `(str.len ${value.term.text})`)
@@ -2521,6 +2564,9 @@ export const make = (given: Loader, run: Run): Interpreter => {
             break;
           }
           case "DebuggerStatement":
+            break;
+          case "TSEnumDeclaration":
+            env.scope.variables.set(statement.id.name, yield* enumOf(statement, env));
             break;
           case "ForOfStatement":
           case "ForInStatement": {

@@ -174,6 +174,9 @@ const declare = (declarations: Map<string, Declaration>, node: Node): void => {
   } else if (node.type === "ClassDeclaration") {
     const name = nameOf(node.id);
     if (name !== undefined) declarations.set(name, { _tag: "Class", node });
+  } else if (node.type === "TSEnumDeclaration") {
+    const name = nameOf(node.id);
+    if (name !== undefined) declarations.set(name, { _tag: "Enum", node });
   }
 };
 

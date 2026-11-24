@@ -33,7 +33,9 @@ export type Declaration =
   /** A name a pattern binds: `const { a, b: [c] } = made` declares `a` and `c`. */
   | { readonly _tag: "Pattern"; readonly pattern: Node; readonly init: Node }
   | { readonly _tag: "Function"; readonly node: Node }
-  | { readonly _tag: "Class"; readonly node: Node };
+  | { readonly _tag: "Class"; readonly node: Node }
+  /** `enum Kind { Good, Gift }`: an object of its members, made where it is declared. */
+  | { readonly _tag: "Enum"; readonly node: Node };
 
 export interface Import {
   readonly specifier: string;

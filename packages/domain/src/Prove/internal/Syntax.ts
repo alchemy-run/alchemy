@@ -362,7 +362,7 @@ export const FORMS: ReadonlyArray<Form> = [
   form("TSInstantiationExpression", kind("TSInstantiationExpression")),
   form("TSTypeAliasDeclaration", kind("TSTypeAliasDeclaration")),
   form("TSInterfaceDeclaration", kind("TSInterfaceDeclaration")),
-  form("TSEnumDeclaration", kind("TSEnumDeclaration"), false),
+  form("TSEnumDeclaration", kind("TSEnumDeclaration")),
   form("TSModuleDeclaration", kind("TSModuleDeclaration"), false),
 
   // A file: what it imports, declares and exports.

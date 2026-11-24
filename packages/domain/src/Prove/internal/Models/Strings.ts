@@ -406,6 +406,22 @@ export const make = (kit: Kit) => {
         missing ? Value.undef : Value.term("String", `(str.at ${term.text} ${place})`),
       );
     },
+    // The number of the letter at a place: none past the end, which the language writes as NaN.
+    charCodeAt: (self, [at], site) => {
+      const text = known(self);
+      const i = absent(at) ? 0 : index(at);
+      if (i === undefined || i < 0) return unread(site, "charCodeAt");
+      if (text !== undefined) return Effect.succeed(Value.num(text.charCodeAt(i)));
+      const term = Compare.textual(self);
+      if (!term) return unread(site, "charCodeAt");
+      return Effect.map(
+        host.decide(Value.term("Bool", `(<= (str.len ${term.text}) ${i})`), site),
+        (missing) =>
+          missing
+            ? Value.num(Number.NaN)
+            : Value.term("Int", `(str.to_code (str.at ${term.text} ${i}))`),
+      );
+    },
     toUpperCase: computed("toUpperCase", (self) => self.toUpperCase()),
     toLowerCase: computed("toLowerCase", (self) => self.toLowerCase()),
     trim: computed("trim", (self) => self.trim()),
@@ -417,7 +433,25 @@ export const make = (kit: Kit) => {
     padEnd: computed("padEnd", (self, [n, fill]) =>
       self.padEnd(Number(n), fill as string | undefined),
     ),
-    repeat: computed("repeat", (self, [n]) => self.repeat(Number(n))),
+    // Text an input holds, a number of times the code writes: that many of it, one after another.
+    repeat: (self, args, site) => {
+      const text = known(self);
+      const times = index(args[0]);
+      if (text !== undefined || times === undefined || times < 0 || times > 16)
+        return computed("repeat", (held, [n]) => held.repeat(Number(n)))(self, args, site);
+      const term = Compare.textual(self);
+      if (!term) return unread(site, "repeat");
+      return Effect.succeed(
+        times === 0
+          ? Value.str("")
+          : times === 1
+            ? self
+            : Value.term(
+                "String",
+                `(str.++ ${Array.from({ length: times }, () => term.text).join(" ")})`,
+              ),
+      );
+    },
     split: (self, args, site) => {
       const separator = known(args[0]);
       return self._tag === "Term" &&
@@ -432,7 +466,6 @@ export const make = (kit: Kit) => {
       const placed = place(self, args[0], args[1], "last");
       return placed ? Effect.succeed(placed) : lastIndexKnown(self, args, site);
     },
-    charCodeAt: computed("charCodeAt", (self, [i]) => self.charCodeAt(Number(i ?? 0))),
   };
 
   const splitKnown = computed("split", (self, [separator]) =>
