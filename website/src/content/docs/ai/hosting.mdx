@@ -88,6 +88,10 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
+## Reach it from a browser
+
+Serve the session as an RPC group, and a browser follows it and acts on it over one WebSocket. See [Connect a front end](/ai/front-end).
+
 ## Reach it from a Domain policy
 
 A policy runs in the model's own Durable Objects, and reaches a session's object the same way. See [Processes and Domain models](/ai/domain#let-a-policy-ask-for-the-work).

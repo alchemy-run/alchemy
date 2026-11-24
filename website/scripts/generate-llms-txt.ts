@@ -716,6 +716,7 @@ const SECTIONS: Section[] = [
         "ai/domain",
         "ai/harnesses",
         "ai/hosting",
+        "ai/front-end",
         "ai/models",
         "ai/tools",
         "ai/coding-tools",

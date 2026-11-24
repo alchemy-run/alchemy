@@ -1,12 +1,18 @@
-import type * as AI from "@alchemy.run/ai";
+import * as AI from "@alchemy.run/ai";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
+import * as Socket from "effect/socket/Socket";
+import * as Stream from "effect/Stream";
 import ProcessApi from "./fixtures/ProcessApi.ts";
 
 const providers = Cloudflare.providers();
@@ -220,6 +226,102 @@ for (const harness of ["pi", "opencode"] as const) {
             entry.item.type === "user" ? [entry.item.text] : [],
           );
           expect(users).toEqual(["Add 20 and 22.", "Also say the word PERSIMMON in your answer."]);
+        }),
+        { timeout: 240_000 },
+      );
+
+      test(
+        "a client follows a session over a WebSocket",
+        Effect.gen(function* () {
+          const { url } = yield* stack;
+          const live = AI.SessionClientWebSocket(
+            `${url.replace(/^http/, "ws")}/${harness}/live/socket-3`,
+          ).pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal));
+
+          const events = yield* Effect.gen(function* () {
+            const session = yield* AI.SessionClient;
+            // Reading first: the session is idle, and has nothing yet.
+            let worked = false;
+            const first = yield* Deferred.make<void>();
+            const reading = yield* AI.followSession().pipe(
+              Stream.tap(() => Deferred.succeed(first, undefined)),
+              // Idle again, after working: its answer is stored. A session kept from
+              // an earlier run (NO_DESTROY) never works again: its stored answer ends the read.
+              Stream.takeUntil((event) => {
+                if (event.type === "item") {
+                  return (
+                    !worked && event.item.type === "assistant" && event.item.toolCalls.length === 0
+                  );
+                }
+                if (event.status === "working") worked = true;
+                return worked && event.status === "idle" && event.queued.length === 0;
+              }),
+              Stream.runCollect,
+              Effect.forkChild,
+            );
+            yield* Deferred.await(first);
+            yield* session.send({ text: "Add 7 and 8.", requestId: "first" });
+            return Array.from(yield* Fiber.join(reading));
+          }).pipe(
+            Effect.provide(live),
+            Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 6 }),
+          );
+
+          expect(events[0]).toEqual({ type: "status", status: "idle", queued: [] });
+          const items = events.flatMap((event) => (event.type === "item" ? [event] : []));
+          expect(items[0]?.item).toEqual({ type: "user", text: "Add 7 and 8." });
+          expect(items.map((event) => event.seq)).toEqual(
+            [...items.map((event) => event.seq)].sort((a, b) => a - b),
+          );
+          // The tool is off by a thousand: 1015 can only have come from it.
+          expect(JSON.stringify(items)).toContain("1015");
+
+          // Read again from the last item: only the status, nothing repeated.
+          const last = items.at(-1)!.seq;
+          const again = yield* Effect.gen(function* () {
+            const session = yield* AI.SessionClient;
+            const page = yield* session.history({ take: 1, order: "desc" });
+            const first = yield* Stream.runHead(session.events({ after: last }));
+            return { page, first: Option.getOrUndefined(first) };
+          }).pipe(Effect.provide(live));
+          expect(again.page.items[0]?.seq).toBe(last);
+          expect(again.first).toEqual({ type: "status", status: "idle", queued: [] });
+        }),
+        { timeout: 240_000 },
+      );
+
+      test(
+        "a reader that waited while its session was idle sees the next message",
+        Effect.gen(function* () {
+          const { url } = yield* stack;
+          const live = AI.SessionClientWebSocket(
+            `${url.replace(/^http/, "ws")}/${harness}/live/socket-idle`,
+          ).pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal));
+
+          const items = yield* Effect.gen(function* () {
+            const first = yield* Deferred.make<void>();
+            const reading = yield* AI.followSession().pipe(
+              Stream.tap(() => Deferred.succeed(first, undefined)),
+              Stream.filter((event) => event.type === "item"),
+              Stream.takeUntil(
+                (event) => event.item.type === "assistant" && event.item.toolCalls.length === 0,
+              ),
+              Stream.runCollect,
+              Effect.forkChild,
+            );
+            yield* Deferred.await(first);
+            // Long enough for an idle object to be put to sleep with the socket open.
+            yield* Effect.sleep("30 seconds");
+            // Sent by the Worker, as a policy would, not over the reader's socket.
+            yield* call(`${harness}/tell/socket-idle`, { text: "Add 4 and 5.", requestId: "a" });
+            return Array.from(yield* Fiber.join(reading));
+          }).pipe(Effect.provide(live));
+
+          expect(items[0]?.item).toEqual({ type: "user", text: "Add 4 and 5." });
+          expect(items.map((event) => event.seq)).toEqual(
+            [...new Set(items.map((event) => event.seq))].sort((a, b) => a - b),
+          );
+          expect(JSON.stringify(items)).toContain("1009");
         }),
         { timeout: 240_000 },
       );

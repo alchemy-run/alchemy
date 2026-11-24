@@ -1,11 +1,15 @@
 import * as AI from "@alchemy.run/ai";
+import * as AIFoldkit from "@alchemy.run/ai/Foldkit";
 import { describe, expect, it } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { LanguageModel } from "effect/ai";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as RpcTest from "effect/rpc/RpcTest";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Chat from "./fixtures/chat/Chat.ts";
 import { recording } from "./fixtures/recording.ts";
 
 class Fast extends AI.Model<Fast>()("fast") {}
@@ -124,6 +128,90 @@ describe("AI.Process", { tags: ["unit"] }, () => {
         expect(newest.items.map((entry) => entry.seq)).toEqual([3, 2]);
       }),
     ),
+  );
+
+  it.effect("serves a session as an RPC group", () =>
+    run((harness) =>
+      Effect.gen(function* () {
+        const session = (yield* Research).get("q1");
+        const client = yield* RpcTest.makeClient(AI.SessionRpcs).pipe(
+          Effect.provide(AI.SessionHandlers(session)),
+        );
+        yield* client.send({ text: "one", requestId: "a" });
+        yield* client.send({ text: "one", requestId: "a" });
+        yield* client.steer({ text: "two" });
+        yield* client.interrupt();
+
+        expect(harness.sessions.get("Research/q1")!.messages).toEqual([
+          { text: "one", requestId: "a", model: "smart" },
+          { text: "two", model: "smart", steered: true },
+        ]);
+        expect(harness.sessions.get("Research/q1")!.interrupts).toBe(1);
+        expect(Array.from(yield* Stream.runCollect(client.events({ after: 1 })))).toEqual([
+          { type: "status", status: "idle", queued: [] },
+          { type: "item", seq: 2, item: { type: "user", text: "two" } },
+        ]);
+        expect((yield* client.history({ take: 1, order: "desc" })).items).toEqual([
+          { seq: 2, item: { type: "user", text: "two" } },
+        ]);
+      }).pipe(Effect.scoped),
+    ),
+  );
+
+  it.effect("a Foldkit app acts on a session and follows it", () =>
+    run(() =>
+      Effect.gen(function* () {
+        const session = (yield* Research).get("q1");
+        const client = yield* RpcTest.makeClient(AI.SessionRpcs).pipe(
+          Effect.provide(AI.SessionHandlers(session)),
+        );
+        const sent = yield* AIFoldkit.Send({ text: "one", requestId: "a" }).effect.pipe(
+          Effect.provideService(AI.SessionClient, client),
+        );
+        expect(sent).toEqual(AIFoldkit.Message.SucceededSession({ requestId: "a" }));
+        yield* AIFoldkit.Steer({ text: "two", requestId: "b" }).effect.pipe(
+          Effect.provideService(AI.SessionClient, client),
+        );
+
+        // The Model holds item 1, so the read starts after it.
+        const entry = AIFoldkit.events({
+          cursor: (model: { readonly seq: number }) => Option.some(model.seq),
+          onEvent: (event) => (event.type === "item" ? `item ${event.seq}` : event.status),
+          onFailure: (reason) => reason,
+        });
+        const dependencies = entry.modelToDependencies({ seq: 1 });
+        const messages = yield* entry
+          .dependenciesToStream(dependencies, () => dependencies)
+          .pipe(Stream.provideService(AI.SessionClient, client), Stream.runCollect);
+        expect(Array.from(messages)).toEqual(["idle", "item 2"]);
+      }).pipe(Effect.scoped),
+    ),
+  );
+
+  it.effect("a Foldkit Model is built from a session's events", () =>
+    Effect.sync(() => {
+      const events: ReadonlyArray<AI.SessionEvent> = [
+        {
+          type: "status",
+          status: "working",
+          queued: [{ id: "7", text: "next", delivery: "queue" }],
+        },
+        { type: "item", seq: 1, item: { type: "user", text: "one" } },
+        { type: "status", status: "idle", queued: [] },
+      ];
+      const model = events.reduce(
+        (model, event) => Chat.update(model, Chat.Message.ReceivedSessionEvent({ event })).model,
+        Chat.init({ page: "p" }).model,
+      );
+      expect(model.status).toBe("idle");
+      expect(model.queued).toEqual([]);
+      expect(model.items).toEqual([{ seq: 1, item: { type: "user", text: "one" } }]);
+
+      // Each click is one Command, named so a retry is not run twice.
+      const sent = Chat.update({ ...model, draft: "two" }, Chat.Message.ClickedSend());
+      expect(sent.model.sent).toBe(1);
+      expect(sent.commands?.map((command) => command.name)).toEqual(["SendToSession"]);
+    }),
   );
 
   it.effect("a session nobody started is idle and empty", () =>

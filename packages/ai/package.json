@@ -111,6 +111,7 @@
     "@types/bun": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
+    "foldkit": "catalog:",
     "typescript": "catalog:"
   },
   "peerDependencies": {
@@ -121,9 +122,13 @@
     "@alchemy.run/e2b": "workspace:*",
     "@alchemy.run/modal": "workspace:*",
     "alchemy": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "foldkit": "catalog:"
   },
   "peerDependenciesMeta": {
+    "foldkit": {
+      "optional": true
+    },
     "@alchemy.run/archil": {
       "optional": true
     },

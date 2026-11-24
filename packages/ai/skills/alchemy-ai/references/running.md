@@ -82,3 +82,26 @@ const page = yield* triage.get(String(issue)).history({ take: 50 });
 Each item is a message, the tools an answer called, or a tool's result. `events()` is the same items live, after the session's status.
 
 More: [Read the transcript](https://alchemy.run/ai/processes#read-the-transcript), [Watch a session](https://alchemy.run/ai/processes#watch-a-session).
+
+## Connect a front end
+
+Serve a session as `AI.SessionRpcs` from a `Cloudflare.RpcDurableObject` named after the session's key. A browser follows it and acts on it over one WebSocket.
+
+```typescript
+export default class Engineers extends Cloudflare.RpcDurableObject<Engineers>()(
+  "Engineers",
+  { schema: AI.SessionRpcs },
+  Effect.gen(function* () {
+    const engineer = yield* Engineer;
+    const state = yield* Cloudflare.DurableObjectState;
+    return Effect.sync(() => AI.SessionHandlers(engineer.get(state.id.name ?? "")));
+  }).pipe(Effect.provide(Live)),
+) {}
+```
+
+- The Worker forwards a route to it: `engineers.fetch(id, request)`. Authorize the caller first.
+- Browser code imports from `@alchemy.run/ai/SessionRpcs`: `AI.SessionClientWebSocket(url)` is the client Layer, `AI.followSession({ after })` the resumable event stream.
+- A Foldkit app uses `@alchemy.run/ai/Foldkit`: `Send`, `Steer`, `Withdraw`, `Interrupt` Commands and the `events` Subscription.
+- A server reaches the same object with `yield* engineers.getByName(id)`, which gives the same client.
+
+More: [Serve a session](https://alchemy.run/ai/front-end#serve-a-session), [Follow what the session does](https://alchemy.run/ai/front-end#follow-what-the-session-does), [In a Foldkit app](https://alchemy.run/ai/front-end#in-a-foldkit-app).

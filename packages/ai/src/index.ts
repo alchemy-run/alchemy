@@ -33,14 +33,14 @@ export {
   type EngineSession,
   type EngineSessionOptions,
   type EngineValues,
-  type HistoryOptions,
-  type QueuedMessage,
+  HistoryOptions,
+  QueuedMessage,
   type Reply,
   type SendOptions,
-  type SessionEntry,
-  type SessionEvent,
-  type SessionItem,
-  type SessionPage,
+  SessionEntry,
+  SessionEvent,
+  SessionItem,
+  SessionPage,
 } from "./Harness.ts";
 export {
   Acting,
@@ -58,6 +58,14 @@ export {
   type StartOptions,
   type Stored,
 } from "./Process.ts";
+export {
+  followSession,
+  SessionClient,
+  SessionClientWebSocket,
+  SessionError,
+  SessionHandlers,
+  SessionRpcs,
+} from "./SessionRpcs.ts";
 export { isModel, Model, type AnyModel, type ModelClass, type ModelOptions } from "./Model.ts";
 export {
   Sandbox,

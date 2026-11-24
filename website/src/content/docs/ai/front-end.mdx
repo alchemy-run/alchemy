@@ -1,0 +1,338 @@
+---
+title: Connect a front end
+description: Serve a session from its Durable Object as an Effect RPC group, follow what it does over a WebSocket, and send, steer and stop it from a browser or a Foldkit app.
+---
+
+A front end needs two things from a session: a live stream of what it does, and a way to act on it. `AI.SessionRpcs` is a session as an [Effect RPC](/cloudflare/apis/effect-rpc) group, with the same methods as `AI.Session`. A Durable Object serves it, and a browser calls it over one WebSocket.
+
+## Serve a session
+
+Declare the object with `Cloudflare.RpcDurableObject` and return `AI.SessionHandlers` for the session it holds:
+
+```typescript title="src/Engineers.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import { Engineer } from "./Engineer.process.ts";
+import { Live } from "./Layers.ts";
+
+export default class Engineers extends Cloudflare.RpcDurableObject<Engineers>()(
+  "Engineers",
+  { schema: AI.SessionRpcs },
+  Effect.gen(function* () {
+    const engineer = yield* Engineer;
+    const state = yield* Cloudflare.DurableObjectState;
+
+    return Effect.sync(() => AI.SessionHandlers(engineer.get(state.id.name ?? "")));
+  }).pipe(Effect.provide(Live)),
+) {}
+```
+
+The object is named after the session's key, so each session has an object of its own. `Live` is the same Layer as in [Where sessions run](/ai/hosting).
+
+## Forward the browser to it
+
+The Worker maps a URL to an object and forwards the request. The same route carries plain HTTP calls and the WebSocket upgrade:
+
+```typescript title="src/Api.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import Engineers from "./Engineers.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const engineers = yield* Engineers;
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const id = /^\/sessions\/([\w-]+)$/.exec(new URL(request.url, "http://api").pathname)?.[1];
+        if (id === undefined) return HttpServerResponse.empty({ status: 404 });
+        return yield* engineers.fetch(id, request);
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+Anyone who can open this route can read and steer that session. Check who is asking before you call `fetch`, or take the id from the signed-in user.
+
+## Connect from the browser
+
+`AI.SessionClientWebSocket` is a Layer that holds one WebSocket to that route:
+
+```typescript title="web/Session.ts"
+import * as AI from "@alchemy.run/ai/SessionRpcs";
+import * as Layer from "effect/Layer";
+import * as Socket from "effect/socket/Socket";
+
+export const SessionLive = (id: string) =>
+  AI.SessionClientWebSocket(`wss://${location.host}/sessions/${id}`).pipe(
+    Layer.provide(Socket.layerWebSocketConstructorGlobal),
+  );
+```
+
+Import from `@alchemy.run/ai/SessionRpcs` in browser code. It brings in only Effect, so no server code reaches the bundle.
+
+## Follow what the session does
+
+`AI.followSession` is the session's `events` for as long as you read them:
+
+```typescript title="web/follow.ts"
+import * as AI from "@alchemy.run/ai/SessionRpcs";
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import { SessionLive } from "./Session.ts";
+
+export const follow = (id: string, show: (line: string) => void) =>
+  AI.followSession().pipe(
+    Stream.runForEach((event) =>
+      Effect.sync(() =>
+        show(event.type === "status" ? event.status : `${event.seq} ${event.item.type}`),
+      ),
+    ),
+    Effect.provide(SessionLive(id)),
+  );
+```
+
+The first event is the status: `idle` or `working`, and the messages that are queued. Then come the stored items, then each new one as it happens. A change of status follows the items stored with it, so `idle` arrives after the answer.
+
+The stream is the whole picture. A page that folds these events knows the transcript, whether the session is working and what is queued, with no other call.
+
+## Resume after a reconnect
+
+Pass the `seq` of the last item you hold, and the stream starts after it:
+
+```typescript
+AI.followSession({ after: lastSeq });
+```
+
+`followSession` does the same on its own when the connection drops. An idle object is put to sleep with its sockets open, and wakes when the session is sent something. The stream then asks again from the last item it delivered, so nothing is missed or repeated.
+
+## Send, steer and stop
+
+The client has the session's methods. Each returns once the session has stored the message:
+
+```typescript title="web/act.ts"
+import * as AI from "@alchemy.run/ai/SessionRpcs";
+import * as Effect from "effect/Effect";
+
+export const act = Effect.gen(function* () {
+  const session = yield* AI.SessionClient;
+
+  yield* session.send({ text: "Rename the config flag.", requestId: "m-1" });
+  yield* session.steer({ text: "Only in src.", requestId: "m-2" });
+  yield* session.interrupt();
+});
+```
+
+A `requestId` makes a message exactly-once, so a retry after a lost answer is safe. `withdraw({ id })` takes back a queued message, by the `id` the status lists it with.
+
+## In a Foldkit app
+
+`@alchemy.run/ai/Foldkit` has a Command for each action and a Subscription for the events. Keep the status, the queue and the items in the Model:
+
+```typescript title="web/Chat.ts"
+import * as AIFoldkit from "@alchemy.run/ai/Foldkit";
+import { QueuedMessage, SessionEntry, SessionEvent } from "@alchemy.run/ai/Session";
+import * as AI from "@alchemy.run/ai/SessionRpcs";
+import * as Array from "effect/Array";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import { Command, Subscription, type Update } from "foldkit";
+import type { Document, HtmlBuilder } from "foldkit/html";
+import { defineMessageUnion } from "foldkit/message";
+import { modifyFields } from "foldkit/struct";
+
+// MODEL
+
+export const Flags = Schema.Struct({ page: Schema.String });
+
+export const Model = Schema.Struct({
+  /** Names this page's messages, so a retry is never run twice. */
+  page: Schema.String,
+  sent: Schema.Number,
+  draft: Schema.String,
+  status: Schema.Literals(["idle", "working"]),
+  queued: Schema.Array(QueuedMessage),
+  items: Schema.Array(SessionEntry),
+  error: Schema.Option(Schema.String),
+});
+export type Model = typeof Model.Type;
+
+// MESSAGE
+
+export const Message = defineMessageUnion({
+  ChangedDraft: { text: Schema.String },
+  ClickedSend: {},
+  ClickedSteer: {},
+  ClickedStop: {},
+  ClickedWithdraw: { id: Schema.String },
+  ReceivedSessionEvent: { event: SessionEvent },
+  ReceivedSessionResult: { result: AIFoldkit.Message },
+  FailedSession: { reason: Schema.String },
+});
+export type Message = typeof Message.Type;
+
+// UPDATE
+
+type Return = Update.Return<Model, Message, AI.SessionClient>;
+
+const act = (
+  model: Model,
+  command: (requestId: string) => Command.Command<AIFoldkit.Message, never, AI.SessionClient>,
+): Return => ({
+  model: modifyFields(model, { sent: (sent) => sent + 1, draft: () => "" }),
+  commands: [
+    Command.mapMessage(command(`${model.page}:${model.sent}`), (result) =>
+      Message.ReceivedSessionResult({ result }),
+    ),
+  ],
+});
+
+export const update = (model: Model, message: Message) =>
+  Message.match<Return>(message, {
+    ChangedDraft: ({ text }) => ({ model: modifyFields(model, { draft: () => text }) }),
+    // Queued behind the turn that is running.
+    ClickedSend: () => act(model, (requestId) => AIFoldkit.Send({ text: model.draft, requestId })),
+    // Read by the turn that is running, at its next step.
+    ClickedSteer: () =>
+      act(model, (requestId) => AIFoldkit.Steer({ text: model.draft, requestId })),
+    ClickedStop: () => act(model, (requestId) => AIFoldkit.Interrupt({ requestId })),
+    ClickedWithdraw: ({ id }) => act(model, (requestId) => AIFoldkit.Withdraw({ id, requestId })),
+    ReceivedSessionEvent: ({ event }) => ({
+      model:
+        event.type === "status"
+          ? modifyFields(model, { status: () => event.status, queued: () => event.queued })
+          : modifyFields(model, {
+              items: (items) => [...items, { seq: event.seq, item: event.item }],
+            }),
+    }),
+    ReceivedSessionResult: ({ result }) => ({
+      model:
+        result._tag === "FailedSession"
+          ? modifyFields(model, { error: () => Option.some(result.reason) })
+          : model,
+    }),
+    FailedSession: ({ reason }) => ({
+      model: modifyFields(model, { error: () => Option.some(reason) }),
+    }),
+  });
+
+// INIT
+
+export const init = (flags: typeof Flags.Type): Return => ({
+  model: Model.make({
+    page: flags.page,
+    sent: 0,
+    draft: "",
+    status: "idle",
+    queued: [],
+    items: [],
+    error: Option.none(),
+  }),
+});
+
+// SUBSCRIPTION
+
+export const subscriptions = Subscription.make<Model, Message, AI.SessionClient>()(() => ({
+  session: AIFoldkit.events({
+    // The last item the Model holds: a reconnect resumes after it.
+    cursor: (model: Model) => Option.map(Array.last(model.items), (entry) => entry.seq),
+    onEvent: (event): Message => Message.ReceivedSessionEvent({ event }),
+    onFailure: (reason): Message => Message.FailedSession({ reason }),
+  }),
+}));
+
+// VIEW
+
+const itemView = ({ seq, item }: SessionEntry, h: HtmlBuilder<Message>) =>
+  h.keyed("li")(
+    String(seq),
+    [],
+    [
+      item.type === "tool"
+        ? `${item.name}: ${item.output}`
+        : item.type === "assistant" && item.toolCalls.length > 0
+          ? `calls ${item.toolCalls.map((call) => call.name).join(", ")}`
+          : item.text,
+    ],
+  );
+
+export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
+  title: model.status === "working" ? "Working" : "Idle",
+  body: h.div(
+    [],
+    [
+      h.ul(
+        [],
+        model.items.map((entry) => itemView(entry, h)),
+      ),
+      h.ul(
+        [],
+        model.queued.map((message) =>
+          h.keyed("li")(
+            message.id,
+            [],
+            [
+              `${message.delivery}: ${message.text}`,
+              h.button([h.OnClick(Message.ClickedWithdraw({ id: message.id }))], ["Withdraw"]),
+            ],
+          ),
+        ),
+      ),
+      h.input([h.Value(model.draft), h.OnInput((text) => Message.ChangedDraft({ text }))]),
+      h.button([h.OnClick(Message.ClickedSend())], ["Send"]),
+      ...(model.status === "working"
+        ? [
+            h.button([h.OnClick(Message.ClickedSteer())], ["Steer"]),
+            h.button([h.OnClick(Message.ClickedStop())], ["Stop"]),
+          ]
+        : []),
+      h.p([], [Option.getOrElse(model.error, () => "")]),
+    ],
+  ),
+});
+```
+
+`cursor` is the last item the Model holds. The Subscription reads after it, and a changing cursor does not restart the read.
+
+Provide the client in the app's resources:
+
+```typescript title="web/entry.ts"
+import * as Effect from "effect/Effect";
+import { Runtime } from "foldkit";
+import { Flags, init, Model, subscriptions, update, view } from "./Chat.ts";
+import { SessionLive } from "./Session.ts";
+
+Runtime.run(
+  Runtime.makeApplication({
+    Model,
+    Flags,
+    init,
+    update,
+    view,
+    subscriptions,
+    resources: SessionLive(new URLSearchParams(location.search).get("session") ?? "main"),
+    container: document.getElementById("root"),
+  }),
+  // Names this page's messages, so a retry is never run twice.
+  { flags: Effect.sync(() => ({ page: crypto.randomUUID() })) },
+);
+```
+
+## Send from the server too
+
+The object answers the same group to your own services. A Worker, or a [Domain policy](/ai/domain#let-a-policy-ask-for-the-work), gets a client by the session's key:
+
+```typescript
+const session = yield* engineers.getByName("task-7");
+
+yield* session.send({ text: "Rename the config flag.", requestId: "start" });
+```
+
+A browser that is following `task-7` sees that message and everything the session does with it.

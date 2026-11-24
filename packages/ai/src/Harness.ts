@@ -8,6 +8,16 @@ import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import type { AnyModel } from "./Model.ts";
+import type { HistoryOptions, SessionEvent, SessionPage } from "./Session.ts";
+
+export {
+  HistoryOptions,
+  QueuedMessage,
+  SessionEntry,
+  SessionEvent,
+  SessionItem,
+  SessionPage,
+} from "./Session.ts";
 
 /** A harness could not run what a process asked of it. */
 export class HarnessError extends Data.TaggedError("HarnessError")<{
@@ -30,73 +40,6 @@ export interface SendOptions {
   readonly requestId?: string;
   /** The model that answers from now on. It must be one the process mentions, or the default. */
   readonly model?: AnyModel;
-}
-
-/** A message a session has stored and not yet read. */
-export interface QueuedMessage {
-  /** What `withdraw` takes. */
-  readonly id: string;
-  readonly text: string;
-  /** `steer` joins the turn that is running; `queue` waits for it to end. */
-  readonly delivery: "queue" | "steer";
-}
-
-/** One thing in a session's transcript. */
-export type SessionItem =
-  | { readonly type: "user"; readonly text: string }
-  | {
-      readonly type: "assistant";
-      readonly text: string;
-      /** The tools this answer asked for. */
-      readonly toolCalls: ReadonlyArray<{
-        readonly id: string;
-        readonly name: string;
-        readonly input: unknown;
-      }>;
-    }
-  | {
-      readonly type: "tool";
-      /** The call this is the result of. */
-      readonly callId: string;
-      readonly name: string;
-      readonly output: string;
-      readonly isError: boolean;
-    };
-
-/** A transcript item and where it sits. `seq` grows with every item of the session. */
-export interface SessionEntry {
-  readonly seq: number;
-  readonly item: SessionItem;
-}
-
-/**
- * What a session reports. `status` says whether it is working and what is
- * queued: it is the first event of every `events` stream, and is sent again
- * whenever either changes. `item` is a transcript item, stored and numbered.
- */
-export type SessionEvent =
-  | {
-      readonly type: "status";
-      readonly status: "idle" | "working";
-      readonly queued: ReadonlyArray<QueuedMessage>;
-    }
-  | ({ readonly type: "item" } & SessionEntry);
-
-/** Which stored items `history` returns. */
-export interface HistoryOptions {
-  /** Only items after this `seq` (before it, when `order` is `"desc"`). */
-  readonly after?: number;
-  /** @default 50 */
-  readonly take?: number;
-  /** @default "asc" */
-  readonly order?: "asc" | "desc";
-}
-
-/** A page of a session's items. */
-export interface SessionPage {
-  readonly items: ReadonlyArray<SessionEntry>;
-  /** The `after` of the next page. Absent on the last one. */
-  readonly next?: number;
 }
 
 /** What a harness runs a session with. */

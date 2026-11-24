@@ -1,4 +1,4 @@
-import type * as AI from "@alchemy.run/ai";
+import * as AI from "@alchemy.run/ai";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as OpenCode from "@alchemy.run/opencode";
 import * as OpenCodeCloudflare from "@alchemy.run/opencode/Cloudflare";
@@ -84,6 +84,41 @@ export class PiAgents extends Cloudflare.DurableObject<PiAgents>()(
 export class OpenCodeAgents extends Cloudflare.DurableObject<OpenCodeAgents>()(
   "OpenCodeAgents",
   sessions.pipe(
+    Effect.provide(
+      ProcessesLive.pipe(
+        Layer.provide(OpenCode.HarnessLive),
+        Layer.provide(OpenCodeCloudflare.DurableObjectStorage),
+      ),
+    ),
+  ),
+) {}
+
+/** One object per Adder session, named by its key, serving it as `AI.SessionRpcs`. */
+const served = Effect.gen(function* () {
+  const adder = yield* Adder;
+  const state = yield* Cloudflare.DurableObjectState;
+  return Effect.sync(() => AI.SessionHandlers(adder.get(state.id.name ?? "")));
+});
+
+/** An Adder session a browser reaches, on Pi. */
+export class PiSessions extends Cloudflare.RpcDurableObject<PiSessions>()(
+  "PiSessions",
+  { schema: AI.SessionRpcs },
+  served.pipe(
+    Effect.provide(
+      ProcessesLive.pipe(
+        Layer.provide(Pi.HarnessLive),
+        Layer.provide(PiCloudflare.DurableObjectStorage),
+      ),
+    ),
+  ),
+) {}
+
+/** The same, on OpenCode. */
+export class OpenCodeSessions extends Cloudflare.RpcDurableObject<OpenCodeSessions>()(
+  "OpenCodeSessions",
+  { schema: AI.SessionRpcs },
+  served.pipe(
     Effect.provide(
       ProcessesLive.pipe(
         Layer.provide(OpenCode.HarnessLive),

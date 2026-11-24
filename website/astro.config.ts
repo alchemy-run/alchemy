@@ -2525,6 +2525,7 @@ export default defineConfig({
               items: [
                 { label: "Choose a harness", link: "/ai/harnesses" },
                 { label: "Where sessions run", link: "/ai/hosting" },
+                { label: "Connect a front end", link: "/ai/front-end" },
               ],
             },
             {

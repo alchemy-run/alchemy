@@ -120,6 +120,8 @@ export interface Session {
    * What the session is doing, live. The first event is its `status`:
    * whether it is working, and what is queued. Then every stored item after
    * `after`, then each new item and each change of status as it happens.
+   * Reading a session nobody sent anything opens it, idle, so its first
+   * message is reported too. One that acts as someone must be started first.
    */
   readonly events: (options?: {
     readonly after?: number;
@@ -734,7 +736,14 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
         withdraw: (id) => Effect.flatMap(sessionOf(key), (session) => session.withdraw(id)),
         interrupt: Effect.flatMap(sessionOf(key), (session) => session.interrupt),
         events: (options) =>
-          Stream.unwrap(Effect.map(sessionOf(key), (session) => session.events(options))),
+          Stream.unwrap(
+            Effect.gen(function* () {
+              const session = yield* sessionOf(key);
+              // Open it, so a reader who arrives before the first message sees that message.
+              if (!needsStart()) yield* session.open();
+              return session.events(options);
+            }),
+          ),
         history: (options) => Effect.flatMap(sessionOf(key), (session) => session.history(options)),
         prompt: (text, options) =>
           Effect.flatMap(started(key), (session) => session.prompt(text, options)),

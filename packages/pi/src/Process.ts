@@ -249,7 +249,11 @@ export const HarnessLive: Layer.Layer<AiHarness, never, Storage> = makeHarness<S
                         const events: Array<SessionEvent> = [];
                         const status = statusOf(view);
                         const key = JSON.stringify(status);
-                        if (key !== last) events.push(status);
+                        // The first event is the status. After that a change of status
+                        // follows the items stored with it, so `idle` comes after the answer.
+                        const changed = key !== last;
+                        const first = last === "";
+                        if (first) events.push(status);
                         last = key;
                         // A window that starts past what the reader has is filled from storage.
                         while (view.before !== undefined && view.before > seen) {
@@ -270,6 +274,7 @@ export const HarnessLive: Layer.Layer<AiHarness, never, Storage> = makeHarness<S
                           for (const item of itemsOf(entry)) events.push({ type: "item", ...item });
                           seen = entry.id;
                         }
+                        if (changed && !first) events.push(status);
                         return events;
                       }),
                     ),
