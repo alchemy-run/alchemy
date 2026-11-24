@@ -154,8 +154,6 @@ export interface Section {
   readonly quiet?: RegExp;
   /** How many lines one command computes. */
   readonly chunk?: number;
-  /** The lines take the items of a hash set in order: see `Group.orders`. */
-  readonly orders?: boolean;
 }
 
 const FUNCTIONS = new Set(["ArrowFunctionExpression", "FunctionExpression"]);
@@ -263,7 +261,6 @@ export const supported = async (name: string, block: Block, section: Section): P
     chunk: 1,
     effectful: section.effectful || section.yields,
     prelude: section.prelude,
-    orders: section.orders,
     both,
   };
 };

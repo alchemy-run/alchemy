@@ -61,7 +61,6 @@ const sections: Readonly<Record<string, Section>> = {
     base: base("HashSet"),
     context: `const person = a; const roster = { members, points: HashMap.make([a, 1], [a + 1, 2]) }; const other = { members: HashSet.add(members, a) }; const seen = [];`,
     chunk: 3,
-    orders: true,
   },
   "Effects and failures": {
     base: numbers,

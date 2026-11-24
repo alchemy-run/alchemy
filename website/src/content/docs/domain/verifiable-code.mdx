@@ -2188,7 +2188,7 @@ Effect.promise(() => fetch(url));
 Effect.tryPromise(() => fetch(url));
 ```
 
-Which of two things happens first is not something a handler decides, and a handler does not wait. A handler is one fiber that runs to its end, so a `Deferred`, a `Queue`, a `Semaphore` and a `Latch` are [supported](#library-functions) where the handler itself has done what the call waits for, and reported where it has not.
+Which of two things happens first is not something a handler decides. A deployed handler can wait, but a proof is held against the handler run at once, without waiting, so a `sleep`, a `delay` and a schedule that waits are reported. A handler is one fiber that runs to its end, so a `Deferred`, a `Queue`, a `Semaphore` and a `Latch` are [supported](#library-functions) where the handler itself has done what the call waits for, and reported where it has not.
 
 ```typescript title="Time passing and things running together"
 import * as Scheduler from "effect/Scheduler";

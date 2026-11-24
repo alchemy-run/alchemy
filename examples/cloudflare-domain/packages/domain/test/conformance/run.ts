@@ -204,7 +204,9 @@ export const check = (groups: ReadonlyArray<Group>): void => {
           );
           expect(unread).toEqual([]);
           expect(report.agreement.differs.map((reason) => reason.slice(0, 400))).toEqual([]);
-          if (!group.orders) expect(report.agreement.uncompared).toBe(0);
+          // A path that takes the items of a hash set in an order the real one does not give
+          // cannot be run: the order the real one gives is compared on its own path.
+          expect(report.agreement.uncompared - report.agreement.unordered).toBe(0);
           if (chunks.some((chunk) => !chunk.unread))
             expect(report.agreement.compared).toBeGreaterThan(0);
         }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

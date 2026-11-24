@@ -182,6 +182,12 @@ export interface Report {
     readonly compared: number;
     /** The paths inputs take that could not be run on the real code. */
     readonly uncompared: number;
+    /**
+     * How many of those take the items of a hash set or a hash map in an
+     * order the real one did not give for the items picked. The prover reads
+     * every order, and the order the real one gives is compared on its own path.
+     */
+    readonly unordered: number;
     readonly differs: ReadonlyArray<string>;
   };
   /** What the proof takes for granted. */
@@ -320,6 +326,7 @@ export const report = (
       agreement: {
         compared: own.reduce((sum, row) => sum + row.compared, 0),
         uncompared: own.reduce((sum, row) => sum + row.uncompared, 0),
+        unordered: own.reduce((sum, row) => sum + row.unordered, 0),
         differs: own.flatMap((row) => row.differs),
       },
       assumptions: [...ASSUMPTIONS, ...pure(loader.opaques())],
@@ -488,19 +495,33 @@ export const suggestion = (
   `${indent}  ${suggested.name}: ${suggested.source},`,
 ];
 
+/** The paths that were not run on the real code, and why, as the end of a line. */
+const unrun = (uncompared: number, unordered: number): string => {
+  const unbuilt = uncompared - unordered;
+  const why = [
+    ...(unbuilt > 0 ? [`the prover cannot build the inputs of ${unbuilt}`] : []),
+    ...(unordered > 0
+      ? [
+          `${unordered} take the items of a hash set or a hash map in an order the real one does not give`,
+        ]
+      : []),
+  ];
+  return uncompared > 0 ? ` (${uncompared} more could not be run: ${why.join(", and ")})` : "";
+};
+
 /** How far a report's reading was held against the real code, as a line. */
 export const agreed = (agreement: {
   readonly compared: number;
   readonly uncompared: number;
+  readonly unordered?: number;
   readonly differs: ReadonlyArray<string>;
 }): string =>
   agreement.differs.length > 0
     ? `✗ The real code does something else on ${agreement.differs.length} of the ${agreement.compared} paths compared`
-    : `Agreed with the real code: inputs picked for each of ${agreement.compared} paths through the commands did what the prover read${
-        agreement.uncompared > 0
-          ? ` (${agreement.uncompared} more could not be run: the prover cannot build their inputs)`
-          : ""
-      }`;
+    : `Agreed with the real code: inputs picked for each of ${agreement.compared} paths through the commands did what the prover read${unrun(
+        agreement.uncompared,
+        agreement.unordered ?? 0,
+      )}`;
 
 /** The schema checks a report could not read or prove kept, then what it takes for granted. */
 const notes = (report: {
