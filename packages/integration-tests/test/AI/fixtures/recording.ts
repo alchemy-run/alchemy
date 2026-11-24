@@ -1,7 +1,15 @@
 import * as AI from "@alchemy.run/ai";
 import { makeHarness } from "@alchemy.run/ai/Harness";
-import { callTool, type ToolHandler, type ToolSpec } from "@alchemy.run/ai/Tool";
+import {
+  callTool,
+  isToolTag,
+  type ToolHandler,
+  type ToolSpec,
+  type ToolTagService,
+} from "@alchemy.run/ai/Tool";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
 /** What a recording harness was asked to run. */
@@ -29,7 +37,7 @@ export const recording = () => {
   const opened: Array<{ models: ReadonlyArray<string>; tools: ReadonlyArray<string> }> = [];
   const toolName = (tool: unknown) => (tool as { toolName: string }).toolName;
   const layer = makeHarness<never>("recording", (options) =>
-    Effect.sync(() => {
+    Effect.map(Effect.context<never>(), (provided) => {
       opened.push({
         models: options.models.map((model) => model.modelName),
         tools: options.tools.map(toolName),
@@ -38,6 +46,16 @@ export const recording = () => {
         const { spec, handler } = tool as { spec?: ToolSpec; handler?: ToolHandler<ToolSpec> };
         if (spec !== undefined && handler !== undefined)
           tools.set(toolName(tool), { spec, handler });
+        // A tool known only by name: its Layer holds what it is.
+        if (isToolTag(tool)) {
+          const service = Context.getOption(
+            provided,
+            tool as never,
+          ) as Option.Option<ToolTagService>;
+          if (Option.isSome(service) && service.value.kind === "tool") {
+            tools.set(toolName(tool), service.value);
+          }
+        }
       }
       return {
         values: {
@@ -128,14 +146,20 @@ export const recording = () => {
    * Call a tool the way a harness does: JSON arguments in, and what the
    * model would read out (`structured` is the value, `isError` a declared failure).
    */
-  const call = (name: string, parameters: unknown, callId = "call-1", conversationId = "c") =>
+  const call = (
+    name: string,
+    parameters: unknown,
+    callId = "call-1",
+    conversationId = "c",
+    sandbox: AI.Sandbox["Service"] = undefined as never,
+  ) =>
     Effect.suspend(() => {
       const tool = tools.get(name)!;
       return callTool(tool.spec, tool.handler, parameters);
     }).pipe(
       Effect.provideService(AI.ToolCall, { conversationId, callId }),
-      // The recording harness never opens a sandbox.
-      Effect.provideService(AI.Sandbox, undefined as never),
+      // The recording harness never opens a sandbox: a test that needs one passes it.
+      Effect.provideService(AI.Sandbox, sandbox),
     );
   return { layer, sessions, opened, values, call };
 };

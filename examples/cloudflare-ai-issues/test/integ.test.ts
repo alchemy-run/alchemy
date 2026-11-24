@@ -138,6 +138,14 @@ test(
       text: started(seen.issueId),
     });
     expect(JSON.stringify(threadOf(seen.done).items)).toContain("Board_LabelIssue_send");
+    // Every tool call was understood: none came back as arguments that did not decode.
+    const results = threadOf(seen.replied).items.flatMap(({ item }) =>
+      item.type === "tool" ? [`${item.name}: ${item.output}`] : [],
+    );
+    expect(results.filter((result) => /\[error\] Expected /.test(result))).toEqual([]);
+    // A search of the repository ran, and did not fail.
+    const searches = results.filter((result) => /^(grep|glob): /.test(result));
+    expect(searches.filter((result) => result.includes("[error]"))).toEqual([]);
     // Every item once, in order.
     const seqs = threadOf(seen.replied).items.map((entry) => entry.seq);
     expect(seqs).toEqual([...new Set(seqs)].sort((a, b) => a - b));

@@ -32,6 +32,12 @@ export const Edit = native(AI.Edit);
 /** Pi's `write` as `AI.Write`: write a whole file, creating its directories. */
 export const Write = native(AI.Write);
 
+/**
+ * Shell that sets `p` to the path in `$1`, with a leading `~` as the home
+ * directory: a path given as an argument is not expanded by a shell.
+ */
+const HOME_PATH = 'p=$1; case $p in "~") p=$HOME ;; "~/"*) p=$HOME/${p#"~/"} ;; esac';
+
 const MAX_LINES = 200;
 
 const lines = (text: string) => {
@@ -70,16 +76,20 @@ export const Grep = AI.Grep.make(
     const sandbox = yield* Sandbox;
     const result = yield* sandbox
       .exec([
+        "bash",
+        "-c",
+        `${HOME_PATH}; shift; exec grep -rnE --exclude-dir=.git --exclude-dir=node_modules "$@" "$p"`,
         "grep",
-        "-rnE",
-        "--exclude-dir=.git",
-        "--exclude-dir=node_modules",
+        path ?? ".",
         ...(include === undefined ? [] : [`--include=${include}`]),
         "--",
         pattern,
-        path ?? ".",
       ])
       .pipe(Effect.orDie);
+    // grep exits 1 when nothing matches, and 2 when it could not search.
+    if (result.exitCode > 1) {
+      return yield* Effect.die(new Error(result.stderr.trim() || "grep could not search"));
+    }
     return lines(result.stdout);
   }),
 );
@@ -108,12 +118,15 @@ export const Glob = AI.Glob.make(
         "nullglob",
         "-c",
         // An empty IFS keeps a pattern with spaces whole while it still expands.
-        'cd "$1" && IFS= && printf "%s\\n" $2',
+        `${HOME_PATH}; cd "$p" && IFS= && printf "%s\\n" $2`,
         "glob",
         path ?? ".",
         pattern,
       ])
       .pipe(Effect.orDie);
+    if (result.exitCode !== 0) {
+      return yield* Effect.die(new Error(result.stderr.trim() || "glob could not search"));
+    }
     return lines(result.stdout);
   }),
 );
