@@ -253,7 +253,7 @@ A theorem proves its outcome for every input. `behaviour` runs the model with th
 theorem aBouncedPayoutIsRefunded (id owner payout : String) (held amount : Nat)
     (some : amount ≠ 0) (enough : amount ≤ held) (modest : held < 10000) :
     let bank := Bank.run (aPayoutBounces id owner payout held amount)
-    (bank.state .Account id).balance = held ∧ bank.sagas payout = .failed .bounced := by
+    (bank.state .Account id).balance = held ∧ bank.sagas (.Payout, payout) = .failed (.Payout .bounced) := by
   …
   behaviour [aPayoutBounces]
 ```
@@ -267,7 +267,7 @@ example : Bank.follows (aPayoutBounces "a-1" "Sam" "p-1" 500 200) [
     .state .Account "a-1"
       { status := .open, owner := "Sam", balance := 300, deposited := 500, withdrawn := 200 },
     .next,
-    .saga "p-1" (.failed .bounced),
+    .saga (.Payout, "p-1") (.failed (.Payout .bounced)),
     .recorded .Account "a-1" [.opened "Sam", .deposited 500, .payoutRequested "p-1" 200,
       .withdrawn 200, .deposited 200]
   ] = true := by decide
@@ -577,5 +577,5 @@ In the editor, `#eval` shows any of it without running a program.
 
 - Stacks run against a cloud held in memory. Nothing deploys to a real account.
 - A host handles one request at a time, by design.
-- `model` takes one saga, and ids are strings.
+- Ids are strings.
 - Cloudflare has no control-plane model, so its stacks have a graph but no plan.

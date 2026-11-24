@@ -324,10 +324,8 @@ macro_rules
     let mut streams : Array Ident := #[]
     let mut queries : Array Ident := #[]
     let mut decisionCommands : Array Term := #[]
-    let mut saga : Option Ident := none
-    let mut sagaInput : Term ← `(Unit)
-    let mut sagaSignal : Term ← `(Unit)
-    let mut sagaFailure : Term ← `(Unit)
+    -- Each saga: its name, what a run is started with, what it can be told, and how it can fail.
+    let mut sagas : Array (Ident × Term × Term × Term) := #[]
     let name := mkIdent `Name
     let signature := mkIdent `Signature
     let aggregatesId := mkIdent `Aggregates
@@ -471,26 +469,13 @@ macro_rules
             Actor := Unit
             decide := fun _ states command => $run states command))
       | `(modelItem| saga $g:ident ($input:term) ($signal:term) : $failure:term $alts:modelAlt*) =>
-        saga := some g
-        sagaInput := input
-        sagaSignal := signal
-        sagaFailure := failure
+        sagas := sagas.push (g, input, signal, failure)
         let alts ← exactly alts
         later := later.push (← `(command|
           /-- The saga's steps, for one run. -/
           def $(under g `run):ident (id : String) (input : $input) :
               Alchemy.Program $signature Unit :=
             match id, input with $alts:matchAlt*))
-        later := later.push (← `(command|
-          /-- Start a run of the saga, from a policy. A run already started is left alone. -/
-          def $(under g `start):ident (id : String) (input : $input) :
-              Alchemy.Program $signature Unit :=
-            Alchemy.Program.startSaga (σ := $signature) id input))
-        later := later.push (← `(command|
-          /-- Tell a run of the saga something, from a policy. -/
-          def $(under g `signal):ident (id : String) (signal : $signal) :
-              Alchemy.Program $signature Unit :=
-            Alchemy.Program.signalSaga (σ := $signature) id signal))
       | _ => Macro.throwUnsupported
     let mut commands : Array Command := #[]
     commands := commands.push (← `(command| namespace $m))
@@ -513,15 +498,94 @@ macro_rules
     else
       commands := commands.push (← `(command|
         abbrev $(mkIdent `Reply) : $callId → Type := fun c => match c with $replyAlts:matchAlt*))
+    -- One saga: its own types. Several: a run is named by its saga, and each type is one of theirs.
+    let several := sagas.size > 1
+    let sagaNames := mkIdent `Sagas
+    let sumInput := mkIdent `SagaInput
+    let sumSignal := mkIdent `SagaSignal
+    let sumFailure := mkIdent `SagaFailure
+    let mut sagaKey : Term ← `(String)
+    let mut sagaInput : Term ← `(Unit)
+    let mut sagaSignal : Term ← `(Unit)
+    let mut sagaFailure : Term ← `(Unit)
+    if several then
+      let names ← sagas.mapM fun (g, _, _, _) => `(Command.ctor| | $g:ident)
+      let inputs ← sagas.mapM fun (g, input, _, _) => `(Command.ctor| | $g:ident (input : $input))
+      let signals ← sagas.mapM fun (g, _, signal, _) => `(Command.ctor| | $g:ident (signal : $signal))
+      let failures ← sagas.mapM fun (g, _, _, failure) => `(Command.ctor| | $g:ident (failure : $failure))
+      commands := commands.push (← `(command|
+        /-- The sagas of the model. -/
+        inductive $sagaNames where $names* deriving DecidableEq, Repr))
+      commands := commands.push (← `(command|
+        /-- What a run is started with: one saga's input. -/
+        inductive $sumInput where $inputs*))
+      commands := commands.push (← `(command|
+        /-- What a run can be told while it waits: one saga's signal. -/
+        inductive $sumSignal where $signals*))
+      commands := commands.push (← `(command|
+        /-- How a run can fail: one saga's failure. -/
+        inductive $sumFailure where $failures* deriving DecidableEq, Repr))
+      sagaKey ← `($sagaNames × String)
+      sagaInput ← `($sumInput)
+      sagaSignal ← `($sumSignal)
+      sagaFailure ← `($sumFailure)
+    else if let some (_, input, signal, failure) := sagas[0]? then
+      sagaInput := input
+      sagaSignal := signal
+      sagaFailure := failure
     commands := commands.push (← `(command|
       abbrev $signature : Alchemy.Signature where
         aggregates := $aggregatesId
         Call := $callId
         Reply := $(mkIdent `Reply)
-        Saga := String
+        Saga := $sagaKey
         SagaInput := $sagaInput
         Signal := $sagaSignal
         Failure := $sagaFailure))
+    for (g, input, signal, failure) in sagas do
+      if several then
+        commands := commands.push (← `(command|
+          /-- Start a run of the saga, from a policy. A run already started is left alone. -/
+          def $(under g `start):ident (id : String) (input : $input) : Alchemy.Program $signature Unit :=
+            Alchemy.Program.startSaga (σ := $signature) ($(under sagaNames g.getId), id)
+              ($(under sumInput g.getId) input)))
+        commands := commands.push (← `(command|
+          /-- Tell a run of the saga something, from a policy. -/
+          def $(under g `signal):ident (id : String) (signal : $signal) : Alchemy.Program $signature Unit :=
+            Alchemy.Program.signalSaga (σ := $signature) ($(under sagaNames g.getId), id)
+              ($(under sumSignal g.getId) signal)))
+        commands := commands.push (← `(command|
+          /-- This saga's failure, as a failure of the model. -/
+          abbrev $(under g `failure):ident (failure : $failure) : $sumFailure :=
+            $(under sumFailure g.getId) failure))
+        commands := commands.push (← `(command|
+          /-- Stop this saga: what it registered to undo is undone, newest first. -/
+          def $(under g `failWith):ident {α : Type} (failure : $failure) : Alchemy.Program $signature α :=
+            Alchemy.Program.fail ($(under sumFailure g.getId) failure)))
+        commands := commands.push (← `(command|
+          /-- Wait for the next signal sent to this run. `none` if it was meant for another saga. -/
+          def $(under g `awaitSignal):ident : Alchemy.Program $signature (Option $signal) :=
+            Alchemy.Program.await (σ := $signature) fun told =>
+              match told with
+              | $(under sumSignal g.getId):ident signal => Alchemy.Program.pure (some signal)
+              | _ => Alchemy.Program.pure none))
+        for a in aggregates do
+          commands := commands.push (← `(command|
+            /-- Send the aggregate a command; a rejection fails this saga with what `explain` makes of it. -/
+            def $(mkIdentFrom g (g.getId ++ a.getId ++ `must)):ident (command : $(rooted a `Command))
+                (explain : $(rooted a `Rejection) → $failure)
+                (actor : $(rooted a `Actor) := by exact default) : Alchemy.Program $signature Unit :=
+              Alchemy.Program.step ⟨$(under name a.getId), actor, command⟩
+                fun rejection => $(under sumFailure g.getId) (explain rejection)))
+      else
+        commands := commands.push (← `(command|
+          /-- Start a run of the saga, from a policy. A run already started is left alone. -/
+          def $(under g `start):ident (id : String) (input : $input) : Alchemy.Program $signature Unit :=
+            Alchemy.Program.startSaga (σ := $signature) id input))
+        commands := commands.push (← `(command|
+          /-- Tell a run of the saga something, from a policy. -/
+          def $(under g `signal):ident (id : String) (signal : $signal) : Alchemy.Program $signature Unit :=
+            Alchemy.Program.signalSaga (σ := $signature) id signal))
     commands := commands.push (← `(command|
       /-- Wait for the next signal sent to this run of the saga. -/
       def $(mkIdent `awaitSignal) : Alchemy.Program $signature $sagaSignal :=
@@ -560,9 +624,17 @@ macro_rules
           states $(under name a.getId) id))
     commands := commands ++ later
     commands := commands.push (← `(command| end $m))
-    let sagaRun : Term ← match saga with
-      | some g => `($(under m (g.getId ++ `run)))
-      | none => `(fun _ _ => Alchemy.Program.pure ())
+    let sagaRun : Term ← if several then do
+        let runs ← sagas.mapM fun (g, _, _, _) =>
+          `(Term.matchAltExpr|
+            | ($(under (under m `Sagas) g.getId):ident, id), $(under (under m `SagaInput) g.getId):ident input =>
+              $(under m (g.getId ++ `run)) id input)
+        let runs : Array (TSyntax ``Term.matchAlt) :=
+          (runs.push (← `(Term.matchAltExpr| | _, _ => Alchemy.Program.pure ()))).map fun alt => ⟨alt.raw⟩
+        `(fun key input => match key, input with $runs:matchAlt*)
+      else match sagas[0]? with
+        | some (g, _, _, _) => `($(under m (g.getId ++ `run)))
+        | none => `(fun _ _ => Alchemy.Program.pure ())
     commands := commands.push (← `(command|
       abbrev $m:ident : Alchemy.Model where
         name := $(text m)
@@ -658,9 +730,12 @@ macro_rules
     for p in policies do stepped := stepped.push (under m p.getId)
     for d in decisions do stepped := stepped.push (under m (d.getId ++ `decide))
     for c in callNames do stepped := stepped.push (under m c.getId)
-    if let some g := saga then
-      for helper in [`run, `start, `signal] do
+    for (g, _, _, _) in sagas do
+      for helper in (if several then [`run, `start, `signal, `failWith] else [`run, `start, `signal]) do
         stepped := stepped.push (under m (g.getId ++ helper))
+      if several then
+        stepped := stepped.push (under m (g.getId ++ `awaitSignal))
+        for a in aggregates do stepped := stepped.push (under m (g.getId ++ a.getId ++ `must))
     stepped := stepped ++ #[under m `awaitSignal, under m `failWith]
     commands := commands.push (← `(command| attribute [behaviour] $stepped*))
     return mkNullNode commands

@@ -159,6 +159,10 @@ inductive PayoutFailed where
   | bounced
 deriving DecidableEq, Repr
 
+inductive FarewellFailed where
+  | alreadyGone
+deriving DecidableEq, Repr
+
 model Bank where
   aggregate Account
 
@@ -187,8 +191,14 @@ model Bank where
       | .sent => pure ()
       | .bounced => failWith .bounced
 
+  -- A second saga, with a failure type of its own. When an account closes, it is
+  -- frozen against reuse; a closed account cannot be, so the run fails and says why.
+  saga Farewell (Unit) (Unit) : FarewellFailed
+    | account, _ => Account.must (.freeze account "closed") fun _ => .alreadyGone
+
   policy Payouts on Account
     | id, .payoutRequested payout amount => Payout.start payout ⟨id, amount⟩
+    | id, .closed => Farewell.start id ()
 
   -- Whenever a large deposit arrives, have it screened, and freeze the account if it is flagged.
   policy Compliance on Account
@@ -547,7 +557,7 @@ example : Bank.follows (aPayoutBounces "a-1" "Sam" "p-1" 500 200) [
     .state .Account "a-1"
       { status := .open, owner := "Sam", balance := 300, deposited := 500, withdrawn := 200 },
     .next,
-    .saga "p-1" (.failed .bounced),
+    .saga (.Payout, "p-1") (.failed (.Payout .bounced)),
     .recorded .Account "a-1" [.opened "Sam", .deposited 500, .payoutRequested "p-1" 200,
       .withdrawn 200, .deposited 200]
   ] = true := by decide
@@ -560,14 +570,27 @@ every account, owner and amount.
 theorem aBouncedPayoutIsRefunded (id owner payout : String) (held amount : Nat)
     (some : amount ≠ 0) (enough : amount ≤ held) (modest : held < 10000) :
     let bank := Bank.run (aPayoutBounces id owner payout held amount)
-    (bank.state .Account id).balance = held ∧ bank.sagas payout = .failed .bounced := by
+    (bank.state .Account id).balance = held ∧ bank.sagas (.Payout, payout) = .failed (.Payout .bounced) := by
   behaviour [aPayoutBounces]
 
 /-- Sam's case is one instance of the theorem: nothing is run, the values are filled in. -/
 example :
     let bank := Bank.run (aPayoutBounces "a-1" "Sam" "p-1" 500 200)
-    (bank.state .Account "a-1").balance = 500 ∧ bank.sagas "p-1" = .failed .bounced :=
+    (bank.state .Account "a-1").balance = 500 ∧ bank.sagas (.Payout, "p-1") = .failed (.Payout .bounced) :=
   aBouncedPayoutIsRefunded "a-1" "Sam" "p-1" 500 200 (by decide) (by decide) (by decide)
+
+/--
+Given an open, empty account, when it is closed, then it is closed, and the
+Farewell saga's run for it has failed with its own failure: a closed account
+cannot be frozen. Two sagas, each with its own way to fail, in one model.
+-/
+theorem closingRunsTheFarewell (id owner : String) :
+    let bank := Bank.run [
+      .send ⟨.Account, (), .open id owner⟩,
+      .send ⟨.Account, (), .close id⟩]
+    (bank.state .Account id).status = .closed ∧
+      bank.sagas (.Farewell, id) = .failed (.Farewell .alreadyGone) := by
+  behaviour
 
 /-! What is read from the bank. These came with the model. -/
 
