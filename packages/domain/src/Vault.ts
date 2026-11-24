@@ -364,7 +364,7 @@ export const newKey = Effect.sync(() => toBase64(crypto.getRandomValues(new Uint
  * export const BankLive = Bank.layer(BankHandlers).pipe(
  *   Layer.provide(Domain.VaultLive),
  *   Layer.provide(Domain.HostKeyStore),
- *   Layer.provide(Domain.RootKeyWrap(Config.redacted("VAULT_ROOT_KEY"))),
+ *   Layer.provide(Domain.RootKeyWrap(Config.Redacted("VAULT_ROOT_KEY"))),
  *   Layer.provide(Platform),
  * );
  * ```
@@ -545,7 +545,7 @@ export const rootKeyWrap = <E>(
  * export const BankLive = Bank.layer(BankHandlers).pipe(
  *   Layer.provide(Domain.VaultLive),
  *   Layer.provide(Domain.HostKeyStore),
- *   Layer.provide(Domain.RootKeyWrap(Config.redacted("VAULT_ROOT_KEY"))),
+ *   Layer.provide(Domain.RootKeyWrap(Config.Redacted("VAULT_ROOT_KEY"))),
  *   Layer.provide(Platform),
  * );
  * ```

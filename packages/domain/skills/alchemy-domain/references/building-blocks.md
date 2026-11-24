@@ -377,10 +377,13 @@ yield* vault.shred(customerId);
 
 - `decide`, `evolve` and views see `{ subject, box }`, never the value. In `decide`, reject a value whose `subject` is not the instance's own.
 - Keep ids, unique values and anything a rule compares plain; remove those with a rewrite.
-- Provide `Domain.VaultLive` over your own `Domain.VaultKeys` (a store backed up apart from the model) where the model's Layer is built.
+- Provide `Domain.VaultLive` where the model's Layer is built, over a `Domain.KeyStore` (where each subject's key is kept) and a `Domain.KeyWrap` (what is stored of it).
+- Stores: `Domain.HostKeyStore` (the model's own host), `DomainCloudflare.D1KeyStore`, `DomainAWS.DynamoKeyStore`, `DomainGCP.FirestoreKeyStore`, `SqlKeyStore`, `Domain.MemoryKeyStore`.
+- Wraps: `DomainCloudflare.SecretKeyWrap`, `DomainAWS.KmsKeyWrap`, `DomainGCP.KmsKeyWrap`, `Domain.RootKeyWrap`, `Domain.NoKeyWrap`. Any store pairs with any wrap.
+- A restored backup of the key store brings shredded keys back: keep its backups off or expiring.
 - Stories run with a test Vault: expect values with `Domain.sealedInTest(Address, subject, value)`, shred with `Story.shred(subject)`.
 
-More: [Crypto-shredding](https://alchemy.run/domain/crypto-shredding), [Erasing personal data: Or seal it under a key you can delete](https://alchemy.run/domain/erasing-personal-data#or-seal-it-under-a-key-you-can-delete).
+More: [Crypto-shredding](https://alchemy.run/domain/crypto-shredding), [Choose where the keys are kept](https://alchemy.run/domain/crypto-shredding#choose-where-the-keys-are-kept), [Erasing personal data: Or seal it under a key you can delete](https://alchemy.run/domain/erasing-personal-data#or-seal-it-under-a-key-you-can-delete).
 
 ## Compaction
 

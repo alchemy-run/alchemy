@@ -29,8 +29,8 @@ export interface SqlKeyStoreOptions {
  *
  * export const Sealing = Domain.VaultLive.pipe(
  *   Layer.provide(SqlKeyStore()),
- *   Layer.provide(Domain.RootKeyWrap(Config.redacted("VAULT_ROOT_KEY"))),
- *   Layer.provide(PgClient.layerConfig({ url: Config.redacted("VAULT_DATABASE_URL") })),
+ *   Layer.provide(Domain.RootKeyWrap(Config.Redacted("VAULT_ROOT_KEY"))),
+ *   Layer.provide(PgClient.layerConfig({ url: Config.Redacted("VAULT_DATABASE_URL") })),
  * );
  * ```
  *

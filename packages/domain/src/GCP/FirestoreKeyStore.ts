@@ -37,9 +37,12 @@ const documentId = (subject: string) => {
  * import * as Effect from "effect/Effect";
  * import * as Layer from "effect/Layer";
  *
- * export const Keys = GCP.Firestore.Database("VaultKeys", { locationId: "nam5" });
+ * export const Keys = GCP.Firestore.Database("VaultKeys", {
+ *   location: "us-central1",
+ *   type: "FIRESTORE_NATIVE",
+ * });
  * export const RootKey = Effect.gen(function* () {
- *   const keyRing = yield* GCP.KMS.KeyRing("Vault", { location: "us" });
+ *   const keyRing = yield* GCP.KMS.KeyRing("Vault", { location: "us-central1" });
  *   return yield* GCP.KMS.CryptoKey("VaultRootKey", { keyRing: keyRing.name });
  * });
  *
