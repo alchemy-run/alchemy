@@ -83,7 +83,7 @@ Leave out `main` to deploy an archive you built yourself:
 ```typescript
 const hello = yield* GCP.CloudFunctions.Function("Hello", {
   buildConfig: {
-    runtime: "nodejs22",
+    runtime: "nodejs26",
     entryPoint: "helloHttp",
     source: { storageSource: { bucket: "my-source", object: "hello.zip" } },
   },
