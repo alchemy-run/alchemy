@@ -1162,7 +1162,7 @@ testFor(bothResources).test.provider(
 
 const underWildcard = makeUrlCloud();
 testFor(underWildcard).test.provider(
-  "a wildcard domain ownership with dns and two RoutingUrls with dns under it publish one TXT record, and destroy removes everything",
+  "a wildcard domain ownership with dns and two RoutingUrls with dns declared after it publish one TXT record, and destroy removes everything",
   (stack) =>
     Effect.gen(function* () {
       underWildcard.reset({ fromZone: true });
@@ -1187,14 +1187,6 @@ testFor(underWildcard).test.provider(
       );
 
       expect(deployed.ownership.status).toBe("verified");
-      const routes = underWildcard.routes();
-      const ownershipCreate = routes.indexOf("POST /v1/workspaces/ws-1/domain-ownerships");
-      const urlCreates = routes.flatMap((route, index) =>
-        route === "POST /v1/services/svc-1/urls" ? [index] : [],
-      );
-      expect(ownershipCreate).toBeGreaterThan(-1);
-      expect(urlCreates).toHaveLength(2);
-      expect(urlCreates.every((index) => index > ownershipCreate)).toBe(true);
       expect(underWildcard.zone.records.filter((record) => record.type === "TXT")).toEqual([
         txtFor("example.com"),
       ]);
@@ -1208,6 +1200,50 @@ testFor(underWildcard).test.provider(
       expect(underWildcard.rows.size).toBe(0);
       expect(underWildcard.ownerships.size).toBe(0);
       expect(underWildcard.zone.records).toEqual([]);
+    }),
+  { tags },
+);
+
+const beforeWildcard = makeUrlCloud();
+testFor(beforeWildcard).test.provider(
+  "two RoutingUrls with dns saved before a wildcard domain ownership with dns become active once it is verified",
+  (stack) =>
+    Effect.gen(function* () {
+      beforeWildcard.reset({ fromZone: true });
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const api = yield* RoutingUrl("Api", { app: "svc-1", hostname: HOSTNAME, dns: TEST_DNS });
+          const admin = yield* RoutingUrl("Admin", {
+            app: "svc-1",
+            hostname: "admin.example.com",
+            dns: TEST_DNS,
+          });
+          const ownership = yield* DomainOwnership("Domain", {
+            project: Output.map(Output.all(api.routingUrlId, admin.routingUrlId), () => "proj-1"),
+            domain: "*.example.com",
+            dns: TEST_DNS,
+          });
+          return { ownership, api, admin };
+        }),
+      );
+
+      expect([deployed.api.status, deployed.admin.status]).toEqual(["pending", "pending"]);
+      expect(deployed.ownership.status).toBe("verified");
+      expect(beforeWildcard.zone.records.filter((record) => record.type === "TXT")).toEqual([
+        txtFor("example.com"),
+      ]);
+      expect(beforeWildcard.zone.records).toHaveLength(3);
+      expect([...beforeWildcard.rows.values()].map((row) => row.status)).toEqual([
+        "active",
+        "active",
+      ]);
+
+      yield* stack.destroy();
+      expect(beforeWildcard.rows.size).toBe(0);
+      expect(beforeWildcard.ownerships.size).toBe(0);
+      expect(beforeWildcard.zone.records).toEqual([]);
     }),
   { tags },
 );

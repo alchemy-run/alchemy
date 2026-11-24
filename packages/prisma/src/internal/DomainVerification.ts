@@ -7,10 +7,11 @@ import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import { devProvider } from "./DevStub.ts";
 import {
-  domainSharingRecord,
+  domainSharingRecordWith,
   ensureSameWorkspace,
   findOwnership,
   type ProjectReference,
+  recordDomainOf,
   resolveWorkspaceId,
 } from "./DomainOwnership.ts";
 import { normalizeHostname } from "./Hostname.ts";
@@ -21,7 +22,6 @@ export interface DomainVerificationProps {
   project: ProjectReference;
   /** An exact hostname such as `app.example.com`, or a wildcard such as `*.example.com`. */
   domain: string;
-  /** Whether the stack publishes the `TXT` record, which the wildcard or apex sharing its name also uses. */
   publishesRecord?: boolean;
 }
 
@@ -34,7 +34,7 @@ export interface DomainVerification extends Resource<
     workspaceId: string;
     /** Domain the record proves ownership of. */
     domain: string;
-    /** Name of the `TXT` record, `_prisma-verification.{domain}`. */
+    /** Name of the `TXT` record, `_prisma-verification.{domain}` without a leading `*.`. */
     recordName: string;
     /** Value of the `TXT` record; the same for every domain in the workspace. */
     recordValue: string;
@@ -60,14 +60,13 @@ const ProviderLive = () =>
         }),
         read: Effect.fn(function* ({ output, olds, previous }) {
           if (output !== undefined) return output;
-          if (typeof olds?.domain !== "string") return undefined;
+          if (olds?.publishesRecord !== true || typeof olds.domain !== "string") return undefined;
           const workspaceId = yield* resolveWorkspaceId(olds.project);
           const domain = normalizeHostname(olds.domain);
           const recorded =
             previous?.workspaceId === workspaceId ? normalizeHostname(previous.domain) : undefined;
-          const sharing = olds.publishesRecord === true ? [domainSharingRecord(domain)] : [];
           const existing = yield* Effect.forEach(
-            [domain, ...sharing].filter((each) => each !== recorded),
+            [domain, domainSharingRecordWith(domain)].filter((each) => each !== recorded),
             (each) => findOwnership(workspaceId, each),
           );
           const unrecorded = existing.find((ownership) => ownership !== undefined);
@@ -100,7 +99,7 @@ const ProviderLocal = () =>
   devProvider(DomainVerification, [], ({ news }) => ({
     workspaceId: "dev:workspace:local",
     domain: String(news.domain),
-    recordName: `_prisma-verification.${String(news.domain).replace(/^\*\./, "")}`,
+    recordName: `_prisma-verification.${recordDomainOf(String(news.domain))}`,
     recordValue: "prisma-verification=dev",
   }));
 

@@ -4,15 +4,17 @@ import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
 import type { ResourceLike } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import type { ProjectReference } from "./internal/DomainOwnership.ts";
+import { type ProjectReference, recordDomainOf } from "./internal/DomainOwnership.ts";
 import { DomainOwnershipRow } from "./internal/DomainOwnershipRow.ts";
 import { DomainVerification } from "./internal/DomainVerification.ts";
 import { normalizeHostname } from "./internal/Hostname.ts";
 import { publishesDns } from "./internal/PublishesDns.ts";
+import { publishedRecordsId } from "./internal/RoutingUrlRequiredRecords.ts";
 
 export { PrismaDomainOwnershipRequired } from "./internal/DomainOwnership.ts";
 
-const recordSetId = (domain: string) => `Record-${normalizeHostname(domain).replace(/^\*\./, "")}`;
+const recordSetId = (domain: string) =>
+  publishedRecordsId(recordDomainOf(normalizeHostname(domain)));
 
 /** A workspace's domain ownership, as the deploy last saw it. */
 export type DomainOwnership = DomainOwnershipRow;
@@ -69,17 +71,19 @@ export interface DomainOwnershipProps {
  * domain ownership the stack did not create, made in the Console, by a
  * RoutingUrl with `createDomainOwnership: true`, by Prisma for an older
  * custom domain, or by another stack, needs `--adopt`, or better `adopt(true)`
- * on this resource alone. The refusal can name `Prisma.DomainVerification`,
- * the resource that checks for an existing domain ownership of this domain,
- * and with `dns` of the wildcard or apex that shares its record. Adopting in
+ * on this resource alone. With `dns`, the refusal can name
+ * `Prisma.DomainVerification`, the resource that checks for an existing domain
+ * ownership of this domain or of the wildcard or apex that shares its record,
+ * before the record is published. Adopting in
  * that last case makes the stack publish, and on destroy delete, the record
  * the other domain ownership also uses. Once two stacks have it,
  * destroying either deletes it for both, so declare a shared one in one
  * stack, with `RemovalPolicy.retain()` if it must outlive that stack. A
  * domain ownership belongs to a workspace: moving `project` to another
- * workspace fails the deploy and changes nothing: point `project` back, or
- * remove the domain ownership from the stack and deploy, which deletes it
- * from the old workspace, then declare it again.
+ * workspace fails the deploy and changes nothing. To recover, point `project`
+ * back, or remove the domain ownership from the stack and deploy, which
+ * deletes it from the old workspace unless it is retained, then declare it
+ * again.
  *
  * ### Proving a Domain
  * **Example:** Prove a hostname and serve it

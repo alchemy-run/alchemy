@@ -114,8 +114,11 @@ export const findOwnership = (workspaceId: string, domain: string) =>
     ),
   );
 
-export const domainSharingRecord = (domain: string) =>
-  domain.startsWith("*.") ? domain.slice(2) : `*.${domain}`;
+/** Prisma names the `TXT` record of `*.example.com` after `example.com`, so a wildcard and its apex share one record. */
+export const recordDomainOf = (domain: string) => domain.replace(/^\*\./, "");
+
+export const domainSharingRecordWith = (domain: string) =>
+  domain.startsWith("*.") ? recordDomainOf(domain) : `*.${domain}`;
 
 export const ensureSameWorkspace = (
   domain: string,
@@ -126,7 +129,7 @@ export const ensureSameWorkspace = (
   if (recorded === undefined || recorded === workspaceId) return Effect.void;
   return Effect.fail(
     new DomainOwnershipOperationFailed({
-      message: `The domain ownership of '${domain}' belongs to workspace '${recorded}', but the project is now in workspace '${workspaceId}'. A domain ownership belongs to a workspace and does not move with a project. Point project back to a project in workspace '${recorded}', or remove this Prisma.DomainOwnership from the stack and deploy, which deletes it from workspace '${recorded}', then declare it again.`,
+      message: `The domain ownership of '${domain}' belongs to workspace '${recorded}', but the project is now in workspace '${workspaceId}'. A domain ownership belongs to a workspace and does not move with a project. Point project back to a project in workspace '${recorded}', or remove this Prisma.DomainOwnership from the stack and deploy, which deletes it from workspace '${recorded}' unless it is retained, then declare it again.`,
     }),
   );
 };

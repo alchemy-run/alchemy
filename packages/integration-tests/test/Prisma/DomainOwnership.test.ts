@@ -239,7 +239,7 @@ testFor(created).test.provider(
       expect(ownership.recordValue).toBe(RECORD.value);
       expect(created.state.checkedWith).toBe(undefined);
       expect(created.routes().filter((route) => route === CREATE)).toEqual([CREATE]);
-      expect(created.routes().filter((route) => route === LIST)).toEqual([LIST, LIST, LIST]);
+      expect(created.routes().filter((route) => route === LIST)).toEqual([LIST, LIST]);
       expect(VERIFIES(created)).toEqual([]);
 
       yield* stack.destroy();
@@ -317,6 +317,7 @@ for (const status of ["unverified", "verified", "expiring"] as const) {
         const failure = yield* failureOf(stack.deploy(ownershipStack()));
 
         expect(failure).toContain("Cannot adopt resource");
+        expect(failure).toContain("(Prisma.DomainOwnership)");
         expect(foreign.routes().some((route) => route.startsWith("POST"))).toBe(false);
         expect(foreign.deleted()).toBe(false);
 
@@ -427,7 +428,7 @@ testFor(moved).test.provider(
       const failure = yield* failureOf(stack.deploy(ownershipStack("proj-2", "ws-2")));
 
       expect(failure).toContain(
-        `The domain ownership of '${HOSTNAME}' belongs to workspace 'ws-1', but the project is now in workspace 'ws-2'. A domain ownership belongs to a workspace and does not move with a project. Point project back to a project in workspace 'ws-1', or remove this Prisma.DomainOwnership from the stack and deploy, which deletes it from workspace 'ws-1', then declare it again.`,
+        `The domain ownership of '${HOSTNAME}' belongs to workspace 'ws-1', but the project is now in workspace 'ws-2'. A domain ownership belongs to a workspace and does not move with a project. Point project back to a project in workspace 'ws-1', or remove this Prisma.DomainOwnership from the stack and deploy, which deletes it from workspace 'ws-1' unless it is retained, then declare it again.`,
       );
       expect([...moved.rows.keys()]).toEqual(["do-created"]);
       expect(moved.routes().some((route) => !route.startsWith("GET"))).toBe(false);
@@ -547,9 +548,7 @@ urlTestFor(neverVerified).test.provider(
 
       neverVerified.state.verifiesAs = undefined;
       neverVerified.fake.captured.length = 0;
-      const changed = yield* stack.deploy(
-        dnsStack({ project: { projectId: "proj-1", workspaceId: "ws-1" } as ProjectReference }),
-      );
+      const changed = yield* stack.deploy(dnsStack({ project: project("proj-1") }));
 
       expect(changed.domainOwnershipId).toBe([...neverVerified.ownerships.keys()][0]);
       expect(neverVerified.routes()).not.toContain(CREATE);
@@ -803,9 +802,7 @@ urlTestFor(movedWithDns).test.provider(
       movedWithDns.fake.captured.length = 0;
       const publishes = movedWithDns.zone.publishes;
       const failure = yield* failureOf(
-        stack.deploy(
-          dnsStack({ project: { projectId: "proj-2", workspaceId: "ws-2" } as ProjectReference }),
-        ),
+        stack.deploy(dnsStack({ project: project("proj-2", "ws-2") })),
       );
 
       expect(failure).toContain(
@@ -819,7 +816,11 @@ urlTestFor(movedWithDns).test.provider(
       expect(NOT_GET(movedWithDns)).toEqual([]);
       expect([...movedWithDns.ownerships.keys()]).toEqual([first.domainOwnershipId]);
 
-      yield* stack.destroy();
+      yield* stack.deploy(Effect.void);
+
+      expect(movedWithDns.routes()).toContain(
+        `DELETE /v1/domain-ownerships/${first.domainOwnershipId}`,
+      );
       expect(movedWithDns.ownerships.size).toBe(0);
       expect(movedWithDns.zone.records).toEqual([]);
     }),

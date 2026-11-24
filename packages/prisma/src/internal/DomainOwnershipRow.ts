@@ -23,6 +23,7 @@ import {
   findOwnership,
   listOwnerships,
   type ProjectReference,
+  recordDomainOf,
   resolveWorkspaceId,
 } from "./DomainOwnership.ts";
 import { normalizeHostname } from "./Hostname.ts";
@@ -220,7 +221,7 @@ const ProviderLocal = () =>
     domainOwnershipId: devId("domain-ownership", id),
     workspaceId: "dev:workspace:local",
     domain: String(news.domain),
-    recordName: `_prisma-verification.${String(news.domain).replace(/^\*\./, "")}`,
+    recordName: `_prisma-verification.${recordDomainOf(String(news.domain))}`,
     recordValue: "prisma-verification=dev",
     status: "verified" as const,
     expiresAt: null,
