@@ -171,6 +171,7 @@ export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
         kind: "aws" as const,
         vpcId: network.vpcId,
         subnetIds: network.subnetIds,
+        publicSubnetIds: network.publicSubnetIds,
         securityGroupId: runners.groupId,
         cidrBlock: network.cidrBlock,
         assignPublicIp: network.assignPublicIp,

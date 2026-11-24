@@ -20,6 +20,11 @@ export interface VpcNetwork<E = never, R = never> {
    */
   readonly subnets: ReadonlyArray<ResourceInput<Subnet, E, R>>;
   /**
+   * Subnets with a route to an internet gateway, for an internet-facing
+   * gateway's load balancer. Defaults to `subnets`.
+   */
+  readonly publicSubnets?: ReadonlyArray<ResourceInput<Subnet, E, R>>;
+  /**
    * Whether runners take a public IP. Give subnets without a NAT gateway
    * `true`: runners pull their image and reach other APIs through it.
    * @default false

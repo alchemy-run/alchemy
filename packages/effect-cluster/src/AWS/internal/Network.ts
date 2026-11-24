@@ -13,6 +13,7 @@ export interface ResolvedNetwork {
   readonly vpcId: Output.Output<EC2.VpcId>;
   readonly cidrBlock: Output.Output<string>;
   readonly subnetIds: Output.Output<EC2.SubnetId>[];
+  readonly publicSubnetIds: Output.Output<EC2.SubnetId>[];
   readonly assignPublicIp: boolean;
 }
 
@@ -30,16 +31,24 @@ export const resolveNetwork = Effect.fn(function* <E, R>(input: NetworkInput<E, 
       vpcId: network.vpc.vpcId,
       cidrBlock: network.vpc.cidrBlock,
       subnetIds: nat ? network.privateSubnetIds : network.publicSubnetIds,
+      publicSubnetIds: network.publicSubnetIds,
       assignPublicIp: !nat,
     } as ResolvedNetwork;
   }
   const vpc = yield* resolveResource(input.vpc);
   const subnets: EC2.Subnet[] = [];
   for (const subnet of input.subnets) subnets.push(yield* resolveResource(subnet));
+  const publicSubnets: EC2.Subnet[] = [];
+  for (const subnet of input.publicSubnets ?? []) {
+    publicSubnets.push(yield* resolveResource(subnet));
+  }
   return {
     vpcId: vpc.vpcId,
     cidrBlock: vpc.cidrBlock,
     subnetIds: subnets.map((subnet) => subnet.subnetId),
+    publicSubnetIds: (input.publicSubnets === undefined ? subnets : publicSubnets).map(
+      (subnet) => subnet.subnetId,
+    ),
     assignPublicIp: input.assignPublicIp ?? false,
   } as ResolvedNetwork;
 });

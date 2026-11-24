@@ -183,6 +183,7 @@ export const Database = <E = never, R = never>(id: string, props: DatabaseProps<
           kind: "aws" as const,
           vpcId: network.vpcId,
           subnetIds: network.subnetIds,
+          publicSubnetIds: network.publicSubnetIds,
           securityGroupId: runners.groupId,
           cidrBlock: network.cidrBlock,
           assignPublicIp: network.assignPublicIp,

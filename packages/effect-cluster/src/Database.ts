@@ -26,6 +26,11 @@ export type ClusterNetwork =
       readonly subnetIds: Input<string>[];
       /** The group every runner joins: it reaches the database and the other runners. */
       readonly securityGroupId: Input<string>;
+      /**
+       * Subnets with a route to an internet gateway, where an
+       * internet-facing gateway's load balancer goes. Defaults to `subnetIds`.
+       */
+      readonly publicSubnetIds?: Input<string>[];
       /** The VPC's IPv4 range, which an internal gateway admits by default. */
       readonly cidrBlock: Input<string>;
       /**

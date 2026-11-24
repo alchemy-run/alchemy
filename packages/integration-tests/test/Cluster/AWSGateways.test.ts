@@ -111,7 +111,7 @@ describe.skipIf(!!process.env.FAST)(
       "the database, the runners and the front share the network the user declared",
       Effect.gen(function* () {
         // The database and the front yield the same `EC2.Network`.
-        const vpcs = yield* deployed<{ vpcId: string }>("AWS.EC2.Vpc");
+        const vpcs = yield* deployed<{ vpcId: string }>("AWS.EC2.VPC");
         expect(vpcs.size).toBe(1);
         const [{ vpcId }] = [...vpcs.values()];
         const { Vpcs } = yield* aws(ec2.describeVpcs({ VpcIds: [vpcId!] }));

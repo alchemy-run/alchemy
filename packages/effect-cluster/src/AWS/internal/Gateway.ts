@@ -58,7 +58,12 @@ const makeBalancer = Effect.fn(function* (
 ) {
   // The database's network, as the EC2 identifiers it holds.
   const vpcId = network.vpcId as Input<EC2.VpcId>;
-  const subnetIds = network.subnetIds as Input<EC2.SubnetId>[];
+  // An internet-facing load balancer needs subnets routed to the internet.
+  const subnetIds = (
+    options.scheme === "internet-facing"
+      ? (network.publicSubnetIds ?? network.subnetIds)
+      : network.subnetIds
+  ) as Input<EC2.SubnetId>[];
   const { port } = options;
   const balancerGroup = yield* EC2.SecurityGroup(`${id}GatewayBalancerGroup`, {
     vpcId,
@@ -121,7 +126,7 @@ const makeBalancer = Effect.fn(function* (
   const targetGroupArn = Output.all(targets.targetGroupArn, listener.listenerArn).pipe(
     Output.map(([arn]) => arn),
   );
-  return { balancer, listener, targets: { targetGroupArn }, gatewayGroup };
+  return { balancer, balancerGroup, listener, targets: { targetGroupArn }, gatewayGroup };
 });
 
 const domainOf = (domain: string | GatewayDomain | undefined): GatewayDomain | undefined =>
@@ -234,23 +239,36 @@ const makeCloudFrontGateway = Effect.fn(function* (
   targetType: "ip" | "instance",
   gateway: CloudFrontGateway,
 ) {
-  // CloudFront reaches the load balancer from network interfaces it places
-  // in the VPC, so the VPC's range is the only ingress it needs.
-  const { balancer, listener, targets, gatewayGroup } = yield* makeBalancer(
+  // Only CloudFront reaches the load balancer (see the rule below).
+  const { balancer, balancerGroup, listener, targets, gatewayGroup } = yield* makeBalancer(
     id,
     network,
     targetType,
-    {
-      scheme: "internal",
-      ingress: [{ cidrIpv4: network.cidrBlock as unknown as string }],
-      port: 80,
-    },
+    { scheme: "internal", ingress: [], port: 80 },
   );
   const origin = yield* CloudFront.VpcOrigin(`${id}GatewayOrigin`, {
     arn: balancer.loadBalancerArn,
     httpPort: 80,
     httpsPort: 443,
     originProtocolPolicy: "http-only",
+  });
+  // CloudFront connects from network interfaces in the security group AWS
+  // creates in the VPC with its first VPC origin; an origin admits that
+  // group, not the interfaces' addresses.
+  const cloudFrontGroup = EC2.SecurityGroup.lookup({
+    // Looked up once the origin exists (the VPC's id is an Output).
+    vpcId: Output.all(network.vpcId as Output.Output<string>, origin.vpcOriginId).pipe(
+      Output.map(([vpcId]) => vpcId),
+    ),
+    groupName: "CloudFront-VPCOrigins-Service-SG",
+  });
+  const fromCloudFront = yield* EC2.SecurityGroupRule(`${id}GatewayFromCloudFront`, {
+    groupId: balancerGroup.groupId,
+    type: "ingress",
+    ipProtocol: "tcp",
+    fromPort: 80,
+    toPort: 80,
+    referencedGroupId: cloudFrontGroup.groupId,
   });
   const distribution = yield* CloudFront.Distribution(`${id}GatewayDistribution`, {
     comment: `Effect Cluster gateway of pool ${id}`,
@@ -279,10 +297,12 @@ const makeCloudFrontGateway = Effect.fn(function* (
     },
   });
   return {
-    // Ordered after the listener and the distribution.
-    url: Output.all(listener.listenerArn, distribution.domainName).pipe(
-      Output.map(([, domainName]) => `https://${domainName}`),
-    ),
+    // Ordered after the listener, CloudFront's way in, and the distribution.
+    url: Output.all(
+      listener.listenerArn,
+      fromCloudFront.securityGroupRuleId,
+      distribution.domainName,
+    ).pipe(Output.map(([, , domainName]) => `https://${domainName}`)),
     targetGroupArn: targets.targetGroupArn,
     securityGroupId: gatewayGroup.groupId,
   };
