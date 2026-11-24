@@ -72,6 +72,16 @@ export default Bank.layer(BankHandlers).pipe(
 - Both platforms push live reads over `Domain.protocolWebSocket`: the runtime that serves the Api holds the caller's socket, and the owner of the key pushes each commit. Over `Domain.protocolHttp`, live reads poll instead.
 - A deploy that adds a view or projection doesn't wait for its backfill; the first call starts it.
 
+A process that hosts nothing can still read a model's history, for an export or an audit. `DomainRivet.modelReader(namespace, "Bank")` pages the instances of an aggregate or view and reads an aggregate's stored events. It builds no model and never sends a command:
+
+```ts
+const bank = DomainRivet.modelReader(namespace, "Bank");
+const page = yield* bank.instances("Account", undefined, 100); // { rows: [{ source, id }], next? }
+const events = yield* bank.log("Account", "a-1", 0, 500);      // stored events with seq > 0, in seq order
+```
+
+Pass `page.next` as `after` for the next page. An instance may be listed twice while the directory splits, so key by id.
+
 More: [Rivet](https://alchemy.run/domain/rivet), [Effect Cluster](https://alchemy.run/domain/effect-cluster).
 
 ## Calling the Api in process

@@ -1,6 +1,8 @@
 import * as Domain from "@alchemy.run/domain";
 import * as DurableObjects from "@alchemy.run/domain/DurableObjects";
 import { InMemory } from "@alchemy.run/domain/InMemory";
+import type { AggregateStore, ModelHost } from "@alchemy.run/domain/Platform";
+import * as DomainRivet from "@alchemy.run/domain/Rivet";
 import { describe, expect, it } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Clock from "effect/Clock";
@@ -233,6 +235,90 @@ const importsOn = (platform: Layer.Layer<Domain.Platform, never, SecureRandom.Se
     Layer.provideMerge(SecureRandom.layerWebCrypto),
   );
 
+// ---------------------------------------------------------------- reading a model's instances and logs
+
+/**
+ * A platform that keeps the host it built for the model and the store of each
+ * aggregate, so a test reads through them as a caller of the platform does.
+ */
+const spyingOn = (platform: Layer.Layer<Domain.Platform, never, SecureRandom.SecureRandom>) => {
+  const seen = {
+    host: undefined as ModelHost | undefined,
+    stores: new Map<string, AggregateStore>(),
+  };
+  const layer = Layer.effect(
+    Domain.Platform,
+    Effect.gen(function* () {
+      const inner = yield* Domain.Platform;
+      return Domain.Platform.of({
+        model: (hosted) =>
+          inner.model(hosted).pipe(
+            Effect.map((host) => {
+              const spy: ModelHost = {
+                ...host,
+                aggregate: (aggregate, kit) =>
+                  host
+                    .aggregate(aggregate, kit)
+                    .pipe(
+                      Effect.tap((store) =>
+                        Effect.sync(() => seen.stores.set(aggregate.aggregateName, store)),
+                      ),
+                    ),
+              };
+              seen.host = spy;
+              return spy;
+            }),
+          ),
+      });
+    }),
+  ).pipe(Layer.provide(platform));
+  return { seen, layer };
+};
+
+/** Every page of a source's instances, `limit` rows a page, until the cursor ends. */
+const pagesOf = (
+  list: (
+    source: string,
+    after: string | undefined,
+    limit: number,
+  ) => Effect.Effect<{
+    readonly rows: ReadonlyArray<{ readonly id: string }>;
+    readonly next?: string;
+  }>,
+  source: string,
+  limit: number,
+) =>
+  Effect.gen(function* () {
+    const ids: Array<string> = [];
+    let pages = 0;
+    let after: string | undefined;
+    do {
+      const page = yield* list(source, after, limit);
+      expect(page.rows.length).toBeLessThanOrEqual(limit);
+      ids.push(...page.rows.map((row) => row.id));
+      after = page.next;
+      pages += 1;
+    } while (after !== undefined);
+    return { ids, pages };
+  });
+
+/** Page the source's instances until `count` distinct ones are listed: an instance lists itself after its first commit. */
+const untilListed = (
+  list: Parameters<typeof pagesOf>[0],
+  source: string,
+  limit: number,
+  count: number,
+) =>
+  Effect.gen(function* () {
+    while (true) {
+      const listed = yield* pagesOf(list, source, limit);
+      if (new Set(listed.ids).size >= count) return listed;
+      yield* Effect.sleep("20 millis");
+    }
+  }).pipe(Effect.timeout("15 seconds"));
+
+const LEDGERS = Array.from({ length: 7 }, (_, i) => `ledger-${i}`);
+
 describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
   for (const [name, platform] of [
     ["Durable Objects", () => DurableObjects.makePlatform(simHost({ rowsRead: 0 }).host)],
@@ -297,7 +383,102 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
         }).pipe(Effect.scoped, Effect.provide(importsOn(platform()))),
       { timeout: 60_000 },
     );
+    it.live(
+      `a model's instances are read a page at a time, and an instance's stored events by seq, on ${name}`,
+      () => {
+        const { seen, layer } = spyingOn(platform());
+        return Effect.gen(function* () {
+          const ledgers = yield* Ledger;
+          for (const id of LEDGERS) yield* ledgers.send(new BookMany({ id, count: 3 }));
+          const host = seen.host!;
+          const store = seen.stores.get("Ledger")!;
+
+          // Pages of two reach every instance, each at least once, and keep their cursor.
+          const listed = yield* untilListed(host.instances!, "Ledger", 2, LEDGERS.length);
+          expect([...new Set(listed.ids)].sort()).toEqual(LEDGERS);
+          expect(listed.pages).toBeGreaterThanOrEqual(Math.ceil(LEDGERS.length / 2));
+          // One page takes them all, and a name that is no source lists none.
+          expect((yield* host.instances!("Ledger", undefined, 100)).next).toBeUndefined();
+          expect((yield* host.instances!("Unknown", undefined, 100)).rows).toEqual([]);
+
+          // An instance's log, as stored: its events in seq order, from after a seq.
+          const rows = yield* store.log!("ledger-3", 0, 100);
+          expect(rows.map((row) => row.envelope.seq)).toEqual([1, 2, 3]);
+          expect(rows.map((row) => row.event)).toMatchObject([
+            { _tag: "Booked", n: 1 },
+            { _tag: "Booked", n: 2 },
+            { _tag: "Booked", n: 3 },
+          ]);
+          expect(rows[0]!.envelope).toMatchObject({ stream: "Ledger/ledger-3", seq: 1 });
+          expect((yield* store.log!("ledger-3", 1, 1)).map((row) => row.envelope.seq)).toEqual([2]);
+          expect(yield* store.log!("ledger-3", 3, 10)).toEqual([]);
+
+          // Reading an instance that was never written creates nothing: it is never listed.
+          expect(yield* store.log!("never-written", 0, 10)).toEqual([]);
+          yield* Effect.sleep("300 millis");
+          expect(
+            new Set((yield* pagesOf(host.instances!, "Ledger", 100)).ids).has("never-written"),
+          ).toBe(false);
+          expect(yield* ledgers.get("ledger-3")).toEqual({ count: 3 });
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(
+            BooksBefore.layer(Layer.empty).pipe(
+              Layer.provideMerge(layer),
+              Layer.provideMerge(SecureRandom.layerWebCrypto),
+            ),
+          ),
+        );
+      },
+      { timeout: 60_000 },
+    );
   }
+
+  it.live(
+    "a model is read from outside its host by the names its host gives its objects",
+    () => {
+      const sim = simHost({ rowsRead: 0 });
+      const hosted = { modelName: "Books", id: {}, sagas: [], legacyData: false };
+      // What a caller reaches: one object per class and key, by the host's names.
+      const direct = DurableObjects.readModel((cls, key) =>
+        sim.host.lookup!(hosted, cls)!.getByName(key),
+      );
+      // The same objects, as one Rivet class holds them: `Books.LedgerAggregate/ledger-0`.
+      const multiplexed = DomainRivet.modelReader(
+        {
+          getByName: (name: string) => {
+            const { className, key } = DurableObjects.parseMultiplexedName(name)!;
+            return sim.host.lookup!(hosted, className.slice("Books.".length))!.getByName(key);
+          },
+        } as never,
+        "Books",
+      );
+      return Effect.gen(function* () {
+        const ledgers = yield* Ledger;
+        for (const id of LEDGERS) yield* ledgers.send(new BookMany({ id, count: 2 }));
+        for (const reader of [direct, multiplexed]) {
+          const listed = yield* untilListed(reader.instances, "Ledger", 3, LEDGERS.length);
+          expect([...new Set(listed.ids)].sort()).toEqual(LEDGERS);
+          const rows = yield* reader.log("Ledger", "ledger-5", 0, 100);
+          expect(rows.map((row) => row.envelope.seq)).toEqual([1, 2]);
+          expect(rows[1]!.envelope).toMatchObject({ stream: "Ledger/ledger-5", seq: 2 });
+          expect(
+            (yield* reader.log("Ledger", "ledger-5", 1, 100)).map((row) => row.envelope.seq),
+          ).toEqual([2]);
+          expect(yield* reader.log("Ledger", "never-written", 0, 100)).toEqual([]);
+        }
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          BooksBefore.layer(Layer.empty).pipe(
+            Layer.provideMerge(DurableObjects.makePlatform(sim.host)),
+            Layer.provideMerge(SecureRandom.layerWebCrypto),
+          ),
+        ),
+      );
+    },
+    { timeout: 60_000 },
+  );
 
   it.live(
     "a stream's list reads only the page it returns",
