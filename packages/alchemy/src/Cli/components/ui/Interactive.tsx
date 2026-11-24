@@ -19,7 +19,7 @@ import { useCliEnvironment, useGlyphs, useKeyGlyphs } from "./Environment.tsx";
 import { KeyBar, Spinner } from "./Feedback.tsx";
 import { Box, overflowListWindow } from "./Layout.tsx";
 import { useAlchemyStatus } from "./ProgramStatus.ts";
-import { Link, Text } from "./Typography.tsx";
+import { Text } from "./Typography.tsx";
 
 export interface TerminalKey {
   readonly up: boolean;
@@ -863,12 +863,15 @@ export function BrowserLoginWait({
             </Text>
           </Box>
         )}
+        {/* The URL itself is printed above the screen on one unpadded line
+            (Runtime's printUrl), where it copies cleanly. */}
         {browserFailed ? (
           <Text tone="warning">
-            {glyphs.warning} Could not open the browser. Copy and open the URL manually.
+            {glyphs.warning} Could not open the browser. Open the URL above, or press c to copy it.
           </Text>
-        ) : null}
-        <Link href={url}>{url}</Link>
+        ) : (
+          <Text tone="muted">Opened the URL above in your browser.</Text>
+        )}
       </Box>
     </PromptFrame>
   );

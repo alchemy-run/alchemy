@@ -10,6 +10,8 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as PlatformError from "effect/PlatformError";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Alchemist from "@/Alchemist/index.ts";
 import {
   AnsweredPrompt,
@@ -2062,6 +2064,65 @@ it.effect(
       expect(failure).toBeInstanceOf(TerminalCancelled);
     }),
   { tags: ["unit", "local"] },
+);
+
+/** Set an environment variable for one effect; the test must be exclusive. */
+const withEnv =
+  (name: string, value: string) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const previous = process.env[name];
+        process.env[name] = value;
+        return previous;
+      }),
+      () => effect,
+      (previous) =>
+        Effect.sync(() => {
+          if (previous === undefined) delete process.env[name];
+          else process.env[name] = previous;
+        }),
+    );
+
+it.effect(
+  "prints the authorization URL on one unpadded line",
+  () =>
+    Effect.gen(function* () {
+      const stdin = new InputStream();
+      const { service, stdout } = yield* makeLive({ stdin });
+      // Longer than the 80-column terminal, so a wrapped or indented render
+      // would split it.
+      const url = `https://signin.aws.amazon.com/v1/authorize?client_id=${"x".repeat(120)}&state=abc`;
+      // No browser in tests: the launcher fails and the screen says so.
+      const noBrowser = Layer.succeed(
+        ChildProcessSpawner.ChildProcessSpawner,
+        ChildProcessSpawner.make(() =>
+          Effect.fail(
+            PlatformError.systemError({
+              _tag: "NotFound",
+              module: "ChildProcess",
+              method: "spawn",
+            }),
+          ),
+        ),
+      );
+
+      const fiber = yield* service
+        .browserLogin({ provider: "AWS", url, waitFor: Effect.never })
+        .pipe(Effect.provide(noBrowser), Effect.flip, Effect.forkChild);
+      yield* Effect.promise(() => stdin.ready);
+      yield* Effect.promise(() => stdout.waitFor("AWS authorization"));
+
+      const lines = stripVTControlCharacters(stdout.output).split(/\r?\n/);
+      expect(lines).toContain(url);
+      // Still a clickable OSC 8 link around the bare URL.
+      expect(stdout.output).toContain(`\x1b]8;;${url}\x07${url}\x1b]8;;\x07`);
+      expect(stripVTControlCharacters(stdout.output)).toContain("Open the URL above");
+
+      yield* Effect.sync(() => stdin.write("\x1b"));
+      expect(yield* Fiber.join(fiber)).toBeInstanceOf(TerminalCancelled);
+    }).pipe(withEnv("FORCE_HYPERLINK", "1")),
+  { tags: ["unit", "local"], exclusive: true },
 );
 
 it.effect(
