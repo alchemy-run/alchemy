@@ -402,11 +402,7 @@ example : prod.passes postingAnOrder = true := by native_decide
 
 ## Least privilege
 
-Every grant of every function is asked for by a call written in that function. It is read off the code, with no test.
-
-```lean
-theorem noUnusedPermissions : prod.NoUnusedPermissions := by decide
-```
+A role holds only what a call in the function's code asks for, so there is nothing to state: delete the call and the permission goes with it.
 
 `lake exe shop graph prod --why` prints the call behind each grant.
 

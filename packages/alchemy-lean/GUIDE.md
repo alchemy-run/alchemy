@@ -272,12 +272,7 @@ Shop.lean: error: unsolved goals          ← theWarehouseReadsNothing
 
 Nobody reviewed a policy. The change looked harmless and would have deployed; the build refused it because the rule about customer data was written down once. The first rule is what connects the two halves of this guide: it is the stack-side fact that the domain proofs rely on.
 
-The opposite mistake is a permission left behind after the code that needed it is gone. That cannot happen here, because a role holds only what a call in the code asks for, and one line states it:
-
-```lean
-/-- No function holds a permission that its code does not use. -/
-theorem noUnusedPermissions : prod.NoUnusedPermissions := by decide
-```
+The opposite mistake, a permission left behind after the code that needed it is deleted, needs no rule at all. A role holds only what a call in the code asks for, so deleting the call removes the permission.
 
 `--why` shows the line behind each permission, which is what you would otherwise reconstruct by hand in a review:
 

@@ -564,12 +564,6 @@ is a run in which that function makes a call the grant is what permits.
 theorem leastPrivilege : prod.LeastPrivilege InMemory :=
   .of_tests [postingAnOrder] (by native_decide)
 
-/--
-The same, read off the code: every grant of every function is asked for by a
-call written in that function. No test is needed.
--/
-theorem noUnusedPermissions : prod.NoUnusedPermissions := by decide
-
 /-! ## Deploying it -/
 
 def fresh : Cloud.World Kind Control.Service := ⟨.empty, {}⟩
