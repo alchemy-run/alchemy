@@ -462,20 +462,35 @@ export const make = (kit: Kit) => {
   };
 
   /** A place in a string, as an `Option`: nothing where the method gives `""`, `undefined` or `-1`. */
+  const placed = (
+    name: string,
+    key: string,
+    nothing: V,
+    self: V | undefined,
+    args: ReadonlyArray<V>,
+    site: Site,
+  ): Eval<V> =>
+    self && Compare.textual(self)
+      ? Effect.gen(function* () {
+          const made = yield* methods[key]!(self, args, site);
+          const missing = yield* host.decide(yield* host.equal(made, nothing, site), site);
+          return missing ? Value.none : Value.some(made);
+        })
+      : wrongArguments(site, `String.${name}`);
+
+  /** `String.indexOf(needle)(self)`: the string is always given second. */
   const optional =
     (name: string, key: string, nothing: V): Model =>
     (args) =>
       Effect.succeed(
-        native(`String.${name}`, ([self], site) =>
-          self && Compare.textual(self)
-            ? Effect.gen(function* () {
-                const made = yield* methods[key]!(self, args, site);
-                const missing = yield* host.decide(yield* host.equal(made, nothing, site), site);
-                return missing ? Value.none : Value.some(made);
-              })
-            : wrongArguments(site, `String.${name}`),
-        ),
+        native(`String.${name}`, ([self], site) => placed(name, key, nothing, self, args, site)),
       );
+
+  /** `String.at(self, index)`, or `String.at(index)` then the string. */
+  const optionalDual = (name: string, key: string, nothing: V): Model =>
+    dual(`String.${name}`, 2, ([self, ...args], site) =>
+      placed(name, key, nothing, self, args, site),
+    );
 
   const first = (text: string, change: (head: string) => string): string =>
     text === "" ? text : change(text[0]!) + text.slice(1);
@@ -516,8 +531,8 @@ export const make = (kit: Kit) => {
         : wrongArguments(site, "String.takeLeft"),
     ),
     "effect/String:takeRight": dual("String.takeRight", 2, (args, site) => takeRight(args, site)),
-    "effect/String:charAt": optional("charAt", "charAt", Value.str("")),
-    "effect/String:at": optional("at", "at", Value.undef),
+    "effect/String:charAt": optionalDual("charAt", "charAt", Value.str("")),
+    "effect/String:at": optionalDual("at", "at", Value.undef),
     "effect/String:indexOf": optional("indexOf", "indexOf", Value.num(-1)),
     "effect/String:lastIndexOf": optional("lastIndexOf", "lastIndexOf", Value.num(-1)),
     "effect/String:trim": direct("trim"),

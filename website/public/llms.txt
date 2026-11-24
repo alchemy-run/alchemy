@@ -1363,7 +1363,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Story](https://alchemy.run/domain/story) — A specification you can run. Given some history, when a command is sent, then these events are recorded.
 - [Testing a model](https://alchemy.run/domain/testing-models) — Test your model's rules, views, policies and deadlines with stories that run it in memory.
 - [Verifying a model](https://alchemy.run/domain/verifying-models) — Write down what must always be true of your model, and have it proved, or searched for a sequence of commands that breaks it.
-- [What the prover reads](https://alchemy.run/domain/verifiable-code) — The TypeScript, the Effect helpers and the schemas that Verify reads as logic, and what happens to code outside that set.
+- [What can be verified](https://alchemy.run/domain/verifiable-code) — The TypeScript, the Effect helpers and the schemas that Verify supports, and what happens to code outside that set.
 - [Testing an Api](https://alchemy.run/domain/testing-apis) — Test what each client may do and see, in process, over HTTP, and against a real deployment.
 - [Plain HTTP and OpenAPI](https://alchemy.run/domain/http-api) — Publish an Api as a plain HTTP JSON API, with an OpenAPI document, from the same Api.
 - [CLI](https://alchemy.run/domain/cli) — Run an Api's calls from a terminal, as a person or an agent, against the deployed Api.

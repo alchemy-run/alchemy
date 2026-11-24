@@ -1,6 +1,7 @@
 import * as Interpreter from "./internal/Interpreter.ts";
 import * as Known from "./internal/Known.ts";
 import type { Loader } from "./internal/Source.ts";
+import * as Syntax from "./internal/Syntax.ts";
 import * as Value from "./internal/Value.ts";
 
 /**
@@ -13,33 +14,31 @@ export const surface = () => ({
   // Nothing is loaded to list the names: no file is read.
   ...Interpreter.make({} as Loader, new Value.Run([])).surface,
   computed: Known.modules,
+  /** Every form of the language, by name: the ones the prover reads, and the ones it stops at. */
+  syntax: {
+    read: Syntax.FORMS.filter((form) => form.read).map((form) => form.name),
+    unread: Syntax.FORMS.filter((form) => !form.read).map((form) => form.name),
+  },
 });
 
 /**
- * Every kind of syntax a source text is written with: each node's type, and
- * for an operator, the type with the operator (`BinaryExpression +`).
+ * The forms of the language a source text is written with, by the names
+ * `surface().syntax` gives them. A piece of syntax that is on neither list
+ * is `undeclared <its type>`.
  */
-export const kinds = async (source: string): Promise<ReadonlySet<string>> => {
+export const forms = async (source: string): Promise<ReadonlySet<string>> => {
   const oxc = await import("oxc-parser");
   const parsed = oxc.parseSync("surface.ts", source);
   if (parsed.errors.length > 0)
-    throw new Error(`the source does not parse: ${parsed.errors[0]?.message ?? ""}`);
-  const found = new Set<string>();
-  const visit = (node: unknown): void => {
-    if (Array.isArray(node)) return node.forEach(visit);
-    if (typeof node !== "object" || node === null) return;
-    const { type, operator, kind } = node as {
-      readonly type?: unknown;
-      readonly operator?: unknown;
-      readonly kind?: unknown;
-    };
-    if (typeof type === "string") {
-      found.add(type);
-      if (typeof operator === "string") found.add(`${type} ${operator}`);
-      if (type === "VariableDeclaration" && typeof kind === "string") found.add(`${type} ${kind}`);
-    }
-    for (const child of Object.values(node)) visit(child);
-  };
-  visit(parsed.program);
-  return found;
+    throw new Error(`the source does not parse: ${parsed.errors[0]?.message ?? ""}: ${source}`);
+  return Syntax.formsOf(parsed.program);
+};
+
+/** A source text as the tree the prover reads: what a test walks to find how a table calls a function. */
+export const parse = async (source: string): Promise<unknown> => {
+  const oxc = await import("oxc-parser");
+  const parsed = oxc.parseSync("surface.ts", source);
+  if (parsed.errors.length > 0)
+    throw new Error(`the source does not parse: ${parsed.errors[0]?.message ?? ""}: ${source}`);
+  return parsed.program;
 };
