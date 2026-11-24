@@ -2408,6 +2408,19 @@ Resource.refresh(resource);
 Resource.isResource(resource);
 ```
 
+```typescript title="effect/Random"
+// A seed the code writes decides every draw, so a seeded draw is the one the deployed handler makes.
+Random.next.pipe(Random.withSeed("seed"));
+Random.withSeed(Random.nextInt, 7);
+Random.nextBoolean.pipe(Random.withSeed("coin"));
+Random.nextBetween(1, 5);
+Random.nextIntBetween(1, 10);
+Random.nextIntBetween(1, 3, { halfOpen: true });
+Random.shuffle([a, b, 3, 4]);
+Random.choice([a, b, 3]);
+Schedule.jittered(Schedule.spaced("1 second")); // each wait is drawn, so it is run inside Random.withSeed
+```
+
 ```typescript title="effect/PubSub"
 // What is published reaches each one who subscribed before it was.
 const hub = yield* PubSub.unbounded();
@@ -2863,7 +2876,6 @@ A call to one of these is reported with its name, and the rule is not proved.
 A handler depends on the state, the command and the time. What it needs from the outside world comes in as a field of the command.
 
 ```typescript title="The outside world"
-import * as Random from "effect/Random";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as FileSystem from "effect/FileSystem";
@@ -2890,7 +2902,8 @@ Effect.never;
 Effect.race(Effect.as(Effect.sleep(10), a), Effect.as(Effect.sleep(10), b)); // two waits that end at the same moment
 Effect.repeat(effect, { schedule: Schedule.spaced("1 second") }); // an effect run again more than 100 times
 Effect.retry(effect, { times: command.attempts }); // a count an input decides
-Effect.retry(effect, Schedule.jittered(Schedule.spaced("1 second"))); // a schedule that draws a random number
+Random.next; // a random number drawn with no seed: so is a wait of Schedule.jittered
+Random.next.pipe(Random.withSeed(command.attempts)); // a seed an input decides
 Cache.get(prices, command.item); // a key an input decides: the library finds one by its hash
 Effect.request(GetPrice({ item: command.item }), prices); // a request of values an input decides
 

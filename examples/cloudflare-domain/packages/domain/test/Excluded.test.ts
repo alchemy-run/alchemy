@@ -24,6 +24,7 @@ const READ = new Set([
   ...["PartitionedSemaphore", "ScopedCache", "Semaphore", "TxChunk", "TxDeferred", "TxPubSub"],
   ...["TxHashMap", "TxHashSet", "TxPriorityQueue", "TxQueue", "Channel", "Pull", "Take"],
   ...["Combiner", "Reducer", "MutableList", "Scope", "ScopedRef", "RcRef", "RcMap", "Resource"],
+  "Random",
   ...["TxReentrantLock", "TxRef", "TxSemaphore", "TxSubscriptionRef", "index"],
 ]);
 

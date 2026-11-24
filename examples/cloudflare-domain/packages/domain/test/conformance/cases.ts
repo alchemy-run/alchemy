@@ -2351,7 +2351,10 @@ const rest: ReadonlyArray<Group> = [
         `Effect.repeat(Effect.succeed(a), { schedule: Schedule.spaced("1 second") })`,
         /runs an effect again more than/,
       ],
-      [`Effect.retry(even(a), Schedule.jittered(Schedule.spaced("1 second")))`, reported],
+      [
+        `Effect.retry(even(a), Schedule.jittered(Schedule.spaced("1 second")))`,
+        /draws a random number with no seed: no two runs draw the same/,
+      ],
     ],
   },
   {
@@ -3055,6 +3058,40 @@ const rest: ReadonlyArray<Group> = [
       `Effect.succeed([Exit.isSuccess(Exit.void), Exit.hasInterrupts(Exit.interrupt()), Exit.isFailure(Exit.failCause(Cause.fail(a))), Cause.hasInterruptsOnly(Cause.interrupt())])`,
       `Effect.gen(function* () { const turns = yield* Ref.make(a); return yield* Effect.scoped(Effect.gen(function* () { const resource = yield* Resource.manual(Ref.updateAndGet(turns, (n) => n + 1)); const first = yield* Resource.get(resource); yield* Resource.refresh(resource); return [first, yield* Resource.get(resource), Resource.isResource(resource), Resource.isResource(a)]; })); })`,
       `Effect.gen(function* () { const turns = yield* Ref.make(b); return yield* Effect.scoped(Effect.gen(function* () { const resource = yield* Resource.auto(Ref.updateAndGet(turns, (n) => n + 1), Schedule.spaced("1 second")); const first = yield* Resource.get(resource); yield* Effect.sleep("2500 millis"); return [first, yield* Resource.get(resource)]; })); })`,
+    ],
+  },
+  {
+    // Random numbers are the library's own, drawn from the seed the code gives.
+    name: "Seeded",
+    chunk: 3,
+    ...numbers,
+    effectful: true,
+    prelude: [
+      `import * as Random from "effect/Random";`,
+      `import * as Schedule from "effect/Schedule";`,
+    ],
+    both: [
+      `Random.next.pipe(Random.withSeed("seed"))`,
+      `Random.withSeed(Random.nextInt, 7)`,
+      `Random.nextBoolean.pipe(Random.withSeed("coin"))`,
+      `Effect.all([Random.next, Random.next, Random.nextInt]).pipe(Random.withSeed(42))`,
+      `Random.nextBetween(1, 5).pipe(Random.withSeed("between"))`,
+      `Random.nextIntBetween(1, 10).pipe(Random.withSeed("whole"))`,
+      `Random.nextIntBetween(1, 3, { halfOpen: true }).pipe(Random.withSeed("half"))`,
+      `Random.shuffle([a, b, 3, 4]).pipe(Random.withSeed("shuffle"))`,
+      `Random.choice([a, b, 3]).pipe(Random.withSeed("choice"))`,
+      `Effect.map(Effect.result(Random.choice([])), Result.isFailure).pipe(Random.withSeed(1))`,
+      `Effect.map(Random.nextIntBetween(0, 9), (n) => n + a).pipe(Random.withSeed("sum"))`,
+      `Effect.gen(function* () { const tries = yield* Ref.make(0); const got = yield* Effect.retry(Effect.flatMap(Ref.updateAndGet(tries, (n) => n + 1), (n) => n < 3 ? Effect.fail("again") : Effect.succeed(n + a)), Schedule.jittered(Schedule.spaced("1 second"))); return got; }).pipe(Random.withSeed("jitter"))`,
+    ],
+    unread: [
+      // With no seed, no two runs draw the same number.
+      [`Random.next`, /draws a random number with no seed: no two runs draw the same/],
+      [`Random.shuffle([a, b])`, /draws a random number with no seed/],
+      [
+        `Random.next.pipe(Random.withSeed(a))`,
+        /calls Random.withSeed with a seed the prover cannot see/,
+      ],
     ],
   },
   {

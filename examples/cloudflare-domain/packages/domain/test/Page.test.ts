@@ -94,6 +94,7 @@ const sections: Readonly<Record<string, Section>> = {
       `import * as Semaphore from "effect/Semaphore";`,
       `import * as Cache from "effect/Cache";`,
       `import * as Request from "effect/Request";`,
+      `import * as Random from "effect/Random";`,
     ],
     context: `const url = "https://example.com"; const effect = Effect.succeed(a); const first = effect; const second = effect; const command = { attempts: a, item: a }; const cron = Cron.parseUnsafe("0 4 * * *"); const Ticket = Schema.Struct({ n: Schema.Number }); const input = { n: a }; const ticket = input; const cell = yield* SubscriptionRef.make(a); const done = yield* Deferred.make(); const gate = yield* Latch.make(); const line = yield* Queue.unbounded(); const permits = yield* Semaphore.make(2); const prices = yield* Cache.make({ capacity: 2, lookup: (n) => Effect.succeed(n) }); const GetPrice = Request.tagged("GetPrice");`,
     effectful: true,

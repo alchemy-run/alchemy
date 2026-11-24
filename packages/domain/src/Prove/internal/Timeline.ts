@@ -4,6 +4,7 @@ import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Exit from "effect/Exit";
+import * as Random from "effect/Random";
 import { Instant, type Timekeeping } from "../../internal.ts";
 import type { Eval, Run, Site, Stop, V } from "./Value.ts";
 import * as Value from "./Value.ts";
@@ -207,6 +208,21 @@ export const outside = <A, E>(self: Effect.Effect<A, E>): Effect.Effect<A, E> =>
     });
   });
 
+/**
+ * The random numbers of a handler that gave no seed. No two runs draw the
+ * same, so a draw is what stops the prover: the path is not read.
+ */
+const unseeded = (timeline: Timeline, site: Site): Random.Random => {
+  const draw = (): number => {
+    timeline.fatal ??= Value.notTranslated(
+      site,
+      "draws a random number with no seed: no two runs draw the same",
+    );
+    return 0;
+  };
+  return { nextIntUnsafe: draw, nextDoubleUnsafe: draw };
+};
+
 /** The clock the library reads while it runs a handler: its time stands still, and a sleep is the timeline's. */
 const clockOf = (timeline: Timeline): Clock.Clock => ({
   currentTimeMillisUnsafe: () => 0,
@@ -247,6 +263,7 @@ export const run = <A>(current: () => Run, site: Site, self: Eval<A>): Eval<A> =
       self.pipe(
         Effect.provideService(Current, timeline),
         Effect.provideService(Clock.Clock, clockOf(timeline)),
+        Effect.provideService(Random.Random, unseeded(timeline, site)),
       ),
       { scheduler: timeline.instant.scheduler },
     );

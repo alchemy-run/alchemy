@@ -15,6 +15,7 @@ import * as PartitionedSemaphore from "effect/PartitionedSemaphore";
 import * as Pool from "effect/Pool";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
+import * as Random from "effect/Random";
 import * as RcMap from "effect/RcMap";
 import * as RcRef from "effect/RcRef";
 import * as Request from "effect/Request";
@@ -1384,6 +1385,12 @@ export const make = (
         () => Effect.scope,
         (held) => wrap("Scope", held),
       ),
+    "effect/Random:next": (site) =>
+      drawn("Random.next", site, () => Effect.succeed(Random.next), num),
+    "effect/Random:nextInt": (site) =>
+      drawn("Random.nextInt", site, () => Effect.succeed(Random.nextInt), num),
+    "effect/Random:nextBoolean": (site) =>
+      drawn("Random.nextBoolean", site, () => Effect.succeed(Random.nextBoolean), bool),
     "effect/Effect:yieldNow": () => lazy(() => Effect.as(Effect.yieldNow, Value.undef)),
     "effect/Effect:never": (site) =>
       timed(
@@ -1466,6 +1473,10 @@ export const make = (
         ? Effect.succeed(Schedule.concat(self, that) as Schedule.Schedule<unknown, unknown>)
         : wrongArguments(site, "Schedule.concat");
     }),
+    // Each wait is drawn around the one the schedule gives: the seed decides it.
+    "effect/Schedule:jittered": onSchedule("Schedule.jittered", 1, (self) =>
+      Effect.sync(() => Schedule.jittered(self)),
+    ),
     "effect/Schedule:upTo": onSchedule("Schedule.upTo", 2, (self, [limit], site) => {
       const fields = limit?._tag === "Obj" && !limit.brand ? limit.fields : undefined;
       if (!fields) return wrongArguments(site, "Schedule.upTo");
@@ -3952,7 +3963,93 @@ export const make = (
       Effect.succeed(bool(heldOf<RS>("Resource", value) !== undefined)),
   };
 
+  // ---- Random numbers, which a seed decides.
+
+  /** A draw: the library's own, from the seed the code gave. With no seed, no two runs give the same. */
+  const drawn = <A>(
+    name: string,
+    site: Site,
+    draw: (timeline: Timeline.Timeline) => Eval<Effect.Effect<A, unknown>>,
+    give: (value: A) => V,
+  ): V =>
+    timed(
+      name,
+      (timeline) =>
+        Effect.flatMap(draw(timeline), (effect) =>
+          Effect.flatMap(
+            Timeline.back(timeline, effect, give),
+            // A draw with no seed has stopped the prover: the handler is not read further.
+            (value) => (timeline.fatal ? Effect.fail(timeline.fatal) : Effect.succeed(value)),
+          ),
+        ),
+      site,
+    );
+
+  const known = (name: string, v: V | undefined, site: Site): Eval<number> =>
+    v?._tag === "Num"
+      ? Effect.succeed(v.value)
+      : unseen(site, `calls ${name} with a bound the prover cannot see`);
+
+  const randoms: Models = {
+    "effect/Random:nextBetween": ([min, max], site) =>
+      Effect.succeed(
+        drawn(
+          "Random.nextBetween",
+          site,
+          () =>
+            Effect.all([
+              known("Random.nextBetween", min, site),
+              known("Random.nextBetween", max, site),
+            ]).pipe(Effect.map(([low, high]) => Random.nextBetween(low, high))),
+          num,
+        ),
+      ),
+    "effect/Random:nextIntBetween": ([min, max, given_], site) =>
+      Effect.succeed(
+        drawn(
+          "Random.nextIntBetween",
+          site,
+          () =>
+            Effect.all([
+              known("Random.nextIntBetween", min, site),
+              known("Random.nextIntBetween", max, site),
+              given_ === undefined || given_._tag === "Undef"
+                ? Effect.succeed(undefined)
+                : options<{ readonly halfOpen?: boolean }>("Random.nextIntBetween", given_, site),
+            ]).pipe(Effect.map(([low, high, read]) => Random.nextIntBetween(low, high, read))),
+          num,
+        ),
+      ),
+    "effect/Random:shuffle": ([given_], site) =>
+      Effect.succeed(
+        drawn(
+          "Random.shuffle",
+          site,
+          () => Effect.map(items("Random.shuffle", given_, site), (all) => Random.shuffle(all)),
+          list,
+        ),
+      ),
+    "effect/Random:choice": ([given_], site) =>
+      Effect.succeed(
+        drawn(
+          "Random.choice",
+          site,
+          () =>
+            Effect.map(items("Random.choice", given_, site), (all) =>
+              Random.choice(all as ReadonlyArray<V>),
+            ),
+          same,
+        ),
+      ),
+    "effect/Random:withSeed": onEffect("Random.withSeed", 1, (timeline, self, [seed], site) =>
+      seed?._tag === "Num" || seed?._tag === "Str"
+        ? Timeline.back(timeline, Random.withSeed(self, seed.value), same)
+        : unseen(site, "calls Random.withSeed with a seed the prover cannot see"),
+    ),
+  };
+
   const models: Models = {
+    ...randoms,
     ...lifetimes,
     ...stores,
     ...requests,
