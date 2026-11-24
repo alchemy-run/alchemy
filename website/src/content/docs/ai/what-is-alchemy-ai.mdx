@@ -333,41 +333,30 @@ See [Where sessions run](/ai/hosting) and [Pi on other hosts](/pi/other-hosts).
 
 ## Front ends: watching a session live
 
-A session reports everything it does as a stream: its status, then each message, tool call and result. Alchemy AI exports the Schemas of that stream, and you put them in an RPC interface of your own:
+A session reports everything it does as a stream: its status, then each message, tool call and result. The object that runs it records that into the Domain model, as a command:
 
-```typescript title="src/chat/Rpcs.ts"
-export class ChatRpcs extends RpcGroup.make(
-  Rpc.make("send", { payload: { text: Schema.String, requestId: Schema.String } }),
-  Rpc.make("events", {
-    payload: { after: Schema.optional(Schema.Number) },
-    success: SessionEvent,
-    stream: true,
-  }),
-) {}
+```typescript title="src/Agents.ts"
+yield* triage.get(issue).events({ after: recorded.seq }).pipe(
+  Stream.groupedWithin(50, "100 millis"),
+  Stream.runForEach((batch) => sessions.send(new RecordActivity(batchOf(issue, batch)))),
+);
 ```
 
-A Durable Object serves it over a WebSocket, each procedure calling the session:
+From there it is ordinary model: a view holds the agent's status, and a stream holds its transcript.
 
-```typescript title="src/Sessions.ts"
-export default class Sessions extends Cloudflare.RpcDurableObject<Sessions>()(
-  "Sessions",
-  { schema: ChatRpcs },
-  Effect.gen(function* () {
-    const triage = yield* Triage;
-    const state = yield* Cloudflare.DurableObjectState;
-
-    return Effect.sync(() => {
-      const session = triage.get(state.id.name ?? "");
-      return ChatRpcs.toLayer({
-        send: ({ text, requestId }) => session.send(text, { requestId }).pipe(Effect.orDie),
-        events: ({ after }) => session.events({ after }).pipe(Stream.orDie),
-      });
-    });
-  }).pipe(Effect.provide(Live)),
-) {}
+```typescript title="src/Board/SessionStatus.view.ts"
+export class SessionStatus extends Domain.View("SessionStatus", {
+  from: [IssueSession],
+  key: IssueSession,
+  state: Schema.Struct({ status: Status, queued: Schema.Array(QueuedMessage) }),
+  initial: { status: "idle", queued: [] },
+  evolve: {
+    ActivityRecorded: (_, event) => ({ status: event.status, queued: event.queued }),
+  },
+}) {}
 ```
 
-A browser gets a typed client for that interface. Each item has a number, so a page that reconnects resumes after the last one it has. See [Connect a front end](/ai/front-end).
+So a front end uses one Api. It sends commands, which a policy passes to the session, and it watches the status and the transcript like any other read. See [Connect a front end](/ai/front-end).
 
 ## One program, down to the infrastructure
 

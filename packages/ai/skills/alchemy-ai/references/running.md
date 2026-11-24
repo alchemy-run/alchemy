@@ -85,22 +85,20 @@ More: [Read the transcript](https://alchemy.run/ai/processes#read-the-transcript
 
 ## Connect a front end
 
-Define your own Effect RPC group over a session, using the Schemas in `@alchemy.run/ai/Session` (`SessionEvent`, `SessionEntry`, `QueuedMessage`, `HistoryOptions`, `SessionPage`). Serve it from a `Cloudflare.RpcDurableObject` named after the session's key.
+Make the session part of the Domain model, so a front end uses one Api.
+
+- A `RecordActivity` command carries a batch: status, queue and items (`@alchemy.run/ai/Session` has the Schemas). Its aggregate drops items it already has.
+- A view holds the status. A stream, appended by a projection, holds the transcript.
+- The session's Durable Object reads `session.events({ after })` and sends the command. A job from `Alchemy.makeCallback` on the object's alarm records what is missing after an eviction, until the session is idle.
+- The front end's Api lists only the commands a page may send. Acting on the session is a command that a policy passes on.
 
 ```typescript
-export class ChatRpcs extends RpcGroup.make(
-  Rpc.make("send", { payload: { text: Schema.String, requestId: Schema.String } }),
-  Rpc.make("events", {
-    payload: { after: Schema.optional(Schema.Number) },
-    success: SessionEvent,
-    stream: true,
-  }),
-) {}
+yield* triage.get(issue).events({ after: recorded.seq }).pipe(
+  Stream.groupedWithin(50, "100 millis"),
+  Stream.runForEach((batch) => sessions.send(new RecordActivity(batchOf(issue, batch)))),
+);
 ```
 
-- Each handler calls one method of `AI.Session` (`send`, `steer`, `withdraw`, `interrupt`, `events`, `history`).
-- The Worker forwards a route to the object: `engineers.fetch(id, request)`. Authorize the caller first.
-- The browser uses `RpcWebSocketClient.layer` from `@alchemy.run/cloudflare/Workers/RpcWebSocketClient`. Read `events` again from the last `seq` after a reconnect.
-- A server reaches the same object with `yield* engineers.getByName(id)`.
+Without a model, serve a session over your own Effect RPC group from a `Cloudflare.RpcDurableObject`.
 
-More: [Define the interface](https://alchemy.run/ai/front-end#define-the-interface), [Connect and follow](https://alchemy.run/ai/front-end#connect-and-follow), [In a Foldkit app](https://alchemy.run/ai/front-end#in-a-foldkit-app).
+More: [Record what the session does](https://alchemy.run/ai/front-end#record-what-the-session-does), [Keep recording through an eviction](https://alchemy.run/ai/front-end#keep-recording-through-an-eviction), [Read it in a Foldkit app](https://alchemy.run/ai/front-end#read-it-in-a-foldkit-app), [Without a Domain model](https://alchemy.run/ai/front-end#without-a-domain-model).

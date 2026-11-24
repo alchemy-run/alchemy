@@ -1,11 +1,617 @@
 ---
 title: Connect a front end
-description: Define an RPC interface over a session with its own Schemas, serve it from the session's Durable Object, and follow the session from a browser or a Foldkit app over one WebSocket.
+description: Record a session into your Domain model, so a front end sends commands and follows the agent's status and transcript through one Api. Or serve a session over an RPC interface of your own.
 ---
 
-A front end needs two things from a session: a live stream of what it does, and a way to act on it. You define that interface yourself, as an [Effect RPC](/cloudflare/apis/effect-rpc) group. Alchemy AI gives you the Schemas of what a session reports, and Alchemy serves the group over a WebSocket from the session's Durable Object.
+A front end needs two things from a session: a live view of what it does, and a way to act on it. The way that needs nothing new is to make the session part of your [Domain model](/ai/domain). The front end then talks to one Api: it sends commands, and watches the agent's status and transcript like any other view and stream.
 
-## Define the interface
+The code is from the [`cloudflare-ai-issues`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-ai-issues) example, which has a web page for an issue.
+
+## Record what the session does
+
+One command carries a batch of what a session reported: its status, what is queued, and the items it stored. `@alchemy.run/ai/Session` has the Schemas.
+
+```typescript title="src/Board/RecordActivity.command.ts"
+import { QueuedMessage, SessionEntry } from "@alchemy.run/ai/Session";
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { IssueId } from "./Issue.id.ts";
+
+export const Status = Schema.Literals(["idle", "working"]);
+
+/** What an issue's session did since the last record: where it stands, and the items it stored. */
+export class ActivityRecorded extends Domain.Event("ActivityRecorded", {
+  status: Status,
+  queued: Schema.Array(QueuedMessage),
+  items: Schema.Array(SessionEntry),
+}) {}
+
+/** Sent by the object that runs the session, with a batch of what the session reported. */
+export class RecordActivity extends Domain.Command("RecordActivity", {
+  input: {
+    issueId: IssueId,
+    status: Status,
+    queued: Schema.Array(QueuedMessage),
+    items: Schema.Array(SessionEntry),
+  },
+  events: [ActivityRecorded],
+  rejects: [],
+}) {}
+```
+
+An aggregate decides it. It drops the items it already has, so a batch sent twice changes nothing:
+
+```typescript title="src/Board/IssueSession.aggregate.ts"
+import { QueuedMessage } from "@alchemy.run/ai/Session";
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { IssueId } from "./Issue.id.ts";
+import { ActivityRecorded, RecordActivity, Status } from "./RecordActivity.command.ts";
+
+const sameQueue = (a: ReadonlyArray<QueuedMessage>, b: ReadonlyArray<QueuedMessage>) =>
+  a.length === b.length && a.every((message, index) => message.id === b[index]!.id);
+
+/**
+ * The session that looks after one issue, as the board knows it: what the
+ * session's object has recorded of it so far.
+ */
+export class IssueSession extends Domain.Aggregate("IssueSession", {
+  id: IssueId,
+  state: Schema.Struct({
+    /** The last item recorded. */
+    seq: Schema.Number,
+    status: Status,
+    queued: Schema.Array(QueuedMessage),
+  }),
+  initial: { seq: 0, status: "idle", queued: [] },
+  commands: [RecordActivity],
+  keyOf: (command) => command.issueId,
+  decide: {
+    // Items already recorded are dropped, so a batch sent again changes nothing.
+    RecordActivity: (session, command) => {
+      const items = command.items.filter((entry) => entry.seq > session.seq);
+      const changed =
+        command.status !== session.status || !sameQueue(command.queued, session.queued);
+      return items.length === 0 && !changed
+        ? []
+        : [new ActivityRecorded({ status: command.status, queued: command.queued, items })];
+    },
+  },
+  evolve: {
+    ActivityRecorded: (session, event) => ({
+      seq: event.items.at(-1)?.seq ?? session.seq,
+      status: event.status,
+      queued: event.queued,
+    }),
+  },
+}) {}
+```
+
+## Show the status as a view
+
+Whether the agent is working, and what is queued for it, is the latest recorded status:
+
+```typescript title="src/Board/SessionStatus.view.ts"
+import { QueuedMessage } from "@alchemy.run/ai/Session";
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { IssueSession } from "./IssueSession.aggregate.ts";
+import { Status } from "./RecordActivity.command.ts";
+
+/** Whether the issue's session is working, and what is queued for it. */
+export class SessionStatus extends Domain.View("SessionStatus", {
+  from: [IssueSession],
+  key: IssueSession,
+  state: Schema.Struct({ status: Status, queued: Schema.Array(QueuedMessage) }),
+  initial: { status: "idle", queued: [] },
+  evolve: {
+    ActivityRecorded: (_, event) => ({ status: event.status, queued: event.queued }),
+  },
+}) {}
+```
+
+## Keep the transcript as a stream
+
+Each item is one entry of a stream, so a page reads what it missed and then follows:
+
+```typescript title="src/Board/Transcript.stream.ts"
+import { SessionEntry } from "@alchemy.run/ai/Session";
+import * as Domain from "@alchemy.run/domain";
+import { IssueSession } from "./IssueSession.aggregate.ts";
+
+/** One item of the transcript: a message, a tool call or a tool result. */
+export class ItemStored extends Domain.Event("ItemStored", SessionEntry.fields) {}
+
+/** The session's transcript, one entry per item. */
+export class Transcript extends Domain.Stream("Transcript", {
+  key: IssueSession,
+  entries: [ItemStored],
+}) {}
+```
+
+A projection appends them:
+
+```typescript title="src/Board/Transcripts.projection.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import { IssueSession } from "./IssueSession.aggregate.ts";
+import { ActivityRecorded } from "./RecordActivity.command.ts";
+import { ItemStored, Transcript } from "./Transcript.stream.ts";
+
+/** Appends each recorded item to the transcript. */
+export class Transcripts extends Domain.Projection("Transcripts", {
+  from: [IssueSession],
+  key: IssueSession,
+  on: [ActivityRecorded],
+  writes: [Transcript],
+}) {}
+
+export const TranscriptsLive = Transcripts.toLayer(
+  Effect.gen(function* () {
+    const transcript = yield* Transcript;
+    return Effect.fn(function* (batch) {
+      for (const input of batch) {
+        yield* transcript.append(input, ...input.event.items.map((entry) => new ItemStored(entry)));
+      }
+    });
+  }),
+);
+```
+
+## Serve what the front end may use
+
+The Api lists the commands a page may send. `RecordActivity` is not one of them: only the session's object sends it.
+
+```typescript title="src/Board/WebApi.api.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Board } from "./Board.model.ts";
+
+/**
+ * What the web app may do and read: report an issue, reply on one, and read
+ * every view and stream. Labeling and recording are left out: only the
+ * session's object sends those.
+ */
+export class WebApi extends Domain.Api("WebApi", {
+  model: Board,
+  commands: ["ReportIssue", "CommentOnIssue"],
+}) {}
+```
+
+## Record from the session's object
+
+The object that runs the session reads its events and sends them to the model. `live` follows the session from the last item the model has. `catchUp` records everything stored that the model lacks, and says whether the session is done:
+
+```typescript
+/** Send the board a batch of what the session reported. */
+const report = (
+  issue: IssueId,
+  status: AI.SessionEvent & { type: "status" },
+  items: ReadonlyArray<AI.SessionEntry>,
+) =>
+  sessions.send(
+    new RecordActivity({ issueId: issue, status: status.status, queued: status.queued, items }),
+  );
+
+/**
+ * Record the session as it happens: every event after the last item the
+ * board has, a batch at a time. It runs for as long as this instance does.
+ */
+const live = Effect.fn(function* (issue: IssueId) {
+  const recorded = yield* sessions.get(IssueSession.ref(issue));
+  let status: AI.SessionEvent & { type: "status" } = {
+    type: "status",
+    status: recorded.status,
+    queued: recorded.queued,
+  };
+  yield* triage
+    .get(issue)
+    .events({ after: recorded.seq })
+    .pipe(
+      Stream.groupedWithin(50, "100 millis"),
+      Stream.runForEach((batch) => {
+        const events = Array.from(batch);
+        status = events.findLast((event) => event.type === "status") ?? status;
+        return report(
+          issue,
+          status,
+          events.flatMap((event) =>
+            event.type === "item" ? [{ seq: event.seq, item: event.item }] : [],
+          ),
+        );
+      }),
+    );
+});
+
+/**
+ * Record everything the session has stored that the board lacks, and say
+ * whether the session is done: idle, with nothing queued.
+ */
+const catchUp = Effect.fn(function* (issue: IssueId) {
+  const session = triage.get(issue);
+  const status = Option.getOrUndefined(yield* Stream.runHead(session.events()));
+  if (status?.type !== "status") return true;
+  let after = (yield* sessions.get(IssueSession.ref(issue))).seq;
+  while (true) {
+    const page = yield* session.history({ after, take: 100 });
+    yield* report(issue, status, page.items);
+    if (page.next === undefined) break;
+    after = page.next;
+  }
+  return status.status === "idle" && status.queued.length === 0;
+});
+```
+
+## Keep recording through an eviction
+
+`live` runs in memory, so it ends when the object is evicted. A job on the object's alarm makes recording durable. It is stored with the object, wakes it, records what the model lacks, and comes back every five seconds until the session is idle:
+
+```typescript
+let recording = false;
+/** Start recording live, once for as long as this instance lives. */
+const follow = (issue: IssueId) =>
+  Effect.suspend(() => {
+    if (recording) return Effect.void;
+    recording = true;
+    return state.waitUntil(
+      live(issue).pipe(Effect.ensuring(Effect.sync(() => void (recording = false)))),
+    );
+  });
+
+/**
+ * What makes recording durable: a job on the object's alarm, kept in
+ * its storage. It wakes the object, records what the board lacks, and
+ * comes back until the session is done, however often the object is
+ * evicted in between.
+ */
+const again = (issue: IssueId): Effect.Effect<void, never, RuntimeContext> =>
+  onRecord.schedule(issue, { after: "5 seconds", payload: issue }).pipe(Effect.orDie);
+const onRecord: Alchemy.Callback<IssueId> = yield* Alchemy.makeCallback(
+  "record",
+  Effect.fn(function* (issue: IssueId) {
+    yield* follow(issue);
+    if (!(yield* catchUp(issue))) yield* again(issue);
+  }, Effect.orDie),
+);
+/** Record from now until the session is done. */
+const record = (issue: IssueId) => Effect.andThen(follow(issue), again(issue));
+
+return {
+  // The same id however often the event is delivered, so the issue is taken up once.
+  start: (issue) =>
+    triage
+      .get(issue)
+      .send(`The issue is ${issue}.`, { requestId: "start" })
+      .pipe(Effect.andThen(record(issue)), Effect.orDie),
+  tell: (issue, text, id) =>
+    triage
+      .get(issue)
+      .send(text, { requestId: id })
+      .pipe(Effect.andThen(record(issue)), Effect.orDie),
+} satisfies Agent;
+```
+
+The harness already resumes the session itself after an eviction. This job is what makes the model catch up with it.
+
+## Act on the session with commands
+
+A page does not call the session. It sends a command, and the model's policy passes it on through a port, as in [Processes and Domain models](/ai/domain#let-a-policy-ask-for-the-work). Here a reply on an issue is `CommentOnIssue`, and the policy tells the issue's session. A session that is working queues it.
+
+## Read it in a Foldkit app
+
+`DomainFoldkit.make` gives a Command for each command of the Api, and `watch` and `events` for each view and stream. The page keeps the status, the queue and the transcript in its Model:
+
+```typescript title="web/src/Issue.ts"
+import { QueuedMessage, SessionEntry } from "@alchemy.run/ai/Session";
+import type * as Domain from "@alchemy.run/domain";
+import * as DomainFoldkit from "@alchemy.run/domain/Foldkit";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import { Command, Subscription, type Update } from "foldkit";
+import type { Document, HtmlBuilder } from "foldkit/html";
+import { defineMessageUnion } from "foldkit/message";
+import { modifyFields } from "foldkit/struct";
+import { IssueId } from "../../src/Board/Issue.id.ts";
+import { Label } from "../../src/Board/LabelIssue.command.ts";
+import { Status } from "../../src/Board/RecordActivity.command.ts";
+import { WebApi } from "../../src/Board/WebApi.api.ts";
+
+type Board = Domain.Api.ClientKey<"WebApi">;
+/** One Command per command of the Api, and a read namespace per view and stream. */
+export const BoardClient = DomainFoldkit.make(WebApi);
+
+// MODEL
+
+export const Flags = Schema.Struct({ issueId: IssueId, page: Schema.String });
+export type Flags = typeof Flags.Type;
+
+export const Model = Schema.Struct({
+  issueId: IssueId,
+  commandIds: DomainFoldkit.CommandIds,
+  draft: Schema.String,
+  /** The issue, once it is reported. */
+  title: Schema.Option(Schema.String),
+  label: Schema.Option(Label),
+  /** Whether the issue's session is working, and what is queued for it. */
+  status: Status,
+  queued: Schema.Array(QueuedMessage),
+  /** The session's transcript so far, and where to resume reading it. */
+  items: Schema.Array(SessionEntry),
+  cursor: Schema.Option(Schema.Number),
+  error: Schema.Option(Schema.String),
+});
+export type Model = typeof Model.Type;
+
+// MESSAGE
+
+export const Message = defineMessageUnion({
+  ChangedDraft: { text: Schema.String },
+  ClickedReport: {},
+  ClickedReply: {},
+  ReceivedBoardResult: { result: BoardClient.Message },
+  ReceivedIssue: { title: Schema.Option(Schema.String), label: Schema.Option(Label) },
+  ReceivedStatus: { status: Status, queued: Schema.Array(QueuedMessage) },
+  ReceivedItem: { entry: SessionEntry, cursor: Schema.Number },
+  CaughtUpTranscript: { cursor: Schema.Number },
+  FailedRead: { reason: Schema.String },
+});
+export type Message = typeof Message.Type;
+
+// UPDATE
+
+type Return = Update.Return<Model, Message, Board>;
+
+/** Send one command of the Api, named so that a retry is not run twice. */
+const send = (
+  model: Model,
+  command: (commandId: string) => Command.Command<typeof BoardClient.Message.Type, never, Board>,
+): Return => {
+  const { commandId, commandIds } = DomainFoldkit.next(model.commandIds);
+  return {
+    model: modifyFields(model, {
+      commandIds: () => commandIds,
+      draft: () => "",
+      error: () => Option.none(),
+    }),
+    commands: [
+      Command.mapMessage(command(commandId), (result) => Message.ReceivedBoardResult({ result })),
+    ],
+  };
+};
+
+export const update = (model: Model, message: Message) =>
+  Message.match<Return>(message, {
+    ChangedDraft: ({ text }) => ({ model: modifyFields(model, { draft: () => text }) }),
+    // Reporting the issue is what starts its session: the board's policy does that.
+    ClickedReport: () =>
+      send(model, (commandId) =>
+        BoardClient.ReportIssue({
+          input: { issueId: model.issueId, title: model.draft, body: "" },
+          commandId,
+        }),
+      ),
+    // A reply is passed to the session by the same policy. A working session queues it.
+    ClickedReply: () =>
+      send(model, (commandId) =>
+        BoardClient.CommentOnIssue({
+          input: { issueId: model.issueId, commentId: commandId, body: model.draft },
+          commandId,
+        }),
+      ),
+    ReceivedBoardResult: ({ result }) => ({
+      model:
+        result._tag === "FailedReportIssue" || result._tag === "FailedCommentOnIssue"
+          ? modifyFields(model, { error: () => Option.some(result.failure._tag) })
+          : model,
+    }),
+    ReceivedIssue: ({ title, label }) => ({
+      model: modifyFields(model, { title: () => title, label: () => label }),
+    }),
+    ReceivedStatus: ({ status, queued }) => ({
+      model: modifyFields(model, { status: () => status, queued: () => queued }),
+    }),
+    ReceivedItem: ({ entry, cursor }) => ({
+      model: modifyFields(model, {
+        items: (items) => [...items, entry],
+        cursor: () => Option.some(cursor),
+      }),
+    }),
+    CaughtUpTranscript: ({ cursor }) => ({
+      model: modifyFields(model, { cursor: () => Option.some(cursor) }),
+    }),
+    FailedRead: ({ reason }) => ({
+      model: modifyFields(model, { error: () => Option.some(reason) }),
+    }),
+  });
+
+// INIT
+
+export const init = (flags: Flags): Return => ({
+  model: Model.make({
+    issueId: flags.issueId,
+    commandIds: { session: flags.page, sent: 0 },
+    draft: "",
+    title: Option.none(),
+    label: Option.none(),
+    status: "idle",
+    queued: [],
+    items: [],
+    cursor: Option.none(),
+    error: Option.none(),
+  }),
+});
+
+// SUBSCRIPTION
+
+export const subscriptions = Subscription.make<Model, Message, Board>()(() => ({
+  issue: BoardClient.IssueDetail.watch({
+    key: (model: Model) => model.issueId,
+    toMessage: ({ state }): Message =>
+      Message.ReceivedIssue({
+        title: Option.map(state, (detail) => detail.title),
+        label: Option.flatMap(state, (detail) => Option.fromNullishOr(detail.label)),
+      }),
+    onFailure: (error): Message => Message.FailedRead({ reason: error._tag }),
+    onDefect: (): Message => Message.FailedRead({ reason: "Read defect" }),
+  }),
+  status: BoardClient.SessionStatus.watch({
+    key: (model: Model) => model.issueId,
+    toMessage: ({ state }): Message =>
+      Message.ReceivedStatus(
+        Option.getOrElse(state, () => ({ status: "idle" as const, queued: [] })),
+      ),
+    onFailure: (error): Message => Message.FailedRead({ reason: error._tag }),
+    onDefect: (): Message => Message.FailedRead({ reason: "Read defect" }),
+  }),
+  transcript: BoardClient.Transcript.events({
+    key: (model: Model) => model.issueId,
+    cursor: (model) => model.cursor,
+    onEntry: ({ event, envelope }): Message =>
+      Message.ReceivedItem({ entry: { seq: event.seq, item: event.item }, cursor: envelope.seq }),
+    onCaughtUp: (cursor): Message => Message.CaughtUpTranscript({ cursor }),
+    onFailure: (error): Message => Message.FailedRead({ reason: error._tag }),
+    onDefect: (): Message => Message.FailedRead({ reason: "Read defect" }),
+  }),
+}));
+
+// VIEW
+
+const itemView = ({ seq, item }: SessionEntry, h: HtmlBuilder<Message>) =>
+  h.keyed("li")(
+    String(seq),
+    [],
+    [
+      item.type === "user"
+        ? `You: ${item.text}`
+        : item.type === "tool"
+          ? `${item.name} answered: ${item.output}`
+          : item.toolCalls.length > 0
+            ? `Calls ${item.toolCalls.map((call) => call.name).join(", ")}`
+            : `Agent: ${item.text}`,
+    ],
+  );
+
+export const view = (model: Model, h: HtmlBuilder<Message>): Document => {
+  const reported = Option.isSome(model.title);
+  return {
+    title: Option.getOrElse(model.title, () => "New issue"),
+    body: h.div(
+      [],
+      [
+        h.h1([], [Option.getOrElse(model.title, () => `Issue ${model.issueId}`)]),
+        h.p([], [`Label: ${Option.getOrElse(model.label, () => "none yet")}`]),
+        h.p([], [model.status === "working" ? "The agent is working" : "The agent is idle"]),
+        h.ul(
+          [],
+          model.items.map((entry) => itemView(entry, h)),
+        ),
+        h.ul(
+          [],
+          model.queued.map((message) => h.keyed("li")(message.id, [], [`Queued: ${message.text}`])),
+        ),
+        h.input([h.Value(model.draft), h.OnInput((text) => Message.ChangedDraft({ text }))]),
+        reported
+          ? h.button([h.OnClick(Message.ClickedReply())], ["Reply"])
+          : h.button([h.OnClick(Message.ClickedReport())], ["Report this issue"]),
+        h.p([], [Option.getOrElse(model.error, () => "")]),
+      ],
+    ),
+  };
+};
+```
+
+The client is provided once, on the app's own origin:
+
+```typescript title="web/src/entry.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Socket from "effect/socket/Socket";
+import { Runtime } from "foldkit";
+import { IssueId } from "../../src/Board/Issue.id.ts";
+import { WebApi } from "../../src/Board/WebApi.api.ts";
+import { Flags, init, Model, subscriptions, update, view } from "./Issue.ts";
+
+/**
+ * The board's Api for the life of the app. Commands go over HTTP. Each live
+ * read is a WebSocket to the Durable Object that owns what it reads.
+ */
+const BoardConnection = WebApi.layerClient.pipe(
+  Layer.provide(Domain.protocolWebSocket(`${location.origin}/api`)),
+  Layer.provide(Layer.mergeAll(FetchHttpClient.layer, Socket.layerWebSocketConstructorGlobal)),
+);
+
+Runtime.run(
+  Runtime.makeApplication({
+    Model,
+    Flags,
+    init,
+    update,
+    view,
+    subscriptions,
+    resources: BoardConnection,
+    container: document.getElementById("root"),
+  }),
+  {
+    flags: Effect.sync(() => ({
+      // `?issue=42` picks the issue. A new one is made up otherwise.
+      issueId: IssueId.make(
+        new URLSearchParams(location.search).get("issue") ?? `web-${Date.now()}`,
+      ),
+      // Names this page's commands, so each is unique even across reloads.
+      page: crypto.randomUUID(),
+    })),
+  },
+);
+```
+
+## Deploy the page with the board
+
+The page is built with Vite and served by its own Worker, which forwards `/api` to the board:
+
+```typescript title="alchemy.run.ts"
+import * as Boat from "@alchemy.run/boat";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import * as GitHub from "@alchemy.run/github";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Repo } from "./src/Repo.ts";
+import Worker from "./src/Worker.ts";
+
+export default Alchemy.Stack(
+  "CloudflareAiIssues",
+  {
+    providers: Layer.mergeAll(
+      Cloudflare.providers(),
+      DomainCloudflare.providers(),
+      Boat.providers(),
+      GitHub.providers(),
+    ),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const repo = yield* Repo;
+    const worker = yield* Worker;
+    // The foldkit app, built with Vite. Its Worker serves the build and
+    // forwards /api to the board, so the app and the Api share one origin.
+    const app = yield* Cloudflare.Website.Foldkit("BoardApp", {
+      rootDir: "web",
+      main: "src/worker.ts",
+      env: { BOARD: worker },
+      assets: { runWorkerFirst: ["/api", "/api/*"] },
+    });
+    return { url: worker.url, app: app.url, repository: repo.htmlUrl };
+  }),
+);
+```
+
+## Without a Domain model
+
+An app with no model can serve a session over an [Effect RPC](/cloudflare/apis/effect-rpc) group of its own. Alchemy AI gives the Schemas, and Alchemy serves the group over a WebSocket from the session's Durable Object.
+
+### Define the interface
 
 `@alchemy.run/ai/Session` has a Schema for everything a session says about itself: `SessionEvent`, `SessionEntry`, `SessionItem`, `QueuedMessage`, `HistoryOptions` and `SessionPage`. Use them as the results of your own procedures:
 
@@ -40,7 +646,7 @@ export class ChatRpcs extends RpcGroup.make(
 
 `events` is a stream. The interface is yours, so it holds only what this front end may do: leave out `interrupt`, add a field, or put a middleware on it.
 
-## Implement it with a session
+### Implement it with a session
 
 Each procedure calls one method of `AI.Session`:
 
@@ -66,7 +672,7 @@ export const ChatHandlers = (session: AI.Session) =>
   });
 ```
 
-## Serve it from the session's object
+### Serve it from the session's object
 
 `Cloudflare.RpcDurableObject` serves a group over HTTP and over a WebSocket. Return the handlers for the session the object holds:
 
@@ -92,7 +698,7 @@ export default class Engineers extends Cloudflare.RpcDurableObject<Engineers>()(
 
 The object is named after the session's key, so each session has an object of its own. `Live` is the same Layer as in [Where sessions run](/ai/hosting).
 
-## Forward the browser to it
+### Forward the browser to it
 
 The Worker maps a URL to an object and forwards the request. The same route carries plain HTTP calls and the WebSocket upgrade:
 
@@ -123,7 +729,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
 Anyone who can open this route can read and steer that session. Check who is asking before you call `fetch`, or take the id from the signed-in user.
 
-## Connect and follow
+### Connect and follow
 
 In the browser, `RpcWebSocketClient.layer` gives a typed client over one WebSocket. `follow` reads the session's events and resumes after a reconnect:
 
@@ -181,7 +787,7 @@ The stream is the whole picture. A page that folds these events knows the transc
 
 An idle object is put to sleep with its sockets open, and wakes when the session is sent something. Each item has a `seq`, so `follow` asks again from the last one it delivered and nothing is missed or repeated.
 
-## Send, steer and stop
+### Send, steer and stop
 
 The client has the procedures you declared:
 
@@ -199,235 +805,3 @@ export const act = Effect.gen(function* () {
 ```
 
 A `requestId` makes a message exactly-once, so a retry after a lost answer is safe.
-
-## In a Foldkit app
-
-Each procedure is a Command, and `follow` is a Subscription. The Model keeps the status, the queue and the items:
-
-```typescript title="web/App.ts"
-import { QueuedMessage, SessionEntry, SessionEvent } from "@alchemy.run/ai/Session";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
-import { Command, Subscription, type Update } from "foldkit";
-import type { Document, HtmlBuilder } from "foldkit/html";
-import { defineMessageUnion } from "foldkit/message";
-import { modifyFields } from "foldkit/struct";
-import { Chat, follow } from "./Client.ts";
-
-// MODEL
-
-export const Flags = Schema.Struct({ page: Schema.String });
-
-export const Model = Schema.Struct({
-  /** Names this page's messages, so a retry is never run twice. */
-  page: Schema.String,
-  sent: Schema.Number,
-  draft: Schema.String,
-  status: Schema.Literals(["idle", "working"]),
-  queued: Schema.Array(QueuedMessage),
-  items: Schema.Array(SessionEntry),
-  error: Schema.Option(Schema.String),
-});
-export type Model = typeof Model.Type;
-
-// MESSAGE
-
-export const Message = defineMessageUnion({
-  ChangedDraft: { text: Schema.String },
-  ClickedSend: {},
-  ClickedSteer: {},
-  ClickedStop: {},
-  ClickedWithdraw: { id: Schema.String },
-  ReceivedSessionEvent: { event: SessionEvent },
-  CompletedAct: {},
-  FailedSession: { reason: Schema.String },
-});
-export type Message = typeof Message.Type;
-
-// COMMAND
-
-const completed = <E>(effect: Effect.Effect<void, E, Chat>) =>
-  effect.pipe(
-    Effect.as(Message.CompletedAct()),
-    Effect.catch(() => Effect.succeed(Message.FailedSession({ reason: "Not delivered" }))),
-  );
-
-const Text = { text: Schema.String, requestId: Schema.String };
-
-/** Queued behind the turn that is running. */
-export const Send = Command.define("Send", {
-  args: Text,
-  messages: [Message.CompletedAct, Message.FailedSession],
-  execute: (message) => completed(Effect.flatMap(Chat, (chat) => chat.send(message))),
-});
-
-/** Read by the turn that is running, at its next step. */
-export const Steer = Command.define("Steer", {
-  args: Text,
-  messages: [Message.CompletedAct, Message.FailedSession],
-  execute: (message) => completed(Effect.flatMap(Chat, (chat) => chat.steer(message))),
-});
-
-export const Withdraw = Command.define("Withdraw", {
-  args: { id: Schema.String },
-  messages: [Message.CompletedAct, Message.FailedSession],
-  execute: ({ id }) => completed(Effect.flatMap(Chat, (chat) => chat.withdraw({ id }))),
-});
-
-export const Stop = Command.define("Stop", {
-  messages: [Message.CompletedAct, Message.FailedSession],
-  execute: completed(Effect.flatMap(Chat, (chat) => chat.interrupt())),
-});
-
-// UPDATE
-
-type Return = Update.Return<Model, Message, Chat>;
-
-/** A message is named after the page and its count, so a retry is not run twice. */
-const say = (model: Model, command: typeof Send | typeof Steer): Return => ({
-  model: modifyFields(model, { sent: (sent) => sent + 1, draft: () => "" }),
-  commands: [command({ text: model.draft, requestId: `${model.page}:${model.sent}` })],
-});
-
-export const update = (model: Model, message: Message) =>
-  Message.match<Return>(message, {
-    ChangedDraft: ({ text }) => ({ model: modifyFields(model, { draft: () => text }) }),
-    ClickedSend: () => say(model, Send),
-    ClickedSteer: () => say(model, Steer),
-    ClickedStop: () => ({ model, commands: [Stop()] }),
-    ClickedWithdraw: ({ id }) => ({ model, commands: [Withdraw({ id })] }),
-    ReceivedSessionEvent: ({ event }) => ({
-      model:
-        event.type === "status"
-          ? modifyFields(model, { status: () => event.status, queued: () => event.queued })
-          : modifyFields(model, {
-              items: (items) => [...items, { seq: event.seq, item: event.item }],
-            }),
-    }),
-    CompletedAct: () => ({ model }),
-    FailedSession: ({ reason }) => ({
-      model: modifyFields(model, { error: () => Option.some(reason) }),
-    }),
-  });
-
-// INIT
-
-export const init = (flags: typeof Flags.Type): Return => ({
-  model: Model.make({
-    page: flags.page,
-    sent: 0,
-    draft: "",
-    status: "idle",
-    queued: [],
-    items: [],
-    error: Option.none(),
-  }),
-});
-
-// SUBSCRIPTION
-
-export const subscriptions = Subscription.make<Model, Message, Chat>()((entry) => ({
-  session: entry(
-    {},
-    {
-      modelToDependencies: () => ({}),
-      // The status, every item, then each new one. It resumes by itself after a reconnect.
-      dependenciesToStream: () =>
-        follow().pipe(
-          Stream.map((event) => Message.ReceivedSessionEvent({ event })),
-          Stream.catch((error) => Stream.succeed(Message.FailedSession({ reason: error.message }))),
-        ),
-    },
-  ),
-}));
-
-// VIEW
-
-const itemView = ({ seq, item }: SessionEntry, h: HtmlBuilder<Message>) =>
-  h.keyed("li")(
-    String(seq),
-    [],
-    [
-      item.type === "tool"
-        ? `${item.name}: ${item.output}`
-        : item.type === "assistant" && item.toolCalls.length > 0
-          ? `calls ${item.toolCalls.map((call) => call.name).join(", ")}`
-          : item.text,
-    ],
-  );
-
-export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
-  title: model.status === "working" ? "Working" : "Idle",
-  body: h.div(
-    [],
-    [
-      h.ul(
-        [],
-        model.items.map((entry) => itemView(entry, h)),
-      ),
-      h.ul(
-        [],
-        model.queued.map((message) =>
-          h.keyed("li")(
-            message.id,
-            [],
-            [
-              `${message.delivery}: ${message.text}`,
-              h.button([h.OnClick(Message.ClickedWithdraw({ id: message.id }))], ["Withdraw"]),
-            ],
-          ),
-        ),
-      ),
-      h.input([h.Value(model.draft), h.OnInput((text) => Message.ChangedDraft({ text }))]),
-      h.button([h.OnClick(Message.ClickedSend())], ["Send"]),
-      ...(model.status === "working"
-        ? [
-            h.button([h.OnClick(Message.ClickedSteer())], ["Steer"]),
-            h.button([h.OnClick(Message.ClickedStop())], ["Stop"]),
-          ]
-        : []),
-      h.p([], [Option.getOrElse(model.error, () => "")]),
-    ],
-  ),
-});
-```
-
-Provide the client in the app's resources:
-
-```typescript title="web/entry.ts"
-import * as Effect from "effect/Effect";
-import { Runtime } from "foldkit";
-import { Flags, init, Model, subscriptions, update, view } from "./App.ts";
-import { ChatLive } from "./Client.ts";
-
-const id = new URLSearchParams(location.search).get("session") ?? "main";
-
-Runtime.run(
-  Runtime.makeApplication({
-    Model,
-    Flags,
-    init,
-    update,
-    view,
-    subscriptions,
-    resources: ChatLive(`wss://${location.host}/sessions/${id}`),
-    container: document.getElementById("root"),
-  }),
-  // Names this page's messages, so a retry is never run twice.
-  { flags: Effect.sync(() => ({ page: crypto.randomUUID() })) },
-);
-```
-
-## Send from the server too
-
-The object answers the same group to your own services. A Worker, or a [Domain policy](/ai/domain#let-a-policy-ask-for-the-work), gets a client by the session's key:
-
-```typescript
-const chat = yield* engineers.getByName("task-7");
-
-yield* chat.send({ text: "Rename the config flag.", requestId: "start" });
-```
-
-A browser that is following `task-7` sees that message and everything the session does with it.
