@@ -67,6 +67,15 @@ def may (g : Graph K) {k : K} (host : Ref k) (action : Doing K) : Prop :=
 
 end Graph
 
+open Lean Elab Tactic Meta in
+/-- Stops with the stack's roles, for a rule that does not hold of them. -/
+elab "roles_do_not_allow " g:term : tactic => do
+  let roles ← Term.elabTerm (← `(Graph.roles $g)) none
+  let roles ← withTransparency .all (reduce roles (skipProofs := true) (skipTypes := true))
+  throwError "This rule does not hold of the stack. Some role allows what the rule forbids, or \
+    lacks what it requires. The roles, as the code gives them:{indentExpr roles}\n\
+    `graph --why` prints the call behind each permission."
+
 /--
 Proves a rule about who can do what in a stack: `stack_rule in prod using [out]`. The
 list names what the rule is stated with: the stack's outputs, and how grants
@@ -80,9 +89,12 @@ macro_rules
         try simp only [Graph.only, Graph.nobody, Graph.never, Graph.may]
         intros
         have roles : Graph.roles $g = computed% (Graph.roles $g) := rfl
-        simp [Graph.mem_whoCan, Graph.can, Access.permits, permitsOn, Kinds.covers,
-          roles, $lemmas,*] at *
-        try grind))
+        first
+          | (simp [Graph.mem_whoCan, Graph.can, Access.permits, permitsOn, Kinds.covers,
+              roles, $lemmas,*] at * <;> done)
+          | (simp [Graph.mem_whoCan, Graph.can, Access.permits, permitsOn, Kinds.covers,
+              roles, $lemmas,*] at * <;> grind)
+          | roles_do_not_allow $g))
 
 end Alchemy.Cloud
 

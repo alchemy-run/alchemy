@@ -119,7 +119,7 @@ macro_rules
                 `(Term.matchAltExpr| | $(mkIdentFrom event (`Event ++ event.getId)):ident .. => True)
               let allowed : Array (TSyntax ``Term.matchAlt) :=
                 (allowed.push (← `(Term.matchAltExpr| | _ => False))).map fun alt => ⟨alt.raw⟩
-              checks := checks.push (← lenient <| ← `(command|
+              checks := checks.push (← withRef name <| do lenient (← `(command|
                 /-- The command records only the events it says it records. -/
                 theorem $(mkIdentFrom name (`records ++ name.getId)):ident
                     (state : $(n `State)) $bracketed* (events : List $(n `Event))
@@ -127,14 +127,14 @@ macro_rules
                     ∀ event ∈ events, (match event with $allowed:matchAlt*) := by
                   simp only [$(n `decide):ident] at accepted
                   (repeat' split at accepted) <;>
-                    first | (cases accepted <;> simp) | simp_all | grind))
+                    first | (cases accepted <;> simp) | simp_all | grind)))
             if let some rejections := rejections then
               let allowed ← rejections.getElems.mapM fun rejection =>
                 `(Term.matchAltExpr|
                   | $(mkIdentFrom rejection (`Rejection ++ rejection.getId)):ident .. => True)
               let allowed : Array (TSyntax ``Term.matchAlt) :=
                 (allowed.push (← `(Term.matchAltExpr| | _ => False))).map fun alt => ⟨alt.raw⟩
-              checks := checks.push (← lenient <| ← `(command|
+              checks := checks.push (← withRef name <| do lenient (← `(command|
                 /-- The command answers only the rejections it says it answers. -/
                 theorem $(mkIdentFrom name (`rejects ++ name.getId)):ident
                     (state : $(n `State)) $bracketed* (rejection : $(n `Rejection))
@@ -142,7 +142,7 @@ macro_rules
                     (match rejection with $allowed:matchAlt*) := by
                   simp only [$(n `decide):ident] at rejected
                   (repeat' split at rejected) <;>
-                    first | (cases rejected <;> simp) | simp_all | grind))
+                    first | (cases rejected <;> simp) | simp_all | grind)))
           | _ => Macro.throwUnsupported
         let (ctors, names) ← casesOf (n `Command) plain
         commands := commands.push (← `(command|

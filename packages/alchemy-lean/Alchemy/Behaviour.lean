@@ -62,19 +62,40 @@ attribute [behaviour]
 
 /--
 Proves a behaviour theorem by running the model, with its variables left as
-they are. Facts it should use, such as `amount ≠ 0`, are taken from the
-hypotheses; more definitions to unfold go in the list.
+they are. Each `if` on the way is decided by arithmetic from the hypotheses, so
+`amount ≥ 50000` settles a test for `amount ≥ 10000`. More definitions to unfold
+go in the list.
 -/
 syntax "behaviour" (" [" Lean.Parser.Tactic.simpLemma,* "]")? : tactic
+
+theorem Behaviour.then_branch {α : Sort _} {c : Prop} [Decidable c] {a b : α} (h : c) :
+    (if c then a else b) = a := by simp [h]
+
+theorem Behaviour.else_branch {α : Sort _} {c : Prop} [Decidable c] {a b : α} (h : ¬c) :
+    (if c then a else b) = b := by simp [h]
 
 macro_rules
   | `(tactic| behaviour) =>
     `(tactic| (
         try dsimp only
-        simp [behaviour, Alchemy.Program.pure_eq, Alchemy.Program.bind_eq, *]))
+        try simp (config := { failIfUnchanged := false })
+          [behaviour, Alchemy.Program.pure_eq, Alchemy.Program.bind_eq, *]
+        repeat' (first
+          | done
+          | (simp (disch := omega)
+              [behaviour, Alchemy.Program.pure_eq, Alchemy.Program.bind_eq,
+                Alchemy.Behaviour.then_branch, Alchemy.Behaviour.else_branch, *]
+             try simp [behaviour, Alchemy.Program.pure_eq, Alchemy.Program.bind_eq, *]))))
   | `(tactic| behaviour [$lemmas,*]) =>
     `(tactic| (
         try dsimp only
-        simp [behaviour, Alchemy.Program.pure_eq, Alchemy.Program.bind_eq, $lemmas,*, *]))
+        try simp (config := { failIfUnchanged := false })
+          [behaviour, Alchemy.Program.pure_eq, Alchemy.Program.bind_eq, $lemmas,*, *]
+        repeat' (first
+          | done
+          | (simp (disch := omega)
+              [behaviour, Alchemy.Program.pure_eq, Alchemy.Program.bind_eq,
+                Alchemy.Behaviour.then_branch, Alchemy.Behaviour.else_branch, $lemmas,*, *]
+             try simp [behaviour, Alchemy.Program.pure_eq, Alchemy.Program.bind_eq, $lemmas,*, *]))))
 
 end Alchemy

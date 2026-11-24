@@ -101,8 +101,6 @@ theorem aReportableDepositFreezesTheAccount (id owner : String) (amount : Nat)
       .send ⟨.Account, (), .deposit id amount⟩]
     (both.1.state .Account id).status = .frozen "over the reporting threshold" ∧
       both.2.state .Watch id = { assessed := 1, flagged := 1 } := by
-  have some : amount ≠ 0 := by omega
-  have large : 10000 ≤ amount := by omega
   behaviour [screening]
 
 /--
@@ -116,8 +114,6 @@ theorem aLargeDepositIsLookedAtAndLeftAlone (id owner : String) (amount : Nat)
       .send ⟨.Account, (), .deposit id amount⟩]
     (both.1.state .Account id).status = .open ∧
       both.2.state .Watch id = { assessed := 1, flagged := 0 } := by
-  have some : amount ≠ 0 := by omega
-  have under : ¬50000 ≤ amount := by omega
   behaviour [screening]
 
 /--
@@ -130,7 +126,6 @@ theorem aSmallDepositIsNotScreened (id owner : String) (amount : Nat)
       .send ⟨.Account, (), .open id owner⟩,
       .send ⟨.Account, (), .deposit id amount⟩]
     (both.1.state .Account id).status = .open ∧ both.2.state .Watch id = {} := by
-  have under : ¬10000 ≤ amount := by omega
   behaviour [screening]
 
 /-! ## A run of the two together -/

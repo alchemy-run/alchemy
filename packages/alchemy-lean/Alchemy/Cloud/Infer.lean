@@ -141,10 +141,10 @@ call, and works out the grants its body asks for. They become the function's
 own requirements, so nobody lists them: a host that calls it is asked for them.
 The type names the role as `role`.
 -/
-syntax (name := helperCommand) "helper " ident bracketedBinder* " : " term " := " term : command
+syntax (name := helperCommand) (docComment)? "helper " ident bracketedBinder* " : " term " := " term : command
 
 @[command_elab helperCommand] def elabHelper : CommandElab := fun stx => do
-  let `(helper $name:ident $binders* : $type := $body) := stx | throwUnsupportedSyntax
+  let `($[$doc:docComment]? helper $name:ident $binders* : $type := $body) := stx | throwUnsupportedSyntax
   let declName := (← getCurrNamespace) ++ name.getId
   runTermElabM fun _ => do
     elabBinders binders fun params => do
@@ -188,6 +188,7 @@ syntax (name := helperCommand) "helper " ident bracketedBinder* " : " term " := 
           addAndCompile <| .defnDecl {
             name := declName, levelParams := [], type := declType, value
             hints := .abbrev, safety := .safe }
+          if let some doc := doc then addDocString declName (mkNullNode binders) doc
       go 0 #[]
 where
   lit := "{"

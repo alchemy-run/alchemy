@@ -536,9 +536,6 @@ theorem aBouncedPayoutIsRefunded (id owner payout : String) (held amount : Nat)
     (some : amount ≠ 0) (enough : amount ≤ held) (modest : held < 10000) :
     let bank := Bank.run (aPayoutBounces id owner payout held amount)
     (bank.state .Account id).balance = held ∧ bank.sagas payout = .failed .bounced := by
-  have held' : held ≠ 0 := by omega
-  have small : ¬10000 ≤ held := by omega
-  have small' : ¬10000 ≤ amount := by omega
   behaviour [aPayoutBounces]
 
 /-- Sam's case is one instance of the theorem: nothing is run, the values are filled in. -/
