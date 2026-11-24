@@ -1,6 +1,7 @@
 import Lean
 import Alchemy.Attr
 import Alchemy.Model
+import Alchemy.History
 import Alchemy.Reads
 import Alchemy.Cloud.Hosted
 import Alchemy.Codec
@@ -798,6 +799,42 @@ macro_rules
               intro d mem; cases mem) :
             P ((Alchemy.Cloud.Served.replay $served journal).state $here id) :=
           $always initially kept _ (Alchemy.Cloud.Served.replay_reachable $served journal) id decided))
+    if decisions.isEmpty then
+      for a in aggregates do
+        let here := under name a.getId
+        let explained := mkIdent (a.getId ++ `explained)
+        commands := commands.push (← `(command|
+          /--
+          A rule that ties an instance's state to the events it recorded holds of
+          every instance, in every world the model can reach.
+          -/
+          theorem $explained
+              {R : $(rooted a `State) → List $(rooted a `Event) → Prop}
+              (explains : Alchemy.Aggregate.Explains $(rooted a) R)
+              (w : Alchemy.World $signature) (reach : Alchemy.Model.Reachable $(rooted m) w)
+              (id : $(rooted a `Id)) :
+              R (w.state $here id) (Alchemy.Recorded.eventsAt w.toRecorded $here id) :=
+            Alchemy.Model.explained $(rooted m) rfl $here explains w reach id))
+        commands := commands.push (← `(command|
+          /-- A quantity the aggregate tallies is, of every instance, the worth of everything it recorded. -/
+          theorem $(mkIdent (a.getId ++ `tallied))
+              {quantity : $(rooted a `State) → Int} {worth : $(rooted a `Event) → Int}
+              (tallies : Alchemy.Aggregate.Tallies $(rooted a) quantity worth)
+              (w : Alchemy.World $signature) (reach : Alchemy.Model.Reachable $(rooted m) w)
+              (id : $(rooted a `Id)) :
+              quantity (w.state $here id) = quantity (Alchemy.Aggregate.initial $(rooted a))
+                + ((Alchemy.Recorded.eventsAt w.toRecorded $here id).map worth).sum :=
+            $explained tallies.explains w reach id))
+        commands := commands.push (← `(command|
+          /-- An event the aggregate records only after another comes after it, on every instance. -/
+          theorem $(mkIdent (a.getId ++ `follows))
+              {cause effect : $(rooted a `Event) → Prop} {seen : $(rooted a `State) → Prop}
+              (precedes : Alchemy.Aggregate.Precedes $(rooted a) cause effect seen)
+              (w : Alchemy.World $signature) (reach : Alchemy.Model.Reachable $(rooted m) w)
+              (id : $(rooted a `Id)) :
+              Alchemy.Aggregate.Follows cause effect
+                (Alchemy.Recorded.eventsAt w.toRecorded $here id) :=
+            ($explained precedes.explains w reach id).2))
     commands := commands.push (← `(command| end $m))
     -- What a behaviour proof steps through: the model's own definitions.
     let mut stepped : Array Ident := #[]

@@ -134,6 +134,28 @@ macro_rules
           | (rename_i c _ _; cases c <;> simp [$params,*] <;> (repeat' split) <;> grind [$grinds,*])
           | (simp [$params,*] <;> (repeat' split) <;> grind [$grinds,*])))
 
+/--
+Proves a rule that ties an aggregate's state to its history, such as `Tallies`
+or `Precedes`: `history_rule [decide, evolve, worth]`. It takes each command,
+each way `decide` can answer it, and the events it records.
+-/
+syntax "history_rule" " [" ident,+ "]" : tactic
+
+open Lean in
+macro_rules
+  | `(tactic| history_rule [$names,*]) => do
+    let names := names.getElems
+    let decide := names[0]!
+    let unfolded := #[mkIdent ``Alchemy.Aggregate.apply] ++ names.extract 1 names.size
+    let params ← unfolded.mapM fun name => `(Lean.Parser.Tactic.simpLemma| $name:ident)
+    `(tactic| first
+        | (intro ctx s c es h
+           cases c <;> simp only [$decide:ident] at h <;> (repeat' split at h) <;> cases h <;>
+             simp [$params,*])
+        | (refine ⟨by simp, ?_, ?_⟩ <;> intro ctx s c es h <;> intros <;> cases c <;>
+             simp only [$decide:ident] at h <;> (repeat' split at h) <;> cases h <;>
+             simp_all [$params,*]))
+
 open Lean Elab Tactic Meta in
 /-- The names a rule about an aggregate is stated with: its `decide` and `evolve`, and the rule. -/
 private def namesIn (goal : Expr) : MetaM (Array Ident) := do
@@ -162,5 +184,11 @@ open Lean Elab Tactic in
 elab "command_law" : tactic => withMainContext do
   let names ← namesIn (← getMainTarget)
   evalTactic (← `(tactic| command_law [$(names.extract 0 2),*]))
+
+open Lean Elab Tactic in
+/-- `history_rule`, with the names read off the goal: `Order.Tallies charged worth`. -/
+elab "history_rule" : tactic => withMainContext do
+  let names ← namesIn (← getMainTarget)
+  evalTactic (← `(tactic| history_rule [$names,*]))
 
 end Alchemy

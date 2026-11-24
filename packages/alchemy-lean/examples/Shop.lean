@@ -311,6 +311,46 @@ example (log : List (Emitted Aggregates)) :
 example (log : List (Emitted Aggregates)) :
     Packing.table log = log.flatMap Packing.rows := Packing.exact log
 
+/-! ## What an order's history says
+
+Rules about a state alone are lifted by `Order.always`. These tie a state to
+the events its order recorded, and are lifted the same way.
+-/
+
+/-- What an event adds to what an order was charged. -/
+def Order.worth : Order.Event → Int
+  | .paid _ _ amount => amount
+  | _ => 0
+
+/-- Every command moves `charged` by exactly what its events are worth. -/
+theorem chargesAreTallied : Order.Tallies (fun s => s.charged) Order.worth := by
+  history_rule
+
+/-- So what any order was charged is the sum of the payments it recorded: no more, no less. -/
+theorem chargedIsWhatWasPaid (w : Alchemy.World Signature) (reach : Shop.Reachable w) (id : String) :
+    ((w.state .Order id).charged : Int)
+      = ((w.toRecorded.eventsAt .Order id).map Order.worth).sum := by
+  simpa using Order.tallied chargesAreTallied w reach id
+
+def Order.isPlaced : Order.Event → Prop
+  | .placed .. => True
+  | _ => False
+
+def Order.isPaid : Order.Event → Prop
+  | .paid .. => True
+  | _ => False
+
+/-- An order records a payment only once it shows it was placed. -/
+theorem paymentNeedsAPlacedOrder :
+    Order.Precedes Order.isPlaced Order.isPaid (fun s => s.status ≠ .new) := by
+  history_rule
+
+/-- So in every order's history, in every world the shop can reach, a payment comes after a placement. -/
+theorem noOrderIsPaidBeforeItIsPlaced (w : Alchemy.World Signature) (reach : Shop.Reachable w)
+    (id : String) :
+    Aggregate.Follows Order.isPlaced Order.isPaid (w.toRecorded.eventsAt .Order id) :=
+  Order.follows paymentNeedsAPlacedOrder w reach id
+
 /-- One story, in the shop's words: a kettle is ordered, paid for and shipped, and cannot be ordered twice. -/
 def aKettle : List (Story.ModelStep Shop) := [
   .when ⟨.Order, (), .place "o-1" "kettle" 40⟩,
