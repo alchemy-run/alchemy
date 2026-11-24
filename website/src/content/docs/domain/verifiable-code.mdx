@@ -2590,6 +2590,41 @@ Deferred.into(even(a), done); // how the effect ends is how the Deferred is comp
 Deferred.isDeferred(done);
 ```
 
+```typescript title="A cause and an exit as data"
+Cause.isCause(Cause.fail(a));
+Cause.empty;
+Cause.isReason(reason);
+Cause.isFailReason(reason);
+Cause.isDieReason(reason);
+Cause.isInterruptReason(reason);
+Cause.makeFailReason(a);
+Cause.makeDieReason("d");
+Cause.makeInterruptReason();
+Cause.fromReasons([Cause.makeFailReason(a), Cause.makeDieReason(b)]);
+Cause.combine(Cause.fail(a), Cause.die(b));
+Cause.map(Cause.fail(a), (n) => n + b);
+Cause.findError(Cause.empty); // what the cause holds, or the cause where it holds none
+Cause.findFail(Cause.fail(a));
+Cause.findDefect(Cause.die(b));
+Cause.findDie(Cause.fail(a));
+Cause.findInterrupt(Cause.interrupt());
+Cause.isNoSuchElementError(a); // an error the library made, by the library's own mark
+Cause.isTimeoutError({ _tag: "TimeoutError" });
+Cause.isUnknownError(a);
+Cause.isIllegalArgumentError(a);
+Cause.isExceededCapacityError(a);
+Cause.isAsyncFiberError(a);
+Exit.isExit(a);
+Exit.mapBoth(Exit.succeed(a), { onFailure: (n) => n - 1, onSuccess: (n) => n + b });
+Exit.asVoidAll([Exit.succeed(a), Exit.void]);
+Exit.filterSuccess(Exit.succeed(a));
+Exit.filterValue(Exit.succeed(a));
+Exit.filterFailure(Exit.succeed(a));
+Exit.filterCause(Exit.fail(b));
+Exit.findError(Exit.fail(a));
+Exit.findDefect(Exit.die(b));
+```
+
 ```typescript title="More of effect/Effect"
 // What handles a cause: a failure, a defect or an interrupt, as data.
 Effect.catchCause((cause) => Effect.succeed(Cause.hasFails(cause)));

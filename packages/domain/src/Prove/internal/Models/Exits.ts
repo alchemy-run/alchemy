@@ -1,5 +1,6 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Brands from "../Brands.ts";
 import type { Kit, Model, Models } from "../Kit.ts";
 import { arr, dual, lazy, onEffect, tagOf, wrongArguments } from "../Kit.ts";
 import type { Eval, Site, V } from "../Value.ts";
@@ -70,6 +71,23 @@ export const make = (kit: Kit) => {
 
   const handlerOf = (cases: V | undefined, key: string): V | undefined =>
     cases?._tag === "Obj" ? cases.fields[key] : undefined;
+
+  /** The first reason of a kind a cause holds, as a `Result`: what it holds, or the cause where it holds none. */
+  const finding =
+    (
+      name: string,
+      tag: "Fail" | "Die" | "Interrupt",
+      gives: (reason: V & { readonly _tag: "Obj" }) => V | undefined,
+    ): Model =>
+    ([cause], site) => {
+      if (!cause || !reasonsOf(cause)) return wrongArguments(site, name);
+      const reason = found(cause, tag);
+      return Effect.succeed(
+        reason?._tag === "Obj"
+          ? Brands.success(gives(reason) ?? Value.undef)
+          : Brands.failure(cause),
+      );
+    };
 
   const models: Models = {
     // How the effect ended, as a value: a defect too, which nothing else here handles.
@@ -178,6 +196,125 @@ export const make = (kit: Kit) => {
         ? Effect.succeed(reason.fields.error ?? reason.fields.defect ?? Value.undef)
         : wrongArguments(site, "Cause.squash");
     },
+    // ---- A cause as data: its reasons, found, made and put together.
+    "effect/Cause:isCause": ([value]) => Effect.succeed(Value.bool(reasonsOf(value) !== undefined)),
+    "effect/Cause:isReason": ([value]) =>
+      Effect.succeed(Value.bool(["Fail", "Die", "Interrupt"].includes(tagOf(value) ?? ""))),
+    "effect/Cause:isFailReason": ([value]) => Effect.succeed(Value.bool(tagOf(value) === "Fail")),
+    "effect/Cause:isDieReason": ([value]) => Effect.succeed(Value.bool(tagOf(value) === "Die")),
+    "effect/Cause:isInterruptReason": ([value]) =>
+      Effect.succeed(Value.bool(tagOf(value) === "Interrupt")),
+    "effect/Cause:makeFailReason": ([error]) => Effect.succeed(failed(error ?? Value.undef)),
+    "effect/Cause:makeDieReason": ([defect]) => Effect.succeed(died(defect ?? Value.undef)),
+    "effect/Cause:makeInterruptReason": () =>
+      Effect.succeed(Value.obj({ _tag: Value.str("Interrupt") })),
+    "effect/Cause:fromReasons": ([reasons], site) => {
+      const items = kit.itemsOf(reasons);
+      return items
+        ? Effect.succeed(Value.obj({ reasons: arr(items) }))
+        : wrongArguments(site, "Cause.fromReasons");
+    },
+    "effect/Cause:combine": dual("Cause.combine", 2, ([self, that], site) => {
+      const [left, right] = [reasonsOf(self), reasonsOf(that)];
+      return left && right
+        ? Effect.succeed(Value.obj({ reasons: arr([...left, ...right]) }))
+        : wrongArguments(site, "Cause.combine");
+    }),
+    // Each error the cause failed with, as the function gives it.
+    "effect/Cause:map": dual("Cause.map", 2, ([self, f], site) => {
+      const reasons = reasonsOf(self);
+      if (!reasons || !f) return wrongArguments(site, "Cause.map");
+      return Effect.map(
+        Effect.forEach(reasons, (reason) =>
+          reason._tag === "Obj" && tagOf(reason) === "Fail"
+            ? Effect.map(host.call(f, [reason.fields.error ?? Value.undef], site), failed)
+            : Effect.succeed(reason),
+        ),
+        (mapped) => Value.obj({ reasons: arr(mapped) }),
+      );
+    }),
+    // What a cause holds, or the cause itself where it holds none.
+    "effect/Cause:findError": finding("Cause.findError", "Fail", (reason) => reason.fields.error),
+    "effect/Cause:findFail": finding("Cause.findFail", "Fail", (reason) => reason),
+    "effect/Cause:findDefect": finding("Cause.findDefect", "Die", (reason) => reason.fields.defect),
+    "effect/Cause:findDie": finding("Cause.findDie", "Die", (reason) => reason),
+    "effect/Cause:findInterrupt": finding("Cause.findInterrupt", "Interrupt", (reason) => reason),
+    ...Object.fromEntries(
+      [
+        "NoSuchElement",
+        "Timeout",
+        "Unknown",
+        "IllegalArgument",
+        "ExceededCapacity",
+        "AsyncFiber",
+      ].map((name): [string, Model] => [
+        `effect/Cause:is${name}Error`,
+        // One the library made: it carries the library's own mark, not only the tag.
+        ([value]) =>
+          Effect.succeed(
+            Value.bool(
+              value?._tag === "Obj" && value.fields[`~effect/Cause/${name}Error`] !== undefined,
+            ),
+          ),
+      ]),
+    ),
+    // ---- An exit as data.
+    "effect/Exit:isExit": ([value]) =>
+      Effect.succeed(Value.bool(["Success", "Failure"].includes(tagOf(value) ?? ""))),
+    "effect/Exit:mapBoth": onExit("Exit.mapBoth", 2, (exit, [cases], site, self) => {
+      const [onFailure, onSuccess] = [handlerOf(cases, "onFailure"), handlerOf(cases, "onSuccess")];
+      if (!onFailure || !onSuccess) return wrongArguments(site, "Exit.mapBoth");
+      if ("value" in exit) return Effect.map(host.call(onSuccess, [exit.value], site), success);
+      const reason = found(exit.cause, "Fail");
+      return reason?._tag === "Obj"
+        ? Effect.map(host.call(onFailure, [reason.fields.error ?? Value.undef], site), (error) =>
+            failure(failed(error)),
+          )
+        : Effect.succeed(self);
+    }),
+    "effect/Exit:filterSuccess": onExit("Exit.filterSuccess", 1, (exit, _, __, self) =>
+      Effect.succeed("value" in exit ? Brands.success(self) : Brands.failure(self)),
+    ),
+    "effect/Exit:filterValue": onExit("Exit.filterValue", 1, (exit, _, __, self) =>
+      Effect.succeed("value" in exit ? Brands.success(exit.value) : Brands.failure(self)),
+    ),
+    "effect/Exit:filterFailure": onExit("Exit.filterFailure", 1, (exit, _, __, self) =>
+      Effect.succeed("value" in exit ? Brands.failure(self) : Brands.success(self)),
+    ),
+    "effect/Exit:filterCause": onExit("Exit.filterCause", 1, (exit, _, __, self) =>
+      Effect.succeed("value" in exit ? Brands.failure(self) : Brands.success(exit.cause)),
+    ),
+    "effect/Exit:findError": onExit("Exit.findError", 1, (exit, _, __, self) => {
+      const reason = "cause" in exit ? found(exit.cause, "Fail") : undefined;
+      return Effect.succeed(
+        reason?._tag === "Obj"
+          ? Brands.success(reason.fields.error ?? Value.undef)
+          : Brands.failure(self),
+      );
+    }),
+    "effect/Exit:findDefect": onExit("Exit.findDefect", 1, (exit, _, __, self) => {
+      const reason = "cause" in exit ? found(exit.cause, "Die") : undefined;
+      return Effect.succeed(
+        reason?._tag === "Obj"
+          ? Brands.success(reason.fields.defect ?? Value.undef)
+          : Brands.failure(self),
+      );
+    }),
+    // Nothing where every one succeeded: every cause, in one, where any did not.
+    "effect/Exit:asVoidAll": ([exits], site) => {
+      const items = kit.itemsOf(exits);
+      if (!items) return wrongArguments(site, "Exit.asVoidAll");
+      const reasons = items.flatMap((exit) =>
+        exit._tag === "Obj" && tagOf(exit) === "Failure"
+          ? (reasonsOf(exit.fields.cause) ?? [])
+          : [],
+      );
+      return Effect.succeed(
+        reasons.length === 0
+          ? success(Value.undef)
+          : Value.obj({ _tag: Value.str("Failure"), cause: Value.obj({ reasons: arr(reasons) }) }),
+      );
+    },
     "effect/Exit:failCause": ([cause], site) =>
       reasonsOf(cause) && cause
         ? Effect.succeed(Value.obj({ _tag: Value.str("Failure"), cause }))
@@ -189,7 +326,10 @@ export const make = (kit: Kit) => {
   };
 
   /** Values of the two modules that are not functions. */
-  const values: Readonly<Record<string, V>> = { "effect/Exit:void": success(Value.undef) };
+  const values: Readonly<Record<string, V>> = {
+    "effect/Exit:void": success(Value.undef),
+    "effect/Cause:empty": Value.obj({ reasons: arr([]) }),
+  };
 
   return { models, values };
 };

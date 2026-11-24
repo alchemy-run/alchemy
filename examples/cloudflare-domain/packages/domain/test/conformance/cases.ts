@@ -3614,6 +3614,28 @@ const rest: ReadonlyArray<Group> = [
     ],
   },
   {
+    // A cause and an exit as data: what they hold, found, made and put together.
+    name: "Ended",
+    ...numbers,
+    both: [
+      `Effect.runSync(Effect.map(Effect.result(Effect.fromOption(Option.none())), (ended) => Result.isFailure(ended) && Cause.isNoSuchElementError(ended.failure) && !Cause.isTimeoutError(ended.failure)))`,
+      `[Cause.isCause(Cause.fail(a)), Cause.isCause(a), Cause.isCause(Cause.empty), Cause.hasFails(Cause.empty)]`,
+      `Cause.fail(a).reasons.map((reason) => [Cause.isReason(reason), Cause.isFailReason(reason), Cause.isDieReason(reason), Cause.isInterruptReason(reason)])`,
+      `[Cause.isFailReason(Cause.makeFailReason(a)), Cause.isDieReason(Cause.makeDieReason("d")), Cause.isInterruptReason(Cause.makeInterruptReason()), Cause.isReason(a)]`,
+      `Cause.hasDies(Cause.fromReasons([Cause.makeFailReason(a), Cause.makeDieReason(b)]))`,
+      `[Cause.hasFails(Cause.combine(Cause.fail(a), Cause.die(b))), Cause.hasDies(pipe(Cause.fail(a), Cause.combine(Cause.die(b))))]`,
+      `Result.getOrElse(Cause.findError(Cause.map(Cause.fail(a), (n) => n + b)), () => "none")`,
+      `Result.getOrElse(Cause.findError(pipe(Cause.die("d"), Cause.map((n) => n + 1))), () => "none")`,
+      `[Result.isSuccess(Cause.findFail(Cause.fail(a))), Result.getOrElse(Cause.findDefect(Cause.die(b)), () => "none"), Result.isSuccess(Cause.findDie(Cause.fail(a))), Result.isSuccess(Cause.findInterrupt(Cause.interrupt())), Result.isFailure(Cause.findError(Cause.empty))]`,
+      `[Cause.isNoSuchElementError(a), Cause.isTimeoutError({ _tag: "TimeoutError" }), Cause.isUnknownError(a), Cause.isIllegalArgumentError(a), Cause.isExceededCapacityError(a), Cause.isAsyncFiberError(a)]`,
+      `[Exit.isExit(Exit.succeed(a)), Exit.isExit(a), Exit.isSuccess(Exit.asVoidAll([Exit.succeed(a), Exit.void])), Exit.hasFails(Exit.asVoidAll([Exit.succeed(a), Exit.fail(b)]))]`,
+      `Exit.getSuccess(Exit.mapBoth(Exit.succeed(a), { onFailure: (n) => n - 1, onSuccess: (n) => n + b }))`,
+      `Exit.findErrorOption(pipe(Exit.fail(a), Exit.mapBoth({ onFailure: (n) => n * 2, onSuccess: (n) => n })))`,
+      `[Result.isSuccess(Exit.filterSuccess(Exit.succeed(a))), Result.getOrElse(Exit.filterValue(Exit.succeed(a)), () => -1), Result.isSuccess(Exit.filterFailure(Exit.succeed(a))), Result.isSuccess(Exit.filterCause(Exit.fail(b)))]`,
+      `[Result.getOrElse(Exit.findError(Exit.fail(a)), () => "none"), Result.getOrElse(Exit.findDefect(Exit.die(b)), () => "none"), Result.isFailure(Exit.findError(Exit.succeed(a)))]`,
+    ],
+  },
+  {
     name: "Services",
     ...numbers,
     effectful: true,

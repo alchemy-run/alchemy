@@ -122,9 +122,13 @@ export const errorOf = (error: unknown): V => {
       typeof value === "object" && value !== null && "_tag" in value ? (value as V) : Value.undef,
     );
   }
-  return typeof tag === "string"
-    ? Value.obj({ _tag: Value.str(tag) })
-    : { _tag: "Opaque", what: "an error of the library" };
+  if (typeof tag !== "string") return { _tag: "Opaque", what: "an error of the library" };
+  // What the library marks its own errors with is kept: `Cause.isTimeoutError` looks for it.
+  const marks: Record<string, V> = {};
+  if (typeof error === "object" && error !== null)
+    for (const [key, mark] of Object.entries(error))
+      if (key.startsWith("~effect/") && typeof mark === "string") marks[key] = Value.str(mark);
+  return Value.obj({ ...marks, _tag: Value.str(tag) });
 };
 
 /** Why an effect the library ran did not give a value, as the prover holds it. */

@@ -1265,6 +1265,7 @@ export const make = (
 
   const timeoutError = (time: Timeline.Time): V =>
     Value.obj({
+      "~effect/Cause/TimeoutError": Value.str("~effect/Cause/TimeoutError"),
       _tag: Value.str("TimeoutError"),
       ...(typeof time === "number"
         ? {
@@ -4359,8 +4360,7 @@ export const make = (
                   )
                 : Effect.fail(
                     new Value.Rejected({
-                      rejection: Value.obj({
-                        _tag: Value.str("UnknownError"),
+                      rejection: Value.libraryError("UnknownError", {
                         cause: stop.rejection,
                       }),
                     }),

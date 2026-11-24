@@ -327,7 +327,7 @@ export const make = (kit: Kit) => {
     "effect/Option:getOrThrow": onOption("Option.getOrThrow", 1, (option) =>
       option._tag === "Some"
         ? Effect.succeed(option.value)
-        : thrown(Value.obj({ _tag: Value.str("NoSuchElementError") })),
+        : thrown(Value.libraryError("NoSuchElementError")),
     ),
     "effect/Option:getOrThrowWith": onOption("Option.getOrThrowWith", 2, (option, [f], site) =>
       option._tag === "Some"

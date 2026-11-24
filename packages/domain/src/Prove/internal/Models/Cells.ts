@@ -536,7 +536,7 @@ export const make = (
         : self === undefined || self._tag === "Undef"
           ? Effect.fail(
               new Value.Rejected({
-                rejection: Value.obj({ _tag: Value.str("NoSuchElementError") }),
+                rejection: Value.libraryError("NoSuchElementError"),
                 defect: true,
               }),
             )

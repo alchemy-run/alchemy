@@ -21,7 +21,7 @@ import type { Eval, Site, V } from "../Value.ts";
 import * as Value from "../Value.ts";
 
 /** What `Effect.fromOption` and the like fail with when there is nothing. */
-export const noSuchElement: V = Value.obj({ _tag: Value.str("NoSuchElementError") });
+export const noSuchElement: V = Value.libraryError("NoSuchElementError");
 
 const rejected = (rejection: V, defect = false) =>
   Effect.fail(new Value.Rejected(defect ? { rejection, defect } : { rejection }));

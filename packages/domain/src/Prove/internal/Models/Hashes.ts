@@ -301,7 +301,7 @@ export const make = (kit: Kit) => {
         at < 0
           ? Effect.fail(
               new Value.Rejected({
-                rejection: Value.obj({ _tag: Value.str("NoSuchElementError") }),
+                rejection: Value.libraryError("NoSuchElementError"),
                 defect: true,
               }),
             )

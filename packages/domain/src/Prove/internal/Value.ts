@@ -247,6 +247,13 @@ const OPTION: Brand = { kind: "Option", cls: undefined };
 
 /** `Option.none()`: there is one, as in the library. */
 export const none: V = obj({ _tag: str("None") }, OPTION);
+
+/**
+ * An error the library makes, such as a `NoSuchElementError`: its tag, and
+ * the mark the library gives its own, which `Cause.isNoSuchElementError` looks for.
+ */
+export const libraryError = (tag: string, fields: Record<string, V> = {}): V =>
+  obj({ [`~effect/Cause/${tag}`]: str(`~effect/Cause/${tag}`), _tag: str(tag), ...fields });
 /** `Option.some(value)`. */
 export const some = (value: V): V => obj({ _tag: str("Some"), value }, OPTION);
 
