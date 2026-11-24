@@ -35,7 +35,9 @@ export type Declaration =
   | { readonly _tag: "Function"; readonly node: Node }
   | { readonly _tag: "Class"; readonly node: Node }
   /** `enum Kind { Good, Gift }`: an object of its members, made where it is declared. */
-  | { readonly _tag: "Enum"; readonly node: Node };
+  | { readonly _tag: "Enum"; readonly node: Node }
+  /** `namespace Space { export const n = 1 }`: an object of what it exports. */
+  | { readonly _tag: "Space"; readonly node: Node };
 
 export interface Import {
   readonly specifier: string;

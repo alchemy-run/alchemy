@@ -151,7 +151,7 @@ export const cases: ReadonlyArray<Case> = [
   read("ExportedNamespace", `Space.inside + a`),
   // An enum the file keeps to itself is read where it is declared.
   read("OwnEnum", `OwnLevel.High + a`),
-  unread("OwnNamespace", `OwnSpace.inside + a`, /refers to OwnSpace, which the prover cannot find/),
+  read("OwnNamespace", `OwnSpace.inside + a`),
   // A class the file keeps to itself is read from what it writes.
   read("OwnPlainClass", `new Plain(a).n`),
   read("OwnClassWithABody", `new Child().twice() + a + Child.made`),

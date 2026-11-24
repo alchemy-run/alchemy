@@ -177,6 +177,9 @@ const declare = (declarations: Map<string, Declaration>, node: Node): void => {
   } else if (node.type === "TSEnumDeclaration") {
     const name = nameOf(node.id);
     if (name !== undefined) declarations.set(name, { _tag: "Enum", node });
+  } else if (node.type === "TSModuleDeclaration" && !node.declare) {
+    const name = nameOf(node.id);
+    if (name !== undefined) declarations.set(name, { _tag: "Space", node });
   }
 };
 

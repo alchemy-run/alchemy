@@ -14,6 +14,11 @@ const known = (v: V | undefined): string | undefined => (v?._tag === "Str" ? v.v
 const index = (v: V | undefined): number | undefined =>
   v?._tag === "Num" && Number.isInteger(v.value) ? v.value : undefined;
 const absent = (v: V | undefined): boolean => v === undefined || v._tag === "Undef";
+/** A regular expression the code writes: the language's own, run on text the code writes too. */
+export const patternOf = (v: V | undefined): RegExp | undefined =>
+  v?._tag === "Host" && Object.prototype.toString.call(v.value) === "[object RegExp]"
+    ? (v.value as RegExp)
+    : undefined;
 
 /**
  * Strings: the methods of a string, and `effect/String`, which is the same
@@ -42,7 +47,9 @@ export const make = (kit: Kit) => {
           ? { value: arg.value as unknown }
           : arg._tag === "Undef"
             ? { value: undefined as unknown }
-            : undefined,
+            : patternOf(arg)
+              ? { value: patternOf(arg) as unknown }
+              : undefined,
       );
       if (text === undefined || given.some((arg) => arg === undefined)) return unread(site, name);
       // A method that throws on what it is given stops the code: nothing is read past it.
@@ -64,10 +71,19 @@ export const make = (kit: Kit) => {
           : typeof made === "boolean"
             ? Effect.succeed(Value.bool(made))
             : Array.isArray(made)
-              ? Effect.succeed(arr(made.map((part) => Value.str(String(part)))))
+              ? Effect.succeed(
+                  arr(
+                    made.map((part) =>
+                      // A group that matched nothing.
+                      part === undefined ? Value.undef : Value.str(String(part)),
+                    ),
+                  ),
+                )
               : made === undefined
                 ? Effect.succeed(Value.undef)
-                : unread(site, name);
+                : made === null
+                  ? Effect.succeed(Value.nil)
+                  : unread(site, name);
     };
 
   /** A test of one string against another: `startsWith`, `endsWith`, `includes`. */
@@ -359,7 +375,13 @@ export const make = (kit: Kit) => {
       );
     },
     // A string is replaced by a string the code writes: a `$` in it would stand for part of what was found.
+    match: computed("match", (self, [pattern]) => self.match(pattern as RegExp)),
+    search: computed("search", (self, [pattern]) => self.search(pattern as RegExp)),
     replace: (self, [pattern, replacement], site) => {
+      if (patternOf(pattern))
+        return computed("replace", (held, [by, with__]) =>
+          held.replace(by as RegExp, String(with__)),
+        )(self, [pattern, replacement ?? Value.undef], site);
       const a = Compare.textual(self);
       const b = pattern ? Compare.textual(pattern) : undefined;
       const with_ = known(replacement);
@@ -373,6 +395,10 @@ export const make = (kit: Kit) => {
       );
     },
     replaceAll: (self, [pattern, replacement], site) => {
+      if (patternOf(pattern))
+        return computed("replaceAll", (held, [by, with__]) =>
+          held.replaceAll(by as RegExp, String(with__)),
+        )(self, [pattern, replacement ?? Value.undef], site);
       const a = Compare.textual(self);
       const y = known(pattern);
       const with_ = known(replacement);
@@ -453,6 +479,10 @@ export const make = (kit: Kit) => {
       );
     },
     split: (self, args, site) => {
+      if (patternOf(args[0]))
+        return computed("split", (held, [by, limit]) =>
+          held.split(by as RegExp, limit as number | undefined),
+        )(self, args, site);
       const separator = known(args[0]);
       return self._tag === "Term" &&
         self.term.sort === "String" &&

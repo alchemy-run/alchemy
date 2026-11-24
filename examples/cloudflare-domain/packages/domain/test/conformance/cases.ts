@@ -1927,6 +1927,16 @@ const syntax: ReadonlyArray<Group> = [
       `({ n: a, twice() { return this.n * 2; }, get half() { return this.n / 2; } }).twice()`,
       `new (class { n = a })().n`,
       `typeof class { n = a }`,
+      // A Map and a Set: found by ===, kept in the order things were put in.
+      `new Map([[a, b]]).size`,
+      `new Set([a, b]).size`,
+      `(() => { const seen = new Map(); seen.set("x", a).set("y", b).set("x", 9); return [seen.get("x"), seen.get("z"), seen.has("y"), seen.size, [...seen.keys()], [...seen.values()], [...seen.entries()]]; })()`,
+      `(() => { const seen = new Map([[a, "first"], [b, "second"]]); const before = seen.size; const gone = seen.delete(a); return [before, gone, seen.delete(99), seen.has(b), [...seen]]; })()`,
+      `(() => { const seen = new Set([a, b, a]); seen.add(3).add(a); const all = [...seen]; const had = seen.has(b); seen.delete(3); let total = 0; seen.forEach((item) => { total += item; }); seen.clear(); return [all, had, total, seen.size]; })()`,
+      `(() => { const totals = new Map(); for (const n of [a, b, a]) totals.set(n, (totals.get(n) ?? 0) + 1); const out = []; totals.forEach((count, n) => { out.push([n, count]); }); for (const [n] of totals) out.push(n); return out; })()`,
+      // A regular expression, on text the code writes.
+      `[/a+/.test("caat"), /^b/.test("abc"), /(\\d+)-(\\d+)/.exec("10-20"), /x/.exec("abc"), /a/gi.flags, /a+/.source]`,
+      `["a1b22".match(/\\d+/g), "abc".match(/z/), "a-b".replace(/-/, "+"), "a-b-c".replaceAll(/-/g, "+"), "a1b2".split(/\\d/), "abc".search(/c/)]`,
       // delete, instanceof and a tagged template.
       `(() => { const made = { n: a, m: b }; const gone = delete made.n; delete made["m"]; return [made, gone]; })()`,
       `(() => { try { throw new TypeError("no"); } catch (thrown) { return [thrown instanceof TypeError, thrown instanceof Error, thrown instanceof RangeError, ({}) instanceof Error]; } })()`,
@@ -2086,7 +2096,7 @@ const syntax: ReadonlyArray<Group> = [
       [`a >> 1`, reported],
       [`a >>> 1`, reported],
       [`a instanceof Small`, /uses instanceof with a class the prover cannot see/],
-      [`/a+/.test("aa" + a)`, reported],
+      [`/a+/.test("aa" + a)`, /runs a regular expression's test on text an input holds/],
       [`new Date(a).getTime()`, reported],
       [`Math.random() + a`, reported],
       [`Date.now() + a`, reported],
@@ -2095,8 +2105,6 @@ const syntax: ReadonlyArray<Group> = [
       [`globalThis.a`, reported],
       [`parseInt("1" + a)`, reported],
       [`JSON.stringify({ a })`, reported],
-      [`new Map([[a, b]]).size`, reported],
-      [`new Set([a, b]).size`, reported],
       [`Symbol("s").toString() + a`, reported],
       [`(0, [a][Symbol.iterator])`, reported],
       [`import.meta.url + a`, reported],
@@ -2106,7 +2114,10 @@ const syntax: ReadonlyArray<Group> = [
     name: "Statements",
     chunk: 1,
     ...lists,
-    prelude: [`enum Size { Small, Large = 10, Huge }`],
+    prelude: [
+      `enum Size { Small, Large = 10, Huge }`,
+      `namespace Space { const hidden = 2; export const shown = hidden * 3; export function twice(n: number) { return n * hidden; } export enum Kind { One = 1 } export namespace Inner { export const deep = shown + 1; } }`,
+    ],
     both: [
       // Declarations and assignment.
       body(`const x = a; return x;`),
@@ -2222,6 +2233,10 @@ const syntax: ReadonlyArray<Group> = [
       body(`const Made = class { twice(n) { return n * 2; } }; return new Made().twice(a);`),
       body(
         `const made = { n: a, twice() { return this.n * 2; }, get half() { return this.n / 2; }, set next(n) { this.n = n; } }; const before = made.twice(); made.next = 4; return [before, made.half, made.n];`,
+      ),
+      // A namespace: an object of what it exports, with another inside it.
+      body(
+        `return [Space.shown, Space.twice(a), Space.Kind.One, Space.hidden, Space.Inner.deep + a];`,
       ),
       // An enum, in a function and at the top of the file.
       body(

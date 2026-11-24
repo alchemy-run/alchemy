@@ -170,6 +170,9 @@ delete made.n; // of an object the code made
 items[a]; // a place an input decides: one of the places the list has, or undefined
 a.toString(); // as a template writes it
 ({ n: a, twice() { return this.n * 2; }, get half() { return this.n / 2; } }).twice(); // this, a getter and a setter
+new Map([[a, b]]).size; // a Map and a Set: found by ===, kept in the order things were put in
+new Set([a, b]).size;
+/a+/.test("caat"); // a regular expression, on text the code writes
 a ** 2; // a power the code writes
 (a, b); // the comma: both are run, and the last is what it gives
 a == b; // == and != between two values of one kind, as === and !==
@@ -250,7 +253,7 @@ identity<number>(a);
 a & b; // the bits of a number an input holds: and |, ^, ~, <<, >>, >>>
 a == "1"; // == and != between two kinds of value: write === and !==
 a instanceof Small; // something that is not a class
-/a+/.test(text); // regular expressions
+/a+/.test("aa" + a); // a regular expression on text an input decides
 import.meta.url;
 
 Date.now(); // globals that are not the same every time
@@ -261,8 +264,6 @@ globalThis.name;
 JSON.stringify(made); // of a value an input decides
 parseInt("1" + a); // of text an input decides: so are parseFloat and Number
 a.toFixed(2); // a number an input holds, rounded as text
-new Map();
-new Set();
 
 absurd(a); // what code calls where it cannot be: reaching it is reported
 ```
@@ -3193,15 +3194,13 @@ function within(n: number) {
 export default isDue;
 
 export class Overweight extends Data.TaggedError("Overweight")<{ over: number }> {} // a class of effect/Data or effect/Schema that adds nothing
-export enum Kind { Good, Gift } // an enum, exported or not, and an exported namespace
+export enum Kind { Good, Gift } // an enum and a namespace, exported or not
 class Parcel {
   grams = 0; // a class with a body, exported or not: its fields, its constructor, its methods
 }
 ```
 
-```typescript title="Not supported"
-namespace Local { export const n = 1; } // a namespace the file does not export
-```
+A namespace is supported too, exported or not: `namespace Local { export const n = 1; }` is an object of what it exports.
 
 Two files can import each other.
 

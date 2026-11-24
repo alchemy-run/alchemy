@@ -54,7 +54,7 @@ export const FORMS: ReadonlyArray<Form> = [
   form("Literal: a boolean", (n) => n.type === "Literal" && typeof n.value === "boolean"),
   form("Literal: null", (n) => n.type === "Literal" && n.value === null && !n.regex && !n.bigint),
   form("Literal: a bigint", (n) => n.type === "Literal" && typeof n.bigint === "string"),
-  form("Literal: a regular expression", (n) => n.type === "Literal" && Boolean(n.regex), false),
+  form("Literal: a regular expression", (n) => n.type === "Literal" && Boolean(n.regex)),
   form(
     "TemplateLiteral: text alone",
     (n) => n.type === "TemplateLiteral" && n.expressions.length === 0,
@@ -362,7 +362,7 @@ export const FORMS: ReadonlyArray<Form> = [
   form("TSTypeAliasDeclaration", kind("TSTypeAliasDeclaration")),
   form("TSInterfaceDeclaration", kind("TSInterfaceDeclaration")),
   form("TSEnumDeclaration", kind("TSEnumDeclaration")),
-  form("TSModuleDeclaration", kind("TSModuleDeclaration"), false),
+  form("TSModuleDeclaration", kind("TSModuleDeclaration")),
 
   // A file: what it imports, declares and exports.
   form("Program", kind("Program")),
