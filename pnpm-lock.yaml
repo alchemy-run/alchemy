@@ -9937,12 +9937,18 @@ importers:
         specifier: 'catalog:'
         version: 5.3.3
     devDependencies:
+      '@alchemy.run/aws':
+        specifier: workspace:*
+        version: link:../aws
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../cloudflare
       '@alchemy.run/effect-cluster':
         specifier: workspace:*
         version: link:../effect-cluster
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../gcp
       '@alchemy.run/rivet':
         specifier: workspace:*
         version: link:../rivet

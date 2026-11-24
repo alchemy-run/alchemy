@@ -34,6 +34,7 @@ export const EraseCustomerLive = EraseCustomer.toLayer(
     const customers = yield* Customer;
     const claims = yield* UsernameClaim;
     const dashboards = yield* CustomerDashboard;
+    const vault = yield* Domain.Vault;
 
     return Effect.fn(function* ({ key }) {
       // Read before anything is removed: the steps after this one need them.
@@ -53,6 +54,13 @@ export const EraseCustomerLive = EraseCustomer.toLayer(
             username: customer._tag === "Registered" ? customer.username : null,
           };
         }),
+      });
+
+      // The key goes first: from here on, nothing sealed for the customer opens,
+      // in the model or in any copy of its events.
+      yield* Activity.make({
+        name: "shred-key",
+        execute: vault.shred(key).pipe(Effect.orDie),
       });
 
       for (const accountId of found.accounts) {

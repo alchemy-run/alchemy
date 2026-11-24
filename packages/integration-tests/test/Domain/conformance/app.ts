@@ -25,10 +25,13 @@
  * - `/redact/:id?word=w&id=rewriteId` runs the `Redact` rewrite on a memo and waits for what is
  *   built from it; `{ changed, lines, text }`: its state's lines and its view's text
  * - `/squash/:id` compacts a memo; `{ version, compacted, events, lines, text }`
+ * - `/vault/:prefix` runs the Vault cases (`../vault/cases.ts`) under subjects that start
+ *   with `prefix`, with keys kept on the model's host; what each case found
  * - `/api` serves {@link ConformanceApi}: calls over HTTP, live reads over WebSockets
  * - `/bench/:id?shape=&n=&consistency=&fresh=&lag=` times `n` commands sent one after
  *   another through {@link LatencyApi}, from inside the front: see `latency.ts`
  */
+import * as Domain from "@alchemy.run/domain";
 import type { ImportOutOfOrder, UnexpectedVersion } from "@alchemy.run/domain";
 import * as Model from "@alchemy.run/domain/Model";
 import * as DateTime from "effect/DateTime";
@@ -36,6 +39,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Option from "effect/Option";
+import { runCases } from "../vault/cases.ts";
 import { One, OneView } from "./latency-model.ts";
 import {
   ConformanceApi,
@@ -86,6 +90,7 @@ export const app = Effect.gen(function* () {
   const progress = yield* TotalWriter.Progress;
   const internals = yield* Model.Internals;
   const ones = yield* OneView;
+  const vault = yield* Domain.Vault;
   // Only the model's next version has it.
   const replays = yield* Effect.serviceOption(CounterReplay);
   return Effect.gen(function* () {
@@ -295,6 +300,10 @@ export const app = Effect.gen(function* () {
         return yield* HttpServerResponse.json(yield* holds.get(id));
       case "hold":
         return yield* HttpServerResponse.json(yield* holds.get(id));
+      case "vault":
+        return yield* HttpServerResponse.json(
+          yield* runCases(id).pipe(Effect.provideService(Domain.Vault, vault)),
+        );
       case "write": {
         const receipt = yield* memos.send(
           new Write({ id, text: url.searchParams.get("text") ?? "" }),
