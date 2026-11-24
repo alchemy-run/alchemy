@@ -3588,6 +3588,32 @@ const rest: ReadonlyArray<Group> = [
     ],
   },
   {
+    // The rest of Queue, PubSub and Deferred.
+    name: "Lines",
+    chunk: 3,
+    ...numbers,
+    effectful: true,
+    prelude: [
+      `import * as Queue from "effect/Queue";`,
+      `import * as PubSub from "effect/PubSub";`,
+      `import * as Deferred from "effect/Deferred";`,
+      `import * as Fiber from "effect/Fiber";`,
+    ],
+    both: [
+      `Effect.gen(function* () { const queue = yield* Queue.make({ capacity: 4 }); yield* Queue.offerAll(queue, [a, b]); yield* Queue.end(queue); return [yield* Queue.collect(Queue.asDequeue(queue)), Queue.isQueue(queue), Queue.isDequeue(queue), Queue.isEnqueue(Queue.asEnqueue(queue)), Queue.isQueue(a)]; })`,
+      `Effect.gen(function* () { const queue = yield* Queue.make(); const left = Queue.offerAllUnsafe(queue, [a, b]); const ended = Queue.endUnsafe(queue); return [left, ended, yield* Queue.collect(queue), Queue.shutdownUnsafe(queue)]; })`,
+      `Effect.gen(function* () { const queue = yield* Queue.unbounded(); yield* Queue.failCause(queue, Cause.fail("broken")); return Result.isFailure(yield* Effect.result(Queue.take(queue))); })`,
+      `Effect.gen(function* () { const queue = yield* Queue.unbounded(); const done = yield* Queue.into(Effect.succeed(a), queue); return [done, yield* Queue.collect(queue)]; })`,
+      `Effect.gen(function* () { const queue = yield* Queue.unbounded(); yield* Queue.interrupt(queue); return Exit.hasInterrupts(yield* Effect.exit(Queue.take(queue))); })`,
+      `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.bounded(4); const subscription = yield* PubSub.subscribe(hub); const sent = PubSub.publishUnsafe(hub, a); yield* PubSub.publish(hub, b); const got = yield* PubSub.takeBetween(subscription, 1, 2); return [sent, got, PubSub.capacity(hub), PubSub.sizeUnsafe(hub), PubSub.isPubSub(hub), PubSub.isPubSub(a), yield* PubSub.isShutdown(hub), PubSub.isShutdownUnsafe(hub)]; }))`,
+      `Effect.gen(function* () { const hub = yield* PubSub.unbounded(); const waiting = yield* Effect.forkChild(PubSub.awaitShutdown(hub)); yield* PubSub.shutdown(hub); yield* Fiber.join(waiting); return [yield* PubSub.isShutdown(hub), a]; })`,
+      `Effect.gen(function* () { const done = yield* Deferred.make(); const first = yield* Deferred.complete(done, Effect.succeed(a)); const second = yield* Deferred.done(done, Exit.succeed(b)); return [first, second, yield* Deferred.await(done), Deferred.isDeferred(done), Deferred.isDeferred(a)]; })`,
+      `Effect.gen(function* () { const done = yield* Deferred.make(); yield* Deferred.done(done, Exit.fail(new Odd({ n: a }))); return yield* Effect.result(Deferred.await(done)); })`,
+      `Effect.gen(function* () { const one = yield* Deferred.make(); const two = yield* Deferred.make(); yield* Deferred.failCause(one, Cause.fail("no")); yield* Deferred.failCauseSync(two, () => Cause.die("gone")); return [Result.isFailure(yield* Effect.result(Deferred.await(one))), Exit.hasDies(yield* Effect.exit(Deferred.await(two)))]; })`,
+      `Effect.gen(function* () { const done = yield* Deferred.make(); const set = yield* Deferred.into(even(a), done); return [set, yield* Effect.result(Deferred.await(done))]; })`,
+    ],
+  },
+  {
     name: "Services",
     ...numbers,
     effectful: true,

@@ -4494,7 +4494,231 @@ export const make = (
       Effect.succeed(lazy(() => Effect.succeed(Value.undef))),
   };
 
+  // ---- The rest of `Queue`, `PubSub` and `Deferred`.
+
+  /** A cause of the code, as the library takes one. */
+  const realCause = (cause: V | undefined): Cause.Cause<Held> | undefined => {
+    const exit = cause ? ended(Value.obj({ _tag: Value.str("Failure"), cause })) : undefined;
+    return exit && Exit.isFailure(exit) ? exit.cause : undefined;
+  };
+  const isKind =
+    (kind: Kind): Model =>
+    ([value]) =>
+      Effect.succeed(bool(kindOf(value) === kind));
+  type QD = Queue.Queue<V, Held | Cause.Done>;
+  type Hub = PubSub.PubSub<V>;
+  type SB = PubSub.Subscription<V>;
+
+  const rest: Models = {
+    "effect/Queue:asDequeue": ([queue]) => Effect.succeed(queue ?? Value.undef),
+    "effect/Queue:asEnqueue": ([queue]) => Effect.succeed(queue ?? Value.undef),
+    "effect/Queue:isQueue": isKind("Queue"),
+    "effect/Queue:isDequeue": isKind("Queue"),
+    "effect/Queue:isEnqueue": isKind("Queue"),
+    "effect/Queue:make": made("Queue", ([given_], site) =>
+      given_ === undefined || given_._tag === "Undef"
+        ? Queue.make<V, Held>()
+        : Effect.flatMap(
+            options<{ readonly capacity?: number; readonly strategy?: "suspend" }>(
+              "Queue.make",
+              given_,
+              site,
+            ),
+            (read) => Queue.make<V, Held>(read),
+          ),
+    ),
+    // Every item until the queue is ended.
+    "effect/Queue:collect": on<QD, Array<V>>(
+      "Queue",
+      "collect",
+      1,
+      (held) => Queue.collect(held),
+      list,
+      "collects a Queue that nothing ends",
+    ),
+    "effect/Queue:endUnsafe": now<QD, boolean>(
+      "Queue",
+      "endUnsafe",
+      1,
+      (held) => Queue.endUnsafe(held),
+      bool,
+    ),
+    "effect/Queue:shutdownUnsafe": now<Q, boolean>(
+      "Queue",
+      "shutdownUnsafe",
+      1,
+      (held) => Queue.shutdownUnsafe(held),
+      bool,
+    ),
+    "effect/Queue:interrupt": on<Q, boolean>(
+      "Queue",
+      "interrupt",
+      1,
+      (held) => Queue.interrupt(held),
+      bool,
+    ),
+    "effect/Queue:failCause": later<Q, boolean>(
+      "Queue",
+      "failCause",
+      2,
+      (held, [cause], site) => {
+        const real = realCause(cause);
+        return real
+          ? Effect.succeed(Queue.failCause(held, real))
+          : wrongArguments(site, "Queue.failCause");
+      },
+      bool,
+    ),
+    "effect/Queue:offerAllUnsafe": dual("Queue.offerAllUnsafe", 2, ([self, given_], site) => {
+      const held = heldOf<Q>("Queue", self);
+      return held
+        ? Effect.map(items("Queue.offerAllUnsafe", given_, site), (all) =>
+            arr(Queue.offerAllUnsafe(held, all)),
+          )
+        : wrongArguments(site, "Queue.offerAllUnsafe");
+    }),
+    // What the effect gives is offered, and the queue is ended: how it ended otherwise fails the queue.
+    "effect/Queue:into": onEffect("Queue.into", 1, (timeline, self, [queue], site) => {
+      const held = heldOf<QD>("Queue", queue);
+      return held
+        ? Timeline.back(timeline, Queue.into(self, held), bool)
+        : wrongArguments(site, "Queue.into");
+    }),
+    "effect/PubSub:isPubSub": isKind("PubSub"),
+    "effect/PubSub:capacity": now<Hub, number>(
+      "PubSub",
+      "capacity",
+      1,
+      (held) => PubSub.capacity(held),
+      num,
+    ),
+    "effect/PubSub:sizeUnsafe": now<Hub, number>(
+      "PubSub",
+      "sizeUnsafe",
+      1,
+      (held) => PubSub.sizeUnsafe(held),
+      num,
+    ),
+    "effect/PubSub:isShutdown": on<Hub, boolean>(
+      "PubSub",
+      "isShutdown",
+      1,
+      (held) => PubSub.isShutdown(held),
+      bool,
+    ),
+    "effect/PubSub:isShutdownUnsafe": now<Hub, boolean>(
+      "PubSub",
+      "isShutdownUnsafe",
+      1,
+      (held) => PubSub.isShutdownUnsafe(held),
+      bool,
+    ),
+    "effect/PubSub:publishUnsafe": now<Hub, boolean>(
+      "PubSub",
+      "publishUnsafe",
+      2,
+      (held, [value]) => PubSub.publishUnsafe(held, value ?? Value.undef),
+      bool,
+    ),
+    "effect/PubSub:awaitShutdown": on<Hub, void>(
+      "PubSub",
+      "awaitShutdown",
+      1,
+      (held) => PubSub.awaitShutdown(held),
+      none,
+      "waits for a PubSub that nothing shuts down",
+    ),
+    "effect/PubSub:takeBetween": dual("PubSub.takeBetween", 3, ([self, min, max], site) => {
+      const held = heldOf<SB>("Subscription", self);
+      if (!held) return wrongArguments(site, "PubSub.takeBetween");
+      return Effect.map(
+        Effect.all([
+          count("PubSub.takeBetween", min, site),
+          count("PubSub.takeBetween", max, site),
+        ]),
+        ([least, most]) =>
+          timed(
+            "PubSub.takeBetween",
+            (timeline) =>
+              Timeline.back(
+                timeline,
+                Timeline.waiting(
+                  timeline,
+                  "takes from a PubSub that nothing publishes to",
+                  site,
+                  PubSub.takeBetween(held, least, most),
+                ),
+                list,
+              ),
+            site,
+          ),
+      );
+    }),
+    "effect/Deferred:isDeferred": isKind("Deferred"),
+    // The effect is run once, and what it gives is what every one who waits is given.
+    "effect/Deferred:complete": later<D, boolean>(
+      "Deferred",
+      "complete",
+      2,
+      (held, [effect], site, timeline) => {
+        const given_ = effectOf(timeline, effect, site);
+        return given_
+          ? Effect.succeed(Deferred.complete(held, given_))
+          : wrongArguments(site, "Deferred.complete");
+      },
+      bool,
+    ),
+    "effect/Deferred:done": later<D, boolean>(
+      "Deferred",
+      "done",
+      2,
+      (held, [exit], site) => {
+        const real = ended(exit);
+        return real
+          ? Effect.succeed(Deferred.done(held, real))
+          : wrongArguments(site, "Deferred.done");
+      },
+      bool,
+    ),
+    "effect/Deferred:failCause": later<D, boolean>(
+      "Deferred",
+      "failCause",
+      2,
+      (held, [cause], site) => {
+        const real = realCause(cause);
+        return real
+          ? Effect.succeed(Deferred.failCause(held, real))
+          : wrongArguments(site, "Deferred.failCause");
+      },
+      bool,
+    ),
+    "effect/Deferred:failCauseSync": later<D, boolean>(
+      "Deferred",
+      "failCauseSync",
+      2,
+      (held, [f], site) =>
+        Effect.flatMap(
+          f ? host.call(f, [], site) : wrongArguments(site, "Deferred.failCauseSync"),
+          (cause) => {
+            const real = realCause(cause);
+            return real
+              ? Effect.succeed(Deferred.failCause(held, real))
+              : wrongArguments(site, "Deferred.failCauseSync");
+          },
+        ),
+      bool,
+    ),
+    // How the effect ends is how the Deferred is completed.
+    "effect/Deferred:into": onEffect("Deferred.into", 1, (timeline, self, [deferred], site) => {
+      const held = heldOf<D>("Deferred", deferred);
+      return held
+        ? Timeline.back(timeline, Deferred.into(self, held), bool)
+        : wrongArguments(site, "Deferred.into");
+    }),
+  };
+
   const models: Models = {
+    ...rest,
     ...more,
     ...randoms,
     ...lifetimes,

@@ -2560,6 +2560,36 @@ DateTime.isUtc(noon);
 DateTime.toEpochSeconds(noon);
 ```
 
+```typescript title="The rest of effect/Queue, effect/PubSub and effect/Deferred"
+Queue.make({ capacity: 4 });
+Queue.collect(queue); // every item, until the queue is ended
+Queue.asDequeue(queue);
+Queue.asEnqueue(queue);
+Queue.isQueue(queue);
+Queue.isDequeue(queue);
+Queue.isEnqueue(Queue.asEnqueue(queue));
+Queue.offerAllUnsafe(queue, [a, b]);
+Queue.endUnsafe(queue);
+Queue.shutdownUnsafe(queue);
+Queue.failCause(queue, Cause.fail("broken"));
+Queue.interrupt(queue);
+Queue.into(Effect.succeed(a), queue); // what the effect gives is offered, and the queue is ended
+PubSub.publishUnsafe(hub, a);
+PubSub.takeBetween(subscription, 1, 2);
+PubSub.capacity(hub);
+PubSub.sizeUnsafe(hub);
+PubSub.isPubSub(hub);
+PubSub.isShutdown(hub);
+PubSub.isShutdownUnsafe(hub);
+PubSub.awaitShutdown(hub);
+Deferred.complete(done, Effect.succeed(a)); // the effect is run once, for every one who waits
+Deferred.done(done, Exit.succeed(b));
+Deferred.failCause(one, Cause.fail("no"));
+Deferred.failCauseSync(two, () => Cause.die("gone"));
+Deferred.into(even(a), done); // how the effect ends is how the Deferred is completed
+Deferred.isDeferred(done);
+```
+
 ```typescript title="More of effect/Effect"
 // What handles a cause: a failure, a defect or an interrupt, as data.
 Effect.catchCause((cause) => Effect.succeed(Cause.hasFails(cause)));
