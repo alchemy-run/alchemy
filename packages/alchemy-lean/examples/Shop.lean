@@ -21,8 +21,14 @@ deriving DecidableEq, Repr
 aggregate Order where
   command
     | place (id item : String) (amount : Nat)
+        records placed
+        rejects alreadyPlaced, nothingToCharge
     | settle (id charge : String)
+        records paid
+        rejects notAwaitingPayment
     | decline (id reason : String)
+        records declined
+        rejects notAwaitingPayment
 
   event
     | placed (item : String) (amount : Nat)
@@ -64,6 +70,8 @@ aggregate Order where
 aggregate Shipment where
   command
     | schedule (id item : String)
+        records scheduled
+        rejects alreadyScheduled
 
   event
     | scheduled (item : String)

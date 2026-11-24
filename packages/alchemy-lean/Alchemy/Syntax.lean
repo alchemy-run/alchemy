@@ -32,8 +32,15 @@ syntax caseOf := ppLine "| " rawIdent callBinder*
 /-- One thing the state remembers, and what it starts as. -/
 syntax fieldOf := atomic(ident " : ") term " := " term
 
+/--
+One command: its name and fields, then the events it may record and the
+rejections it may answer. Both lists are checked against `decide`.
+-/
+syntax commandOf := ppLine "| " rawIdent callBinder*
+  (&" records " rawIdent,+)? (&" rejects " rawIdent,+)?
+
 /-- What the aggregate can be asked. The first field of each is the instance it is for. -/
-syntax &"command" caseOf+ : aggregateItem
+syntax &"command" commandOf+ : aggregateItem
 /-- What it records. -/
 syntax &"event" caseOf+ : aggregateItem
 /-- Why it refuses. -/
@@ -53,6 +60,10 @@ evolves and replies. It writes a namespace of that name holding plain types and
 plain functions, which is what a `model` and every theorem refer to.
 -/
 syntax (name := aggregateCommand) "aggregate " ident " where" many1Indent(aggregateItem) : command
+
+/-- A command, allowed alternatives that can never match. -/
+private def lenient (command : Command) : MacroM Command :=
+  `(command| set_option match.ignoreUnusedAlts true in $command:command)
 
 /-- The cases as constructors of the type named `self`. -/
 private def casesOf (self : Ident) (cases : Array (TSyntax ``caseOf)) :
@@ -85,10 +96,55 @@ macro_rules
     let n (name : Name) : Ident := mkIdentFrom a name
     let mut commands : Array Command := #[← `(command| namespace $a)]
     let mut hasReply := false
+    let mut checks : Array Command := #[]
     for item in items do
       match item with
       | `(aggregateItem| command $cases*) =>
-        let (ctors, names) ← casesOf (n `Command) cases
+        let mut plain : Array (TSyntax ``caseOf) := #[]
+        for case in cases do
+          match case with
+          | `(commandOf| | $name:ident $binders* $[records $events,*]? $[rejects $rejections,*]?) =>
+            plain := plain.push (← `(caseOf| | $name:ident $binders*))
+            let mut arguments : Array Ident := #[]
+            let mut bracketed := #[]
+            for binder in binders do
+              match binder with
+              | `(callBinder| ($ids* : $type)) =>
+                arguments := arguments ++ ids
+                bracketed := bracketed.push (← `(bracketedBinder| ($ids* : $type)))
+              | _ => Macro.throwUnsupported
+            let sent ← `($(mkIdentFrom name (`Command ++ name.getId)):ident $arguments*)
+            if let some events := events then
+              let allowed ← events.getElems.mapM fun event =>
+                `(Term.matchAltExpr| | $(mkIdentFrom event (`Event ++ event.getId)):ident .. => True)
+              let allowed : Array (TSyntax ``Term.matchAlt) :=
+                (allowed.push (← `(Term.matchAltExpr| | _ => False))).map fun alt => ⟨alt.raw⟩
+              checks := checks.push (← lenient <| ← `(command|
+                /-- The command records only the events it says it records. -/
+                theorem $(mkIdentFrom name (`records ++ name.getId)):ident
+                    (state : $(n `State)) $bracketed* (events : List $(n `Event))
+                    (accepted : $(n `decide) state $sent = .ok events) :
+                    ∀ event ∈ events, (match event with $allowed:matchAlt*) := by
+                  simp only [$(n `decide):ident] at accepted
+                  (repeat' split at accepted) <;>
+                    first | (cases accepted <;> simp) | simp_all | grind))
+            if let some rejections := rejections then
+              let allowed ← rejections.getElems.mapM fun rejection =>
+                `(Term.matchAltExpr|
+                  | $(mkIdentFrom rejection (`Rejection ++ rejection.getId)):ident .. => True)
+              let allowed : Array (TSyntax ``Term.matchAlt) :=
+                (allowed.push (← `(Term.matchAltExpr| | _ => False))).map fun alt => ⟨alt.raw⟩
+              checks := checks.push (← lenient <| ← `(command|
+                /-- The command answers only the rejections it says it answers. -/
+                theorem $(mkIdentFrom name (`rejects ++ name.getId)):ident
+                    (state : $(n `State)) $bracketed* (rejection : $(n `Rejection))
+                    (rejected : $(n `decide) state $sent = .error rejection) :
+                    (match rejection with $allowed:matchAlt*) := by
+                  simp only [$(n `decide):ident] at rejected
+                  (repeat' split at rejected) <;>
+                    first | (cases rejected <;> simp) | simp_all | grind))
+          | _ => Macro.throwUnsupported
+        let (ctors, names) ← casesOf (n `Command) plain
         commands := commands.push (← `(command|
           inductive $(n `Command) where $ctors*
             deriving DecidableEq, Repr, Lean.ToJson, Lean.FromJson))
@@ -146,6 +202,7 @@ macro_rules
       commands := commands.push (← `(command| abbrev $(n `Reply) : Type := Unit))
       commands := commands.push (← `(command|
         def $(n `reply) (_ : $(n `State)) (_ : $(n `Command)) : $(n `Reply) := ()))
+    commands := commands ++ checks
     commands := commands.push (← `(command| end $a))
     return mkNullNode commands
 
@@ -197,10 +254,6 @@ private def exactly (alts : Array (TSyntax ``modelAlt)) : MacroM (Array (TSyntax
     | `(modelAlt| | $patterns,* => $result) => `(Term.matchAltExpr| | $patterns,* => $result)
     | _ => Macro.throwUnsupported
   return alts.map fun alt => ⟨alt.raw⟩
-
-/-- A command, allowed alternatives that can never match. -/
-private def lenient (command : Command) : MacroM Command :=
-  `(command| set_option match.ignoreUnusedAlts true in $command:command)
 
 macro_rules
   | `(model $m:ident where $items*) => do

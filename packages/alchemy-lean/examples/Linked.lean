@@ -15,6 +15,8 @@ open Alchemy Cloud
 aggregate Watch where
   command
     | assess (account : String) (amount : Nat)
+        records cleared, flagged
+        rejects nothingToAssess
 
   event
     | cleared (amount : Nat)

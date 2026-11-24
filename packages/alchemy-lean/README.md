@@ -11,14 +11,20 @@ Every snippet below is from `examples/` and compiles.
 
 ## An aggregate
 
-A block with its commands, events, rejections and state, and three functions. `decide` answers a command with events or a rejection, and `evolve` applies one event.
+A block with its commands, events, rejections and state, and three functions. Each command says what it may record and how it may be refused, and that is checked against `decide`. `decide` answers a command with events or a rejection, and `evolve` applies one event.
 
 ```lean
 aggregate Order where
   command
     | place (id item : String) (amount : Nat)
+        records placed
+        rejects alreadyPlaced, nothingToCharge
     | settle (id charge : String)
+        records paid
+        rejects notAwaitingPayment
     | decline (id reason : String)
+        records declined
+        rejects notAwaitingPayment
 
   event
     | placed (item : String) (amount : Nat)

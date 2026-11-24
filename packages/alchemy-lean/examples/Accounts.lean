@@ -27,11 +27,23 @@ deriving DecidableEq, Repr
 aggregate Account where
   command
     | open (id owner : String)
+        records opened
+        rejects alreadyOpen
     | deposit (id : String) (amount : Nat)
+        records deposited
+        rejects nothingToMove, frozen, notOpen
     | withdraw (id : String) (amount : Nat)
+        records withdrawn
+        rejects nothingToMove, insufficientFunds, frozen, notOpen
     | freeze (id reason : String)
+        records frozen
+        rejects notOpen
     | close (id : String)
+        records closed
+        rejects notEmpty, notOpen
     | requestPayout (id payout : String) (amount : Nat)
+        records payoutRequested
+        rejects notOpen
 
   event
     | opened (owner : String)
