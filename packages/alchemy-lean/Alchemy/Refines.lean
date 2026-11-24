@@ -14,12 +14,53 @@ namespace Alchemy
 
 variable {σ : Signature}
 
+/-- The events delivered so far: all that were recorded but those still waiting. -/
+def World.delivered (w : World σ) : List (Emitted σ.aggregates) :=
+  w.log.take (w.log.length - w.inbox.length)
+
 /-- A store stands for a world, with this much part-way through in the request at hand. -/
-structure Agrees (h : Held σ) (P : Process σ) (w : World σ) : Prop where
+structure Agrees {reads : ReadSide σ.aggregates} (h : Held σ reads) (P : Process σ) (w : World σ) :
+    Prop where
   state : h.state = w.state
   pending : h.pending = w.inbox.map Emitted.unplaced
   process : P = w.process
   now : h.now = w.now
+  /-- What is read has taken in every event delivered, in order. -/
+  read : h.read = (w.delivered.map Emitted.unplaced).foldl reads.apply reads.initial
+  /-- The events waiting are the newest recorded, oldest first. -/
+  ordered : w.inbox = w.log.drop (w.log.length - w.inbox.length)
+
+/-- Recording more leaves what was delivered as it was, and the new events wait in order. -/
+theorem World.grown {w w' : World σ} {new : List (Emitted σ.aggregates)}
+    (ordered : w.inbox = w.log.drop (w.log.length - w.inbox.length))
+    (log : w'.log = w.log ++ new) (inbox : w'.inbox = w.inbox ++ new) :
+    w'.delivered = w.delivered ∧ w'.inbox = w'.log.drop (w'.log.length - w'.inbox.length) := by
+  have le : w.log.length - w.inbox.length ≤ w.log.length := Nat.sub_le _ _
+  have same : w'.log.length - w'.inbox.length = w.log.length - w.inbox.length := by
+    rw [log, inbox, List.length_append, List.length_append, Nat.add_sub_add_right]
+  refine ⟨?_, ?_⟩
+  · rw [World.delivered, same, log, List.take_append_of_le_length le]; rfl
+  · rw [same, log, List.drop_append_of_le_length le, ← ordered, inbox]
+
+/-- Delivering the oldest waiting event adds it to what was delivered. -/
+theorem World.popped {w w' : World σ} {event : Emitted σ.aggregates}
+    {rest : List (Emitted σ.aggregates)}
+    (ordered : w.inbox = w.log.drop (w.log.length - w.inbox.length))
+    (first : w.inbox = event :: rest) (log : w'.log = w.log) (inbox : w'.inbox = rest) :
+    w'.delivered = w.delivered ++ [event] ∧
+      w'.inbox = w'.log.drop (w'.log.length - w'.inbox.length) := by
+  have length : w.inbox.length = rest.length + 1 := by rw [first]; rfl
+  have fits : w.inbox.length ≤ w.log.length := by
+    have := congrArg List.length ordered
+    rw [List.length_drop] at this
+    omega
+  have next : w'.log.length - w'.inbox.length = (w.log.length - w.inbox.length) + 1 := by
+    rw [log, inbox]; omega
+  have head : w.log[w.log.length - w.inbox.length]? = some event := by
+    rw [← List.head?_drop, ← ordered, first]; rfl
+  refine ⟨?_, ?_⟩
+  · rw [World.delivered, next, log, List.take_add_one, head]; rfl
+  · rw [next, log, ← List.tail_drop, ← ordered, first, inbox]; rfl
 
 /--
 Every policy reacts to an event as it is, not to where it sits in the log or
@@ -69,27 +110,27 @@ theorem dispatch_accepted (w : World σ) (s : Send σ.aggregates)
           events w.now) ∧
       (w.dispatch s).inbox.map Emitted.unplaced = w.inbox.map Emitted.unplaced ++
         events.map (fun e => ⟨s.to, (σ.aggregates.of s.to).keyOf s.command, e, 0, w.now⟩) ∧
-      (w.dispatch s).process = w.process ∧ (w.dispatch s).now = w.now := by
-  refine ⟨?_, ?_, ?_, ?_⟩
+      (w.dispatch s).process = w.process ∧ (w.dispatch s).now = w.now ∧
+      ∃ new, (w.dispatch s).log = w.log ++ new ∧ (w.dispatch s).inbox = w.inbox ++ new := by
+  obtain ⟨more, grew⟩ := w.toRecorded.log_subset_record w.now s.to
+    ((σ.aggregates.of s.to).keyOf s.command) events
+  refine ⟨?_, ?_, ?_, ?_, more, ?_, ?_⟩
   · simp [World.dispatch, Recorded.dispatch, h, World.lift, Recorded.record]
   · simp only [World.dispatch, Recorded.dispatch, h, World.lift, List.map_append]
     rw [Recorded.record_new]
   · simp [World.dispatch, Recorded.dispatch, h, World.lift, World.process]
   · simp [World.dispatch, Recorded.dispatch, h, World.lift]
+  · simp only [World.dispatch, Recorded.dispatch, h, World.lift]; exact grew
+  · simp only [World.dispatch, Recorded.dispatch, h, World.lift]
+    rw [grew, List.drop_left]
 
 end World
-
-section Refinement
-
-variable {μ : Type → Type} [Monad μ] {S : Type} {acts : Acts μ S} {held : S → Held σ}
-  {sound : S → Prop}
-
-end Refinement
 
 namespace Engine
 
 variable {μ : Type → Type} [Monad μ] {S : Type} {acts : Acts μ S} {m : Model}
-  {held : S → Held m.signature} {sound : S → Prop} {e : Engine μ m}
+  {reads : ReadSide m.signature.aggregates} {held : S → Held m.signature reads} {sound : S → Prop}
+  {e : Engine μ m}
 
 /--
 Sending a command through the stores answers what the model answers, and
@@ -118,8 +159,7 @@ theorem record_spec (lawful : e.services.Lawful acts held sound)
         = .error rejection := decided
     simp only [same, acts.eval_pure]
     rw [w.dispatch_rejected s decided]
-    exact ⟨trivial, ⟨by rw [loadHeld, nowHeld, agrees.state], by rw [loadHeld, nowHeld, agrees.pending],
-      agrees.process, by rw [loadHeld, nowHeld, agrees.now]⟩, loadSound⟩
+    exact ⟨trivial, by rw [loadHeld, nowHeld]; exact agrees, loadSound⟩
   | ok events =>
     have same : (m.signature.aggregates.of s.to).decide ⟨s.actor, w.now⟩
         (w.state s.to ((m.signature.aggregates.of s.to).keyOf s.command)) s.command
@@ -129,19 +169,32 @@ theorem record_spec (lawful : e.services.Lawful acts held sound)
       ((m.signature.aggregates.of s.to).apply
         (w.state s.to ((m.signature.aggregates.of s.to).keyOf s.command)) events w.now)
       events w.now _ loadSound
-    obtain ⟨state, inbox, process, now⟩ := w.dispatch_accepted s decided
+    obtain ⟨state, inbox, process, now, new, log, waiting⟩ := w.dispatch_accepted s decided
+    obtain ⟨delivered, ordered⟩ := World.grown agrees.ordered log waiting
     simp only [same, acts.eval_bind, acts.eval_pure]
-    refine ⟨trivial, ⟨?_, ?_, ?_, ?_⟩, commitSound⟩
+    refine ⟨trivial, ⟨?_, ?_, ?_, ?_, ?_, ordered⟩, commitSound⟩
     · rw [commitHeld, loadHeld, nowHeld, state]; dsimp only; rw [agrees.state]
     · rw [commitHeld, loadHeld, nowHeld, inbox]; dsimp only; rw [agrees.pending]
     · rw [process]; exact agrees.process
     · rw [commitHeld, loadHeld, nowHeld, now]; exact agrees.now
+    · rw [commitHeld, loadHeld, nowHeld, delivered]; exact agrees.read
 
 /-- A change to what is part-way through, with nothing recorded, agrees with the same change to the world. -/
-theorem _root_.Alchemy.Agrees.change {h : Held σ} {P P' : Process σ} {w w' : World σ}
+theorem _root_.Alchemy.Agrees.change {reads : ReadSide σ.aggregates} {h : Held σ reads}
+    {P P' : Process σ} {w w' : World σ}
     (agrees : Agrees h P w) (recorded : w'.toRecorded = w.toRecorded) (inbox : w'.inbox = w.inbox)
     (now : w'.now = w.now) (process : P' = w'.process) : Agrees h P' w' :=
-  ⟨by rw [agrees.state, ← recorded], by rw [agrees.pending, inbox], process, by rw [agrees.now, now]⟩
+  ⟨by rw [agrees.state, ← recorded], by rw [agrees.pending, inbox], process, by rw [agrees.now, now],
+    by rw [agrees.read, World.delivered, World.delivered, inbox, recorded],
+    by rw [inbox, recorded]; exact agrees.ordered⟩
+
+/-- The same store, seen through what it holds: agreeing is about what is held. -/
+theorem _root_.Alchemy.Agrees.of_held {reads : ReadSide σ.aggregates} {h h' : Held σ reads}
+    {P : Process σ} {w : World σ} (agrees : Agrees h P w) (state : h'.state = h.state)
+    (pending : h'.pending = h.pending) (now : h'.now = h.now) (read : h'.read = h.read) :
+    Agrees h' P w :=
+  ⟨state ▸ agrees.state, pending ▸ agrees.pending, agrees.process, now ▸ agrees.now,
+    read ▸ agrees.read, agrees.ordered⟩
 
 /--
 A fiber's next step through the stores is its next step in the model: the same
@@ -263,24 +316,30 @@ theorem stepOnce_spec (lawful : e.services.Lawful acts held sound) (plain : m.Lo
   rw [nextIs, agrees.pending]
   cases inbox : w.inbox with
   | nil =>
-    have same : Agrees (held (acts.eval e.services.delivery.next st).2) P w :=
-      ⟨by rw [nextHeld]; exact agrees.state,
-        by rw [nextHeld]; dsimp only; rw [agrees.pending, inbox]; rfl,
-        agrees.process, by rw [nextHeld]; exact agrees.now⟩
+    have same : Agrees (held (acts.eval e.services.delivery.next st).2) P w := by
+      rw [nextHeld]
+      exact agrees.of_held rfl (by dsimp only; rw [agrees.pending, inbox]; rfl) rfl rfl
     have fibers : P.fibers = w.fibers := by rw [agrees.process]; rfl
     simp only [List.map_nil, List.head?_nil]
     rw [fibers]
     exact tryFibers_spec lawful w.fibers [] nextSound same
   | cons event rest =>
-    simp only [List.map_cons, List.head?_cons, acts.eval_pure]
-    refine ⟨nextSound, _, rfl, ?_, ?_, ?_, ?_⟩
-    · rw [nextHeld]; exact agrees.state
-    · rw [nextHeld]; dsimp only; rw [agrees.pending, inbox]; rfl
+    obtain ⟨projectHeld, projectSound⟩ := lawful.project event.unplaced _ nextSound
+    obtain ⟨delivered, ordered⟩ := World.popped (w' := m.react { w with inbox := rest } event)
+      agrees.ordered inbox rfl rfl
+    simp only [List.map_cons, List.head?_cons, acts.eval_bind, acts.eval_pure]
+    refine ⟨projectSound, _, rfl, ?_, ?_, ?_, ?_, ?_, ordered⟩
+    · rw [projectHeld, nextHeld]; exact agrees.state
+    · rw [projectHeld, nextHeld]; dsimp only; rw [agrees.pending, inbox]; rfl
     · rw [agrees.process]
       simp only [World.process, Model.react]
       congr 2
       exact List.map_congr_left fun p mem => by rw [plain p mem (w.log.take event.seq) event]
-    · rw [nextHeld]; exact agrees.now
+    · rw [projectHeld, nextHeld]; exact agrees.now
+    · rw [projectHeld, nextHeld, delivered]
+      dsimp only
+      rw [agrees.read, List.map_append, List.foldl_append]
+      rfl
 
 /-- Settling through the stores is the model's own settling. -/
 theorem settle_spec (lawful : e.services.Lawful acts held sound) (plain : m.Local) :
@@ -418,7 +477,7 @@ theorem send_spec (lawful : e.services.Lawful acts held sound) (plain : m.Local)
   refine ⟨w', Model.Runs.trans (Model.Runs.trans (.step (.refl w) (.send w s offered))
     (m.settle_runs _ _)) runs, keptSound, ?_, answer⟩
   rw [keptHeld]
-  exact ⟨answered.state, answered.pending, answered.process, answered.now⟩
+  exact answered.of_held rfl rfl rfl rfl
 
 /-- Waking through the stores is steps the model can take. -/
 theorem wake_spec (lawful : e.services.Lawful acts held sound) (plain : m.Local) {st : S}
@@ -434,7 +493,7 @@ theorem wake_spec (lawful : e.services.Lawful acts held sound) (plain : m.Local)
   simp only [Engine.wake, acts.eval_bind]
   refine ⟨w', Model.Runs.trans fired runs, keptSound, ?_⟩
   rw [keptHeld]
-  exact ⟨answered.state, answered.pending, answered.process, answered.now⟩
+  exact answered.of_held rfl rfl rfl rfl
 
 end Engine
 
@@ -442,30 +501,30 @@ end Engine
 
 namespace Model
 
-variable (m : Model)
+variable (m : Model) {reads : ReadSide m.signature.aggregates}
 
 /-- What the stores hold stands for a world the model can reach. -/
-def Stands (h : Held m.signature) : Prop :=
+def Stands (h : Held m.signature reads) : Prop :=
   ∃ w, m.Reachable w ∧ Agrees h h.process w
 
 /-- Stores with nothing in them stand for the model before anything happened. -/
-theorem Stands.start : m.Stands (Held.start m.signature) :=
-  ⟨World.start m.signature, .start, rfl, rfl, rfl, rfl⟩
+theorem Stands.start : m.Stands (Held.start m.signature reads) :=
+  ⟨World.start m.signature, .start, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 variable {m}
 
 /-- Time passing leaves the stores standing for a world the model can reach. -/
-theorem Stands.tick {h : Held m.signature} (stands : m.Stands h) (time : Time) (later : h.now ≤ time) :
+theorem Stands.tick {h : Held m.signature reads} (stands : m.Stands h) (time : Time) (later : h.now ≤ time) :
     m.Stands { h with now := time } := by
   obtain ⟨w, reach, agrees⟩ := stands
   exact ⟨{ w with now := time }, .step reach (.tick w time (agrees.now ▸ later)),
-    agrees.state, agrees.pending, agrees.process, rfl⟩
+    agrees.state, agrees.pending, agrees.process, rfl, agrees.read, agrees.ordered⟩
 
 /--
 A rule each aggregate keeps holds of every instance the stores hold: of the
 state as it is stored, not of a history replayed.
 -/
-theorem Stands.always {h : Held m.signature} (stands : m.Stands h)
+theorem Stands.always {h : Held m.signature reads} (stands : m.Stands h)
     {P : Rule m.signature.aggregates}
     (initially : ∀ n, P n (m.signature.aggregates.of n).initial)
     (kept : ∀ n, (m.signature.aggregates.of n).Keeps (P n))
@@ -478,7 +537,7 @@ theorem Stands.always {h : Held m.signature} (stands : m.Stands h)
   exact m.always initially kept decided w reach n id
 
 /-- A rule one aggregate keeps holds of every instance of it the stores hold. -/
-theorem Stands.alwaysAt {h : Held m.signature} (stands : m.Stands h) (noDecisions : m.decisions = [])
+theorem Stands.alwaysAt {h : Held m.signature reads} (stands : m.Stands h) (noDecisions : m.decisions = [])
     (n : m.signature.aggregates.Name) (P : (m.signature.aggregates.of n).State → Prop)
     (initially : P (m.signature.aggregates.of n).initial)
     (kept : (m.signature.aggregates.of n).Keeps P) (id : (m.signature.aggregates.of n).Id) :
@@ -492,7 +551,8 @@ end Model
 namespace Engine
 
 variable {μ : Type → Type} [Monad μ] {S : Type} {acts : Acts μ S} {m : Model}
-  {held : S → Held m.signature} {sound : S → Prop} {e : Engine μ m}
+  {reads : ReadSide m.signature.aggregates} {held : S → Held m.signature reads} {sound : S → Prop}
+  {e : Engine μ m}
 
 /--
 Whatever command is sent, the stores go on standing for a world the model can
@@ -531,7 +591,8 @@ def acts (S : Type) : Acts (StateM S) S where
   eval_bind _ _ _ := rfl
 
 /-- Every service, on one value in memory. Outside systems answer as `call` says. -/
-def services (σ : Signature) (call : (c : σ.Call) → σ.Reply c) : Services (StateM (Held σ)) σ where
+def services (σ : Signature) (reads : ReadSide σ.aggregates) (call : (c : σ.Call) → σ.Reply c) :
+    Services (StateM (Held σ reads)) σ where
   store :=
     { load := fun n id => return (← get).state n id
       commit := fun n id state events time => modify fun h =>
@@ -545,10 +606,11 @@ def services (σ : Signature) (call : (c : σ.Call) → σ.Reply c) : Services (
       keep := fun P => modify fun h => { h with process := P } }
   clock := { now := return (← get).now }
   call := fun c => pure (call c)
+  project := fun e => modify fun h => { h with read := reads.apply h.read e }
 
 /-- They keep every law. -/
-theorem lawful (σ : Signature) (call : (c : σ.Call) → σ.Reply c) :
-    (services σ call).Lawful (acts (Held σ)) id (fun _ => True) where
+theorem lawful (σ : Signature) (reads : ReadSide σ.aggregates) (call : (c : σ.Call) → σ.Reply c) :
+    (services σ reads call).Lawful (acts (Held σ reads)) id (fun _ => True) where
   store :=
     { load := fun _ _ _ _ => ⟨rfl, rfl, trivial⟩
       commit := fun _ _ _ _ _ _ _ => ⟨rfl, trivial⟩ }
@@ -558,6 +620,7 @@ theorem lawful (σ : Signature) (call : (c : σ.Call) → σ.Reply c) :
       keep := fun _ _ _ => ⟨rfl, trivial⟩ }
   clock := { now := fun _ _ => ⟨rfl, rfl, trivial⟩ }
   call := fun _ _ _ => ⟨rfl, trivial⟩
+  project := fun _ _ _ => ⟨rfl, trivial⟩
 
 end InMemory
 

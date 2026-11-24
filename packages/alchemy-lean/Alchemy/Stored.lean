@@ -63,21 +63,36 @@ def World.process (w : World σ) : Process σ := ⟨w.fibers, w.sagas, w.signals
 /-- An event as a store hands it on: without its place in a log nobody keeps. -/
 def Emitted.unplaced {g : Aggregates} (e : Emitted g) : Emitted g := { e with seq := 0 }
 
+/--
+What is read from a model, kept up as events are delivered: views, tables,
+whatever a reader asks for. It is a state and how one event changes it.
+-/
+structure ReadSide (g : Aggregates) where
+  State : Type
+  initial : State
+  apply : State → Emitted g → State
+
+/-- A model nothing is read from. -/
+def ReadSide.none (g : Aggregates) : ReadSide g := ⟨Unit, (), fun _ _ => ()⟩
+
 /-- What the stores hold, as the model sees it. -/
-structure Held (σ : Signature) where
+structure Held (σ : Signature) (reads : ReadSide σ.aggregates) where
   /-- Every instance's state. -/
   state : States σ.aggregates
   /-- The events committed and not yet delivered, oldest first. -/
   pending : List (Emitted σ.aggregates)
   process : Process σ
   now : Time
+  /-- What is read, after every event delivered so far. -/
+  read : reads.State
 
 /-- Before anything is stored. -/
-def Held.start (σ : Signature) : Held σ where
+def Held.start (σ : Signature) (reads : ReadSide σ.aggregates) : Held σ reads where
   state := fun n _ => (σ.aggregates.of n).initial
   pending := []
   process := .start σ
   now := 0
+  read := reads.initial
 
 /-! ## The services -/
 
@@ -109,21 +124,23 @@ structure Services (μ : Type → Type) (σ : Signature) where
   clock : Clock μ
   /-- Each outside system the model calls. -/
   call : (c : σ.Call) → μ (σ.Reply c)
+  /-- Hands a delivered event to whatever is read from the model. -/
+  project : Emitted σ.aggregates → μ Unit
 
 /-! ## Their laws -/
 
 section Laws
 
-variable {μ : Type → Type} [Monad μ] {S : Type} (acts : Acts μ S) (held : S → Held σ)
-  (sound : S → Prop)
+variable {μ : Type → Type} [Monad μ] {S : Type} (acts : Acts μ S)
+  {reads : ReadSide σ.aggregates} (held : S → Held σ reads) (sound : S → Prop)
 
 /-- Code that answers something about what is held, and changes none of it. -/
-def Reads {α : Type} (x : μ α) (answer : Held σ → α) : Prop :=
+def Reads {α : Type} (x : μ α) (answer : Held σ reads → α) : Prop :=
   ∀ s, sound s →
     (acts.eval x s).1 = answer (held s) ∧ held (acts.eval x s).2 = held s ∧ sound (acts.eval x s).2
 
 /-- Code that changes what is held in exactly this way. -/
-def Writes {α : Type} (x : μ α) (change : Held σ → Held σ) : Prop :=
+def Writes {α : Type} (x : μ α) (change : Held σ reads → Held σ reads) : Prop :=
   ∀ s, sound s → held (acts.eval x s).2 = change (held s) ∧ sound (acts.eval x s).2
 
 /-- A store answers the state it holds, and a commit changes one instance and adds its events. -/
@@ -158,6 +175,9 @@ structure Services.Lawful (services : Services μ σ) : Prop where
   processes : services.processes.Lawful acts held sound
   clock : services.clock.Lawful acts held sound
   call : ∀ c, Writes acts held sound (services.call c) fun h => h
+  /-- A delivered event changes what is read, and nothing else. -/
+  project : ∀ e, Writes acts held sound (services.project e) fun h =>
+    { h with read := reads.apply h.read e }
 
 end Laws
 
@@ -232,6 +252,7 @@ def tryFibers (P : Process m.signature) :
 def stepOnce (P : Process m.signature) : μ (Option (Process m.signature)) :=
   e.services.delivery.next >>= fun
     | some event =>
+      e.services.project event >>= fun _ =>
       pure (some { P with
         fibers := P.fibers ++ m.policies.map fun p =>
           { owner := none, program := p.react [] event, undo := [] } })
