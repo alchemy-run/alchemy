@@ -83,13 +83,13 @@ const runnersGroup = Effect.fn(function* (id: string, vpcId: Input<EC2.VpcId>) {
 
 /**
  * Run a pool of Effect Cluster runners on ECS Fargate: an ECS service whose tasks
- * host every class given this pool, in the database's VPC, behind a
- * load balancer that serves their gateway to callers anywhere. With a
- * database in no VPC (`Cluster.Database.fromUrl`), give the pool its `network`.
+ * host every class given this pool, in the database's VPC, behind the
+ * gateway its callers reach it through. With a database in no VPC
+ * (`Cluster.Database.fromUrl`), give the pool its `network`.
  *
  * Runners reach each other and the database through the cluster's runner
- * security group; the load balancer only reaches the gateway, which checks
- * every call's token.
+ * security group; the gateway's load balancer only reaches the gateway, which
+ * checks every call's token.
  *
  * ### Running on ECS
  * **Example:** Two runners on Fargate
@@ -106,6 +106,45 @@ const runnersGroup = Effect.fn(function* (id: string, vpcId: Input<EC2.VpcId>) {
  *   cpu: 2048,
  *   memory: 4096,
  *   architecture: "ARM64",
+ * }).pipe(Layer.provide(Database));
+ * ```
+ *
+ * ### Choosing the gateway
+ * Without a `gateway`, an internet-facing load balancer serves plain HTTP.
+ *
+ * **Example:** HTTPS on your domain
+ * ```typescript
+ * export const Default = ClusterAWS.EcsPool("Default", {
+ *   gateway: ClusterAWS.LoadBalancerGateway({ domain: "cluster.example.com" }),
+ * }).pipe(Layer.provide(Database));
+ * ```
+ *
+ * **Example:** HTTPS without a domain, through CloudFront
+ * ```typescript
+ * export const Default = ClusterAWS.EcsPool("Default", {
+ *   gateway: ClusterAWS.CloudFrontGateway(),
+ * }).pipe(Layer.provide(Database));
+ * ```
+ *
+ * **Example:** Only callers inside the VPC
+ * ```typescript
+ * export const Default = ClusterAWS.EcsPool("Default", {
+ *   gateway: ClusterAWS.LoadBalancerGateway({ scheme: "internal" }),
+ * }).pipe(Layer.provide(Database));
+ * ```
+ *
+ * ### Running beside a database by URL
+ * **Example:** Runners in a VPC another stack owns
+ * ```typescript
+ * export const Database = Cluster.Database.fromUrl(Config.redacted("DATABASE_URL"));
+ * export const Default = ClusterAWS.EcsPool("Default", {
+ *   network: {
+ *     vpc: EC2.Vpc.ref("AppVpc", { stack: "network" }),
+ *     subnets: [
+ *       EC2.Subnet.ref("PrivateSubnetA", { stack: "network" }),
+ *       EC2.Subnet.ref("PrivateSubnetB", { stack: "network" }),
+ *     ],
+ *   },
  * }).pipe(Layer.provide(Database));
  * ```
  *

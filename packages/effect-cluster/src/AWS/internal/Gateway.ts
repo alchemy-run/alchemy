@@ -21,13 +21,9 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { ClusterNetwork, DatabaseShape } from "../../Database.ts";
 import { GATEWAY_PORT } from "../../internal/Gateway.ts";
-import type {
-  CloudFrontGateway,
-  Gateway,
-  GatewayDomain,
-  GatewayIngress,
-  LoadBalancerGateway,
-} from "../Gateway.ts";
+import type { CloudFrontGateway } from "../CloudFrontGateway.ts";
+import type { Gateway } from "../Gateway.ts";
+import type { GatewayDomain, GatewayIngress, LoadBalancerGateway } from "../LoadBalancerGateway.ts";
 
 export type AwsNetwork = Extract<ClusterNetwork, { kind: "aws" }>;
 

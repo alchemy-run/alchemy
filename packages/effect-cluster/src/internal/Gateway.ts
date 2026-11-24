@@ -446,16 +446,15 @@ export const keepAlive = HttpRouter.middleware((app) =>
         : response;
     }
     // Commit to a 200 now: an RPC's failures travel in its messages.
-    const body = Stream.unwrap(
-      Fiber.join(call).pipe(
-        Effect.map((response) =>
-          response.body._tag === "Stream"
-            ? response.body.stream
-            : response.body._tag === "Uint8Array"
-              ? Stream.make(response.body.body)
-              : Stream.empty,
-        ),
+    const body = Fiber.join(call).pipe(
+      Effect.map((response) =>
+        response.body._tag === "Stream"
+          ? response.body.stream
+          : response.body._tag === "Uint8Array"
+            ? Stream.make(response.body.body)
+            : Stream.empty,
       ),
+      Stream.unwrap,
     );
     return HttpServerResponse.stream(withKeepAlive(body), {
       contentType: RpcSerialization.ndjson.contentType,

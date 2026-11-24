@@ -49,9 +49,10 @@ export interface DatabaseProps<E = never, R = never> {
 
 /**
  * The database an Effect Cluster coordinates through, on AWS, as a
- * `Cluster.Database` Layer: Postgres on RDS, in a VPC of its own that the
- * runners join. Every runner joins one security group, which reaches the
- * database and the other runners on the runner port; nothing else does.
+ * `Cluster.Database` Layer: Postgres on RDS, in a VPC of its own or the one
+ * you give it, which the runners join. Every runner joins one security
+ * group, which reaches the database and the other runners on the runner
+ * port; nothing else does.
  *
  * ### Running the database on RDS
  * **Example:** Postgres for the cluster
@@ -64,6 +65,42 @@ export interface DatabaseProps<E = never, R = never> {
  * export const Database = ClusterAWS.Database("Cluster", {
  *   instanceClass: "db.m7g.large",
  *   multiAZ: true,
+ * });
+ * ```
+ *
+ * ### Running in your own VPC
+ * With an `EC2.Network` that has a NAT gateway, the database, the runners
+ * and their gateways run in its private subnets.
+ *
+ * **Example:** A network declared in the same stack
+ * ```typescript
+ * export const AppNetwork = EC2.Network("App", {
+ *   cidrBlock: "10.42.0.0/16",
+ *   nat: "single",
+ * });
+ * export const Database = ClusterAWS.Database("Cluster", { network: AppNetwork });
+ * ```
+ *
+ * **Example:** A VPC another stack owns
+ * ```typescript
+ * export const Database = ClusterAWS.Database("Cluster", {
+ *   network: {
+ *     vpc: EC2.Vpc.ref("AppVpc", { stack: "network" }),
+ *     subnets: [
+ *       EC2.Subnet.ref("PrivateSubnetA", { stack: "network" }),
+ *       EC2.Subnet.ref("PrivateSubnetB", { stack: "network" }),
+ *     ],
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** A VPC nobody manages
+ * ```typescript
+ * export const Database = ClusterAWS.Database("Cluster", {
+ *   network: {
+ *     vpc: EC2.Vpc.lookup({ name: "shared" }),
+ *     subnets: [EC2.Subnet.lookup({ name: "private-a" }), EC2.Subnet.lookup({ name: "private-b" })],
+ *   },
  * });
  * ```
  *
