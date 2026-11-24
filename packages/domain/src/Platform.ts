@@ -1367,8 +1367,14 @@ export interface ProjectionStore {
    * accepted, by source and `seq`), then process the log in order, in batches.
    */
   readonly receive: (delivery: Delivery) => Effect.Effect<void>;
-  /** The last processed `seq` per source stream, for one key. */
-  readonly checkpoints: (key: string) => Effect.Effect<Readonly<Record<string, number>>>;
+  /**
+   * The last processed `seq` per source stream, for one key. Given `sources`,
+   * a host may read only theirs: a key can hear from millions of sources.
+   */
+  readonly checkpoints: (
+    key: string,
+    sources?: ReadonlyArray<string>,
+  ) => Effect.Effect<Readonly<Record<string, number>>>;
   /** Whether a key has handled every revision of the rewrite `root` from `source` (a stream). */
   readonly revised?: (key: string, root: string, source: string) => Effect.Effect<boolean>;
 }
