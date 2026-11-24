@@ -25,8 +25,13 @@ import * as CompactionModule from "./Compaction.ts";
 import * as DecisionModule from "./Decision.ts";
 import * as EventModule from "./Event.ts";
 import * as ExternalSystemModule from "./ExternalSystem.ts";
+import { HostKeyStore as HostKeyStoreLayer } from "./HostKeyStore.ts";
 import type * as KeyModule from "./Key.ts";
+import * as KeyStoreModule from "./KeyStore.ts";
+import * as KeyWrapModule from "./KeyWrap.ts";
+import { MemoryKeyStore as MemoryKeyStoreLayer } from "./MemoryKeyStore.ts";
 import * as ModelModule from "./Model.ts";
+import { NoKeyWrap as NoKeyWrapLayer } from "./NoKeyWrap.ts";
 import * as PolicyModule from "./Policy.ts";
 import * as ProjectionModule from "./Projection.ts";
 import * as QueryModule from "./Query.ts";
@@ -34,8 +39,11 @@ import * as RejectionModule from "./Rejection.ts";
 import * as RelationModule from "./Relation.ts";
 import * as RequestContextModule from "./RequestContext.ts";
 import * as RewriteModule from "./Rewrite.ts";
+import { RootKeyWrap as RootKeyWrapLayer } from "./RootKeyWrap.ts";
 import * as SagaModule from "./Saga.ts";
 import * as StreamModule from "./Stream.ts";
+import * as VaultModule from "./Vault.ts";
+import { VaultLive as VaultLiveLayer } from "./VaultLive.ts";
 import * as ViewModule from "./View.ts";
 
 export declare namespace Event {
@@ -358,6 +366,41 @@ export const Model = ModelModule.make;
 export type { Annotations } from "./Annotations.ts";
 /** A problem in a Model's definitions. Building its Layer dies with every one. */
 export { DefinitionError } from "./Kernel.ts";
+
+export declare namespace Sealed {
+  /** A value encrypted under one subject's key. */
+  export type Value<A> = VaultModule.Sealed<A>;
+  /** Any sealed field. */
+  export type Any = VaultModule.AnySealed;
+}
+/** A field encrypted under a key kept per subject. See {@link VaultModule.make}. */
+export const Sealed = VaultModule.make;
+/** Seals, opens and shreds. See {@link VaultModule.Vault}. */
+export const Vault = VaultModule.Vault;
+export type Vault = VaultModule.Vault;
+/** Where a Vault keeps one key per subject. See {@link KeyStoreModule.KeyStore}. */
+export const KeyStore = KeyStoreModule.KeyStore;
+export type KeyStore = KeyStoreModule.KeyStore;
+/** Makes each subject's key and what is stored of it. See {@link KeyWrapModule.KeyWrap}. */
+export const KeyWrap = KeyWrapModule.KeyWrap;
+export type KeyWrap = KeyWrapModule.KeyWrap;
+/** A Vault that encrypts with AES-256-GCM. See {@link VaultLiveLayer}. */
+export const VaultLive = VaultLiveLayer;
+/** Keys kept in memory. See {@link MemoryKeyStoreLayer}. */
+export const MemoryKeyStore = MemoryKeyStoreLayer;
+/** Keys kept on the model's own host. See {@link HostKeyStoreLayer}. */
+export const HostKeyStore = HostKeyStoreLayer;
+/** Keys stored as they are. See {@link NoKeyWrapLayer}. */
+export const NoKeyWrap = NoKeyWrapLayer;
+/** Keys wrapped under a root key you supply. See {@link RootKeyWrapLayer}. */
+export const RootKeyWrap = RootKeyWrapLayer;
+/** A Vault for stories. See {@link VaultModule.VaultTest}. */
+export const VaultTest = VaultModule.VaultTest;
+/** A sealed value as the test Vault seals it. See {@link VaultModule.sealedInTest}. */
+export const sealedInTest = VaultModule.sealedInTest;
+/** The Vault or its key store failed. See {@link VaultModule.VaultError}. */
+export const VaultError = VaultModule.VaultError;
+export type VaultError = VaultModule.VaultError;
 
 /** A service middleware provides to a request, carried into the domain. See {@link RequestContextModule.make}. */
 export const RequestContext = RequestContextModule.make;

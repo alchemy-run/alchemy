@@ -14,6 +14,7 @@ import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import { Activity } from "effect/workflow";
@@ -583,11 +584,25 @@ const handlers = Layer.mergeAll(
   MemoForwardLive,
 );
 
+/**
+ * A Vault whose keys live on the model's own host, one object per subject,
+ * each wrapped under a root key.
+ */
+const ConformanceVault = Domain.VaultLive.pipe(
+  Layer.provide(
+    Layer.merge(Domain.HostKeyStore, Domain.RootKeyWrap(Redacted.make("c0".repeat(32)))),
+  ),
+);
+
 /** The model's Layer, given the platform it runs on. */
-export const ConformanceLive = Conformance.layer(Layer.merge(handlers, TallyWriterLive));
+export const ConformanceLive = Conformance.layer(Layer.merge(handlers, TallyWriterLive)).pipe(
+  Layer.provideMerge(ConformanceVault),
+);
 
 /**
  * The next version's Layer: deployed over {@link ConformanceLive}, it rebuilds
  * the tallies and backfills {@link CounterReplay}.
  */
-export const ConformanceLiveV1 = ConformanceV1.layer(Layer.merge(handlers, TallyWriterV1Live));
+export const ConformanceLiveV1 = ConformanceV1.layer(Layer.merge(handlers, TallyWriterV1Live)).pipe(
+  Layer.provideMerge(ConformanceVault),
+);

@@ -79,6 +79,11 @@ export interface Group {
    * something else.
    */
   readonly unread?: ReadonlyArray<readonly [expression: string, reason: RegExp]>;
+  /**
+   * The expressions take the items of a hash set in order. The prover tries
+   * every order, and the real one gives one: a path for another is not compared.
+   */
+  readonly orders?: boolean;
   /** Lines the group's file declares before its commands. */
   readonly prelude?: ReadonlyArray<string>;
   /** The functions the prelude exports that the prover is told not to read. */
@@ -432,12 +437,17 @@ const base: ReadonlyArray<Group> = [
       `(({ a: x, ...rest }) => [x, rest])({ a, b, c: 1 })`,
       `Optic.id().key("n").replace(a, { n: 0, m: b })`,
       `Optic.id().key("n").modify((n) => n + a)({ n: 1 })`,
+      `Optic.modify({ n: a, m: b }, Optic.id().key("n"), (n) => n + 1)`,
+      `pipe({ n: a, m: b }, Optic.modify(Optic.id().key("n"), (n) => n + 1))`,
+      `Optic.replace({ n: a, m: b }, Optic.id().key("m"), a)`,
+      `pipe({ n: a, m: b }, Optic.replace(Optic.id().key("m"), a))`,
     ],
   },
   {
     name: "Rational",
     ...numbers,
     both: [
+      `Rational.isPositive(Rational.fromBigInt(BigInt(a)))`,
       ...d("Rational.sum", "ratio(a)", "third"),
       ...d("Rational.subtract", "ratio(a)", "third"),
       ...d("Rational.multiply", "ratio(a)", "third"),
@@ -573,6 +583,14 @@ const base: ReadonlyArray<Group> = [
       `[text, other].includes("ab")`,
       `[text, other].join("/")`,
       `[text, other].indexOf("b")`,
+      `text.at(0) ?? "none"`,
+      `text.at(-1) ?? "none"`,
+      `String.at(0)(text)`,
+      `String.at(9)(text)`,
+      ...d("String.at", "text", "1"),
+      `text.at(1) ?? "none"`,
+      `text.at(-2) ?? "none"`,
+      `text.at(9) ?? "none"`,
     ],
     known: [
       `text.slice(-2)`,
@@ -589,8 +607,6 @@ const base: ReadonlyArray<Group> = [
       `text.padEnd(4, "-")`,
       `text.repeat(2)`,
       `text.split(",")`,
-      `text.at(0) ?? "none"`,
-      `text.at(-1) ?? "none"`,
       `text.lastIndexOf("a")`,
       `text.charCodeAt(0)`,
       `String.toUpperCase(text)`,
@@ -604,8 +620,6 @@ const base: ReadonlyArray<Group> = [
       `String.padEnd(4, "-")(text)`,
       `String.repeat(2)(text)`,
       ...d("String.split", "text", "','"),
-      `String.at(0)(text)`,
-      `String.at(9)(text)`,
       `String.lastIndexOf("a")(text)`,
       ...d("String.takeRight", "text", "2"),
       `String.Order(text, other)`,
@@ -613,6 +627,7 @@ const base: ReadonlyArray<Group> = [
       `String.empty`,
       `String.camelToSnake("camelCase" + text)`,
       `String.snakeToCamel("snake_case")`,
+      ...d("String.charAt", "text", "0"),
     ],
   },
   {
@@ -1349,6 +1364,7 @@ const base: ReadonlyArray<Group> = [
     bind: (known) => `${lists.bind(known)} const stream = Stream.fromIterable(items);`,
     effectful: true,
     both: [
+      `Stream.runCollect(Stream.fromIterable(items))`,
       `stream.pipe(Stream.take(5), Stream.runCollect)`,
       `stream.pipe(Stream.take(2), Stream.runCollect)`,
       `stream.pipe(Stream.drop(0), Stream.runCollect)`,
@@ -2164,6 +2180,7 @@ const syntax: ReadonlyArray<Group> = [
       [body(`items.reverse(); return items.length;`), reported],
       [body(`const made = { n: a }; delete made.n; return made;`), reported],
       [body(`debugger; return a;`), reported],
+      [`(async () => { for await (const n of items) {} return a; })()`, reported],
       [body(`let x = a; x **= 2; return x;`), reported],
       [body(`let x = a; x <<= 1; return x;`), reported],
       [body(`let x = a; x >>= 1; return x;`), reported],
@@ -2270,6 +2287,187 @@ const rest: ReadonlyArray<Group> = [
       `PrimaryKey.isPrimaryKey({ a })`,
       `SemVerRange.matches(SemVerRange.parseUnsafe("^1.2.0"), SemVer.parseUnsafe("1.3.0"))`,
       `TextDiff.diff("ab", "ac" + a)`,
+    ],
+  },
+  {
+    name: "Again",
+    chunk: 2,
+    ...numbers,
+    effectful: true,
+    prelude: [
+      `import * as Schedule from "effect/Schedule";`,
+      `import * as SynchronizedRef from "effect/SynchronizedRef";`,
+      `import * as SubscriptionRef from "effect/SubscriptionRef";`,
+    ],
+    both: [
+      // An effect run again, and one given a time limit: nothing in a handler waits, so each is what its runs give.
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => (n < 3 ? Effect.fail(n) : Effect.succeed(n + a))); const made = yield* Effect.result(Effect.retry(step, { times: 2 })); return [made, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => (n < 3 ? Effect.fail(n) : Effect.succeed(n + a))); const made = yield* Effect.result(Effect.retry(step, { times: 1 })); return [made, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => (n < 3 ? Effect.fail(n) : Effect.succeed(n + a))); const made = yield* Effect.result(Effect.retry(step, { times: 0 })); return [made, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => (n < 3 ? Effect.fail(n) : Effect.succeed(n + a))); const made = yield* step.pipe(Effect.retry({ times: 5 }), Effect.result); return [made, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => (n < 3 ? Effect.fail(n) : Effect.succeed(n + a))); const made = yield* Effect.result(Effect.retry(step, { times: 5, while: (n) => n !== 2 })); return [made, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => (n < 3 ? Effect.fail(n) : Effect.succeed(n + a))); const made = yield* Effect.result(Effect.retry(step, { times: 5, until: (n) => n === 1 })); return [made, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const made = yield* Effect.result(Effect.retry(even(a), { times: 2 })); return made; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const made = yield* Effect.exit(Effect.retry(Effect.flatMap(Ref.update(ran, (n) => n + 1), () => Effect.die("gone")), { times: 3 })); return [Exit.hasDies(made), yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(a); const step = Ref.updateAndGet(ran, (n) => n + 1); return [yield* Effect.repeat(step, { times: 2 }), yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(a); const step = Ref.updateAndGet(ran, (n) => n + 1); return [yield* Effect.repeat(step, { times: 0 }), yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(a); const step = Ref.updateAndGet(ran, (n) => n + 1); return [yield* step.pipe(Effect.repeat({ times: 4, until: (n) => n === a + 2 })), yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(a); const step = Ref.updateAndGet(ran, (n) => n + 1); return [yield* Effect.repeat(step, { times: 4, while: (n) => n < a + 3 }), yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => (n < 3 ? Effect.fail(n) : Effect.succeed(n + a))); const made = yield* Effect.result(Effect.repeat(step, { times: 2 })); return [made, yield* Ref.get(ran)]; })`,
+      // `Schedule.recurs` runs again at once, so it is a count of times.
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => (n < 4 ? Effect.fail(n) : Effect.succeed(n + a))); const made = yield* Effect.result(Effect.retry(step, Schedule.recurs(2))); return [made, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => (n < 4 ? Effect.fail(n) : Effect.succeed(n + a))); const made = yield* step.pipe(Effect.retry(Schedule.recurs(5)), Effect.result); return [made, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => (n < 4 ? Effect.fail(n) : Effect.succeed(n + a))); const made = yield* Effect.result(Effect.retry(step, { schedule: Schedule.recurs(5), times: 1 })); return [made, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => (n < 4 ? Effect.fail(n) : Effect.succeed(n + a))); const made = yield* Effect.result(Effect.retry(step, { schedule: Schedule.recurs(1), times: 5 })); return [made, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => (n < 4 ? Effect.fail(n) : Effect.succeed(n + a))); const made = yield* Effect.result(Effect.retry(step, { schedule: Schedule.recurs(5), while: (n) => n < 2 })); return [made, yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(a); const step = Ref.updateAndGet(ran, (n) => n + 1); return [yield* Effect.repeat(step, Schedule.recurs(2)), yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(a); const step = Ref.updateAndGet(ran, (n) => n + 1); return [yield* Effect.repeat(step, Schedule.recurs(0)), yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(a); const step = Ref.updateAndGet(ran, (n) => n + 1); return [yield* Effect.repeat(step, { schedule: Schedule.recurs(2) }), yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(a); const step = Ref.updateAndGet(ran, (n) => n + 1); return [yield* Effect.repeat(step, { schedule: Schedule.recurs(5), until: (n) => n === a + 2 }), yield* Ref.get(ran)]; })`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(a); const step = Ref.updateAndGet(ran, (n) => n + 1); return [yield* step.pipe(Effect.repeat({ schedule: Schedule.recurs(1), times: 4 })), yield* Ref.get(ran)]; })`,
+      `Effect.result(Effect.retry(even(a), { times: 5, while: (error) => error.n !== 2 }))`,
+      `Effect.result(Effect.retry(even(a), { times: 5, until: (error) => error.n === 1 }))`,
+      `Effect.result(Effect.retry(even(a), Schedule.recurs(2)))`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const step = Ref.updateAndGet(ran, (n) => n + 1); return yield* Effect.repeat(step, { times: 4, until: (n) => n === a + 2 }); })`,
+      `Effect.result(Effect.timeout(even(a), "1 second"))`,
+      `Effect.result(Effect.timeoutOption(even(a), "1 second"))`,
+      `Effect.result(Effect.timeoutOrElse(even(a), { duration: "1 second", orElse: () => Effect.succeed(b) }))`,
+      `Effect.succeed(a).pipe(Effect.map((n) => n + 1), Effect.flatMap(even), Effect.result)`,
+      `Stream.make(a, b).pipe(Stream.map((n) => n + 1), Stream.runCollect)`,
+      `Effect.gen(function* () { const cell = yield* Ref.make(a); return yield* cell.pipe(Ref.updateAndGet((n) => n + 1)); })`,
+      `Effect.gen(function* () { const cell = yield* SynchronizedRef.make(a); return yield* Effect.result(SynchronizedRef.updateAndGetEffect(cell, (n) => positive(n))); })`,
+      `Effect.gen(function* () { const cell = yield* SubscriptionRef.make(a); return yield* Effect.result(SubscriptionRef.updateAndGetEffect(cell, (n) => positive(n))); })`,
+      `Stream.runCollect(Stream.fromIterable([a, b]))`,
+      `Effect.timeout(Effect.succeed(a), "1 second")`,
+      `even(a).pipe(Effect.timeout(1000), Effect.result)`,
+      `Effect.timeoutOption(Effect.succeed(a), "1 second")`,
+      `Effect.timeoutOrElse(Effect.succeed(a), { duration: "1 second", orElse: () => Effect.succeed(b) })`,
+      // A cell whose changes may be effects is the same cell: a handler is the only one that holds it.
+      `Effect.gen(function* () { const cell = yield* SynchronizedRef.make(a); yield* SynchronizedRef.set(cell, a + b); yield* SynchronizedRef.update(cell, (n) => n * 2); yield* SynchronizedRef.updateEffect(cell, (n) => Effect.succeed(n + 1)); return [yield* SynchronizedRef.get(cell), SynchronizedRef.getUnsafe(cell)]; })`,
+      `Effect.gen(function* () { const cell = yield* SynchronizedRef.make(a); return [yield* SynchronizedRef.setAndGet(cell, b), yield* SynchronizedRef.getAndSet(cell, a), yield* SynchronizedRef.updateAndGet(cell, (n) => n + 1), yield* SynchronizedRef.getAndUpdate(cell, (n) => n * 2), yield* SynchronizedRef.modify(cell, (n) => [n > b, n - 1]), yield* SynchronizedRef.get(cell)]; })`,
+      `Effect.gen(function* () { const cell = yield* SynchronizedRef.make(a); return [yield* SynchronizedRef.updateAndGetEffect(cell, (n) => Effect.succeed(n + b)), yield* SynchronizedRef.getAndUpdateEffect(cell, (n) => Effect.succeed(n * 2)), yield* SynchronizedRef.modifyEffect(cell, (n) => Effect.succeed([n > b, n - 1])), yield* SynchronizedRef.get(cell)]; })`,
+      `Effect.gen(function* () { const cell = yield* SynchronizedRef.make(a); const failed = yield* Effect.result(SynchronizedRef.updateEffect(cell, (n) => even(n).pipe(Effect.map((m) => m + 1)))); return [failed, yield* SynchronizedRef.get(cell)]; })`,
+      `Effect.gen(function* () { const cell = yield* SynchronizedRef.make(a); return yield* cell.pipe(SynchronizedRef.updateAndGetEffect((n) => positive(n)), Effect.result); })`,
+      `Effect.gen(function* () { const cell = SynchronizedRef.makeUnsafe(a); yield* SynchronizedRef.set(cell, b); return yield* SynchronizedRef.get(cell); })`,
+      `Effect.gen(function* () { const cell = yield* SubscriptionRef.make(a); yield* SubscriptionRef.set(cell, a + b); yield* SubscriptionRef.update(cell, (n) => n * 2); yield* SubscriptionRef.updateEffect(cell, (n) => Effect.succeed(n + 1)); return [yield* SubscriptionRef.get(cell), SubscriptionRef.getUnsafe(cell)]; })`,
+      `Effect.gen(function* () { const cell = yield* SubscriptionRef.make(a); return [yield* SubscriptionRef.setAndGet(cell, b), yield* SubscriptionRef.getAndSet(cell, a), yield* SubscriptionRef.updateAndGet(cell, (n) => n + 1), yield* SubscriptionRef.getAndUpdate(cell, (n) => n * 2), yield* SubscriptionRef.modify(cell, (n) => [n > b, n - 1]), yield* SubscriptionRef.get(cell)]; })`,
+      `Effect.gen(function* () { const cell = yield* SubscriptionRef.make(a); return [yield* SubscriptionRef.updateAndGetEffect(cell, (n) => Effect.succeed(n + b)), yield* SubscriptionRef.getAndUpdateEffect(cell, (n) => Effect.succeed(n * 2)), yield* SubscriptionRef.modifyEffect(cell, (n) => Effect.succeed([n > b, n - 1])), yield* SubscriptionRef.get(cell)]; })`,
+      `Effect.gen(function* () { const cell = yield* SubscriptionRef.make(a); const failed = yield* Effect.result(SubscriptionRef.updateEffect(cell, (n) => even(n).pipe(Effect.map((m) => m + 1)))); return [failed, yield* SubscriptionRef.get(cell)]; })`,
+      `Effect.gen(function* () { const cell = yield* SubscriptionRef.make(a); return yield* cell.pipe(SubscriptionRef.updateAndGetEffect((n) => positive(n)), Effect.result); })`,
+    ],
+    unread: [
+      // A schedule that waits between runs.
+      [`Effect.retry(even(a), Schedule.spaced("1 second"))`, reported],
+      [
+        `Effect.retry(even(a), { schedule: Schedule.exponential("1 second"), times: 2 })`,
+        /Schedule\.exponential/,
+      ],
+      [
+        `Effect.repeat(Effect.succeed(a), { schedule: Schedule.spaced("1 second") })`,
+        /Schedule\.spaced/,
+      ],
+      [`Effect.retry(even(a), Schedule.recurs(b))`, /without a count the prover can see/],
+      [`Effect.retry(even(a), { schedule: { times: 2 } })`, /with a schedule that waits/],
+      // How often is a number the code writes.
+      [`Effect.retry(even(a), { times: b })`, /without a count of times/],
+      [`Effect.repeat(Effect.succeed(a), {})`, /without a count of times/],
+      [
+        `Effect.gen(function* () { const cell = yield* SubscriptionRef.make(a); return yield* Stream.runCollect(Stream.take(SubscriptionRef.changes(cell), 1)); })`,
+        reported,
+      ],
+    ],
+  },
+  {
+    // What one part of a program waits on for another, in a handler: one fiber, which does not wait.
+    name: "Waits",
+    chunk: 3,
+    ...numbers,
+    effectful: true,
+    prelude: [
+      `import * as Deferred from "effect/Deferred";`,
+      `import * as Latch from "effect/Latch";`,
+      `import * as Queue from "effect/Queue";`,
+      `import * as Semaphore from "effect/Semaphore";`,
+    ],
+    both: [
+      `Effect.gen(function* () { const done = yield* Deferred.make(); const first = yield* Deferred.succeed(done, a); const second = yield* Deferred.succeed(done, b); return [first, second, yield* Deferred.await(done), yield* Deferred.isDone(done)]; })`,
+      `Effect.gen(function* () { const done = yield* Deferred.make(); const before = yield* Deferred.isDone(done); yield* Deferred.fail(done, new Odd({ n: a })); return [before, Deferred.isDoneUnsafe(done), yield* Effect.result(Deferred.await(done))]; })`,
+      `Effect.gen(function* () { const done = Deferred.makeUnsafe(); const nothing = Option.isNone(yield* Deferred.poll(done)); yield* Deferred.sync(done, () => a + b); const held = yield* Deferred.poll(done); return [nothing, Option.isSome(held) ? yield* held.value : -1]; })`,
+      `Effect.gen(function* () { const done = yield* Deferred.make(); yield* Deferred.failSync(done, () => a); return yield* Effect.flip(Deferred.await(done)); })`,
+      `Effect.gen(function* () { const done = yield* Deferred.make(); yield* Deferred.die(done, "gone"); return Exit.hasDies(yield* Effect.exit(Deferred.await(done))); })`,
+      `Effect.gen(function* () { const done = yield* Deferred.make(); yield* Deferred.dieSync(done, () => "gone"); return [Exit.hasDies(yield* Effect.exit(Deferred.await(done))), yield* Deferred.succeed(done, a)]; })`,
+      `Effect.gen(function* () { const gate = yield* Latch.make(); const opened = yield* gate.open; const again = yield* gate.open; yield* gate.await; return [opened, again, gate.isOpen(), yield* gate.whenOpen(Effect.succeed(a))]; })`,
+      `Effect.gen(function* () { const gate = yield* Latch.make(a > b); const closed = yield* Latch.close(gate); const opened = yield* Latch.open(gate); yield* Latch.await(gate); return [closed, opened, Latch.isOpen(gate), yield* Latch.whenOpen(gate, even(a)).pipe(Effect.result), yield* Latch.whenOpen(gate)(Effect.succeed(b))]; })`,
+      `Effect.gen(function* () { const gate = Latch.makeUnsafe(false); const released = yield* gate.release; const opened = gate.openUnsafe(); const twice = Latch.openUnsafe(gate); const let_ = yield* Latch.release(gate); const closed = gate.closeUnsafe(); return [released, opened, twice, let_, closed, Latch.closeUnsafe(gate), yield* gate.close, gate.isOpen()]; })`,
+      `Effect.gen(function* () { const permits = yield* Semaphore.make(2); const one = yield* permits.withPermits(1)(Effect.succeed(a)); const two = yield* permits.withPermit(Effect.succeed(b)); const inner = yield* permits.withPermits(1)(permits.withPermits(1)(Effect.succeed(a + b))); return [one, two, inner]; })`,
+      `Effect.gen(function* () { const permits = yield* Semaphore.make(2); const taken = yield* permits.take(1); const some = yield* permits.withPermitsIfAvailable(1)(Effect.succeed(a)); const none = yield* permits.withPermitsIfAvailable(2)(Effect.succeed(b)); const free = yield* permits.release(1); return [taken, some, none, free, yield* permits.takeIfAvailable(2), yield* permits.takeIfAvailable(1), yield* permits.releaseAll]; })`,
+      `Effect.gen(function* () { const permits = Semaphore.makeUnsafe(1); const failed = yield* Effect.result(permits.withPermits(1)(even(a))); const after = yield* permits.takeIfAvailable(1); yield* permits.resize(3); return [failed, after, yield* permits.take(2), yield* permits.takeIfAvailable(1)]; })`,
+      `Effect.gen(function* () { const permits = yield* Semaphore.make(3); const one = yield* Semaphore.withPermits(permits, 2)(Effect.succeed(a)); const two = yield* Semaphore.withPermits(permits, 2, Effect.succeed(b)); const three = yield* Semaphore.withPermit(permits, Effect.succeed(a)); const four = yield* Semaphore.withPermit(permits)(Effect.succeed(b)); const five = yield* Semaphore.withPermitsIfAvailable(permits, 4)(Effect.succeed(a)); const six = yield* Semaphore.withPermitsIfAvailable(permits, 1, Effect.succeed(a)); return [one, two, three, four, five, six]; })`,
+      `Effect.gen(function* () { const permits = yield* Semaphore.make(3); const taken = yield* Semaphore.take(permits, 2); const more = yield* Semaphore.takeIfAvailable(permits, 2); const free = yield* Semaphore.release(permits, 1); yield* Semaphore.resize(permits, 5); const piped = yield* pipe(permits, Semaphore.take(1)); return [taken, more, free, piped, yield* pipe(permits, Semaphore.takeIfAvailable(9)), yield* pipe(permits, Semaphore.release(1)), yield* Semaphore.releaseAll(permits)]; })`,
+      `Effect.gen(function* () { const line = yield* Queue.unbounded(); const offered = yield* Queue.offer(line, a); const rest = yield* Queue.offerAll(line, [b, a + b]); const first = yield* Queue.take(line); return [offered, rest, first, yield* Queue.peek(line), yield* Queue.size(line), yield* Queue.takeAll(line), yield* Queue.size(line)]; })`,
+      `Effect.gen(function* () { const line = yield* Queue.bounded(2); const empty = yield* Queue.poll(line); yield* Queue.offer(line, a); const half = yield* Queue.isFull(line); yield* Queue.offer(line, b); return [empty, half, yield* Queue.isFull(line), Queue.isFullUnsafe(line), Queue.sizeUnsafe(line), Queue.offerUnsafe(line, 1), yield* Queue.poll(line), yield* Queue.takeN(line, 1), yield* Queue.clear(line)]; })`,
+      `Effect.gen(function* () { const line = yield* Queue.unbounded(); Queue.offerUnsafe(line, a); yield* pipe(line, Queue.offer(b)); yield* pipe(line, Queue.offerAll([1, 2])); return [yield* pipe(line, Queue.takeN(2)), yield* Queue.clear(line), yield* Queue.clear(line)]; })`,
+    ],
+    unread: [
+      // Each of these would wait, and in a handler nothing comes: the real code never ends.
+      [
+        `Effect.gen(function* () { const done = yield* Deferred.make(); return yield* Deferred.await(done); })`,
+        /waits for a Deferred the handler has not completed/,
+      ],
+      [
+        `Effect.gen(function* () { const gate = yield* Latch.make(); return yield* gate.await; })`,
+        /waits for a Latch the handler has not opened/,
+      ],
+      [
+        `Effect.gen(function* () { const gate = yield* Latch.make(); return yield* gate.whenOpen(Effect.succeed(a)); })`,
+        /waits for a Latch the handler has not opened/,
+      ],
+      [
+        `Effect.gen(function* () { const permits = yield* Semaphore.make(1); return yield* permits.withPermits(2)(Effect.succeed(a)); })`,
+        /waits for more permits of a Semaphore than are free/,
+      ],
+      [
+        `Effect.gen(function* () { const permits = yield* Semaphore.make(1); yield* permits.take(1); return yield* permits.take(1); })`,
+        /waits for more permits of a Semaphore than are free/,
+      ],
+      [
+        `Effect.gen(function* () { const line = yield* Queue.unbounded(); return yield* Queue.take(line); })`,
+        /takes from a Queue with nothing in it/,
+      ],
+      [
+        `Effect.gen(function* () { const line = yield* Queue.unbounded(); return yield* Queue.takeAll(line); })`,
+        /takes from a Queue with nothing in it/,
+      ],
+      [
+        `Effect.gen(function* () { const line = yield* Queue.bounded(1); yield* Queue.offer(line, a); return yield* Queue.offer(line, b); })`,
+        /offers to a Queue that is full/,
+      ],
+      // How many is a number the code writes.
+      [
+        `Effect.gen(function* () { const permits = yield* Semaphore.make(a); return yield* permits.take(1); })`,
+        /a count of permits the prover cannot see/,
+      ],
+      [
+        `Effect.gen(function* () { const line = yield* Queue.bounded(a); return yield* Queue.size(line); })`,
+        /a Queue of a size the prover cannot see/,
+      ],
+      // A queue that drops what does not fit, and one that ends.
+      [
+        `Effect.gen(function* () { const line = yield* Queue.dropping(1); return yield* Queue.size(line); })`,
+        reported,
+      ],
+      [
+        `Effect.gen(function* () { const line = yield* Queue.sliding(1); return yield* Queue.size(line); })`,
+        reported,
+      ],
+      [
+        `Effect.gen(function* () { const line = yield* Queue.unbounded(); return yield* Queue.end(line); })`,
+        reported,
+      ],
+      [
+        `Effect.gen(function* () { const line = yield* Queue.unbounded(); return yield* Queue.shutdown(line); })`,
+        reported,
+      ],
     ],
   },
   {
@@ -2466,6 +2664,28 @@ const shapes: ReadonlyArray<Group> = [
       [`flagOf(text) === isBlank(text)`, /compares what flagOf returned/],
       [`countOf(text) + 1`, /may not be whole/],
       [`versionOf(text)._tag`, /what versionOf returned/],
+    ],
+  },
+  {
+    // `pipe(value, f, g)` and `value.pipe(f, g)`, on each kind of value that has one.
+    name: "Pipe",
+    ...numbers,
+    both: [
+      `pipe(a)`,
+      `pipe(a, (n) => n + 1, (n) => n * b)`,
+      `pipe(a, Number.sum(b), Number.multiply(2), Number.increment)`,
+      `pipe(a, (n) => pipe(n, Number.sum(b)), Number.decrement)`,
+      `flow((n) => n + 1, Number.multiply(b))(a)`,
+      `Option.some(a).pipe(Option.map((n) => n + b), Option.filter((n) => n > 0), Option.getOrElse(() => 0))`,
+      `halved(a).pipe(Result.map((n) => n + b), Result.getOrElse(() => -1))`,
+      `Duration.seconds(a).pipe(Duration.sum(Duration.millis(b)), Duration.toMillis)`,
+      `decimal(a).pipe(BigDecimal.sum(fee), BigDecimal.isGreaterThan(decimal(b)))`,
+      `ratio(a).pipe(Rational.sum(third), Rational.isGreaterThan(ratio(b)))`,
+      `Redacted.make(a).pipe(Redacted.value)`,
+      `new Point({ x: a, y: b }).pipe((point) => point.x - point.y)`,
+      `HashSet.make(a, b).pipe(HashSet.add(1), HashSet.has(a))`,
+      `HashMap.make(["x", a]).pipe(HashMap.set("y", b), HashMap.get("y"))`,
+      `Match.value(a).pipe(Match.when((n) => n > b, () => "more"), Match.orElse(() => "less"))`,
     ],
   },
 ];

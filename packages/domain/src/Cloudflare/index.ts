@@ -69,7 +69,9 @@ import { DeployVersion } from "./Version.ts";
 export type { Retention } from "../DurableObjects.ts";
 
 export { Backfill, BackfillFailed, BackfillStillRunning } from "./Backfill.ts";
+export { D1KeyStore, type D1KeyStoreOptions } from "./D1KeyStore.ts";
 export { providers, Providers, type ProviderRequirements } from "./Providers.ts";
+export { SecretKeyWrap } from "./SecretKeyWrap.ts";
 
 /** A Cloudflare Durable Object namespace: Domain's, plus fetch, jurisdictions and placement. */
 interface CloudflareNamespace extends Namespace {

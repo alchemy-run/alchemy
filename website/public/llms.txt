@@ -1353,6 +1353,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Saga](https://alchemy.run/domain/saga) — A process that spans several aggregates and takes time, run step by step as an Effect workflow, with steps that undo earlier ones when a later one fails.
 - [Rewrite](https://alchemy.run/domain/rewrite) — How a rewrite changes events an aggregate instance has already recorded, and how its state, views, projections and streams follow.
 - [Compaction](https://alchemy.run/domain/compaction) — How a compaction replaces an aggregate instance's history with a roll-up of its state, where the replaced events go, and when an instance compacts.
+- [Sealed Value](https://alchemy.run/domain/sealed-value) — How a sealed value keeps a field encrypted under one subject's key, what the model sees of it, how a handler opens it, and what opening returns once the key is shredded.
 - [External System](https://alchemy.run/domain/external-system) — Declare the outside systems your model calls in the model's own language, implement them with Layers, and turn their events into commands.
 - [Api](https://alchemy.run/domain/api) — How an Api publishes a model to one kind of client, how it's served, and how a typed client calls it.
 - [Annotations](https://alchemy.run/domain/annotations) — Describe every declaration in an @alchemy.run/domain model, show the descriptions in MCP tools, CLI help and OpenAPI, and add keys of your own for tooling built on the model.
@@ -1363,7 +1364,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Story](https://alchemy.run/domain/story) — A specification you can run. Given some history, when a command is sent, then these events are recorded.
 - [Testing a model](https://alchemy.run/domain/testing-models) — Test your model's rules, views, policies and deadlines with stories that run it in memory.
 - [Verifying a model](https://alchemy.run/domain/verifying-models) — Write down what must always be true of your model, and have it proved, or searched for a sequence of commands that breaks it.
-- [What the prover reads](https://alchemy.run/domain/verifiable-code) — The TypeScript, the Effect helpers and the schemas that Verify reads as logic, and what happens to code outside that set.
+- [What can be verified](https://alchemy.run/domain/verifiable-code) — The TypeScript, the Effect helpers and the schemas that Verify supports, and what happens to code outside that set.
 - [Testing an Api](https://alchemy.run/domain/testing-apis) — Test what each client may do and see, in process, over HTTP, and against a real deployment.
 - [Plain HTTP and OpenAPI](https://alchemy.run/domain/http-api) — Publish an Api as a plain HTTP JSON API, with an OpenAPI document, from the same Api.
 - [CLI](https://alchemy.run/domain/cli) — Run an Api's calls from a terminal, as a person or an agent, against the deployed Api.
@@ -1377,6 +1378,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Unique values](https://alchemy.run/domain/unique-values) — Keep a value unique across every customer by giving the value an aggregate of its own, and deciding the claim together with what it's for.
 - [Deadlines](https://alchemy.run/domain/deadlines) — Give a waiting process a time limit with a scheduled command, and let the aggregate decide whether the deadline or the action wins.
 - [Erasing personal data](https://alchemy.run/domain/erasing-personal-data) — Remove a person's data from every aggregate that recorded it and everything built from those events, as one process that survives failures.
+- [Crypto-shredding](https://alchemy.run/domain/crypto-shredding) — Seal personal data under a key kept per person, and erase it everywhere at once by deleting the key, including the copies a rewrite can't reach.
 - [Closing the books](https://alchemy.run/domain/closing-the-books) — How to keep a long-lived record small by giving each period its own aggregate instance, and when to compact, archive or remove a period instead.
 - [History at scale](https://alchemy.run/domain/backfill) — How a deploy backfills new views and projections on Cloudflare, how long it takes, and how to run a large Domain within Cloudflare's limits.
 - [Observability](https://alchemy.run/domain/observability) — Trace how commands, events and reactions flow through an @alchemy.run/domain model, across Durable Objects and over hours. Automatic spans, correlation ids and metrics, plus the attributes your handlers record.
@@ -1385,4 +1387,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~290 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~292 KB) — only fetch it when you need to locate a specific resource's reference page.

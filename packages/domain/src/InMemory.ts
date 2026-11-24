@@ -14,6 +14,7 @@ import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "./Aggregate.ts"
 import * as Backfill from "./Backfill.ts";
 import { type Routed, targetId } from "./CatchUp.ts";
 import * as InMemoryWorkflows from "./InMemoryWorkflows.ts";
+import { memoryKeys } from "./KeyStore.ts";
 import {
   type Accepted,
   awaitsRevision,
@@ -2166,8 +2167,10 @@ export const make = (
     };
   });
   const claim = hostedModels({ release: true });
+  const keys = memoryKeys();
   const platform = Platform.of({
     model: ({ modelName, id }) => Effect.as(claim(modelName, id), hostFor(modelName)),
+    keys: Effect.succeed(keys),
   });
 
   return {

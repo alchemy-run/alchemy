@@ -150,7 +150,7 @@ describe("RivetGCP.ComputeEnginePool startup script", { tags: ["unit"] }, () => 
           "docker stop -t 30 rivet-node",
           "docker rm -f rivet-node",
           expect.stringMatching(
-            /^docker run -d --name rivet-node --restart always --network host --init --stop-timeout 30 --env-file \S+ -e RIVET_TOKEN -v \S+node.mjs:\/program\/node.mjs:ro -w \/app node:26-slim sh -c .*rivetkit@3.0.0 /,
+            /^docker run -d --name rivet-node --restart always --network host --init --stop-timeout 30 --env-file \S+ -e RIVET_TOKEN -v \S+node.mjs:\/program\/node.mjs:ro -w \/app node:26-slim sh -c .*rivetkit@\d+\.\d+\.\d+ /,
           ),
           "env RIVET_TOKEN=admin token",
           // Its own turn done, it tells node 3.

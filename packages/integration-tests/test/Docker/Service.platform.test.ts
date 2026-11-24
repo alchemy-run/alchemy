@@ -10,6 +10,8 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../Utils/Telemetry.ts";
+import BunService from "./fixtures/runtime/bun.ts";
+import NodeService from "./fixtures/runtime/node.ts";
 import TestServiceV2Scaled from "./fixtures/service-v2-scaled.ts";
 import TestServiceV2 from "./fixtures/service-v2.ts";
 import TestService from "./fixtures/service.ts";
@@ -284,3 +286,51 @@ test.provider(
     timeout: 300_000,
   },
 );
+
+// A service's `runtime` picks the image its program runs on, down to the
+// release, and moving it to another runtime rolls the service onto a new image.
+test.provider(
+  "a service runs on the runtime and version it names",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* ensureDockerSwarm;
+      yield* stack.destroy();
+
+      const versionsOf = (
+        ports: Parameters<typeof publishedUrl>[0],
+        until: (body: Versions) => boolean,
+      ) =>
+        HttpClient.get(publishedUrl(ports)).pipe(
+          Effect.flatMap((res) => res.json),
+          Effect.map((body) => body as unknown as Versions),
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+          Effect.repeat({ schedule: Schedule.spaced("2 seconds"), until, times: 30 }),
+        );
+
+      const bun = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* BunService;
+        }),
+      );
+      const onBun = yield* versionsOf(bun.ports, (body) => body.bun !== null);
+      expect(onBun.bun).toBe("1.3.13");
+
+      const node = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* NodeService;
+        }),
+      );
+      expect(node.id).toBe(bun.id);
+      expect(node.code?.hash).not.toBe(bun.code?.hash);
+      const onNode = yield* versionsOf(node.ports, (body) => body.bun === null);
+      expect(onNode.node.split(".")[0]).toBe("24");
+
+      yield* stack.destroy();
+    }),
+  { timeout: 300_000, tags: ["provider:docker", "provider:docker:service", "local"] },
+);
+
+interface Versions {
+  readonly bun: string | null;
+  readonly node: string;
+}

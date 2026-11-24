@@ -1,4 +1,8 @@
 import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
+import {
+  type ContainerRuntime,
+  resolveContainerRuntime,
+} from "@alchemy.run/docker/ContainerRuntime";
 import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
@@ -46,7 +50,6 @@ import {
   connectionOfOutput,
   deepMerge,
   imagePlatformOf,
-  makeServerBootstrap,
   resolveWorkloadImage,
   tryConnectionOf,
   workloadImageHash,
@@ -186,10 +189,16 @@ export interface BundledDeploymentProps extends DeploymentPropsBase {
   main: string;
   /**
    * Environment image used as the generated Dockerfile's `FROM`; must be
-   * able to run the bun runtime.
-   * @default "oven/bun:1"
+   * able to run the {@link runtime}.
+   * @default the {@link runtime}'s base image (`node:26-slim`)
    */
   image?: string;
+  /**
+   * Runtime the program runs on: `node` or `bun`, optionally with the
+   * version the base image is tagged with (`"node24"`, `"bun1.3.13"`).
+   * @default "node" (`node:26-slim`)
+   */
+  runtime?: ContainerRuntime;
   /** Named export to load from `main`. @default "default" */
   handler?: string;
   /** Bundler configuration for the entrypoint, and the image build's layer `cache`. */
@@ -682,9 +691,8 @@ export const DeploymentProvider = () =>
               platform: imagePlatformOf(news.architecture, connection),
               port: news.port ?? 3000,
               isExternal: news.isExternal,
-              bootstrap: (adapter.bootstrap?.server ?? makeServerBootstrap)(
-                source.handler ?? "default",
-              ),
+              mode: "server",
+              runtime: yield* resolveContainerRuntime(source.runtime),
             });
             if (hash !== undefined && hash !== output.code.hash) {
               return { action: "update" } as const;
@@ -763,9 +771,8 @@ export const DeploymentProvider = () =>
             platform: imagePlatformOf(news.architecture, connection),
             port,
             isExternal: news.isExternal,
-            bootstrap: (adapter.bootstrap?.server ?? makeServerBootstrap)(
-              source.handler ?? "default",
-            ),
+            mode: "server",
+            runtime: yield* resolveContainerRuntime(source.runtime),
             tags,
             state:
               (output?.registry as Record<string, unknown> | undefined) ??
