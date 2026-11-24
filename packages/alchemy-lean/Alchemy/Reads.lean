@@ -97,4 +97,15 @@ theorem Agrees.read_settled {σ : Signature} {reads : ReadSide σ.aggregates} {h
     exact List.map_eq_nil_iff.mp this.symm
   rw [agrees.read, World.delivered, empty, List.length_nil, Nat.sub_zero, List.take_length]
 
+/--
+With nothing waiting to be delivered, what is stored to be read is what the
+model computes from everything recorded, in a world the model can reach.
+-/
+theorem Model.Stands.read {m : Model} {reads : ReadSide m.signature.aggregates}
+    {h : Held m.signature reads} (stands : m.Stands h) (settled : h.pending = []) :
+    ∃ w, m.Reachable w ∧ h.state = w.state ∧
+      h.read = (w.log.map Emitted.unplaced).foldl reads.apply reads.initial := by
+  obtain ⟨w, reach, agrees⟩ := stands
+  exact ⟨w, reach, agrees.state, agrees.read_settled settled⟩
+
 end Alchemy

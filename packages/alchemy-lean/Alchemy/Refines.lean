@@ -580,6 +580,55 @@ theorem wake_stands (lawful : e.services.Lawful acts held sound) (plain : m.Loca
 
 end Engine
 
+/-! ## Everything a host does -/
+
+namespace Engine
+
+variable {μ : Type → Type} [Monad μ] {S : Type} {m : Model}
+  {reads : ReadSide m.signature.aggregates}
+
+/-- From one state of the stores to another, by what a host does with the engine. -/
+inductive Runs (e : Engine μ m reads) (acts : Acts μ S) : S → S → Prop where
+  | refl (st) : Runs e acts st st
+  /-- A caller sends a command the model offers. -/
+  | send {st st'} (s : Send m.signature.aggregates) : m.offered s → Runs e acts st st' →
+      Runs e acts st (acts.eval (e.send s) st').2
+  /-- The host wakes the model. -/
+  | wake {st st'} : Runs e acts st st' → Runs e acts st (acts.eval e.wake st').2
+
+variable {acts : Acts μ S} {held : S → Held m.signature reads} {sound : S → Prop}
+  {e : Engine μ m reads}
+
+/--
+Whatever a host does with the engine, on services that keep their laws, the
+stores go on standing for a world the model can reach.
+-/
+theorem Runs.stands (lawful : e.services.Lawful acts held sound) (plain : m.Local) {st st' : S}
+    (runs : e.Runs acts st st') (ok : sound st) (stands : m.Stands (held st)) :
+    m.Stands (held st') ∧ sound st' := by
+  induction runs with
+  | refl => exact ⟨stands, ok⟩
+  | send s offered _ ih =>
+    obtain ⟨after, stillSound, _⟩ := send_stands lawful plain s offered ih.2 ih.1
+    exact ⟨after, stillSound⟩
+  | wake _ ih => exact wake_stands lawful plain ih.2 ih.1
+
+end Engine
+
+namespace Model
+
+variable {m : Model} {reads : ReadSide m.signature.aggregates}
+
+/-- What is true of the states of every world the model can reach is true of what is stored. -/
+theorem Stands.holds {h : Held m.signature reads} (stands : m.Stands h)
+    {Q : States m.signature.aggregates → Prop} (always : ∀ w, m.Reachable w → Q w.state) :
+    Q h.state := by
+  obtain ⟨w, reach, agrees⟩ := stands
+  rw [agrees.state]
+  exact always w reach
+
+end Model
+
 /-! ## Stores held in memory -/
 
 namespace InMemory

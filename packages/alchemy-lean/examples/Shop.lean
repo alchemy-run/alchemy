@@ -327,11 +327,73 @@ def aKettle : List (Story.ModelStep Shop) := [
 /-- Told to the domain by itself, with the story playing the outside systems. -/
 example : Shop.passes aKettle = true := by decide
 
-/-! ## The stack -/
+/-! ## The shop, kept in stores
+
+Nothing above says where an order's state is kept. `Shop.Services` is what the
+shop asks of a host: a store for its aggregates, delivery of what they record,
+its calls. The engine is written once against them: it loads an order, decides,
+and commits the state the events leave. It replays nothing.
+-/
 
 /-- A payment gateway that approves anything up to a limit. It touches no resource. -/
 def sandboxCharge (order : String) (amount : Nat) (limit : Nat := 1000) : Charge :=
   if amount ≤ limit then .approved s!"ch_{order}" else .refused "over the limit"
+
+/-- The shop on services held in memory: what its stories and tests run on. -/
+def inMemory : Shop.Stored (StateM (Held Signature reads)) where
+  services := InMemory.services _ _ fun
+    | .charge order amount => sandboxCharge order amount
+    | .ship _ _ => ()
+
+/-- What the stores hold once a kettle is ordered, and what the caller was told. -/
+def aKettleOrdered :=
+  (inMemory.ask ⟨.Order, (), .place "o-1" "kettle" 40⟩).run (Held.start _ _)
+
+/-- The caller is told it is paid, the shipment is scheduled, and the Revenue view is kept up. -/
+example :
+    ((aKettleOrdered.1.toOption, (aKettleOrdered.2.state .Shipment "o-1").item,
+        Revenue.held aKettleOrdered.2.read ()) : Option Order.Status × Option String × Nat)
+      = (some (.paid "ch_o-1"), some "kettle", 40) := by
+  native_decide
+
+section AnyStores
+
+variable {μ : Type → Type} [Monad μ] {S : Type} {acts : Acts μ S}
+  {held : S → Held Signature reads} {sound : S → Prop}
+
+/--
+An order is charged at most once, wherever it is kept. For any services that
+keep their laws, whatever commands the host is sent and however often it wakes,
+every order the store holds satisfies the rule.
+-/
+theorem storedOrdersChargedOnce (shop : Shop.Stored μ) (lawful : shop.services.Lawful acts held sound)
+    {fresh now : S} (ok : sound fresh) (empty : held fresh = Held.start _ _)
+    (ran : shop.Runs acts fresh now) (id : String) :
+    ChargedOnce ((held now).state .Order id) :=
+  (ran.stands lawful Shop.plain ok (empty ▸ Model.Stands.start Shop)).1.holds
+    (Q := fun states => ChargedOnce (states .Order id))
+    fun w reach => everyOrderChargedOnce w reach id
+
+/--
+And the Revenue a store answers, once nothing is waiting to be delivered, is
+the Revenue of everything recorded in a world the shop can reach.
+-/
+theorem storedRevenueIsExact (shop : Shop.Stored μ) (lawful : shop.services.Lawful acts held sound)
+    {fresh now : S} (ok : sound fresh) (empty : held fresh = Held.start _ _)
+    (ran : shop.Runs acts fresh now) (delivered : (held now).pending = []) :
+    ∃ w, Shop.Reachable w ∧ Revenue.held (held now).read () = Revenue.stateAt w.log () := by
+  obtain ⟨w, reach, _, read⟩ :=
+    (ran.stands lawful Shop.plain ok (empty ▸ Model.Stands.start Shop)).1.read delivered
+  exact ⟨w, reach, by rw [read]; exact Revenue.stored w.log ()⟩
+
+end AnyStores
+
+/-- In memory is one such: the services keep their laws, so both hold of it. -/
+example (now : Held Signature reads) (ran : inMemory.Runs (InMemory.acts _) (Held.start _ _) now)
+    (id : String) : ChargedOnce (now.state .Order id) :=
+  storedOrdersChargedOnce inMemory (InMemory.lawful _ _ _) trivial rfl ran id
+
+/-! ## The stack -/
 
 /-- An order's status, as a response. -/
 def describe : Order.Status → Response
