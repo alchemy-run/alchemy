@@ -377,9 +377,7 @@ const primitive = (v: V): { readonly value: number | string | boolean | bigint }
     ? { value: v.value }
     : undefined;
 /** `==`, as the language has it between two values that are not objects. */
-const loosely = (a: unknown, b: unknown): boolean =>
-  // oxlint-disable-next-line eqeqeq
-  a == b;
+const loosely = (a: unknown, b: unknown): boolean => a == b;
 /** The operators of the bits of a whole number. */
 const BITS: ReadonlySet<string> = new Set(["&", "|", "^", "<<", ">>", ">>>"]);
 /** The highest power a number an input holds is raised to, as that many multiplications. */

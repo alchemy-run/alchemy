@@ -4851,7 +4851,275 @@ export const make = (
     ),
   };
 
+  // ---- Yet more of `Effect`.
+
+  /** A function that is its argument: `Effect.satisfiesSuccessType<number>()(effect)`. */
+  const itself =
+    (name: string): Model =>
+    () =>
+      Effect.succeed(native(name, ([self]) => Effect.succeed(self ?? Value.undef)));
+  /** An effect that ends as a cause of the code says. */
+  const endedBy = (cause: V | undefined, site: Site, name: string): Eval<never> => {
+    const real = realCause(cause);
+    if (!real) return wrongArguments(site, name);
+    const [die, fail] = [
+      real.reasons.find(Cause.isDieReason),
+      real.reasons.find(Cause.isFailReason),
+    ];
+    if (die && isOurDefect(die.defect))
+      return Effect.fail(new Value.Rejected({ rejection: die.defect.defect, defect: true }));
+    return fail ? Effect.fail(fail.error) : Effect.interrupt;
+  };
+  /** `restore`, as the code is given it: an effect that may be interrupted again. */
+  const restoring = (
+    timeline: Timeline.Timeline,
+    restore: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>,
+  ): V =>
+    native("restore", ([given_], at) =>
+      given_?._tag === "Effect"
+        ? Effect.succeed(effectFrom(timeline, restore(Timeline.real(timeline, given_.run))))
+        : wrongArguments(at, "restore"),
+    );
+  const masked =
+    (
+      name: string,
+      mask: (
+        f: (
+          restore: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>,
+        ) => Effect.Effect<V, Held>,
+      ) => Effect.Effect<V, Held>,
+    ): Model =>
+    ([f], site) =>
+      f
+        ? Effect.succeed(
+            timed(
+              name,
+              (timeline) =>
+                Timeline.back(
+                  timeline,
+                  mask((restore) => called(timeline, f, site)(restoring(timeline, restore))),
+                  same,
+                ),
+              site,
+            ),
+          )
+        : wrongArguments(site, name);
+
+  const yetMore: Models = {
+    "effect/Effect:matchCauseEager": (args, site) =>
+      (models["effect/Effect:matchCause"] ?? alias("effect/Effect:matchCause"))(args, site),
+    "effect/Effect:matchCauseEffectEager": (args, site) =>
+      (models["effect/Effect:matchCauseEffect"] ?? alias("effect/Effect:matchCauseEffect"))(
+        args,
+        site,
+      ),
+    "effect/Effect:satisfiesSuccessType": itself("Effect.satisfiesSuccessType"),
+    "effect/Effect:satisfiesErrorType": itself("Effect.satisfiesErrorType"),
+    "effect/Effect:satisfiesServicesType": itself("Effect.satisfiesServicesType"),
+    // What an effect is measured by decides nothing.
+    "effect/Effect:track": watched("Effect.track"),
+    "effect/Effect:trackDuration": watched("Effect.trackDuration"),
+    "effect/Effect:trackErrors": watched("Effect.trackErrors"),
+    "effect/Effect:trackSuccesses": watched("Effect.trackSuccesses"),
+    "effect/Effect:trackDefects": watched("Effect.trackDefects"),
+    "effect/Effect:logWithLevel": () =>
+      Effect.succeed(
+        native("Effect.logWithLevel", () =>
+          Effect.succeed(lazy(() => Effect.succeed(Value.undef))),
+        ),
+      ),
+    "effect/Effect:yieldNowWith": () =>
+      Effect.succeed(lazy(() => Effect.as(Effect.yieldNow, Value.undef))),
+    "effect/Effect:failCauseSync": ([f], site) =>
+      f
+        ? Effect.succeed(
+            lazy(() =>
+              Effect.flatMap(host.call(f, [], site), (cause) =>
+                endedBy(cause, site, "Effect.failCauseSync"),
+              ),
+            ),
+          )
+        : wrongArguments(site, "Effect.failCauseSync"),
+    // Nothing, or the effect's value in an Option.
+    "effect/Effect:transposeOption": ([given_], site) => {
+      const option_ = Value.optionOf(given_);
+      if (!option_) return wrongArguments(site, "Effect.transposeOption");
+      if (option_._tag === "None") return Effect.succeed(lazy(() => Effect.succeed(Value.none)));
+      const inner = option_.value;
+      return inner._tag === "Effect"
+        ? Effect.succeed(lazy(() => Effect.map(inner.run, Value.some)))
+        : wrongArguments(site, "Effect.transposeOption");
+    },
+    // Every item is tried: the errors of the ones that fail, all of them, or what each gave.
+    "effect/Effect:validate": dualBy(
+      "Effect.validate",
+      (v) => !callable(v),
+      ([given_, f, options_], site) => {
+        const fields = options_?._tag === "Obj" ? options_.fields : {};
+        if (!f || Object.keys(fields).some((key) => key !== "discard"))
+          return wrongArguments(site, "Effect.validate");
+        const discard = fields.discard?._tag === "Bool" && fields.discard.value;
+        return Effect.succeed(
+          lazy(() =>
+            Effect.gen(function* () {
+              const all = yield* items("Effect.validate", given_, site);
+              const [errors, values]: [Array<V>, Array<V>] = [[], []];
+              for (const [index, item] of all.entries()) {
+                const error = yield* Effect.matchEffect(ran(f, [item, num(index)], site), {
+                  onSuccess: (value) =>
+                    Effect.sync(() => {
+                      values.push(value);
+                      return undefined as V | undefined;
+                    }),
+                  onFailure: (stop): Eval<V | undefined> =>
+                    stop._tag === "Rejected" && stop.defect !== true
+                      ? Effect.succeed(stop.rejection)
+                      : Effect.fail(stop),
+                });
+                if (error) errors.push(error);
+              }
+              if (errors.length > 0) return yield* new Value.Rejected({ rejection: arr(errors) });
+              return discard ? Value.undef : arr(values);
+            }),
+          ),
+        );
+      },
+    ),
+    "effect/Effect:repeatOrElse": onEffect(
+      "Effect.repeatOrElse",
+      2,
+      (timeline, self, [given_, orElse], site) => {
+        const held = scheduleOf(given_);
+        return held && orElse
+          ? Timeline.back(
+              timeline,
+              Effect.repeatOrElse(
+                turn("Effect.repeatOrElse", timeline, self, site),
+                held,
+                (error, last) =>
+                  called(
+                    timeline,
+                    orElse,
+                    site,
+                  )(error.rejection, option(Option.map(last, outputOf))),
+              ),
+              outputOf,
+            )
+          : wrongArguments(site, "Effect.repeatOrElse");
+      },
+    ),
+    "effect/Effect:scheduleFrom": onEffect(
+      "Effect.scheduleFrom",
+      2,
+      (timeline, self, [initial, given_], site) => {
+        const held = scheduleOf(given_);
+        return held
+          ? Timeline.back(
+              timeline,
+              Effect.scheduleFrom(
+                turn("Effect.scheduleFrom", timeline, self, site),
+                initial ?? Value.undef,
+                held,
+              ),
+              outputOf,
+            )
+          : wrongArguments(site, "Effect.scheduleFrom");
+      },
+    ),
+    // What it gives, and an effect that forgets it.
+    "effect/Effect:cachedInvalidateWithTTL": onEffect(
+      "Effect.cachedInvalidateWithTTL",
+      1,
+      (timeline, self, [ttl], site) =>
+        Effect.flatMap(written("Effect.cachedInvalidateWithTTL", ttl, site), (time) =>
+          Timeline.back(
+            timeline,
+            Effect.cachedInvalidateWithTTL(self, time),
+            ([kept_, invalidate]) =>
+              arr([
+                effectFrom(timeline, kept_),
+                effectFrom(timeline, Effect.as(invalidate, Value.undef)),
+              ]),
+          ),
+        ),
+    ),
+    "effect/Effect:onExitIf": onEffect("Effect.onExitIf", 2, (timeline, self, [test, f], site) =>
+      f
+        ? Timeline.back(
+            timeline,
+            Effect.onExit(self, (exit) =>
+              sure(
+                Effect.flatMap(Timeline.real(timeline, exitOf(timeline, exit)), (held) =>
+                  Effect.flatMap(holding(timeline, test, held, site), (holds) =>
+                    holds ? called(timeline, f, site)(held) : Effect.succeed(Value.undef),
+                  ),
+                ),
+              ),
+            ),
+            same,
+          )
+        : wrongArguments(site, "Effect.onExitIf"),
+    ),
+    "effect/Effect:awaitAllChildren": onEffect("Effect.awaitAllChildren", 0, (timeline, self) =>
+      Timeline.back(timeline, Effect.awaitAllChildren(self), same),
+    ),
+    "effect/Effect:uninterruptibleMask": masked("Effect.uninterruptibleMask", (f) =>
+      Effect.uninterruptibleMask(f),
+    ),
+    "effect/Effect:interruptibleMask": masked("Effect.interruptibleMask", (f) =>
+      Effect.interruptibleMask(f),
+    ),
+    // The function is called at once, and given what ends the effect: the effect ends when it is called.
+    "effect/Effect:callback": ([register], site) =>
+      register
+        ? Effect.succeed(
+            timed(
+              "Effect.callback",
+              (timeline) =>
+                Timeline.back(
+                  timeline,
+                  Timeline.waiting(
+                    timeline,
+                    "waits for an Effect.callback that nothing ends",
+                    site,
+                    Effect.callback<V, Held>((resume) => {
+                      const ending = native("resume", ([given_], at) =>
+                        given_?._tag === "Effect"
+                          ? Effect.sync(() => {
+                              resume(Timeline.real(timeline, given_.run));
+                              return Value.undef;
+                            })
+                          : wrongArguments(at, "resume"),
+                      );
+                      try {
+                        const cleanup = host.atOnce(register, [ending], site);
+                        return cleanup._tag === "Effect"
+                          ? sure(Timeline.real(timeline, cleanup.run))
+                          : undefined;
+                      } catch {
+                        resume(
+                          Timeline.real(
+                            timeline,
+                            unseen(
+                              site,
+                              "calls Effect.callback with a function the prover cannot run at once",
+                            ),
+                          ),
+                        );
+                        return undefined;
+                      }
+                    }),
+                  ),
+                  same,
+                ),
+              site,
+            ),
+          )
+        : wrongArguments(site, "Effect.callback"),
+  };
+
   const models: Models = {
+    ...yetMore,
     ...turns,
     ...rest,
     ...more,

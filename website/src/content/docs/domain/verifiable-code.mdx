@@ -2672,6 +2672,20 @@ Effect.schedule(Ref.update(runs, (n) => n + 1), Schedule.recurs(2));
 Effect.retryOrElse(even(a), Schedule.recurs(1), (error) => Effect.succeed(-error.n));
 Effect.cached(Ref.updateAndGet(runs, (n) => n + 1)); // run the first time what it gives is run, and never again
 Effect.cachedWithTTL(Ref.updateAndGet(runs, (n) => n + 1), "1 second");
+Effect.cachedInvalidateWithTTL(Ref.updateAndGet(runs, (n) => n + 1), "1 second"); // and an effect that forgets it
+Effect.repeatOrElse(Effect.flatMap(Ref.updateAndGet(runs, (n) => n + 1), (n) => (n > 2 ? Effect.fail(n + a) : Effect.succeed(n))), Schedule.recurs(5), (error, last) => Effect.succeed([error, Option.isSome(last)]));
+Effect.scheduleFrom(Ref.update(runs, (n) => n + 1), a, Schedule.recurs(2));
+Effect.validate([a, b], (n) => even(n)); // every item is tried, and it fails with all their errors
+Effect.validate((n, i) => positive(n - i), { discard: true });
+Effect.transposeOption(Option.some(even(a)));
+Effect.failCauseSync(() => Cause.fail(new Odd({ n: a })));
+Effect.onExitIf(Exit.isFailure, () => log(seen, "failed"));
+Effect.awaitAllChildren(Effect.forkChild(Effect.andThen(Effect.sleep(1), log(seen, a))));
+Effect.uninterruptibleMask((restore) => Effect.map(restore(even(a)), (n) => n + b));
+Effect.interruptibleMask((restore) => Effect.andThen(restore(Effect.sleep(1)), Effect.succeed(a)));
+Effect.callback((resume) => {
+  resume(Effect.succeed(a + b)); // called before the function returns
+});
 Effect.forkIn(Effect.as(Effect.sleep(1), a), scope);
 Effect.scopedWith((scope) => Effect.as(Scope.addFinalizer(scope, log(seen, "closed")), a));
 
@@ -2682,6 +2696,18 @@ Effect.mapErrorEager((error) => error.n);
 Effect.mapBothEager({ onFailure: (n) => n + 1, onSuccess: (n) => n - 1 });
 Effect.matchEager({ onFailure: (n) => ["no", n], onSuccess: (n) => ["yes", n] });
 Effect.catchEager(() => Effect.succeed(0));
+Effect.matchCauseEager(even(a), { onFailure: (cause) => (Cause.hasFails(cause) ? -1 : -2), onSuccess: (n) => n + b });
+Effect.matchCauseEffectEager(even(a), { onFailure: () => Effect.succeed(-1), onSuccess: (n) => Effect.succeed(n - b) });
+Effect.satisfiesSuccessType()(Effect.succeed(a));
+Effect.satisfiesErrorType();
+Effect.satisfiesServicesType();
+Effect.track(Metric.counter("runs"));
+Effect.trackDuration(Metric.timer("took"));
+Effect.trackErrors(Metric.counter("errors"));
+Effect.trackSuccesses(Metric.counter("ok"));
+Effect.trackDefects(Metric.counter("defects"));
+Effect.logWithLevel("Debug")("seen", a);
+Effect.yieldNowWith(1);
 Effect.fnUntracedEager(function* (n) {
   return (yield* Effect.succeed(n)) + 1;
 });
