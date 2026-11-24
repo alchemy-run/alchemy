@@ -29,6 +29,9 @@ const READ = new Set([
   "Hash",
   "Graph",
   "HashRing",
+  "Bytes",
+  "Layer",
+  "Context",
   ...["TxReentrantLock", "TxRef", "TxSemaphore", "TxSubscriptionRef", "index"],
 ]);
 

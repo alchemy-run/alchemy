@@ -268,6 +268,21 @@ interface Kept {
   readonly entries: Array<readonly [V, V]>;
 }
 const kept = new WeakMap<object, Kept>();
+/** `new Uint8Array([1, 2])`: bytes the code writes, as the language holds them. */
+const BYTES: V = {
+  _tag: "Native",
+  name: "Uint8Array",
+  call: ([given], at) => {
+    const real = given ? Known.real(given) : { value: 0 };
+    return real && (typeof real.value === "number" || Array.isArray(real.value))
+      ? Effect.sync((): V => ({
+          _tag: "Host",
+          value: new Uint8Array(real.value as ArrayLike<number>),
+          name: "bytes",
+        }))
+      : Effect.fail(Value.notTranslated(at, "makes bytes of values the prover cannot see"));
+  },
+};
 /** `Map` and `Set`, which `new` makes one of. */
 const KEEPERS: ReadonlyMap<string, V> = new Map(
   (["Map", "Set"] as const).map((name) => [
@@ -331,7 +346,9 @@ const globalOf = (name: string): V | undefined =>
           ? { _tag: "Lib", module: "global", path: [name] }
           : name === "globalThis"
             ? { _tag: "Lib", module: "globalThis", path: [] }
-            : (ERRORS.get(name) ?? KEEPERS.get(name));
+            : name === "Uint8Array"
+              ? BYTES
+              : (ERRORS.get(name) ?? KEEPERS.get(name));
 
 const BREAK: V = { _tag: "Opaque", what: "break" };
 /** `break outer` and `continue outer`: one value for each label, to find the statement it names. */
@@ -346,6 +363,12 @@ const toLabel = (kind: "break" | "continue", label: string): V => {
 };
 /** How deep one function may call another before the prover stops: one that calls itself with no end is not read. */
 const MAX_DEPTH = 500;
+/** A service of `effect/Context`: a key under which the code around provides a value. */
+const isService = (
+  value: unknown,
+): value is { readonly key: string; readonly defaultValue?: unknown } =>
+  (typeof value === "function" || (typeof value === "object" && value !== null)) &&
+  typeof (value as { readonly key?: unknown }).key === "string";
 const isIterable = (value: unknown): value is Iterable<unknown> =>
   typeof value === "object" && value !== null && Symbol.iterator in value;
 /** A number, text, a boolean or a bigint the code writes. */
@@ -1629,6 +1652,9 @@ export const make = (given: Loader, run: Run): Interpreter => {
           !value.fields.pipe
         )
           return piping(value);
+        // A layer and a context are put together with `pipe`.
+        if (key === "pipe" && (value.fields["~layer"] || value.fields["~context"]))
+          return piping(value);
         const keeper = kept.get(value);
         if (keeper)
           return (
@@ -1773,6 +1799,8 @@ export const make = (given: Loader, run: Run): Interpreter => {
         const pattern = Strings.patternOf(value);
         const asked = pattern ? patternMember(pattern, key) : undefined;
         if (asked) return asked;
+        // `Rate.pipe(Effect.map(f))`: a service, given to each function in turn.
+        if (key === "pipe" && isService(value.value)) return piping(value);
         // `Started.make(fields)`: the event, as `new Started(fields)` builds it.
         if (key === "make" && isDomainClass(value.value))
           return {
@@ -2358,10 +2386,37 @@ export const make = (given: Loader, run: Run): Interpreter => {
         return fn.call(args.map(whole), site).pipe(retaken(fn, args, site));
       case "Lib": {
         // A library function goes over what it is given: every field of it is chosen first.
-        if (library.models(fn))
-          return library
-            .call(fn, passes(fn) ? args : args.map(whole), site)
-            .pipe(retaken(fn, args, site));
+        if (library.models(fn)) {
+          // A service is an effect that gives what is provided for it: `Effect.map(Rate, f)`.
+          const served = fn.module === "effect/Effect" && fn.path.length === 1;
+          const serving = (given: ReadonlyArray<V>, at: Site): ReadonlyArray<V> => {
+            const first = given[0];
+            const name = fn.path[0];
+            return served &&
+              first?._tag === "Host" &&
+              isService(first.value) &&
+              name !== "service" &&
+              !(name === "provideService" && given.length < 3)
+              ? [
+                  { _tag: "Effect", run: Effect.suspend(() => settle(first, at)) },
+                  ...given.slice(1),
+                ]
+              : given;
+          };
+          const taken = serving(args, site);
+          return library.call(fn, passes(fn) ? taken : taken.map(whole), site).pipe(
+            // Written to be given the effect by `pipe`: the service is what it is given then.
+            Effect.map((gave) =>
+              served && gave._tag === "Native"
+                ? {
+                    ...gave,
+                    call: (given: ReadonlyArray<V>, at: Site) => gave.call(serving(given, at), at),
+                  }
+                : gave,
+            ),
+            retaken(fn, args, site),
+          );
+        }
         const given = loader.opaque(fn.host, fn.path.at(-1));
         if (given) return Effect.succeed(applied(given, args, "is opaque"));
         // A function of Node's that gives the same result for the same arguments.
@@ -2425,6 +2480,19 @@ export const make = (given: Loader, run: Run): Interpreter => {
       current.run.contexts.set(key, { tag, value: made });
       return Effect.succeed(made);
     }
+    if (value._tag === "Host" && isService(value.value)) {
+      // A service: what the code around provides, or what the service itself gives when none does.
+      const given = hooks.provided.get(value.value);
+      if (given) return Effect.succeed(given);
+      const fallback = value.value.defaultValue;
+      const made_ =
+        typeof fallback === "function"
+          ? Known.known((fallback as () => unknown)(), value.name)
+          : undefined;
+      return made_
+        ? Effect.succeed(made_)
+        : reaches(site, `yields ${value.name}, a service that nothing around it provides`);
+    }
     return reaches(site, "yields a value the prover has no model for");
   };
 
@@ -2463,6 +2531,7 @@ export const make = (given: Loader, run: Run): Interpreter => {
         return yield* constructData(cls, args, site);
       if (cls._tag === "Native" && (library.isClass(cls) || ERROR_CLASSES.has(cls)))
         return yield* cls.call(args, site);
+      if (cls === BYTES) return yield* BYTES.call(args, site);
       if (cls === KEEPERS.get("Map")) return yield* keeping("Map", args[0], site);
       if (cls === KEEPERS.get("Set")) return yield* keeping("Set", args[0], site);
       if (classes.has(cls)) {

@@ -1633,6 +1633,165 @@ export const make = (host: Host) => {
       return undefined;
     });
 
+  // ---- Services provided to an effect: a layer and a context are the values they provide.
+
+  /** What a layer or a context provides, by service, in the order it was put together. */
+  type Provided = ReadonlyArray<readonly [service: unknown, value: V]>;
+  const builders = new WeakMap<object, (site: Site) => Eval<Provided>>();
+  const contexts = new WeakMap<object, Provided>();
+  const layerOf = (build: (site: Site) => Eval<Provided>): V => {
+    const made = Value.obj({ "~layer": Value.bool(true) });
+    builders.set(made, build);
+    return made;
+  };
+  const contextOf = (provided: Provided): V => {
+    const made = Value.obj({ "~context": Value.bool(true) });
+    contexts.set(made, provided);
+    return made;
+  };
+  const serviceOf = (name: string, tag: V | undefined, site: Site): Eval<unknown> =>
+    tag?._tag === "Host" ? Effect.succeed(tag.value) : wrongArguments(site, name);
+  /** An effect with services provided around it: it reads them, and nothing after it does. */
+  const providing = <A>(provided: Provided, self: Eval<A>): Eval<A> =>
+    Effect.suspend(() => {
+      const before = provided.map(([service]) => [service, host.provided.get(service)] as const);
+      for (const [service, value] of provided) host.provided.set(service, value);
+      return self.pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            for (const [service, value] of before.toReversed())
+              if (value) host.provided.set(service, value);
+              else host.provided.delete(service);
+          }),
+        ),
+      );
+    });
+  /** What a layer, a context or a list of layers provides, built now. */
+  const built = (name: string, given: V | undefined, site: Site): Eval<Provided> => {
+    const build = given ? builders.get(given) : undefined;
+    if (build) return build(site);
+    const context = given ? contexts.get(given) : undefined;
+    if (context) return Effect.succeed(context);
+    const several = kit.itemsOf(given);
+    if (!several) return wrongArguments(site, name);
+    return Effect.gen(function* () {
+      const all: Array<readonly [unknown, V]> = [];
+      for (const each of several) all.push(...(yield* built(name, each, site)));
+      return all;
+    });
+  };
+  const merged = (name: string, given: ReadonlyArray<V>): V =>
+    layerOf((site) =>
+      Effect.gen(function* () {
+        const all: Array<readonly [unknown, V]> = [];
+        for (const each of given) all.push(...(yield* built(name, each, site)));
+        return all;
+      }),
+    );
+  /** A layer of one service, made by an effect that reads what is provided around it. */
+  const one =
+    (name: string, value: (given: V | undefined, site: Site) => Eval<V>): Model =>
+    (args) => {
+      const made = (tag: V | undefined, given: V | undefined): V =>
+        layerOf((at) =>
+          Effect.flatMap(serviceOf(name, tag, at), (service) =>
+            Effect.map(value(given, at), (held) => [[service, held] as const]),
+          ),
+        );
+      // `Layer.succeed(Db, db)` and `Layer.succeed(Db)(db)`.
+      return Effect.succeed(
+        args.length >= 2
+          ? made(args[0], args[1])
+          : native(name, ([given]) => Effect.succeed(made(args[0], given))),
+      );
+    };
+  const wiring: Record<string, Model> = {
+    "effect/Layer:succeed": one("Layer.succeed", (given) => Effect.succeed(given ?? Value.undef)),
+    "effect/Layer:sync": one("Layer.sync", (given, site) =>
+      given ? host.call(given, [], site) : wrongArguments(site, "Layer.sync"),
+    ),
+    "effect/Layer:effect": one("Layer.effect", (given, site) =>
+      given?._tag === "Effect" ? given.run : wrongArguments(site, "Layer.effect"),
+    ),
+    "effect/Layer:effectDiscard": ([given], site) =>
+      given?._tag === "Effect"
+        ? Effect.succeed(layerOf(() => Effect.as(given.run, [])))
+        : wrongArguments(site, "Layer.effectDiscard"),
+    "effect/Layer:succeedContext": ([given], site) => {
+      const context = given ? contexts.get(given) : undefined;
+      return context
+        ? Effect.succeed(layerOf(() => Effect.succeed(context)))
+        : wrongArguments(site, "Layer.succeedContext");
+    },
+    "effect/Layer:merge": dual("Layer.merge", 2, ([self, that]) =>
+      Effect.succeed(merged("Layer.merge", [self!, that ?? Value.undef])),
+    ),
+    "effect/Layer:mergeAll": (args) => Effect.succeed(merged("Layer.mergeAll", args)),
+    // What the second provides is there while the first is built, and is not what the result provides.
+    "effect/Layer:provide": dual("Layer.provide", 2, ([self, needs]) =>
+      Effect.succeed(
+        layerOf((site) =>
+          Effect.flatMap(built("Layer.provide", needs, site), (provided) =>
+            providing(provided, built("Layer.provide", self, site)),
+          ),
+        ),
+      ),
+    ),
+    "effect/Layer:provideMerge": dual("Layer.provideMerge", 2, ([self, needs]) =>
+      Effect.succeed(
+        layerOf((site) =>
+          Effect.flatMap(built("Layer.provideMerge", needs, site), (provided) =>
+            Effect.map(providing(provided, built("Layer.provideMerge", self, site)), (own) => [
+              ...provided,
+              ...own,
+            ]),
+          ),
+        ),
+      ),
+    ),
+    "effect/Layer:fresh": ([self]) => Effect.succeed(self ?? Value.undef),
+    "effect/Layer:isLayer": ([value]) =>
+      Effect.succeed(Value.bool(value !== undefined && builders.has(value))),
+    "effect/Effect:provide": onEffect("Effect.provide", 1, (self, [given], site) =>
+      Effect.flatMap(built("Effect.provide", given, site), (provided) => providing(provided, self)),
+    ),
+    "effect/Context:empty": () => Effect.succeed(contextOf([])),
+    "effect/Context:make": ([tag, value], site) =>
+      Effect.map(serviceOf("Context.make", tag, site), (service) =>
+        contextOf([[service, value ?? Value.undef]]),
+      ),
+    "effect/Context:add": dual("Context.add", 3, ([self, tag, value], site) => {
+      const held = self ? contexts.get(self) : undefined;
+      return held
+        ? Effect.map(serviceOf("Context.add", tag, site), (service) =>
+            contextOf([
+              ...held.filter(([each]) => each !== service),
+              [service, value ?? Value.undef],
+            ]),
+          )
+        : wrongArguments(site, "Context.add");
+    }),
+    "effect/Context:merge": dual("Context.merge", 2, ([self, that], site) => {
+      const [a, b] = [self ? contexts.get(self) : undefined, that ? contexts.get(that) : undefined];
+      return a && b
+        ? Effect.succeed(
+            contextOf([...a.filter(([each]) => !b.some(([other]) => other === each)), ...b]),
+          )
+        : wrongArguments(site, "Context.merge");
+    }),
+    "effect/Context:getOption": dual("Context.getOption", 2, ([self, tag], site) => {
+      const held = self ? contexts.get(self) : undefined;
+      return held
+        ? Effect.map(serviceOf("Context.getOption", tag, site), (service) => {
+            const found = held.find(([each]) => each === service);
+            return found ? Value.some(found[1]) : Value.none;
+          })
+        : wrongArguments(site, "Context.getOption");
+    }),
+    "effect/Context:isContext": ([value]) =>
+      Effect.succeed(Value.bool(value !== undefined && contexts.has(value))),
+  };
+
   /** `parseInt` and `parseFloat`, of text the code writes. */
   const parsed = (name: string, text: V | undefined, radix: V | undefined, site: Site): Eval<V> =>
     text?._tag === "Str" && (radix === undefined || radix._tag === "Undef" || radix._tag === "Num")
@@ -1670,6 +1829,7 @@ export const make = (host: Host) => {
     extending.set(made, extended);
     return made;
   };
+  Object.assign(written, wiring);
   const fibers = Fibers.make(kit, { ...written }, asClass);
   Object.assign(written, fibers.models);
   Object.assign(clocks, fibers.sited);
@@ -1746,6 +1906,7 @@ export const make = (host: Host) => {
     ...rationals.values,
     ...streams.values,
     ...folds.constants,
+    "effect/Layer:empty": layerOf(() => Effect.succeed([])),
     "Number:MAX_SAFE_INTEGER": Value.num(Number.MAX_SAFE_INTEGER),
     "Number:MIN_SAFE_INTEGER": Value.num(Number.MIN_SAFE_INTEGER),
     ...exits.values,

@@ -2416,7 +2416,10 @@ const rest: ReadonlyArray<Group> = [
     unread: [
       [`absurd(a)`, /reaches absurd/],
       // Bytes are not a value the prover holds.
-      [`Bytes.Equivalence(new Uint8Array([a]), new Uint8Array([b]))`, reported],
+      [
+        `Bytes.Equivalence(new Uint8Array([a]), new Uint8Array([b]))`,
+        /makes bytes of values the prover cannot see/,
+      ],
     ],
     prelude: [`export class Plain extends Data.Error<{ readonly code: number }> {}`],
     both: [
@@ -3421,6 +3424,43 @@ const rest: ReadonlyArray<Group> = [
       [
         `Graph.nodeCount(Graph.directed((mutable) => { Graph.addNode(mutable, { n: "t" + a }); }))`,
         /./,
+      ],
+    ],
+  },
+  {
+    // Services an effect is provided with: by a layer, by a context, or one at a time.
+    name: "Wired",
+    chunk: 3,
+    ...numbers,
+    effectful: true,
+    prelude: [
+      `import * as Layer from "effect/Layer";`,
+      `import * as Context from "effect/Context";`,
+      `export class Rate extends Context.Service<Rate, { readonly percent: number }>()("test/Rate") {}`,
+      `export class Fee extends Context.Service<Fee, { readonly flat: number }>()("test/Fee") {}`,
+      `export class Step extends Context.Reference<number>("test/Step", { defaultValue: () => 5 }) {}`,
+      `const priced = Effect.gen(function* () { const rate = yield* Rate; const fee = yield* Fee; return rate.percent + fee.flat; });`,
+    ],
+    both: [
+      `Effect.provideService(Effect.map(Rate, (rate) => rate.percent + a), Rate, { percent: b })`,
+      `Rate.pipe(Effect.map((rate) => rate.percent * 2), Effect.provideService(Rate, { percent: a }))`,
+      `Effect.flatMap(Rate, (rate) => Effect.succeed(rate.percent - b)).pipe(Effect.provide(Layer.succeed(Rate, { percent: a }).pipe(Layer.merge(Layer.empty))))`,
+      `priced.pipe(Effect.provide(Layer.mergeAll(Layer.succeed(Rate, { percent: a }), Layer.succeed(Fee)({ flat: b }))))`,
+      `Effect.provide(priced, Layer.merge(Layer.sync(Rate, () => ({ percent: a * 2 })), Layer.effect(Fee, Effect.succeed({ flat: 1 }))))`,
+      `priced.pipe(Effect.provide(Layer.provideMerge(Layer.effect(Fee, Effect.map(Rate, (rate) => ({ flat: rate.percent + 1 }))), Layer.succeed(Rate, { percent: a }))))`,
+      `Effect.gen(function* () { const fee = yield* Fee; return fee.flat; }).pipe(Effect.provide(Layer.provide(Layer.effect(Fee, Effect.map(Rate, (rate) => ({ flat: rate.percent * 3 }))), Layer.succeed(Rate, { percent: b }))))`,
+      `priced.pipe(Effect.provide([Layer.succeed(Rate, { percent: a }), Layer.succeed(Fee, { flat: 2 })]))`,
+      `priced.pipe(Effect.provide(Context.make(Rate, { percent: a }).pipe(Context.add(Fee, { flat: b }))))`,
+      `Effect.succeed([Context.getOption(Context.make(Rate, { percent: a }), Rate), Context.getOption(Context.empty(), Fee), Context.isContext(Context.empty()), Context.isContext(a), Layer.isLayer(Layer.empty), Layer.isLayer(a)])`,
+      `priced.pipe(Effect.provide(Layer.succeedContext(Context.merge(Context.make(Rate, { percent: 1 }), Context.make(Fee, { flat: a })))))`,
+      `Effect.gen(function* () { const outer = yield* Step; const inner = yield* Effect.provideService(Step, Step, a); return [outer, inner, yield* Step]; })`,
+      `priced.pipe(Effect.provide(Layer.fresh(Layer.mergeAll(Layer.succeed(Rate, { percent: a }), Layer.succeed(Fee, { flat: 0 }), Layer.effectDiscard(Effect.void), Layer.empty))))`,
+      `Effect.succeed([Bytes.concat(new Uint8Array([1, 2]), new Uint8Array([3])).length, Bytes.Equivalence(new Uint8Array([1]), new Uint8Array([1])), Bytes.Order(new Uint8Array([1]), new Uint8Array([2])), new Uint8Array(3).length, a])`,
+    ],
+    unread: [
+      [
+        `Effect.gen(function* () { const rate = yield* Rate; return rate.percent + a; })`,
+        /yields .*a service that nothing around it provides/,
       ],
     ],
   },

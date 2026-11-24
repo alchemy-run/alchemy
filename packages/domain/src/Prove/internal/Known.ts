@@ -3,6 +3,7 @@ import * as BigDecimal from "effect/BigDecimal";
 import * as BigInt_ from "effect/BigInt";
 import * as Boolean_ from "effect/Boolean";
 import * as Brand_ from "effect/Brand";
+import * as Bytes_ from "effect/Bytes";
 import * as ByteSize_ from "effect/ByteSize";
 import * as Chunk_ from "effect/Chunk";
 import * as Cron_ from "effect/Cron";
@@ -64,6 +65,7 @@ const PURE: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   "effect/Boolean": Boolean_,
   "effect/Brand": Brand_,
   "effect/ByteSize": ByteSize_,
+  "effect/Bytes": Bytes_,
   "effect/Chunk": Chunk_,
   "effect/Cron": Cron_,
   "effect/Duration": Duration,

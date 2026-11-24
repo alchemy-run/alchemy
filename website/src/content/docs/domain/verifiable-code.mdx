@@ -2517,6 +2517,40 @@ Schema.encodeEffect(Ticket)({ n: 2, note: "n" });
 Schema.isSchemaError;
 ```
 
+```typescript title="effect/Layer, effect/Context and services"
+// A service is an effect that gives what the code around provides for it.
+Effect.provideService(Effect.map(Rate, (rate) => rate.percent + a), Rate, { percent: b });
+Rate.pipe(Effect.map((rate) => rate.percent * 2), Effect.provideService(Rate, { percent: a }));
+Layer.succeed(Rate, { percent: a });
+Layer.succeed(Fee)({ flat: b });
+Layer.sync(Rate, () => ({ percent: a * 2 }));
+Layer.effect(Fee, Effect.map(Rate, (rate) => ({ flat: rate.percent + 1 }))); // it reads what is provided while it is built
+Layer.effectDiscard(Effect.void);
+Layer.empty;
+Layer.merge(Layer.empty);
+Layer.mergeAll(Layer.succeed(Rate, { percent: a }), Layer.succeed(Fee)({ flat: b }));
+Layer.provide(Layer.effect(Fee, Effect.map(Rate, (rate) => ({ flat: rate.percent * 3 }))), Layer.succeed(Rate, { percent: b }));
+Layer.provideMerge(Layer.effect(Fee, Effect.map(Rate, (rate) => ({ flat: rate.percent + 1 }))), Layer.succeed(Rate, { percent: a }));
+Layer.succeedContext(Context.merge(Context.make(Rate, { percent: 1 }), Context.make(Fee, { flat: a })));
+Layer.fresh;
+Layer.isLayer(a);
+Effect.provide(priced, Layer.merge(Layer.sync(Rate, () => ({ percent: a * 2 })), Layer.effect(Fee, Effect.succeed({ flat: 1 }))));
+Effect.provide([Layer.succeed(Rate, { percent: a }), Layer.succeed(Fee, { flat: 2 })]);
+Context.make(Rate, { percent: a });
+Context.add(Fee, { flat: b });
+Context.empty();
+Context.getOption(Context.make(Rate, { percent: a }), Rate);
+Context.isContext(a);
+Effect.provideService(Step, Step, a); // a Context.Reference gives its own value where nothing provides one
+```
+
+```typescript title="effect/Bytes"
+// Bytes the code writes.
+Bytes.concat(new Uint8Array([1, 2]), new Uint8Array([3]));
+Bytes.Equivalence(new Uint8Array([1]), new Uint8Array([1]));
+Bytes.Order(new Uint8Array([1]), new Uint8Array([2]));
+```
+
 ```typescript title="effect/Graph and effect/HashRing"
 // Of values the code writes, these are the library's own: a function the code gives one is called where the library calls it.
 const roads = Graph.directed((mutable) => {
@@ -3079,13 +3113,11 @@ Cron.next(cron); // next, prev and sequence use the clock when they are given no
 Metric.value(orders); // reads a metric: what one holds is not what a handler decides by
 ```
 
-These say how a program is put together and watched, not what it decides. A [request context](#effects-and-failures) a handler yields is supported.
+These say how a program is put together and watched, not what it decides. A [request context](#effects-and-failures) a handler yields is supported, and so is a service an effect is [provided with](#library-functions) by a layer or a context.
 
 ```typescript title="Wiring"
-import * as Layer from "effect/Layer";
 import * as LayerMap from "effect/LayerMap";
 import * as LayerRef from "effect/LayerRef";
-import * as Context from "effect/Context";
 import * as References from "effect/References";
 import * as Runtime from "effect/Runtime";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -3110,12 +3142,6 @@ import * as Arbitrary from "effect/Arbitrary";
 
 Schema.decodeUnknownSync(Schema.NumberFromString)("1"); // a schema that changes the value it reads
 Schema.is(Schema.Record(Schema.String, Schema.Number))(input); // a schema the prover does not read in full
-```
-
-`Bytes` works on byte arrays, which are not a value the prover holds.
-
-```typescript title="Working on bytes"
-import * as Bytes from "effect/Bytes";
 ```
 
 These hold types and the library's own machinery, with nothing for a handler to call.

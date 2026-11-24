@@ -39,6 +39,8 @@ const ONE_WAY: ReadonlySet<string> = new Set([
   "Array:isArray",
   // A metric of numbers and one of bigints: two ways to write its options, neither given by `pipe`.
   ...["effect/Metric:counter", "effect/Metric:gauge"],
+  // The service comes first either way: `Layer.succeed(Rate)(value)`.
+  ...["effect/Layer:succeed", "effect/Layer:sync", "effect/Layer:effect"],
 ]);
 
 const declared = new Map<string, ReadonlySet<string>>();
