@@ -2218,6 +2218,7 @@ TxSemaphore.available(permits);
 TxSemaphore.isTxSemaphore(permits);
 TxSemaphore.capacity(permits);
 TxSemaphore.withPermit(permits)(Effect.succeed(a));
+TxSemaphore.withPermitScoped(permits); // in a scope: given back when it closes
 TxSemaphore.withPermits(permits, 1, Effect.succeed(b));
 const hub = yield* TxPubSub.unbounded();
 TxPubSub.bounded(2);
@@ -2257,6 +2258,8 @@ TxReentrantLock.readLocked(lock);
 TxReentrantLock.isTxReentrantLock(lock);
 TxReentrantLock.writeLocked(lock);
 TxReentrantLock.withLock(lock, log(seen, "locked"));
+TxReentrantLock.readLock(lock); // in a scope, as is the next
+TxReentrantLock.writeLock(lock);
 TxReentrantLock.withReadLock(lock, Effect.andThen(log(seen, name + " reads"), Effect.sleep(millis)));
 TxReentrantLock.withWriteLock(lock, Effect.andThen(log(seen, "writes"), Effect.sleep(2)));
 pipe(lock, TxReentrantLock.withLock(Effect.succeed(a)));
@@ -2285,6 +2288,9 @@ ScopedCache.getSuccess(files, "milk");
 ScopedCache.refresh(files, "tea");
 ScopedCache.values(files);
 ScopedCache.invalidateAll(files);
+ScopedCache.keys(files);
+ScopedCache.entries(files);
+ScopedCache.invalidateWhen(files, "tea", (n) => n > b);
 ```
 
 ```typescript title="effect/Request and effect/RequestResolver"
@@ -2343,6 +2349,9 @@ TxHashMap.toEntries(stock);
 TxHashMap.snapshot(stock);
 TxHashMap.map(stock, (n) => n * 2); // a new one
 TxHashMap.filter(stock, (n) => n > 0);
+TxHashMap.filterMap(kept, (n) => (n > b ? Result.succeed(n * 2) : Result.fail(n)));
+TxHashMap.compact(stock);
+TxHashMap.isTxHashMap(stock);
 TxHashMap.reduce(stock, 0, (total, n) => total + n);
 TxHashMap.some(stock, (n) => n > a);
 TxHashMap.every(stock, (n) => n >= a);
@@ -2365,6 +2374,7 @@ TxHashSet.union(left, right);
 TxHashSet.intersection(left, right);
 TxHashSet.difference(left, right);
 TxHashSet.isSubset(both, left);
+TxHashSet.toHashSet(set);
 TxHashSet.map(left, (n) => n * 2);
 TxHashSet.filter(left, (n) => n > 1);
 TxHashSet.some(left, (n) => n > 1);
@@ -2696,6 +2706,7 @@ PubSub.isShutdownUnsafe(hub);
 PubSub.awaitShutdown(hub);
 Deferred.complete(done, Effect.succeed(a)); // the effect is run once, for every one who waits
 Deferred.done(done, Exit.succeed(b));
+Deferred.doneUnsafe(done, a > 1 ? Exit.succeed(a) : Exit.fail(new Odd({ n: a })));
 Deferred.failCause(one, Cause.fail("no"));
 Deferred.failCauseSync(two, () => Cause.die("gone"));
 Deferred.into(even(a), done); // how the effect ends is how the Deferred is completed
@@ -3186,6 +3197,7 @@ PubSub.take(one); // waits for a fiber to publish
 PubSub.takeAll(two);
 PubSub.takeUpTo(one, 5);
 PubSub.remaining(one);
+PubSub.remainingUnsafe(sub);
 PubSub.size(hub);
 PubSub.isEmpty(hub);
 PubSub.isFull(hub);

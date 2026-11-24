@@ -3820,6 +3820,8 @@ const rest: ReadonlyArray<Group> = [
     effectful: true,
     prelude: [
       `import * as PartitionedSemaphore from "effect/PartitionedSemaphore";`,
+      `import * as TxHashMap from "effect/TxHashMap";`,
+      `import * as PubSub from "effect/PubSub";`,
       `import * as Cache from "effect/Cache";`,
       `import * as TxDeferred from "effect/TxDeferred";`,
       `import * as TxSubscriptionRef from "effect/TxSubscriptionRef";`,
@@ -3874,6 +3876,13 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const queue = yield* Queue.unbounded(); yield* Queue.offerAll(queue, [a, b]); yield* Queue.flush(queue); return yield* Queue.size(queue); })`,
       `Effect.gen(function* () { const prices = yield* Cache.make({ capacity: 4, lookup: (name) => Effect.succeed(name.length + a) }); yield* Cache.get(prices, "tea"); yield* Cache.get(prices, "milk"); const keys = [...(yield* Cache.keys(prices))].sort(); const entries = [...(yield* Cache.entries(prices))].length; const gone = yield* Cache.invalidateWhen(prices, "tea", (n) => n > b); return [keys, entries, gone, yield* Cache.has(prices, "tea")]; })`,
       `Effect.gen(function* () { const permits = PartitionedSemaphore.makeUnsafe({ permits: 2 }); return [PartitionedSemaphore.capacity(permits), yield* PartitionedSemaphore.withPermit(permits, "x", Effect.succeed(a))]; })`,
+      `Effect.gen(function* () { const stock = yield* TxHashMap.fromIterable([["tea", Option.some(a)], ["milk", Option.none()]]); const kept = yield* TxHashMap.compact(stock); const big = yield* TxHashMap.filterMap(kept, (n) => (n > b ? Result.succeed(n * 2) : Result.fail(n))); return [TxHashMap.isTxHashMap(stock), TxHashMap.isTxHashMap(a), yield* TxHashMap.toEntries(kept), yield* TxHashMap.toEntries(big)]; })`,
+      `Effect.gen(function* () { const set = yield* TxHashSet.make(a, b); const held = yield* TxHashSet.toHashSet(set); return [HashSet.size(held), HashSet.has(held, a)]; })`,
+      `Effect.scoped(Effect.gen(function* () { const files = yield* ScopedCache.make({ capacity: 4, lookup: (name) => Effect.succeed(name.length + a) }); yield* ScopedCache.get(files, "tea"); yield* ScopedCache.get(files, "milk"); const keys = [...(yield* ScopedCache.keys(files))].sort(); const entries = (yield* ScopedCache.entries(files)).length; const gone = yield* ScopedCache.invalidateWhen(files, "tea", (n) => n > b); return [keys, entries, gone, yield* ScopedCache.has(files, "tea")]; }))`,
+      `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.unbounded(); const sub = yield* PubSub.subscribe(hub); yield* PubSub.publish(hub, a); return PubSub.remainingUnsafe(sub); }))`,
+      `Effect.gen(function* () { const done = yield* Deferred.make(); const told = Deferred.doneUnsafe(done, a > 1 ? Exit.succeed(a) : Exit.fail(new Odd({ n: a }))); return [told, yield* Effect.result(Deferred.await(done))]; })`,
+      `Effect.gen(function* () { const permits = yield* TxSemaphore.make(1); const inside = yield* Effect.scoped(Effect.andThen(TxSemaphore.withPermitScoped(permits), TxSemaphore.available(permits))); return [inside, yield* TxSemaphore.available(permits), a]; })`,
+      `Effect.gen(function* () { const lock = yield* TxReentrantLock.make(); const reads = yield* Effect.scoped(Effect.andThen(TxReentrantLock.readLock(lock), TxReentrantLock.readLocks(lock))); const writes = yield* Effect.scoped(Effect.andThen(TxReentrantLock.writeLock(lock), TxReentrantLock.writeLocks(lock))); return [reads, writes, yield* TxReentrantLock.locked(lock), a]; })`,
     ],
   },
   {

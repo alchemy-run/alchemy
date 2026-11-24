@@ -5297,6 +5297,102 @@ export const make = (
         options<{ permits: number }>("PartitionedSemaphore.makeUnsafe", given_, site),
         (read) => wrap("PartitionedSemaphore", PartitionedSemaphore.makeUnsafe<Key>(read)),
       ),
+    "effect/TxHashMap:isTxHashMap": isKind("TxHashMap"),
+    "effect/TxHashMap:filterMap": derives("TxHashMap", "filterMap", "effect/HashMap:filterMap"),
+    "effect/TxHashMap:compact": derives("TxHashMap", "compact", "effect/HashMap:compact"),
+    "effect/TxHashSet:toHashSet": stored("TxHashSet", "toHashSet", (before) =>
+      Effect.succeed({ gives: before }),
+    ),
+    "effect/ScopedCache:keys": on<SC, ReadonlyArray<Key>>(
+      "ScopedCache",
+      "keys",
+      1,
+      (held) => ScopedCache.keys(held),
+      (all) => arr(all.map(keyed)),
+    ),
+    "effect/ScopedCache:entries": on<SC, ReadonlyArray<readonly [Key, V]>>(
+      "ScopedCache",
+      "entries",
+      1,
+      (held) => ScopedCache.entries(held),
+      (all) => arr(all.map(([key, value]) => arr([keyed(key), value]))),
+    ),
+    // Forgotten where what is kept for the key is a value the function holds of.
+    "effect/ScopedCache:invalidateWhen": later<SC, boolean>(
+      "ScopedCache",
+      "invalidateWhen",
+      3,
+      (held, [key, f], site, timeline) =>
+        f
+          ? Effect.map(keyOf("ScopedCache.invalidateWhen", key, site), (read) =>
+              Effect.flatMap(ScopedCache.getSuccess(held, read), (found) =>
+                Option.isNone(found)
+                  ? Effect.succeed(false)
+                  : Effect.flatMap(holding(timeline, f, found.value, site), (holds) =>
+                      holds
+                        ? Effect.as(ScopedCache.invalidate(held, read), true)
+                        : Effect.succeed(false),
+                    ),
+              ),
+            )
+          : wrongArguments(site, "ScopedCache.invalidateWhen"),
+      bool,
+    ),
+    "effect/PubSub:remainingUnsafe": now<S, Option.Option<number>>(
+      "Subscription",
+      "remainingUnsafe",
+      1,
+      (held) => PubSub.remainingUnsafe(held),
+      (found) => (Option.isSome(found) ? Value.some(num(found.value)) : Value.none),
+    ),
+    "effect/Deferred:doneUnsafe": dual("Deferred.doneUnsafe", 2, ([self, exit], site) => {
+      const held = heldOf<D>("Deferred", self);
+      const real = ended(exit);
+      return held && real
+        ? Effect.sync(() => bool(Deferred.doneUnsafe(held, real)))
+        : wrongArguments(site, "Deferred.doneUnsafe");
+    }),
+    // A permit or a lock taken in the scope it runs in: given back when the scope closes.
+    "effect/TxSemaphore:withPermitScoped": ([self], site) => {
+      const held = heldOf<TS>("TxSemaphore", self);
+      return held
+        ? Effect.succeed(
+            scoped(
+              "TxSemaphore.withPermitScoped",
+              site,
+              (timeline) =>
+                Timeline.waiting(
+                  timeline,
+                  "waits for a TxSemaphore permit that nothing gives back",
+                  site,
+                  TxSemaphore.withPermitScoped(held),
+                ),
+              none,
+            ),
+          )
+        : wrongArguments(site, "TxSemaphore.withPermitScoped");
+    },
+    ...Object.fromEntries(
+      Object.entries({
+        readLock: TxReentrantLock.readLock,
+        writeLock: TxReentrantLock.writeLock,
+      }).map(([name, lock]): [string, Model] => [
+        `effect/TxReentrantLock:${name}`,
+        ([self], site) => {
+          const held = heldOf<TL>("TxReentrantLock", self);
+          return held
+            ? Effect.succeed(
+                scoped(
+                  `TxReentrantLock.${name}`,
+                  site,
+                  (timeline) => Timeline.waiting(timeline, TX_LOCK, site, lock(held)),
+                  num,
+                ),
+              )
+            : wrongArguments(site, `TxReentrantLock.${name}`);
+        },
+      ]),
+    ),
     "effect/Pool:isPool": ([value]) =>
       Effect.succeed(bool(heldOf<PL>("Pool", value) !== undefined)),
 
