@@ -1,3 +1,4 @@
+import type { CapabilityNode } from "../CapabilityGraph.ts";
 import { toPath } from "../FQN.ts";
 import type { BindingAction, CRUD, ActionApply, ActionDelete, Plan } from "../Plan.ts";
 import type { ProviderMode } from "../ProviderMode.ts";
@@ -143,7 +144,7 @@ function deriveNamespaceAction(node: TreeNode): DerivedAction {
 }
 
 export interface FlattenedItem {
-  type: "namespace" | "resource" | "binding" | "action";
+  type: "namespace" | "resource" | "binding" | "action" | "capability";
   depth: number;
   id: string;
   path: string[];
@@ -151,6 +152,10 @@ export interface FlattenedItem {
   resourceType?: string;
   bindingSid?: string;
   bindingCount?: number;
+  /** For capability items: `Process`, `Tool`, or `Binding` for a binding one of them reaches. */
+  capabilityKind?: string;
+  /** For a capability item of a binding: what it is bound to, and the services it is reached through. */
+  capabilityDetail?: string;
   hasChildren?: boolean;
   /** For task items, the Task's Type (e.g. "Sync"). */
   actionType?: string;
@@ -252,6 +257,12 @@ const flattenNamespace = (
         bindingSid: binding.sid,
       });
     }
+    flattenCapabilities(
+      resource.capabilities ?? [],
+      depth + 1,
+      [...node.path, resource.resource.LogicalId],
+      result,
+    );
     if (childNamespace) {
       flattenNamespace(childNamespace, depth + 1, result, options);
     }
@@ -270,6 +281,52 @@ const flattenNamespace = (
       action: action.action,
       actionType: action.def.Type,
     });
+  }
+};
+
+/**
+ * A runtime's processes and tools, each with the bindings it reaches. A
+ * binding a term reaches through one of the terms listed under it is shown
+ * there, not repeated above.
+ */
+const flattenCapabilities = (
+  nodes: ReadonlyArray<CapabilityNode>,
+  depth: number,
+  path: ReadonlyArray<string>,
+  result: FlattenedItem[],
+): void => {
+  const rowOf = (permission: CapabilityNode["permissions"][number]) =>
+    `${permission.binding}|${permission.targets.join(",")}`;
+  for (const node of nodes) {
+    const id = `${node.kind}:${node.name}`;
+    const here = [...path, id];
+    result.push({
+      type: "capability",
+      depth,
+      id: node.name,
+      path: here,
+      action: "noop",
+      capabilityKind: node.kind,
+    });
+    const below = new Set(node.uses.flatMap((used) => used.permissions.map(rowOf)));
+    for (const permission of node.permissions) {
+      if (below.has(rowOf(permission))) continue;
+      result.push({
+        type: "capability",
+        depth: depth + 1,
+        id: permission.binding,
+        path: [...here, rowOf(permission)],
+        action: "noop",
+        capabilityKind: "Binding",
+        capabilityDetail: [
+          permission.targets.join(", "),
+          permission.via.length === 0 ? "" : `via ${permission.via.join(" > ")}`,
+        ]
+          .filter((part) => part !== "")
+          .join(" "),
+      });
+    }
+    flattenCapabilities(node.uses, depth + 1, here, result);
   }
 };
 

@@ -60,6 +60,27 @@ export const PlannedBinding = Schema.Struct({
 });
 export type PlannedBinding = typeof PlannedBinding.Type;
 
+/** A binding a term of a runtime can reach, and the services it reaches it through. */
+export const PlannedPermission = Schema.Struct({
+  binding: Schema.String,
+  targets: Schema.Array(Schema.String),
+  via: Schema.Array(Schema.String),
+});
+
+/** A process or a tool of a runtime, with what it reaches and the terms it uses. */
+export interface PlannedCapability {
+  readonly kind: string;
+  readonly name: string;
+  readonly permissions: ReadonlyArray<typeof PlannedPermission.Type>;
+  readonly uses: ReadonlyArray<PlannedCapability>;
+}
+export const PlannedCapability: Schema.Codec<PlannedCapability> = Schema.Struct({
+  kind: Schema.String,
+  name: Schema.String,
+  permissions: Schema.Array(PlannedPermission),
+  uses: Schema.Array(Schema.suspend((): Schema.Codec<PlannedCapability> => PlannedCapability)),
+});
+
 /** Serializable view of one resource row in a plan. */
 export const PlannedResource = Schema.Struct({
   fqn: Schema.String,
@@ -69,6 +90,8 @@ export const PlannedResource = Schema.Struct({
   action: Schema.Literals(["create", "update", "adopted", "replace", "delete", "orphaned", "noop"]),
   /** Binding rows the node carries; empty when the resource has none. */
   bindings: Schema.Array(PlannedBinding),
+  /** For a runtime: its processes and tools, and the bindings each can reach. */
+  capabilities: PlannedCapability.pipe(Schema.Array, Schema.optionalKey),
   /** Mode the node's provider resolved for; absent for mode-agnostic providers. */
   providerMode: Schema.optionalKey(ProviderMode),
   /** On mode-switch replacements: the mode the old generation was created with. */

@@ -4,6 +4,7 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as LogLevel from "effect/LogLevel";
+import type { CapabilityNode } from "../CapabilityGraph.ts";
 import type { ApplyEvent, ApplyStatus } from "../Events.ts";
 import { NonInteractiveTerminal } from "../Interaction.ts";
 import type { ActionApply, ActionDelete, CRUD, Plan } from "../Plan.ts";
@@ -87,6 +88,35 @@ const modeSuffix = (options: Parameters<typeof formatModeNote>[0]): string => {
   return note ? ` ${dim(`(${note})`)}` : "";
 };
 
+/**
+ * A runtime's processes and tools, indented under it, each with the bindings
+ * it reaches. A binding reached through a term listed below is shown there.
+ */
+const capabilityLines = (
+  fqn: string,
+  nodes: ReadonlyArray<CapabilityNode>,
+  depth: number,
+): string[] => {
+  const rowOf = (permission: CapabilityNode["permissions"][number]) =>
+    `${permission.binding}|${permission.targets.join(",")}`;
+  const indent = "  ".repeat(depth);
+  return nodes.flatMap((node) => {
+    const below = new Set(node.uses.flatMap((used) => used.permissions.map(rowOf)));
+    return [
+      `${tag(fqn)} ${indent}${dim(node.kind)} ${bold(node.name)}`,
+      ...node.permissions
+        .filter((permission) => !below.has(rowOf(permission)))
+        .map(
+          (permission) =>
+            `${tag(fqn)} ${indent}  ${cyan(permission.binding)}${
+              permission.targets.length === 0 ? "" : ` ${permission.targets.join(", ")}`
+            }${permission.via.length === 0 ? "" : dim(` via ${permission.via.join(" > ")}`)}`,
+        ),
+      ...capabilityLines(fqn, node.uses, depth + 1),
+    ];
+  });
+};
+
 /** Exported for unit tests — pure plan-preview rendering. */
 export const formatPlanLines = (plan: Plan, options: PlanDisplayOptions = {}): string[] => {
   const allItems = [...Object.values(plan.resources), ...Object.values(plan.deletions)] as CRUD[];
@@ -137,6 +167,7 @@ export const formatPlanLines = (plan: Plan, options: PlanDisplayOptions = {}): s
         binding.action === "delete" ? dim("unbind") : actionColor[binding.action](binding.action);
       lines.push(`${tag(`${item.resource.FQN}/${binding.sid}`)} ${bindingAction}`);
     }
+    lines.push(...capabilityLines(item.resource.FQN, item.capabilities ?? [], 1));
     if (
       options.detailed &&
       (item.action === "create" ||

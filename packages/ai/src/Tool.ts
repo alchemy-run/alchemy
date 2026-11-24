@@ -1,3 +1,4 @@
+import { framed } from "alchemy/CapabilityGraph";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { Tool as AiTool } from "effect/ai";
 import * as Cause from "effect/Cause";
@@ -347,7 +348,8 @@ export const Tool = ((...args: ReadonlyArray<unknown>): unknown => {
       static readonly spec = spec;
       static readonly impl = impl;
       static make(implementation: Effect.Effect<AnyHandler, never, unknown> | AnyHandler) {
-        return Layer.effect(this as never, implOf(implementation));
+        // Built under the tool's own frame: what it binds is what the tool can reach.
+        return Layer.effect(this as never, framed("Tool", name)(implOf(implementation)));
       }
     };
   };
@@ -512,7 +514,10 @@ const toolTag = (name: string) => {
     static make(spec: ToolSpec, impl: Effect.Effect<AnyHandler, never, unknown> | AnyHandler) {
       return Layer.effect(
         this as never,
-        Effect.map(implOf(impl), (handler): ToolTagService => ({ kind: "tool", spec, handler })),
+        framed(
+          "Tool",
+          name,
+        )(Effect.map(implOf(impl), (handler): ToolTagService => ({ kind: "tool", spec, handler }))),
       );
     }
     static native(engine: string, tool: unknown) {

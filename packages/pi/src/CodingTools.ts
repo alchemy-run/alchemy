@@ -2,6 +2,7 @@ import * as AI from "@alchemy.run/ai";
 import { Sandbox, Sandboxes } from "@alchemy.run/ai/Sandbox";
 import type { ToolTagClass } from "@alchemy.run/ai/Tool";
 import { CodingTools as PiCodingTools } from "@earendil-works/pi-durable/tools";
+import { framed } from "alchemy/CapabilityGraph";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -12,15 +13,17 @@ import { ENGINE, type NativeTool } from "./Tool.ts";
  * files or a shell, so the Layer requires `AI.Sandboxes`.
  */
 const native = <Self>(tag: ToolTagClass<Self, string>): Layer.Layer<Self, never, Sandboxes> =>
-  Layer.unwrap(
-    Effect.gen(function* () {
-      const sandboxes = yield* Sandboxes;
-      const registration = (PiCodingTools.tools ?? []).find((tool) => tool.name === tag.toolName);
-      if (registration === undefined) {
-        return yield* Effect.die(new Error(`Pi's coding tools have no "${tag.toolName}"`));
-      }
-      return tag.native(ENGINE, { registration, sandboxes } satisfies NativeTool);
-    }),
+  Effect.gen(function* () {
+    const sandboxes = yield* Sandboxes;
+    const registration = (PiCodingTools.tools ?? []).find((tool) => tool.name === tag.toolName);
+    if (registration === undefined) {
+      return yield* Effect.die(new Error(`Pi's coding tools have no "${tag.toolName}"`));
+    }
+    return tag.native(ENGINE, { registration, sandboxes } satisfies NativeTool);
+  }).pipe(
+    // Under the tool's frame: a plan lists the sandbox as what it reaches.
+    framed("Tool", tag.toolName),
+    Layer.unwrap,
   );
 
 /** Pi's `bash` as `AI.Bash`: run a shell command in the conversation's sandbox. */
@@ -31,6 +34,14 @@ export const Read = native(AI.Read);
 export const Edit = native(AI.Edit);
 /** Pi's `write` as `AI.Write`: write a whole file, creating its directories. */
 export const Write = native(AI.Write);
+
+/**
+ * A tool whose calls run in the session's sandbox. Its handler asks for the
+ * sandbox when it is called, so the place sandboxes come from is looked up
+ * here, while the tool is built: a plan then lists it as what the tool reaches.
+ */
+const inSandbox = <Handler>(handler: Handler) =>
+  Effect.as(Effect.serviceOption(Sandboxes), handler);
 
 /**
  * Shell that sets `p` to the path in `$1`, with a leading `~` as the home
@@ -72,26 +83,28 @@ export const Grep = AI.Grep.make(
     success: Found,
     replay: "safe",
   },
-  Effect.fn(function* ({ pattern, path, include }) {
-    const sandbox = yield* Sandbox;
-    const result = yield* sandbox
-      .exec([
-        "bash",
-        "-c",
-        `${HOME_PATH}; shift; exec grep -rnE --exclude-dir=.git --exclude-dir=node_modules "$@" "$p"`,
-        "grep",
-        path ?? ".",
-        ...(include === undefined ? [] : [`--include=${include}`]),
-        "--",
-        pattern,
-      ])
-      .pipe(Effect.orDie);
-    // grep exits 1 when nothing matches, and 2 when it could not search.
-    if (result.exitCode > 1) {
-      return yield* Effect.die(new Error(result.stderr.trim() || "grep could not search"));
-    }
-    return lines(result.stdout);
-  }),
+  inSandbox(
+    Effect.fn(function* ({ pattern, path, include }) {
+      const sandbox = yield* Sandbox;
+      const result = yield* sandbox
+        .exec([
+          "bash",
+          "-c",
+          `${HOME_PATH}; shift; exec grep -rnE --exclude-dir=.git --exclude-dir=node_modules "$@" "$p"`,
+          "grep",
+          path ?? ".",
+          ...(include === undefined ? [] : [`--include=${include}`]),
+          "--",
+          pattern,
+        ])
+        .pipe(Effect.orDie);
+      // grep exits 1 when nothing matches, and 2 when it could not search.
+      if (result.exitCode > 1) {
+        return yield* Effect.die(new Error(result.stderr.trim() || "grep could not search"));
+      }
+      return lines(result.stdout);
+    }),
+  ),
 );
 
 /** `AI.Glob` for Pi, which has no file finder of its own: a `bash` glob in the sandbox. */
@@ -107,28 +120,30 @@ export const Glob = AI.Glob.make(
     success: Found,
     replay: "safe",
   },
-  Effect.fn(function* ({ pattern, path }) {
-    const sandbox = yield* Sandbox;
-    const result = yield* sandbox
-      .exec([
-        "bash",
-        "-O",
-        "globstar",
-        "-O",
-        "nullglob",
-        "-c",
-        // An empty IFS keeps a pattern with spaces whole while it still expands.
-        `${HOME_PATH}; cd "$p" && IFS= && printf "%s\\n" $2`,
-        "glob",
-        path ?? ".",
-        pattern,
-      ])
-      .pipe(Effect.orDie);
-    if (result.exitCode !== 0) {
-      return yield* Effect.die(new Error(result.stderr.trim() || "glob could not search"));
-    }
-    return lines(result.stdout);
-  }),
+  inSandbox(
+    Effect.fn(function* ({ pattern, path }) {
+      const sandbox = yield* Sandbox;
+      const result = yield* sandbox
+        .exec([
+          "bash",
+          "-O",
+          "globstar",
+          "-O",
+          "nullglob",
+          "-c",
+          // An empty IFS keeps a pattern with spaces whole while it still expands.
+          `${HOME_PATH}; cd "$p" && IFS= && printf "%s\\n" $2`,
+          "glob",
+          path ?? ".",
+          pattern,
+        ])
+        .pipe(Effect.orDie);
+      if (result.exitCode !== 0) {
+        return yield* Effect.die(new Error(result.stderr.trim() || "glob could not search"));
+      }
+      return lines(result.stdout);
+    }),
+  ),
 );
 
 /**

@@ -1,3 +1,4 @@
+import { framed } from "alchemy/CapabilityGraph";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -504,7 +505,15 @@ const childTools = (
  * mentions, tell the harness, and return its client. Runs where the
  * process's Layer is built, so every mention's service is at hand.
  */
+/**
+ * A process is built under its own frame (alchemy's CapabilityGraph), so a
+ * plan lists it with the tools it mentions and the bindings each reaches. A
+ * process it follows or starts is built inside it, and listed under it.
+ */
 const compile = (definition: Definition): Effect.Effect<ProcessService<any>, never, any> =>
+  framed("Process", definition.name)(compileUnframed(definition));
+
+const compileUnframed = (definition: Definition): Effect.Effect<ProcessService<any>, never, any> =>
   Effect.gen(function* () {
     const harness = yield* Harness;
     let known = knownBy.get(harness);
@@ -650,6 +659,17 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
       ...[...children.values()].flatMap((child) => childTools(child, state, harness)),
     ];
     const every = [...new Set([...tools, ...generated])];
+    // Name each tool it mentions under this process's frame. A tool's own
+    // Layer was built under a frame of the same name, where it bound what
+    // it uses: the plan joins the two, and lists that under this process.
+    yield* Effect.forEach(
+      tools.flatMap((tool) => {
+        const name = (tool as { readonly toolName?: unknown }).toolName;
+        return typeof name === "string" ? [name] : [];
+      }),
+      (name) => framed("Tool", name)(Effect.void),
+      { discard: true },
+    );
     yield* harness.add({ models, tools: every, context });
 
     let instructions: string | undefined;

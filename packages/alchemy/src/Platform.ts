@@ -15,6 +15,12 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
+import {
+  CapabilityGraph,
+  makeCapabilityGraph,
+  observeLayerBuilds,
+  observeLookups,
+} from "./CapabilityGraph.ts";
 import type { Dependencies } from "./Dependencies.ts";
 import { toFqn } from "./FQN.ts";
 import type { HttpEffect } from "./Http.ts";
@@ -35,7 +41,7 @@ import {
   type BaseRuntimeContext,
 } from "./RuntimeContext.ts";
 import { Self } from "./Self.ts";
-import type { Stack, StackServices } from "./Stack.ts";
+import { Stack, type StackServices } from "./Stack.ts";
 import { StackContext } from "./StackContext.ts";
 import type { Stage } from "./Stage.ts";
 import { effectClass } from "./Util/effect.ts";
@@ -493,6 +499,13 @@ export const Platform = <
       static readonly Platform = Context.Service<Platform, Platform>(`Platform<${type}<${id}>>`);
       static of = (shape: any) => shape;
       static make = (props: Props, impl: Impl) => {
+        // What this runtime's processes and tools reach, recorded while its
+        // Layers build (CapabilityGraph.ts). Every Layer built through this
+        // memo map, `Effect.provide` inside the program included, gets a
+        // frame; every service the program looks up and every binding it
+        // binds lands on the frame current at that moment.
+        const graph = makeCapabilityGraph();
+        const memoMap = observeLayerBuilds(Layer.makeMemoMapUnsafe(), graph);
         // build the Layer once for the root Self
         const SelfLayer = Layer.effect(
           Self,
@@ -521,6 +534,15 @@ export const Platform = <
               // SIGTERM window). Request-coupled cleanup belongs in
               // handlers, where the bridge provides a per-event scope.
               const buildScope = yield* Effect.scope;
+              // Only a plan records: at runtime the same build runs unobserved.
+              const planning = (yield* ALCHEMY_PHASE) === "plan";
+              const recorded = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+                planning
+                  ? observeLookups(graph)(effect).pipe(
+                      Effect.provideService(CapabilityGraph, graph),
+                      Effect.provideService(Layer.CurrentMemoMap, memoMap),
+                    )
+                  : effect;
               const instance = Object.assign(
                 yield* resource(id, props as any).pipe(
                   Effect.flatMap(
@@ -535,7 +557,9 @@ export const Platform = <
               );
 
               // Resources init declares are not the renamed resource (#2219).
-              yield* omitRenamePolicy(impl).pipe(
+              yield* impl.pipe(
+                recorded,
+                omitRenamePolicy,
                 Effect.flatMap((impl) => {
                   // An `alwaysServe` runtime serves routes of its own, so it
                   // boots even when the program returns nothing.
@@ -650,6 +674,14 @@ export const Platform = <
                   ),
                 ),
               );
+
+              if (planning) {
+                const reached = graph.describe();
+                if (reached.length > 0) {
+                  const stack = yield* Stack;
+                  (stack.capabilities ??= {})[instance.FQN] = reached;
+                }
+              }
 
               instance.Props = {
                 ...props,

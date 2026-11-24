@@ -1,4 +1,3 @@
-/** @effect-diagnostics missingEffectError:off */
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
@@ -25,6 +24,8 @@ import {
   makeScopedArtifacts,
 } from "./Artifacts.ts";
 import { demandRemoteCredentials, failCredentialsRequired } from "./Auth/Demand.ts";
+/** @effect-diagnostics missingEffectError:off */
+import type { CapabilityNode } from "./CapabilityGraph.ts";
 import {
   dedupeBindings,
   diffBindings,
@@ -123,6 +124,11 @@ export interface BaseNode<R extends ResourceLike<string> = ResourceLike<string>>
   mode: ProviderMode | undefined;
   downstream: string[];
   bindings: BindingNode<R["Binding"]>[];
+  /**
+   * For a runtime: its processes and tools, and the bindings each can reach
+   * (see CapabilityGraph.ts). Absent when it has none.
+   */
+  capabilities?: ReadonlyArray<CapabilityNode>;
 }
 
 /**
@@ -296,6 +302,7 @@ export const describeResource = (node: CRUD): PlannedResource => ({
   resourceType: node.resource.Type,
   action: node.action,
   bindings: node.bindings.map(describeBinding),
+  ...(node.capabilities === undefined ? {} : { capabilities: node.capabilities }),
   providerMode: node.mode,
   fromProviderMode:
     node.action === "replace" &&
@@ -2752,6 +2759,11 @@ const makePlan = <A>(
             );
       }),
     );
+
+    for (const [fqn, node] of Object.entries(resourceGraph)) {
+      const reached = stack.capabilities?.[fqn];
+      if (reached !== undefined) node.capabilities = reached;
+    }
 
     return {
       resources: resourceGraph,
