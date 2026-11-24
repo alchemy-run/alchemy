@@ -4,6 +4,7 @@ import * as Match from "effect/Match";
 import { IssueCommented } from "./CommentOnIssue.command.ts";
 import { Issue } from "./Issue.aggregate.ts";
 import { IssueReported } from "./ReportIssue.command.ts";
+import { replied } from "./Said.ts";
 import { Triager } from "./Triager.external.ts";
 
 /** A reported issue is handed to the triager; a reply on it is passed on. */
@@ -19,7 +20,7 @@ export const IssueWorkLive = IssueWork.toLayer(
       yield* Match.valueTags(event, {
         IssueReported: () => triager.start({ issue: source.id }),
         IssueCommented: ({ body, commentId }) =>
-          triager.tell({ issue: source.id, text: `A reply on the issue: ${body}`, id: commentId }),
+          triager.tell({ issue: source.id, text: replied(body), id: commentId }),
       });
     });
   }),

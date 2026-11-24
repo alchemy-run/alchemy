@@ -1,7 +1,8 @@
 import type { SessionEntry } from "@alchemy.run/ai/Session";
 import * as Option from "effect/Option";
 import type { Document, Html, HtmlBuilder } from "foldkit/html";
-import { type Listed, Message, type Model } from "./Board.ts";
+import { REPLIED, STARTED } from "../../src/Board/Said.ts";
+import { type Listed, listOf, Message, type Model, sendingOf, threadOf } from "./Board.ts";
 
 type H = HtmlBuilder<Message>;
 
@@ -48,7 +49,12 @@ export const rowsOf = (items: ReadonlyArray<SessionEntry>): ReadonlyArray<Row> =
     ),
   );
   return items.flatMap(({ seq, item }): ReadonlyArray<Row> => {
-    if (item.type === "user") return [{ kind: "user", seq, text: item.text }];
+    if (item.type === "user") {
+      // What starts the agent is the issue itself, shown above the thread.
+      if (item.text.startsWith(STARTED)) return [];
+      const text = item.text.startsWith(REPLIED) ? item.text.slice(REPLIED.length) : item.text;
+      return [{ kind: "user", seq, text }];
+    }
     if (item.type === "tool") return [];
     return [
       ...(item.text.trim() === "" ? [] : [{ kind: "agent" as const, seq, text: item.text }]),
@@ -68,7 +74,7 @@ const labelView = (label: Listed["label"], h: H) =>
     ? h.span([h.Class("label none")], ["unlabeled"])
     : h.span([h.Class(`label ${label}`)], [label]);
 
-const listedView = (issue: Listed, model: Model, h: H) =>
+const listedView = (issue: Listed & { readonly sending: boolean }, model: Model, h: H) =>
   h.keyed("li")(
     issue.issueId,
     [],
@@ -84,7 +90,11 @@ const listedView = (issue: Listed, model: Model, h: H) =>
             [h.Class("issue-meta")],
             [
               labelView(issue.label, h),
-              ...(issue.working ? [h.span([h.Class("dot working")], ["working"])] : []),
+              ...(issue.sending
+                ? [h.span([h.Class("dot working")], ["sending"])]
+                : issue.working
+                  ? [h.span([h.Class("dot working")], ["working"])]
+                  : []),
               ...(issue.replies > 0
                 ? [
                     h.span(
@@ -111,14 +121,14 @@ const sidebar = (model: Model, h: H) =>
           h.button([h.Class("primary"), h.OnClick(Message.ClickedNewIssue())], ["New issue"]),
         ],
       ),
-      model.issues.length === 0
+      listOf(model).length === 0
         ? h.p(
             [h.Class("empty")],
             [model.listed ? "No issues yet. Report the first one." : "Loading issues…"],
           )
         : h.ul(
             [h.Class("issues")],
-            model.issues.map((issue) => listedView(issue, model, h)),
+            listOf(model).map((issue) => listedView(issue, model, h)),
           ),
     ],
   );
@@ -213,30 +223,29 @@ const rowView = (row: Row, h: H): Html =>
       );
 
 const thread = (model: Model, h: H) => {
-  const title = Option.match(model.detail, {
-    onNone: () => "Opening…",
-    onSome: (detail) => detail.title,
-  });
-  const rows = rowsOf(model.items);
+  const open = threadOf(model);
+  const rows = rowsOf(open.items);
+  const sending = sendingOf(model);
+  const label = Option.getOrNull(Option.map(open.detail, (detail) => detail.label));
   return h.section(
     [h.Class("panel thread")],
     [
       h.header(
         [h.Class("thread-head")],
         [
-          h.h2([], [title]),
+          h.h2([], [Option.match(open.detail, { onNone: () => "…", onSome: (d) => d.title })]),
           h.div(
             [h.Class("issue-meta")],
             [
-              labelView(Option.getOrNull(Option.map(model.detail, (detail) => detail.label)), h),
+              labelView(label, h),
               h.span(
-                [h.Class(model.status === "working" ? "dot working" : "dot idle")],
-                [model.status === "working" ? "Agent is working" : "Agent is idle"],
+                [h.Class(open.status === "working" ? "dot working" : "dot idle")],
+                [open.status === "working" ? "Agent is working" : "Agent is idle"],
               ),
             ],
           ),
           ...Option.match(
-            Option.filter(model.detail, (detail) => detail.body !== ""),
+            Option.filter(open.detail, (detail) => detail.body !== ""),
             { onNone: () => [], onSome: (detail) => [h.p([h.Class("body")], [detail.body])] },
           ),
         ],
@@ -245,17 +254,41 @@ const thread = (model: Model, h: H) => {
         [h.Class("rows")],
         [
           ...rows.map((row) => rowView(row, h)),
-          ...model.queued.map((message) =>
+          ...open.queued.map((message) =>
             h.keyed("li")(
               `queued-${message.id}`,
               [h.Class("row user queued")],
               [
                 h.span([h.Class("who")], ["Queued until the agent is free"]),
-                h.div([h.Class("bubble")], [message.text]),
+                h.div(
+                  [h.Class("bubble")],
+                  [
+                    message.text.startsWith(REPLIED)
+                      ? message.text.slice(REPLIED.length)
+                      : message.text,
+                  ],
+                ),
               ],
             ),
           ),
-          ...(rows.length === 0 && model.caughtUp
+          // Shown the moment it is sent, before the board has it.
+          ...sending.map((pending) =>
+            h.keyed("li")(
+              `sending-${pending.commandId}`,
+              [h.Class("row user sending")],
+              [h.span([h.Class("who")], ["Sending…"]), h.div([h.Class("bubble")], [pending.text])],
+            ),
+          ),
+          ...(open.status === "working"
+            ? [
+                h.keyed("li")(
+                  "working",
+                  [h.Class("row agent typing")],
+                  [h.span([h.Class("dot working")], ["Agent is working"])],
+                ),
+              ]
+            : []),
+          ...(rows.length === 0 && open.status === "idle" && open.caughtUp
             ? [h.keyed("li")("empty", [h.Class("empty")], ["The agent has not started yet."])]
             : []),
         ],
@@ -266,7 +299,7 @@ const thread = (model: Model, h: H) => {
           h.input([
             h.Value(model.reply),
             h.Placeholder(
-              model.status === "working"
+              open.status === "working"
                 ? "Reply. It is queued until the agent is free."
                 : "Reply to the agent",
             ),
@@ -281,7 +314,7 @@ const thread = (model: Model, h: H) => {
 };
 
 export const view = (model: Model, h: H): Document => ({
-  title: Option.match(model.detail, {
+  title: Option.match(threadOf(model).detail, {
     onNone: () => "Issue board",
     onSome: (detail) => `${detail.title} · Issue board`,
   }),

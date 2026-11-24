@@ -347,3 +347,10 @@ summary:focus-visible {
     padding: 16px;
   }
 }
+.row.sending .bubble {
+  opacity: 0.7;
+}
+.row.typing {
+  font-size: 13px;
+  color: var(--muted);
+}

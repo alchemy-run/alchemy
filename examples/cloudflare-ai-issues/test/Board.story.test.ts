@@ -2,110 +2,201 @@ import { expect, test } from "@effect/vitest";
 import * as Option from "effect/Option";
 import { Command, given, message, model, story } from "foldkit/story";
 import { IssueId } from "../src/Board/Issue.id.ts";
-import { BoardClient, init, Message, ShowAddress, update } from "../web/src/Board.ts";
+import { replied, started } from "../src/Board/Said.ts";
+import {
+  BoardClient,
+  init,
+  listOf,
+  Message,
+  Remember,
+  sendingOf,
+  ShowAddress,
+  threadOf,
+  update,
+} from "../web/src/Board.ts";
 import { issueIn, urlOf } from "../web/src/Location.ts";
 import { rowsOf } from "../web/src/View.ts";
 
-const fresh = init({ issueId: Option.none(), page: "p" }).model;
+const fresh = init({ issueId: Option.none(), page: "p", issues: [] }).model;
+const mine = IssueId.make("p-0");
 const receipt = { stream: "Issue/p-0", version: 1 };
 const shown = Command.resolve(ShowAddress, Message.CompletedShowAddress());
-const reported = Command.resolve(
-  BoardClient.ReportIssue,
-  BoardClient.Message.SucceededReportIssue({
-    commandId: "p:0",
-    reply: undefined,
-    receipt,
-    commits: [receipt],
-  }),
-);
+const remembered = Command.resolve(Remember, Message.CompletedRemember());
+const user = (seq: number, text: string) => ({ seq, item: { type: "user" as const, text } });
+const listed = (issueId: IssueId, title: string) => ({
+  issueId,
+  title,
+  label: null,
+  replies: 0,
+  working: false,
+});
 
-test("reporting an issue names it, opens it and puts it in the address", () =>
+test("a new issue is on screen before the board answers", () =>
   story(
     update,
     given(fresh),
     message(Message.ChangedTitle({ text: "  Export does nothing " })),
     message(Message.ChangedBody({ text: "No file, no error." })),
     message(Message.SubmittedIssue()),
-    reported,
-    shown,
+    // Nothing has come back yet: the page already shows all of it.
     model((model) => {
-      expect(model.selected).toEqual(Option.some(IssueId.make("p-0")));
+      expect(model.selected).toEqual(Option.some(mine));
+      expect(threadOf(model).detail).toEqual(
+        Option.some({ title: "Export does nothing", body: "No file, no error.", label: null }),
+      );
+      expect(threadOf(model).status).toBe("working");
+      expect(listOf(model)).toEqual([
+        { ...listed(mine, "Export does nothing"), working: true, sending: true },
+      ]);
       expect(model.title).toBe("");
-      expect(model.body).toBe("");
-      expect(model.commandIds.sent).toBe(1);
+    }),
+    Command.resolve(
+      BoardClient.ReportIssue,
+      BoardClient.Message.SucceededReportIssue({
+        commandId: "p:0",
+        reply: undefined,
+        receipt,
+        commits: [receipt],
+      }),
+    ),
+    shown,
+    // The board lists it: its own copy takes the place of the page's.
+    message(Message.ReceivedIssues({ issues: [listed(mine, "Export does nothing")] })),
+    remembered,
+    model((model) => {
+      expect(listOf(model).map((issue) => issue.sending)).toEqual([false]);
+      // Its agent is still starting, though the list does not say so yet.
+      expect(listOf(model)[0]?.working).toBe(true);
+      expect(threadOf(model).status).toBe("working");
+    }),
+    // The agent has it: from here the board's own status is what shows.
+    message(Message.ReceivedItem({ issueId: mine, entry: user(1, started(mine)), cursor: 1 })),
+    model((model) => {
+      expect(model.pending).toEqual([]);
     }),
   ));
 
-test("an issue with no title is not reported", () =>
+test("an issue the board refuses is taken back, and its words return to the form", () =>
   story(
     update,
     given(fresh),
-    message(Message.ChangedTitle({ text: "   " })),
+    message(Message.ChangedTitle({ text: "Export does nothing" })),
     message(Message.SubmittedIssue()),
+    Command.resolve(
+      BoardClient.ReportIssue,
+      BoardClient.Message.FailedReportIssue({ commandId: "p:0", failure: { _tag: "Unknown" } }),
+    ),
+    shown,
     model((model) => {
       expect(model.selected).toEqual(Option.none());
-      expect(model.commandIds.sent).toBe(0);
+      expect(listOf(model)).toEqual([]);
+      expect(model.title).toBe("Export does nothing");
+      expect(Option.isSome(model.error)).toBe(true);
     }),
   ));
 
 const first = IssueId.make("1");
 const second = IssueId.make("2");
-const item = (seq: number, text: string) => ({ seq, item: { type: "user" as const, text } });
+const board = { ...fresh, issues: [listed(first, "First"), listed(second, "Second")] };
 
-test("opening another issue drops what was read of the last one", () =>
+test("a reply is on screen at once, and gives way to the board's copy", () =>
   story(
     update,
-    given(fresh),
+    given(board),
     message(Message.ClickedIssue({ issueId: first })),
     shown,
-    message(Message.ReceivedStatus({ status: "working", queued: [] })),
-    message(Message.ReceivedItem({ issueId: first, entry: item(9, "The issue is 1."), cursor: 1 })),
+    message(Message.ChangedReply({ text: "Any update?" })),
+    message(Message.SubmittedReply()),
     model((model) => {
-      expect(model.items).toHaveLength(1);
-      expect(model.cursor).toEqual(Option.some(1));
+      expect(sendingOf(model).map((pending) => pending.text)).toEqual(["Any update?"]);
+      expect(threadOf(model).status).toBe("working");
+      expect(model.reply).toBe("");
     }),
-    message(Message.ClickedIssue({ issueId: second })),
-    shown,
+    Command.resolve(
+      BoardClient.CommentOnIssue,
+      BoardClient.Message.SucceededCommentOnIssue({
+        commandId: "p:0",
+        reply: undefined,
+        receipt,
+        commits: [receipt],
+      }),
+    ),
+    // An idle status that was already on its way does not hide that the agent is about to work.
+    message(Message.ReceivedStatus({ issueId: first, status: "idle", queued: [] })),
     model((model) => {
-      expect(model.selected).toEqual(Option.some(second));
-      expect(model.items).toEqual([]);
-      expect(model.cursor).toEqual(Option.none());
-      expect(model.status).toBe("idle");
+      expect(threadOf(model).status).toBe("working");
     }),
-    // An entry of the first issue that was already on its way is not the second's.
-    message(Message.ReceivedItem({ issueId: first, entry: item(11, "late"), cursor: 2 })),
+    message(
+      Message.ReceivedItem({ issueId: first, entry: user(3, replied("Any update?")), cursor: 1 }),
+    ),
+    // The agent has it. From here the board's own status is what shows.
     model((model) => {
-      expect(model.items).toEqual([]);
+      expect(sendingOf(model)).toEqual([]);
+      expect(model.pending).toEqual([]);
+      expect(threadOf(model).status).toBe("idle");
+      expect(rowsOf(threadOf(model).items)).toEqual([
+        { kind: "user", seq: 3, text: "Any update?" },
+      ]);
     }),
   ));
 
-test("back and forward open the issue their address names", () =>
+test("a reply the board refuses goes back in the box", () =>
   story(
     update,
-    given({ ...fresh, selected: Option.some(first) }),
-    message(Message.ChangedAddress({ issueId: Option.none() })),
-    model((model) => {
-      expect(model.selected).toEqual(Option.none());
-    }),
-  ));
-
-test("a reply is a CommentOnIssue on the open issue, and a refusal is shown", () =>
-  story(
-    update,
-    given({ ...fresh, selected: Option.some(first), reply: "Any update?" }),
+    given({ ...board, selected: Option.some(first), reply: "Any update?" }),
     message(Message.SubmittedReply()),
     Command.resolve(
       BoardClient.CommentOnIssue,
-      BoardClient.Message.FailedCommentOnIssue({
-        commandId: "p:0",
-        failure: { _tag: "Unknown" },
-      }),
+      BoardClient.Message.FailedCommentOnIssue({ commandId: "p:0", failure: { _tag: "Unknown" } }),
     ),
     model((model) => {
-      expect(model.reply).toBe("");
-      expect(model.error).toEqual(Option.some("The board did not answer. Try again."));
+      expect(sendingOf(model)).toEqual([]);
+      expect(model.reply).toBe("Any update?");
+      expect(Option.isSome(model.error)).toBe(true);
     }),
   ));
+
+test("opening an issue shows what the page knows of it at once", () =>
+  story(
+    update,
+    given(board),
+    message(Message.ClickedIssue({ issueId: first })),
+    shown,
+    // From the list alone, before any read answers.
+    model((model) => {
+      expect(Option.map(threadOf(model).detail, (detail) => detail.title)).toEqual(
+        Option.some("First"),
+      );
+    }),
+    message(Message.ReceivedItem({ issueId: first, entry: user(2, replied("hello")), cursor: 1 })),
+    message(Message.ClickedIssue({ issueId: second })),
+    shown,
+    // An entry of the first issue that was on its way is filed under the first.
+    message(Message.ReceivedItem({ issueId: first, entry: user(4, replied("late")), cursor: 2 })),
+    model((model) => {
+      expect(threadOf(model).items).toEqual([]);
+    }),
+    // Coming back is instant: its transcript was kept, and resumes where it stopped.
+    message(Message.ClickedIssue({ issueId: first })),
+    shown,
+    model((model) => {
+      expect(threadOf(model).items.map((entry) => entry.seq)).toEqual([2, 4]);
+      expect(threadOf(model).cursor).toEqual(Option.some(2));
+    }),
+  ));
+
+test("the list of the last visit is shown until the board answers", () => {
+  const { model } = init({
+    issueId: Option.some(first),
+    page: "p",
+    issues: [listed(first, "First")],
+  });
+  expect(model.listed).toBe(false);
+  expect(listOf(model).map((issue) => issue.title)).toEqual(["First"]);
+  expect(Option.map(threadOf(model).detail, (detail) => detail.title)).toEqual(
+    Option.some("First"),
+  );
+});
 
 test("the address names the open issue, so a refresh opens it again", () => {
   const address = urlOf("https://board.example/", Option.some(first));
@@ -114,9 +205,9 @@ test("the address names the open issue, so a refresh opens it again", () => {
   expect(issueIn(urlOf(address, Option.none()))).toEqual(Option.none());
 });
 
-test("the thread joins each tool call with its result", () => {
+test("the thread joins each tool call with its result, and leaves out what started the agent", () => {
   const rows = rowsOf([
-    item(1, "The issue is 1."),
+    user(1, started("1")),
     {
       seq: 2,
       item: {
@@ -131,11 +222,11 @@ test("the thread joins each tool call with its result", () => {
     { seq: 3, item: { type: "tool", callId: "a", name: "grep", output: "none", isError: false } },
     { seq: 4, item: { type: "assistant", text: "Labeled bug.", toolCalls: [] } },
   ]);
-  expect(rows.map((row) => row.kind)).toEqual(["user", "step", "step", "agent"]);
-  expect(rows[1]).toMatchObject({
+  expect(rows.map((row) => row.kind)).toEqual(["step", "step", "agent"]);
+  expect(rows[0]).toMatchObject({
     name: "grep",
     output: Option.some({ text: "none", isError: false }),
   });
   // Still running: it has no result yet.
-  expect(rows[2]).toMatchObject({ name: "Board_LabelIssue_send", output: Option.none() });
+  expect(rows[1]).toMatchObject({ name: "Board_LabelIssue_send", output: Option.none() });
 });

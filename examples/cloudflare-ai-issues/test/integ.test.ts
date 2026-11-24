@@ -15,8 +15,9 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
 import Stack from "../alchemy.run.ts";
+import { started } from "../src/Board/Said.ts";
 import { WebApi } from "../src/Board/WebApi.api.ts";
-import { Message } from "../web/src/Board.ts";
+import { Message, threadOf } from "../web/src/Board.ts";
 import { open } from "./App.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -76,15 +77,19 @@ test(
   Effect.gen(function* () {
     const { app } = yield* stack;
     const seen = yield* Effect.gen(function* () {
-      const page = yield* open({ issueId: Option.none(), page: `integ-${Date.now()}` });
+      const page = yield* open({ issues: [], issueId: Option.none(), page: `integ-${Date.now()}` });
       const empty = yield* page.until((model) => model.listed);
       expect(empty.error).toEqual(Option.none());
 
       yield* page.dispatch(Message.ChangedTitle({ text: "The export button does nothing" }));
       yield* page.dispatch(Message.SubmittedIssue());
 
-      const working = yield* page.until((model) => model.status === "working");
+      // Shown at once, before the board answers.
+      const working = yield* page.until((model) => threadOf(model).status === "working");
       const issueId = Option.getOrThrow(working.selected);
+      expect(Option.map(threadOf(working).detail, (detail) => detail.title)).toEqual(
+        Option.some("The export button does nothing"),
+      );
       // The sidebar shows it, with its agent at work.
       yield* page.until((model) =>
         model.issues.some((issue) => issue.issueId === issueId && issue.working),
@@ -92,9 +97,9 @@ test(
 
       const done = yield* page.until(
         (model) =>
-          model.status === "idle" &&
-          model.items.length > 2 &&
-          Option.exists(model.detail, (detail) => detail.label !== null),
+          threadOf(model).status === "idle" &&
+          threadOf(model).items.length > 2 &&
+          Option.exists(threadOf(model).detail, (detail) => detail.label !== null),
       );
 
       // A reply goes to the same agent, and the page sees what it did with it.
@@ -103,36 +108,43 @@ test(
       );
       yield* page.dispatch(Message.SubmittedReply());
       // The agent takes the reply up, then finishes with it.
-      yield* page.until((model) => model.status === "working");
+      yield* page.until((model) => model.pending.length === 0);
       const replied = yield* page.until(
         (model) =>
-          model.status === "idle" &&
-          Option.exists(model.detail, (detail) => detail.label === "question"),
+          threadOf(model).status === "idle" &&
+          Option.exists(threadOf(model).detail, (detail) => detail.label === "question"),
       );
 
       // A refresh: a new page load with the issue in its address reads it all back.
-      const refreshed = yield* open({ issueId: Option.some(issueId), page: "integ-refresh" });
+      const refreshed = yield* open({
+        issues: [],
+        issueId: Option.some(issueId),
+        page: "integ-refresh",
+      });
       const resumed = yield* refreshed.until(
-        (model) => model.caughtUp && model.listed && Option.isSome(model.detail),
+        (model) =>
+          threadOf(model).caughtUp && model.listed && Option.isSome(threadOf(model).detail),
       );
       // The status and the transcript are two reads: the first page may see
       // `idle` a moment before the last item. Both pages end with the same items.
-      const settled = yield* page.until((model) => model.items.length >= resumed.items.length);
+      const settled = yield* page.until(
+        (model) => threadOf(model).items.length >= threadOf(resumed).items.length,
+      );
       return { issueId, done, replied: settled, resumed };
     }).pipe(Effect.scoped, Effect.provide(connection(app)));
 
-    expect(seen.done.items[0]?.item).toEqual({
+    expect(threadOf(seen.done).items[0]?.item).toEqual({
       type: "user",
-      text: `The issue is ${seen.issueId}.`,
+      text: started(seen.issueId),
     });
-    expect(JSON.stringify(seen.done.items)).toContain("Board_LabelIssue_send");
+    expect(JSON.stringify(threadOf(seen.done).items)).toContain("Board_LabelIssue_send");
     // Every item once, in order.
-    const seqs = seen.replied.items.map((entry) => entry.seq);
+    const seqs = threadOf(seen.replied).items.map((entry) => entry.seq);
     expect(seqs).toEqual([...new Set(seqs)].sort((a, b) => a - b));
-    expect(seen.replied.items.length).toBeGreaterThan(seen.done.items.length);
+    expect(threadOf(seen.replied).items.length).toBeGreaterThan(threadOf(seen.done).items.length);
     expect(seen.replied.error).toEqual(Option.none());
     // The refreshed page has the same transcript and finds the issue in the list.
-    expect(seen.resumed.items).toEqual(seen.replied.items);
+    expect(threadOf(seen.resumed).items).toEqual(threadOf(seen.replied).items);
     expect(seen.resumed.issues.find((issue) => issue.issueId === seen.issueId)).toMatchObject({
       title: "The export button does nothing",
       label: "question",

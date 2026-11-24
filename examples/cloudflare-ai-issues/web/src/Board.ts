@@ -12,6 +12,7 @@ import { IssueId } from "../../src/Board/Issue.id.ts";
 import { ALL } from "../../src/Board/IssueList.view.ts";
 import { Label } from "../../src/Board/LabelIssue.command.ts";
 import { Status } from "../../src/Board/RecordActivity.command.ts";
+import { replied } from "../../src/Board/Said.ts";
 import { WebApi } from "../../src/Board/WebApi.api.ts";
 import { issueIn, urlOf } from "./Location.ts";
 
@@ -20,13 +21,6 @@ export type Board = Domain.Api.ClientKey<"WebApi">;
 export const BoardClient = DomainFoldkit.make(WebApi);
 
 // MODEL
-
-export const Flags = Schema.Struct({
-  /** The issue the address names, if it names one. */
-  issueId: Schema.Option(IssueId),
-  page: Schema.String,
-});
-export type Flags = typeof Flags.Type;
 
 /** One issue as the sidebar lists it. */
 export const Listed = Schema.Struct({
@@ -37,6 +31,55 @@ export const Listed = Schema.Struct({
   working: Schema.Boolean,
 });
 export type Listed = typeof Listed.Type;
+
+export const Flags = Schema.Struct({
+  /** The issue the address names, if it names one. */
+  issueId: Schema.Option(IssueId),
+  page: Schema.String,
+  /** The list as the last visit left it, shown until the board answers. */
+  issues: Schema.Array(Listed),
+});
+export type Flags = typeof Flags.Type;
+
+/** What the page knows of one issue. It is kept when another is opened, so coming back is instant. */
+export const Thread = Schema.Struct({
+  /** The issue itself. Known at once for one this page reported or lists. */
+  detail: Schema.Option(
+    Schema.Struct({ title: Schema.String, body: Schema.String, label: Schema.NullOr(Label) }),
+  ),
+  /** Whether its agent is working, and what is queued for it. */
+  status: Status,
+  queued: Schema.Array(QueuedMessage),
+  /** The agent's transcript so far, and where to resume reading it. */
+  items: Schema.Array(SessionEntry),
+  cursor: Schema.Option(Schema.Number),
+  /** The transcript has been read up to now: what arrives next is live. */
+  caughtUp: Schema.Boolean,
+});
+export type Thread = typeof Thread.Type;
+
+const unread: Thread = {
+  detail: Option.none(),
+  status: "idle",
+  queued: [],
+  items: [],
+  cursor: Option.none(),
+  caughtUp: false,
+};
+
+/**
+ * Something the person did that the board has not shown back yet. The page
+ * shows it at once, and drops it when the board's own copy arrives, or says
+ * so when the board refuses it.
+ */
+export const Pending = Schema.Struct({
+  commandId: Schema.String,
+  issueId: IssueId,
+  kind: Schema.Literals(["issue", "reply"]),
+  /** A reply's text. */
+  text: Schema.String,
+});
+export type Pending = typeof Pending.Type;
 
 export const Model = Schema.Struct({
   commandIds: DomainFoldkit.CommandIds,
@@ -50,21 +93,76 @@ export const Model = Schema.Struct({
   body: Schema.String,
   /** The reply being written. */
   reply: Schema.String,
-  /** The open issue, once the board has it. */
-  detail: Schema.Option(
-    Schema.Struct({ title: Schema.String, body: Schema.String, label: Schema.NullOr(Label) }),
-  ),
-  /** Whether its agent is working, and what is queued for it. */
-  status: Status,
-  queued: Schema.Array(QueuedMessage),
-  /** The agent's transcript so far, and where to resume reading it. */
-  items: Schema.Array(SessionEntry),
-  cursor: Schema.Option(Schema.Number),
-  /** The transcript has been read up to now: what arrives next is live. */
-  caughtUp: Schema.Boolean,
+  /** Every issue this page has opened. */
+  threads: Schema.Record(IssueId, Thread),
+  pending: Schema.Array(Pending),
   error: Schema.Option(Schema.String),
 });
 export type Model = typeof Model.Type;
+
+/**
+ * The open issue's thread. While something this page sent is on its way, its
+ * agent is about to work, whatever the board last said.
+ */
+export const threadOf = (model: Model): Thread =>
+  Option.match(model.selected, {
+    onNone: () => unread,
+    onSome: (issueId) => {
+      const known = model.threads[issueId] ?? unread;
+      return model.pending.some((pending) => pending.issueId === issueId)
+        ? { ...known, status: "working" }
+        : known;
+    },
+  });
+
+/** The sidebar: the board's list, with what this page reported ahead of it. */
+export const listOf = (model: Model): ReadonlyArray<Listed & { readonly sending: boolean }> => {
+  const known = new Set(model.issues.map((issue) => issue.issueId));
+  const ahead = model.pending.flatMap((pending) =>
+    pending.kind === "issue" && !known.has(pending.issueId)
+      ? [
+          {
+            issueId: pending.issueId,
+            title: Option.match(model.threads[pending.issueId]?.detail ?? Option.none(), {
+              onNone: () => "",
+              onSome: (detail) => detail.title,
+            }),
+            label: null,
+            replies: 0,
+            working: true,
+            sending: true,
+          },
+        ]
+      : [],
+  );
+  return [
+    ...ahead,
+    ...model.issues.map((issue) => ({
+      ...issue,
+      // The page knows its own issue's agent is at work before the list says so.
+      working:
+        issue.working ||
+        model.threads[issue.issueId]?.status === "working" ||
+        model.pending.some((pending) => pending.issueId === issue.issueId),
+      sending: false,
+    })),
+  ];
+};
+
+/** The replies to the open issue that its transcript does not show yet. */
+export const sendingOf = (model: Model): ReadonlyArray<Pending> => {
+  const thread = threadOf(model);
+  const shown = [
+    ...thread.queued.map((message) => message.text),
+    ...thread.items.flatMap(({ item }) => (item.type === "user" ? [item.text] : [])),
+  ];
+  return model.pending.filter(
+    (pending) =>
+      pending.kind === "reply" &&
+      Option.contains(model.selected, pending.issueId) &&
+      !shown.includes(replied(pending.text)),
+  );
+};
 
 // MESSAGE
 
@@ -79,12 +177,13 @@ export const Message = defineMessageUnion({
   SubmittedIssue: {},
   SubmittedReply: {},
   CompletedShowAddress: {},
+  CompletedRemember: {},
   ReceivedBoardResult: { result: BoardClient.Message },
   ReceivedIssues: { issues: Schema.Array(Listed) },
-  ReceivedIssue: { detail: Model.fields.detail },
-  ReceivedStatus: { status: Status, queued: Schema.Array(QueuedMessage) },
+  ReceivedIssue: { issueId: IssueId, detail: Thread.fields.detail },
+  ReceivedStatus: { issueId: IssueId, status: Status, queued: Schema.Array(QueuedMessage) },
   ReceivedItem: { issueId: IssueId, entry: SessionEntry, cursor: Schema.Number },
-  CaughtUpTranscript: { cursor: Schema.Number },
+  CaughtUpTranscript: { issueId: IssueId, cursor: Schema.Number },
   FailedRead: { reason: Schema.String },
 });
 export type Message = typeof Message.Type;
@@ -104,38 +203,91 @@ export const ShowAddress = Command.define("ShowAddress", {
     }),
 });
 
+/** Keep the list for the next visit, so it is on screen before the board answers. */
+export const Remember = Command.define("Remember", {
+  args: { issues: Schema.Array(Listed) },
+  messages: [Message.CompletedRemember],
+  execute: ({ issues }) =>
+    Effect.sync(() => {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(REMEMBERED, JSON.stringify(issues.slice(0, 100)));
+      }
+      return Message.CompletedRemember();
+    }),
+});
+export const REMEMBERED = "board:issues";
+
 // UPDATE
 
 type Return = Update.Return<Model, Message, Board>;
 
-/** Open an issue, or none: what was read of the last one is dropped. */
+/** Change what the page knows of one issue. */
+const thread = (model: Model, issueId: IssueId, change: (thread: Thread) => Thread): Model =>
+  modifyFields(model, {
+    threads: (threads) => ({ ...threads, [issueId]: change(threads[issueId] ?? unread) }),
+  });
+
+/**
+ * Open an issue, or none. Nothing is waited for: an issue this page has open
+ * already is shown as it was left, and one it only lists shows its title.
+ */
 const show = (model: Model, selected: Option.Option<IssueId>): Model =>
-  Option.getOrNull(model.selected) === Option.getOrNull(selected)
-    ? model
-    : modifyFields(model, {
+  Option.match(selected, {
+    onNone: () => modifyFields(model, { selected: () => selected, error: () => Option.none() }),
+    onSome: (issueId) => {
+      const listed = model.issues.find((issue) => issue.issueId === issueId);
+      const opened = thread(model, issueId, (known) =>
+        Option.isSome(known.detail) || listed === undefined
+          ? known
+          : {
+              ...known,
+              detail: Option.some({ title: listed.title, body: "", label: listed.label }),
+              status: listed.working ? "working" : known.status,
+            },
+      );
+      return modifyFields(opened, {
         selected: () => selected,
-        detail: () => Option.none(),
-        status: () => "idle",
-        queued: () => [],
-        items: () => [],
-        cursor: () => Option.none(),
-        caughtUp: () => false,
         reply: () => "",
         error: () => Option.none(),
       });
+    },
+  });
 
 /** Send one command of the Api, named so that a retry is not run twice. */
 const send = (
   model: Model,
   command: (commandId: string) => Command.Command<typeof BoardClient.Message.Type, never, Board>,
-): Return => {
+): Return & { readonly commandId: string } => {
   const { commandId, commandIds } = DomainFoldkit.next(model.commandIds);
   return {
+    commandId,
     model: modifyFields(model, { commandIds: () => commandIds, error: () => Option.none() }),
     commands: [
       Command.mapMessage(command(commandId), (result) => Message.ReceivedBoardResult({ result })),
     ],
   };
+};
+
+/** The board refused, or never answered: take back what the page showed ahead of it. */
+const undo = (model: Model, commandId: string, reason: string): Model => {
+  const refused = model.pending.find((pending) => pending.commandId === commandId);
+  const rest = modifyFields(model, {
+    pending: (pending) => pending.filter((each) => each.commandId !== commandId),
+    error: () => Option.some(reason),
+  });
+  if (refused === undefined) return rest;
+  if (refused.kind === "reply") {
+    // The words go back in the box, unless the person has started another.
+    return modifyFields(rest, { reply: (reply) => (reply === "" ? refused.text : reply) });
+  }
+  const written = Option.getOrUndefined(rest.threads[refused.issueId]?.detail ?? Option.none());
+  const { [refused.issueId]: _dropped, ...threads } = rest.threads;
+  return modifyFields(rest, {
+    threads: () => threads,
+    selected: (selected) => (Option.contains(selected, refused.issueId) ? Option.none() : selected),
+    title: (title) => (title === "" ? (written?.title ?? "") : title),
+    body: (body) => (body === "" ? (written?.body ?? "") : body),
+  });
 };
 
 export const update = (model: Model, message: Message) =>
@@ -154,21 +306,32 @@ export const update = (model: Model, message: Message) =>
     ChangedReply: ({ text }) => ({ model: modifyFields(model, { reply: () => text }) }),
     // Reporting the issue is what starts its agent: the board's policy does that.
     SubmittedIssue: () => {
-      if (model.title.trim() === "") return { model };
-      // The page names the issue, so it can open it before the board answers.
+      const title = model.title.trim();
+      const body = model.body.trim();
+      if (title === "") return { model };
+      // The page names the issue, so it can show it before the board answers.
       const issueId = IssueId.make(
         `${model.commandIds.session}-${model.commandIds.sent}`.replace(/[^\w-]/g, "-"),
       );
       const sent = send(model, (commandId) =>
-        BoardClient.ReportIssue({
-          input: { issueId, title: model.title.trim(), body: model.body.trim() },
-          commandId,
-        }),
+        BoardClient.ReportIssue({ input: { issueId, title, body }, commandId }),
       );
+      // Shown at once: the issue as written, its agent starting, and a place in the list.
+      const written = thread(sent.model, issueId, () => ({
+        ...unread,
+        detail: Option.some({ title, body, label: null }),
+        caughtUp: true,
+      }));
       return {
-        model: modifyFields(show(sent.model, Option.some(issueId)), {
+        model: modifyFields(written, {
+          selected: () => Option.some(issueId),
           title: () => "",
           body: () => "",
+          reply: () => "",
+          pending: (pending) => [
+            ...pending,
+            { commandId: sent.commandId, issueId, kind: "issue" as const, text: "" },
+          ],
         }),
         commands: [...(sent.commands ?? []), ShowAddress({ issueId: Option.some(issueId) })],
       };
@@ -178,48 +341,86 @@ export const update = (model: Model, message: Message) =>
       Option.match(model.selected, {
         onNone: (): Return => ({ model }),
         onSome: (issueId) => {
-          if (model.reply.trim() === "") return { model };
+          const text = model.reply.trim();
+          if (text === "") return { model };
           const sent = send(model, (commandId) =>
             BoardClient.CommentOnIssue({
-              input: { issueId, commentId: commandId, body: model.reply.trim() },
+              input: { issueId, commentId: commandId, body: text },
               commandId,
             }),
           );
-          return { ...sent, model: modifyFields(sent.model, { reply: () => "" }) };
+          return {
+            // Shown at once, with the agent taking it up.
+            model: modifyFields(sent.model, {
+              reply: () => "",
+              pending: (pending) => [
+                ...pending,
+                { commandId: sent.commandId, issueId, kind: "reply" as const, text },
+              ],
+            }),
+            commands: sent.commands,
+          };
         },
       }),
     CompletedShowAddress: () => ({ model }),
+    CompletedRemember: () => ({ model }),
     ReceivedBoardResult: ({ result }) => ({
       model:
         result._tag === "FailedReportIssue" || result._tag === "FailedCommentOnIssue"
-          ? modifyFields(model, {
-              error: () =>
-                Option.some(
-                  result.failure._tag === "Rejected"
-                    ? result.failure.rejection._tag
-                    : "The board did not answer. Try again.",
-                ),
-            })
+          ? undo(
+              model,
+              result.commandId,
+              result.failure._tag === "Rejected"
+                ? result.failure.rejection._tag
+                : "The board did not answer. Your words are back in the box.",
+            )
           : model,
     }),
     ReceivedIssues: ({ issues }) => ({
       model: modifyFields(model, { issues: () => issues, listed: () => true }),
+      commands: [Remember({ issues })],
     }),
-    ReceivedIssue: ({ detail }) => ({ model: modifyFields(model, { detail: () => detail }) }),
-    ReceivedStatus: ({ status, queued }) => ({
-      model: modifyFields(model, { status: () => status, queued: () => queued }),
+    ReceivedIssue: ({ issueId, detail }) => ({
+      // The board's copy replaces the page's, once it has one.
+      model: Option.isNone(detail)
+        ? model
+        : thread(model, issueId, (known) => ({ ...known, detail })),
     }),
-    ReceivedItem: ({ issueId, entry, cursor }) => ({
-      // An entry of the issue that was open a moment ago is not this one's.
-      model: Option.contains(model.selected, issueId)
-        ? modifyFields(model, {
-            items: (items) => [...items, entry],
-            cursor: () => Option.some(cursor),
-          })
-        : model,
+    ReceivedStatus: ({ issueId, status, queued }) => ({
+      model: thread(model, issueId, (known) => ({
+        ...known,
+        queued,
+        status,
+      })),
     }),
-    CaughtUpTranscript: ({ cursor }) => ({
-      model: modifyFields(model, { cursor: () => Option.some(cursor), caughtUp: () => true }),
+    ReceivedItem: ({ issueId, entry, cursor }) => {
+      const read = thread(model, issueId, (known) =>
+        known.items.some((item) => item.seq === entry.seq)
+          ? known
+          : { ...known, items: [...known.items, entry], cursor: Option.some(cursor) },
+      );
+      // The agent has it: the page's own copy of the reply, or of the issue, is done.
+      const text = entry.item.type === "user" ? entry.item.text : undefined;
+      const arrived = read.pending.find(
+        (pending) =>
+          pending.issueId === issueId &&
+          (pending.kind === "issue" ? text !== undefined : text === replied(pending.text)),
+      );
+      return {
+        model:
+          arrived === undefined
+            ? read
+            : modifyFields(read, {
+                pending: (pending) => pending.filter((each) => each !== arrived),
+              }),
+      };
+    },
+    CaughtUpTranscript: ({ issueId, cursor }) => ({
+      model: thread(model, issueId, (known) => ({
+        ...known,
+        cursor: Option.some(cursor),
+        caughtUp: true,
+      })),
     }),
     FailedRead: ({ reason }) => ({
       model: modifyFields(model, { error: () => Option.some(reason) }),
@@ -229,22 +430,21 @@ export const update = (model: Model, message: Message) =>
 // INIT
 
 export const init = (flags: Flags): Return => ({
-  model: Model.make({
-    commandIds: { session: flags.page, sent: 0 },
-    issues: [],
-    listed: false,
-    selected: flags.issueId,
-    title: "",
-    body: "",
-    reply: "",
-    detail: Option.none(),
-    status: "idle",
-    queued: [],
-    items: [],
-    cursor: Option.none(),
-    caughtUp: false,
-    error: Option.none(),
-  }),
+  model: show(
+    Model.make({
+      commandIds: { session: flags.page, sent: 0 },
+      issues: flags.issues,
+      listed: false,
+      selected: Option.none(),
+      title: "",
+      body: "",
+      reply: "",
+      threads: {},
+      pending: [],
+      error: Option.none(),
+    }),
+    flags.issueId,
+  ),
 });
 
 // SUBSCRIPTION
@@ -290,8 +490,9 @@ export const subscriptions = Subscription.make<Model, Message, Board>()((entry) 
   issue: BoardClient.IssueDetail.watch({
     key: open,
     isEnabled: isOpen,
-    toMessage: ({ state }): Message =>
+    toMessage: ({ state }, issueId): Message =>
       Message.ReceivedIssue({
+        issueId,
         detail: Option.map(state, ({ title, body, label }) => ({ title, body, label })),
       }),
     onFailure: failed,
@@ -300,24 +501,25 @@ export const subscriptions = Subscription.make<Model, Message, Board>()((entry) 
   status: BoardClient.SessionStatus.watch({
     key: open,
     isEnabled: isOpen,
-    toMessage: ({ state }): Message =>
-      Message.ReceivedStatus(
-        Option.getOrElse(state, () => ({ status: "idle" as const, queued: [] })),
-      ),
+    toMessage: ({ state }, issueId): Message =>
+      Message.ReceivedStatus({
+        issueId,
+        ...Option.getOrElse(state, () => ({ status: "idle" as const, queued: [] })),
+      }),
     onFailure: failed,
     onDefect: defect,
   }),
   transcript: BoardClient.Transcript.events({
     key: open,
     isEnabled: isOpen,
-    cursor: (model) => model.cursor,
+    cursor: (model) => threadOf(model).cursor,
     onEntry: ({ event, envelope }): Message =>
       Message.ReceivedItem({
         issueId: IssueId.make(envelope.id),
         entry: { seq: event.seq, item: event.item },
         cursor: envelope.seq,
       }),
-    onCaughtUp: (cursor): Message => Message.CaughtUpTranscript({ cursor }),
+    onCaughtUp: (cursor, issueId): Message => Message.CaughtUpTranscript({ issueId, cursor }),
     onFailure: failed,
     onDefect: defect,
   }),

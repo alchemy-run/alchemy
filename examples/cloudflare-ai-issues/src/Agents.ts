@@ -15,6 +15,7 @@ import { BoardHandlers } from "./Board/Handlers.ts";
 import type { IssueId } from "./Board/Issue.id.ts";
 import { IssueSession } from "./Board/IssueSession.aggregate.ts";
 import { RecordActivity } from "./Board/RecordActivity.command.ts";
+import { started } from "./Board/Said.ts";
 import { Triager } from "./Board/Triager.external.ts";
 import { SmartLlama, Smart } from "./Models.ts";
 import { PostAnswerLive } from "./PostAnswer.tool.ts";
@@ -184,7 +185,7 @@ export default class IssueAgents extends Cloudflare.DurableObject<IssueAgents>()
         start: (issue) =>
           triage
             .get(issue)
-            .send(`The issue is ${issue}.`, { requestId: "start" })
+            .send(started(issue), { requestId: "start" })
             .pipe(Effect.andThen(record(issue)), Effect.orDie),
         tell: (issue, text, id) =>
           triage
