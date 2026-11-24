@@ -1,4 +1,7 @@
+import * as EC2 from "@alchemy.run/aws/EC2";
+import type { SecurityGroup } from "@alchemy.run/aws/EC2/SecurityGroup";
 import * as ECS from "@alchemy.run/aws/ECS";
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { GATEWAY_PORT, RUNNER_PORT } from "../internal/Gateway.ts";
@@ -13,7 +16,10 @@ const RDS_RUNNER_DOCKERFILE = RUNNER_DOCKERFILE.replace(
 ADD ${RDS_CA_BUNDLE} /etc/ssl/rds-ca.pem
 ENV NODE_EXTRA_CA_CERTS=/etc/ssl/rds-ca.pem`,
 );
-import { awsNetworkOf, makeAwsGateway, type AwsNetwork } from "./internal/Gateway.ts";
+import type { Gateway } from "./Gateway.ts";
+import { awsNetworkOf, makeAwsGateway } from "./internal/Gateway.ts";
+import { resolveNetwork, resolveResource } from "./internal/Network.ts";
+import type { NetworkInput, ResourceInput } from "./Network.ts";
 
 export interface EcsPoolOptions extends PoolSettings {
   /**
@@ -38,13 +44,42 @@ export interface EcsPoolOptions extends PoolSettings {
    */
   architecture?: "X86_64" | "ARM64";
   /**
-   * The VPC runners run in when the database is in none, such as
-   * `Cluster.Database.fromUrl`. `securityGroupId` is the group every runner
-   * joins; it must let runners reach each other on port 34431 and reach
-   * the database. Ignored when the database is in a VPC.
+   * Where callers reach the pool: `ClusterAWS.LoadBalancerGateway(…)` or
+   * `ClusterAWS.CloudFrontGateway(…)`.
+   * @default ClusterAWS.LoadBalancerGateway(): internet-facing, plain HTTP
    */
-  network?: Omit<AwsNetwork, "kind">;
+  gateway?: Gateway;
+  /**
+   * The VPC runners run in when the database is in none, such as
+   * `Cluster.Database.fromUrl`. Ignored when the database is in a VPC.
+   */
+  network?: NetworkInput;
+  /**
+   * With a `network`, the security group every runner joins. It must reach
+   * the database and let runners reach each other on port 34431. When
+   * omitted, the pool creates one that does the second.
+   */
+  securityGroup?: ResourceInput<SecurityGroup>;
 }
+
+/** A security group for a pool's runners, which reach each other on the runner port. */
+const runnersGroup = Effect.fn(function* (id: string, vpcId: Input<EC2.VpcId>) {
+  const runners = yield* EC2.SecurityGroup(`${id}RunnersGroup`, {
+    vpcId,
+    description: "Effect Cluster runners",
+    egress: [{ ipProtocol: "-1", cidrIpv4: "0.0.0.0/0" }],
+  });
+  // Runners send each other messages for the shards they own.
+  yield* EC2.SecurityGroupRule(`${id}RunnerPeers`, {
+    groupId: runners.groupId,
+    type: "ingress",
+    ipProtocol: "tcp",
+    fromPort: RUNNER_PORT,
+    toPort: RUNNER_PORT,
+    referencedGroupId: runners.groupId,
+  });
+  return runners;
+});
 
 /**
  * Run a pool of Effect Cluster runners on ECS Fargate: an ECS service whose tasks
@@ -86,10 +121,23 @@ export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
     // verify the database's certificate.
     dockerfile: RDS_RUNNER_DOCKERFILE,
     network: awsNetworkOf,
-    ownNetwork: Effect.succeed(
-      options.network === undefined ? undefined : { kind: "aws" as const, ...options.network },
-    ),
-    gateway: (_name, network) => makeAwsGateway(id, network, "ip"),
+    ownNetwork: Effect.gen(function* () {
+      if (options.network === undefined) return undefined;
+      const network = yield* resolveNetwork(options.network);
+      const runners =
+        options.securityGroup === undefined
+          ? yield* runnersGroup(id, network.vpcId)
+          : yield* resolveResource(options.securityGroup);
+      return {
+        kind: "aws" as const,
+        vpcId: network.vpcId,
+        subnetIds: network.subnetIds,
+        securityGroupId: runners.groupId,
+        cidrBlock: network.cidrBlock,
+        assignPublicIp: network.assignPublicIp,
+      };
+    }),
+    gateway: (_name, network) => makeAwsGateway(id, network, "ip", options.gateway),
     nodes: ({ network, gateway, program, environment }) =>
       Effect.gen(function* () {
         const cluster = yield* ECS.Cluster(`${id}Cluster`, {});
@@ -114,7 +162,7 @@ export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
           vpcId: network.vpcId,
           subnets: [...network.subnetIds],
           securityGroups: [network.securityGroupId, gateway.securityGroupId],
-          assignPublicIp: true,
+          assignPublicIp: network.assignPublicIp,
           loadBalancers: [
             {
               targetGroupArn: gateway.targetGroupArn as unknown as string,

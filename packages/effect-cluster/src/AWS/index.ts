@@ -4,3 +4,5 @@
  */
 export * from "./Database.ts";
 export * from "./EcsPool.ts";
+export * from "./Gateway.ts";
+export type * from "./Network.ts";

@@ -8,8 +8,10 @@ import * as Redacted from "effect/Redacted";
 import { clusterShardGroups, Database as ClusterDatabase } from "../Database.ts";
 import { RUNNER_PORT } from "../internal/Gateway.ts";
 import type { Providers } from "../Providers.ts";
+import { resolveNetwork } from "./internal/Network.ts";
+import type { NetworkInput } from "./Network.ts";
 
-export interface DatabaseProps {
+export interface DatabaseProps<E = never, R = never> {
   /**
    * RDS instance class.
    * @default "db.t4g.micro"
@@ -31,10 +33,18 @@ export interface DatabaseProps {
    */
   multiAZ?: boolean;
   /**
-   * IPv4 CIDR block of the cluster's VPC.
+   * IPv4 CIDR block of the VPC the database creates. Ignored with a
+   * `network`.
    * @default "10.44.0.0/16"
    */
   cidrBlock?: string;
+  /**
+   * The VPC the database, the runners and their gateways run in: an
+   * `EC2.Network` declaration, or a VPC and its subnets (declared, a `ref`
+   * to another stack's, or a `lookup`). When omitted, the database creates
+   * a VPC of its own, with public subnets and no NAT gateway.
+   */
+  network?: NetworkInput<E, R>;
 }
 
 /**
@@ -59,7 +69,7 @@ export interface DatabaseProps {
  *
  * @primitive
  */
-export const Database = (id: string, props: DatabaseProps = {}) =>
+export const Database = <E = never, R = never>(id: string, props: DatabaseProps<E, R> = {}) =>
   Layer.effect(
     ClusterDatabase,
     Effect.gen(function* () {
@@ -67,10 +77,15 @@ export const Database = (id: string, props: DatabaseProps = {}) =>
         // Runners read their database from their own environment at runtime.
         return { url: Redacted.make(""), shardGroups: undefined as never };
       }
-      const network = yield* EC2.Network(`${id}Network`, {
-        cidrBlock: props.cidrBlock ?? "10.44.0.0/16",
-        availabilityZones: 2,
-      });
+      const network =
+        props.network === undefined
+          ? yield* resolveNetwork(
+              EC2.Network(`${id}Network`, {
+                cidrBlock: props.cidrBlock ?? "10.44.0.0/16",
+                availabilityZones: 2,
+              }),
+            )
+          : yield* resolveNetwork(props.network);
       const runners = yield* EC2.SecurityGroup(`${id}RunnersGroup`, {
         vpcId: network.vpcId,
         description: "Effect Cluster runners",
@@ -95,7 +110,7 @@ export const Database = (id: string, props: DatabaseProps = {}) =>
       });
       const subnets = yield* RDS.DBSubnetGroup(`${id}Subnets`, {
         description: "Effect Cluster database",
-        subnetIds: network.publicSubnetIds,
+        subnetIds: network.subnetIds,
       });
       const password = yield* Random(`${id}Password`, { bytes: 24 }) as unknown as Effect.Effect<
         Random,
@@ -130,8 +145,10 @@ export const Database = (id: string, props: DatabaseProps = {}) =>
         network: {
           kind: "aws" as const,
           vpcId: network.vpcId,
-          subnetIds: network.publicSubnetIds,
+          subnetIds: network.subnetIds,
           securityGroupId: runners.groupId,
+          cidrBlock: network.cidrBlock,
+          assignPublicIp: network.assignPublicIp,
         },
         shardGroups: yield* clusterShardGroups(id),
       };
