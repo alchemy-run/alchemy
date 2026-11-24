@@ -152,13 +152,10 @@ export const cases: ReadonlyArray<Case> = [
   // An enum the file keeps to itself is read where it is declared.
   read("OwnEnum", `OwnLevel.High + a`),
   unread("OwnNamespace", `OwnSpace.inside + a`, /refers to OwnSpace, which the prover cannot find/),
-  unread("OwnPlainClass", `new Plain(a).n`, /Plain is a class that its file does not export/),
-  unread(
-    "OwnClassWithABody",
-    `new Child().twice() + a`,
-    /Child is a class that its file does not export/,
-  ),
-  unread("ExportedPlainClass", `new Lib.Counter(a).n`, /./),
+  // A class the file keeps to itself is read from what it writes.
+  read("OwnPlainClass", `new Plain(a).n`),
+  read("OwnClassWithABody", `new Child().twice() + a + Child.made`),
+  read("ExportedPlainClass", `new Lib.Counter(a).n`),
   // A name a file declares and does not export is not on its namespace.
   read("NotExported", `Lib.hidden === undefined ? a : -1`),
   read("NotExportedOfBarrel", `[Barrel.one, Barrel.hidden, Barrel.half].length + a`),

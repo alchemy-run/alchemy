@@ -1921,6 +1921,12 @@ const syntax: ReadonlyArray<Group> = [
     both: [
       // Powers, loose equality between two of a kind, the comma, and helpers of arrays and objects.
       `a ** 2`,
+      // A getter and a setter of an object, and `this` in its methods.
+      `({ get n() { return a; } }).n`,
+      `({ set n(value) {} }).n ?? a`,
+      `({ n: a, twice() { return this.n * 2; }, get half() { return this.n / 2; } }).twice()`,
+      `new (class { n = a })().n`,
+      `typeof class { n = a }`,
       // delete, instanceof and a tagged template.
       `(() => { const made = { n: a, m: b }; const gone = delete made.n; delete made["m"]; return [made, gone]; })()`,
       `(() => { try { throw new TypeError("no"); } catch (thrown) { return [thrown instanceof TypeError, thrown instanceof Error, thrown instanceof RangeError, ({}) instanceof Error]; } })()`,
@@ -2071,8 +2077,6 @@ const syntax: ReadonlyArray<Group> = [
       // `==` between two kinds turns one into the other, which is not read.
       [`a == "1"`, /uses ==, where the prover reads ===/],
       [`a != flag`, /uses !=, where the prover reads ===/],
-      [`({ get n() { return a; } }).n`, /declares a getter/],
-      [`({ set n(value) {} }).n ?? a`, /declares a setter/],
       [`2 ** a`, /raises a number to a power the prover cannot see/],
       [`a & b`, /applies & to a number an input holds/],
       [`a | b`, /applies \| to a number an input holds/],
@@ -2086,8 +2090,6 @@ const syntax: ReadonlyArray<Group> = [
       [`new Date(a).getTime()`, reported],
       [`Math.random() + a`, reported],
       [`Date.now() + a`, reported],
-      [`class { n = a }`, reported],
-      [`new (class { n = a })().n`, reported],
       [`(function () { return this; })()`, reported],
       [`(async () => a)()`, reported],
       [`globalThis.a`, reported],
@@ -2206,6 +2208,21 @@ const syntax: ReadonlyArray<Group> = [
       body(`a; "use strict"; return a;`),
       body(`return;`) + ` ?? "nothing"`,
       body(``) + ` ?? "nothing"`,
+      // A class: fields, a constructor, methods, this, what it extends, and what it holds itself.
+      body(`class Local { n = a; } return new Local().n;`),
+      body(
+        `class Counter { count = 0; constructor(readonly step: number) {} add() { this.count += this.step; return this; } get doubled() { return this.count * 2; } } const made = new Counter(a); made.add().add(); return [made.count, made.doubled, made.step, made instanceof Counter];`,
+      ),
+      body(
+        `class Shape { constructor(public side: number) {} area() { return this.side * this.side; } describe() { return "area " + this.area(); } } class Box extends Shape { depth = 2; constructor(side: number) { super(side + 1); } area() { return super.area() * this.depth; } } const box = new Box(a); return [box.area(), box.describe(), box instanceof Shape, new Shape(1) instanceof Box];`,
+      ),
+      body(
+        `class Tally { static made = 0; static next() { Tally.made += 1; return Tally.made; } #hidden = a; reveal() { return this.#hidden; } set value(n) { this.#hidden = n; } get value() { return this.#hidden; } } const tally = new Tally(); tally.value = 7; return [Tally.next(), Tally.next(), tally.reveal(), tally.value];`,
+      ),
+      body(`const Made = class { twice(n) { return n * 2; } }; return new Made().twice(a);`),
+      body(
+        `const made = { n: a, twice() { return this.n * 2; }, get half() { return this.n / 2; }, set next(n) { this.n = n; } }; const before = made.twice(); made.next = 4; return [before, made.half, made.n];`,
+      ),
       // An enum, in a function and at the top of the file.
       body(
         `enum Kind { Good, Gift = 5, Last } return [Kind.Good, Kind.Gift, Kind.Last, Kind[5], Kind.Good === 0, a > 1 ? Kind.Last : Kind.Good];`,
@@ -2252,7 +2269,10 @@ const syntax: ReadonlyArray<Group> = [
     ],
     known: [body(`let x = a; x /= 4; return x;`), body(`let x = 9; x /= 2; x += a; return x;`)],
     unread: [
-      [body(`class Local { n = a; } return new Local().n;`), reported],
+      [
+        body(`const again = (n) => again(n + 1); return again(a);`),
+        /calls functions more than 500 deep: a function that calls itself with no end/,
+      ],
       [body(`let i = 0; while (i < a) i++; return i;`), reported],
       [body(`for (let i = 0; i < a; i++) {} return a;`), reported],
       [body(`items.push(1); return items.length;`), reported],

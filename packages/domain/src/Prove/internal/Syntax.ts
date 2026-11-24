@@ -66,8 +66,8 @@ export const FORMS: ReadonlyArray<Form> = [
   form("TemplateElement", kind("TemplateElement")),
   form("TaggedTemplateExpression", kind("TaggedTemplateExpression")),
   form("Identifier", kind("Identifier")),
-  form("ThisExpression", kind("ThisExpression"), false),
-  form("Super", kind("Super"), false),
+  form("ThisExpression", kind("ThisExpression")),
+  form("Super", kind("Super")),
   form("MetaProperty", kind("MetaProperty"), false),
 
   // Objects and arrays.
@@ -107,8 +107,8 @@ export const FORMS: ReadonlyArray<Form> = [
       n.method === true &&
       n.kind === "init",
   ),
-  form("Property: a getter", (n) => n.type === "Property" && n.kind === "get", false),
-  form("Property: a setter", (n) => n.type === "Property" && n.kind === "set", false),
+  form("Property: a getter", (n) => n.type === "Property" && n.kind === "get"),
+  form("Property: a setter", (n) => n.type === "Property" && n.kind === "set"),
   form("ArrayExpression", kind("ArrayExpression")),
   form(
     "ArrayExpression: with a hole",
@@ -346,12 +346,11 @@ export const FORMS: ReadonlyArray<Form> = [
   form("CatchClause", kind("CatchClause")),
   form("ThrowStatement", kind("ThrowStatement")),
   form("DebuggerStatement", kind("DebuggerStatement")),
-  form("ClassExpression", kind("ClassExpression"), false),
+  form("ClassExpression", kind("ClassExpression")),
   form(
     "ClassDeclaration: in a function",
     (n, p) =>
       n.type === "ClassDeclaration" && p?.type !== "Program" && !p?.type.startsWith("Export"),
-    false,
   ),
 
   // TypeScript that changes nothing at run time, and TypeScript that does.
@@ -437,9 +436,11 @@ export const FORMS: ReadonlyArray<Form> = [
       (p?.type === "Program" || p?.type.startsWith("Export") === true),
   ),
   form("ClassBody", kind("ClassBody")),
-  form("PropertyDefinition", kind("PropertyDefinition"), false),
-  form("MethodDefinition", kind("MethodDefinition"), false),
-  form("StaticBlock", kind("StaticBlock"), false),
+  form("PropertyDefinition", kind("PropertyDefinition")),
+  form("MethodDefinition", kind("MethodDefinition")),
+  form("StaticBlock", kind("StaticBlock")),
+  form("PrivateIdentifier", kind("PrivateIdentifier")),
+  form("TSParameterProperty", kind("TSParameterProperty")),
 ];
 
 /** The keys of a node that hold types, which are not there when the code runs. */

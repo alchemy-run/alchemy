@@ -239,6 +239,32 @@ const PURE: ReadonlySet<string> = new Set([
  * The errors the language has: `new Error("no")`. One is what it says, its
  * `message` and its `name`. A stack and a cause are not read.
  */
+/** A class the prover reads from its source: its body, where it was declared, and what it extends. */
+interface Read {
+  readonly name: string;
+  readonly node: Node;
+  readonly env: Env;
+  readonly parent: V | undefined;
+  /** What the class itself holds: `static` fields and methods. */
+  readonly statics: Record<string, V>;
+}
+const classes = new WeakMap<object, Read>();
+/** The classes whose bodies are being read: a `static` block may write what the class holds. */
+const building = new WeakSet<object>();
+/** The class each object the code made with `new` is an instance of. */
+const instances = new WeakMap<object, V>();
+/** What an object answers with when a property is read or written: a getter, a setter. */
+const accessors = new WeakMap<object, Record<string, { get?: V; set?: V }>>();
+/** The name a class body or a property gives: `#count` for a private one. */
+const keyNameOf = (key: Node): string | undefined =>
+  key.type === "PrivateIdentifier"
+    ? `#${key.name}`
+    : key.type === "Identifier"
+      ? key.name
+      : key.type === "Literal"
+        ? String(key.value)
+        : undefined;
+
 /** The class each error the code made was made with: `thrown instanceof TypeError`. */
 const errorNames = new WeakMap<object, string>();
 const ERRORS: ReadonlyMap<string, V> = new Map(
@@ -290,6 +316,8 @@ const toLabel = (kind: "break" | "continue", label: string): V => {
   labelled.set(key, made);
   return made;
 };
+/** How deep one function may call another before the prover stops: one that calls itself with no end is not read. */
+const MAX_DEPTH = 500;
 /** The operators of the bits of a whole number. */
 const BITS: ReadonlySet<string> = new Set(["&", "|", "^", "<<", ">>", ">>>"]);
 /** The highest power a number an input holds is raised to, as that many multiplications. */
@@ -618,16 +646,20 @@ export const make = (given: Loader, run: Run): Interpreter => {
         );
       }
       if (declaration?._tag === "Class") {
-        if (name in module.exports) return fromHost(module.exports[name], name);
-        // A class a file keeps to itself is read where it only extends one of `effect/Data`'s.
         const node = declaration.node;
+        // A class of the library or of the domain a file exports is the one the runtime made.
+        const host: unknown = name in module.exports ? module.exports[name] : undefined;
+        if (host !== undefined && (node.superClass || typeof host !== "function"))
+          return fromHost(host, name);
+        // A class a file keeps to itself is read where it only extends one of `effect/Data`'s.
         const body: ReadonlyArray<Node> = node.body?.body ?? [];
         if (node.superClass && body.length === 0) {
           const base = yield* evaluate(node.superClass, moduleEnv(module));
           const made = library.subclass(base, name);
           if (made) return made;
         }
-        return yield* reaches(site, `${name} is a class that its file does not export`);
+        // Any other class is read from what the file writes: its fields, its constructor, its methods.
+        return yield* classOf(node, moduleEnv(module), name);
       }
       const imported = module.imports.get(name);
       if (imported) {
@@ -1020,6 +1052,173 @@ export const make = (given: Loader, run: Run): Interpreter => {
     }),
   });
 
+  /** The class a function was already bound in, kept when it is bound again. */
+  const thisOfFn = (fn: V & { readonly _tag: "Fn" }): V | undefined => thisOf(fn.env, "~class");
+
+  /** A function with `this` bound to the value it was read from. */
+  const bound = (fn: V, self: V, cls?: V): V => {
+    if (fn._tag !== "Fn" || fn.node.type === "ArrowFunctionExpression") return fn;
+    const scope = child(fn.env.scope);
+    scope.variables.set("this", self);
+    if (cls) scope.variables.set("~class", cls);
+    return { ...fn, env: { ...fn.env, scope } };
+  };
+
+  const membersOf = (read: Read): ReadonlyArray<Node> =>
+    (read.node.body?.body ?? []) as ReadonlyArray<Node>;
+
+  /** The method, getter or setter a class gives under a name, in the class or one it extends. */
+  const methodOf = (
+    cls: V | undefined,
+    key: string,
+    kind: "method" | "get" | "set",
+    isStatic = false,
+  ): { readonly fn: V; readonly cls: V } | undefined => {
+    for (let at = cls; at;) {
+      const read = classes.get(at);
+      if (!read) return undefined;
+      const found = membersOf(read).find(
+        (each) =>
+          each.type === "MethodDefinition" &&
+          each.kind === kind &&
+          Boolean(each.static) === isStatic &&
+          !each.computed &&
+          keyNameOf(each.key) === key,
+      );
+      if (found)
+        return { fn: { _tag: "Fn", node: found.value, env: read.env, effectful: false }, cls: at };
+      at = read.parent;
+    }
+    return undefined;
+  };
+
+  /** `this`, where the code being read has one. */
+  const thisOf = (env: Env, name = "this"): V | undefined => {
+    for (let scope: Scope | undefined = env.scope; scope; scope = scope.parent) {
+      const found = scope.variables.get(name);
+      if (found) return found;
+    }
+    return undefined;
+  };
+
+  /** The fields a class body gives each instance, set where the language sets them. */
+  const fieldsOf: (cls: V, read: Read, self: V & { readonly _tag: "Obj" }) => Eval<void> =
+    Effect.fnUntraced(function* (cls: V, read: Read, self: V & { readonly _tag: "Obj" }) {
+      const scope = child(read.env.scope);
+      scope.variables.set("this", self);
+      scope.variables.set("~class", cls);
+      for (const each of membersOf(read)) {
+        if (each.type !== "PropertyDefinition" || each.static || each.declare) continue;
+        const key = each.computed ? undefined : keyNameOf(each.key);
+        if (key === undefined)
+          return yield* fail(
+            { module: read.env.module, node: each },
+            "declares a field under a name the prover cannot see",
+          );
+        (self.fields as Record<string, V>)[key] = each.value
+          ? yield* evaluate(each.value, { ...read.env, scope })
+          : Value.undef;
+      }
+    });
+
+  /** What `new` does to the object it makes: the fields and the constructor of the class, and of the ones it extends. */
+  const initialise: (
+    cls: V,
+    self: V & { readonly _tag: "Obj" },
+    args: ReadonlyArray<V>,
+    site: Site,
+  ) => Eval<void> = Effect.fnUntraced(function* (
+    cls: V,
+    self: V & { readonly _tag: "Obj" },
+    args: ReadonlyArray<V>,
+    site: Site,
+  ) {
+    const read = classes.get(cls);
+    if (!read) return yield* fail(site, "extends a class the prover cannot read");
+    const constructor = membersOf(read).find(
+      (each) => each.type === "MethodDefinition" && each.kind === "constructor",
+    );
+    if (!read.parent) yield* fieldsOf(cls, read, self);
+    if (!constructor) {
+      // With no constructor of its own, a class that extends another is made as that one is.
+      if (read.parent) {
+        yield* initialise(read.parent, self, args, site);
+        yield* fieldsOf(cls, read, self);
+      }
+      return;
+    }
+    const scope = child(read.env.scope);
+    scope.variables.set("this", self);
+    scope.variables.set("~class", cls);
+    // `super(...)`: the class it extends makes the object first, and then this one's fields are set.
+    const parent = read.parent;
+    if (parent)
+      scope.variables.set("~super", {
+        _tag: "Native",
+        name: "super",
+        call: (given, at) =>
+          Effect.as(
+            Effect.andThen(initialise(parent, self, given, at), fieldsOf(cls, read, self)),
+            Value.undef,
+          ),
+      });
+    yield* invoke(
+      { _tag: "Fn", node: constructor.value, env: { ...read.env, scope }, effectful: false },
+      args,
+    );
+  });
+
+  /** A class read from its source: `new` makes an object of it. */
+  const classOf: (node: Node, env: Env, name: string) => Eval<V> = Effect.fnUntraced(function* (
+    node: Node,
+    env: Env,
+    name: string,
+  ) {
+    const site: Site = { module: env.module, node };
+    const parent = node.superClass ? yield* evaluate(node.superClass, env) : undefined;
+    if (parent && !classes.has(parent))
+      return yield* fail(site, `${name} extends a class the prover does not read the body of`);
+    const statics: Record<string, V> = {};
+    const cls: V = made<V>({
+      _tag: "Native",
+      name,
+      call: (_, at) => fail(at, `calls the class ${name} without new`),
+    });
+    building.add(cls);
+    const read: Read = { name, node, env, parent, statics };
+    classes.set(cls, read);
+    const scope = child(env.scope);
+    scope.variables.set("this", cls);
+    scope.variables.set("~class", cls);
+    // A class can name itself in its own body.
+    scope.variables.set(name, cls);
+    for (const each of membersOf(read)) {
+      if (each.type === "StaticBlock") {
+        yield* execute(each.body, { ...env, scope: child(scope) });
+        continue;
+      }
+      if (each.type === "MethodDefinition" && each.value?.generator)
+        return yield* fail(
+          { module: env.module, node: each },
+          "declares a generator as a method, which the prover does not read",
+        );
+      if (each.type !== "PropertyDefinition" || !each.static) continue;
+      const key = each.computed ? undefined : keyNameOf(each.key);
+      if (key === undefined)
+        return yield* fail(site, "declares a field under a name the prover cannot see");
+      statics[key] = each.value ? yield* evaluate(each.value, { ...env, scope }) : Value.undef;
+    }
+    building.delete(cls);
+    return cls;
+  });
+
+  /** Whether an object was made by a class, or by one that extends it. */
+  const isInstance = (value: V, cls: V): boolean => {
+    for (let at = instances.get(value); at; at = classes.get(at)?.parent)
+      if (at === cls) return true;
+    return false;
+  };
+
   /**
    * `enum Kind { Good, Gift = 5, Last }`: an object of its members. One with
    * no value is one more than the member before it, and a member that is a
@@ -1116,10 +1315,35 @@ export const make = (given: Loader, run: Run): Interpreter => {
         )
           return piping(value);
         const held = value.fields[key];
+        if (held === undefined) {
+          // A getter of the object, and a method or a getter of its class.
+          const getter = accessors.get(value)?.[key]?.get;
+          if (getter) return yield* call(bound(getter, value), [], site);
+          const cls = instances.get(value);
+          const got = methodOf(cls, key, "get");
+          if (got) return yield* call(bound(got.fn, value, got.cls), [], site);
+          const method = methodOf(cls, key, "method");
+          if (method) return bound(method.fn, value, method.cls);
+        }
+        // A method an object was written with is called on the object: `this` is it.
+        if (held?._tag === "Fn" && !value.brand) return bound(held, value, thisOfFn(held));
         // A field the run has yet to choose is chosen now: this one, and no other.
         return (
           (held?._tag === "Pending" ? Symbolic.resolve(held, current.run) : held) ?? Value.undef
         );
+      }
+      case "Native": {
+        // What a class itself holds: a `static` field, method or getter, its own or one it extends.
+        for (let at: V | undefined = classes.has(value) ? value : undefined; at;) {
+          const read: Read = classes.get(at)!;
+          if (Object.hasOwn(read.statics, key)) return read.statics[key]!;
+          at = read.parent;
+        }
+        const got = methodOf(value, key, "get", true);
+        if (got) return yield* call(bound(got.fn, value, got.cls), [], site);
+        const method = methodOf(value, key, "method", true);
+        if (method) return bound(method.fn, value, method.cls);
+        return yield* fail(site, `reads .${key} of a function`);
       }
       case "List":
         // The first and the last part of a split string are known, however many parts there are.
@@ -1526,9 +1750,22 @@ export const make = (given: Loader, run: Run): Interpreter => {
       for (const [index, parameter] of (fn.node.params as ReadonlyArray<Node>).entries()) {
         if (parameter.type === "RestElement")
           yield* bind(parameter.argument, { _tag: "Arr", items: args.slice(index) }, scope, env);
-        else yield* bind(parameter, args[index] ?? Value.undef, scope, env);
+        else if (parameter.type === "TSParameterProperty") {
+          // `constructor(readonly n: number)`: the parameter, and a field of the same name.
+          const inner: Node = parameter.parameter;
+          yield* bind(inner, args[index] ?? Value.undef, scope, env);
+          const name: string = inner.type === "AssignmentPattern" ? inner.left.name : inner.name;
+          const self = thisOf(env);
+          if (self?._tag === "Obj")
+            (self.fields as Record<string, V>)[name] = scope.variables.get(name) ?? Value.undef;
+        } else yield* bind(parameter, args[index] ?? Value.undef, scope, env);
       }
       const body: Node = fn.node.body;
+      if (frames.length > MAX_DEPTH)
+        return yield* fail(
+          { module: fn.env.module, node: fn.node },
+          `calls functions more than ${MAX_DEPTH} deep: a function that calls itself with no end`,
+        );
       // What the call writes, it may change until it returns.
       const frame = ++calls;
       frames.push(frame);
@@ -1545,13 +1782,25 @@ export const make = (given: Loader, run: Run): Interpreter => {
   const write = (object: V, key: V, value: V, site: Site): Eval<void> => {
     if (key._tag !== "Str" && key._tag !== "Num")
       return fail(site, "writes a property by a key the prover cannot see");
+    // What a class itself holds, written while it is declared or by the function that declared it.
+    const read = classes.get(object);
+    if (read && (building.has(object) || mine(object))) {
+      read.statics[String(key.value)] = value;
+      return Effect.void;
+    }
     if ((object._tag !== "Obj" && object._tag !== "Arr") || !mine(object))
       return reaches(
         site,
         "changes a value it was given: the prover reads code that changes only what it wrote itself",
       );
-    if (object._tag === "Obj") (object.fields as Record<string, V>)[String(key.value)] = value;
-    else if (typeof key.value === "number" && Number.isInteger(key.value) && key.value >= 0)
+    if (object._tag === "Obj") {
+      const name = String(key.value);
+      const setter =
+        accessors.get(object)?.[name]?.set ?? methodOf(instances.get(object), name, "set")?.fn;
+      if (setter && !Object.hasOwn(object.fields, name))
+        return Effect.asVoid(call(bound(setter, object), [value], site));
+      (object.fields as Record<string, V>)[name] = value;
+    } else if (typeof key.value === "number" && Number.isInteger(key.value) && key.value >= 0)
       (object.items as Array<V>)[key.value] = value;
     else return fail(site, "writes an array at a place that is not an index");
     return Effect.void;
@@ -1587,7 +1836,7 @@ export const make = (given: Loader, run: Run): Interpreter => {
       const object = yield* evaluate(target.object, env);
       const key = target.computed
         ? yield* evaluate(target.property, env)
-        : Value.str(target.property.name);
+        : Value.str(keyNameOf(target.property) ?? target.property.name);
       return yield* write(object, key, value, site);
     },
   );
@@ -1829,8 +2078,14 @@ export const make = (given: Loader, run: Run): Interpreter => {
         return yield* constructData(cls, args, site);
       if (cls._tag === "Native" && (library.isClass(cls) || ERROR_CLASSES.has(cls)))
         return yield* cls.call(args, site);
-      const made = cls._tag === "Host" ? library.constructHost(cls.value, args, site) : undefined;
-      if (made) return yield* made;
+      if (classes.has(cls)) {
+        const instance = made<V & { readonly _tag: "Obj" }>({ _tag: "Obj", fields: {} });
+        instances.set(instance, cls);
+        yield* initialise(cls, instance, args, site);
+        return instance;
+      }
+      const hosted = cls._tag === "Host" ? library.constructHost(cls.value, args, site) : undefined;
+      if (hosted) return yield* hosted;
       if (cls._tag !== "Host" || !isDomainClass(cls.value))
         return yield* reaches(
           site,
@@ -2060,13 +2315,37 @@ export const make = (given: Loader, run: Run): Interpreter => {
       case "ArrowFunctionExpression":
       case "FunctionExpression":
         return { _tag: "Fn", node, env, effectful: false };
+      case "ClassExpression":
+        return yield* classOf(node, env, node.id?.name ?? "a class");
+      case "ThisExpression": {
+        const self = thisOf(env);
+        return self ?? (yield* fail(site, "uses this where nothing is it"));
+      }
       case "MemberExpression": {
+        if (node.object.type === "Super") {
+          // `super.total()`: the method of the class this one extends, on this object.
+          const self = thisOf(env);
+          const from = thisOf(env, "~class");
+          const parent = from ? classes.get(from)?.parent : undefined;
+          const key = node.computed ? undefined : keyNameOf(node.property);
+          const found =
+            key === undefined
+              ? undefined
+              : (methodOf(parent, key, "method", self !== undefined && classes.has(self)) ??
+                methodOf(parent, key, "get", self !== undefined && classes.has(self)));
+          if (!self || !found)
+            return yield* fail(site, "uses super where the prover cannot read it");
+          const got = bound(found.fn, self, found.cls);
+          return found.fn._tag === "Fn" && methodOf(parent, key!, "method")
+            ? got
+            : yield* call(got, [], site);
+        }
         const object = yield* evaluate(node.object, env);
         if (object === SHORT) return SHORT;
         if (node.optional && (object._tag === "Null" || object._tag === "Undef")) return SHORT;
         const key = node.computed
           ? yield* evaluate(node.property, env)
-          : Value.str(node.property.name);
+          : Value.str(keyNameOf(node.property) ?? node.property.name);
         if (key._tag === "Term" && key.term.sort === "Int" && key.big !== true) {
           const list = forced(object);
           if (list._tag === "Arr") return yield* placed(list.items, key.term.text, false);
@@ -2076,6 +2355,14 @@ export const make = (given: Loader, run: Run): Interpreter => {
           : yield* fail(site, "reads a property by a key the prover cannot see");
       }
       case "CallExpression": {
+        if (node.callee.type === "Super") {
+          const parent = thisOf(env, "~super");
+          if (!parent) return yield* fail(site, "calls super where the prover cannot read it");
+          const given: Array<V> = [];
+          for (const argument of node.arguments as ReadonlyArray<Node>)
+            given.push(yield* evaluate(argument, env));
+          return yield* call(parent, given, site);
+        }
         // `field.pipe(f)`: the field is not looked at before `f` is known.
         const receiver =
           node.callee.type === "MemberExpression" &&
@@ -2190,7 +2477,7 @@ export const make = (given: Loader, run: Run): Interpreter => {
           const object = yield* evaluate(target.object, env);
           const key = target.computed
             ? yield* evaluate(target.property, env)
-            : Value.str(target.property.name);
+            : Value.str(keyNameOf(target.property) ?? target.property.name);
           if (object._tag !== "Obj" || object.brand || (key._tag !== "Str" && key._tag !== "Num"))
             return yield* fail(site, "deletes a property of a value the prover cannot see into");
           if (!mine(object))
@@ -2290,6 +2577,7 @@ export const make = (given: Loader, run: Run): Interpreter => {
           // An array of the language, whatever name the file gives `Array`.
           if (right._tag === "Lib" && right.module === "Array" && right.path.length === 0)
             return Value.bool(value._tag === "Arr");
+          if (classes.has(right)) return Value.bool(isInstance(value, right));
           if (right._tag === "Native" && ERROR_CLASSES.has(right)) {
             const named = value._tag === "Obj" ? errorNames.get(value) : undefined;
             return Value.bool(
@@ -2328,6 +2616,7 @@ export const make = (given: Loader, run: Run): Interpreter => {
       }
       case "ObjectExpression": {
         const fields: Record<string, V> = {};
+        const pending: Record<string, { get?: V; set?: V }> = {};
         for (const property of node.properties as ReadonlyArray<Node>) {
           if (property.type === "SpreadElement") {
             const spread = yield* evaluate(property.argument, env);
@@ -2338,11 +2627,19 @@ export const make = (given: Loader, run: Run): Interpreter => {
             continue;
           }
           // A getter runs when the property is read: the prover reads a property as the value it holds.
-          if (property.kind === "get" || property.kind === "set")
-            return yield* fail(
-              site,
-              `declares a ${property.kind}ter in an object, which the prover does not read`,
-            );
+          if (property.kind === "get" || property.kind === "set") {
+            const name = property.computed ? undefined : keyNameOf(property.key);
+            if (name === undefined)
+              return yield* fail(site, `declares a ${property.kind}ter under a name it cannot see`);
+            const kind: "get" | "set" = property.kind;
+            (pending[name] ??= {})[kind] = {
+              _tag: "Fn",
+              node: property.value,
+              env,
+              effectful: false,
+            };
+            continue;
+          }
           const key = property.computed
             ? yield* evaluate(property.key, env)
             : Value.str(
@@ -2355,7 +2652,9 @@ export const make = (given: Loader, run: Run): Interpreter => {
             );
           fields[String(key.value)] = yield* evaluate(property.value, env);
         }
-        return made(Value.obj(fields));
+        const object = made(Value.obj(fields));
+        if (Object.keys(pending).length > 0) accessors.set(object, pending);
+        return object;
       }
       case "ArrayExpression": {
         const items: Array<V> = [];
@@ -2564,6 +2863,12 @@ export const make = (given: Loader, run: Run): Interpreter => {
             break;
           }
           case "DebuggerStatement":
+            break;
+          case "ClassDeclaration":
+            env.scope.variables.set(
+              statement.id.name,
+              yield* classOf(statement, env, statement.id.name),
+            );
             break;
           case "TSEnumDeclaration":
             env.scope.variables.set(statement.id.name, yield* enumOf(statement, env));

@@ -43,7 +43,13 @@ const MODEL = [
 
 /** The sections whose blocks are run, and what the names their lines use stand for. */
 const sections: Readonly<Record<string, Section>> = {
-  Statements: { base: lists, chunk: 100, context: `const resource = { n: a };` },
+  Statements: {
+    base: lists,
+    chunk: 100,
+    context: `const resource = { n: a };`,
+    // An object of a class is not a value an event carries.
+    quiet: /^const local/,
+  },
   Expressions: {
     base: numbers,
     context: `const text = "t"; const items = [a, b, 3]; const made = { n: a }; const maybe = flag ? { n: b, twice: (n) => n * 2 } : undefined; const callback = flag ? (n) => n + 1 : undefined; const record = { x: 1, z: a, inner: { deep: b }, more: 2 }; const twice = (n) => n * 2; const tag = (parts, value) => value;`,

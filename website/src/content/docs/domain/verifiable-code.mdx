@@ -83,6 +83,30 @@ enum Kind {
   Gift = 5, // a member is found by its number too: Kind[5]
 }
 
+class Local {
+  static made = 0; // what the class itself holds
+  count = 0;
+  #step = a; // a private field
+  constructor(readonly name: string) {} // a parameter that is a field
+  add() {
+    this.count += this.#step;
+    return this;
+  }
+  get doubled() {
+    return this.count * 2;
+  }
+}
+class Deeper extends Local {
+  constructor() {
+    super("deeper");
+  }
+  add() {
+    super.add(); // the method of the class it extends
+    return this;
+  }
+}
+const local = new Deeper().add();
+
 outer: for (const n of items) {
   for (const m of [1, 2]) {
     if (n < 0) continue outer; // a label, on a loop or on a block
@@ -114,9 +138,11 @@ await saved; // async, await and for await
 function* each() {
   yield a;
 } // a generator, other than the one given to Effect.gen, Effect.fn, Option.gen and Result.gen
-class Local {
-  n = a;
-} // a class in a function
+class Stream extends Local {
+  *each() {
+    yield a;
+  }
+} // a generator as a method
 using held = resource;
 
 while (count < a) count++; // a loop that an input decides the length of
@@ -143,6 +169,7 @@ tag`x${a}`; // a tagged template: the function is given the text and then each v
 delete made.n; // of an object the code made
 items[a]; // a place an input decides: one of the places the list has, or undefined
 a.toString(); // as a template writes it
+({ n: a, twice() { return this.n * 2; }, get half() { return this.n / 2; } }).twice(); // this, a getter and a setter
 a ** 2; // a power the code writes
 (a, b); // the comma: both are run, and the last is what it gives
 a == b; // == and != between two values of one kind, as === and !==
@@ -222,10 +249,8 @@ identity<number>(a);
 2 ** a; // a power an input decides
 a & b; // the bits of a number an input holds: and |, ^, ~, <<, >>, >>>
 a == "1"; // == and != between two kinds of value: write === and !==
-a instanceof Local; // a class the prover cannot see: one a function declares
+a instanceof Small; // something that is not a class
 /a+/.test(text); // regular expressions
-this;
-({ get n() { return a; } }); // a getter or a setter
 import.meta.url;
 
 Date.now(); // globals that are not the same every time
@@ -3168,14 +3193,14 @@ function within(n: number) {
 export default isDue;
 
 export class Overweight extends Data.TaggedError("Overweight")<{ over: number }> {} // a class of effect/Data or effect/Schema that adds nothing
-export enum Kind { Good, Gift } // an exported enum or namespace
+export enum Kind { Good, Gift } // an enum, exported or not, and an exported namespace
+class Parcel {
+  grams = 0; // a class with a body, exported or not: its fields, its constructor, its methods
+}
 ```
 
 ```typescript title="Not supported"
-namespace Local { export const n = 1; } // a namespace
-class Parcel {
-  grams = 0; // a class with a body
-}
+namespace Local { export const n = 1; } // a namespace the file does not export
 ```
 
 Two files can import each other.
