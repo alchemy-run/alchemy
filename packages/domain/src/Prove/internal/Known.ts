@@ -6,6 +6,7 @@ import * as Brand_ from "effect/Brand";
 import * as ByteSize_ from "effect/ByteSize";
 import * as Chunk_ from "effect/Chunk";
 import * as Cron_ from "effect/Cron";
+import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -14,7 +15,9 @@ import * as Equivalence_ from "effect/Equivalence";
 import * as Filter_ from "effect/Filter";
 import * as Formatter_ from "effect/Formatter";
 import * as Glob_ from "effect/Glob";
+import * as Graph_ from "effect/Graph";
 import * as HashMap from "effect/HashMap";
+import * as HashRing_ from "effect/HashRing";
 import * as HashSet from "effect/HashSet";
 import * as Inspectable_ from "effect/Inspectable";
 import * as Iterable_ from "effect/Iterable";
@@ -69,6 +72,8 @@ const PURE: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   "effect/Filter": Filter_,
   "effect/Formatter": Formatter_,
   "effect/Glob": Glob_,
+  "effect/Graph": Graph_,
+  "effect/HashRing": HashRing_,
   "effect/HashMap": HashMap,
   "effect/HashSet": HashSet,
   "effect/Inspectable": Inspectable_,
@@ -195,8 +200,10 @@ export const real = (v: V): { readonly value: unknown } | undefined => {
     }
     case "Native": {
       const fn = functions.get(v);
-      return fn && { value: fn };
+      return fn ? { value: fn } : called(v);
     }
+    case "Fn":
+      return called(v);
     case "Time": {
       const millis = literal(v.millis.text);
       const time = millis === undefined ? Option.none() : DateTime.make(millis);
@@ -264,6 +271,22 @@ export const real = (v: V): { readonly value: unknown } | undefined => {
             ? { value: HashMap.fromIterable(entries.value as Array<readonly [unknown, unknown]>) }
             : undefined;
         }
+        case "Data": {
+          // An instance of a class of `effect/Data` or `effect/Schema`: the class makes the real one.
+          const cls: unknown = v.brand.cls;
+          if (typeof cls !== "function") return undefined;
+          const fields: Record<string, unknown> = {};
+          for (const [key, field] of Object.entries(v.fields)) {
+            const made = real(field);
+            if (!made) return undefined;
+            fields[key] = made.value;
+          }
+          try {
+            return { value: Reflect.construct(cls, [fields]) as unknown };
+          } catch {
+            return undefined;
+          }
+        }
         default:
           return undefined;
       }
@@ -271,6 +294,37 @@ export const real = (v: V): { readonly value: unknown } | undefined => {
     default:
       return undefined;
   }
+};
+
+/**
+ * How a function of the code is called where the library calls it at once.
+ * The interpreter gives it: a function it can run to its end gives a value,
+ * and one it cannot throws.
+ */
+export const calling: { run: ((fn: V, args: ReadonlyArray<V>) => V) | undefined } = {
+  run: undefined,
+};
+
+/** What crosses back from a function of the code the library called: it could not be run at once. */
+export class NotAtOnce extends Data.TaggedError("NotAtOnce")<{}> {}
+
+/** A function of the code, as one the library calls: it is run at once, on what the library gives it. */
+const called = (fn: V): { readonly value: unknown } | undefined => {
+  const run = calling.run;
+  if (!run) return undefined;
+  return {
+    value: (...args: ReadonlyArray<unknown>): unknown => {
+      const given: Array<V> = [];
+      for (const [index, arg] of args.entries()) {
+        const made = known(arg, `argument ${index}`);
+        if (!made) throw new NotAtOnce();
+        given.push(made);
+      }
+      const out = real(run(fn, given));
+      if (!out) throw new NotAtOnce();
+      return out.value;
+    },
+  };
 };
 
 /**

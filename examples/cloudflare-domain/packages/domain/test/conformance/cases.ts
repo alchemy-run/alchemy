@@ -3401,6 +3401,30 @@ const rest: ReadonlyArray<Group> = [
     ],
   },
   {
+    // A graph and a hash ring of values the code writes: the library's own, with the code's functions called at once.
+    name: "Built",
+    ...numbers,
+    prelude: [
+      `import * as Graph from "effect/Graph";`,
+      `import * as HashRing from "effect/HashRing";`,
+      `export class Host extends Data.Class<{ readonly name: string }> { [PrimaryKey.symbol]() { return this.name; } }`,
+      `const roads = Graph.directed((mutable) => { const a_ = Graph.addNode(mutable, "A"); const b_ = Graph.addNode(mutable, "B"); const c_ = Graph.addNode(mutable, "C"); Graph.addEdge(mutable, a_, b_, 2); Graph.addEdge(mutable, b_, c_, 3); Graph.addEdge(mutable, a_, c_, 9); });`,
+    ],
+    both: [
+      `[Graph.nodeCount(roads), Graph.edgeCount(roads), Graph.getNode(roads, 1), Graph.hasNode(roads, 7), Graph.isAcyclic(roads)]`,
+      `[...Graph.neighbors(roads, 0), Graph.isGraph(roads), Graph.isGraph(7)].concat([a])`,
+      `(() => { const made = Graph.directed((mutable) => { const first = Graph.addNode(mutable, { n: 1 }); const second = Graph.addNode(mutable, { n: 2 }); Graph.addEdge(mutable, first, second, "to"); }); return [Graph.nodeCount(made), Graph.getNode(made, 0), Graph.getNode(made, 1), [...Graph.neighbors(made, 0)], a + b]; })()`,
+      `(() => { const grown = Graph.mutate(roads, (mutable) => { Graph.addNode(mutable, "D"); }); return [Graph.nodeCount(grown), Graph.nodeCount(roads), a]; })()`,
+      `(() => { const ring = HashRing.make(); HashRing.add(ring, new Host({ name: "one" })); HashRing.addMany(ring, [new Host({ name: "two" }), new Host({ name: "three" })]); const found = HashRing.get(ring, "key-" + 7); return [HashRing.has(ring, new Host({ name: "two" })), HashRing.has(ring, new Host({ name: "nine" })), HashRing.isHashRing(ring), found?.name === "one" || found?.name === "two" || found?.name === "three", a]; })()`,
+    ],
+    unread: [
+      [
+        `Graph.nodeCount(Graph.directed((mutable) => { Graph.addNode(mutable, { n: "t" + a }); }))`,
+        /./,
+      ],
+    ],
+  },
+  {
     name: "Services",
     ...numbers,
     effectful: true,

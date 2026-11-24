@@ -28,6 +28,12 @@ export interface Host {
   readonly kind: (value: V) => string | undefined;
   /** A list with its items, when the value is one. */
   readonly force: (value: V) => V;
+  /**
+   * What a function of the code gives where the library calls it at once.
+   * It throws where the function cannot be run to its end there: one an
+   * input decides is not.
+   */
+  readonly atOnce: (fn: V, args: ReadonlyArray<V>, site: Site) => V;
   /** A value the code being read has just made: it may change it, as it may what it wrote itself. */
   readonly fresh: <A extends V>(value: A) => A;
   /** An array's method that takes a function, such as `map`. */

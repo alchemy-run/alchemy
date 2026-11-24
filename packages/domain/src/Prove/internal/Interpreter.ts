@@ -4,6 +4,7 @@ import * as Option from "effect/Option";
 import * as Brands from "./Brands.ts";
 import * as Compare from "./Compare.ts";
 import { fromTruth, isQuotient, same, textual, truth } from "./Compare.ts";
+import * as Known from "./Known.ts";
 import * as Library from "./Library.ts";
 import * as Strings from "./Models/Strings.ts";
 import * as Smt from "./Smt.ts";
@@ -345,6 +346,8 @@ const toLabel = (kind: "break" | "continue", label: string): V => {
 };
 /** How deep one function may call another before the prover stops: one that calls itself with no end is not read. */
 const MAX_DEPTH = 500;
+const isIterable = (value: unknown): value is Iterable<unknown> =>
+  typeof value === "object" && value !== null && Symbol.iterator in value;
 /** A number, text, a boolean or a bigint the code writes. */
 const primitive = (v: V): { readonly value: number | string | boolean | bigint } | undefined =>
   v._tag === "Num" || v._tag === "Str" || v._tag === "Bool" || v._tag === "Big"
@@ -790,6 +793,13 @@ export const make = (given: Loader, run: Run): Interpreter => {
     return yield* reaches(site, `refers to ${name}, which the prover cannot find`);
   });
 
+  /** A function of the code, run to its end where it stands: the library called it and waits for no one. */
+  const ranAtOnce = (fn: V, args: ReadonlyArray<V>, site: Site): V => {
+    const exit = Effect.runSyncExit(call(fn, args, site));
+    if (exit._tag === "Success") return exit.value;
+    throw new Known.NotAtOnce();
+  };
+
   const library = Library.make({
     current,
     branch: (condition) => branch(condition),
@@ -811,6 +821,7 @@ export const make = (given: Loader, run: Run): Interpreter => {
     },
     force: (value) => forced(value),
     fresh: (value) => made(value),
+    atOnce: (fn, args, site) => ranAtOnce(fn, args, site),
     array: (name, items, fn, initial, site) => arrayMethods[name]!(items, fn, initial, site),
   });
 
@@ -2260,6 +2271,17 @@ export const make = (given: Loader, run: Run): Interpreter => {
           keeper.kind === "Map" ? made<V>({ _tag: "Arr", items: [k, v] }) : k,
         ),
       );
+    // What the library gave that can be gone over: its items, as far as each is a value.
+    if (value._tag === "Host" && isIterable(value.value)) {
+      const items: Array<V> = [];
+      for (const item of value.value) {
+        const made_ = Known.known(item, value.name);
+        if (!made_ || items.length >= MAX_TURNS)
+          return fail(site, `goes over ${value.name}, whose items the prover cannot see`);
+        items.push(made_);
+      }
+      return Effect.succeed(items);
+    }
     // A generator is run to its end: each value it yields, in order.
     const generator = generators.get(value);
     if (generator) {

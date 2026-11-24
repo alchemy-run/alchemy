@@ -1941,13 +1941,19 @@ export const make = (host: Host) => {
       // A pure function is run as it is, where the prover knows every argument.
       const computed = () => {
         const fn = hostOf(lib.module, lib.path);
-        return typeof fn === "function"
-          ? Known.applied(
-              fn as (...args: ReadonlyArray<unknown>) => unknown,
-              args,
-              `${lib.module.replace(/^effect\//, "")}.${lib.path.join(".")}`,
-            )
-          : undefined;
+        if (typeof fn !== "function") return undefined;
+        // A function of the code the library is given is run where the library calls it.
+        const before = Known.calling.run;
+        Known.calling.run = (given, with_) => host.atOnce(given, with_, site);
+        try {
+          return Known.applied(
+            fn as (...args: ReadonlyArray<unknown>) => unknown,
+            args,
+            `${lib.module.replace(/^effect\//, "")}.${lib.path.join(".")}`,
+          );
+        } finally {
+          Known.calling.run = before;
+        }
       };
       const model = host.extra.get(keyOf(lib)) ?? models[keyOf(lib)];
       // A model that has no reading of a call gives way to the function itself.

@@ -27,6 +27,8 @@ const READ = new Set([
   "Random",
   "Metric",
   "Hash",
+  "Graph",
+  "HashRing",
   ...["TxReentrantLock", "TxRef", "TxSemaphore", "TxSubscriptionRef", "index"],
 ]);
 

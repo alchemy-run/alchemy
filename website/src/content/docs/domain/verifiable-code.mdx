@@ -2517,6 +2517,35 @@ Schema.encodeEffect(Ticket)({ n: 2, note: "n" });
 Schema.isSchemaError;
 ```
 
+```typescript title="effect/Graph and effect/HashRing"
+// Of values the code writes, these are the library's own: a function the code gives one is called where the library calls it.
+const roads = Graph.directed((mutable) => {
+  const a_ = Graph.addNode(mutable, "A");
+  const b_ = Graph.addNode(mutable, "B");
+  const c_ = Graph.addNode(mutable, "C");
+  Graph.addEdge(mutable, a_, b_, 2);
+  Graph.addEdge(mutable, b_, c_, 3);
+  Graph.addEdge(mutable, a_, c_, 9);
+});
+Graph.nodeCount(roads);
+Graph.edgeCount(roads);
+Graph.getNode(roads, 1);
+Graph.hasNode(roads, 7);
+Graph.isAcyclic(roads);
+Graph.neighbors(roads, 0);
+Graph.mutate(roads, (mutable) => {
+  Graph.addNode(mutable, "D");
+});
+Graph.isGraph(roads);
+
+const ring = HashRing.make();
+HashRing.add(ring, new Host({ name: "one" })); // a node is a class of effect/Data with a primary key
+HashRing.addMany(ring, [new Host({ name: "two" }), new Host({ name: "three" })]);
+HashRing.get(ring, "key-" + 7);
+HashRing.has(ring, new Host({ name: "two" }));
+HashRing.isHashRing(ring);
+```
+
 ```typescript title="effect/Metric and effect/Hash"
 // What a handler writes to a metric decides nothing, so it is read as doing nothing.
 const orders = Metric.counter("orders");
@@ -3081,13 +3110,6 @@ import * as Arbitrary from "effect/Arbitrary";
 
 Schema.decodeUnknownSync(Schema.NumberFromString)("1"); // a schema that changes the value it reads
 Schema.is(Schema.Record(Schema.String, Schema.Number))(input); // a schema the prover does not read in full
-```
-
-A graph and a ring are built by changing one, and a hash of an object is where it sits in memory. Put a call to one in an exported function, which is then [opaque](#opaque-functions).
-
-```typescript title="Values changed in place, or known by where they are"
-import * as Graph from "effect/Graph";
-import * as HashRing from "effect/HashRing";
 ```
 
 `Bytes` works on byte arrays, which are not a value the prover holds.
