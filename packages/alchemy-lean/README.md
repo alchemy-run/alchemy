@@ -316,7 +316,7 @@ Any number of models join in a `Network`. The same holds of all of them, and a r
 
 ```lean
 theorem allThreeAreSound (w : institution.Worlds) (reach : institution.Reachable w)
-    (account payout : String) :
+    (account : String) (payout : WireId) :
     Bank.Balanced ((w .bank).state .Account account) ∧
       Bank.Conserved (w .bank).toRecorded ∧
       Compliance.FlagsAreAssessments ((w .compliance).state .Watch account) ∧
@@ -340,14 +340,25 @@ theorem anApprovedOrderEventuallyShips (id item charge : String) (amount : Nat)
   refine Shop.eventually_now _ ?_ ?_ <;> behaviour
 ```
 
-That a model comes to rest from any world is proved with a measure every step lowers.
+That a model comes to rest from any world it can reach is proved with weights: each event weighs more than the reactions to it, and each command at least what it records.
 
 ```lean
-theorem comesToRest (w : Alchemy.World Signature) (idle : w.fibers = []) :
-    Wires.AtRest (Wires.settle w.inbox.length w) :=
-  Wires.comesToRestWithin (fun w => w.fibers = []) (fun w => w.inbox.length)
-    (fun _ _ idle step => (step_idle idle step).1) (fun _ _ idle step => (step_idle idle step).2)
-    _ w idle (Nat.le_refl _)
+def weights : Shop.Weights where
+  event
+    | .Order, .placed .. => 3
+    | .Order, .paid .. => 8
+    | .Order, .declined _ => 4
+    | .Shipment, .scheduled _ => 3
+  send
+    | ⟨.Order, _, .place ..⟩ => 3
+    | ⟨.Order, _, .settle ..⟩ => 8
+    | ⟨.Order, _, .decline ..⟩ => 4
+    | ⟨.Shipment, _, .schedule ..⟩ => 3
+  …
+
+theorem theShopComesToRest (w : Alchemy.World Signature) (reach : Shop.Reachable w) :
+    Shop.AtRest (Shop.settle (weights.measure w) w) :=
+  weights.comesToRest policiesAreCalm w reach
 ```
 
 ## A stack
@@ -615,4 +626,3 @@ In the editor, `#eval` shows any of it without running a program.
 
 - Stacks run against a cloud held in memory. Nothing deploys to a real account.
 - A host handles one request at a time, by design.
-- Ids are strings.
