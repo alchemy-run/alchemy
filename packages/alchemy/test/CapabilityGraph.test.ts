@@ -258,6 +258,50 @@ describe("CapabilityGraph", { tags: ["unit"] }, () => {
     }).pipe(Effect.provide(StoreLive)),
   );
 
+  it.effect("a tool reaches what a service two Layers away bound, wherever they are provided", () =>
+    Effect.gen(function* () {
+      class Ledger extends Context.Service<
+        Ledger,
+        { readonly put: (value: string) => Effect.Effect<string> }
+      >()("test/Ledger") {}
+      class Audit extends Context.Service<
+        Audit,
+        { readonly note: (value: string) => Effect.Effect<string> }
+      >()("test/Audit") {}
+      // Ledger binds the store. Audit only looks Ledger up. The tool only looks Audit up.
+      const LedgerLive = Layer.effect(
+        Ledger,
+        Effect.map(Store("ledger"), (store) => ({ put: store.put })),
+      );
+      const AuditLive = Layer.effect(
+        Audit,
+        Effect.map(Ledger, (ledger) => ({ note: ledger.put })),
+      );
+      const tool = framed(
+        "Tool",
+        "audit",
+      )(Effect.map(Audit, (audit) => (value: string) => audit.note(value)));
+      // Each requirement is provided further out than the last.
+      const built = tool.pipe(
+        Effect.provide(AuditLive),
+        Effect.provide(LedgerLive),
+        Effect.provide(StoreLive),
+      );
+
+      const graph = makeCapabilityGraph();
+      yield* observed(graph, built);
+      expect(graph.ofFrame("Tool", "audit")).toEqual([
+        { binding: "Test.Store", targets: [], via: ["test/Audit", "test/Ledger"] },
+      ]);
+
+      // At runtime the same build is held to that list: the tool may, another may not.
+      const policy = policyOf(graph.describe());
+      const handler = yield* built.pipe(Effect.provideService(CurrentPolicy, policy));
+      expect(yield* calling("Tool", "audit")(handler("a"))).toBe("put a");
+      expect(Exit.isFailure(yield* Effect.exit(calling("Tool", "other")(handler("b"))))).toBe(true);
+    }),
+  );
+
   it.effect("without a graph in context every recorder does nothing", () =>
     Effect.gen(function* () {
       yield* framed("Tool", "lonely")(recordAcquisition({ binding: "X", targets: [] }));
