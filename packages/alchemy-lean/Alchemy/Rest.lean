@@ -1,3 +1,4 @@
+import Lean
 import Alchemy.Engine
 import Alchemy.Attr
 
@@ -654,29 +655,103 @@ theorem Ranking.plain (ranking : m.Ranking) {program : Program m.signature Unit}
   ⟨rank, 0, ranked, .nil, Nat.le_refl _⟩
 
 /-- The reactions to one event, each a program with a rank. -/
-inductive Ranking.programs (ranking : m.Ranking) : List (Program m.signature Unit) → Nat → Prop where
-  | nil : Ranking.programs ranking [] 0
-  | cons {p r ps n} : Ranked ranking p r → Ranking.programs ranking ps n →
-      Ranking.programs ranking (p :: ps) (r + n)
+inductive Ranking.programs (ranking : m.Ranking) : List (Program m.signature Unit) → List Nat → Prop where
+  | nil : Ranking.programs ranking [] []
+  | cons {p r ps rs} : Ranked ranking p r → Ranking.programs ranking ps rs →
+      Ranking.programs ranking (p :: ps) (r :: rs)
 
 theorem Ranking.programs_fibers (ranking : m.Ranking) {ps : List (Program m.signature Unit)}
-    {n : Nat} (h : ranking.programs ps n) :
-    ranking.fibers (ps.map fun program => { owner := none, program, undo := [] }) n := by
+    {rs : List Nat} (h : ranking.programs ps rs) :
+    ranking.fibers (ps.map fun program => { owner := none, program, undo := [] }) rs.sum := by
   induction h with
   | nil => exact .nil
-  | cons ranked _ ih => exact .cons (ranking.plain ranked) ih
+  | cons ranked _ ih => rw [List.sum_cons]; exact .cons (ranking.plain ranked) ih
 
 /-- An event outweighs the reactions to it, once each reaction has a rank. -/
 theorem Ranking.reacting (ranking : m.Ranking) {history} {e : Emitted m.signature.aggregates}
-    {total : Nat} (ranked : ranking.programs (m.policies.map fun p => p.react history e) total)
-    (fits : 1 + total ≤ ranking.event e.source e.event) :
+    {ranks : List Nat} (ranked : ranking.programs (m.policies.map fun p => p.react history e) ranks)
+    (fits : 1 + ranks.sum ≤ ranking.event e.source e.event) :
     ∃ total, ranking.fibers
         (m.policies.map fun p => { owner := none, program := p.react history e, undo := [] }) total
       ∧ 1 + total ≤ ranking.event e.source e.event := by
-  refine ⟨total, ?_, fits⟩
+  refine ⟨ranks.sum, ?_, fits⟩
   simpa [List.map_map, Function.comp_def] using ranking.programs_fibers ranked
 
+/-! ## How many steps
+
+When every reaction is calm, a ranking is also a measure of a world, so the
+number of steps to rest can be written down.
+-/
+
+theorem Ranked.weighs {ranking : m.Ranking} {p : Program m.signature Unit} {t : Nat}
+    (h : Ranked ranking p t) : m.weigh ranking.send p ≤ t := by
+  cases h <;> simp only [Model.weigh] <;> omega
+
+theorem Ranking.fibers_weigh (ranking : m.Ranking) {fs : List (Fiber m.signature)} {n : Nat}
+    (h : ranking.fibers fs n) : (fs.map fun f => m.weigh ranking.send f.program).sum ≤ n := by
+  induction h with
+  | nil => simp
+  | cons one _ ih =>
+    obtain ⟨p, u, ranked, _, fits⟩ := one
+    have := ranked.weighs
+    simp only [List.map_cons, List.sum_cons]
+    omega
+
+/-- The ranking's weights, as a measure of a world. -/
+def Ranking.weights (ranking : m.Ranking) (reacts : ranking.Reacts) : m.Weights where
+  event := ranking.event
+  send := ranking.send
+  emits := ranking.emits
+  reacts := by
+    intro history e
+    obtain ⟨total, ranked, fits⟩ := reacts history e
+    have := ranking.fibers_weigh ranked
+    simp only [List.map_map, Function.comp_def] at this
+    omega
+
+/-- The reactions to one event are all calm. -/
+inductive AllCalm : List (Program m.signature Unit) → Prop where
+  | nil : AllCalm []
+  | cons {p ps} : Calm p → AllCalm ps → AllCalm (p :: ps)
+
+theorem AllCalm.each {ps : List (Program m.signature Unit)} (h : AllCalm (m := m) ps) :
+    ∀ p ∈ ps, Calm p := by
+  induction h with
+  | nil => intro p mem; cases mem
+  | cons one _ ih =>
+    intro p mem
+    cases mem with
+    | head => exact one
+    | tail _ rest => exact ih p rest
+
+/-- With calm reactions, the model is at rest after as many steps as the world weighs. -/
+theorem Ranking.comesToRestIn (ranking : m.Ranking) (reacts : ranking.Reacts)
+    (calm : ∀ history e, AllCalm (m := m) (m.policies.map fun p => p.react history e))
+    (w : World m.signature) (reach : m.Reachable w) :
+    m.AtRest (m.settle ((ranking.weights reacts).measure w) w) :=
+  (ranking.weights reacts).comesToRest
+    (fun p mem history e => (calm history e).each _ (List.mem_map.mpr ⟨p, mem, rfl⟩)) w reach
+
 end Model
+
+/-- The least rank left over at the end of a program, while a program is being measured. -/
+initialize rankLeft : IO.Ref Nat ← IO.mkRef 0
+
+open Lean Elab Tactic Meta in
+/-- At the end of a program, notes how much of the rank given is left. It proves nothing. -/
+elab "ranked_note" : tactic => withMainContext do
+  let goal ← whnfR (← getMainTarget)
+  let args := goal.getAppArgs
+  if args.size < 2 then return
+  let program ← whnf args[args.size - 2]!
+  unless program.isAppOf ``Alchemy.Program.pure || program.isAppOf ``Alchemy.Program.fail do return
+  let left ← whnf args[args.size - 1]!
+  let left ← match left with
+    | .lit (.natVal n) => pure n
+    | _ => match ← (evalNat (← reduce left)).run with
+      | some n => pure n
+      | none => return
+  rankLeft.modify (min · left)
 
 /-- Settles an inequality between a rank and what a step costs. -/
 syntax "ranked_fits " ident : tactic
@@ -705,8 +780,8 @@ macro_rules
     let start ← if starts.isEmpty then `(tactic| fail "no saga's rank was given")
       else `(tactic| first $[| $starts:tactic]*)
     `(tactic| first
-      | exact Alchemy.Model.Ranked.pure (by ranked_fits $ranking)
-      | exact Alchemy.Model.Ranked.fail _ (by ranked_fits $ranking)
+      | (ranked_note; exact Alchemy.Model.Ranked.pure (by ranked_fits $ranking))
+      | (ranked_note; exact Alchemy.Model.Ranked.fail _ (by ranked_fits $ranking))
       | (refine Alchemy.Model.Ranked.send' _ _ (fun r => ?_) (by ranked_fits $ranking)
          first | $again:tactic | (cases r <;> $again:tactic))
       | (refine Alchemy.Model.Ranked.call' _ _ (fun r => ?_)
@@ -721,5 +796,17 @@ macro_rules
       | (refine Alchemy.Model.Ranked.schedule' _ _ _ ?_ (by ranked_fits $ranking)
          $again:tactic)
       | (split <;> $again:tactic))
+
+/-- Proves that a reaction only calls outside, tells an aggregate, and ends. -/
+syntax "calm" : tactic
+
+macro_rules
+  | `(tactic| calm) =>
+    `(tactic| first
+      | exact Alchemy.Calm.done
+      | exact Alchemy.Calm.tell _
+      | (refine Alchemy.Calm.call _ _ (fun r => ?_)
+         first | calm | (cases r <;> calm))
+      | (split <;> calm))
 
 end Alchemy

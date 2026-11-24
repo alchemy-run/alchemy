@@ -267,6 +267,14 @@ theorem theShopComesToRest (w : Alchemy.World Signature) (reach : Shop.Reachable
     ∃ steps, Shop.AtRest (Shop.settle steps w) :=
   Shop.comesToRest w reach
 
+/--
+And how many steps: the shop's reactions only call outside, tell an aggregate
+and end, so it is at rest after as many steps as the world weighs.
+-/
+theorem theShopComesToRestIn (w : Alchemy.World Signature) (reach : Shop.Reachable w) :
+    Shop.AtRest (Shop.settle ((ranking.weights reacts).measure w) w) :=
+  Shop.comesToRestIn w reach
+
 /-- The weights it found, to read: a paid order weighs more than the shipment it leads to. -/
 example : ranking.event .Order (.paid "ch-1" "kettle" 20) > ranking.event .Shipment (.scheduled "kettle") := by
   decide

@@ -350,6 +350,31 @@ theorem theShopComesToRest (w : Alchemy.World Signature) (reach : Shop.Reachable
   Shop.comesToRest w reach
 ```
 
+When every reaction only calls outside, tells an aggregate and ends, the number of steps comes with it.
+
+```lean
+theorem theShopComesToRestIn (w : Alchemy.World Signature) (reach : Shop.Reachable w) :
+    Shop.AtRest (Shop.settle ((ranking.weights reacts).measure w) w) :=
+  Shop.comesToRestIn w reach
+```
+
+A model whose reaction feeds itself is refused, with the event that keeps growing.
+
+```lean
+model Loop where
+  aggregate Counter
+
+  -- whenever the counter is bumped, bump it again
+  policy Again on Counter
+    | id, .bumped => Counter.send (.bump id)
+
+/--
+error: Loop may never come to rest: no weights hold together, because some reaction leads back to the event it reacts to. These kept growing: [Counter.Event.bumped]
+-/
+#guard_msgs in
+comes_to_rest Loop
+```
+
 The same line covers sagas and their undos. The weights it found can be read.
 
 ```lean

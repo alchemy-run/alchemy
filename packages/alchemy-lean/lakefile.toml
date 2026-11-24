@@ -1,5 +1,5 @@
 name = "alchemy"
-defaultTargets = ["Alchemy", "Accounts", "Bank", "Inbox", "Jobs", "Linked", "Shop", "Uploads", "Wallet"]
+defaultTargets = ["Alchemy", "Accounts", "Bank", "Inbox", "Jobs", "Linked", "Loop", "Shop", "Uploads", "Wallet"]
 
 [[lean_lib]]
 name = "Alchemy"
@@ -18,6 +18,10 @@ srcDir = "examples"
 
 [[lean_lib]]
 name = "Linked"
+srcDir = "examples"
+
+[[lean_lib]]
+name = "Loop"
 srcDir = "examples"
 
 [[lean_lib]]

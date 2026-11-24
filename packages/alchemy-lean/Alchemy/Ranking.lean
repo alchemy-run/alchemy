@@ -14,47 +14,71 @@ namespace Alchemy
 
 open Lean Elab Tactic Meta
 
-/-- The least number an attempt works for: doubled until one does, then closed in on. -/
-def leastWorking (what : String) (attempt : Nat → TacticM Unit) (limit : Nat := 4096) :
+/--
+The least number an attempt works for, given that nothing below `start` does:
+stepped up from there until one works, then closed in on.
+-/
+def leastWorking (what : String) (start : Nat) (attempt : Nat → TacticM Unit) (limit : Nat := 4096) :
     TacticM Unit := do
   let works (k : Nat) : TacticM Bool := do
     let saved ← saveState
     let ok ← try attempt k; pure true catch _ => pure false
     saved.restore
     pure ok
-  let mut high := 1
+  if ← works start then
+    attempt start
+    return
+  let mut low := start
+  let mut step := 1
+  let mut high := start + 1
   while !(← works high) do
     if high ≥ limit then
       -- Run it once more, so the reason it fails is the error shown.
       attempt high
       throwError "no {what} up to {limit} is enough"
-    high := high * 2
-  let mut low := high / 2
+    low := high
+    step := step * 2
+    high := high + step
   while low + 1 < high do
     let middle := (low + high) / 2
     if ← works middle then high := middle else low := middle
   attempt high
 
-/-- Closes a goal `{ n // P n }` with the least `n` the tactics prove `P n` for. -/
-syntax "least_such " tacticSeq : tactic
+/-- Closes a goal `{ n // P n }` with the least `n`, from the one given, the tactics prove `P n` for. -/
+syntax "least_such " "from " num tacticSeq : tactic
 
 elab_rules : tactic
-  | `(tactic| least_such $tactics) =>
-    leastWorking "number" fun k => do
+  | `(tactic| least_such from $start $tactics) =>
+    leastWorking "number" start.getNat fun k => do
       evalTactic (← `(tactic| (refine ⟨$(quote k), ?_⟩; ($tactics); done)))
 
-/-- Gives a program the least rank it has: the goal's rank is left open and filled in. -/
-syntax "ranked_least " ident " [" term,* "]" : tactic
+/--
+Gives a program the least rank it has: the goal's rank is left open and filled
+in. The rank given is tried first. If it is not enough the program is measured:
+walked once with more rank than it could need, to see how much is left over.
+-/
+syntax "ranked_least " "from " num ident " [" term,* "]" : tactic
 
 elab_rules : tactic
-  | `(tactic| ranked_least $ranking [$sagas,*]) => do
+  | `(tactic| ranked_least from $start $ranking [$sagas,*]) => do
     -- Open the program up once, so every `if` in it is in sight.
     evalTactic (← `(tactic| try simp only [behaviour]))
-    leastWorking "rank" fun k => do
+    let attempt (k : Nat) : TacticM Unit := do
       evalTactic (← `(tactic| focus (
         refine Alchemy.Model.Ranked.mono (a := $(quote k)) ?_ (Nat.le_refl _)
         ranked $ranking [$sagas,*]
         done)))
+    let saved ← saveState
+    try
+      attempt start.getNat
+    catch _ =>
+      saved.restore
+      let plenty := 1 <<< 40
+      rankLeft.set plenty
+      attempt plenty
+      let left ← rankLeft.get
+      saved.restore
+      attempt (plenty - left + 1)
 
 /-- Ranks each reaction to one event, each with the least rank it has. -/
 syntax "reaction_ranks " ident " [" term,* "]" : tactic
@@ -65,7 +89,7 @@ macro_rules
       (repeat' first
         | exact Alchemy.Model.Ranking.programs.nil
         | (apply Alchemy.Model.Ranking.programs.cons
-           focus (ranked_least $ranking [$sagas,*])))
+           focus (ranked_least from 0 $ranking [$sagas,*])))
       done))
 
 /-- Proves that an event outweighs the reactions to it: `reactions Bank.ranking [Bank.rank_Payout]`. -/
@@ -76,6 +100,23 @@ macro_rules
     `(tactic| (
       apply Alchemy.Model.Ranking.reacting
       reaction_ranks $ranking [$sagas,*]
+      ranked_fits $ranking))
+
+/-- The same, with each reaction's rank given. -/
+syntax "reactions_ranked " ident " [" term,* "]" " [" num,* "]" : tactic
+
+macro_rules
+  | `(tactic| reactions_ranked $ranking [$sagas,*] [$ranks,*]) =>
+    `(tactic| (
+      refine Alchemy.Model.Ranking.reacting _ (ranks := [$ranks,*]) ?_ ?_
+      focus (
+        (repeat' first
+          | exact Alchemy.Model.Ranking.programs.nil
+          | (apply Alchemy.Model.Ranking.programs.cons
+             focus (try simp only [behaviour]
+                    ranked $ranking [$sagas,*]
+                    done)))
+        done)
       ranked_fits $ranking))
 
 /-- Settles one accepted command: what it records weighs no more than the bound. -/
@@ -210,37 +251,58 @@ syntax (name := comesToRest) "comes_to_rest " ident : command
           Alchemy.Model.Ranked $ranking $(← sagaRun s) $(quote j) := sorry)
   let earlier (i : Nat) : Array Term := (sagas.extract 0 i).map fun s => (sagaRank s : Term)
   let all : Array Term := sagas.map fun s => (sagaRank s : Term)
-  -- Look for the least numbers that hold together, starting from nothing.
-  let mut E := events.map fun _ => 0
+  let policies ← liftTermElabM do
+    let mut list ← whnfR (← elabTerm (← `(($M).policies)) none)
+    let mut found := #[]
+    while list.isAppOfArity ``List.cons 3 do
+      let .const p _ := (list.getArg! 1).getAppFn
+        | throwError "the policies of {model} are not written as a list of names"
+      found := found.push p
+      list ← whnfR (list.getArg! 2)
+    unless list.isAppOfArity ``List.nil 1 do
+      throwError "the policies of {model} are not written as a list"
+    pure found
+  let weigh (R : Array (Array Nat)) : Array Nat := R.map fun ranks => 1 + ranks.foldl (· + ·) 0
+  -- Look for the least numbers that hold together, starting from nothing. Each
+  -- round starts from what the last one found: the numbers only go up.
+  let mut R : Array (Array Nat) := events.map fun _ => policies.map fun _ => 0
   let mut S := commands.map fun _ => 0
   let mut J := sagas.map fun _ => 0
   let mut settled := false
-  for _ in [0:64] do
-    let J' ← scratch ((← tables E S false) ++ (← assumed J)) do
-      (Array.range sagas.size).mapM fun i => do
-        found (← `((⟨_, by intro id input; ranked_least $ranking [$(earlier i),*]⟩ :
-          { j : Nat // ∀ id input, Alchemy.Model.Ranked $ranking $(← sagaRun sagas[i]!) j })))
-    let E' ← scratch ((← tables E S false) ++ (← assumed J')) do
-      events.mapM fun (a, c, k) => do
+  let mut growing : Array Name := #[]
+  for round in [0 : events.size + commands.size + sagas.size + 3] do
+    let E := weigh R
+    let S' ← scratch (← tables E S false) do
+      (commands.zip S).mapM fun ((a, c, k), n) => do
         let xs := fields k
-        let total ← found (← `((⟨_, by intros; reaction_ranks $ranking [$all,*]⟩ :
-          { total : Nat // ∀ history id $xs* seq time, Alchemy.Model.Ranking.programs $ranking
-              (($M).policies.map fun p =>
-                p.react history ⟨$(mkIdent a), id, $(mkIdent c) $xs*, seq, time⟩) total })))
-        return 1 + total
-    let S' ← scratch (← tables E' S false) do
-      commands.mapM fun (a, c, k) => do
-        let xs := fields k
-        found (← `((by least_such (intros; rename_i accepted; records_fit accepted [$decides,*]) :
+        found (← `((by least_such from $(quote n)
+            (intros; rename_i accepted; records_fit accepted [$decides,*]) :
           { n : Nat // ∀ ctx state $xs* es,
               (($M).signature.aggregates.of $(mkIdent a)).decide ctx state ($(mkIdent c) $xs*) = .ok es →
               (es.map ($eventWeight $(mkIdent a))).sum ≤ n })))
-    if E' == E && S' == S && J' == J then
+    -- What the sagas and reactions weigh follows from what the commands weigh:
+    -- if those have not moved since the last round, nothing else will.
+    if round > 0 && S' == S then
       settled := true
       break
-    E := E'; S := S'; J := J'
+    let J' ← scratch ((← tables E S' false) ++ (← assumed J)) do
+      (Array.range sagas.size).mapM fun i => do
+        found (← `((⟨_, by intro id input; ranked_least from $(quote J[i]!) $ranking [$(earlier i),*]⟩ :
+          { j : Nat // ∀ id input, Alchemy.Model.Ranked $ranking $(← sagaRun sagas[i]!) j })))
+    let R' ← scratch ((← tables E S' false) ++ (← assumed J')) do
+      (events.zip R).mapM fun ((a, c, k), ranks) => do
+        let xs := fields k
+        (policies.zip ranks).mapM fun (p, r) => do
+          found (← `((⟨_, by intros; ranked_least from $(quote r) $ranking [$all,*]⟩ :
+            { r : Nat // ∀ history id $xs* seq time, Alchemy.Model.Ranked $ranking
+                (($(mkIdent p)).react history ⟨$(mkIdent a), id, $(mkIdent c) $xs*, seq, time⟩) r })))
+    growing := ((events.zip (weigh R')).zip E).filterMap fun (((_, c, _), now), before) =>
+      if now != before then some c else none
+    R := R'; S := S'; J := J'
   unless settled do
-    throwError "no weights hold together: some reaction feeds itself, so {model} may never come to rest"
+    throwError "{model} may never come to rest: no weights hold together, because some reaction \
+      leads back to the event it reacts to. These kept growing: {growing}"
+  let E := weigh R
   -- The numbers hold together: state them, and prove everything with them.
   for c in ← tables E S true do elabCommand c
   for i in [0:sagas.size] do
@@ -250,12 +312,18 @@ syntax (name := comesToRest) "comes_to_rest " ident : command
           Alchemy.Model.Ranked $ranking $(← sagaRun sagas[i]!) $(quote J[i]!) := by
         try simp only [behaviour]
         ranked $ranking [$(earlier i),*]))
+  -- Each event's case is proved with the ranks found for it.
+  let mut shapes : Array (Array Nat) := #[]
+  for ranks in R do
+    unless shapes.contains ranks do shapes := shapes.push ranks
+  let cases ← shapes.mapM fun ranks =>
+    `(tactic| reactions_ranked $ranking [$all,*] [$(ranks.map fun r => (quote r : TSyntax `num)),*])
   elabCommand (← `(
     /-- Every event weighs more than the reactions to it. -/
     theorem $(at_ `reacts) : Alchemy.Model.Ranking.Reacts $ranking := by
       intro history e
       obtain ⟨source, id, event, seq, time⟩ := e
-      cases source <;> cases event <;> reactions $ranking [$all,*]))
+      cases source <;> cases event <;> first $[| $cases:tactic]*))
   elabCommand (← `(
     /--
     The model comes to rest. From any world it can reach, after some number of
@@ -264,5 +332,41 @@ syntax (name := comesToRest) "comes_to_rest " ident : command
     theorem $(at_ `comesToRest) (w : Alchemy.World ($M).signature) (reach : ($M).Reachable w) :
         ∃ steps, ($M).AtRest (($M).settle steps w) :=
       Alchemy.Model.Ranking.comesToRest $ranking $(at_ `reacts) w reach))
+  -- When every reaction is calm, the number of steps can be written down too.
+  let calmly ← `(∀ history e,
+    Alchemy.Model.AllCalm (m := $M) (($M).policies.map fun p => p.react history e))
+  let proof ← `(by
+          intro history e
+          obtain ⟨source, id, event, seq, time⟩ := e
+          cases source <;> cases event <;>
+            (repeat' first
+              | exact Alchemy.Model.AllCalm.nil
+              | (apply Alchemy.Model.AllCalm.cons
+                 focus (calm))) <;> done)
+  let calm ← liftTermElabM <| withoutErrToSorry do
+    let saved ← saveState
+    let messages ← Core.getMessageLog
+    Core.resetMessageLog
+    let ok ← try
+        discard <| elabTermEnsuringType (← `(($proof : $calmly))) none
+        synthesizeSyntheticMVarsNoPostponing
+        pure !(← Core.getMessageLog).hasErrors
+      catch _ => pure false
+    saved.restore
+    Core.setMessageLog messages
+    pure ok
+  if calm then
+    elabCommand (← `(
+      /-- Every reaction only calls outside, tells an aggregate, and ends. -/
+      theorem $(at_ `calm) : $calmly := $proof))
+    elabCommand (← `(
+      /--
+      How many steps it takes. From any world the model can reach, it is at
+      rest after as many steps as that world weighs.
+      -/
+      theorem $(at_ `comesToRestIn) (w : Alchemy.World ($M).signature) (reach : ($M).Reachable w) :
+          ($M).AtRest (($M).settle
+            ((Alchemy.Model.Ranking.weights $ranking $(at_ `reacts)).measure w) w) :=
+        Alchemy.Model.Ranking.comesToRestIn $ranking $(at_ `reacts) $(at_ `calm) w reach))
 
 end Alchemy
