@@ -23,9 +23,19 @@ namespace Layer
 
 variable {In Mid Out R T S : Service K}
 
+/--
+Building something with the services `In` at hand, under some access. A `do`
+block: `let s3 ← service (S3.GetObject bucket)` takes one of the services.
+-/
+abbrev Make (In : Service K) (access : Access K) := ReaderT (In access) Id
+
+/-- One of the services at hand. -/
+def service (S : Service K) [Uses In S] {access : Access K} : Make In access (S access) :=
+  fun services => Uses.get services
+
 /-- Services that need no access of their own: built from the services they are given. -/
-def make (build : {access : Access K} → In access → Out access) : Layer In Out where
-  build _ services := build services
+def make (build : {access : Access K} → Make In access (Out access)) : Layer In Out where
+  build _ services := build.run services
 
 /-- A service built from one of the services available. -/
 def over (S : Service K) [Uses In S] (build : {access : Access K} → S access → Out access) :
@@ -40,10 +50,10 @@ def provide (layer : Layer Mid Out) (deps : Layer In Mid) : Layer In Out where
       (deps.build (Access.le_trans (Access.le_union_left _ _) le) services)
 
 /-- Services built from the services of another layer. They need what that layer needs. -/
-def «from» (deps : Layer In Mid) (build : {access : Access K} → Mid access → Out access) :
+def «from» (deps : Layer In Mid) (build : {access : Access K} → Make Mid access (Out access)) :
     Layer In Out where
   needs := deps.needs
-  build le services := build (deps.build le services)
+  build le services := build.run (deps.build le services)
 
 /-- Both layers' services. They need what both need. -/
 def merge (a : Layer In R) (b : Layer In T) : Layer In (Both R T) where
@@ -66,6 +76,8 @@ def services (layer : Layer Nothing R) : R layer.needs :=
   layer.build (Access.le_refl _) ⟨⟩
 
 end Layer
+
+export Layer (service)
 
 /-- Run code with the services of a layer. It runs with the access the layer needs. -/
 def Effect.provide {R : Service K} {ε α : Type} (effect : Effect R ε α) (layer : Layer Nothing R) :

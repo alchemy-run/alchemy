@@ -39,11 +39,14 @@ so it needs what they need: read and write under that prefix. S3's error
 becomes the service's own.
 -/
 def JobStorageS3 (bucket : Bucket) : Layer Nothing JobStorage :=
-  .from (S3.GetObjectLive bucket ["jobs"] ++ S3.PutObjectLive bucket ["jobs"]) fun s3 =>
-    { put := fun id content => (S3.putObject bucket ["jobs"] id content).run s3
+  .from (S3.GetObjectLive bucket ["jobs"] ++ S3.PutObjectLive bucket ["jobs"]) do
+    let objects ← service (S3.GetObject bucket ["jobs"])
+    let store ← service (S3.PutObject bucket ["jobs"])
+    return {
+      put := fun id content => store.call id content
       get := fun id =>
-        ((S3.getObject bucket ["jobs"] id).mapError fun
-          | S3.GetObjectError.noSuchKey _ => JobNotFound.mk id).run s3 }
+        (objects.call id).mapError fun
+          | S3.GetObjectError.noSuchKey _ => JobNotFound.mk id }
 
 /-! ## The functions -/
 
