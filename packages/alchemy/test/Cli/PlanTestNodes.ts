@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import type { Apply, Create, Delete, NoopUpdate, Plan, Replace, Update } from "@/Plan.ts";
 import type { ProviderService } from "@/Provider.ts";
 import type { ResourceLike } from "@/Resource.ts";
-import type { CreatedResourceState } from "@/State/index.ts";
+import type { CreatedResourceState, UpdatingReourceState } from "@/State/index.ts";
 
 const provider: ProviderService<ResourceLike> = {
   list: () => Effect.succeed([]),
@@ -56,6 +56,26 @@ export const updateNode = (olds: object, news: object, id = "Worker"): Update =>
   props: news,
   state: state(id, olds),
 });
+
+/**
+ * An update retried after a failed reconcile: the `updating` row holds the
+ * failed attempt's props on top and the props last applied under `old`.
+ */
+export const failedUpdateNode = (
+  applied: object,
+  attempted: object,
+  news: object,
+  id = "Worker",
+): Update => {
+  const last = state(id, applied);
+  const row: UpdatingReourceState = {
+    ...last,
+    status: "updating",
+    props: attempted,
+    old: { props: applied, bindings: [], attr: {}, removalPolicy: "destroy" },
+  };
+  return { ...baseNode(id, news), action: "update", props: news, state: row };
+};
 
 export const createNode = (props: object, id = "Worker"): Create => ({
   ...baseNode(id, props),

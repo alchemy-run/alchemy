@@ -8,6 +8,7 @@ import type { ApplyEvent, ApplyStatus } from "../Events.ts";
 import { NonInteractiveTerminal } from "../Interaction.ts";
 import type { ActionApply, ActionDelete, CRUD, Plan } from "../Plan.ts";
 import { Cli, type PlanDisplayOptions } from "../Report.ts";
+import { previousProps } from "../State/ResourceState.ts";
 import { canPromptOnStdin } from "../Util/interactive.ts";
 import { formatResourceTag } from "../Util/ResourceOutput.ts";
 import { terminalStyle } from "../Util/Terminal.ts";
@@ -145,7 +146,7 @@ export const formatPlanLines = (plan: Plan, options: PlanDisplayOptions = {}): s
         item.action === "replace")
     ) {
       const document = formatDeclaredPropertyYaml(
-        item.action === "create" ? {} : item.state.props,
+        item.action === "create" ? {} : previousProps(item.state),
         item.props,
         item.action === "adopted" ? "update" : item.action,
       );

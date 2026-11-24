@@ -1,6 +1,7 @@
 import { toPath } from "../FQN.ts";
 import type { BindingAction, CRUD, ActionApply, ActionDelete, Plan } from "../Plan.ts";
 import type { ProviderMode } from "../ProviderMode.ts";
+import { previousProps } from "../State/ResourceState.ts";
 import {
   formatDeclaredPropertyYaml,
   formatDriftPropertyYaml,
@@ -236,7 +237,7 @@ const flattenNamespace = (
                 resource.action === "adopted" ||
                 resource.action === "replace")
             ? formatDeclaredPropertyYaml(
-                resource.action === "create" ? {} : resource.state.props,
+                resource.action === "create" ? {} : previousProps(resource.state),
                 resource.props,
                 resource.action === "adopted" ? "update" : resource.action,
               )

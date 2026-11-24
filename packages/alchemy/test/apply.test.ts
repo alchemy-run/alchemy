@@ -13,6 +13,7 @@ import * as Redacted from "effect/Redacted";
 import { Action } from "@/Action";
 import { adopt, AdoptPolicy, OwnedBySomeoneElse, Unowned, Unresolved } from "@/AdoptPolicy";
 import { apply, DestroyError } from "@/Apply";
+import { formatPlanLines } from "@/Cli/LoggingCli.ts";
 import { isResolved } from "@/Diff";
 import * as ProviderLayer from "@/Local/ProviderLayer";
 import * as Namespace from "@/Namespace.ts";
@@ -4366,6 +4367,30 @@ describe("three-level dependency chain (A -> B -> C)", { tags: ["unit", "local"]
         expect((yield* getState("B"))?.status).toEqual("updated");
         expect((yield* getState("C"))?.status).toEqual("updated");
         expect(output.C.string).toEqual("a-value-updated");
+      }),
+    );
+
+    test.provider("a failed update's retry plan shows the change it never applied", (stack) =>
+      Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { string: "a-value" });
+        }).pipe(stack.deploy);
+
+        const program = Effect.gen(function* () {
+          yield* TestResource("A", { string: "a-value-updated" });
+        });
+
+        yield* program.pipe(stack.deploy, hook(failOn("A", "update")));
+        expect((yield* getState("A"))?.status).toEqual("updating");
+
+        // The `updating` row already holds the attempted props; the plan
+        // must still diff and display against the props last applied.
+        const plan = yield* stack.plan(program);
+        expect(actionOfPlan(plan, "A")).toBe("update");
+        const output = formatPlanLines(plan, { detailed: true }).join("\n");
+        expect(output).not.toContain("no declared property changes");
+        expect(output).toMatch(/^\s*-\s+string: a-value$/m);
+        expect(output).toMatch(/^\s*\+\s+string: a-value-updated$/m);
       }),
     );
 

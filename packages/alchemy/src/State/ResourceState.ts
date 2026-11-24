@@ -150,3 +150,16 @@ export interface ReplacedResourceState extends BaseResourceState {
   deleteFirst: boolean;
   // .. will (finally) transition to `CreatedResourceState` after finalizing
 }
+
+/**
+ * The props a plan diffs a persisted row against: the `olds` Apply hands the
+ * provider's `reconcile` when it updates the row.
+ *
+ * Apply commits an `updating` row before it calls the provider, so its
+ * top-level `props` are the update's desired props, which a failed reconcile
+ * may never have applied. Its `old.props` are the props the provider last
+ * applied. Every other row's top-level props are the current generation's.
+ * A replacement's older generations stay under `old` and are not diffed.
+ */
+export const previousProps = (state: ResourceState): Props | undefined =>
+  state.status === "updating" ? (state.old?.props ?? state.props) : state.props;
