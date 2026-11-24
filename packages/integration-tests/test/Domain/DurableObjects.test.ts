@@ -878,7 +878,12 @@ const COUNTS_V1 = `${COUNTS}V1`;
 
 /** A sim host for one test, with what the projection's handler ran and a switch to fail it. */
 const countingSim = (
-  options: { readonly failPut?: (key: string) => boolean; readonly inputGate?: boolean } = {},
+  options: {
+    readonly failPut?: (key: string) => boolean;
+    readonly inputGate?: boolean;
+    /** Answers true for a call between objects that should fail, by its method. */
+    readonly failCall?: (method: string) => boolean;
+  } = {},
 ) => {
   const stats: Stats = { rowsRead: 0, bytesWritten: 0 };
   /** What the key's object was sent, as a counter's outbox sends it. */
@@ -889,6 +894,7 @@ const countingSim = (
       if (call.cls.startsWith(COUNTS) && call.method === "receive") {
         received.push(call.args[1] as Record<string, unknown>);
       }
+      if (options.failCall?.(call.method)) return Effect.die(new Error(`${call.method} failed`));
       return run;
     },
   });
@@ -924,6 +930,11 @@ const countingSim = (
         .map(([row, value]) => [row.slice(prefix.length), value]),
     );
   const meta = (cls = COUNTS) => rows(cls).get("meta") as Record<string, unknown>;
+  /** The keys the run's root still has to tell that every source's history is in. */
+  const waiting = () =>
+    [...sim.disk.objects.values()].flatMap((object) =>
+      [...object.data.keys()].filter((row) => row.startsWith("rw:")),
+    );
   /** A failed drain has let go of the key: the next one runs at once, not after the lease. */
   const released = eventually(() => !rows().has("drain-lease"));
   /** Deliver to the key directly, as a counter's outbox does (at least once, so again too). */
@@ -947,6 +958,7 @@ const countingSim = (
     rows,
     prefixed,
     meta,
+    waiting,
     released,
     receive,
     checkpoints,
@@ -989,6 +1001,42 @@ class Recounting extends Domain.Model("Recounting", {
   projections: [AllCounts],
   rewrites: [Recount],
 }) {}
+
+describe("a projection key's first input", { tags: ["unit"] }, () => {
+  it.live(
+    "is handled as soon as the run has every source's history: the run tells the key",
+    () => {
+      const t = countingSim();
+      return Effect.gen(function* () {
+        // The key holds its first input until the run is past its barrier. No scanner
+        // pushed it history, so no scanner tells it: it asks the run, which does.
+        const receipt = yield* (yield* Counter).send(new Count({ id: "a" }));
+        yield* AllCounts.caughtUp(receipt, { timeout: "2 seconds" });
+        expect(t.handled).toEqual(["Counter/a#1"]);
+        expect(t.waiting()).toEqual([]);
+      }).pipe(Effect.scoped, Effect.provide(t.layer()));
+    },
+    { timeout: 30_000 },
+  );
+
+  it.live(
+    "is handled once the run reaches a key it could not tell at first",
+    () => {
+      const failing = { left: 1 };
+      const t = countingSim({
+        failCall: (method) => method === "bfConsumerReady" && failing.left-- > 0,
+      });
+      return Effect.gen(function* () {
+        const receipt = yield* (yield* Counter).send(new Count({ id: "a" }));
+        yield* AllCounts.caughtUp(receipt, { timeout: "10 seconds" });
+        expect(failing.left).toBeLessThan(1);
+        expect(t.handled).toEqual(["Counter/a#1"]);
+        expect(t.waiting()).toEqual([]);
+      }).pipe(Effect.scoped, Effect.provide(t.layer()));
+    },
+    { timeout: 30_000 },
+  );
+});
 
 describe("a projection key fed by many sources", { tags: ["unit"] }, () => {
   it.live(
