@@ -405,7 +405,7 @@ example : prod.passes postingAnOrder = true := by native_decide
 Every grant of every function is asked for by a call written in that function. It is read off the code, with no test.
 
 ```lean
-theorem everyGrantIsCalledFor : prod.EveryGrantIsCalledFor := by decide
+theorem noUnusedPermissions : prod.NoUnusedPermissions := by decide
 ```
 
 `lake exe shop graph prod --why` prints the call behind each grant.

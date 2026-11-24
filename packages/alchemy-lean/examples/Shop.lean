@@ -568,7 +568,7 @@ theorem leastPrivilege : prod.LeastPrivilege InMemory :=
 The same, read off the code: every grant of every function is asked for by a
 call written in that function. No test is needed.
 -/
-theorem everyGrantIsCalledFor : prod.EveryGrantIsCalledFor := by decide
+theorem noUnusedPermissions : prod.NoUnusedPermissions := by decide
 
 /-! ## Deploying it -/
 

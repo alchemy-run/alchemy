@@ -224,23 +224,65 @@ def ShopStack : Stack Kind Outputs where
 
 **Reading it.** `def name (inputs) : Type := body` defines a function, and `fun x => …` is an anonymous one. `theShop` hosts the model: its history is a journal in the bucket, and it says who answers `charge` and `ship`. `SQS.consume` registers the function as the queue's consumer.
 
-## 9. Prove things about the infrastructure
+## 9. Prove who can touch what
+
+Permissions are where infrastructure goes wrong quietly. Someone adds a read to a function, its role widens, and nothing fails. Six months later a function that only files packing slips can read every order. The usual defence is a person reviewing IAM diffs.
+
+Here the role is worked out from the code, so the question becomes: what should be true of those roles, whatever the code grows into? You write that down once.
 
 ```lean
+/-- Only the Api writes the shop's history. -/
 theorem onlyTheApiWritesHistory :
     prod.only [out.api] (S3.writing out.orders ["journal"]) := by
   stack_rule in prod using [out, BucketOp.covers]
 
+/-- The Warehouse reads nothing in the bucket: no order, and none of the history. -/
 theorem theWarehouseReadsNothing :
     prod.never out.warehouse (S3.reading out.orders) := by
   stack_rule in prod using [out, BucketOp.covers]
-
-theorem everyGrantIsCalledFor : prod.EveryGrantIsCalledFor := by decide
 ```
 
-**Reading it.** `prod` is the stack at the "prod" stage, and `out` is what it built. The first says only the Api can write under `journal/`, for every key. The last says no function holds a permission its code does not ask for.
+**Reading it.** `prod` is the stack at the "prod" stage and `out` is what it built. `S3.writing out.orders ["journal"]` means writing any object under `journal/`, so each rule covers every key, not a sample. `stack_rule` computes each function's role from the stack and checks the rule against it.
 
-The same story as step 7 is told to the stack. Each command goes in through the Api, and the gateway and the queue answer the model's calls.
+**What you get.** Now suppose someone edits the Warehouse to peek at the journal:
+
+```diff
+  SQS.consume shipments fun shipment => do
+    match shipment.splitOn ":" with
+-   | [order, item] => S3.putObject orders ["packed"] order item
++   | [order, item] => do
++     let _ ← S3.getObject orders ["journal"] "count"
++     S3.putObject orders ["packed"] order item
+```
+
+The call asks for a grant, the Warehouse's role gains "read Orders/journal", and the build stops at the rule that said it must not:
+
+```
+Shop.lean: error: unsolved goals          ← theWarehouseReadsNothing
+```
+
+Nobody reviewed a policy. The person who wrote the rule did not need to know this change was coming, and the person making the change did not need to know the rule existed.
+
+The opposite mistake is a permission left behind after the code that needed it is gone. That cannot happen here, because a role holds only what a call in the code asks for, and one line states it:
+
+```lean
+/-- No function holds a permission that its code does not use. -/
+theorem noUnusedPermissions : prod.NoUnusedPermissions := by decide
+```
+
+`--why` shows the line behind each permission, which is what you would otherwise reconstruct by hand in a review:
+
+```
+$ lake exe shop graph prod --why
+
+  Warehouse
+    may        write Orders/packed
+                 ← Shop.lean:334  S3.putObject orders ["packed"] order item
+    may        receive from Shipments
+                 ← Shop.lean:332  SQS.consume shipments fun shipment => do match shipment.s…
+```
+
+The domain's story also runs against the stack. It is step 7 again, but each command goes in through the Api, and the gateway and the queue answer the model's calls. This is what shows the wiring does what the model says.
 
 ```lean
 example : prod.tells deployed [
@@ -286,6 +328,6 @@ Each layer has the same three moves.
 |---|---|---|---|
 | Aggregate | `aggregate` | invariant, behaviour | story |
 | Model | `model` | flow theorem | story |
-| Stack | `Stack`, functions | access rules | story told to the stack |
+| Stack | `Stack`, functions | who can touch what | story told to the stack |
 
 Write the definition, write a story to see it do the right thing, then turn what must always hold into a theorem. A first exercise: change `amount = 0` to `amount < 5` in `decide`, run `lake build`, and see which theorems and stories depended on that line.

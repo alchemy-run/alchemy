@@ -135,10 +135,10 @@ Every grant of every host is asked for by a call written in that host's code.
 It is read off the code when the file is checked: no run is needed. A grant no
 call asks for cannot be in a role at all.
 -/
-def Graph.EveryGrantIsCalledFor (g : Graph K) : Prop :=
+def Graph.NoUnusedPermissions (g : Graph K) : Prop :=
   (g.nodes.all fun node => node.access.atoms.all node.calledFor) = true
 
-instance (g : Graph K) : Decidable g.EveryGrantIsCalledFor :=
+instance (g : Graph K) : Decidable g.NoUnusedPermissions :=
   inferInstanceAs (Decidable (_ = true))
 
 /-- The calls that ask for a grant. -/
