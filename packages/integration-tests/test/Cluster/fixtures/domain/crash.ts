@@ -10,6 +10,9 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
+import * as Socket from "effect/socket/Socket";
+import * as Stream from "effect/Stream";
+import { ConformanceApi } from "../../../Domain/conformance/model.ts";
 
 type TestFn = (
   name: string,
@@ -203,7 +206,7 @@ export const crash = ({ test, url, stack }: CrashOptions) => {
   );
 
   test(
-    "a runner frozen past its shard lock commits no command another runner decided from the same version",
+    "a runner frozen past its shard lock commits no command another runner decided from the same version, and live reads see every commit",
     Effect.gen(function* () {
       const counters = Array.from({ length: 8 }, (_, i) => fresh(`freeze${i}`));
       // Every command id a caller saw accepted, per counter.
@@ -215,7 +218,7 @@ export const crash = ({ test, url, stack }: CrashOptions) => {
         Effect.gen(function* () {
           unanswered.set(command, id);
           const client = yield* HttpClient.HttpClient;
-          const response = yield* client.get(`${url}/increment/${id}?by=1&command=${command}`);
+          const response = yield* client.get(`${url()}/increment/${id}?by=1&command=${command}`);
           const body = (yield* response.json) as { accepted?: number };
           if (response.status === 200 && body.accepted !== undefined) {
             accepted.get(id)!.add(command);
@@ -243,6 +246,16 @@ export const crash = ({ test, url, stack }: CrashOptions) => {
             { concurrency: "unbounded", discard: true },
           );
         });
+      // The last total each counter's live read was pushed, from a read
+      // opened on the runner that took the frozen runner's shards.
+      const pushed = new Map<string, number>();
+      const api = yield* ConformanceApi.clientWebSocket(`${url()}/api`);
+      const watch = (id: string) =>
+        api.CounterTotal.watch(id).pipe(
+          Stream.runForEach((frame) => Effect.sync(() => pushed.set(id, frame.state?.total ?? 0))),
+          Effect.ignore,
+          Effect.forkScoped,
+        );
       // Every counter exists, so its runner owns it, before the freeze.
       for (const id of counters) yield* send(id, fresh("cmd"));
       yield* Effect.all(
@@ -254,8 +267,10 @@ export const crash = ({ test, url, stack }: CrashOptions) => {
               frozen(stack, (resume) =>
                 Effect.all(
                   [
-                    // Once the other runner has the shards: new commands to the same counters.
-                    Effect.sleep("44 seconds").pipe(
+                    // Once the other runner has the shards: live reads, then new commands.
+                    Effect.sleep("40 seconds").pipe(
+                      Effect.andThen(Effect.forEach(counters, watch, { discard: true })),
+                      Effect.andThen(Effect.sleep("4 seconds")),
                       Effect.andThen(load(3, "100 millis", "25 seconds")),
                     ),
                     // Resumed while those callers still send.
@@ -268,6 +283,9 @@ export const crash = ({ test, url, stack }: CrashOptions) => {
           ),
         ],
         { concurrency: "unbounded", discard: true },
+      );
+      yield* Effect.log(
+        `freeze: ${[...accepted.values()].reduce((n, ids) => n + ids.size, 0)} answered, ${unanswered.size} unanswered, ${pushed.size} live reads pushed`,
       );
       // A send without an answer may have committed: sent again under its id, it counts once.
       for (const [command, id] of [...unanswered]) {
@@ -285,7 +303,19 @@ export const crash = ({ test, url, stack }: CrashOptions) => {
           ),
         ).toEqual({ total: sent, increments: sent });
       }
-    }),
+      // A live read is pushed every commit, the frozen runner's included.
+      for (const id of counters) {
+        const sent = accepted.get(id)!.size;
+        const last = yield* Effect.sync(() => pushed.get(id)).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (total) => total === sent,
+            times: 30,
+          }),
+        );
+        expect({ id, pushed: last }).toEqual({ id, pushed: sent });
+      }
+    }).pipe(Effect.scoped, Effect.provide(Socket.layerWebSocketConstructorGlobal)),
     options,
   );
 
