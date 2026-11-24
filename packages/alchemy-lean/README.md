@@ -529,6 +529,7 @@ In the editor, `#eval` shows any of it without running a program.
 | `examples/Accounts.lean` | The bank above |
 | `examples/Linked.lean` | The bank linked to a compliance model |
 | `examples/Shop.lean` | A model on an AWS stack |
+| `examples/Uploads.lean` | Proving an infrastructure design: uploads that cannot be served before they are scanned |
 | `examples/Inbox.lean` | Cloudflare Workers |
 | `examples/Jobs.lean` | Services, Layers and typed errors |
 | `examples/Bank/` | A larger bank in the long form: keyed views, streams, queries, actors |

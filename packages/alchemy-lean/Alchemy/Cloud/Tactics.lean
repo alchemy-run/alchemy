@@ -77,7 +77,7 @@ syntax "stack_rule" " in " term " using " "[" Lean.Parser.Tactic.simpLemma,* "]"
 macro_rules
   | `(tactic| stack_rule in $g using [$lemmas,*]) =>
     `(tactic| (
-        simp only [Graph.only, Graph.nobody, Graph.never, Graph.may]
+        try simp only [Graph.only, Graph.nobody, Graph.never, Graph.may]
         intros
         have roles : Graph.roles $g = computed% (Graph.roles $g) := rfl
         simp [Graph.mem_whoCan, Graph.can, Access.permits, permitsOn, Kinds.covers,

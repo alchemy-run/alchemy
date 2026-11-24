@@ -1,5 +1,5 @@
 name = "alchemy"
-defaultTargets = ["Alchemy", "Accounts", "Bank", "Inbox", "Jobs", "Linked", "Shop", "Wallet"]
+defaultTargets = ["Alchemy", "Accounts", "Bank", "Inbox", "Jobs", "Linked", "Shop", "Uploads", "Wallet"]
 
 [[lean_lib]]
 name = "Alchemy"
@@ -29,6 +29,10 @@ name = "Shop"
 srcDir = "examples"
 
 [[lean_lib]]
+name = "Uploads"
+srcDir = "examples"
+
+[[lean_lib]]
 name = "Wallet"
 srcDir = "examples"
 
@@ -44,4 +48,9 @@ path = "../../submodules/distilled/lean"
 [[lean_exe]]
 name = "shop"
 root = "ShopMain"
+srcDir = "examples"
+
+[[lean_exe]]
+name = "uploads"
+root = "UploadsMain"
 srcDir = "examples"

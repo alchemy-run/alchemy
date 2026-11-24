@@ -352,6 +352,22 @@ def getObject {role : Access Kind} (bucket : AWS.Bucket) (under : Path) (name : 
     [granted : Has role (Get bucket under)] : Run role GetObjectError String :=
   ((GetObjectLive bucket under).build granted.le ⟨⟩).call name
 
+/-- Writing an object does what the model says. -/
+theorem putObject_eval {role : Access Kind} (bucket : AWS.Bucket) (under : Path) (name body : String)
+    [granted : Has role (Put bucket under)] (m : Memory) :
+    (putObject (role := role) bucket under name body).eval InMemory m
+      = (.ok (), m.put bucket (under ++ [name]) body) :=
+  (PutObjectLive.lawful bucket under granted.le).put m name body
+
+/-- Reading an object answers what the model holds, and changes nothing. -/
+theorem getObject_eval {role : Access Kind} (bucket : AWS.Bucket) (under : Path) (name : String)
+    [granted : Has role (Get bucket under)] (m : Memory) :
+    (getObject (role := role) bucket under name).eval InMemory m =
+      (match m.object bucket (under ++ [name]) with
+        | some body => .ok body
+        | none => .error (.noSuchKey { bucket := bucket.id, key := under ++ [name] }), m) :=
+  (GetObjectLive.lawful bucket under granted.le).get m name
+
 /-- A journal kept in a bucket, under a prefix. Using it asks for reading and writing there. -/
 def journal {role : Access Kind} (bucket : AWS.Bucket) (under : Path := ["journal"])
     [counts : Has role (Get bucket under)] [setsCount : Has role (Put bucket under)]
@@ -398,5 +414,21 @@ namespace Alchemy.AWS
 macro_rules
   | `(Lambda.Function $id $props $body) =>
     `(Alchemy.AWS.Lambda.Function $id $props (granted% $body))
+
+end Alchemy.AWS
+
+namespace Alchemy.AWS
+open Alchemy.Cloud
+
+/-- The functions anyone on the internet can call: those with a public URL. -/
+def exposed (g : Graph Kind) : List String :=
+  g.nodes.filterMap fun node =>
+    match node.kind, node.props with
+    | .function, (props : FunctionProps) => if props.url then some node.id else none
+    | _, _ => none
+
+/-- Nothing that is exposed to the internet can do this. -/
+def nothingExposed (g : Graph Kind) (action : Doing Kind) : Prop :=
+  ∀ detail host, host ∈ exposed g → g.can host (action.attempt detail) = false
 
 end Alchemy.AWS
