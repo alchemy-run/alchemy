@@ -193,7 +193,7 @@ example : Shop.passes [
 A stack declares resources. A function calls what it needs, and its permissions are worked out from those calls.
 
 ```lean
-def theShop (role : Access Kind) (orders : Bucket) (shipments : Queue) … : Hosted served role :=
+helper theShop {role : Access Kind} (orders : Bucket) (shipments : Queue) : Hosted served role :=
   served.host (S3.journal orders) fun
     | .charge order amount => pure (sandboxCharge order amount)
     | .ship order item => SQS.sendMessage shipments s!"{order}:{item}"
@@ -201,7 +201,7 @@ def theShop (role : Access Kind) (orders : Bucket) (shipments : Queue) … : Hos
 def Api (orders : Bucket) (shipments : Queue) : Construct Kind Function := do
   let stage ← stage
   Lambda.Function "Api" { url := true, memory := if stage = "prod" then 1024 else 512 } do
-    return route (theShop _ orders shipments)
+    return route (theShop orders shipments)
 
 def Warehouse (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
   Lambda.Function "Warehouse" {} do
@@ -222,7 +222,7 @@ def ShopStack : Stack Kind Outputs where
     return { orders, shipments, api, warehouse }
 ```
 
-**Reading it.** `def name (inputs) : Type := body` defines a function, and `fun x => …` is an anonymous one. `theShop` hosts the model: its history is a journal in the bucket, and it says who answers `charge` and `ship`. `SQS.consume` registers the function as the queue's consumer.
+**Reading it.** `def name (inputs) : Type := body` defines a function, and `fun x => …` is an anonymous one. `helper` defines a function whose permissions are read off its body, so nobody lists them. `theShop` hosts the model: its history is a journal in the bucket, and it says who answers `charge` and `ship`. `SQS.consume` registers the function as the queue's consumer.
 
 ## 9. Prove who can touch what
 

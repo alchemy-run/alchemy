@@ -306,16 +306,10 @@ def route (request : Request) : Run role Never Response :=
 
 end Routes
 
-/--
-The shop, hosted: its history is a journal in the bucket, and each call it makes
-to the outside is answered here. Charging goes to a sandbox gateway; shipping
-is a message on the queue.
--/
-def theShop (role : Access Kind) (orders : Bucket) (shipments : Queue)
-    [Has role (S3.Get orders ["journal"])] [Has role (S3.Put orders ["journal"])]
-    [Has role (S3.Get orders (["journal"] ++ ["lines"]))]
-    [Has role (S3.Put orders (["journal"] ++ ["lines"]))]
-    [Has role (SQS.Send shipments)] : Hosted served role :=
+-- The shop, hosted: its history is a journal in the bucket, and each call it
+-- makes to the outside is answered here. Charging goes to a sandbox gateway;
+-- shipping is a message on the queue. What it needs is read off its body.
+helper theShop {role : Access Kind} (orders : Bucket) (shipments : Queue) : Hosted served role :=
   served.host (S3.journal orders) fun
     | .charge order amount => pure (sandboxCharge order amount)
     | .ship order item => SQS.sendMessage shipments s!"{order}:{item}"
@@ -324,7 +318,7 @@ def theShop (role : Access Kind) (orders : Bucket) (shipments : Queue)
 def Api (orders : Bucket) (shipments : Queue) : Construct Kind Function := do
   let stage ← stage
   Lambda.Function "Api" { url := true, memory := if stage = "prod" then 1024 else 512 } do
-    return route (theShop _ orders shipments)
+    return route (theShop orders shipments)
 
 /-- Consumes the shipments queue and files a packing slip for each. -/
 def Warehouse (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
@@ -388,7 +382,7 @@ Given any bucket, when an order is asked for, then the Api describes that order
 as the journal has it, and changes nothing.
 -/
 theorem gettingAnOrder (id : String) (cloud : Memory) :
-    (getOrder (theShop role orders shipments) id).eval InMemory cloud
+    (getOrder (theShop (role := role) orders shipments) id).eval InMemory cloud
       = (.ok (describe ((shopIn orders cloud).state .Order id)), cloud) := by
   show Run.eval InMemory (Run.bind _ _) cloud = _
   rw [Run.eval_bind, Hosted.world_eval _ (S3.journal_lawful orders ["journal"])]
@@ -396,7 +390,7 @@ theorem gettingAnOrder (id : String) (cloud : Memory) :
 
 /-- Given any bucket, when the revenue is asked for, then the Api answers the Revenue view, and changes nothing. -/
 theorem gettingTheRevenue (cloud : Memory) :
-    (getRevenue (theShop role orders shipments)).eval InMemory cloud
+    (getRevenue (theShop (role := role) orders shipments)).eval InMemory cloud
       = (.ok { status := 200, body := toString (Revenue.stateAt (shopIn orders cloud).log ()) },
           cloud) := by
   show Run.eval InMemory (Run.bind _ _) cloud = _
@@ -410,41 +404,41 @@ answers what the order, as the journal had it, decides: a refusal as a 409, and
 otherwise the order as the journal has it now. The journal is whole afterwards.
 -/
 theorem postingACommand (command : Order.Command) (cloud : Memory) (whole : Whole orders cloud) :
-    let result := (postOrder (theShop role orders shipments) command).eval InMemory cloud
+    let result := (postOrder (theShop (role := role) orders shipments) command).eval InMemory cloud
     result.1 = .ok (respond command
         (Order.decide ((shopIn orders cloud).state .Order (Order.key command)) command)
         (shopIn orders result.2)) ∧
       Whole orders result.2 := by
   obtain ⟨after, answered, recorded, wholeAfter⟩ :=
     Hosted.send_recorded (sim := InMemory) (lines := S3.lines orders ["journal"])
-      (sound := S3.Sound orders ["journal"]) (theShop role orders shipments)
+      (sound := S3.Sound orders ["journal"]) (theShop (role := role) orders shipments)
       (S3.journal_lawful orders ["journal"]) faithful
       (by
         intro call cloud whole
         cases call with
         | charge order amount => exact ⟨rfl, whole⟩
         | ship order item =>
-          have sent : ((theShop role orders shipments).call (.ship order item)).eval InMemory cloud
+          have sent : ((theShop (role := role) orders shipments).call (.ship order item)).eval InMemory cloud
               = (.ok (), cloud.send shipments s!"{order}:{item}") := SQS.sendMessage_eval _ _ cloud
           show S3.lines orders ["journal"]
-              (((theShop role orders shipments).call (.ship order item)).eval InMemory cloud).2 = _ ∧
+              (((theShop (role := role) orders shipments).call (.ship order item)).eval InMemory cloud).2 = _ ∧
             S3.Sound orders ["journal"]
-              (((theShop role orders shipments).call (.ship order item)).eval InMemory cloud).2
+              (((theShop (role := role) orders shipments).call (.ship order item)).eval InMemory cloud).2
           rw [sent]
           have same := S3.untouched (bucket := orders) (under := ["journal"]) (m := cloud)
             (m' := cloud.send shipments s!"{order}:{item}") (fun _ => rfl)
           exact ⟨same.1, same.2 whole⟩)
       (.Order command) cloud whole
-  have evaluated : (postOrder (theShop role orders shipments) command).eval InMemory cloud
+  have evaluated : (postOrder (theShop (role := role) orders shipments) command).eval InMemory cloud
       = (.ok (respond command
           (Order.decide ((shopIn orders cloud).state .Order (Order.key command)) command) after),
-        ((Hosted.send (theShop role orders shipments) (.Order command)).eval InMemory cloud).2) := by
+        ((Hosted.send (theShop (role := role) orders shipments) (.Order command)).eval InMemory cloud).2) := by
     show Run.eval InMemory (Run.bind _ _) cloud = _
     rw [Run.eval_bind, answered]
     rfl
-  show ((postOrder (theShop role orders shipments) command).eval InMemory cloud).1 = .ok (respond command _
-      (shopIn orders ((postOrder (theShop role orders shipments) command).eval InMemory cloud).2)) ∧
-    Whole orders ((postOrder (theShop role orders shipments) command).eval InMemory cloud).2
+  show ((postOrder (theShop (role := role) orders shipments) command).eval InMemory cloud).1 = .ok (respond command _
+      (shopIn orders ((postOrder (theShop (role := role) orders shipments) command).eval InMemory cloud).2)) ∧
+    Whole orders ((postOrder (theShop (role := role) orders shipments) command).eval InMemory cloud).2
   rw [evaluated]
   exact ⟨by rw [← recorded], wholeAfter⟩
 
@@ -456,7 +450,7 @@ then the Api refuses with a 409, whatever the item and the amount.
 theorem placingAnOrderTwiceIsRefused (id item : String) (amount : Nat) (cloud : Memory)
     (whole : Whole orders cloud)
     (placed : ((shopIn orders cloud).state .Order id).status ≠ .new) :
-    ((postOrder (theShop role orders shipments) (.place id item amount)).eval InMemory cloud).1
+    ((postOrder (theShop (role := role) orders shipments) (.place id item amount)).eval InMemory cloud).1
       = .ok { status := 409, body := reprStr Order.Rejection.alreadyPlaced } := by
   have answered := (postingACommand (role := role) (shipments := shipments) faithful
     (.place id item amount) cloud whole).1
@@ -465,8 +459,8 @@ theorem placingAnOrderTwiceIsRefused (id item : String) (amount : Nat) (cloud : 
 
 /-- The routes are the requests: each request reaches the route its path names. -/
 example (id : String) :
-    route (theShop role orders shipments) { method := .get, path := ["orders", id] }
-      = getOrder (theShop role orders shipments) id := rfl
+    route (theShop (role := role) orders shipments) { method := .get, path := ["orders", id] }
+      = getOrder (theShop (role := role) orders shipments) id := rfl
 
 end ApiBehaviour
 

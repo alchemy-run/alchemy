@@ -21,7 +21,11 @@ open Alchemy Cloud AWS
 
 namespace Uploads
 
-def infected (body : String) : Bool := (body.splitOn "EICAR").length > 1
+/--
+Whether a file is infected. It is opaque: no proof below can look inside it, so
+every theorem holds for whatever detector is put here.
+-/
+opaque infected (body : String) : Bool := (body.splitOn "EICAR").length > 1
 
 /-- Stores an upload where nothing public can read it, and asks for it to be scanned. -/
 def Upload (files : Bucket) (scans : Queue) : Construct Kind Function :=
@@ -34,10 +38,10 @@ def Upload (files : Bucket) (scans : Queue) : Construct Kind Function :=
         return { status := 202 }
       | _, _ => return { status := 404 }
 
-/-- Scans one upload: a clean file is published, an infected one is set aside. -/
-def scan {role : Access Kind} (files : Bucket)
-    [Has role (S3.Get files ["incoming"])] [Has role (S3.Put files ["clean"])]
-    [Has role (S3.Put files ["quarantine"])] (name : String) : Run role Never Unit := do
+-- Scans one upload: a clean file is published, an infected one is set aside.
+-- Nobody lists what it needs: reading `incoming/`, and writing `clean/` and
+-- `quarantine/`, are read off its body.
+helper scan {role : Access Kind} (files : Bucket) (name : String) : Run role Never Unit := do
   match ← (S3.getObject files ["incoming"] name).result with
   | .ok body =>
     if infected body then S3.putObject files ["quarantine"] name body

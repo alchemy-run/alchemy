@@ -130,3 +130,67 @@ elab "granted% " body:term : term <= expected => do
     grantedFor body args[2]! expected
 
 end Alchemy.Cloud
+
+namespace Alchemy.Cloud
+
+open Lean Elab Term Meta Command
+
+/--
+`helper name (params) : type := body` defines a function a host's code can
+call, and works out the grants its body asks for. They become the function's
+own requirements, so nobody lists them: a host that calls it is asked for them.
+The type names the role as `role`.
+-/
+syntax (name := helperCommand) "helper " ident bracketedBinder* " : " term " := " term : command
+
+@[command_elab helperCommand] def elabHelper : CommandElab := fun stx => do
+  let `(helper $name:ident $binders* : $type := $body) := stx | throwUnsupportedSyntax
+  let declName := (← getCurrNamespace) ++ name.getId
+  runTermElabM fun _ => do
+    elabBinders binders fun params => do
+      -- The role is the parameter the result's type runs under.
+      let roleParam? ← params.findM? fun param => do
+        return (← inferType param).isAppOf ``Alchemy.Cloud.Access
+      let some role := roleParam? | throwError "a helper takes its role as a parameter: {lit}role : Access K{rit}"
+      let access ← inferType role
+      let resultType ← Term.elabType type
+      let standType ← withLocalDeclD `need access fun need => do
+        mkForallFVars #[need] (← mkAppM ``Alchemy.Cloud.Has #[role, need])
+      let block ← withLocalDecl `granted .instImplicit standType fun stand => do
+        let value ← elabTermEnsuringType body resultType
+        synthesizeSyntheticMVarsNoPostponing
+        mkLambdaFVars #[stand] (← instantiateMVars value)
+      let .lam _ _ blockBody _ := block | throwError "helper: unexpected body"
+      let marker := Lean.mkConst `Alchemy.Cloud.Infer.marker
+      let marked := blockBody.instantiate1 marker
+      let needs := askedFor marker marked #[]
+      for need in needs do
+        if need.hasLooseBVars then
+          throwError "a call's resource is only known when the code runs, so its grant cannot be \
+            read off the code"
+      -- One requirement per grant the body asks for.
+      let rec go (i : Nat) (given : Array Expr) : TermElabM Unit := do
+        if h : i < needs.size then
+          let hasType ← mkAppM ``Alchemy.Cloud.Has #[role, needs[i]]
+          withLocalDecl (Name.mkSimple s!"grant{i}") .instImplicit hasType fun inst =>
+            go (i + 1) (given.push inst)
+        else
+          let filled := marked.replace fun e =>
+            match e with
+            | .app f a =>
+              if f == marker then (needs.findIdx? (· == a)).bind fun j => given[j]? else none
+            | _ => none
+          let all := params ++ given
+          let value ← mkLambdaFVars all filled
+          let declType ← mkForallFVars all resultType
+          let value ← instantiateMVars value
+          let declType ← instantiateMVars declType
+          addAndCompile <| .defnDecl {
+            name := declName, levelParams := [], type := declType, value
+            hints := .abbrev, safety := .safe }
+      go 0 #[]
+where
+  lit := "{"
+  rit := "}"
+
+end Alchemy.Cloud

@@ -302,7 +302,7 @@ def Warehouse (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
 `served.host` runs a domain model on a journal, and says who answers each call the model makes to the outside.
 
 ```lean
-def theShop (role : Access Kind) (orders : Bucket) (shipments : Queue) … : Hosted served role :=
+helper theShop {role : Access Kind} (orders : Bucket) (shipments : Queue) : Hosted served role :=
   served.host (S3.journal orders) fun
     | .charge order amount => pure (sandboxCharge order amount)
     | .ship order item => SQS.sendMessage shipments s!"{order}:{item}"
@@ -310,7 +310,7 @@ def theShop (role : Access Kind) (orders : Bucket) (shipments : Queue) … : Hos
 def Api (orders : Bucket) (shipments : Queue) : Construct Kind Function := do
   let stage ← stage
   Lambda.Function "Api" { url := true, memory := if stage = "prod" then 1024 else 512 } do
-    return route (theShop _ orders shipments)
+    return route (theShop orders shipments)
 ```
 
 A Cloudflare Worker ends with `fetch` and typed methods other Workers call. Its bindings are still taken as steps.
@@ -432,7 +432,7 @@ Given what the bucket holds, when a request arrives, then the response and the b
 
 ```lean
 theorem gettingAnOrder (id : String) (cloud : Memory) :
-    (getOrder (theShop role orders shipments) id).eval InMemory cloud
+    (getOrder (theShop (role := role) orders shipments) id).eval InMemory cloud
       = (.ok (describe ((shopIn orders cloud).state .Order id)), cloud)
 ```
 
@@ -442,7 +442,7 @@ A response follows from the domain's `decide`, for every item and amount.
 theorem placingAnOrderTwiceIsRefused (id item : String) (amount : Nat) (cloud : Memory)
     (whole : Whole orders cloud)
     (placed : ((shopIn orders cloud).state .Order id).status ≠ .new) :
-    ((postOrder (theShop role orders shipments) (.place id item amount)).eval InMemory cloud).1
+    ((postOrder (theShop (role := role) orders shipments) (.place id item amount)).eval InMemory cloud).1
       = .ok { status := 409, body := reprStr Order.Rejection.alreadyPlaced }
 ```
 
