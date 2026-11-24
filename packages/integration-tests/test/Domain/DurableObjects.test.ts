@@ -715,12 +715,11 @@ const counted = (id: string, seq: number) => ({
 });
 
 /** Count once on counter `id`, and wait until the key has handled it. */
-const count = (id: string) =>
-  Effect.gen(function* () {
-    const receipt = yield* (yield* Counter).send(new Count({ id }));
-    yield* AllCounts.caughtUp(receipt, { timeout: "20 seconds" });
-    return receipt;
-  });
+const count = Effect.fn(function* (id: string) {
+  const receipt = yield* (yield* Counter).send(new Count({ id }));
+  yield* AllCounts.caughtUp(receipt, { timeout: "20 seconds" });
+  return receipt;
+});
 
 /** Changes each counter's first count, and keeps the others. */
 class Recount extends Domain.Rewrite("Recount", {
@@ -978,14 +977,13 @@ describe("a projection key fed by many sources", { tags: ["unit"] }, () => {
       const t = countingSim();
       return Effect.gen(function* () {
         yield* count("warm");
-        const perDelivery = (from: number, n: number) =>
-          Effect.gen(function* () {
-            const before = t.stats.bytesWritten!;
-            for (let i = from; i < from + n; i++) yield* t.receive(counted(`s${i}`, 1));
-            yield* eventually(() => t.handled.length === 1 + from + n, "30 seconds");
-            yield* Effect.sleep("20 millis");
-            return (t.stats.bytesWritten! - before) / n;
-          });
+        const perDelivery = Effect.fn(function* (from: number, n: number) {
+          const before = t.stats.bytesWritten!;
+          for (let i = from; i < from + n; i++) yield* t.receive(counted(`s${i}`, 1));
+          yield* eventually(() => t.handled.length === 1 + from + n, "30 seconds");
+          yield* Effect.sleep("20 millis");
+          return (t.stats.bytesWritten! - before) / n;
+        });
         const small = yield* perDelivery(0, 50);
         yield* perDelivery(50, 1_950);
         const large = yield* perDelivery(2_000, 50);

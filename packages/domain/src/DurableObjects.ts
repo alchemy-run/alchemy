@@ -267,21 +267,20 @@ const putRows = <T>(storage: ObjectStorage, rows: ReadonlyArray<readonly [string
   );
 
 /** Every row under a prefix, in key order, read a page at a time. */
-const allRows = <T>(storage: ObjectStorage, prefix: string) =>
-  Effect.gen(function* () {
-    const out: Array<readonly [string, T]> = [];
-    let after: string | undefined;
-    while (true) {
-      const page = yield* storage.list<T>({
-        prefix,
-        limit: 512,
-        ...(after === undefined ? {} : { startAfter: after }),
-      });
-      out.push(...page.entries());
-      if (page.size < 512) return out;
-      after = out[out.length - 1]![0];
-    }
-  });
+const allRows = Effect.fn(function* <T>(storage: ObjectStorage, prefix: string) {
+  const out: Array<readonly [string, T]> = [];
+  let after: string | undefined;
+  while (true) {
+    const page = yield* storage.list<T>({
+      prefix,
+      limit: 512,
+      ...(after === undefined ? {} : { startAfter: after }),
+    });
+    out.push(...page.entries());
+    if (page.size < 512) return out;
+    after = out[out.length - 1]![0];
+  }
+});
 
 /** The storage list that reads exactly the `entry:` rows in `range`. */
 const entryRange = (range: ListRange | undefined): ListOptions => {
@@ -2697,24 +2696,23 @@ const projectionObject = (
      * Move the per-source maps an earlier version kept in `meta` to rows,
      * once. Callers hold the exclusive section and its transaction.
      */
-    const upgrade = (meta: ProjectionMeta) =>
-      Effect.gen(function* () {
-        const { intake, checkpoints, taken, ...scalars } = meta;
-        if (intake === undefined && checkpoints === undefined && taken === undefined) return meta;
-        const maps = [
-          [INTAKE, intake],
-          [CHECKPOINT, checkpoints],
-          [TAKEN, taken],
-        ] as const;
-        yield* putRows(
-          state.storage,
-          maps.flatMap(([prefix, map]) =>
-            Object.entries(map ?? {}).map(([source, n]) => [prefix + source, n] as const),
-          ),
-        );
-        yield* state.storage.put("meta", scalars);
-        return scalars;
-      });
+    const upgrade = Effect.fn(function* (meta: ProjectionMeta) {
+      const { intake, checkpoints, taken, ...scalars } = meta;
+      if (intake === undefined && checkpoints === undefined && taken === undefined) return meta;
+      const maps = [
+        [INTAKE, intake],
+        [CHECKPOINT, checkpoints],
+        [TAKEN, taken],
+      ] as const;
+      yield* putRows(
+        state.storage,
+        maps.flatMap(([prefix, map]) =>
+          Object.entries(map ?? {}).map(([source, n]) => [prefix + source, n] as const),
+        ),
+      );
+      yield* state.storage.put("meta", scalars);
+      return scalars;
+    });
     /** A per-source cursor, or 0. Read after `upgrade`, so the rows are all there is. */
     const cursor = (prefix: string, source: string) =>
       Effect.map(state.storage.get<number>(prefix + source), (n) => n ?? 0);
@@ -2722,27 +2720,26 @@ const projectionObject = (
      * The last handled `seq` per source: every source's, or only `sources`'.
      * A key not yet upgraded still keeps them in `meta`, and its rows win.
      */
-    const checkpointsOf = (sources?: ReadonlyArray<string>) =>
-      Effect.gen(function* () {
-        const meta = yield* readMeta;
-        // Nothing accepted in this generation (an earlier one's rows read as empty).
-        if (meta.key === null) return {};
-        const legacy = meta.checkpoints ?? {};
-        if (sources === undefined) {
-          const rows = yield* allRows<number>(state.storage, CHECKPOINT);
-          return {
-            ...legacy,
-            ...Object.fromEntries(rows.map(([row, seq]) => [row.slice(CHECKPOINT.length), seq])),
-          };
-        }
-        const found = yield* Effect.forEach(sources, (source) =>
-          Effect.map(
-            state.storage.get<number>(CHECKPOINT + source),
-            (seq) => [source, seq ?? legacy[source]] as const,
-          ),
-        );
-        return Object.fromEntries(found.filter(([, seq]) => seq !== undefined));
-      });
+    const checkpointsOf = Effect.fn(function* (sources?: ReadonlyArray<string>) {
+      const meta = yield* readMeta;
+      // Nothing accepted in this generation (an earlier one's rows read as empty).
+      if (meta.key === null) return {};
+      const legacy = meta.checkpoints ?? {};
+      if (sources === undefined) {
+        const rows = yield* allRows<number>(state.storage, CHECKPOINT);
+        return {
+          ...legacy,
+          ...Object.fromEntries(rows.map(([row, seq]) => [row.slice(CHECKPOINT.length), seq])),
+        };
+      }
+      const found = yield* Effect.forEach(sources, (source) =>
+        Effect.map(
+          state.storage.get<number>(CHECKPOINT + source),
+          (seq) => [source, seq ?? legacy[source]] as const,
+        ),
+      );
+      return Object.fromEntries(found.filter(([, seq]) => seq !== undefined));
+    });
     const size = kit.options.batch?.size ?? 1;
     const waitMillis = kit.options.batch?.waitMillis ?? 0;
     const lease = "drain-lease";
@@ -2841,22 +2838,21 @@ const projectionObject = (
         awaitsRevision(rows.values(), root, source),
       );
     /** Append a row to the key's log. Callers hold the exclusive section and its transaction. */
-    const append = (key: string, meta: ProjectionMeta, delivery: Delivery) =>
-      Effect.gen(function* () {
-        const position = meta.accepted + 1;
-        yield* state.storage.put(`in:${pad(position)}`, {
-          position,
-          delivery,
-          at: yield* Clock.currentTimeMillis,
-        } satisfies Accepted);
-        // The backstop: handled even if this instance dies before the drain runs.
-        yield* callback.schedule("drain", {
-          after: `${Math.max(waitMillis, PROJECTION_RETRY_MS)} millis`,
-          payload: {},
-          progress: yield* advance,
-        });
-        return { ...meta, key, accepted: position } satisfies ProjectionMeta;
+    const append = Effect.fn(function* (key: string, meta: ProjectionMeta, delivery: Delivery) {
+      const position = meta.accepted + 1;
+      yield* state.storage.put(`in:${pad(position)}`, {
+        position,
+        delivery,
+        at: yield* Clock.currentTimeMillis,
+      } satisfies Accepted);
+      // The backstop: handled even if this instance dies before the drain runs.
+      yield* callback.schedule("drain", {
+        after: `${Math.max(waitMillis, PROJECTION_RETRY_MS)} millis`,
+        payload: {},
+        progress: yield* advance,
       });
+      return { ...meta, key, accepted: position } satisfies ProjectionMeta;
+    });
     /**
      * Take a rewrite's revision of an event. One the key has not been given
      * yet is held until it arrives; one still waiting in the log is swapped
@@ -2864,117 +2860,115 @@ const projectionObject = (
      * into the log as a revision, for the `rewrite` handler. Callers hold the
      * exclusive section and its transaction; `true` when the log grew.
      */
-    const reviseIntake = (key: string, delivery: Delivery) =>
-      Effect.gen(function* () {
-        if ((delivery.target.generation ?? 0) < kit.generation) return false;
-        yield* reset;
-        const revision = delivery.revision!;
-        const meta = yield* upgrade(yield* readMeta);
-        if (revision.n <= (yield* cursor(TAKEN, delivery.source))) return false;
-        /** Write `meta` with the source's taken revision (and any other rows) in one put. */
-        const save = (next: ProjectionMeta, rows: Record<string, number> = {}) =>
-          state.storage.put({ meta: next, [TAKEN + delivery.source]: revision.n, ...rows });
-        if (revision.done) {
-          // Held while a revision of it waits for its event: handled after that.
-          if (yield* awaits(revision.root, delivery.source)) {
-            yield* state.storage.put(`rev-wait:${revision.root}|${delivery.source}`, delivery);
-            yield* save({ ...meta, key } satisfies ProjectionMeta);
-            return false;
-          }
-          yield* save(yield* append(key, meta, delivery));
-          return true;
-        }
-        const accepted = yield* cursor(INTAKE, delivery.source);
-        // Newly given to this key: an ordinary input, late.
-        if (revision.before === undefined) {
-          yield* save(yield* append(key, meta, withoutRevision(delivery)), {
-            [INTAKE + delivery.source]: Math.max(accepted, delivery.seq),
-          });
-          return true;
-        }
-        // Given to the key, and yet to arrive: taken when it does.
-        if (delivery.seq > accepted) {
-          yield* state.storage.put(revisionRow(delivery.source, delivery.seq), delivery);
-          yield* save({
-            ...meta,
-            key,
-            pending: (meta.pending ?? 0) + 1,
-          } satisfies ProjectionMeta);
+    const reviseIntake = Effect.fn(function* (key: string, delivery: Delivery) {
+      if ((delivery.target.generation ?? 0) < kit.generation) return false;
+      yield* reset;
+      const revision = delivery.revision!;
+      const meta = yield* upgrade(yield* readMeta);
+      if (revision.n <= (yield* cursor(TAKEN, delivery.source))) return false;
+      /** Write `meta` with the source's taken revision (and any other rows) in one put. */
+      const save = (next: ProjectionMeta, rows: Record<string, number> = {}) =>
+        state.storage.put({ meta: next, [TAKEN + delivery.source]: revision.n, ...rows });
+      if (revision.done) {
+        // Held while a revision of it waits for its event: handled after that.
+        if (yield* awaits(revision.root, delivery.source)) {
+          yield* state.storage.put(`rev-wait:${revision.root}|${delivery.source}`, delivery);
+          yield* save({ ...meta, key } satisfies ProjectionMeta);
           return false;
         }
-        // A drain under way may be handling a waiting input: it is then left as it is.
-        const leased = yield* state.storage.get<number>(lease);
-        const idle = leased === undefined || leased <= (yield* Clock.currentTimeMillis);
-        if (idle) {
-          const waiting = yield* state.storage.list<Accepted>({
-            prefix: "in:",
-            start: `in:${pad(meta.processed + 1)}`,
-          });
-          for (const [row, accepted] of waiting) {
-            const input = accepted.delivery;
-            if (
-              input.revision !== undefined ||
-              input.source !== delivery.source ||
-              input.seq !== delivery.seq
-            ) {
-              continue;
-            }
-            yield* state.storage.put(row, {
-              ...accepted,
-              delivery: revision.gone
-                ? { ...delivery, revision: { root: revision.root, n: revision.n, gone: true } }
-                : withoutRevision(delivery),
-            } satisfies Accepted);
-            yield* save({ ...meta, key } satisfies ProjectionMeta);
-            return false;
-          }
-        }
         yield* save(yield* append(key, meta, delivery));
         return true;
-      });
-    const intake = (key: string, arrived: Delivery) =>
-      Effect.gen(function* () {
-        if (arrived.revision !== undefined) return yield* reviseIntake(key, arrived);
-        let delivery = arrived;
-        const sent = delivery.target.generation ?? 0;
-        // For an earlier generation: sent by an instance still on older code.
-        if (sent < kit.generation) return false;
-        // Sent by newer code: fail, so the sender retries once this instance runs it.
-        if (sent > kit.generation) {
-          return yield* Effect.die(
-            new Error(`${kit.name} received generation ${sent} but runs ${kit.generation}`),
-          );
-        }
-        yield* reset;
-        let meta = yield* upgrade(yield* readMeta);
-        if ((yield* cursor(INTAKE, delivery.source)) >= delivery.seq) return false;
-        meta = { ...meta, key };
-        /** Write `meta` with the source's intake row in one put. */
-        const save = (next: ProjectionMeta) =>
-          state.storage.put({ meta: next, [INTAKE + delivery.source]: delivery.seq });
-        // An event a rewrite changed before it got here arrives as it is now.
-        if ((meta.pending ?? 0) > 0) {
-          const row = revisionRow(delivery.source, delivery.seq);
-          const revised = yield* state.storage.get<Delivery>(row);
-          if (revised !== undefined) {
-            yield* state.storage.delete(row);
-            meta = { ...meta, pending: (meta.pending ?? 1) - 1 };
-            if (!revised.revision?.gone) meta = yield* append(key, meta, withoutRevision(revised));
-            // The last event a rewrite was waiting for: its `done` follows it in the log.
-            const root = revised.revision!.root;
-            const waiting = `rev-wait:${root}|${delivery.source}`;
-            const done = yield* state.storage.get<Delivery>(waiting);
-            if (done !== undefined && !(yield* awaits(root, delivery.source))) {
-              yield* state.storage.delete(waiting);
-              meta = yield* append(key, meta, done);
-            }
-            yield* save(meta);
-            return true;
-          }
-        }
-        yield* save(yield* append(key, meta, delivery));
+      }
+      const accepted = yield* cursor(INTAKE, delivery.source);
+      // Newly given to this key: an ordinary input, late.
+      if (revision.before === undefined) {
+        yield* save(yield* append(key, meta, withoutRevision(delivery)), {
+          [INTAKE + delivery.source]: Math.max(accepted, delivery.seq),
+        });
         return true;
-      });
+      }
+      // Given to the key, and yet to arrive: taken when it does.
+      if (delivery.seq > accepted) {
+        yield* state.storage.put(revisionRow(delivery.source, delivery.seq), delivery);
+        yield* save({
+          ...meta,
+          key,
+          pending: (meta.pending ?? 0) + 1,
+        } satisfies ProjectionMeta);
+        return false;
+      }
+      // A drain under way may be handling a waiting input: it is then left as it is.
+      const leased = yield* state.storage.get<number>(lease);
+      const idle = leased === undefined || leased <= (yield* Clock.currentTimeMillis);
+      if (idle) {
+        const waiting = yield* state.storage.list<Accepted>({
+          prefix: "in:",
+          start: `in:${pad(meta.processed + 1)}`,
+        });
+        for (const [row, accepted] of waiting) {
+          const input = accepted.delivery;
+          if (
+            input.revision !== undefined ||
+            input.source !== delivery.source ||
+            input.seq !== delivery.seq
+          ) {
+            continue;
+          }
+          yield* state.storage.put(row, {
+            ...accepted,
+            delivery: revision.gone
+              ? { ...delivery, revision: { root: revision.root, n: revision.n, gone: true } }
+              : withoutRevision(delivery),
+          } satisfies Accepted);
+          yield* save({ ...meta, key } satisfies ProjectionMeta);
+          return false;
+        }
+      }
+      yield* save(yield* append(key, meta, delivery));
+      return true;
+    });
+    const intake = Effect.fn(function* (key: string, arrived: Delivery) {
+      if (arrived.revision !== undefined) return yield* reviseIntake(key, arrived);
+      let delivery = arrived;
+      const sent = delivery.target.generation ?? 0;
+      // For an earlier generation: sent by an instance still on older code.
+      if (sent < kit.generation) return false;
+      // Sent by newer code: fail, so the sender retries once this instance runs it.
+      if (sent > kit.generation) {
+        return yield* Effect.die(
+          new Error(`${kit.name} received generation ${sent} but runs ${kit.generation}`),
+        );
+      }
+      yield* reset;
+      let meta = yield* upgrade(yield* readMeta);
+      if ((yield* cursor(INTAKE, delivery.source)) >= delivery.seq) return false;
+      meta = { ...meta, key };
+      /** Write `meta` with the source's intake row in one put. */
+      const save = (next: ProjectionMeta) =>
+        state.storage.put({ meta: next, [INTAKE + delivery.source]: delivery.seq });
+      // An event a rewrite changed before it got here arrives as it is now.
+      if ((meta.pending ?? 0) > 0) {
+        const row = revisionRow(delivery.source, delivery.seq);
+        const revised = yield* state.storage.get<Delivery>(row);
+        if (revised !== undefined) {
+          yield* state.storage.delete(row);
+          meta = { ...meta, pending: (meta.pending ?? 1) - 1 };
+          if (!revised.revision?.gone) meta = yield* append(key, meta, withoutRevision(revised));
+          // The last event a rewrite was waiting for: its `done` follows it in the log.
+          const root = revised.revision!.root;
+          const waiting = `rev-wait:${root}|${delivery.source}`;
+          const done = yield* state.storage.get<Delivery>(waiting);
+          if (done !== undefined && !(yield* awaits(root, delivery.source))) {
+            yield* state.storage.delete(waiting);
+            meta = yield* append(key, meta, done);
+          }
+          yield* save(meta);
+          return true;
+        }
+      }
+      yield* save(yield* append(key, meta, delivery));
+      return true;
+    });
     const target = targetId({
       kind: "projection",
       name: kit.name,
