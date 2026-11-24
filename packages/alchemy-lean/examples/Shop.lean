@@ -61,6 +61,26 @@ aggregate Order where
   reply : Status
     | s, _ => s.status
 
+aggregate Shipment where
+  command
+    | schedule (id item : String)
+
+  event
+    | scheduled (item : String)
+
+  rejection
+    | alreadyScheduled
+
+  state
+    item : Option String := none
+
+  decide
+    | s, .schedule _ item =>
+      if s.item.isSome then .error .alreadyScheduled else .ok [.scheduled item]
+
+  evolve
+    | s, .scheduled item => { s with item := some item }
+
 /-- What the payment gateway answers. -/
 inductive Charge where
   | approved (id : String)
@@ -69,24 +89,31 @@ deriving DecidableEq, Repr, Lean.ToJson, Lean.FromJson
 
 model Shop where
   aggregate Order
+  aggregate Shipment
 
   call charge (order : String) (amount : Nat) : Charge
   call ship (order item : String) : Unit
 
+  -- whenever an order is placed, charge for it, and record what the gateway said
   policy Payment on Order
     | id, .placed _ amount => do
       match ← charge id amount with
       | .approved chargeId => Order.send (.settle id chargeId)
       | .refused reason => Order.send (.decline id reason)
 
+  -- whenever an order is paid, schedule its shipment: one aggregate tells another
   policy Fulfilment on Order
-    | id, .paid _ item _ => ship id item
+    | id, .paid _ item _ => Shipment.send (.schedule id item)
+
+  -- whenever a shipment is scheduled, have the warehouse ship it
+  policy Dispatch on Shipment
+    | id, .scheduled item => ship id item
 
   view Revenue on Order : Nat := 0
     | total, .paid _ _ amount => total + amount
 
-  projection Packing on Order : String × String
-    | id, .paid _ item _ => [(id, item)]
+  projection Packing on Shipment : String × String
+    | id, .scheduled item => [(id, item)]
 
 namespace Shop
 
@@ -141,7 +168,9 @@ theorem anApprovedOrderIsPaidAndShipped (id item charge : String) (amount : Nat)
     let shop := Shop.run [
       .send ⟨.Order, (), .place id item amount⟩,
       .answer (.charge id amount) (.approved charge)]
-    (shop.state .Order id).status = .paid charge ∧ Shop.waiting shop = [.ship id item] := by
+    (shop.state .Order id).status = .paid charge ∧
+      (shop.state .Shipment id).item = some item ∧
+      Shop.waiting shop = [.ship id item] := by
   behaviour
 
 /--
@@ -153,7 +182,9 @@ theorem aRefusedOrderIsDeclinedAndNotShipped (id item reason : String) (amount :
     let shop := Shop.run [
       .send ⟨.Order, (), .place id item amount⟩,
       .answer (.charge id amount) (.refused reason)]
-    (shop.state .Order id).status = .declined reason ∧ Shop.waiting shop = [] := by
+    (shop.state .Order id).status = .declined reason ∧
+      (shop.state .Shipment id).item = none ∧
+      Shop.waiting shop = [] := by
   behaviour
 
 /-! ## Rules about the domain -/
@@ -194,6 +225,7 @@ example : Shop.passes [
     .call (.charge "o-1" 40),
     .answer (.charge "o-1" 40) (.approved "ch_1"),
     .recorded .Order "o-1" [.placed "kettle" 40, .paid "ch_1" "kettle" 40],
+    .recorded .Shipment "o-1" [.scheduled "kettle"],
     .call (.ship "o-1" "kettle"),
     .answer (.ship "o-1" "kettle") (),
     .view Revenue () 40,
@@ -428,11 +460,13 @@ def deployed : Telling Shop InMemory where
   host := out.api
   request
     | ⟨.Order, _, command⟩ => (post out.api "/orders" command).request
+    | ⟨.Shipment, _, command⟩ => (post out.api "/shipments" command).request
   world := shopIn out.orders
 
 example : prod.tells deployed [
     .when ⟨.Order, (), .place "o-1" "kettle" 40⟩,
     .recorded .Order "o-1" [.placed "kettle" 40, .paid "ch_o-1" "kettle" 40],
+    .recorded .Shipment "o-1" [.scheduled "kettle"],
     .view Revenue () 40,
     .when ⟨.Order, (), .place "o-1" "kettle" 40⟩,
     .rejected .Order .alreadyPlaced,

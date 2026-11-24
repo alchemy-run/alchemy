@@ -65,7 +65,7 @@ The block writes plain definitions, `Order.decide`, `Order.evolve`, `Order.reply
 
 ## A model
 
-One block declares the aggregates and the systems outside the model.
+One block declares the aggregates and the systems outside the model. A model has as many aggregates as it needs, and a policy on one can send to another (`examples/Shop.lean` has `Order` and `Shipment`).
 
 ```lean
 model Bank where
