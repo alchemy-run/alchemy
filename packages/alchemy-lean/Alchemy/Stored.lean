@@ -117,7 +117,7 @@ structure Clock (μ : Type → Type) where
   now : μ Time
 
 /-- Everything a model asks of its host. -/
-structure Services (μ : Type → Type) (σ : Signature) where
+structure Services (μ : Type → Type) (σ : Signature) (reads : ReadSide σ.aggregates) where
   store : Store μ σ.aggregates
   delivery : Delivery μ σ.aggregates
   processes : Processes μ σ
@@ -126,6 +126,8 @@ structure Services (μ : Type → Type) (σ : Signature) where
   call : (c : σ.Call) → μ (σ.Reply c)
   /-- Hands a delivered event to whatever is read from the model. -/
   project : Emitted σ.aggregates → μ Unit
+  /-- What is read from the model, as it stands. -/
+  look : μ reads.State
 
 /-! ## Their laws -/
 
@@ -169,7 +171,7 @@ structure Clock.Lawful (clock : Clock μ) : Prop where
   now : Reads acts held sound clock.now fun h => h.now
 
 /-- Every service keeps its law, and calling outside changes nothing the model holds. -/
-structure Services.Lawful (services : Services μ σ) : Prop where
+structure Services.Lawful (services : Services μ σ reads) : Prop where
   store : services.store.Lawful acts held sound
   delivery : services.delivery.Lawful acts held sound
   processes : services.processes.Lawful acts held sound
@@ -178,14 +180,15 @@ structure Services.Lawful (services : Services μ σ) : Prop where
   /-- A delivered event changes what is read, and nothing else. -/
   project : ∀ e, Writes acts held sound (services.project e) fun h =>
     { h with read := reads.apply h.read e }
+  look : Reads acts held sound services.look fun h => h.read
 
 end Laws
 
 /-! ## The engine -/
 
 /-- A model run on services. -/
-structure Engine (μ : Type → Type) (m : Model) where
-  services : Services μ m.signature
+structure Engine (μ : Type → Type) (m : Model) (reads : ReadSide m.signature.aggregates) where
+  services : Services μ m.signature reads
   /-- How many steps one request may set off. -/
   fuel : Nat := 1000
   /-- How many outside calls one request may make. -/
@@ -193,7 +196,8 @@ structure Engine (μ : Type → Type) (m : Model) where
 
 namespace Engine
 
-variable {μ : Type → Type} [Monad μ] {m : Model} (e : Engine μ m)
+variable {μ : Type → Type} [Monad μ] {m : Model} {reads : ReadSide m.signature.aggregates}
+  (e : Engine μ m reads)
 
 /-- Sends one command to its instance: load, decide, and commit what the events leave. -/
 def record (s : Send m.signature.aggregates) : μ (Answer m.signature.aggregates s.to) :=
@@ -312,6 +316,9 @@ def wake : μ Unit :=
 def state (n : m.signature.aggregates.Name) (id : (m.signature.aggregates.of n).Id) :
     μ (m.signature.aggregates.of n).State :=
   e.services.store.load n id
+
+/-- What is read from the model, as it stands. -/
+def look : μ reads.State := e.services.look
 
 /-- Send a command, and answer its caller: a rejection, or the aggregate's reply. -/
 def ask (s : Send m.signature.aggregates) :

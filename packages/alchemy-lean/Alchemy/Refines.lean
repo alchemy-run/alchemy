@@ -130,7 +130,7 @@ namespace Engine
 
 variable {μ : Type → Type} [Monad μ] {S : Type} {acts : Acts μ S} {m : Model}
   {reads : ReadSide m.signature.aggregates} {held : S → Held m.signature reads} {sound : S → Prop}
-  {e : Engine μ m}
+  {e : Engine μ m reads}
 
 /--
 Sending a command through the stores answers what the model answers, and
@@ -552,7 +552,7 @@ namespace Engine
 
 variable {μ : Type → Type} [Monad μ] {S : Type} {acts : Acts μ S} {m : Model}
   {reads : ReadSide m.signature.aggregates} {held : S → Held m.signature reads} {sound : S → Prop}
-  {e : Engine μ m}
+  {e : Engine μ m reads}
 
 /--
 Whatever command is sent, the stores go on standing for a world the model can
@@ -592,7 +592,7 @@ def acts (S : Type) : Acts (StateM S) S where
 
 /-- Every service, on one value in memory. Outside systems answer as `call` says. -/
 def services (σ : Signature) (reads : ReadSide σ.aggregates) (call : (c : σ.Call) → σ.Reply c) :
-    Services (StateM (Held σ reads)) σ where
+    Services (StateM (Held σ reads)) σ reads where
   store :=
     { load := fun n id => return (← get).state n id
       commit := fun n id state events time => modify fun h =>
@@ -607,6 +607,7 @@ def services (σ : Signature) (reads : ReadSide σ.aggregates) (call : (c : σ.C
   clock := { now := return (← get).now }
   call := fun c => pure (call c)
   project := fun e => modify fun h => { h with read := reads.apply h.read e }
+  look := return (← get).read
 
 /-- They keep every law. -/
 theorem lawful (σ : Signature) (reads : ReadSide σ.aggregates) (call : (c : σ.Call) → σ.Reply c) :
@@ -621,6 +622,7 @@ theorem lawful (σ : Signature) (reads : ReadSide σ.aggregates) (call : (c : σ
   clock := { now := fun _ _ => ⟨rfl, rfl, trivial⟩ }
   call := fun _ _ _ => ⟨rfl, trivial⟩
   project := fun _ _ _ => ⟨rfl, trivial⟩
+  look := fun _ _ => ⟨rfl, rfl, trivial⟩
 
 end InMemory
 
