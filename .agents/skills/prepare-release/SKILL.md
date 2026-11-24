@@ -243,6 +243,15 @@ pnpm exec tsrs -b                             # coordinator only, once per round
 pnpm docs:check-jsdoc                        # if any props/attrs changed
 ```
 
+Before the merge ask, run every step of CI's Check job locally (see
+`.github/workflows/check.yml`: format, publish validation, typecheck,
+`lint:providers`, `lint`, the package and engine tests, JSDoc, exports and
+docs checks): a change across hundreds of providers fails `lint` on things the
+type check accepts, such as an import it left unused. And audit the whole diff
+for widened permissions (`Resource: ["*"]`, dropped conditions, broader
+permission groups or roles): a widening made to get a test passing is a
+regression to undo before merging, per the harden skill.
+
 Fix cross-cutting fallout yourself (`Providers.ts` nested `Layer.mergeAll`
 groups, barrel conflicts). Commit the round — one commit per service fix,
 conventional-commit scoped (`fix(aws/ec2): …`) — and **push immediately**.
@@ -271,7 +280,10 @@ slow, so after the first full plan every fixing run is targeted:
    runs of each provider's suite, a census after each, until two consecutive
    runs are green and clean. One green run proves little — retry leaks, lagging
    listings and shared names only show up across runs.
-6. **Finish with nuke + clear:state + census.** The goal is consecutive green
+6. **Harden the examples the same way:** `pnpm test:examples --profile
+   testing`, two consecutive green runs with a census of every cloud they use
+   (about 10 minutes a round).
+7. **Finish with nuke + clear:state + census.** The goal is consecutive green
    runs and a census that shows `Nothing to delete`.
 
 If a census leftover reappears after nuke, its `list` or `delete` is the bug
@@ -321,6 +333,14 @@ The merge order is distilled → floci → alchemy. After each upstream PR merge
 repoint the submodule at its **`main` merge commit** (never a side branch),
 rerun the affected tags, and push.
 
+Keep the release PR to fixes. An API or behavior change found along the way
+(an engine semantic, removing an option) goes in its own PR with its own
+description, so it can be reviewed on its own.
+
+Check a PR's state before pushing to it: a squash merge deletes the branch,
+and pushing then recreates a branch no PR tracks. Follow-up work after a merge
+goes on a new branch from `main`.
+
 Descriptions follow AGENTS.md's PR conventions: one plain sentence, then
 user-facing snippets or a per-service table of what was fixed. No `#`/`##`
 headings and no test plan. Write the body to a file and pass `--body-file`.
@@ -354,6 +374,12 @@ Say plainly what was **not** run (out-of-scope providers, opt-in tags). Don't
 report CI status in place of the test results.
 
 ## Pitfalls seen in practice
+
+- **Check the last release before calling something new or removing it.**
+  Read its source (`git show v<last>:<path>`) and whether the version you're
+  describing is published (`npm view alchemy@<version> version`). Named
+  Cloudflare state stores looked new in beta.85 but shipped in beta.84, which
+  made removing their option a breaking change.
 
 - **Commit with the pinned env sourced.** The pre-commit hook runs pnpm; with
   the wrong bun/node or a stray temp workspace dir under `examples/` (left by
