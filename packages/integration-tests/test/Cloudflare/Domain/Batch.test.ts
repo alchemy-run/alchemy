@@ -198,8 +198,8 @@ describe.concurrent.each([
         }),
       );
       expect(answered).toEqual(["reset-projection"]);
-      // Reset about 10 seconds in. Waiting out the lease: answered after 70.
-      expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(45_000);
+      // Answered about 35 to 45 seconds in. Waiting out the lease: about 65.
+      expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(55_000);
     }),
     { tags, timeout: 180_000 },
   );
@@ -219,9 +219,8 @@ describe.concurrent.each([
       );
       expect(answersTo(answered, "reset-policy")).toHaveLength(1);
       expect(answered).toContain("reset-policy");
-      // The inbox's backstop runs the reaction again 10 seconds in. Waiting
-      // out the lease: answered after 60, and then the batch wait.
-      expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(45_000);
+      // Answered about 35 to 45 seconds in. Waiting out the lease: about 65.
+      expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(55_000);
     }),
     { tags, timeout: 180_000 },
   );
