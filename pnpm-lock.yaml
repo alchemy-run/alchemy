@@ -514,6 +514,9 @@ catalogs:
     esbuild:
       specifier: ^0.28.1
       version: 0.28.2
+    everystate:
+      specifier: 0.4.1
+      version: 0.4.1
     fast-xml-parser:
       specifier: ^5.11.2
       version: 5.11.2
@@ -11495,6 +11498,9 @@ importers:
       effect:
         specifier: 4.1.4
         version: 4.1.4
+      everystate:
+        specifier: 'catalog:'
+        version: 0.4.1
       fflate:
         specifier: 'catalog:'
         version: 0.8.3
@@ -26185,6 +26191,11 @@ packages:
   eventsource@4.1.1:
     resolution: {integrity: sha512-D6bTRWh6KahHTK/m4WnjPQyEinNPf9eFLEZSEoj7d6fTibspnAVYfzHvirL7u/aoX5d9YYfIkBVAhmigUELk9w==}
     engines: {node: '>=20.0.0'}
+
+  everystate@0.4.1:
+    resolution: {integrity: sha512-edqnujHaz9iTzuFskCa3IiU2evgh/dMnwkQofnW9rZ3tr7VYN7LGzHOxszPKD0MSr+VK1ssKDe4csHRNy8q64w==}
+    engines: {node: '>=20'}
+    hasBin: true
 
   execa@10.0.1:
     resolution: {integrity: sha512-ge98qjkRK4IB7tL7Ju/6qmm5LHoH1eEMt5FNZrz3f4UIYhF28lggX20z3FaX1sgc67msLEn0N0BscOs29iuwyw==}
@@ -47684,6 +47695,8 @@ snapshots:
   eventsource@4.1.1:
     dependencies:
       eventsource-parser: 3.1.1
+
+  everystate@0.4.1: {}
 
   execa@10.0.1:
     dependencies:

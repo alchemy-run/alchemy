@@ -985,7 +985,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
 
   const decide: Interpreter["decide"] = (value, site) =>
     truthOf(value, site).pipe(
-      Effect.map((t) => (typeof t === "boolean" ? t : current.run.branch(t))),
+      Effect.map((t) => current.run.test(typeof t === "boolean" ? t : current.run.branch(t))),
     );
 
   const bind: (pattern: Node, value: V, scope: Scope, env: Env) => Eval<void> = Effect.fnUntraced(

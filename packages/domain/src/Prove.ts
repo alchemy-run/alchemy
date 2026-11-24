@@ -29,6 +29,7 @@ import * as Value from "./Prove/internal/Value.ts";
 import type * as Rewrite from "./Rewrite.ts";
 
 export type { Counterexample, Verdict } from "./Prove/internal/Check.ts";
+export type { Guard } from "./Prove/internal/Induction.ts";
 export type { Suggestion } from "./Prove/internal/Suggest.ts";
 export type { Reading } from "./Prove/internal/Source.ts";
 
@@ -184,6 +185,11 @@ export interface Report {
     readonly uncompared: number;
     readonly differs: ReadonlyArray<string>;
   };
+  /**
+   * Each rejection a command gives, and the rules that break when its check
+   * is taken out. One no rule needs protects something no rule says.
+   */
+  readonly guards: ReadonlyArray<Induction.Guard>;
   /** What the proof takes for granted. */
   readonly assumptions: ReadonlyArray<string>;
 }
@@ -322,6 +328,7 @@ export const report = (
         uncompared: own.reduce((sum, row) => sum + row.uncompared, 0),
         differs: own.flatMap((row) => row.differs),
       },
+      guards: own.flatMap((row) => row.guards),
       assumptions: [...ASSUMPTIONS, ...pure(loader.opaques())],
     };
     return made;
@@ -475,7 +482,12 @@ export const render = (report: Report): string => {
       "    pass that decision in `decisions`, or verify the model that hosts both",
       "",
     );
-  lines.push(agreed(report.agreement), "", ...notes(report));
+  lines.push(
+    agreed(report.agreement),
+    "",
+    ...unneeded(report.guards, (guard) => `${guard.command}.${guard.rejection}`),
+    ...notes(report),
+  );
   return lines.join("\n");
 };
 
@@ -501,6 +513,27 @@ export const agreed = (agreement: {
           ? ` (${agreement.uncompared} more could not be run: the prover cannot build their inputs)`
           : ""
       }`;
+
+/**
+ * The rejections no rule needs, as lines of a report: each named as
+ * `name(guard)` names it.
+ */
+export const unneeded = (
+  guards: ReadonlyArray<Induction.Guard & { readonly aggregate?: string }>,
+  name: (guard: Induction.Guard & { readonly aggregate?: string }) => string,
+  /** Whose rules were looked at: `no rule`, or `no rule of its aggregate`. */
+  whose = "no rule",
+): ReadonlyArray<string> => {
+  const free = guards.filter((guard) => guard.standing === "unneeded");
+  return free.length === 0
+    ? []
+    : [
+        `Rejections ${whose} needs: with the check taken out, the command records events on what it refused, and every rule is kept`,
+        ...free.map((guard) => `  ? ${name(guard)}`),
+        "  What each is there for is not written down. Say it in an invariant or a transition, and taking the check out breaks it.",
+        "",
+      ];
+};
 
 /** The schema checks a report could not read or prove kept, then what it takes for granted. */
 const notes = (report: {

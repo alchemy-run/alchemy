@@ -243,6 +243,7 @@ Rules of thumb:
 - A helper the prover cannot read (a hash, a parser, a regular expression) goes in an exported function: the prover takes it to be pure and does not look inside, and rules that do not read its result are still proved. One that reads a global (`Date`, `Math.random`) or calls a package function with no model is not taken to be pure: name it in `opaque: [DateTime.formatIso]` only when it is. Shared rules in another package are read like your own files.
 - Pin the rules that must stay proved with `require: { proved: ["Account.NeverOverdrawn"] }`: one that slips to `Checked` then fails the test.
 - Keep rules from being weakened with `lock: "./Bank.lock.json"`: the first run writes the file, commit it. A rule removed, or changed to allow more, then fails. Never set `UPDATE_VERIFY_LOCK=1` or edit the file to make a test pass: relocking a rule that says less is the user's call.
+- The report lists `Rejections no rule needs`: checks that can be removed without breaking a rule. Write the invariant or transition each one keeps, then pin it with `require: { guards: ["Account.WithdrawMoney.InsufficientFunds"] }`. Never delete the check to clear the list.
 - Where a proof fails from a state no sequence reaches, the report may print the invariant to add (`Add it to the invariants:`). Add it as written.
 - Never widen `allow` to get a pass. It names what the check may skip, and each entry is something no longer verified.
 - A rule that is true but not proved needs a second invariant that rules out the state the prover started from.

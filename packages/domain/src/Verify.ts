@@ -106,7 +106,39 @@ export interface Options extends Prove.Reading {
 export interface Require {
   /** The rules that have to be proved, each as the report names it: `Account.NeverOverdrawn`. */
   readonly proved?: ReadonlyArray<string>;
+  /**
+   * The rejections a rule has to need, each as the report names it:
+   * `Account.WithdrawMoney.InsufficientFunds` in a model,
+   * `WithdrawMoney.InsufficientFunds` in an aggregate. One fails the
+   * verification when every rule is kept with its check taken out: what it
+   * protects is then not a rule, and a change that drops the check passes.
+   */
+  readonly guards?: ReadonlyArray<string>;
 }
+
+/** Each rejection that is required to be needed by a rule and is not, as a part of the check left undone. */
+const guarded = (
+  guards: ReadonlyArray<Prove.Guard & { readonly aggregate?: string }>,
+  require: Require | undefined,
+): ReadonlyArray<string> =>
+  (require?.guards ?? []).flatMap((name) => {
+    const guard = guards.find((guard) => guardName(guard) === name);
+    return !guard
+      ? [
+          `${name} is required to be needed by a rule, and no command gives a rejection of that name`,
+        ]
+      : guard.standing === "needed"
+        ? []
+        : guard.standing === "unneeded"
+          ? [
+              `${name} is required to be needed by a rule, and every rule is kept with its check taken out`,
+            ]
+          : [`${name} is required to be needed by a rule, and that is not known: ${guard.reason}`];
+  });
+
+/** A rejection as a report names it: its command, then its tag, after its aggregate in a model. */
+const guardName = (guard: Prove.Guard & { readonly aggregate?: string }): string =>
+  `${guard.aggregate === undefined ? "" : `${guard.aggregate}.`}${guard.command}.${guard.rejection}`;
 
 /** Each rule that is required to be proved and is not, as a part of the check left undone. */
 const required = (
@@ -757,6 +789,7 @@ export const report = (
       undone: [
         ...Explore.undone(explored, options.allow ?? {}),
         ...required(rules, options.require),
+        ...guarded(explored.guards, options.require),
         ...unlocked.reasons,
         ...(histories?.uninstantiated ?? [])
           .filter((name) => changes.find((change) => change.name === name)?.standing !== "proved")
@@ -945,6 +978,7 @@ const renderAggregate = (report: AggregateReport): string => {
   const broken = report.rules.filter((rule) => rule.standing === "broken");
   if (broken.length > 0) out.push(...broken.map((rule) => `✗ ${rule.name} breaks`), "");
   out.push(Prove.agreed(report.proof.agreement), "");
+  out.push(...Prove.unneeded(report.proof.guards, guardName));
   if (report.undone.length > 0)
     out.push("Not done", ...report.undone.map((reason) => `  ✗ ${reason}`), "");
   out.push(...relockedLines(report.relocked));
@@ -1041,6 +1075,7 @@ export const aggregate = (
       undone: [
         ...Explore.undone(explored, options.allow ?? {}),
         ...required(rules, options.require),
+        ...guarded(proof.guards, options.require),
         ...proof.agreement.differs,
         ...unlocked.reasons,
       ],
@@ -1271,6 +1306,8 @@ export const render = (report: Report | AggregateReport): string => {
     );
   else if (explored.agreement.compared > 0)
     out.push(Prove.agreed({ ...explored.agreement, differs: [] }), "");
+
+  out.push(...Prove.unneeded(explored.guards, guardName, "no rule of its aggregate"));
 
   if (explored.repeated.length > 0)
     out.push(

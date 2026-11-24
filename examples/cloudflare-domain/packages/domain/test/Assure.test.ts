@@ -346,3 +346,58 @@ it.effect(
     }).pipe(Effect.scoped, Effect.provide(services(false))),
   60_000,
 );
+
+it.effect(
+  "a rejection is needed by the rules that break when its check is taken out",
+  () =>
+    Effect.gen(function* () {
+      // `Reserve` refuses more than the balance covers. With the rule that says so
+      // written down, taking the check out breaks it.
+      const covered = yield* Verify.aggregate(Covered, {
+        require: { guards: ["Reserve.NotEnough"] },
+      });
+      expect(covered.proof.guards).toEqual([
+        {
+          command: "Reserve",
+          rejection: "NotEnough",
+          standing: "needed",
+          rules: ["ReservedIsCovered"],
+          reason: undefined,
+        },
+      ]);
+      expect(Verify.render(covered)).not.toContain("Rejections no rule needs");
+    }).pipe(Effect.provide(services(false))),
+  60_000,
+);
+
+it.effect(
+  "a rejection no rule needs is named, and fails where one is required to",
+  () =>
+    Effect.gen(function* () {
+      // The same check, in an aggregate whose only rule is about the balance: reserving
+      // too much breaks nothing that is written down.
+      const proof = yield* Prove.report(Escrow, {
+        source: new URL("./fixtures/Escrow.aggregate.ts", import.meta.url),
+      });
+      expect(proof.guards).toMatchObject([
+        { command: "Reserve", rejection: "NotEnough", standing: "unneeded", rules: [] },
+      ]);
+      expect(Prove.render(proof)).toContain(
+        [
+          "Rejections no rule needs: with the check taken out, the command records events on what it refused, and every rule is kept",
+          "  ? Reserve.NotEnough",
+        ].join("\n"),
+      );
+      const failed = yield* failure(
+        Verify.aggregate(Escrow, { require: { guards: ["Reserve.NotEnough", "Pay.Nothing"] } }),
+      );
+      expect(failed).toMatchObject({ _tag: "NotVerified" });
+      expect(failed.message).toContain(
+        "Reserve.NotEnough is required to be needed by a rule, and every rule is kept with its check taken out",
+      );
+      expect(failed.message).toContain(
+        "Pay.Nothing is required to be needed by a rule, and no command gives a rejection of that name",
+      );
+    }).pipe(Effect.provide(services(false))),
+  60_000,
+);

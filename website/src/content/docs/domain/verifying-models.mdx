@@ -265,6 +265,7 @@ Proved: for every state and every input, after any number of commands
   ✓ Account.WithinDailyLimit
   ✓ Account.AClosedAccountStaysClosed
   ✓ Account.MoneyLeavesOnlyByWithdrawalOrTransfer
+  ✓ Account.AFrozenAccountLosesNoMoney
   ✓ Account.OnlyAnAgentChangesTheOwner
   ✓ RegisterCustomer.TheNameGoesToWhoRegistered
   ✓ RegisterCustomer.OnlyAFreeNameIsClaimed
@@ -272,11 +273,11 @@ Proved: for every state and every input, after any number of commands
   ✓ Bank.ARegisteredCustomerHoldsTheirName
 
 Checked: in every sequence of up to 2 commands through CustomerApi, SupportApi, with each event delivered twice, each reaction also run behind the others that wait, each step of a saga run twice, every answer FraudCheck can give
-20,138 sequences, 9,725 states
+20,205 sequences, 9,669 states
   ✓ Bank.TransfersLoseNoMoney
   ✓ Bank.NoTransferLeftPending
   ✓ Bank.LedgerIsGivenEveryDeposit
-  ✓ Bank.EveryTransferEnds  holds at the end of the 6,158 sequences that ran their course
+  ✓ Bank.EveryTransferEnds  holds at the end of the 6,066 sequences that ran their course
 
 Reached: a sequence of commands gets there
   ✓ Bank.AnAccountHoldsMoney
@@ -287,10 +288,28 @@ Reached: a sequence of commands gets there
 Sampled: 200 longer sequences, of up to 12 commands picked at random (seed 1)
   ✓ none breaks a rule
 
-Agreed with the real code: inputs picked for each of 141 paths through the commands did what the prover read
+Agreed with the real code: inputs picked for each of 117 paths through the commands did what the prover read
+
+Rejections no rule of its aggregate needs: with the check taken out, the command records events on what it refused, and every rule is kept
+  ? Account.ChangeOwner.NotOpen
+  ? Account.DepositMoney.NotOwner
+  ? Account.WithdrawMoney.NotOwner
+  ? Account.FreezeAccount.NotOwner
+  ? Account.CloseAccount.NotOwner
+  ? Account.CloseAccount.BalanceNotZero
+  ? Account.DebitTransfer.NotOwner
+  What each is there for is not written down. Say it in an invariant or a transition, and taking the check out breaks it.
+
+Called again when an event is delivered again: each has to be safe to repeat
+  FraudCheck.score, by FraudReview
 
 Left out, and no rule depends on it
   - view AccountSummary: no rule reads it and no policy reacts to it
+  - view CustomerDashboard: no rule reads it and no policy reacts to it
+  - view Statement: no rule reads it and no policy reacts to it
+  - view AccountActivity: no rule reads it and no policy reacts to it
+  - view TransferStatus: no rule reads it and no policy reacts to it
+  - view AccountTransfers: no rule reads it and no policy reacts to it
   - projection AccountCards: no rule reads it and no policy reacts to it
   - stream AccountCard: what a stream gives is not checked
   - query AccountLedger: what a query answers is not checked
@@ -315,6 +334,10 @@ Assumed
 
 **Agreed** is what the proofs rest on. A proof is about the code as the prover reads it, so for each path through a command it picks inputs that take that path and runs the real `decide` and `evolve` on them. If the real code rejects where the prover read an event, or leaves another state, the rule isn't proved and the test fails with both.
 
+**Rejections no rule needs** come from taking each check out. For every rejection a command gives, the prover tells the code the check passed, on the inputs it refused, and looks at every rule on the state that leaves. `WithdrawMoney` without its `InsufficientFunds` check breaks `NeverOverdrawn`, so it isn't listed. `CloseAccount` without `BalanceNotZero` breaks nothing: no rule says a closed account held no money. Each line is a promise the code keeps and the rules don't make, so a change that drops the check still passes.
+
+**Called again** lists the external calls a redelivered event repeats.
+
 **Left out** names every part of the model the sequences ran without. No rule reads one and no policy reacts to one, so leaving it out changes no result. A view a rule does read is followed, and a policy the search can't follow fails the test.
 
 **Assumed** is what a pass takes for granted. Read it once. It's where a rule that verifies can still be wrong in production.
@@ -337,6 +360,43 @@ Verify.model(Bank, {
 Not done
   ✗ Account.NeverOverdrawn is required to be proved, and is only checked
 ```
+
+## Write down what a rejection is for
+
+The bank refuses to move money out of a frozen account. That was on the list of rejections no rule needs, until the rule it keeps was written:
+
+```diff lang="typescript" title="packages/domain/src/Account/Account.aggregate.ts"
+transitions: {
+  AClosedAccountStaysClosed: ({ before, after }) =>
+    before._tag !== "Closed" || after._tag === "Closed",
++  AFrozenAccountLosesNoMoney: ({ before, after }) =>
++    before._tag !== "Open" ||
++    before.frozen === null ||
++    after._tag !== "Open" ||
++    after.balance >= before.balance,
+},
+```
+
+With it, taking the `Frozen` check out of `WithdrawMoney` or `DebitTransfer` breaks a rule, and both leave the list. The rule also failed the first time it ran: the check tested the reason for the freeze, so an account frozen with an empty reason wasn't frozen.
+
+## Keep a rejection needed
+
+`require.guards` names the rejections a rule has to need. This escrow refuses to reserve more than it holds, and its only rule is about the balance:
+
+```typescript title="packages/domain/test/Escrow.verify.test.ts"
+Verify.aggregate(Escrow, { require: { guards: ["Reserve.NotEnough"] } });
+```
+
+```text
+Rejections no rule needs: with the check taken out, the command records events on what it refused, and every rule is kept
+  ? Reserve.NotEnough
+  What each is there for is not written down. Say it in an invariant or a transition, and taking the check out breaks it.
+
+Not done
+  ✗ Reserve.NotEnough is required to be needed by a rule, and every rule is kept with its check taken out
+```
+
+In a model a rejection is named after its aggregate: `Account.WithdrawMoney.InsufficientFunds`.
 
 ## Keep a rule from saying less
 
@@ -800,6 +860,8 @@ An outcome no sequence reaches is worth a look. It's either out of reach in two 
 A proof is about one aggregate, one step of a decision, or a few instances a relation names. A rewrite's proof takes every event an instance holds to be one its commands recorded, or a roll-up: events that were imported are not looked at. A rewrite or a compaction is put into the sequences that run as stories, so not into one that needs an event delivered twice, and the model's own rules are not checked again after it.
 
 A decision's proof assumes the decision commits everything it records or nothing, which is the platform's job and isn't checked here. A rule across instances is checked in every sequence of up to `depth` commands and in the walks that were sampled. A longer sequence that no walk took could still break it.
+
+A rejection is held against the rules of its own aggregate. One that keeps a rule of the model, or a relation, is still listed as needed by none. Where the code can't go on without the check, such as reading the balance of an account that isn't open, nothing is said of it.
 
 An invariant can be true of every state the aggregate reaches and still not be proved. The proof starts from any state the rules allow, including ones no sequence of commands leads to. This escrow reserves money before it captures it, and `Reserve` checks there is enough, so the balance never goes below zero:
 

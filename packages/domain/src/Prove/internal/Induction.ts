@@ -41,7 +41,105 @@ export interface Row {
   /** The paths inputs take that could not be run: a value the prover cannot build, or one a schema it does not read refuses. */
   readonly uncompared: number;
   readonly differs: ReadonlyArray<string>;
+  /** Each rejection the command gives, and the rules that break when its check is taken out. */
+  readonly guards: ReadonlyArray<Guard>;
 }
+
+/**
+ * One rejection of a command, and what it is there for. The prover takes the
+ * check out, lets the command go on with the inputs it refused, and looks at
+ * every rule on the state that leaves.
+ */
+export interface Guard {
+  readonly command: string;
+  /** The tag of the rejection. */
+  readonly rejection: string;
+  /**
+   * `needed`: without the check, `rules` break. `unneeded`: without it the
+   * command records events on inputs it refuses now, and every rule is kept:
+   * what it protects is not written down as a rule. `unknown`: the prover
+   * could not go on without it, and `reason` says why.
+   */
+  readonly standing: "needed" | "unneeded" | "unknown";
+  /** The invariants and transitions that break without it. */
+  readonly rules: ReadonlyArray<string>;
+  readonly reason: string | undefined;
+}
+
+/** The most paths a command is followed along with one check taken out. */
+const MAX_UNGUARDED = 64;
+
+/** What a state's schema is called among the rules a guard keeps. */
+export const SCHEMA = "the state's schema";
+
+/** The most tests before a rejection that are tried as the one it depends on. */
+const MAX_TESTS = 6;
+
+/**
+ * Tell the code the opposite of one test it made before a rejection, on the
+ * inputs that were rejected, and say which rules the command then breaks.
+ */
+const unguarded = Effect.fn(function* (
+  solver: Smt.Solver,
+  interpreter: Interpreter,
+  definition: Paths.Definition,
+  command: Paths.CommandClass,
+  rejected: Paths.Path,
+  /** Which test, counted from the run's first. */
+  test: number,
+) {
+  // The choices the rejected path had made once the test was settled: the inputs stay the ones it refused.
+  const at = rejected.run.checks[test]!;
+  const base = rejected.run.taken.slice(0, at).map((choice) => choice.chosen);
+  const rules = new Set<string>();
+  let moved = false;
+  let unknown: string | undefined;
+  let paths = 0;
+  let prefix: ReadonlyArray<number> | undefined = base;
+  while (prefix) {
+    if (++paths > MAX_UNGUARDED) {
+      unknown ??= `without it ${command.tag} has more than ${MAX_UNGUARDED} paths`;
+      break;
+    }
+    const taken = yield* Paths.path(interpreter, definition, command, prefix, test);
+    const next = Value.nextPrefix(taken.run.taken);
+    // Only the paths that go on from the test taken out.
+    prefix = next && next.length > at ? next : undefined;
+    const outcome = taken.outcome;
+    if (outcome._tag === "Stopped") {
+      unknown ??= `without it the prover cannot read on: ${outcome.error.reason}`;
+      continue;
+    }
+    if (outcome._tag !== "Changed" || !taken.inputs) continue;
+    if (taken.run.bounds.size > 0) {
+      unknown ??= "without it a list is tried only up to a few items";
+      continue;
+    }
+    const conditions: Array<{ readonly name: string; readonly condition: string }> = [];
+    for (const check of [
+      ...outcome.checks,
+      { name: SCHEMA, condition: Result.succeed(outcome.fits) },
+    ]) {
+      if (Result.isFailure(check.condition))
+        unknown ??= `${check.name} could not be read: ${check.condition.failure.reason}`;
+      else if (check.condition.success !== "true")
+        conditions.push({ name: check.name, condition: check.condition.success });
+    }
+    // Inputs the check refused that now record an event: without any, there is nothing to ask.
+    const taking = yield* Check.solve(solver, taken.run, "false");
+    if (taking._tag === "Unknown") unknown ??= "whether the command goes on was not decided";
+    if (taking._tag !== "Sat") continue;
+    moved = true;
+    for (const one of conditions) {
+      const answer = yield* Check.solve(solver, taken.run, one.condition);
+      if (answer._tag === "Sat") rules.add(one.name);
+      else if (answer._tag === "Unknown") unknown ??= `${one.name} was not decided`;
+    }
+    // One path on which a rule breaks is enough to say the check is needed.
+    if (rules.size > 0) break;
+  }
+  return { rules, moved, unknown };
+});
 
 /** The most paths of one command that are run on the real code. */
 export const MAX_COMPARED = 256;
@@ -118,6 +216,10 @@ export const rows = Effect.fn(function* (
     let compared = 0;
     let uncompared = 0;
     const differs: Array<string> = [];
+    const guards = new Map<
+      string,
+      { readonly rules: Set<string>; moved: boolean; unknown: string | undefined }
+    >();
     let prefix: ReadonlyArray<number> | undefined = [];
     while (prefix) {
       if (++paths > MAX_PATHS) {
@@ -173,6 +275,38 @@ export const rows = Effect.fn(function* (
           fits = worse(fits, misread);
         }
       }
+      // A rejection, with its check taken out: what the command then does to the rules.
+      const rejection =
+        outcome._tag === "Unchanged" && outcome.rejection?._tag === "Obj"
+          ? outcome.rejection.fields._tag
+          : undefined;
+      if (rejection?._tag === "Str") {
+        const guard = guards.get(rejection.value) ?? {
+          rules: new Set<string>(),
+          moved: false,
+          unknown: undefined,
+        };
+        guards.set(rejection.value, guard);
+        // The test it depends on is the last one that, told the opposite, lets the command go on.
+        let why: string | undefined;
+        const last = taken.run.checks.length - 1;
+        for (
+          let test = last;
+          guard.rules.size === 0 && test >= taken.from && test > last - MAX_TESTS;
+          test--
+        ) {
+          const without = yield* unguarded(solver, interpreter, definition, command, taken, test);
+          why ??= without.unknown;
+          if (without.rules.size === 0 && !without.moved) continue;
+          for (const name of without.rules) guard.rules.add(name);
+          guard.moved = true;
+          guard.unknown ??= without.unknown;
+          why = undefined;
+          break;
+        }
+        // Where no test lets it go on, another check refuses the same inputs: nothing to say of this path.
+        guard.unknown ??= why;
+      }
       if (outcome._tag !== "Changed" || !taken.inputs) continue;
       for (const check of outcome.checks) {
         const verdict: Verdict = Result.isFailure(check.condition)
@@ -217,6 +351,24 @@ export const rows = Effect.fn(function* (
       compared,
       uncompared,
       differs,
+      guards: [...guards].map(([rejection, guard]): Guard => ({
+        command: command.tag,
+        rejection,
+        standing:
+          guard.rules.size > 0
+            ? "needed"
+            : guard.unknown === undefined && guard.moved
+              ? "unneeded"
+              : "unknown",
+        rules: [...guard.rules],
+        reason:
+          guard.rules.size > 0
+            ? undefined
+            : (guard.unknown ??
+              (guard.moved
+                ? undefined
+                : "taking out a test it follows never lets the command record an event")),
+      })),
     });
   }
   return made;
@@ -439,6 +591,7 @@ export const decisionRow = Effect.fn(function* (
     compared: 0,
     uncompared: 0,
     differs: [],
+    guards: [],
     own,
   };
   return row;

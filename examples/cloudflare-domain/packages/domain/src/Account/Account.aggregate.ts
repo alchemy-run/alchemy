@@ -96,6 +96,11 @@ export class Account extends Domain.Aggregate("Account", {
       after.balance >= before.balance ||
       command._tag === "WithdrawMoney" ||
       command._tag === "DebitTransfer",
+    AFrozenAccountLosesNoMoney: ({ before, after }) =>
+      before._tag !== "Open" ||
+      before.frozen === null ||
+      after._tag !== "Open" ||
+      after.balance >= before.balance,
     OnlyAnAgentChangesTheOwner: Effect.fn(function* ({ before, after }) {
       if (before._tag !== "Open" || after._tag !== "Open") return true;
       if (before.customerId === after.customerId) return true;
@@ -139,7 +144,7 @@ export class Account extends Domain.Aggregate("Account", {
       // Recorded on this command's decide span; nothing else from it is.
       yield* Effect.annotateCurrentSpan("bank.amount", cmd.amount);
       const o = yield* authorized(account);
-      if (o.frozen) return yield* new Frozen({ reason: o.frozen });
+      if (o.frozen !== null) return yield* new Frozen({ reason: o.frozen });
       if (cmd.amount > o.balance)
         return yield* new InsufficientFunds({ balance: o.balance, requested: cmd.amount });
       const used = o.today.day === dayOf(now) ? o.today.withdrawn : 0;
@@ -151,7 +156,7 @@ export class Account extends Domain.Aggregate("Account", {
     FreezeAccount: Effect.fn(function* (account, cmd) {
       const o = yield* authorized(account);
       const actor = yield* CurrentActor;
-      return o.frozen ? [] : [new AccountFrozen({ reason: cmd.reason, by: actor })];
+      return o.frozen !== null ? [] : [new AccountFrozen({ reason: cmd.reason, by: actor })];
     }),
 
     CloseAccount: Effect.fn(function* (account) {
@@ -163,7 +168,7 @@ export class Account extends Domain.Aggregate("Account", {
     DebitTransfer: (account, cmd) => {
       const o = openFor(account, cmd.requestedBy);
       if (o._tag !== "Open") return o;
-      if (o.frozen) return new Frozen({ reason: o.frozen });
+      if (o.frozen !== null) return new Frozen({ reason: o.frozen });
       if (cmd.amount > o.balance)
         return new InsufficientFunds({ balance: o.balance, requested: cmd.amount });
       return [
