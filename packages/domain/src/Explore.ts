@@ -690,7 +690,7 @@ const renderModel = (report: ModelReport): string => {
   if (report.unread.length > 0)
     out.push(
       "",
-      "Not read",
+      "Not supported",
       ...report.unread.map((error) => `  ${error.file}:${error.line}  ${error.reason}`),
     );
   if (report.disagreements.length > 0)
@@ -789,7 +789,7 @@ export const render = (report: Report | ModelReport): string => {
   if (report.unread.length > 0)
     out.push(
       "",
-      "Not read",
+      "Not supported",
       ...report.unread.map((error) => `  ${error.file}:${error.line}  ${error.reason}`),
     );
   if (report.disagreements.length > 0)

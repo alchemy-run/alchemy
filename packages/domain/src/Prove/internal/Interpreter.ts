@@ -453,6 +453,24 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           ),
         );
       }
+      if (declaration?._tag === "Pattern") {
+        // `const { a } = made`: what the pattern gives the name, of what the file made.
+        frames.push(0);
+        const env = moduleEnv(module);
+        const bound = child(env.scope);
+        return yield* evaluate(declaration.init, env).pipe(
+          Effect.flatMap((made) =>
+            bind(declaration.pattern, made, bound, { ...env, scope: bound }),
+          ),
+          Effect.ensuring(Effect.sync(() => void frames.pop())),
+          Effect.map(() => bound.variables.get(name) ?? Value.undef),
+          Effect.catchTag("NotTranslated", (error) =>
+            name in module.exports
+              ? Effect.succeed(fromHost(module.exports[name], name))
+              : Effect.fail(error),
+          ),
+        );
+      }
       if (declaration?._tag === "Function") {
         return exported(
           { _tag: "Fn", node: declaration.node, env: moduleEnv(module), effectful: false },
@@ -892,6 +910,8 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         return library.valueOf(next, site) ?? next;
       }
       case "Namespace": {
+        // A namespace has what its file exports, and nothing else the file declares.
+        if (!(key in value.module.exports)) return Value.undef;
         const found = yield* top(value.module, key, site);
         return found ?? fromHost(value.module.exports[key], key);
       }
