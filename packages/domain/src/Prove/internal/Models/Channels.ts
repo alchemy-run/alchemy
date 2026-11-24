@@ -5,6 +5,7 @@ import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import type * as PubSub from "effect/PubSub";
 import type * as Queue from "effect/Queue";
+import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Brands from "../Brands.ts";
@@ -1104,7 +1105,116 @@ export const make = (kit: Kit, tools: Tools) => {
     ),
   });
 
+  // ---- Filters and reasons, as a channel has them.
+
+  /** A function of the code, called for what it gives: an effect it gives is a value, and is not run. */
+  const straight =
+    (to: Given, f: V | undefined) =>
+    (...args: ReadonlyArray<V>): Effect.Effect<V, Held> =>
+      to.read(f && callable(f) ? host.call(f, args, to.site) : wrongArguments(to.site, to.name));
+  /** The `Result` a filter of the code gave, as the library's. */
+  const sorted = (to: Given, made_: V): Effect.Effect<Result.Result<V, V>, Held> => {
+    const read = Brands.resultOf(made_);
+    if (!read) return to.read(wrongArguments(to.site, to.name));
+    return Effect.succeed(
+      read._tag === "Success" ? Result.succeed(read.success) : Result.fail(read.failure),
+    );
+  };
+  const unset = (v: V | undefined): boolean => v === undefined || v._tag === "Undef";
+  const reasonOf = (rejection: V, tag: V | undefined): V | undefined =>
+    tag?._tag === "Str" && tagOf(rejection) === tag.value && rejection._tag === "Obj"
+      ? rejection.fields.reason
+      : undefined;
+  /** A channel that goes on as another where its error holds a reason, and fails as it did where it does not. */
+  const byReason = (
+    name: string,
+    next: (to: Given, reason: V, error: V, rest: ReadonlyArray<V>) => Real | undefined,
+  ): Model =>
+    over(name, (to, self, [errorTag, ...rest]) =>
+      Channel.catch(self, (error): Real => {
+        const rejection = seen(error);
+        const reason = reasonOf(rejection, errorTag);
+        return (reason && next(to, reason, rejection, rest)) ?? failing(rejection);
+      }),
+    );
+
+  Object.assign(models, {
+    "effect/Channel:filterMap": over("Channel.filterMap", (to, self, [filter]) =>
+      Channel.filterMapEffect(self, (item: V) =>
+        Effect.flatMap(straight(to, filter)(item), (made_) => sorted(to, made_)),
+      ),
+    ),
+    "effect/Channel:filterMapEffect": over("Channel.filterMapEffect", (to, self, [filter]) =>
+      Channel.filterMapEffect(self, (item: V) =>
+        Effect.flatMap(to.fn(filter)(item), (made_) => sorted(to, made_)),
+      ),
+    ),
+    "effect/Channel:catchFilter": over("Channel.catchFilter", (to, self, [filter, f, orElse]) =>
+      Channel.catch(self, (error) =>
+        Channel.unwrap(
+          Effect.map(
+            Effect.flatMap(straight(to, filter)(seen(error)), (made_) => sorted(to, made_)),
+            (made_): Real => {
+              if (Result.isSuccess(made_)) return to.inner(f)(made_.success);
+              return unset(orElse) ? failing(made_.failure) : to.inner(orElse)(made_.failure);
+            },
+          ),
+        ),
+      ),
+    ),
+    "effect/Channel:catchCauseFilter": over("Channel.catchCauseFilter", (to, self, [filter, f]) =>
+      Channel.catchCause(self, (cause) =>
+        Channel.unwrap(
+          Effect.flatMap(to.cause(cause), (held) =>
+            Effect.map(
+              Effect.flatMap(straight(to, filter)(held), (made_) => sorted(to, made_)),
+              (made_): Real =>
+                Result.isSuccess(made_)
+                  ? to.inner(f)(made_.success, held)
+                  : Channel.failCause(tools.realCause(made_.failure) ?? cause),
+            ),
+          ),
+        ),
+      ),
+    ),
+    "effect/Channel:catchReason": byReason("Channel.catchReason", (to, reason, error, rest) => {
+      const [reasonTag, f, orElse] = rest;
+      if (reasonTag?._tag !== "Str") return to.bad;
+      if (tagOf(reason) === reasonTag.value) return to.inner(f)(reason, error);
+      return unset(orElse) ? undefined : to.inner(orElse)(reason, error);
+    }),
+    "effect/Channel:catchReasons": byReason("Channel.catchReasons", (to, reason, error, rest) => {
+      const [cases, orElse] = rest;
+      if (cases?._tag !== "Obj") return to.bad;
+      const handler = cases.fields[tagOf(reason) ?? ""];
+      if (!unset(handler)) return to.inner(handler)(reason, error);
+      return unset(orElse) ? undefined : to.inner(orElse)(reason, error);
+    }),
+    "effect/Channel:unwrapReason": byReason("Channel.unwrapReason", (_, reason) => failing(reason)),
+    // What is acquired is given to the channel, and released when the channel ends, however it ends.
+    "effect/Channel:acquireUseRelease": from(
+      "Channel.acquireUseRelease",
+      (to, [acquire, use, release]) =>
+        ours(
+          Channel.acquireUseRelease(
+            to.eff(acquire),
+            (value: V) => to.inner(use)(value),
+            (value, ended) =>
+              tools.sure(Effect.flatMap(to.exit(ended), (exit) => to.fn(release)(value, exit))),
+          ),
+        ),
+    ),
+    // A span says how the channel is watched: it is the channel it was.
+    "effect/Channel:withSpan": ([first]: ReadonlyArray<V>) =>
+      Effect.succeed(
+        isChannel(first)
+          ? first!
+          : native("Channel.withSpan", ([self]) => Effect.succeed(self ?? Value.undef)),
+      ),
+  });
+
   const sited: Readonly<Record<string, (site: Site) => V>> = {
+    "effect/Channel:DefaultChunkSize": () => Value.num(Channel.DefaultChunkSize),
     "effect/Channel:empty": (site) => made("Channel.empty", site, () => ours(Channel.empty)),
     "effect/Channel:Do": (site) =>
       made("Channel.Do", site, () => Channel.succeed<V>(Value.obj({})).pipe(ours)),
