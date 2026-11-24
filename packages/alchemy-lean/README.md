@@ -7,6 +7,8 @@ curl https://elan.lean-lang.org/elan-init.sh -sSf | sh
 lake build        # proves every theorem and runs every story
 ```
 
+New to Lean? Start with [GUIDE.md](./GUIDE.md), which builds one program step by step and explains how to read each piece. This page shows every feature, one snippet each.
+
 Every snippet below is from `examples/` and compiles.
 
 ## An aggregate
