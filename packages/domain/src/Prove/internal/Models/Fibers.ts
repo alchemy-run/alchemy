@@ -4717,7 +4717,142 @@ export const make = (
     }),
   };
 
+  // ---- The rest of `Schedule`: a schedule changed by a function of the code.
+
+  /** What a schedule tells a function of each turn, as the code holds it. The clock's own time is not told. */
+  const turnOf = (meta: Schedule.Metadata<unknown, unknown>): V => {
+    const input: unknown = meta.input;
+    const clock: V = { _tag: "Opaque", what: "the time a schedule reads off the clock" };
+    return Value.obj({
+      input:
+        typeof input === "object" && input !== null && "_tag" in input && input._tag === "Rejected"
+          ? (input as Held).rejection
+          : outputOf(input),
+      output: outputOf(meta.output),
+      attempt: num(meta.attempt),
+      elapsed: num(meta.elapsed),
+      elapsedSincePrevious: num(meta.elapsedSincePrevious),
+      duration: durationOf(meta.duration),
+      start: clock,
+      now: clock,
+    });
+  };
+  /** A function of the code a schedule calls on each turn, on the timeline of the handler that runs it. */
+  const eachTurn =
+    <A>(body: (turn: V) => Eval<A>) =>
+    (meta: Schedule.Metadata<unknown, unknown>): Effect.Effect<A, Held> =>
+      Effect.flatMap(Effect.service(Timeline.Current), (timeline) =>
+        timeline
+          ? Timeline.real(timeline, body(turnOf(meta)))
+          : Effect.die("a schedule is run on the timeline of a handler"),
+      );
+  const anyInput = (self: Schedule.Schedule<unknown, unknown>) =>
+    self as Schedule.Schedule<unknown, unknown, Held>;
+  /** A schedule changed by a function of the code: a failure of the function is the effect's that runs it. */
+  const onTurns = (
+    name: string,
+    arity: number,
+    made_: (
+      self: Schedule.Schedule<unknown, unknown>,
+      rest: ReadonlyArray<V>,
+      site: Site,
+    ) => Eval<Schedule.Schedule<unknown, unknown, Held>>,
+  ): Model =>
+    onSchedule(name, arity, (self, rest, site) =>
+      Effect.map(
+        made_(self, rest, site),
+        (changed) => changed as unknown as Schedule.Schedule<unknown, unknown>,
+      ),
+    );
+
+  const turns: Models = {
+    "effect/Schedule:isSchedule": ([value]) =>
+      Effect.succeed(bool(scheduleOf(value) !== undefined)),
+    "effect/Schedule:identity": schedule("Schedule.identity", () =>
+      Effect.sync(() => Schedule.identity<unknown>()),
+    ),
+    "effect/Schedule:during": schedule("Schedule.during", ([duration], site) =>
+      Effect.map(written("Schedule.during", duration, site), (time) => Schedule.during(time)),
+    ),
+    "effect/Schedule:setInputType": () =>
+      Effect.succeed(
+        native("Schedule.setInputType", ([self]) => Effect.succeed(self ?? Value.undef)),
+      ),
+    // What the schedule gives each turn, as the function makes it.
+    "effect/Schedule:map": onTurns("Schedule.map", 2, (self, [f], site) =>
+      f
+        ? Effect.sync(() =>
+            Schedule.map(
+              anyInput(self),
+              eachTurn((turn) =>
+                Effect.flatMap(host.call(f, [turn], site), (made_) =>
+                  made_._tag === "Effect" ? made_.run : Effect.succeed(made_),
+                ),
+              ),
+            ),
+          )
+        : wrongArguments(site, "Schedule.map"),
+    ),
+    "effect/Schedule:tap": onTurns("Schedule.tap", 2, (self, [f], site) =>
+      f
+        ? Effect.sync(() =>
+            Schedule.tap(
+              anyInput(self),
+              eachTurn((turn) => ran(f, [turn], site)),
+            ),
+          )
+        : wrongArguments(site, "Schedule.tap"),
+    ),
+    // It goes on while the function says so.
+    "effect/Schedule:while": onTurns("Schedule.while", 2, (self, [f], site) =>
+      f
+        ? Effect.sync(() =>
+            Schedule.while(
+              anyInput(self),
+              eachTurn((turn) =>
+                Effect.flatMap(host.call(f, [turn], site), (made_) =>
+                  made_._tag === "Effect"
+                    ? Effect.flatMap(made_.run, (held) => host.decide(held, site))
+                    : host.decide(made_, site),
+                ),
+              ),
+            ),
+          )
+        : wrongArguments(site, "Schedule.while"),
+    ),
+    // A wait the function adds to the one the schedule gives, or puts in its place.
+    "effect/Schedule:addDelay": onTurns("Schedule.addDelay", 2, (self, [f], site) =>
+      f
+        ? Effect.sync(() =>
+            Schedule.addDelay(
+              anyInput(self),
+              eachTurn((turn) =>
+                Effect.flatMap(ran(f, [turn], site), (more_) =>
+                  written("Schedule.addDelay", more_, site),
+                ),
+              ),
+            ),
+          )
+        : wrongArguments(site, "Schedule.addDelay"),
+    ),
+    "effect/Schedule:modifyDelay": onTurns("Schedule.modifyDelay", 2, (self, [f], site) =>
+      f
+        ? Effect.sync(() =>
+            Schedule.modifyDelay(
+              anyInput(self),
+              eachTurn((turn) =>
+                Effect.flatMap(ran(f, [turn], site), (next) =>
+                  written("Schedule.modifyDelay", next, site),
+                ),
+              ),
+            ),
+          )
+        : wrongArguments(site, "Schedule.modifyDelay"),
+    ),
+  };
+
   const models: Models = {
+    ...turns,
     ...rest,
     ...more,
     ...randoms,

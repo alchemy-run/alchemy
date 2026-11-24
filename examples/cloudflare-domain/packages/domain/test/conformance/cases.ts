@@ -3636,6 +3636,28 @@ const rest: ReadonlyArray<Group> = [
     ],
   },
   {
+    // A schedule changed by a function of the code, which is told of each turn.
+    name: "Turns",
+    chunk: 3,
+    ...numbers,
+    effectful: true,
+    prelude: [
+      `import * as Schedule from "effect/Schedule";`,
+      `const log = (cell, entry) => Ref.update(cell, (entries) => [...entries, entry]);`,
+      `const counting = (runs) => Ref.updateAndGet(runs, (n) => n + 1);`,
+    ],
+    both: [
+      `Effect.gen(function* () { const runs = yield* Ref.make(0); const out = yield* Effect.repeat(counting(runs), Schedule.recurs(2).pipe(Schedule.map((turn) => turn.attempt + a))); return [out, yield* Ref.get(runs)]; })`,
+      `Effect.gen(function* () { const runs = yield* Ref.make(0); const seen = yield* Ref.make([]); yield* Effect.repeat(counting(runs), Schedule.tap(Schedule.recurs(2), (turn) => log(seen, [turn.input, turn.output, turn.attempt]))); return yield* Ref.get(seen); })`,
+      `Effect.gen(function* () { const runs = yield* Ref.make(0); yield* Effect.repeat(counting(runs), Schedule.while(Schedule.spaced(1), (turn) => turn.input < 3 + (a > 0 ? 1 : 0))); return yield* Ref.get(runs); })`,
+      `Effect.gen(function* () { const runs = yield* Ref.make(0); yield* Effect.repeat(counting(runs), Schedule.recurs(5).pipe(Schedule.while((turn) => Effect.succeed(turn.attempt < 2)))); return yield* Ref.get(runs); })`,
+      `Effect.gen(function* () { const runs = yield* Ref.make(b); const raced = yield* Effect.race(Effect.as(Effect.sleep(25), "slept"), Effect.repeat(counting(runs), Schedule.recurs(2).pipe(Schedule.addDelay(() => Effect.succeed(10))))); return [raced, yield* Ref.get(runs)]; })`,
+      `Effect.gen(function* () { const runs = yield* Ref.make(0); const raced = yield* Effect.race(Effect.as(Effect.sleep(15), "slept"), Effect.repeat(counting(runs), Schedule.spaced(100).pipe(Schedule.modifyDelay(() => Effect.succeed(Duration.millis(4))), Schedule.upTo({ times: 2 })))); return [raced, yield* Ref.get(runs)]; })`,
+      `Effect.gen(function* () { const runs = yield* Ref.make(0); const out = yield* Effect.repeat(counting(runs), Schedule.identity().pipe(Schedule.setInputType(), Schedule.upTo({ times: 2 }))); return [out, Schedule.isSchedule(Schedule.recurs(1)), Schedule.isSchedule(a)]; })`,
+      `Effect.gen(function* () { const runs = yield* Ref.make(0); const ended = yield* Effect.timeoutOption(Effect.repeat(Effect.andThen(Effect.sleep(2), counting(runs)), Schedule.during("1 second")), 5); return [Option.isNone(ended), (yield* Ref.get(runs)) > 0]; })`,
+    ],
+  },
+  {
     name: "Services",
     ...numbers,
     effectful: true,

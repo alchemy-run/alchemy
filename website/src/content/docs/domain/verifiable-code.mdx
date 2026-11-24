@@ -2625,6 +2625,19 @@ Exit.findError(Exit.fail(a));
 Exit.findDefect(Exit.die(b));
 ```
 
+```typescript title="A schedule changed by a function of the code"
+// The function is told of each turn: what was put in, what the schedule gives, which attempt it is.
+Schedule.map((turn) => turn.attempt + a);
+Schedule.tap(Schedule.recurs(2), (turn) => log(seen, [turn.input, turn.output, turn.attempt]));
+Schedule.while(Schedule.spaced(1), (turn) => turn.input < 3 + (a > 0 ? 1 : 0)); // it goes on while the function says so
+Schedule.addDelay(() => Effect.succeed(10)); // a wait added to the one the schedule gives
+Schedule.modifyDelay(() => Effect.succeed(Duration.millis(4)));
+Schedule.identity();
+Schedule.setInputType();
+Schedule.during("1 second");
+Schedule.isSchedule(a);
+```
+
 ```typescript title="More of effect/Effect"
 // What handles a cause: a failure, a defect or an interrupt, as data.
 Effect.catchCause((cause) => Effect.succeed(Cause.hasFails(cause)));
