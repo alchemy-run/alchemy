@@ -209,7 +209,10 @@ export interface Kernel {
     view: View.Any,
     deliver: (d: Delivery) => Effect.Effect<void>,
   ) => Omit<ViewKit, "push">;
-  readonly policyKit: (policy: Policy.Any, handler: Policy.Handler<unknown>) => PolicyKit;
+  readonly policyKit: (
+    policy: Policy.Any,
+    handler: (trigger: unknown) => Effect.Effect<void>,
+  ) => PolicyKit;
   /** Decode a run of a projection key's input log into handler inputs. */
   readonly projectionInputs: (
     projection: Projection.Any,
@@ -2415,7 +2418,11 @@ const build = (
     });
   };
 
-  const policyKit = (policy: Policy.Any, handler: Policy.Handler<unknown>): PolicyKit => {
+  const policyKit = (
+    policy: Policy.Any,
+    // The platform runs it inside its runtime, where the handler's RuntimeContext is.
+    handler: (trigger: unknown) => Effect.Effect<void>,
+  ): PolicyKit => {
     const policyKey = policy.definition.key;
     return {
       name: policy.policyName,

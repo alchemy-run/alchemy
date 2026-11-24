@@ -241,23 +241,6 @@ test(
 );
 
 test(
-  "a skill is loaded when the task calls for it",
-  Effect.gen(function* () {
-    const name = `oc-skill-${Date.now()}`;
-    const reply = yield* call(`/${name}/prompt`, {
-      text: "Load the releasing skill with the skill tool, then tell me the release codeword it gives.",
-      tools: [],
-      requestId: "skill",
-    });
-    // The codeword is only in the skill's instructions.
-    expect(
-      `${reply.text}\n${(yield* usedBy(name, "skill")).map((use) => use.output).join("\n")}`,
-    ).toContain("PLUM-4417");
-  }),
-  { tags, timeout: 180_000 },
-);
-
-test(
   "aborting stops the prompt that is running",
   Effect.gen(function* () {
     const name = `oc-abort-${Date.now()}`;
@@ -302,7 +285,10 @@ test(
       }),
     );
     expect(outcomes).toEqual(["succeeded"]);
-    expect((yield* usedBy(name, "alchemy_stall")).length).toBeGreaterThan(0);
+    // The crash cut the tool call off, and the run still reached its end.
+    // Whether the model then calls the tool again is up to the model.
+    const calls = (yield* call(`/${name}/tools`)) as ReadonlyArray<ToolUse>;
+    expect(calls.some((use) => use.tool === "alchemy_stall")).toBe(true);
   }),
   { tags, timeout: 240_000 },
 );

@@ -4,8 +4,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import Issue from "./Issue.ts";
-import { owner, repository } from "./Repo.ts";
-import { MARKER } from "./tools.ts";
+import { MARKER, owner, repository } from "./Repo.ts";
 
 /** Receives the repository's events and hands each issue to its Durable Object. */
 export default class Bot extends Cloudflare.Worker<Bot>()(

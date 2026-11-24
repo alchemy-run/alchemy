@@ -510,6 +510,22 @@ A check that is not supported is not assumed and not dropped in silence. The rep
 
 A field that may be left out, a union and an `Option` are each a choice, and a proof takes every choice in turn. The choice is made when the code first uses the field, so a field no handler or rule uses adds nothing.
 
+A field read only for its value or a default isn't a choice. Both ways go on to the same code, so the proof keeps one value that depends on whether the field is there:
+
+```typescript
+command.note ?? "none";
+Option.getOrElse(command.memo, () => "none");
+command.memo.pipe(Option.getOrElse(() => "none"));
+Option.match(command.memo, { onNone: () => "none", onSome: (memo) => memo + "!" });
+
+const { note } = command; // a name the field is given is the field
+note ?? "none";
+```
+
+This holds for a field that is a string, a number or a boolean, alone or with `null` and `undefined` beside it, and for an `Option` of one. The default, and what each case of `Option.match` returns, has to be a value the code only computes: a literal, a name, a property, or a sum, a product or a comparison of those. A default that calls a function or tests something is a choice as before.
+
+A test is a choice too, but only of the sides an input can reach. After `command.kind === "refund"` is true, `command.kind === "sale"` is false, and the proof doesn't go the other way.
+
 ## Library functions
 
 A function of Effect is supported when it is called below. Each does to a value of the state or a command what the real function does: every path of a proof is then run on the real code, and the two have to agree. Every function Effect writes both ways is supported both ways, `f(self, arg)` and `pipe(self, f(arg))`, whichever way it is written below: a test calls each one both ways and compares it with the real code.

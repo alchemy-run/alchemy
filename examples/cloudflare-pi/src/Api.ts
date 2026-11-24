@@ -97,9 +97,6 @@ export default class Api extends Cloudflare.Worker<Api>()(
             case "enable-code-mode":
               yield* session.enableCodeMode(name);
               return yield* ok;
-            case "add-skill":
-              yield* session.addSkill(name);
-              return yield* ok;
             case "tools":
               return yield* HttpServerResponse.json(yield* session.tools(name));
             case "messages":

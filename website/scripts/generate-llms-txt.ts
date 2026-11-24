@@ -700,17 +700,28 @@ const SECTIONS: Section[] = [
   {
     heading: "AI",
     intro:
-      "What every agent harness shares: models, tools and their failures, the coding tools, MCP servers, skills, and the sandboxes tools work in.",
+      "Work described as processes that run on any agent harness: prose that mentions the models, tools, MCP servers and other processes it uses, the sandboxes tools work in, and where sessions run.",
     pages: {
       slugs: [
         "ai/index",
-        "ai/what-is-a-harness",
+        "ai/what-is-alchemy-ai",
+        "ai/project-layout",
+        "ai/tutorial/part-1",
+        "ai/tutorial/part-2",
+        "ai/tutorial/part-3",
+        "ai/tutorial/part-4",
+        "ai/tutorial/part-5",
+        "ai/processes",
+        "ai/process-graphs",
+        "ai/domain",
+        "ai/harnesses",
+        "ai/hosting",
+        "ai/front-end",
         "ai/models",
         "ai/tools",
         "ai/coding-tools",
         "ai/mcp-servers",
         "ai/code-mode",
-        "ai/skills",
         "ai/sandboxes",
         "ai/sandbox-platforms",
         "ai/custom-sandboxes",
@@ -720,7 +731,7 @@ const SECTIONS: Section[] = [
   {
     heading: "Pi",
     intro:
-      "Pi Durable on Alchemy: conversations in a Durable Object, tools, extensions, skills, code mode, sandboxes, and runs that resume after a crash.",
+      "Pi Durable on Alchemy: conversations in a Durable Object, tools, extensions, code mode, sandboxes, processes, and runs that resume after a crash.",
     pages: {
       slugs: [
         "pi/index",
@@ -736,7 +747,7 @@ const SECTIONS: Section[] = [
         "pi/mcp-servers",
         "pi/code-mode",
         "pi/extensions",
-        "pi/skills",
+        "pi/processes",
         "pi/sandboxes",
         "pi/other-hosts",
       ],
@@ -745,7 +756,7 @@ const SECTIONS: Section[] = [
   {
     heading: "OpenCode",
     intro:
-      "OpenCode on Alchemy: sessions in a sandbox, prompts, model requests answered by your Layers, tools, MCP servers and skills.",
+      "OpenCode on Alchemy: OpenCode in a Durable Object, sessions and prompts, model requests answered by your Layers, tools, MCP servers and processes.",
     pages: {
       slugs: [
         "opencode/index",
@@ -760,7 +771,7 @@ const SECTIONS: Section[] = [
         "opencode/tools",
         "opencode/mcp-servers",
         "opencode/code-mode",
-        "opencode/skills",
+        "opencode/processes",
         "opencode/sandbox",
         "opencode/api",
       ],

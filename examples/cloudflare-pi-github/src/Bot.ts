@@ -3,9 +3,9 @@ import * as GitHub from "@alchemy.run/github";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { MARKER } from "./Comment.tool.ts";
 import Issue from "./Issue.ts";
 import { owner, repository } from "./Repo.ts";
-import { MARKER } from "./tools.ts";
 
 /** Receives the repository's events and hands each issue to its Durable Object. */
 export default class Bot extends Cloudflare.Worker<Bot>()(
