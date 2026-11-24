@@ -498,9 +498,11 @@ export type Agreement =
   | { readonly _tag: "Agreed" }
   /**
    * Nothing was compared. No inputs take the path, or with `taken`, the ones
-   * the solver found cannot be built as real values or run.
+   * the solver found cannot be built as real values or run. With `order`,
+   * the path takes the items of a hash set or a hash map in an order the real
+   * one does not give for the items the solver found.
    */
-  | { readonly _tag: "Skipped"; readonly taken: boolean }
+  | { readonly _tag: "Skipped"; readonly taken: boolean; readonly order?: boolean }
   | { readonly _tag: "Differs"; readonly reason: string };
 
 /** What the prover read a command to do on one path. */
@@ -637,7 +639,9 @@ export const agree = Effect.fn(function* (
   });
   const agreement = yield* tried.pipe(Effect.catch((agreement) => Effect.succeed(agreement)));
   if (agreement._tag !== "Differs") return agreement;
-  return (yield* ordered.pipe(Effect.orElseSucceed(() => true))) ? agreement : skipped;
+  return (yield* ordered.pipe(Effect.orElseSucceed(() => true)))
+    ? agreement
+    : ({ _tag: "Skipped", taken: true, order: true } as const);
 });
 
 /**

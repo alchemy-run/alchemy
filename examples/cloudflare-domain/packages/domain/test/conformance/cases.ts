@@ -79,11 +79,6 @@ export interface Group {
    * something else.
    */
   readonly unread?: ReadonlyArray<readonly [expression: string, reason: RegExp]>;
-  /**
-   * The expressions take the items of a hash set in order. The prover tries
-   * every order, and the real one gives one: a path for another is not compared.
-   */
-  readonly orders?: boolean;
   /** Lines the group's file declares before its commands. */
   readonly prelude?: ReadonlyArray<string>;
   /** The functions the prelude exports that the prover is told not to read. */

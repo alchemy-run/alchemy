@@ -1016,7 +1016,7 @@ Effect Cluster entities, workflows, singletons and crons, on a Postgres database
 - [Databases](https://alchemy.run/cluster/databases) — The Postgres an Effect Cluster coordinates through — what runners keep in it, and how to run one on any cloud or connect to one you have.
 - [Pools](https://alchemy.run/cluster/pools) — How a pool of Effect Cluster runners hosts your entities, workflows, singletons and crons — what's bundled together, shard groups, the gateway, and how to split work across pools.
 - [Docker](https://alchemy.run/cluster/docker) — Run an Effect Cluster's database and runners on a Docker swarm, on your machine or a server.
-- [AWS](https://alchemy.run/cluster/aws) — Run an Effect Cluster's database on RDS and its runners on ECS Fargate, called from Lambda or anywhere through a load balancer.
+- [AWS](https://alchemy.run/cluster/aws) — Run an Effect Cluster's database on RDS and its runners on ECS Fargate, in a VPC of its own or yours, called through a load balancer or CloudFront.
 - [GCP](https://alchemy.run/cluster/gcp) — Run an Effect Cluster's database and runners on Compute Engine, called from Cloud Run or anywhere through a regional load balancer.
 - [Kubernetes](https://alchemy.run/cluster/kubernetes) — Run an Effect Cluster's database and runners on any Kubernetes cluster — EKS, GKE, or kind on your machine.
 - [Fly](https://alchemy.run/cluster/fly) — Run an Effect Cluster's database and runners on Fly.io, on a private network, with the gateway at the pool's fly.dev address.

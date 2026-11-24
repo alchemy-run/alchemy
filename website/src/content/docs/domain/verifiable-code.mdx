@@ -2188,7 +2188,7 @@ Effect.promise(() => fetch(url));
 Effect.tryPromise(() => fetch(url));
 ```
 
-Which of two things happens first is not something a handler decides, and a handler does not wait. A handler is one fiber that runs to its end, so a `Deferred`, a `Queue`, a `Semaphore` and a `Latch` are [supported](#library-functions) where the handler itself has done what the call waits for, and reported where it has not.
+Which of two things happens first is not something a handler decides. A deployed handler can wait, but a proof is held against the handler run at once, without waiting, so a `sleep`, a `delay` and a schedule that waits are reported. A handler is one fiber that runs to its end, so a `Deferred`, a `Queue`, a `Semaphore` and a `Latch` are [supported](#library-functions) where the handler itself has done what the call waits for, and reported where it has not.
 
 ```typescript title="Time passing and things running together"
 import * as Scheduler from "effect/Scheduler";
@@ -2538,6 +2538,77 @@ Not supported
 ```
 
 Rewrite the line with what is supported, or put it in an exported function, which is then [opaque](#opaque-functions). You can also move it out of the handler: compute it where the command is built and pass the result in as a field. What `decide` then checks is the field.
+
+### What a line says, and what to write
+
+Each kind of line has one change that fixes it. The first line of each pair is what the report prints.
+
+```typescript title="What the report says, and what to write"
+// calls Math.sqrt, which the prover has no model for
+// refers to JSON, which the prover cannot find
+// calls toUpperCase on a string an input holds, in a way the prover does not translate
+//   There is nothing to rewrite it with. Put the call in an exported function,
+//   or compute it where the command is built and pass the result in as a field.
+
+// divides with / in a way the prover does not translate
+Math.floor(a / 2); // divide by a number the code writes, and say how it rounds
+
+// applies * to numbers that may not be whole, which JavaScript rounds and the prover does not
+BigDecimal.multiply(amount, RATE); // keep the number whole, or in a BigDecimal
+
+// loops a number of times that depends on an input
+for (const n of items) total += n; // go over a list, or count up to a number the code writes
+
+// pushes onto an array it was given, which changes it
+// changes a value it was given
+[...items, a]; // make a new one
+
+// reads a property by a key the prover cannot see
+HashMap.get(roster.points, person); // look a key from an input up in a HashMap
+
+// uses ==, where the prover reads ===
+a === b;
+
+// uses a TryStatement, which the prover does not read
+//   Fail with a Data.TaggedError and handle it with Effect.catchTag.
+
+// calls Effect.retry without a count of times the prover can see
+// calls Schedule.spaced, which the prover has no model for
+Effect.retry(even(a), { times: 2 }); // a count the code writes
+Effect.retry(even(a), Schedule.recurs(2));
+
+// takes from a Queue with nothing in it
+// waits for a Deferred the handler has not completed
+//   The deployed handler would never finish here. Ask without waiting:
+Queue.poll(line);
+Deferred.poll(done);
+```
+
+### The last line of a proof
+
+A proof ends by saying how it was held against the real code. For each way through a command the prover picks inputs, runs the real `decide` and `evolve` on them, and compares.
+
+```text title="Nothing to do"
+Agreed with the real code: inputs picked for each of 86 paths through the commands did what the prover read
+```
+
+```text title="Nothing to do: the order of a hash set"
+Agreed with the real code: inputs picked for each of 86 paths through the commands did what the prover read (12 more could not be run: 12 take the items of a hash set or a hash map in an order the real one does not give)
+```
+
+The prover reads every order a `HashSet` or a `HashMap` could give its items in, and the real one gives one. The order it gives is compared on its own path.
+
+```text title="Proved, and not run"
+Agreed with the real code: inputs picked for each of 86 paths through the commands did what the prover read (3 more could not be run: the prover cannot build the inputs of 3)
+```
+
+The prover picked inputs it could not run: a value it cannot build as a real one, or inputs a schema check it does not support refuses. The report lists such a check under "Schema checks not supported". The rules are still proved on those paths. They were not run on the real code as well.
+
+```text title="A bug in the prover"
+✗ The real code does something else on 1 of the 86 paths compared
+```
+
+The prover read a line of code wrongly, and the rules of that command are not proved. The line under it names the inputs and what each side did. Put the code it names in an exported function, which the prover then does not read, and [report it](https://github.com/alchemy-run/alchemy/issues).
 
 A policy's or a saga's handler is held to the same list when the model is searched. One the search cannot follow fails the check until it is allowed by name:
 
