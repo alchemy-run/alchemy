@@ -974,6 +974,12 @@ const base: ReadonlyArray<Group> = [
         ? `const a = pin.a; const amount = BigDecimal.fromStringUnsafe(pin.amount);`
         : `const a = command.a; const amount = command.amount;`,
     both: [
+      // A decimal rounded to a number of places is written out, whatever it is.
+      `BigDecimal.format(BigDecimal.floor(amount, 2))`,
+      `BigDecimal.format(BigDecimal.ceil(amount, 1))`,
+      `BigDecimal.format(BigDecimal.truncate(amount))`,
+      `BigDecimal.format(BigDecimal.floor(BigDecimal.multiply(amount, decimal(a)), 3))`,
+      `BigDecimal.format(BigDecimal.truncate(BigDecimal.negate(amount), 2)).length`,
       ...d("BigDecimal.sum", "amount", "fee"),
       ...d("BigDecimal.subtract", "amount", "fee"),
       ...d("BigDecimal.multiply", "amount", "fee"),
@@ -2734,6 +2740,8 @@ const rest: ReadonlyArray<Group> = [
     effectful: true,
     prelude: [
       `import * as Fiber from "effect/Fiber";`,
+      `import * as Request from "effect/Request";`,
+      `import * as RequestResolver from "effect/RequestResolver";`,
       `import * as Pool from "effect/Pool";`,
       `import * as PartitionedSemaphore from "effect/PartitionedSemaphore";`,
       `import * as ScopedCache from "effect/ScopedCache";`,
@@ -2761,8 +2769,17 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const made = yield* Ref.make(0); const got = yield* Effect.scoped(Effect.gen(function* () { const pool = yield* Pool.makeWithTTL({ acquire: Ref.updateAndGet(made, (n) => n + 1), min: 1, max: 2, timeToLive: "1 minute" }); return yield* Effect.scoped(Pool.get(pool)); })); return [got, yield* Ref.get(made)]; })`,
       `Effect.gen(function* () { const held = yield* TxChunk.make(Chunk.make(a, b)); yield* TxChunk.append(held, 1); yield* TxChunk.prepend(held, 2); yield* TxChunk.appendAll(held, Chunk.make(3, 4)); yield* TxChunk.prependAll(held, Chunk.make(5)); const all = Chunk.toReadonlyArray(yield* TxChunk.get(held)); yield* TxChunk.drop(held, 1); yield* TxChunk.take(held, 5); yield* TxChunk.slice(held, 1, 4); const cut = Chunk.toReadonlyArray(yield* TxChunk.get(held)); return [all, cut, yield* TxChunk.size(held), yield* TxChunk.isEmpty(held), yield* TxChunk.isNonEmpty(held)]; })`,
       `Effect.gen(function* () { const held = yield* TxChunk.fromIterable([a, b, 1]); const other = yield* TxChunk.empty(); yield* TxChunk.set(other, Chunk.make(9)); yield* TxChunk.concat(held, other); yield* TxChunk.map(held, (n) => n * 2); yield* TxChunk.filter(held, (n) => n > a); yield* TxChunk.update(held, (chunk) => Chunk.append(chunk, a)); const size = yield* TxChunk.modify(held, (chunk) => [Chunk.size(chunk), Chunk.drop(chunk, 1)]); return [size, Chunk.toReadonlyArray(yield* TxChunk.get(held)), yield* pipe(held, TxChunk.append(b), Effect.andThen(TxChunk.size(held))), yield* Effect.tx(Effect.gen(function* () { yield* TxChunk.append(held, 7); return yield* TxChunk.size(held); }))]; })`,
+      // Requests asked for together are answered together, in one call of the resolver.
+      `Effect.gen(function* () { const batches = yield* Ref.make([]); const GetPrice = Request.tagged("GetPrice"); const prices = RequestResolver.make((entries) => Effect.andThen(log(batches, entries.length), Effect.forEach(entries, (entry) => Request.succeed(entry, entry.request.item * 2 + a), { discard: true }))); const price = (item) => Effect.request(GetPrice({ item }), prices); const together = yield* Effect.all([price(1), price(2), price(3)], { concurrency: "unbounded" }); const apart = yield* Effect.all([price(4), price(5)]); return [together, apart, yield* Ref.get(batches)]; })`,
+      `Effect.gen(function* () { const batches = yield* Ref.make([]); const ask = Request.of(); const answers = RequestResolver.make((entries) => Effect.andThen(log(batches, entries.length), Effect.forEach(entries, (entry) => (entry.request.n % 2 === 0 ? Request.succeed(entry, entry.request.n + b) : Request.fail(entry, new Odd({ n: entry.request.n }))), { discard: true }))).pipe(RequestResolver.batchN(2)); const made = yield* Effect.all([1, 2, 3, 4, 5].map((n) => Effect.result(pipe(ask({ n }), Effect.request(answers)))), { concurrency: "unbounded" }); return [made, yield* Ref.get(batches)]; })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const ask = Request.tagged("Double"); const doubled = RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n * 2 + a)).pipe(RequestResolver.setDelay("1 second")); const made = yield* Effect.all([Effect.request(ask({ n: 1 }), doubled), Effect.andThen(Effect.sleep(5), Effect.request(ask({ n: 2 }), doubled))], { concurrency: 2 }); return [made, yield* Ref.get(seen)]; })`,
+      `Effect.gen(function* () { const ask = Request.tagged("Checked"); const checked = RequestResolver.make((entries) => Effect.forEach(entries, (entry) => Request.completeEffect(entry, even(entry.request.n + a)), { discard: true })); return yield* Effect.all([Effect.result(Effect.request(ask({ n: 0 }), checked)), Effect.result(Effect.request(ask({ n: 1 }), checked))], { concurrency: 2 }); })`,
     ],
     unread: [
+      [
+        `Effect.gen(function* () { const ask = Request.tagged("Held"); const any = RequestResolver.fromEffect(() => Effect.succeed(1)); return yield* Effect.request(ask({ n: a }), any); })`,
+        /a Held request of values the prover cannot see/,
+      ],
       [
         `Effect.gen(function* () { const done = yield* TxDeferred.make(); return yield* TxDeferred.await(done); })`,
         /waits for a TxDeferred that nothing completes/,

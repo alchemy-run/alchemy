@@ -296,12 +296,14 @@ BigDecimal.negate(amount);
 BigDecimal.floor(amount);
 BigDecimal.ceil(amount);
 BigDecimal.truncate(amount);
+BigDecimal.format(BigDecimal.floor(amount, 2)); // written out, once it is rounded to a number of places
 
 BigDecimal.divide(RATE, BigDecimal.fromNumberUnsafe(4)); // a division between decimals the code writes
 ```
 
 ```typescript title="Not supported"
 BigDecimal.divide(amount, fee); // the library rounds a division that does not end, and the solver does not
+BigDecimal.format(amount); // a decimal an input holds has no last place: round it first
 ```
 
 ## Strings
@@ -1541,6 +1543,9 @@ BigDecimal.sum(amount, fee);
 BigDecimal.sumAll([amount, fee, decimal(a)]);
 BigDecimal.toNumberUnsafe(amount); // on values the code writes
 BigDecimal.truncate(amount);
+BigDecimal.format(BigDecimal.floor(amount, 2)); // a decimal an input holds, once it is rounded
+BigDecimal.format(BigDecimal.ceil(amount, 1));
+BigDecimal.format(BigDecimal.truncate(amount));
 ```
 
 ```typescript title="effect/Rational"
@@ -2058,6 +2063,28 @@ ScopedCache.invalidate(files, "tea");
 ScopedCache.size(files);
 ```
 
+```typescript title="effect/Request and effect/RequestResolver"
+// Requests asked for together are answered together, in one call of the resolver.
+const GetPrice = Request.tagged("GetPrice"); // a request of values the code writes
+const ask = Request.of();
+const prices = RequestResolver.make((entries) =>
+  Effect.andThen(
+    log(batches, entries.length),
+    Effect.forEach(entries, (entry) => Request.succeed(entry, entry.request.item * 2 + a), {
+      discard: true,
+    }),
+  ),
+);
+RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n * 2 + a));
+RequestResolver.batchN(2);
+RequestResolver.setDelay("1 second");
+Effect.request(GetPrice({ item }), prices);
+pipe(ask({ n }), Effect.request(answers));
+Request.succeed(entry, entry.request.n + b);
+Request.fail(entry, new Odd({ n: entry.request.n }));
+Request.completeEffect(entry, even(entry.request.n + a));
+```
+
 ```typescript title="effect/PubSub"
 // What is published reaches each one who subscribed before it was.
 const hub = yield* PubSub.unbounded();
@@ -2530,8 +2557,6 @@ A handler's sleeps, time limits, races and fibers are [supported](#time-and-fibe
 
 ```typescript title="Time passing and things running together"
 import * as Scheduler from "effect/Scheduler";
-import * as Request from "effect/Request";
-import * as RequestResolver from "effect/RequestResolver";
 import * as Channel from "effect/Channel";
 import * as Pull from "effect/Pull";
 import * as Take from "effect/Take";

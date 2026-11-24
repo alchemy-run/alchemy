@@ -20,7 +20,7 @@ const READ = new Set([
   ...["Ref", "RegExp", "Result", "SemVer", "SemVerRange", "Sink", "Stream", "String", "Struct"],
   ...["SubscriptionRef", "Symbol", "SynchronizedRef", "TextDiff", "Trie", "Tuple", "UndefinedOr"],
   ...["Cache", "Deferred", "Fiber", "FiberHandle", "FiberMap", "FiberSet", "Latch", "Pool"],
-  ...["PubSub", "Queue", "Schedule"],
+  ...["PubSub", "Queue", "Request", "RequestResolver", "Schedule"],
   ...["PartitionedSemaphore", "ScopedCache", "Semaphore", "TxChunk", "TxDeferred", "TxPubSub"],
   ...["TxQueue"],
   ...["TxReentrantLock", "TxRef", "TxSemaphore", "TxSubscriptionRef", "index"],

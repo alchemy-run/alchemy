@@ -15,6 +15,8 @@ import * as PartitionedSemaphore from "effect/PartitionedSemaphore";
 import * as Pool from "effect/Pool";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
+import * as Request from "effect/Request";
+import * as RequestResolver from "effect/RequestResolver";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
@@ -64,7 +66,10 @@ type Kind =
   | "TxSubscriptionRef"
   | "TxReentrantLock"
   | "PartitionedSemaphore"
-  | "TxChunk";
+  | "TxChunk"
+  | "Request"
+  | "Entry"
+  | "Resolver";
 
 /** How often effects may be run again in one handler before the prover stops reading. */
 const MAX_TURNS = 100;
@@ -974,8 +979,32 @@ export const make = (kit: Kit, base: Models) => {
     releaseAll: lazy(() => Effect.map(semaphore.releaseAll, num)),
   });
 
+  /** What a request asks for, as a value of the code. */
+  const asked = (request: object): V => {
+    const read = (value: unknown): V =>
+      typeof value === "number"
+        ? Value.num(value)
+        : typeof value === "string"
+          ? Value.str(value)
+          : typeof value === "boolean"
+            ? Value.bool(value)
+            : Array.isArray(value)
+              ? arr(value.map(read))
+              : typeof value === "object" && value !== null
+                ? Value.obj(
+                    Object.fromEntries(
+                      Object.entries(value).map(([name, each]) => [name, read(each)]),
+                    ),
+                  )
+                : Value.undef;
+    return read({ ...request });
+  };
+
   /** A member of a latch or a semaphore, as the code reads it: `latch.open`, `semaphore.take`. */
   const member = (value: V, key: string, site: Site): V | undefined => {
+    // What an entry of a batch asks for: `entry.request`.
+    const entry = heldOf<Request.Entry<Request.Request<V, Value.Rejected>>>("Entry", value);
+    if (entry && key === "request") return asked(entry.request);
     const latch = heldOf<Latch.Latch>("Latch", value);
     const semaphore = heldOf<Semaphore.Semaphore>("Semaphore", value);
     const members = latch
@@ -3044,7 +3073,161 @@ export const make = (kit: Kit, base: Models) => {
     ),
   };
 
+  // ---- Requests: asked for one at a time, answered a batch at a time.
+
+  type Asked = Request.Request<V, Held> & Record<string, unknown>;
+  type Answering = RequestResolver.RequestResolver<Asked>;
+  /** A resolver is made of functions of the code, so it is made for the handler that uses it. */
+  type Resolver = (timeline: Timeline.Timeline) => Answering;
+
+  /** A request is found by what it asks for, so the prover has to know what that is. */
+  const asking = (name: string, build: (fields: object) => Asked): V =>
+    native(name, ([given_], site) => {
+      const fields = plainOf(given_ ?? Value.obj({}));
+      return fields === NOT_PLAIN || typeof fields !== "object" || fields === null
+        ? unseen(site, `makes a ${name} request of values the prover cannot see`)
+        : Effect.succeed(wrap("Request", build(fields)));
+    });
+
+  const entryOf = (entry: Request.Entry<Asked>): V => wrap("Entry", entry);
+
+  /** One resolver for each handler that uses it: it remembers the requests of that handler only. */
+  const resolving = (make_: (timeline: Timeline.Timeline) => Answering): V => {
+    const made_ = new WeakMap<Timeline.Timeline, Answering>();
+    const resolver: Resolver = (timeline) => {
+      const known = made_.get(timeline);
+      if (known) return known;
+      const fresh = make_(timeline);
+      made_.set(timeline, fresh);
+      return fresh;
+    };
+    return wrap("Resolver", resolver);
+  };
+
+  const onEntry = (
+    name: string,
+    answer: (
+      entry: Request.Entry<Asked>,
+      rest: ReadonlyArray<V>,
+      timeline: Timeline.Timeline,
+      site: Site,
+    ) => Effect.Effect<void, unknown> | undefined,
+  ): Model =>
+    dual(`Request.${name}`, 2, ([self, ...rest], site) => {
+      const held = heldOf<Request.Entry<Asked>>("Entry", self);
+      return held
+        ? Effect.succeed(
+            timed(
+              `Request.${name}`,
+              (timeline) => {
+                const made_ = answer(held, rest, timeline, site);
+                return made_
+                  ? Timeline.back(timeline, made_, none)
+                  : wrongArguments(site, `Request.${name}`);
+              },
+              site,
+            ),
+          )
+        : wrongArguments(site, `Request.${name}`);
+    });
+
+  const requests: Models = {
+    "effect/Request:tagged": ([tag], site) =>
+      tag?._tag === "Str"
+        ? Effect.succeed(
+            asking(tag.value, (fields) =>
+              Request.tagged<Asked & { _tag: string }>(tag.value)(fields as never),
+            ),
+          )
+        : wrongArguments(site, "Request.tagged"),
+    "effect/Request:of": () =>
+      Effect.succeed(asking("Request.of", (fields) => Request.of<Asked>()(fields as never))),
+    "effect/Request:succeed": onEntry("succeed", (entry, [value]) =>
+      Request.succeed(entry, value ?? Value.undef),
+    ),
+    "effect/Request:fail": onEntry("fail", (entry, [error]) =>
+      Request.fail(entry, new Value.Rejected({ rejection: error ?? Value.undef })),
+    ),
+    "effect/Request:completeEffect": onEntry(
+      "completeEffect",
+      (entry, [effect], timeline, site) => {
+        const given_ = effectOf(timeline, effect, site);
+        return given_ ? Request.completeEffect(entry, given_) : undefined;
+      },
+    ),
+    "effect/RequestResolver:make": ([runAll], site) =>
+      runAll && callable(runAll)
+        ? Effect.succeed(
+            resolving((timeline) =>
+              RequestResolver.make<Asked>((entries) =>
+                Effect.asVoid(called(timeline, runAll, site)(arr(entries.map(entryOf)))),
+              ),
+            ),
+          )
+        : wrongArguments(site, "RequestResolver.make"),
+    "effect/RequestResolver:fromEffect": ([f], site) =>
+      f && callable(f)
+        ? Effect.succeed(
+            resolving((timeline) =>
+              RequestResolver.fromEffect<Asked>((entry) =>
+                called(timeline, f, site)(entryOf(entry)),
+              ),
+            ),
+          )
+        : wrongArguments(site, "RequestResolver.fromEffect"),
+    "effect/RequestResolver:batchN": dual("RequestResolver.batchN", 2, ([self, n], site) => {
+      const held = heldOf<Resolver>("Resolver", self);
+      return held
+        ? Effect.map(count("RequestResolver.batchN", n, site), (size) =>
+            resolving((timeline) => RequestResolver.batchN(held(timeline), size)),
+          )
+        : wrongArguments(site, "RequestResolver.batchN");
+    }),
+    "effect/RequestResolver:setDelay": dual(
+      "RequestResolver.setDelay",
+      2,
+      ([self, duration], site) => {
+        const held = heldOf<Resolver>("Resolver", self);
+        return held
+          ? Effect.map(written("RequestResolver.setDelay", duration, site), (time) =>
+              resolving((timeline) => RequestResolver.setDelay(held(timeline), time)),
+            )
+          : wrongArguments(site, "RequestResolver.setDelay");
+      },
+    ),
+    // `Effect.request(request, resolver)`, or `Effect.request(resolver)` then the request.
+    "effect/Effect:request": (args, site) => {
+      const ask = (request: V | undefined, resolver: V | undefined, at: Site): Eval<V> => {
+        const asked = heldOf<Asked>("Request", request);
+        const held = heldOf<Resolver>("Resolver", resolver);
+        return asked && held
+          ? Effect.succeed(
+              timed(
+                "Effect.request",
+                (timeline) =>
+                  Timeline.back(
+                    timeline,
+                    Timeline.waiting(
+                      timeline,
+                      "waits for a request that its resolver never answers",
+                      at,
+                      Effect.request(asked, held(timeline)),
+                    ),
+                    same,
+                  ),
+                at,
+              ),
+            )
+          : wrongArguments(at, "Effect.request");
+      };
+      return args.length >= 2
+        ? ask(args[0], args[1], site)
+        : Effect.succeed(native("Effect.request", ([request], at) => ask(request, args[0], at)));
+    },
+  };
+
   const models: Models = {
+    ...requests,
     ...chunks,
     ...shared,
     ...kept,
