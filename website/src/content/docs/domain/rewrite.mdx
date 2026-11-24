@@ -75,6 +75,28 @@ export class DropNotes extends Domain.Rewrite("DropNotes", {
 }) {}
 ```
 
+## Undo an instance's latest events
+
+A handler also gets the event's envelope. A rewrite that removes every event after a given sequence number takes an instance back to how it stood then.
+
+```typescript title="src/UndoSince.rewrite.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { Guestbook } from "./Guestbook.aggregate.ts";
+
+const undo = <E>(event: E, { since }: { readonly since: number }, { seq }: { readonly seq: number }) =>
+  seq > since ? null : event;
+
+/** Takes a guestbook back to how it stood after event `since`. */
+export class UndoSince extends Domain.Rewrite("UndoSince", {
+  of: Guestbook,
+  input: { since: Schema.Number },
+  events: { Signed: undo, NoteAdded: undo },
+}) {}
+```
+
+The next command's events follow the removed ones, so every view and projection receives them. Restoring the instance's storage to an earlier point, such as a Durable Object bookmark, would instead commit new events under sequence numbers its consumers have already seen, and they would drop them as duplicates.
+
 ## Remove an instance
 
 `delete: true` removes every event of the instance, its state, and what it keeps of the commands it handled and scheduled.
