@@ -1,3 +1,4 @@
+import * as Domain from "@alchemy.run/domain";
 import { Story } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -31,8 +32,11 @@ import {
 import { type Actor, agent, customer, system } from "../src/Actor.ts";
 import { Bank, BankHandlers } from "../src/Bank.model.ts";
 import { CurrentActor } from "../src/CurrentActor.context.ts";
+import { Address } from "../src/Customer/Address.ts";
+import { ContactDetails } from "../src/Customer/ContactDetails.aggregate.ts";
 import { Customer } from "../src/Customer/Customer.aggregate.ts";
 import { CustomerId } from "../src/Customer/Customer.id.ts";
+import { CustomerAddress } from "../src/Customer/CustomerAddress.query.ts";
 import { CustomerDashboard } from "../src/Customer/CustomerDashboard.view.ts";
 import { EraseCustomer } from "../src/Customer/EraseCustomer.saga.ts";
 import {
@@ -42,6 +46,7 @@ import {
   UsernameTaken,
 } from "../src/Customer/RegisterCustomer.command.ts";
 import { Registration } from "../src/Customer/Registration.decision.ts";
+import { AddressSet, SetAddress } from "../src/Customer/SetAddress.command.ts";
 import { Username } from "../src/Customer/Username.ts";
 import { UsernameClaim } from "../src/Customer/UsernameClaim.aggregate.ts";
 import { DailyOutflow } from "../src/Fraud/DailyOutflow.view.ts";
@@ -119,6 +124,7 @@ it.effect("registering claims the username with it, then opens a main account", 
 
 it.effect("erasing a customer removes their name from everything built from it", () => {
   const main = Account.ref("c-1-main");
+  const contact = ContactDetails.ref(c1.id);
   return story(
     as(sam),
     when(new RegisterCustomer({ customerId: c1.id, name: "sam", username: samsName })),
@@ -128,6 +134,10 @@ it.effect("erasing a customer removes their name from everything built from it",
       main,
       new CardChanged({ customerId: c1.id, owner: "sam", balance: 500, frozen: false }),
     ),
+    // The address is sealed under the customer's key as the command arrives.
+    when(new SetAddress({ customerId: c1.id, address: Address.plain(c1.id, "1 Main St") })),
+    then(contact, new AddressSet({ address: Domain.sealedInTest(Address, c1.id, "1 Main St") })),
+    Story.query(CustomerAddress, { customerId: c1.id }, { address: "1 Main St" }),
     // The operator who handles the customer's request starts the erasure.
     Story.start(EraseCustomer, c1.id, {}),
     Story.saga(EraseCustomer, c1.id, { _tag: "Completed", result: undefined }),
@@ -147,6 +157,9 @@ it.effect("erasing a customer removes their name from everything built from it",
     }),
     // The card that carried the name was removed from its stream.
     streamed(AccountCard, main),
+    // The address is where it was, and no longer opens: its key was shredded.
+    state(contact, { address: Domain.sealedInTest(Address, c1.id, "1 Main St") }),
+    Story.query(CustomerAddress, { customerId: c1.id }, { address: null }),
     // Nothing leads to the customer by that username: someone else can take it.
     as(alex),
     when(new RegisterCustomer({ customerId: c2.id, name: "alex", username: samsName })),

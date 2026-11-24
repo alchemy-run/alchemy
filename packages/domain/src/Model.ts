@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import type * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { WorkflowEngine } from "effect/workflow";
@@ -25,11 +26,14 @@ import {
   LazyViewNeedsOneSource,
   MissingRewriteHandler,
   MissingWorkflowEngine,
+  ReservedMember,
   UnvalidatedRead,
 } from "./DefinitionError.ts";
 import { type Filter, matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
 import * as Key from "./Key.ts";
+import * as Mention from "./Mention.ts";
+import type * as Middleware from "./Middleware.ts";
 import {
   type Accepted,
   type AggregateStore,
@@ -63,6 +67,7 @@ import * as Rewrite from "./Rewrite.ts";
 import * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
 import * as Telemetry from "./Telemetry.ts";
+import * as Vault from "./Vault.ts";
 import * as View from "./View.ts";
 import * as Watch from "./Watch.ts";
 
@@ -381,6 +386,58 @@ type ProvidedBy<
   | Saga.Identifier<G[number]>
   | Projection.ProgressIdentifier<J[number]>;
 
+/** The middleware among `Ms` that checks something, where one that provides request context only says who is calling. */
+type Checks<Ms extends Middleware.List> = Ms[number] extends infer M
+  ? M extends RpcMiddleware.AnyService
+    ? [RpcMiddleware.Provides<M["Identifier"]>] extends [never]
+      ? M["Identifier"]
+      : never
+    : never
+  : never;
+
+/**
+ * A mention of something behind the middleware `Ms`: running the process
+ * requires the hosted model and a Layer for each middleware that checks
+ * something, and a session is started as the request context the others
+ * provide.
+ */
+type MentionBehind<Provided, Ms extends Middleware.List> = Mention.Mention<
+  Provided | Checks<Ms>,
+  Middleware.Provides<Ms>
+>;
+
+/**
+ * What an `AI.Process` mentions of a model, as members of its class: each
+ * command by its tag, each aggregate by its name (every command it takes),
+ * and each view by its name (its state for a key).
+ */
+export type Mentions<
+  Provided,
+  A extends ReadonlyArray<Aggregate.Any>,
+  V extends ReadonlyArray<View.Any>,
+  D extends ReadonlyArray<Decision.Any> = readonly [],
+> = {
+  readonly [
+    C in A[number]["definition"]["commands"][number] | D[number]["command"] as Named<C["tag"]>
+  ]: MentionBehind<Provided, C["middleware"]>;
+} & {
+  readonly [K in A[number] as Named<K["aggregateName"]>]: MentionBehind<
+    Provided,
+    K["definition"]["commands"][number]["middleware"]
+  >;
+} & {
+  readonly [K in V[number] as Named<K["viewName"]>]: MentionBehind<
+    Provided,
+    Read.MiddlewareOf<K["definition"]>
+  >;
+};
+
+/**
+ * A name known as one literal. A model whose members were widened, or
+ * named by a pattern (`Balance\${number}`), has no member to mention for them.
+ */
+type Named<Name extends string> = {} extends Record<Name, unknown> ? never : Name;
+
 /** How a model's `layer` hosts it: tuning that doesn't change what the model means. */
 export interface LayerOptions<Views extends string = string> {
   /** What the hosted model records in traces. See {@link Telemetry.Options}. */
@@ -536,7 +593,8 @@ export const make = <
   ProvidedBy<A, V, J, S, G, D>,
   HandledBy<P, J, G, Q, V, S, C>,
   ServableBy<A, V, S, Q, D>
-> => {
+> &
+  Mentions<ProvidedBy<A, V, J, S, G, D>, A, V, D> => {
   const decisions = (members.decisions ?? []) as ReadonlyArray<Decision.Any>;
   const definitions: Kernel.Definitions = {
     aggregates: members.aggregates,
@@ -549,7 +607,7 @@ export const make = <
     rewrites: members.rewrites ?? [],
     compactions: members.compactions ?? [],
   };
-  return class {
+  const model = class {
     static readonly kind = "Model" as const;
     static readonly annotations: Annotations = annotations;
     static readonly modelName: Name = name;
@@ -598,7 +656,41 @@ export const make = <
     ProvidedBy<A, V, J, S, G, D>,
     HandledBy<P, J, G, Q, V, S, C>,
     ServableBy<A, V, S, Q, D>
-  >;
+  > &
+    Mentions<ProvidedBy<A, V, J, S, G, D>, A, V, D>;
+  // What a process mentions: each command, each aggregate (every command it
+  // takes) and each view, by name, on the model that hosts it.
+  const mentioned: ReadonlyArray<readonly [string, Mention.Entries]> = [
+    ...model.commands.map((command) => [command.tag, { commands: [command.tag] }] as const),
+    ...definitions.aggregates.map(
+      (aggregate) =>
+        [
+          aggregate.aggregateName,
+          { commands: aggregate.definition.commands.map((command) => command.tag) },
+        ] as const,
+    ),
+    ...definitions.views.map((view) => [view.viewName, { views: [view.viewName] }] as const),
+  ];
+  // A command, an aggregate or a view may share a name: one member gives them all.
+  const merged = new Map<string, Mention.Entries>();
+  for (const [member, entries] of mentioned) {
+    const before = merged.get(member);
+    merged.set(member, {
+      commands: [...(before?.commands ?? []), ...(entries.commands ?? [])],
+      views: [...(before?.views ?? []), ...(entries.views ?? [])],
+    });
+  }
+  for (const [member, entries] of merged) {
+    if (member in model) {
+      throw new DefinitionError({ reason: new ReservedMember({ model: name, member }) });
+    }
+    let mention: Mention.Mention<unknown, unknown> | undefined;
+    Object.defineProperty(model, member, {
+      enumerable: true,
+      get: () => (mention ??= Mention.of(model as unknown as Any, entries)),
+    });
+  }
+  return model;
 };
 
 /**
@@ -667,6 +759,10 @@ const build = <A, E, R>(
     });
     const kernel = yield* Kernel.make(definitions, telemetry);
     const random = yield* SecureRandom.SecureRandom;
+    // A command's values that wait to be sealed are sealed here, before the command is stored.
+    const vault = yield* Effect.serviceOption(Vault.Vault);
+    const settle: Settle = <A>(json: A) =>
+      Effect.orDie(Vault.settle(json, vault)) as Effect.Effect<A>;
 
     const aggregateStores = new Map<string, AggregateStore>();
     const viewStores = new Map<string, ViewStore>();
@@ -770,6 +866,7 @@ const build = <A, E, R>(
         aggregate,
         aggregateStores.get(aggregate.aggregateName)!,
         random,
+        settle,
         { views: viewStores, projections: projectionStores },
       );
       hosts = Context.add(hosts, aggregate, client);
@@ -781,6 +878,7 @@ const build = <A, E, R>(
         decision,
         decisionStores.get(decision.decisionName)!,
         random,
+        settle,
       );
       hosts = Context.add(hosts, decision, client);
       // An Api and a story send every command the same way.
@@ -995,10 +1093,11 @@ const build = <A, E, R>(
       );
     }
     for (const policy of definitions.policies) {
+      // Platforms run handlers inside their runtime (a Durable Object, or this process).
       const handler = Context.getUnsafe(
         implementations as Context.Context<unknown>,
         policy as Context.Key<unknown, Policy.Handler<unknown>>,
-      );
+      ) as (trigger: unknown) => Effect.Effect<void>;
       policyStores.set(
         policy.policyName,
         yield* platform.policy(policy, kernel.policyKit(policy, handler)),
@@ -1176,11 +1275,15 @@ const rewriteSettled = (
     });
   }).pipe(Effect.withSpan("Domain.rewritten", { attributes: { "domain.stream": receipt.stream } }));
 
+/** Seals what waits to be sealed in an encoded command; dies when it can't. */
+type Settle = <A>(json: A) => Effect.Effect<A>;
+
 const aggregateClient = (
   kernel: Kernel.Kernel,
   aggregate: Aggregate.Any,
   store: AggregateStore,
   random: SecureRandom.SecureRandom["Service"],
+  settle: Settle,
   consumers: Consumers,
 ): Aggregate.ClientImpl => {
   /** What a send carries besides the command: its id, context, flow and trace. */
@@ -1239,7 +1342,7 @@ const aggregateClient = (
         // The span records a rejection as an outcome; the caller still fails with it.
         const result = yield* Effect.gen(function* () {
           const { id, meta } = yield* metaFor(target, command, options, false);
-          const encoded = yield* kernel.encodeCommand(aggregate, command);
+          const encoded = yield* settle(yield* kernel.encodeCommand(aggregate, command));
           const result = yield* store.send(id, encoded, meta);
           yield* Effect.annotateCurrentSpan(
             "domain.outcome",
@@ -1270,7 +1373,7 @@ const aggregateClient = (
         const at = yield* store.schedule(
           id,
           name,
-          yield* kernel.encodeCommand(aggregate, command),
+          yield* settle(yield* kernel.encodeCommand(aggregate, command)),
           meta,
           options.at !== undefined
             ? { at: DateTime.toEpochMillis(options.at) }
@@ -1426,6 +1529,7 @@ const decisionClient = (
   decision: Decision.Any,
   store: DecisionStore,
   random: SecureRandom.SecureRandom["Service"],
+  settle: Settle,
 ): Decision.ClientImpl => ({
   send: (command, options) =>
     Effect.gen(function* () {
@@ -1439,7 +1543,8 @@ const decisionClient = (
           "domain.correlation_id": correlationId,
         });
         const trace = yield* Telemetry.currentTrace;
-        const result = yield* store.send(yield* kernel.encodeDecisionCommand(decision, command), {
+        const encoded = yield* settle(yield* kernel.encodeDecisionCommand(decision, command));
+        const result = yield* store.send(encoded, {
           commandId,
           context,
           correlationId,
@@ -2176,7 +2281,10 @@ const projectionProgress = (
           let missing: readonly [string, number] = [...streams][0]!;
           return chain.until(
             store()
-              .checkpoints(key)
+              .checkpoints(
+                key,
+                [...streams].map(([stream]) => stream),
+              )
               .pipe(
                 Effect.flatMap((checkpoints) => {
                   const behind = [...streams].find(

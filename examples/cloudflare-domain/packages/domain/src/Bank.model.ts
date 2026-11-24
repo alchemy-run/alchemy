@@ -7,7 +7,9 @@ import { AccountCards, AccountCardsLive } from "./Account/AccountCards.projectio
 import { AccountSummary, AccountSummaryLive } from "./Account/AccountSummary.view.ts";
 import { ForgetOwner } from "./Account/ForgetOwner.rewrite.ts";
 import { Statement, StatementLive } from "./Account/Statement.view.ts";
+import { ContactDetails } from "./Customer/ContactDetails.aggregate.ts";
 import { Customer } from "./Customer/Customer.aggregate.ts";
+import { CustomerAddress, CustomerAddressLive } from "./Customer/CustomerAddress.query.ts";
 import { CustomerDashboard, CustomerDashboardLive } from "./Customer/CustomerDashboard.view.ts";
 import { DeleteCustomer } from "./Customer/DeleteCustomer.rewrite.ts";
 import { EraseCustomer, EraseCustomerLive } from "./Customer/EraseCustomer.saga.ts";
@@ -35,7 +37,7 @@ import { TransferStatus, TransferStatusLive } from "./Transfer/TransferStatus.vi
 
 /** The bank: every aggregate, decision, view, policy, projection, stream, saga and query, hosted together. */
 export class Bank extends Domain.Model("Bank", {
-  aggregates: [Customer, UsernameClaim, Account, Transfer],
+  aggregates: [Customer, UsernameClaim, ContactDetails, Account, Transfer],
   decisions: [Registration],
   views: [
     AccountSummary,
@@ -57,7 +59,7 @@ export class Bank extends Domain.Model("Bank", {
   streams: [AccountCard],
   sagas: [ExecuteTransfer, EraseCustomer],
   rewrites: [ForgetOwner, ReleaseUsername, DeleteCustomer],
-  queries: [AccountLedger],
+  queries: [AccountLedger, CustomerAddress],
   relations: {
     /** Whoever a username is claimed for is registered under it. */
     AClaimedNameBelongsToItsCustomer: Domain.Relation({
@@ -133,8 +135,8 @@ export const BankReads = Layer.mergeAll(
 
 /**
  * The policies', projections' and queries' implementations, and who may read
- * each key. They require the FraudCheck and Payments external systems, and
- * the LedgerStore.
+ * each key. They require the FraudCheck and Payments external systems, the
+ * LedgerStore, and the Vault that seals what identifies a customer.
  */
 export const BankHandlers = Layer.mergeAll(
   BankReads,
@@ -147,5 +149,6 @@ export const BankHandlers = Layer.mergeAll(
   SettlementRefundLive,
   LedgerLive,
   AccountLedgerLive,
+  CustomerAddressLive,
   AccountCardsLive,
 );

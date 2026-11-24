@@ -1,6 +1,6 @@
 ---
 name: harden
-description: Harden one or more providers' live test suites until they are stable — repeat full suite runs with a leak census after each, root-cause every failure and leak (provider bug first, then distilled patch, then test, timeouts last), make every name and stage deterministic and isolated per user and worktree, and stop only when consecutive runs are green and clean. Use for "harden cloudflare", "harden the aws provider", "/harden gcp neon", "make the X suite stable", "do a few more runs to see how stable it is", or as the per-provider loop inside prepare-release.
+description: Harden one or more providers' live test suites until they are stable — repeat full suite runs with a leak census after each, root-cause every failure and leak (provider bug first, then distilled patch, then test, timeouts last), make every name and stage deterministic and isolated per user and worktree, and stop only when consecutive runs are green and clean. Use for "harden cloudflare", "harden the aws provider", "/harden gcp neon", "make the X suite stable", "do a few more runs to see how stable it is", or when a prepare-release step stays intermittent.
 metadata:
   internal: true
 ---

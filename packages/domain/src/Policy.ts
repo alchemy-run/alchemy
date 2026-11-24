@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -43,10 +44,12 @@ export interface Options {
 /**
  * A policy's handler. It runs after the triggering event commits, at least
  * once, in order per source instance. Every failure must be handled: send a
- * command or ignore it. It requires nothing: resolve aggregate clients, Ports
- * and views while building it, in `toLayer`.
+ * command or ignore it. Resolve aggregate clients, external systems and
+ * views while building it, in `toLayer`. It runs inside the platform's
+ * runtime, so it may call what needs the runtime context: an external
+ * system's operation, or a binding.
  */
-export type Handler<T> = (trigger: T) => Effect.Effect<void>;
+export type Handler<T> = (trigger: T) => Effect.Effect<void, never, RuntimeContext>;
 
 /**
  * Structural constraint satisfied by every policy class.

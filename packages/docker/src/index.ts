@@ -1,4 +1,5 @@
 export * from "./Container.ts";
+export type { ContainerRuntime } from "./ContainerRuntime.ts";
 export * from "./Context.ts";
 export * from "./Docker.ts";
 export * as Dockerfile from "./Dockerfile.ts";

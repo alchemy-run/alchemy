@@ -2045,6 +2045,7 @@ export default defineConfig({
                 { label: "Saga", link: "/domain/saga" },
                 { label: "Rewrite", link: "/domain/rewrite" },
                 { label: "Compaction", link: "/domain/compaction" },
+                { label: "Sealed Value", link: "/domain/sealed-value" },
                 { label: "External System", link: "/domain/external-system" },
                 { label: "Api", link: "/domain/api" },
                 { label: "Annotations", link: "/domain/annotations" },
@@ -2065,7 +2066,7 @@ export default defineConfig({
                 { label: "Story", link: "/domain/story" },
                 { label: "Testing a model", link: "/domain/testing-models" },
                 { label: "Verifying a model", link: "/domain/verifying-models" },
-                { label: "What the prover reads", link: "/domain/verifiable-code" },
+                { label: "What can be verified", link: "/domain/verifiable-code" },
                 { label: "Testing an Api", link: "/domain/testing-apis" },
               ],
             },
@@ -2099,6 +2100,7 @@ export default defineConfig({
                 { label: "Unique values", link: "/domain/unique-values" },
                 { label: "Deadlines", link: "/domain/deadlines" },
                 { label: "Erasing personal data", link: "/domain/erasing-personal-data" },
+                { label: "Crypto-shredding", link: "/domain/crypto-shredding" },
                 { label: "Closing the books", link: "/domain/closing-the-books" },
               ],
             },
@@ -2506,7 +2508,28 @@ export default defineConfig({
           label: "AI",
           items: [
             { label: "Overview", link: "/ai" },
-            { label: "What is an agent harness?", link: "/ai/what-is-a-harness" },
+            { label: "What is Alchemy AI?", link: "/ai/what-is-alchemy-ai" },
+            { label: "Project layout", link: "/ai/project-layout" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "ai/tutorial" } }],
+            },
+            {
+              label: "Processes",
+              items: [
+                { label: "Processes", link: "/ai/processes" },
+                { label: "Processes that use processes", link: "/ai/process-graphs" },
+                { label: "Processes and Domain models", link: "/ai/domain" },
+              ],
+            },
+            {
+              label: "Running them",
+              items: [
+                { label: "Choose a harness", link: "/ai/harnesses" },
+                { label: "Where sessions run", link: "/ai/hosting" },
+                { label: "Connect a front end", link: "/ai/front-end" },
+              ],
+            },
             {
               label: "Models & tools",
               items: [
@@ -2515,7 +2538,6 @@ export default defineConfig({
                 { label: "Coding tools", link: "/ai/coding-tools" },
                 { label: "MCP servers", link: "/ai/mcp-servers" },
                 { label: "Code mode", link: "/ai/code-mode" },
-                { label: "Skills", link: "/ai/skills" },
               ],
             },
             {
@@ -2557,7 +2579,7 @@ export default defineConfig({
               label: "Extensions & skills",
               items: [
                 { label: "Extensions", link: "/pi/extensions" },
-                { label: "Skills", link: "/pi/skills" },
+                { label: "Processes", link: "/pi/processes" },
               ],
             },
             {
@@ -2592,7 +2614,7 @@ export default defineConfig({
                 { label: "Tools", link: "/opencode/tools" },
                 { label: "MCP servers", link: "/opencode/mcp-servers" },
                 { label: "Code mode", link: "/opencode/code-mode" },
-                { label: "Skills", link: "/opencode/skills" },
+                { label: "Processes", link: "/opencode/processes" },
               ],
             },
             {

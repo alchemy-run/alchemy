@@ -181,6 +181,7 @@ export const EraseCustomerLive = EraseCustomer.toLayer(
     const customers = yield* Customer;
     const claims = yield* UsernameClaim;
     const dashboards = yield* CustomerDashboard;
+    const vault = yield* Domain.Vault;
 
     return Effect.fn(function* ({ key }) {
       // Read before anything is removed: the steps after this one need them.
@@ -200,6 +201,13 @@ export const EraseCustomerLive = EraseCustomer.toLayer(
             username: customer._tag === "Registered" ? customer.username : null,
           };
         }),
+      });
+
+      // The key goes first: from here on, nothing sealed for the customer opens,
+      // in the model or in any copy of its events.
+      yield* Activity.make({
+        name: "shred-key",
+        execute: vault.shred(key).pipe(Effect.orDie),
       });
 
       for (const accountId of found.accounts) {
@@ -234,9 +242,11 @@ export const EraseCustomerLive = EraseCustomer.toLayer(
 
 The first step reads which accounts and which username belong to the customer, and keeps the answer as the step's result. The steps after it would not find them once the customer is gone.
 
+The second step shreds the customer's key. The bank seals each customer's address under one, so from this step on the address can't be read, wherever a copy of it is. [Crypto-shredding](/domain/crypto-shredding) covers it.
+
 Inside a step, a rewrite runs under the step's own id. A step that runs again after a failure rewrites nothing twice.
 
-Each step ends with `rewritten`, which waits for every view, projection and stream the rewrite reaches. When the saga completes, the name is gone from all of them.
+Each rewrite's step ends with `rewritten`, which waits for every view, projection and stream the rewrite reaches. When the saga completes, the name is gone from all of them.
 
 ## List it in the model
 
@@ -371,13 +381,13 @@ A rewrite costs as much as the history it changes. Where you can choose, record 
 
 The bank records `owner: "sam"` in `AccountOpened`, so it needs the rewrite. Had it recorded only `customerId`, forgetting the customer's name would not have touched a single account.
 
-## Or encrypt it before it is recorded
+## Or seal it under a key you can delete
 
-Some systems can't change a record at all, and erase by losing a key instead. Encrypt the personal fields in your server before it sends the command, with a key you keep per person in a store of your own. The events, and everything built from them, then hold only ciphertext.
+Some copies can't be rewritten at all: a backup, an archive, an export another system took. Seal the personal fields under a key kept per person, and deleting the key makes every copy unreadable at once. [Crypto-shredding](/domain/crypto-shredding) shows how.
 
-Reads decrypt where they are served: in a [query](/domain/query) handler, or in the client after it fetches the key. Deleting the person's key makes every copy unreadable at once, including the ones a rewrite can't reach.
+The bank seals a customer's address this way. The saga above shreds the customer's key in its `shred-key` step, before the rewrites that remove the name.
 
-Domain has no field encryption of its own, so `decide`, `evolve` and views see the ciphertext and can't use the value. This fits data the model only carries, such as a name or an address, and not data its rules depend on.
+The model can't read a sealed value. This fits data it only carries, such as an address, and not data its rules depend on.
 
 ## Pick a way to erase
 
@@ -385,4 +395,4 @@ Keep the data out of the events when you are still designing them. It is the che
 
 Rewrite when the data is already in the events, or the model's rules need it there. Remove the whole instance when nothing in it has to stay.
 
-Encrypt when the record must never change, or when copies leave the model for places you can't rewrite.
+Seal and shred when the record must never change, or when copies leave the model for places you can't rewrite.

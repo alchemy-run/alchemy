@@ -109,7 +109,7 @@ More: [Aggregate](https://alchemy.run/domain/aggregate).
 - **Events carry the outcome**, not just the request (`balanceAfter`), so `evolve` copies it and never repeats a rule. Views and policies see the same numbers.
 - **decide reads time from `now`** (its third argument) and the actor from middleware context. In an effectful `decide`, `DateTime.now` and `Clock.currentTimeMillis` give that same time. Never `Date.now()` or randomness.
 - **evolve and reply are total and never fail.** decide already refused the command, so a handler keeps any state its event can't follow: `s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s`. An event that changes the stage returns the new state whole.
-- **Optics are an opt-in shorthand** for many handlers that repeat the same check. `const balance = Optic.id<State>().tag("Open").key("balance")` focuses on the Open state; `Optic.replace(s, balance, e.balanceAfter)` sets one field and `open.modify((o) => ({ ...o, ... }))(s)` several, leaving other states unchanged. The example bank uses them.
+- **Use optics (`effect/Optic`) once an `evolve` nests or repeats a check**, in aggregates and views alike. Never spread three levels deep. `Optic.id<State>().tag("Open").key("balance")` focuses on a field of one state; `.key("issues").at(id)` on a record entry, and does nothing when it is missing; `.key("issues").optionalKey(id)` on one that may be added. `Optic.replace(s, balance, e.balanceAfter)` sets a field, `issue(id).key("replies").modify((n) => n + 1)(s)` changes one, and `pipe(s, a.modify(...), b.modify(...))` makes several changes. An optic that does not match leaves the state as it is, which keeps `evolve` total. The example bank's `Account` and the issue board's `IssueList` view use them.
 - **A compensation never refuses.** A command that undoes another process's step (`RefundTransfer`) records a fact for every state (`TransferRefunded`, or `RefundStranded` when the account closed), so the saga that sent it has no refusal to handle.
 
 More: [Aggregate: Focus on a state with optics](https://alchemy.run/domain/aggregate#focus-on-a-state-with-optics), [Aggregate: Never refuse a compensation](https://alchemy.run/domain/aggregate#never-refuse-a-compensation).
@@ -349,6 +349,42 @@ yield* accounts.rewritten(receipt); // every view, projection and stream has cau
 - Run several rewrites as one process in a saga: one `Activity` per rewrite, each ending with `rewritten`.
 
 More: [Rewrite](https://alchemy.run/domain/rewrite), [Erasing personal data](https://alchemy.run/domain/erasing-personal-data).
+
+## Sealed fields and the Vault
+
+Seal personal data under a key kept per subject, and erase it everywhere by deleting the key: backups, archives and exported copies included.
+
+```ts
+// Customer/Address.ts
+export const Address = Domain.Sealed(Schema.String);
+
+// Customer/SetAddress.command.ts
+export class AddressSet extends Domain.Event("AddressSet", { address: Address }) {}
+export class SetAddress extends Domain.Command("SetAddress", {
+  input: { customerId: CustomerId, address: Address },
+  events: [AddressSet],
+  rejects: [NotYourAddress],
+}) {}
+
+// a client: the model seals the value when the command arrives
+yield* bank.SetAddress({ customerId, address: Address.plain(customerId, "1 Main St") });
+
+// a query, policy or saga step: open it, or shred the subject's key
+const vault = yield* Domain.Vault;
+const address = yield* vault.open(Address, contact.address); // Option; None once shredded
+yield* vault.shred(customerId);
+```
+
+- `decide`, `evolve` and views see `{ subject, box }`, never the value. In `decide`, reject a value whose `subject` is not the instance's own.
+- Keep ids, unique values and anything a rule compares plain; remove those with a rewrite.
+- Provide `Domain.VaultLive` where the model's Layer is built, over a `Domain.KeyStore` (where each subject's key is kept) and a `Domain.KeyWrap` (what is stored of it).
+- Stores: `Domain.HostKeyStore` (the model's own host), `DomainCloudflare.D1KeyStore`, `DomainAWS.DynamoKeyStore`, `DomainGCP.FirestoreKeyStore`, `SqlKeyStore`, `Domain.MemoryKeyStore`.
+- Wraps: `DomainCloudflare.SecretKeyWrap`, `DomainAWS.KmsKeyWrap`, `DomainGCP.KmsKeyWrap`, `Domain.RootKeyWrap`, `Domain.NoKeyWrap`. Any store pairs with any wrap.
+- A KMS wrap calls KMS on every seal and open. `KmsKeyWrap(RootKey, { intermediateKey: { keep: "5 minutes" } })` calls it once per process instead; it puts an intermediate key in memory and drops per-subject KMS logs. Shredding is unchanged.
+- A restored backup of the key store brings shredded keys back: keep its backups off or expiring.
+- Stories run with a test Vault: expect values with `Domain.sealedInTest(Address, subject, value)`, shred with `Story.shred(subject)`.
+
+More: [Sealed Value](https://alchemy.run/domain/sealed-value), [Crypto-shredding](https://alchemy.run/domain/crypto-shredding), [Choose where the keys are kept](https://alchemy.run/domain/crypto-shredding#choose-where-the-keys-are-kept), [Call KMS less often](https://alchemy.run/domain/crypto-shredding#call-kms-less-often), [Erasing personal data: Or seal it under a key you can delete](https://alchemy.run/domain/erasing-personal-data#or-seal-it-under-a-key-you-can-delete).
 
 ## Compaction
 

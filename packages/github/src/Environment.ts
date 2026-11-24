@@ -63,10 +63,16 @@ export interface EnvironmentProps {
   /**
    * Which branches can deploy to this environment. Omit to allow all
    * branches. Set `protectedBranches: true` to restrict deployments to
-   * branches with branch protection rules, or `customBranchPolicies` to a
-   * list of branch name patterns (e.g. `["main", "release/*"]`).
+   * branches with branch protection rules. Or list the name patterns that
+   * may deploy: `customBranchPolicies` for branches (e.g.
+   * `["main", "release/*"]`), `customTagPolicies` for tags (e.g. `["v*"]`),
+   * or both. Only refs matching a listed pattern can deploy, so tags alone
+   * means no branch can.
    */
-  deploymentBranchPolicy?: { protectedBranches: true } | { customBranchPolicies: string[] };
+  deploymentBranchPolicy?:
+    | { protectedBranches: true }
+    | { customBranchPolicies: string[]; customTagPolicies?: string[] }
+    | { customBranchPolicies?: string[]; customTagPolicies: string[] };
 
   /**
    * Override the GitHub host or API base URL for this resource only (e.g.
@@ -196,6 +202,29 @@ export interface EnvironmentLookup {
  *   deploymentBranchPolicy: {
  *     customBranchPolicies: ["main", "release/*"],
  *   },
+ * });
+ * ```
+ *
+ * **Example:** Allow Deployments from Tags
+ * ```typescript
+ * yield* GitHub.Environment("production", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   name: "production",
+ *   deploymentBranchPolicy: {
+ *     customBranchPolicies: ["main"],
+ *     customTagPolicies: ["v*"],
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Deploy Only from Release Tags
+ * ```typescript
+ * yield* GitHub.Environment("production", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   name: "production",
+ *   deploymentBranchPolicy: { customTagPolicies: ["v*"] },
  * });
  * ```
  *
@@ -354,25 +383,38 @@ export const EnvironmentProvider = () =>
         // is custom (GitHub drops the policies itself when the mode changes).
         if (
           news.deploymentBranchPolicy !== undefined &&
-          "customBranchPolicies" in news.deploymentBranchPolicy
+          !("protectedBranches" in news.deploymentBranchPolicy)
         ) {
-          const desired = news.deploymentBranchPolicy.customBranchPolicies;
+          // A policy is a (type, pattern) pair: a branch and a tag policy can share a pattern.
+          const desired = [
+            ...(news.deploymentBranchPolicy.customBranchPolicies ?? []).map((name) => ({
+              name,
+              type: "branch" as const,
+            })),
+            ...(news.deploymentBranchPolicy.customTagPolicies ?? []).map((name) => ({
+              name,
+              type: "tag" as const,
+            })),
+          ];
+          const policyKey = (policy: { name?: string; type?: string }) =>
+            `${policy.type ?? "branch"}:${policy.name}`;
+          const desiredKeys = new Set(desired.map(policyKey));
           const observed = yield* Stream.runCollect(
             Repos.listDeploymentBranchPolicies.items({ ...scope, per_page: 100 }),
           );
-          const observedNames = new Set(observed.map((policy) => policy.name));
-          for (const name of desired) {
-            if (!observedNames.has(name)) {
-              yield* Repos.createDeploymentBranchPolicy({ ...scope, name, type: "branch" });
-            }
-          }
+          const observedKeys = new Set(observed.map(policyKey));
           for (const policy of observed) {
             if (
               policy.id !== undefined &&
               policy.name !== undefined &&
-              !desired.includes(policy.name)
+              !desiredKeys.has(policyKey(policy))
             ) {
               yield* Repos.deleteDeploymentBranchPolicy({ ...scope, branch_policy_id: policy.id });
+            }
+          }
+          for (const policy of desired) {
+            if (!observedKeys.has(policyKey(policy))) {
+              yield* Repos.createDeploymentBranchPolicy({ ...scope, ...policy });
             }
           }
         }

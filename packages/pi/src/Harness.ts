@@ -8,7 +8,6 @@ import {
 } from "@alchemy.run/ai/McpServer";
 import type { AnyModel, ModelService } from "@alchemy.run/ai/Model";
 import { Sandboxes } from "@alchemy.run/ai/Sandbox";
-import type { AnySkill } from "@alchemy.run/ai/Skill";
 import type { ToolSpec, ToolTagService } from "@alchemy.run/ai/Tool";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { createModels } from "@earendil-works/pi-ai/models";
@@ -62,7 +61,6 @@ import { mcpExtensionName, mcpRegistrations, mcpToolName } from "./internal/mcp.
 import { fromPi, messageOf } from "./internal/promise.ts";
 import { makeProvider } from "./internal/provider.ts";
 import { makeEnvFor, sandboxKey } from "./Sandbox.ts";
-import { isSkill, toExtension, type SkillExtension } from "./Skill.ts";
 import { Storage } from "./Storage.ts";
 import {
   ENGINE,
@@ -92,7 +90,7 @@ export type Listed = AnyTool | AnyMcpServer | CodeModeGroup<ReadonlyArray<AnyToo
 export interface HarnessOptions<
   Models extends ReadonlyArray<AnyModel>,
   Tools extends ReadonlyArray<Listed>,
-  Extensions extends ReadonlyArray<AnyExtension | AnySkill> = readonly [],
+  Extensions extends ReadonlyArray<AnyExtension> = readonly [],
 > {
   /**
    * Distinguishes several harnesses in one Durable Object: each keeps its
@@ -112,8 +110,7 @@ export interface HarnessOptions<
    */
   readonly tools?: Tools;
   /**
-   * Every extension and skill a conversation may select. Extensions are
-   * selected by default; skills only where a conversation adds them.
+   * Every extension a conversation may select. Each is selected by default.
    */
   readonly extensions?: Extensions;
   /** Pi's run policy: retries, compaction, tool execution, queue modes. */
@@ -141,15 +138,15 @@ export interface AgentOptions {
       }
     | null;
   /**
-   * The extensions and skills the conversation selects: exactly these, or
+   * The extensions the conversation selects: exactly these, or
    * `add`/`remove` relative to the harness default. Adding one enables the
    * tools it brings.
    */
   readonly extensions?:
-    | ReadonlyArray<AnyExtension | AnySkill>
+    | ReadonlyArray<AnyExtension>
     | {
-        readonly add?: ReadonlyArray<AnyExtension | AnySkill>;
-        readonly remove?: ReadonlyArray<AnyExtension | AnySkill>;
+        readonly add?: ReadonlyArray<AnyExtension>;
+        readonly remove?: ReadonlyArray<AnyExtension>;
       }
     | null;
   /** Rendered after every other system prompt section. */
@@ -202,6 +199,8 @@ export interface Conversation {
   /** Start a new context; older entries stay in storage. A handoff note becomes its first message. */
   readonly reset: (handoff?: string) => Effect.Effect<void, PiError, RuntimeContext>;
   readonly compact: (instructions?: string) => Effect.Effect<void, PiError, RuntimeContext>;
+  /** Withdraw one queued submission of this conversation. Does nothing once it was placed. */
+  readonly withdraw: (id: SubmissionId) => Effect.Effect<void, PiError, RuntimeContext>;
   /** Stop: withdraw queued inputs, abort running work, wait until idle. */
   readonly abort: (options?: {
     readonly background?: boolean;
@@ -217,6 +216,10 @@ export interface Conversation {
   readonly entries: (options?: {
     readonly limit?: number;
     readonly order?: "ascending" | "descending";
+    /** Only entries with an id above this one. */
+    readonly after?: EntryId;
+    /** Only entries with an id below this one. */
+    readonly before?: EntryId;
   }) => Effect.Effect<ReadonlyArray<EntryRecord>, PiError, RuntimeContext>;
   /** The conversation's live view: the newest entries, the running generation, the inbox. */
   readonly watch: (
@@ -316,48 +319,6 @@ type ListedRequirements<T> =
 /** The extension the harness's own tools are installed in; always selected. */
 const BASE_EXTENSION = "alchemy";
 
-/**
- * `load_skill`: gives the model a selected skill's instructions and writes
- * its files into the conversation's environment.
- */
-const LOAD_SKILL = "load_skill";
-
-const loadSkill = (skills: ReadonlyMap<string, SkillExtension>): ToolRegistration =>
-  ({
-    name: LOAD_SKILL,
-    description:
-      "Load a skill listed in <skill> sections: returns its instructions and writes its files under .skills/<name>/.",
-    parameters: {
-      type: "object",
-      properties: { name: { type: "string", description: "The skill's name." } },
-      required: ["name"],
-    },
-    replay: "safe",
-    execute: async (args: { name: string }, api, context) => {
-      const skill = skills.get(args.name);
-      const agent = await api.agent(context);
-      if (
-        skill === undefined ||
-        !agent.extensions.some((extension) => extension.name === skill.extensionName)
-      ) {
-        return {
-          isError: true,
-          output: [{ type: "text", text: `No skill "${args.name}" is available here.` }],
-        };
-      }
-      const written: string[] = [];
-      for (const [file, content] of Object.entries(skill.skill.files ?? {})) {
-        if (api.env === undefined) break;
-        const path = `.skills/${skill.skillName}/${file}`;
-        const result = await api.env.writeFile(path, content, context);
-        if (result.ok) written.push(path);
-      }
-      const files =
-        written.length > 0 ? `\n\nFiles:\n${written.map((path) => `- ${path}`).join("\n")}` : "";
-      return { output: [{ type: "text", text: `${skill.skill.instructions}${files}` }] };
-    },
-  }) as ToolRegistration;
-
 /** How long one alarm keeps working before it hands off to the next. */
 const ALARM_SLICE = "10 minutes";
 
@@ -390,7 +351,7 @@ const ALARM_SLICE = "10 minutes";
 export const Harness = <
   const Models extends ReadonlyArray<AnyModel>,
   const Tools extends ReadonlyArray<Listed> = readonly [],
-  const Extensions extends ReadonlyArray<AnyExtension | AnySkill> = readonly [],
+  const Extensions extends ReadonlyArray<AnyExtension> = readonly [],
 >(
   options: HarnessOptions<Models, Tools, Extensions>,
 ): Effect.Effect<
@@ -515,30 +476,21 @@ export const Harness = <
     );
     /** Each server's tools, by name: known once an instance has opened and asked it. */
     const serverTools = new Map<string, ReadonlyArray<string>>();
-    const extensions = yield* Effect.forEach(
-      (options.extensions ?? []).map(toExtension),
-      (extension) =>
-        Effect.gen(function* () {
-          const impl: ExtensionImpl | undefined = extension.impl
-            ? yield* extension.impl
-            : isSkill(extension)
-              ? undefined
-              : Option.getOrUndefined(
-                  yield* Effect.serviceOption(
-                    extension as unknown as Context.Key<unknown, ExtensionImpl>,
-                  ),
-                );
-          return {
-            extension,
-            impl,
-            tools: yield* resolveTools(extension.spec.tools ?? []),
-          };
-        }),
-    );
-    const skills = new Map(
-      extensions.flatMap(({ extension }) =>
-        isSkill(extension) ? [[extension.skillName, extension] as const] : [],
-      ),
+    const extensions = yield* Effect.forEach(options.extensions ?? [], (extension) =>
+      Effect.gen(function* () {
+        const impl: ExtensionImpl | undefined = extension.impl
+          ? yield* extension.impl
+          : Option.getOrUndefined(
+              yield* Effect.serviceOption(
+                extension as unknown as Context.Key<unknown, ExtensionImpl>,
+              ),
+            );
+        return {
+          extension,
+          impl,
+          tools: yield* resolveTools(extension.spec.tools ?? []),
+        };
+      }),
     );
     const sandboxes = sandbox;
     const envFor = sandboxes === undefined ? undefined : makeEnvFor(sandboxes);
@@ -569,17 +521,11 @@ export const Harness = <
       ...(codemode !== undefined
         ? [[CODEMODE_TOOL, { toolName: CODEMODE_TOOL } as ToolRef] as const]
         : []),
-      ...(skills.size > 0 ? [[LOAD_SKILL, { toolName: LOAD_SKILL } as ToolRef] as const] : []),
     ]);
 
     /** The tools selecting these extensions enables: their own, and the one that drives them. */
-    const broughtBy = (selected: ReadonlyArray<AnyExtension | AnySkill>): ReadonlyArray<ToolRef> =>
-      selected
-        .map(toExtension)
-        .flatMap((extension) => [
-          ...flattenTools(extension.spec.tools ?? []),
-          ...(isSkill(extension) ? [{ toolName: LOAD_SKILL } as ToolRef] : []),
-        ]);
+    const broughtBy = (selected: ReadonlyArray<AnyExtension>): ReadonlyArray<ToolRef> =>
+      selected.flatMap((extension) => flattenTools(extension.spec.tools ?? []));
     const modelName = (model: AnyModel) => model.modelName;
 
     const open = Effect.gen(function* () {
@@ -631,13 +577,10 @@ export const Harness = <
 
         const baseExtension: PiExtension = {
           name: BASE_EXTENSION,
-          tools: [
-            ...tools.map((entry) => ({
-              ...compile(entry),
-              ...callersOf("tools", entry.tool.toolName),
-            })),
-            ...(skills.size > 0 ? [loadSkill(skills)] : []),
-          ],
+          tools: tools.map((entry) => ({
+            ...compile(entry),
+            ...callersOf("tools", entry.tool.toolName),
+          })),
         };
         const piExtensions: PiExtension[] = extensions.map(({ extension, impl, tools }) => {
           const sections: PromptSection[] = [
@@ -778,11 +721,8 @@ export const Harness = <
                   ),
                 ];
               }).pipe(Effect.provideContext(base));
-        // Selected by default: the base and every extension; skills only where added.
-        const defaultExtensions = [
-          baseExtension,
-          ...piExtensions.filter((_, index) => !isSkill(extensions[index]!.extension)),
-        ];
+        // Selected by default: the base and every extension.
+        const defaultExtensions = [baseExtension, ...piExtensions];
 
         opened = Effect.runPromiseWith(base)(
           Effect.all([buildModels, storage.open(prefix), buildServers]).pipe(
@@ -957,8 +897,8 @@ export const Harness = <
           const enabled = current ?? [...toolByName.keys()];
           tools = yield* exactly([...enabled, ...add].filter((name) => !remove.has(name)));
         }
-        const named = (extension: AnyExtension | AnySkill) =>
-          ({ name: toExtension(extension).extensionName }) as PiExtension;
+        const named = (extension: AnyExtension) =>
+          ({ name: extension.extensionName }) as PiExtension;
         let selected: AgentChange["extensions"];
         if (agent.extensions === null) selected = null;
         else if (agent.extensions === undefined) selected = undefined;
@@ -966,8 +906,8 @@ export const Harness = <
           selected = [{ name: BASE_EXTENSION } as PiExtension, ...agent.extensions.map(named)];
         else {
           const edit = agent.extensions as {
-            add?: ReadonlyArray<AnyExtension | AnySkill>;
-            remove?: ReadonlyArray<AnyExtension | AnySkill>;
+            add?: ReadonlyArray<AnyExtension>;
+            remove?: ReadonlyArray<AnyExtension>;
           };
           selected = {
             ...(edit.add ? { add: edit.add.map(named) } : {}),
@@ -1080,6 +1020,10 @@ export const Harness = <
           on((conversation) =>
             Effect.asVoid(fromPi((context) => conversation.compact(instructions, context))),
           ),
+        withdraw: (submissionId) =>
+          on((_, harness) =>
+            Effect.asVoid(fromPi((context) => harness.abortSubmission(submissionId, context, id))),
+          ),
         abort: (abortOptions) =>
           on((conversation) => fromPi((context) => conversation.abort(context, abortOptions))),
         waitForIdle: on((conversation) => fromPi((context) => conversation.waitForIdle(context))),
@@ -1107,7 +1051,15 @@ export const Harness = <
           on((conversation) =>
             fromPi((context) =>
               conversation.entries(
-                { order: query.order ?? "ascending" },
+                {
+                  order: query.order ?? "ascending",
+                  ...(query.after === undefined
+                    ? {}
+                    : { minEntryId: (query.after + 1) as EntryId }),
+                  ...(query.before === undefined
+                    ? {}
+                    : { maxEntryId: (query.before - 1) as EntryId }),
+                },
                 query.limit ?? 100,
                 undefined,
                 context,
@@ -1121,7 +1073,9 @@ export const Harness = <
                 Effect.acquireRelease(
                   fromPi((context) => conversation.watch(context, window)).pipe(
                     Effect.tap((handle) =>
-                      Effect.sync(() =>
+                      Effect.sync(() => {
+                        // The handle holds the view as it is now; the listener gets each change.
+                        Queue.offerUnsafe(queue, handle.value);
                         handle.start(async (call) => {
                           if (call.kind === "value") Queue.offerUnsafe(queue, call.value);
                           else
@@ -1129,8 +1083,8 @@ export const Harness = <
                               queue,
                               Cause.fail(new PiError({ message: messageOf(call.error) })),
                             );
-                        }),
-                      ),
+                        });
+                      }),
                     ),
                   ),
                   (handle) => Effect.promise(() => handle.stop()),
