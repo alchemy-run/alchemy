@@ -406,7 +406,7 @@ const LABEL = {
   Bounded: "proved for short lists only",
   Violated: "violated",
   Unconfirmed: "not proved",
-  NotTranslated: "not read",
+  NotTranslated: "not supported",
   Unknown: "not decided",
   Misread: "read wrongly",
 } as const;
@@ -510,7 +510,7 @@ const notes = (report: {
 }): ReadonlyArray<string> => [
   ...(report.unread.length > 0
     ? [
-        "Schema checks not read: a value one refuses may be tried",
+        "Schema checks not supported: a value one refuses may be tried",
         ...report.unread.map((check) => `  - ${check}`),
         "",
       ]
