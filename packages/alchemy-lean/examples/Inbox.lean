@@ -176,4 +176,21 @@ theorem deployLeaksNothing :
     intro y present
     simp [Control.lawful] at present)
 
+/-- An account where somebody else already has the bucket's name. -/
+def nameTaken : Cloud.World Kind Control.Service :=
+  ⟨.empty, { taken := fun name => name == ⟨"Mail", 0⟩ }⟩
+
+/--
+There, the deploy fails at the bucket, and carries on with what does not need
+it: the queue exists. The state says the bucket is still to be created, so the
+next deploy picks it up, and nothing was leaked.
+-/
+example :
+    let after := apply Control.providers Control.Service prod nameTaken
+    after.2 = false ∧
+      after.1.cloud.exists_ ⟨.queue, "Incoming", 0⟩ = true ∧
+      after.1.cloud.exists_ ⟨.bucket, "Mail", 0⟩ = false ∧
+      (plan Control.providers prod after.1.state).head? = some ("Mail", .create) := by
+  native_decide
+
 end Inbox
