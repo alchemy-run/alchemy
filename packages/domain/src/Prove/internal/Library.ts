@@ -39,6 +39,7 @@ import * as Effects from "./Models/Effects.ts";
 import * as Exits from "./Models/Exits.ts";
 import * as Fibers from "./Models/Fibers.ts";
 import * as Flows from "./Models/Flows.ts";
+import * as Folds from "./Models/Folds.ts";
 import * as Hashes from "./Models/Hashes.ts";
 import * as Numbers from "./Models/Numbers.ts";
 import * as Rationals from "./Models/Rationals.ts";
@@ -1312,6 +1313,11 @@ export const make = (host: Host) => {
   const streams = Streams.make(kit);
   const cells = Cells.make(kit, (key, args, site) => models[key]!(args, site));
   const exits = Exits.make(kit);
+  const folds = Folds.make(
+    kit,
+    (key, args, site) => models[key]!(args, site),
+    (key) => values[key] ?? Value.undef,
+  );
   const rationals = Rationals.make(kit);
 
   const written: Record<string, Model> = {
@@ -1329,6 +1335,7 @@ export const make = (host: Host) => {
     ...cells.models,
     ...exits.models,
     ...rationals.models,
+    ...folds.models,
   };
   /** Classes of the library other than `effect/Data`'s, each with what a class that extends it is. */
   const extending = new WeakMap<object, (name: string) => V>();
@@ -1388,7 +1395,7 @@ export const make = (host: Host) => {
   const spanOrder = kit.order("Duration.Order", by("Duration.Order", span, "<"));
 
   /** Library values that are not functions. */
-  const values: Readonly<Record<string, V>> = {
+  const values: Record<string, V> = {
     "effect/Effect:void": done,
     "effect/Duration:zero": duration(0),
     "effect/Data:Class": plainClass,
@@ -1412,7 +1419,10 @@ export const make = (host: Host) => {
     ...decimals.values,
     ...rationals.values,
     ...streams.values,
+    ...folds.constants,
   };
+  // The reducers the modules give are made of the orders and the zeros above.
+  Object.assign(values, folds.values());
 
   const keyOf = (lib: V & { readonly _tag: "Lib" }): string =>
     `${lib.module}:${lib.path.join(".")}`;
@@ -1565,7 +1575,8 @@ export const make = (host: Host) => {
     },
     opticMember,
     /** A member of a latch or a semaphore: `latch.open`, `semaphore.withPermits`. */
-    waitMember: fibers.member,
+    waitMember: (value: V, key: string, site: Site): V | undefined =>
+      fibers.member(value, key, site) ?? folds.member(value, key),
     /** An instance of a class of the library that a file exports, other than one of `effect/Data`'s. */
     constructHost: fibers.constructs,
     /** A helper of a tagged union of `effect/Schema`, as a value the code calls. */

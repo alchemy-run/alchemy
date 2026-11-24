@@ -23,6 +23,7 @@ const READ = new Set([
   ...["PubSub", "Queue", "Request", "RequestResolver", "Schedule"],
   ...["PartitionedSemaphore", "ScopedCache", "Semaphore", "TxChunk", "TxDeferred", "TxPubSub"],
   ...["TxHashMap", "TxHashSet", "TxPriorityQueue", "TxQueue", "Channel", "Pull", "Take"],
+  ...["Combiner", "Reducer", "MutableList"],
   ...["TxReentrantLock", "TxRef", "TxSemaphore", "TxSubscriptionRef", "index"],
 ]);
 

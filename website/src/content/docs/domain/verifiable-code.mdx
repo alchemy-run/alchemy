@@ -1407,6 +1407,76 @@ Array.sort(Array.fromIterable(HashMap.values(scores)), Order.Number);
 MutableHashSet.size(MutableHashSet.empty());
 ```
 
+```typescript title="effect/MutableList"
+(() => {
+  const list = MutableList.make();
+  MutableList.append(list, a);
+  MutableList.prepend(list, b);
+  MutableList.appendAll(list, [1, 2]);
+  MutableList.prependAll(list, [8, 9]);
+  return [MutableList.toArray(list), list.length];
+})();
+(() => {
+  const list = MutableList.make();
+  return [MutableList.take(list) === MutableList.Empty, MutableList.takeAll(list)]; // the first, or Empty when there is none
+})();
+MutableList.takeN(list, 2);
+MutableList.takeNVoid(list, 1);
+MutableList.toArrayN(list, 1);
+MutableList.filter(list, (n, index) => n > 0 && index < 2);
+MutableList.remove(list, a);
+MutableList.clear(list);
+```
+
+```typescript title="effect/Combiner and effect/Reducer"
+// A combiner is a function of two values. A reducer is one with a value to start from.
+Combiner.make((x, y) => x + y).combine(a, b);
+Combiner.flip(Combiner.make((x, y) => x - y));
+Combiner.min(Order.Number);
+Combiner.max(byN);
+Combiner.first();
+Combiner.last();
+Combiner.constant(7);
+Combiner.intercalate("-")(Combiner.make((x, y) => x + y));
+Reducer.make((x, y) => x + y, 0).combineAll([a, b]);
+Reducer.make((x, y) => x * y, 1).initialValue;
+Reducer.make((x, y) => x + y, 0, (all) => Array.fromIterable(all).length);
+Reducer.flip(Reducer.make((x, y) => x - y, 0));
+
+Number.ReducerSum.combineAll([a, b, 1]);
+Number.ReducerMultiply.combineAll([a, b]);
+Number.ReducerMax.combine(a, b);
+Number.ReducerMin.combine(a, b);
+BigInts.ReducerSum.combineAll([BigInt(a), BigInt(b)]);
+BigInts.ReducerMultiply.combineAll([BigInt(a), 2n]);
+BigInts.CombinerMax.combine(BigInt(a), BigInt(b));
+BigInts.CombinerMin.combine(BigInt(a), BigInt(b));
+Boolean.ReducerAnd.combineAll([flag, a > b]);
+Boolean.ReducerOr.combineAll([flag, a > b]);
+String.ReducerConcat.combineAll(["l" + a, "/", "r" + b]);
+Duration.ReducerSum.combineAll([Duration.millis(a + 20), Duration.millis(b + 20)]);
+Duration.CombinerMax.combine(Duration.millis(a + 20), Duration.millis(b + 20));
+Duration.CombinerMin.combine(Duration.millis(a + 20), Duration.millis(b + 20));
+
+Array.makeReducerConcat().combineAll([[a], [b, 1]]);
+Array.getReadonlyReducerConcat().combine([a], [b]);
+Option.makeReducer(sum).combineAll([Option.some(a), Option.none(), Option.some(b)]); // the ones there are
+Option.makeCombinerFailFast(sum); // nothing when one is missing
+Option.makeReducerFailFast(Number.ReducerSum);
+UndefinedOr.makeReducer(sum).combineAll([a, undefined, b]);
+UndefinedOr.makeCombinerFailFast(sum);
+UndefinedOr.makeReducerFailFast(Number.ReducerSum);
+Record.makeReducerUnion(sum).combineAll([{ x: a }, { x: b, y: 1 }]);
+Record.makeReducerIntersection(sum).combine({ x: a, y: 2 }, { x: b });
+Tuple.makeCombiner([sum, Combiner.last()]).combine([a, "l"], [b, "r"]);
+Tuple.makeReducer([Number.ReducerSum, String.ReducerConcat]);
+Struct.makeCombiner({ n: sum, s: Combiner.first() }).combine({ n: a, s: "l" }, { n: b, s: "r" });
+Struct.makeCombiner({ n: sum, m: sum }, { omitKeyWhen: (n) => n === 0 });
+Struct.makeReducer({ n: Number.ReducerSum, s: String.ReducerConcat });
+Newtype.makeCombiner(sum);
+Newtype.makeReducer(Number.ReducerSum);
+```
+
 ```typescript title="effect/MutableHashMap"
 (() => {
   const held = MutableHashMap.make(["a", a]);
@@ -2833,15 +2903,12 @@ A graph and a ring are built by changing one, and a hash of an object is where i
 ```typescript title="Values changed in place, or known by where they are"
 import * as Graph from "effect/Graph";
 import * as HashRing from "effect/HashRing";
-import * as MutableList from "effect/MutableList";
 import * as Hash from "effect/Hash";
 ```
 
-`Combiner` and `Reducer` are made from functions, and `Bytes` works on byte arrays: write the fold.
+`Bytes` works on byte arrays, which are not a value the prover holds.
 
-```typescript title="Made from functions, or working on bytes"
-import * as Combiner from "effect/Combiner";
-import * as Reducer from "effect/Reducer";
+```typescript title="Working on bytes"
 import * as Bytes from "effect/Bytes";
 ```
 
@@ -2858,7 +2925,7 @@ import * as Differ from "effect/Differ";
 import * as PlatformError from "effect/PlatformError";
 import * as Redactable from "effect/Redactable";
 import * as Version from "effect/Version";
-// and effect/Newtype and effect/Brand beyond Newtype.value and Brand.nominal
+// and effect/Newtype and effect/Brand beyond Newtype.value, Newtype.makeCombiner, Newtype.makeReducer and Brand.nominal
 ```
 
 ## Effects and failures
