@@ -360,6 +360,12 @@ export interface FunctionCommonProps extends PlatformProps {
    * @default no limit
    */
   maxExecutionEnvironments?: number;
+  /**
+   * Environment variables of the function. A `Redacted` value (here, or
+   * bound by a capability) is kept out of the function's configuration: it
+   * goes into an SSM SecureString parameter of the function's own, which
+   * the function reads into its environment as it starts.
+   */
   env?: Record<string, any>;
   /**
    * Attach the function to a VPC for private AWS connectivity such as Aurora.
