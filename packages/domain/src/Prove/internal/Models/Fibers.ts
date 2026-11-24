@@ -327,12 +327,12 @@ export const make = (
     (args, site) =>
       Effect.map(made(args, site), (held) => wrap("Schedule", held));
 
-  const count = (name: string, v: V | undefined, site: Site): Eval<number> => {
-    const n = whole(v);
-    return n === undefined
-      ? unseen(site, `calls ${name} without a count the prover can see`)
-      : Effect.succeed(n);
-  };
+  const count = (name: string, v: V | undefined, site: Site): Eval<number> =>
+    Effect.flatMap(kit.picked(v), (n) =>
+      n === undefined
+        ? unseen(site, `calls ${name} without a count the prover can see`)
+        : Effect.succeed(n),
+    );
 
   /** A schedule changed by another function of the module, given first or by `pipe`. */
   const onSchedule = (
@@ -371,12 +371,6 @@ export const make = (
     )
       return wrongArguments(site, name);
     const out: Record<string, unknown> = {};
-    if (fields.times !== undefined && fields.times._tag !== "Undef") {
-      const times = whole(fields.times);
-      if (times === undefined)
-        return unseen(site, `calls ${name} without a count of times the prover can see`);
-      out.times = times;
-    }
     if (fields.schedule !== undefined && fields.schedule._tag !== "Undef") {
       const held = scheduleOf(fields.schedule);
       if (!held) return wrongArguments(site, name);
@@ -390,7 +384,13 @@ export const make = (
           Effect.map((held) => held._tag === "Bool" && held.value),
         );
     }
-    return Effect.succeed(out);
+    if (fields.times === undefined || fields.times._tag === "Undef") return Effect.succeed(out);
+    // A count of times an input decides is each count it can be, a path at a time.
+    return Effect.flatMap(kit.picked(fields.times), (times) =>
+      times === undefined
+        ? unseen(site, `calls ${name} without a count of times the prover can see`)
+        : Effect.succeed({ ...out, times }),
+    );
   };
 
   /** One more run of an effect that is run again: a handler that never stops running it is not read. */

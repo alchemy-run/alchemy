@@ -63,6 +63,14 @@ const rejected = (rejection: V, defect = false) =>
 export const make = (kit: Kit): { readonly models: Models; readonly values: Record<string, V> } => {
   const { host, ran } = kit;
 
+  /** How many items a stream takes or drops: a count the code writes, or a small one an input decides. */
+  const few = (name: string, n: V | undefined, site: Site): Eval<number> =>
+    n?._tag === "Num"
+      ? counted(name, n, site)
+      : Effect.flatMap(kit.picked(n), (count) =>
+          count === undefined ? counted(name, n, site) : Effect.succeed(count),
+        );
+
   let pulls = 0;
   let depth = 0;
 
@@ -701,7 +709,7 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
           ),
     ),
     "effect/Stream:take": over("Stream.take", (self, [n], site) =>
-      Effect.map(counted("Stream.take", n, site), (count) =>
+      Effect.map(few("Stream.take", n, site), (count) =>
         count <= 0
           ? fromChunk([])
           : until(self, (_, index) => Effect.succeed(index === count - 1), false),
@@ -734,7 +742,7 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
       ),
     ),
     "effect/Stream:drop": over("Stream.drop", (self, [n], site) =>
-      Effect.map(counted("Stream.drop", n, site), (count) =>
+      Effect.map(few("Stream.drop", n, site), (count) =>
         count <= 0
           ? self
           : chunked(self, () => {
@@ -767,7 +775,7 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
     ),
     // Everything is gathered, and the last `n` given when the stream ends.
     "effect/Stream:takeRight": over("Stream.takeRight", (self, [n], site) =>
-      Effect.map(counted("Stream.takeRight", n, site), (count) =>
+      Effect.map(few("Stream.takeRight", n, site), (count) =>
         count <= 0
           ? fromChunk([])
           : through(self, (pull) => {
@@ -1330,7 +1338,7 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
           )
         : wrongArguments(site, "Sink.find"),
     "effect/Sink:take": ([n], site) =>
-      Effect.map(counted("Sink.take", n, site), (count) =>
+      Effect.map(few("Sink.take", n, site), (count) =>
         reducingWhile(
           "Sink.take",
           true,

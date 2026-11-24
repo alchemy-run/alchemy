@@ -3090,7 +3090,7 @@ Effect.promise(() => fetch(url));
 Effect.tryPromise(() => fetch(url));
 ```
 
-A handler's sleeps, time limits, races, fibers, queues, transactions and requests are [supported](#time-and-fibers). What is left is a wait that never ends, two waits that end at the same moment, a count or a key an input decides, and the few modules below.
+A handler's sleeps, time limits, races, fibers, queues, transactions and requests are [supported](#time-and-fibers). A count an input decides is read where the input is held between 0 and 64: each count it can be is a path of its own. What is left is a wait that never ends, two waits that end at the same moment, a key an input decides, and the few modules below.
 
 ```typescript title="Time passing and things running together"
 import * as Scheduler from "effect/Scheduler"; // what decides which fiber runs: a proof has its own
@@ -3103,7 +3103,7 @@ permits.take(3);
 Effect.never;
 Effect.race(Effect.as(Effect.sleep(10), a), Effect.as(Effect.sleep(10), b)); // two waits that end at the same moment
 Effect.repeat(effect, { schedule: Schedule.spaced("1 second") }); // an effect run again more than 100 times
-Effect.retry(effect, { times: command.attempts }); // a count an input decides
+Effect.retry(effect, { times: command.attempts }); // a count an input decides, where it may be below 0 or above 64
 Random.next; // a random number drawn with no seed: so is a wait of Schedule.jittered
 Random.next.pipe(Random.withSeed(command.attempts)); // a seed an input decides
 Cache.get(prices, command.item); // a key an input decides: the library finds one by its hash
@@ -3246,7 +3246,7 @@ Every function of `effect/Stream` and `effect/Sink` that is supported is under [
 
 ```typescript title="Not supported"
 Stream.iterate(1, (n) => n + 1).pipe(Stream.runCollect); // a stream with no end: cut it with Stream.take(3)
-Stream.take(stream, command.count); // a count an input decides
+Stream.take(stream, command.count); // a count an input decides, where it may be below 0 or above 64
 Stream.tick("1 second").pipe(Stream.runCollect); // a stream of time with no end: cut it with Stream.take(3)
 Stream.never.pipe(Stream.runCollect); // a stream that gives nothing and does not end
 Stream.merge(paced(3, a), paced(3, b)).pipe(Stream.runCollect); // two items that come at the same moment

@@ -2514,8 +2514,8 @@ const rest: ReadonlyArray<Group> = [
     ],
     unread: [
       // How often is a number the code writes.
-      [`Effect.retry(even(a), { times: b })`, /without a count of times/],
-      [`Effect.retry(even(a), Schedule.recurs(b))`, /without a count the prover can see/],
+      [`Effect.retry(even(a), { times: b - 100 })`, /without a count of times/],
+      [`Effect.retry(even(a), Schedule.recurs(b - 100))`, /without a count the prover can see/],
       [`Effect.retry(even(a), { schedule: { times: 2 } })`, reported],
       // An effect run again with nothing to stop it never ends.
       [`Effect.repeat(Effect.succeed(a), {})`, /runs an effect again more than/],
@@ -2837,6 +2837,11 @@ const rest: ReadonlyArray<Group> = [
     ],
     both: [
       `Stream.tick("1 second").pipe(Stream.take(3), Stream.runCount)`,
+      // A small count an input decides: each count it can be is a path.
+      `Stream.make(1, 2, 3, 4).pipe(Stream.take(Math.abs(a) % 3), Stream.runCollect)`,
+      `Stream.make(1, 2, 3).pipe(Stream.drop(Math.abs(b) % 2), Stream.takeRight(Math.abs(a) % 3), Stream.runCollect)`,
+      `Effect.gen(function* () { const tries = yield* Ref.make(0); const ended = yield* Effect.result(Effect.retry(Effect.flatMap(Ref.updateAndGet(tries, (n) => n + 1), (n) => Effect.fail(n)), { times: Math.abs(a) % 3 })); return [Result.isFailure(ended), yield* Ref.get(tries)]; })`,
+      `Effect.gen(function* () { const runs = yield* Ref.make(0); yield* Effect.repeat(Ref.update(runs, (n) => n + 1), Schedule.recurs(Math.abs(b) % 3)); return yield* Ref.get(runs); })`,
       `Stream.make(a, b, 3).pipe(Stream.throttle({ cost: (chunk) => chunk.length, units: 1, duration: "1 second" }), Stream.runCollect)`,
       `Stream.runCollect(Stream.throttle(Stream.make(a, b), { cost: () => 1, units: 2, duration: 10, burst: 1, strategy: "shape" }))`,
       `Stream.tick(10).pipe(Stream.as(a), Stream.take(2), Stream.runCollect)`,

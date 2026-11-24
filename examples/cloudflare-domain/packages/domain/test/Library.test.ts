@@ -155,10 +155,8 @@ it.effect(
         expect(verdicts.Sample).toMatchObject(bounded("command.readings"));
         // `Stream.iterate` never ends, and `take` cuts it.
         expect(verdicts.Skip).toEqual({ _tag: "Proved" });
-        expect(verdicts.Pad).toMatchObject({
-          _tag: "NotTranslated",
-          reason: "Stream.take is given a count the prover cannot see",
-        });
+        // A count an input decides, held between 1 and 3: each count is a path.
+        expect(verdicts.Pad).toEqual({ _tag: "Proved" });
       }
       agrees(report);
     }).pipe(Effect.provide(NodeServices.layer)),

@@ -259,6 +259,8 @@ const orders = (n: number): number => (n <= 1 ? 1 : n * orders(n - 1));
 
 /** The most items of a hash set or a hash map the prover reads in every order. */
 export const MAX_ORDERED = 4;
+/** The largest count an input may decide where the library takes a number. */
+export const MAX_PICKED = 64;
 
 /** The helpers that need the interpreter. */
 export const make = (host: Host) => {
@@ -279,6 +281,20 @@ export const make = (host: Host) => {
             .call(next, [value], site)
             .pipe(Effect.flatMap((made) => (made._tag === "Effect" ? made.run : invalid)))
         : invalid;
+
+  /**
+   * A count the library is given: one the code writes, or a small one an
+   * input decides. Each value the input allows, up to `MAX_PICKED`, is a path
+   * of its own, since the library takes a number and not a formula.
+   */
+  const picked = (n: V | undefined): Eval<number | undefined> =>
+    Effect.gen(function* () {
+      if (n?._tag === "Num") return Number.isInteger(n.value) && n.value >= 0 ? n.value : undefined;
+      if (n?._tag !== "Term" || n.big === true || n.term.sort !== "Int") return undefined;
+      for (let count = 0; count <= MAX_PICKED; count++)
+        if (yield* host.branch(`(= ${n.term.text} ${count})`)) return count;
+      return undefined;
+    });
 
   /** What the effect a function gives, gives. A function that gives anything else is not one the library runs. */
   const ran = (fn: V, args: ReadonlyArray<V>, site: Site): Eval<V> =>
@@ -461,6 +477,7 @@ export const make = (host: Host) => {
     sorted,
     after,
     ran,
+    picked,
     either,
     itemsOf,
     onArray,
