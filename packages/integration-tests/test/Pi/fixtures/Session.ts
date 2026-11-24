@@ -56,10 +56,21 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
       }),
     );
 
+    // A tool whose handler dies: a bug, or a binding the tool may not use.
+    const Explode = AI.Tool(
+      "explode",
+      {
+        description: "Set off the charge. Call it when asked to.",
+        parameters: Schema.Struct({}),
+        success: Schema.Void,
+      },
+      () => Effect.die(new Error("the charge was wet")),
+    );
+
     const harness = yield* Pi.Harness({
       models: [Fast],
       // `add` and `withdraw` are offered both ways: as direct calls, and from programs.
-      tools: [Add, SaveNote, Withdraw, AI.Glob, Programs],
+      tools: [Add, SaveNote, Withdraw, AI.Glob, Explode, Programs],
       extensions: [Guard],
     });
 
@@ -90,7 +101,7 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
         }),
         create: Effect.fn(function* (
           name: string,
-          tools: ReadonlyArray<"add" | "save_note" | "withdraw" | "glob">,
+          tools: ReadonlyArray<"add" | "save_note" | "withdraw" | "glob" | "explode">,
         ) {
           const conversation = yield* harness.createConversation({
             name,
@@ -101,7 +112,9 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
                   ? Withdraw
                   : tool === "glob"
                     ? AI.Glob
-                    : SaveNote,
+                    : tool === "explode"
+                      ? Explode
+                      : SaveNote,
             ),
             instructions: "You are terse. Use your tools whenever they apply.",
           });
