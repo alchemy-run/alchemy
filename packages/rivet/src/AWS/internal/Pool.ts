@@ -86,9 +86,5 @@ export const resolvePoolNetwork = Effect.fn(function* (
     description: "Rivet nodes",
     egress: [{ ipProtocol: "-1", cidrIpv4: "0.0.0.0/0" }],
   });
-  return Network({
-    vpcId: vpc.vpcId,
-    subnetIds: vpc.publicSubnetIds,
-    securityGroupId: group.groupId,
-  });
+  return Network(vpc, group);
 });

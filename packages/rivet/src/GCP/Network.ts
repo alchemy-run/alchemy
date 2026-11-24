@@ -1,7 +1,8 @@
 import type { Input } from "alchemy/Input";
+import * as Output from "alchemy/Output";
 
 /**
- * A GCP VPC network a control plane's private address is on. Pools that run
+ * A GCP subnetwork a control plane's private address is on. Pools that run
  * nodes on GCP join it and connect to that address.
  */
 export interface Network {
@@ -11,18 +12,30 @@ export interface Network {
   /** The subnetwork nodes run in. */
   readonly subnetwork: Input<string>;
   /** The subnetwork's region, where nodes run unless their pool names one. */
-  readonly region: string;
+  readonly region: Input<string>;
 }
 
 /**
- * A GCP VPC network, for `Rivet.ControlPlane`'s `network`.
+ * A GCP subnetwork, for `Rivet.ControlPlane`'s `network`: a
+ * `GCP.Compute.Subnetwork` the stack declares, or one it looks up.
  *
  * ```typescript
- * network: RivetGCP.Network({
- *   network: "rivet",
- *   subnetwork: "rivet-us-central1",
- *   region: "us-central1",
- * }),
+ * network: RivetGCP.Network(subnetwork),
+ * network: RivetGCP.Network(GCP.Compute.Subnetwork.lookup({ subnetworkName: "default" })),
  * ```
  */
-export const Network = (props: Omit<Network, "kind">): Network => ({ kind: "gcp", ...props });
+export const Network = (subnetwork: {
+  /** The parent network's URL. */
+  readonly network: Input<string>;
+  readonly subnetworkName: Input<string>;
+  readonly region: Input<string>;
+}): Network => ({
+  kind: "gcp",
+  // The subnetwork names its network by URL; nodes take the name.
+  network: (Output.isOutput(subnetwork.network)
+    ? subnetwork.network
+    : Output.literal(subnetwork.network)
+  ).pipe(Output.map((url) => String(url).split("/").pop() ?? "")),
+  subnetwork: subnetwork.subnetworkName,
+  region: subnetwork.region,
+});

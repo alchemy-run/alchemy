@@ -101,14 +101,10 @@ export interface ControlPlaneProps {
  *   endpoint: "https://rivet.example.com",
  *   token: Config.Redacted("RIVET_TOKEN"),
  *   nodeEndpoint: "http://10.0.0.2:6420",
- *   network: RivetGCP.Network({
- *     network: "rivet",
- *     subnetwork: "rivet-us-central1",
- *     region: "us-central1",
- *   }),
+ *   network: RivetGCP.Network(GCP.Compute.Subnetwork.lookup({ subnetworkName: "rivet" })),
  * });
  *
- * // Joins the "rivet" network and connects its nodes to nodeEndpoint.
+ * // Joins the "rivet" subnetwork's network and connects its nodes to nodeEndpoint.
  * export const Default = RivetGCP.CloudRunPool("Default").pipe(Layer.provide(Cluster));
  * ```
  *

@@ -118,7 +118,7 @@ export const SwarmControlPlane = (
         nodeEndpoint: "http://rivet-engine:6420",
         // `localhost` is the deploying machine's; callers run on the network.
         clientEndpoint: "http://rivet-engine:6420",
-        network: Network({ name: network.name }),
+        network: Network(network),
         token: token.text,
         namespace: namespace.name,
       };

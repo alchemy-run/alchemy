@@ -10,5 +10,15 @@ export interface Network {
   readonly name: Input<string>;
 }
 
-/** A Docker network, for `Rivet.ControlPlane`'s `network`. */
-export const Network = (props: Omit<Network, "kind">): Network => ({ kind: "docker", ...props });
+/**
+ * A Docker network, for `Rivet.ControlPlane`'s `network`: a
+ * `Docker.Network` the stack declares, or one it looks up.
+ *
+ * ```typescript
+ * network: RivetDocker.Network(Docker.Network.lookup({ name: "compose_default" })),
+ * ```
+ */
+export const Network = (network: { readonly name: Input<string> }): Network => ({
+  kind: "docker",
+  name: network.name,
+});

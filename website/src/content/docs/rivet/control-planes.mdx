@@ -89,10 +89,10 @@ export const Cluster = Rivet.ControlPlane("Rivet", {
   endpoint: "https://rivet.example.com",
   token: Config.Redacted("RIVET_TOKEN"),
   nodeEndpoint: "http://10.0.0.2:6420",
-  network: RivetGCP.Network({ network: "rivet", subnetwork: "rivet-us-central1", region: "us-central1" }),
+  network: RivetGCP.Network(GCP.Compute.Subnetwork.lookup({ subnetworkName: "rivet" })),
 });
 ```
 
-`RivetGCP.CloudRunPool` and `RivetGCP.ComputeEnginePool` join a `RivetGCP.Network`. See [GCP](/rivet/gcp#on-cloud-run).
+`RivetGCP.CloudRunPool` and `RivetGCP.ComputeEnginePool` join a `RivetGCP.Network`, made from a `GCP.Compute.Subnetwork` your stack declares or looks up. See [GCP](/rivet/gcp#on-cloud-run).
 
 Next, [Pool](/rivet/pools): the nodes that run your code.

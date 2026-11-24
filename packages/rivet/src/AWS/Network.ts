@@ -15,14 +15,22 @@ export interface Network {
 }
 
 /**
- * An AWS VPC, for `Rivet.ControlPlane`'s `network`.
+ * An AWS VPC, for `Rivet.ControlPlane`'s `network`: an `EC2.Network`, whose
+ * public subnets nodes run in, and the security group they run with.
  *
  * ```typescript
- * network: RivetAWS.Network({
- *   vpcId: vpc.vpcId,
- *   subnetIds: vpc.publicSubnetIds,
- *   securityGroupId: nodes.groupId,
- * }),
+ * network: RivetAWS.Network(vpc, nodeGroup),
  * ```
  */
-export const Network = (props: Omit<Network, "kind">): Network => ({ kind: "aws", ...props });
+export const Network = (
+  vpc: {
+    readonly vpcId: Input<string>;
+    readonly publicSubnetIds: ReadonlyArray<Input<string>>;
+  },
+  securityGroup: { readonly groupId: Input<string> },
+): Network => ({
+  kind: "aws",
+  vpcId: vpc.vpcId,
+  subnetIds: vpc.publicSubnetIds,
+  securityGroupId: securityGroup.groupId,
+});

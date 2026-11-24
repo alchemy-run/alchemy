@@ -323,11 +323,7 @@ export const ComputeEngineControlPlane = (id: string, props: ComputeEngineContro
       });
       return {
         endpoint,
-        network: Network({
-          network: network.networkName,
-          subnetwork: subnet.subnetworkName,
-          region,
-        }),
+        network: Network(subnet),
         token: token.text,
         namespace: namespace.name,
       };

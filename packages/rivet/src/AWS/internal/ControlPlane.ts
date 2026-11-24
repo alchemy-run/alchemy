@@ -431,11 +431,7 @@ export const makeControlPlane = <Req>(
         endpoint,
         // Nodes in the VPC skip CloudFront.
         nodeEndpoint: Output.interpolate`http://${loadBalancer.dnsName}`,
-        network: Network({
-          vpcId: network.vpcId,
-          subnetIds: network.publicSubnetIds,
-          securityGroupId: nodeGroup.groupId,
-        }),
+        network: Network(network, nodeGroup),
         token: token.text,
         namespace: namespace.name,
       };
