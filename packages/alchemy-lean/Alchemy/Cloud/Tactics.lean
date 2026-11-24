@@ -108,4 +108,26 @@ macro_rules
         cases c <;> simp only [$decide:ident] at eq <;> (repeat' split at eq) <;>
           grind [$params,*]))
 
+/--
+Proves a property of what commands do to the state, such as `Idempotent` or
+`Commute`: `command_law [decide, evolve]`. It takes each command and each way
+`decide` can answer it.
+-/
+syntax "command_law" " [" ident,+ "]" : tactic
+
+open Lean in
+macro_rules
+  | `(tactic| command_law [$names,*]) => do
+    let unfolded := #[mkIdent ``Alchemy.Aggregate.step, mkIdent ``Alchemy.Aggregate.apply]
+      ++ names.getElems
+    let params ← unfolded.mapM fun name => `(Lean.Parser.Tactic.simpLemma| $name:ident)
+    let grinds ← unfolded.mapM fun name => `(Lean.Parser.Tactic.grindParam| $name:ident)
+    `(tactic| (
+        simp only [Alchemy.Aggregate.Idempotent, Alchemy.Aggregate.IdempotentAt,
+          Alchemy.Aggregate.Commute]
+        intros
+        first
+          | (rename_i c _ _; cases c <;> simp [$params,*] <;> (repeat' split) <;> grind [$grinds,*])
+          | (simp [$params,*] <;> (repeat' split) <;> grind [$grinds,*])))
+
 end Alchemy

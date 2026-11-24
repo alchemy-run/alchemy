@@ -239,6 +239,26 @@ theorem aWithdrawalAnswersWhatIsLeft (id owner : String) (held amount : Nat) :
       = held - amount := by
   simp [Aggregate.after, Aggregate.apply, Account.reply, Account.evolve]
 
+/-! ## General properties of the commands -/
+
+/-- Freezing and closing are idempotent: doing either twice is doing it once. -/
+theorem freezingIsIdempotent (id reason : String) : Account.IdempotentAt (.freeze id reason) := by
+  command_law [Account.decide, Account.evolve]
+
+theorem closingIsIdempotent (id : String) : Account.IdempotentAt (.close id) := by
+  command_law [Account.decide, Account.evolve]
+
+/-- A deposit is not: sent twice, the money arrives twice. A caller must not retry it blindly. -/
+theorem aDepositIsNotIdempotent (id : String) : ¬Account.IdempotentAt (.deposit id 1) := by
+  intro idempotent
+  have := idempotent ⟨(), 0⟩ { status := .open }
+  simp [Aggregate.step, Aggregate.apply, Account.decide, Account.evolve] at this
+
+/-- Two deposits commute: the order they arrive in does not matter. -/
+theorem depositsCommute (id other : String) (amount more : Nat) :
+    Account.Commute (.deposit id amount) (.deposit other more) := by
+  command_law [Account.decide, Account.evolve]
+
 /-! ## 3. Invariants: what no command can break
 
 A behaviour theorem is about one history. An invariant is about every state an

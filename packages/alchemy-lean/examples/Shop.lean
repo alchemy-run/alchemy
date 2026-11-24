@@ -153,6 +153,21 @@ theorem aDeclinedOrderIsNeverCharged (id item reason charge : String) (amount : 
       = .error .notAwaitingPayment := by
   simp [Aggregate.after, Aggregate.apply, Order.decide, Order.evolve]
 
+/-! ## General properties
+
+Some facts are not about one scenario but about the shape of the aggregate.
+-/
+
+/--
+Every order command is idempotent: sent twice in a row, it leaves what it
+leaves sent once. So a caller who is not sure a command arrived can send it again.
+-/
+theorem everyOrderCommandIsIdempotent : Order.Idempotent := by
+  command_law [Order.decide, Order.evolve]
+
+theorem schedulingIsIdempotent : Shipment.Idempotent := by
+  command_law [Shipment.decide, Shipment.evolve]
+
 /-! ## Behaviour across the model
 
 The same shape, but the "when" is now a run of the whole shop: commands sent,

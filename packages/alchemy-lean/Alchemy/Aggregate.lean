@@ -100,6 +100,20 @@ theorem Keeps.replay {a : Aggregate} {P : a.State → Prop} (kept : a.Keeps P)
   | nil => intro s h; exact h
   | cons c cs ih => intro s h; exact ih _ (kept.step c.1 s c.2 h)
 
+/--
+A command is idempotent: sent twice in a row, it leaves what it leaves sent
+once. A caller who is not sure the first one arrived can send it again.
+-/
+def IdempotentAt (c : a.Command) : Prop :=
+  ∀ ctx s, a.step ctx (a.step ctx s c) c = a.step ctx s c
+
+/-- Every command is idempotent. -/
+def Idempotent : Prop := ∀ c, a.IdempotentAt c
+
+/-- Two commands commute: either order leaves the same state. -/
+def Commute (c d : a.Command) : Prop :=
+  ∀ ctx s, a.step ctx (a.step ctx s c) d = a.step ctx (a.step ctx s d) c
+
 /-- A rule every state of an aggregate satisfies, with its proof. -/
 structure Invariant (a : Aggregate) where
   name : String
