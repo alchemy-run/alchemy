@@ -2525,6 +2525,28 @@ const shapes: ReadonlyArray<Group> = [
       [`versionOf(text)._tag`, /what versionOf returned/],
     ],
   },
+  {
+    // `pipe(value, f, g)` and `value.pipe(f, g)`, on each kind of value that has one.
+    name: "Pipe",
+    ...numbers,
+    both: [
+      `pipe(a)`,
+      `pipe(a, (n) => n + 1, (n) => n * b)`,
+      `pipe(a, Number.sum(b), Number.multiply(2), Number.increment)`,
+      `pipe(a, (n) => pipe(n, Number.sum(b)), Number.decrement)`,
+      `flow((n) => n + 1, Number.multiply(b))(a)`,
+      `Option.some(a).pipe(Option.map((n) => n + b), Option.filter((n) => n > 0), Option.getOrElse(() => 0))`,
+      `halved(a).pipe(Result.map((n) => n + b), Result.getOrElse(() => -1))`,
+      `Duration.seconds(a).pipe(Duration.sum(Duration.millis(b)), Duration.toMillis)`,
+      `decimal(a).pipe(BigDecimal.sum(fee), BigDecimal.isGreaterThan(decimal(b)))`,
+      `ratio(a).pipe(Rational.sum(third), Rational.isGreaterThan(ratio(b)))`,
+      `Redacted.make(a).pipe(Redacted.value)`,
+      `new Point({ x: a, y: b }).pipe((point) => point.x - point.y)`,
+      `HashSet.make(a, b).pipe(HashSet.add(1), HashSet.has(a))`,
+      `HashMap.make(["x", a]).pipe(HashMap.set("y", b), HashMap.get("y"))`,
+      `Match.value(a).pipe(Match.when((n) => n > b, () => "more"), Match.orElse(() => "less"))`,
+    ],
+  },
 ];
 
 export const groups: ReadonlyArray<Group> = [

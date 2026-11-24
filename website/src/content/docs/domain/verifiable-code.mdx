@@ -539,6 +539,32 @@ const decimal = (n: number) => BigDecimal.fromNumberUnsafe(n);
 const noon = DateTime.makeUnsafe(43200000);
 ```
 
+```typescript title="pipe"
+// pipe(value, f, g), with any number of steps
+pipe(a);
+pipe(a, (n) => n + 1, (n) => n * b);
+pipe(a, Number.sum(b), Number.multiply(2), Number.increment);
+pipe(a, (n) => pipe(n, Number.sum(b)), Number.decrement);
+flow((n: number) => n + 1, Number.multiply(b))(a);
+
+// value.pipe(f, g), on every value of Effect that has it
+Effect.succeed(a).pipe(Effect.map((n) => n + 1), Effect.flatMap(even), Effect.result);
+Stream.make(a, b).pipe(Stream.map((n) => n + 1), Stream.runCollect);
+Option.some(a).pipe(Option.map((n) => n + b), Option.filter((n) => n > 0), Option.getOrElse(() => 0));
+halved(a).pipe(Result.map((n) => n + b), Result.getOrElse(() => -1));
+Duration.seconds(a).pipe(Duration.sum(Duration.millis(b)), Duration.toMillis);
+at.pipe(DateTime.addDuration(wait), DateTime.toEpochMillis);
+decimal(a).pipe(BigDecimal.sum(fee), BigDecimal.isGreaterThan(decimal(b)));
+ratio(a).pipe(Rational.sum(third), Rational.isGreaterThan(ratio(b)));
+Redacted.make(a).pipe(Redacted.value);
+new Point({ x: a, y: b }).pipe((point) => point.x - point.y);
+HashSet.make(a, b).pipe(HashSet.add(1), HashSet.has(a));
+HashMap.make(["x", a]).pipe(HashMap.set("y", b), HashMap.get("y"));
+Match.value(a).pipe(Match.when((n) => n > b, () => "more"), Match.orElse(() => "less"));
+cell.pipe(Ref.updateAndGet((n) => n + 1)); // a Ref, a SynchronizedRef and a SubscriptionRef
+Schema.String.pipe(Schema.brand("AccountId"));
+```
+
 ```typescript title="effect/Effect"
 Effect.Do.pipe(
   Effect.bind("x", () => Effect.succeed(a)),
@@ -2185,7 +2211,7 @@ import * as Types from "effect/Types";
 import * as HKT from "effect/HKT";
 import * as Unify from "effect/Unify";
 import * as Utils from "effect/Utils";
-import * as Pipeable from "effect/Pipeable";
+import * as Pipeable from "effect/Pipeable"; // the type behind `.pipe`, which is supported: see "pipe" above
 import * as Effectable from "effect/Effectable";
 import * as Differ from "effect/Differ";
 import * as PlatformError from "effect/PlatformError";
