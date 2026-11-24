@@ -1,82 +1,251 @@
 # alchemy-lean
 
-A domain model in [Lean 4](https://lean-lang.org): aggregates, decisions, views, policies, sagas and models as values, rules as theorems, and stories the compiler runs. A prototype, not a published package.
-
-`examples/Bank` is the bank from `examples/cloudflare-domain`, block for block.
-
-## The library
-
-| File | What it holds |
-|---|---|
-| `Alchemy/Aggregate.lean` | `Aggregate` (`decide`, `evolve`, `reply`), a rule a command keeps (`Keeps`), a rule about one command (`Transition`), and `Invariant`, a rule with its proof |
-| `Alchemy/Signature.lean` | What a model is made of: its aggregates, the calls it makes to outside systems, and its sagas |
-| `Alchemy/Program.lean` | What a policy or a saga does, as data: send, call, wait for a signal, register a compensation, start or signal a saga, schedule. It is a monad, so a saga is a `do` block |
-| `Alchemy/View.lean` | `View`, `Projection`, `Stream` and `Query`, each a function of the log, each with who may read it |
-| `Alchemy/Model.lean` | `Decision`, `Policy`, `Model`, the `World`, and `Step`: everything a deployed model can do. `Model.invariant` and `Model.always` carry a rule to every world the model can reach |
-| `Alchemy/Engine.lean` | An engine that runs a model in memory, with a proof that everything it does is a `Step` |
-| `Alchemy/Story.lean` | Stories for one aggregate and for a model, checked by `decide` |
-| `Alchemy/Check.lean` | A search for the shortest sequence of moves that breaks a rule |
-| `Alchemy/Api.lean` | What one audience may send and read |
-| `Alchemy/Host.lean` | Serves a model over HTTP and keeps it in a journal file |
-| `Alchemy/Html.lean` | Pages as values: a page is a function of the model, and a form sends a command |
-
-## Check it
+Alchemy in [Lean 4](https://lean-lang.org): a domain model, the stack that hosts it, and proofs about both, in one language. A rule is a theorem, so the file does not compile unless the rule holds. A prototype, not a published package.
 
 ```sh
 curl https://elan.lean-lang.org/elan-init.sh -sSf | sh
-lake build                           # proves every rule, runs every story and every search
-lake exe bank bank.journal 8787      # serves http://127.0.0.1:8787, kept in bank.journal
+lake build        # proves every theorem and runs every story
 ```
 
-## The server
+`Alchemy.lean` is the library's entry point, like an `index.ts`: it only imports the modules, so that `import Alchemy` gives a file all of them. A program, the counterpart of `alchemy.run.ts`, is a file under `examples/`. Start with `examples/Shop.lean`.
 
-`lake exe bank` serves the bank from `examples/Bank/Server.lean`. Everything that changes it is written to the journal before it is applied: each request that became a move, each answer an outside system gave, and each time the clock moved. The engine is a function, so replaying the journal at the start gives back the same world, with every saga where it stood.
+## A domain model
 
-- `POST /commands` sends a command: `{"as": "customer:c-1", "type": "DepositMoney", "accountId": "c-1-main", "amount": 100}`. It answers with what was recorded and the reply, or `409` with the rejection.
-- `GET /accounts/:id/summary`, `/statement`, `/ledger?take=`, `/card`, `/customers/:id/dashboard` and `/transfers/:id` read as whoever `?as=` says, and answer `403` to a caller the view refuses.
-- `GET /app?as=customer:c-1` is a customer's page and `/app?as=agent:support-7` an agent's (`examples/Bank/Web.lean`). Each page is a function of the bank and of who is looking, through the same guarded views; each form sends a command through the same Apis. A page stays live: it watches `/version` and loads again when anything is recorded.
+Each aggregate is a namespace with its `Command`, `Event`, `Rejection` and `State` types and its `key`, `decide` and `evolve` functions. One `model` block declares the rest:
 
-The Apis decide what each caller may send. The clock follows the wall clock, so the daily limit and the approval window run in real time.
+```lean
+model Bank where
+  aggregate Account
 
-For each call the bank waits on, the server asks the service at `FRAUD_URL` or `PAYMENTS_URL` (with curl), and writes the answer to the journal, so a replay never asks again. With neither set, stand-ins answer.
+  call screen (account : String) (amount : Nat) : Screening
+  call wire (payout account : String) (amount : Nat) : WireResult
 
-## What `Step` covers
+  -- decided across two accounts at once: both record it, or neither does
+  decision Transfer (TransferRequest) : TransferRefused
+    | accounts, ⟨source, destination, amount⟩ =>
+      if (Account.of accounts source).balance < amount then
+        .error (.insufficientFunds (Account.of accounts source).balance amount)
+      else .ok [
+        Account.record source (.transferredOut amount),
+        Account.record destination (.transferredIn amount)]
 
-A caller sends a command. A decision records on several instances. An event reaches the policies in any order, or a second time. A policy or a saga takes its next step, whichever one is ready. An outside system answers a call with anything its type allows. Time passes. A scheduled command that is due fires.
+  -- steps, with an undo if a later one fails
+  saga Payout (PayoutRequest) (Unit) : PayoutFailed
+    | payout, ⟨account, amount⟩ => do
+      Account.must (.withdraw account amount) fun _ => .refused
+      Account.undoWith (.deposit account amount)
+      match ← wire payout account amount with
+      | .sent => pure ()
+      | .bounced => failWith .bounced
 
-A rule proved for every `Reachable` world holds whatever order those happen in.
+  policy Compliance on Account
+    | id, .deposited amount => do
+      if amount ≥ 10000 then
+        match ← screen id amount with
+        | .flagged reason => Account.send (.freeze id reason)
+        | .clear => pure ()
 
-## What is proved about the bank
+  view Holdings on Account : Int := 0
+    | total, .deposited amount => total + amount
+    | total, .withdrawn amount => total - amount
 
-- **Every instance, in every reachable world:** no account withdraws more than the daily limit, and every transfer is between two different accounts (`everyInstanceKeepsItsRules`).
-- **Across instances, in every reachable world:** whoever a username is claimed for is registered under it, and the other way round, so no two customers hold one name (`namesAlwaysMatch`, `noTwoCustomersHoldOneName`).
-- **About one command:** a closed account stays closed; money leaves only by a withdrawal or a transfer's debit; only an agent changes an owner; a frozen account pays nothing out; a transfer that ended stays as it ended; only an agent approves; expiry beats a late approval; a transfer that waits can always expire.
-- **About the registration decision:** the name goes to who registered, only a free name is claimed, and a claimed name stays with its holder.
-- **About the bank once it has settled:**
-  - Every cent a transfer takes out of an account is paid into another, paid back, or recorded as stranded (`transfersLoseNoMoney` in `examples/Bank/Money.lean`). While a saga's run is part-way through, the difference is exactly what the runs still owe (`alwaysBalanced`). This holds for callers who send what the Apis offer.
-  - Every transfer that was asked for has completed or failed, so none is left pending (`everyTransferEnds`, `noTransferLeftPending` in `examples/Bank/Pending.lean`). This holds whatever callers send.
-  - Both proofs follow the ExecuteTransfer saga through each of its steps. "Settled" means every event is delivered and no policy or saga is part-way through or waiting. That the bank gets there, and does not stay busy for ever, is not proved.
-- **About the ledger:** it has exactly one row for each money movement the accounts record, whatever the bank did (`ledgerIsGivenEveryMovement`).
-- **Sometimes:** some reachable world has a customer with money, with the story as the witness (`anAccountCanHoldMoney`).
-- **Stories:** twenty, the ones in `Bank.story.test.ts`, each run when the file compiles.
-
-Each rule about an aggregate is two lines: a case split and `grind`.
-
-## What is also checked by search
-
-`Bank/Search.lean` runs every sequence of up to four of eight moves with compiled code (`native_decide`) and checks the settled-bank rules in each, the money rule again with events delivered twice, and that once the approval window closes every transfer has ended. A rule that is false gives the shortest sequence that breaks it.
-
-## Run it in a container
-
-```sh
-docker build -t lean-bank .
-docker run -p 8787:8787 -v bank:/data lean-bank
+  projection Statement on Account : String × String × Nat
+    | id, .deposited amount => [(id, "deposit", amount)]
 ```
 
-The journal is on the volume, so the bank survives the container. An alchemy stack can build and run the same Dockerfile, for example `Fly.Service("Bank", { context: "packages/alchemy-lean", port: 8787 })`; that stack is not written or deployed here, and it needs a volume at `/data` to keep the journal.
+The block covers aggregates keyed by a string, outside calls, policies, decisions, one saga, a view that folds one value over one aggregate, and projections. Keyed views, streams, queries and actors are written without it, as `examples/Bank` does.
 
-## Not built
+## What you prove about it
 
-- A cloud host of its own: the server is one process with one journal file. It runs in a container, not on Durable Objects or a cluster.
-- A proof that the bank always settles: that every saga step and reaction eventually runs.
-- A reader for existing TypeScript models.
+**Behaviour of one aggregate.** Given these events, when this command arrives, then this happens, for every id and amount:
+
+```lean
+theorem anOverdraftIsRefused (id owner : String) (held amount : Nat) (tooMuch : held < amount) :
+    Account.decide (Account.after [.opened owner, .deposited held]) (.withdraw id amount)
+      = .error (.insufficientFunds held amount)
+```
+
+**An invariant.** A fact about the state that no accepted command breaks. `aggregate_rule` takes each command and each branch of `decide`:
+
+```lean
+def Balanced (s : Account.State) : Prop := s.balance + s.withdrawn = s.deposited
+
+theorem balanced_kept : Account.Keeps Balanced := by
+  aggregate_rule [Account.decide, Account.evolve, Balanced]
+```
+
+**In every world the model can reach, and as deployed.** `Account.always` and `Account.deployed` come with the model. Whatever callers send, whatever the outside systems answer, in any order of delivery, with any event delivered twice:
+
+```lean
+theorem everyAccountBalanced (w : World Signature) (reach : Bank.Reachable w) (id : String) :
+    Balanced (w.state .Account id) :=
+  Account.always (by simp [Balanced]) balanced_kept w reach id transfer_balanced
+```
+
+**Across aggregates.** A rule about the whole record, proved by showing no command and no decision breaks it:
+
+```lean
+theorem noTransferCreatesMoney (w : World Signature) (reach : Bank.Reachable w) :
+    Conserved w.toRecorded
+```
+
+**Behaviour of a whole flow.** A scenario is a list of moves: commands sent, decisions made, outside calls answered, time passing. `behaviour` proves the claim by running the model with its variables left as they are:
+
+```lean
+def aPayoutBounces (id owner payout : String) (held amount : Nat) : List (Model.Move Bank) := [
+  .send ⟨.Account, (), .open id owner⟩,
+  .send ⟨.Account, (), .deposit id held⟩,
+  .send ⟨.Account, (), .requestPayout id payout amount⟩,
+  .answer (.wire payout id amount) .bounced]
+
+theorem aBouncedPayoutIsRefunded (id owner payout : String) (held amount : Nat)
+    (some : amount ≠ 0) (enough : amount ≤ held) (modest : held < 10000) :
+    let bank := Bank.run (aPayoutBounces id owner payout held amount)
+    (bank.state .Account id).balance = held ∧ bank.sagas payout = .failed .bounced
+```
+
+**Reads.** Each view and projection comes with a theorem that it equals its definition over the log: `Holdings.exact`, `Statement.exact`.
+
+## Stories
+
+A story is a test the compiler runs: one case with real values, every step visible. It can follow the same scenario a theorem is about; `.next` makes the scenario's next move:
+
+```lean
+example : Bank.follows (aPayoutBounces "a-1" "Sam" "p-1" 500 200) [
+    .next 3,
+    .call (.wire "p-1" "a-1" 200),
+    .state .Account "a-1"
+      { status := .open, owner := "Sam", balance := 300, deposited := 500, withdrawn := 200 },
+    .next,
+    .saga "p-1" (.failed .bounced),
+    .recorded .Account "a-1" [.opened "Sam", .deposited 500, .payoutRequested "p-1" 200,
+      .withdrawn 200, .deposited 200]
+  ] = true := by decide
+```
+
+A story shows the behaviour is the one you meant. A theorem shows it always holds.
+
+## Two models together
+
+A `Link` says which of one model's calls another model answers. What was proved of each holds of both with no new proof, and `behaviour` proves flows across the two (`examples/Linked.lean`):
+
+```lean
+def screening : Link Bank Compliance where
+  ask
+    | .screen account amount => some ⟨.Watch, (), .assess account amount⟩
+    | .wire .. => none
+  reply …
+
+theorem aReportableDepositFreezesTheAccount (id owner : String) (amount : Nat)
+    (reportable : amount ≥ 50000) :
+    let both := screening.run [
+      .send ⟨.Account, (), .open id owner⟩,
+      .send ⟨.Account, (), .deposit id amount⟩]
+    (both.1.state .Account id).status = .frozen "over the reporting threshold" ∧
+      both.2.state .Watch id = { assessed := 1, flagged := 1 }
+```
+
+## A stack
+
+A host is a `do` block. A binding is a step that gives a client and adds its grant to the host's role. Consuming a queue is a step that registers the host as the consumer. Nobody writes the role (`examples/Shop.lean`):
+
+```lean
+def Api (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
+  Lambda.Function "Api" { url := true } do
+    let journal ← S3.Journal orders
+    let queue ← SQS.SendMessage shipments
+    return route (served.host journal (outside queue))
+
+def Warehouse (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
+  Lambda.Function "Warehouse" {} do
+    let slips ← S3.PutObject orders ["packed"]
+    SQS.consume shipments fun shipment => do …
+    return fun _ => return { status := 204 }
+
+def ShopStack : Stack Kind Outputs where
+  name := "Shop"
+  body := do
+    let orders ← S3.Bucket "Orders"
+    let shipments ← SQS.Queue "Shipments"
+    let api ← Api orders shipments
+    let warehouse ← Warehouse orders shipments
+    return { orders, shipments, api, warehouse }
+```
+
+`served.host journal …` hosts a domain model: every command and every outside answer is written to the journal before it is applied.
+
+There is a small AWS (S3, SQS, Lambda) and a small Cloudflare (R2, Queues, Workers with `fetch`, typed RPC and `Queues.consume`; `examples/Inbox.lean`). Both run in memory. An engine plans and applies an AWS stack against a model of the control plane.
+
+## What you prove about a stack
+
+**Who can do what**, in the stack's own words. `only`, `nobody`, `never` and `may`, over `S3.writing`, `S3.reading`, `S3.listing`, `SQS.sending`, `SQS.receiving`, `Lambda.invoking`. Each covers every key under its prefix:
+
+```lean
+theorem onlyTheApiWritesHistory :
+    prod.only [out.api] (S3.writing out.orders ["journal"]) := by
+  stack_rule in prod using [out, BucketOp.covers]
+
+theorem theWarehouseReadsNothing :
+    prod.never out.warehouse (S3.reading out.orders) := by
+  stack_rule in prod using [out, BucketOp.covers]
+```
+
+**Least privilege.** Every call a host makes is inside its role, because a call outside it does not type check. And no host holds a grant it never uses; the stories are the runs that show each grant used:
+
+```lean
+theorem leastPrivilege : prod.LeastPrivilege InMemory :=
+  .of_stories [anOrder] (by native_decide)
+```
+
+**Behaviour of a function, for every request.** Given what the bucket holds, when a request arrives, then this is the response and this is what the bucket holds afterwards:
+
+```lean
+theorem gettingAnOrder (id : String) (cloud : Memory) :
+    (getOrder (theShop le queue) id).eval InMemory cloud
+      = (.ok (describe ((shopIn orders cloud).state .Order id)), cloud)
+```
+
+These are proved from the laws of the bindings. Each AWS binding states what a call answers and what it does to the cloud (`Alchemy/Cloud/AWSLaws.lean`), and its implementation is proved to keep that law.
+
+**Deploying.** The plan for a fresh account, that a second deploy changes nothing, and that a deploy leaks no resource, against the model of AWS.
+
+## The examples
+
+| File | What it shows |
+|---|---|
+| `examples/Wallet.lean` | The smallest: one aggregate, one invariant, one story |
+| `examples/Accounts.lean` | A bank built up in steps: behaviour, invariants, a transfer across accounts, a saga, stories beside theorems |
+| `examples/Linked.lean` | That bank linked to a compliance model |
+| `examples/Shop.lean` | A model on an AWS stack, end to end, with access and request theorems |
+| `examples/Inbox.lean` | Cloudflare Workers: bindings, a queue consumer, `fetch` and RPC |
+| `examples/Jobs.lean` | The earlier style: services, Layers and `Effect` with typed errors |
+| `examples/Bank/` | A larger bank, written before the `model` block: keyed views, streams, queries, actors, and proofs that transfers lose no money and always end |
+
+`lake exe bank bank.journal 8787` serves `examples/Bank` over HTTP from one process, kept in a journal file.
+
+## The library
+
+| Path | What it holds |
+|---|---|
+| `Alchemy/Aggregate.lean`, `Signature.lean`, `Program.lean`, `View.lean`, `Model.lean` | The domain model: aggregates, policies and sagas as data, views, decisions, and every step a model can take |
+| `Alchemy/Engine.lean`, `Story.lean`, `Check.lean` | Running a model, stories, and a search for the shortest run that breaks a rule |
+| `Alchemy/Syntax.lean` | The `model … where` block |
+| `Alchemy/Behaviour.lean` | The `behaviour` tactic |
+| `Alchemy/Compose.lean` | `Link`: two models, one answering the other's calls |
+| `Alchemy/Cloud/Access.lean`, `Run.lean`, `Graph.lean`, `Host.lean` | Access, code that runs under a role, the resource graph, and a host's block |
+| `Alchemy/Cloud/Hosted.lean`, `HostedLaws.lean` | A model run by a host, and the proofs about it |
+| `Alchemy/Cloud/Laws.lean`, `AWSLaws.lean`, `AWSJournal.lean` | Stepping through code, the AWS bindings' laws, and the journal on S3 |
+| `Alchemy/Cloud/Sim.lean`, `Tactics.lean` | Stories for a stack, least privilege, `access`, `stack_rule`, `aggregate_rule` |
+| `Alchemy/Cloud/AWS.lean`, `Cloudflare.lean` | The two small clouds |
+| `Alchemy/Cloud/Engine.lean`, `Provider.lean`, `AWSControl.lean`, `SQSQueue.lean` | Plan and apply, providers, and their proofs |
+| `Alchemy/Cloud/Effect.lean`, `Layer.lean` | Services, Layers and typed errors |
+
+## Limits
+
+- Every proof about a stack is against a model of the cloud held in memory. Nothing here deploys to a real account.
+- A host handles one request at a time, by design. The laws describe one call running alone.
+- The request theorems assume JSON written to the journal reads back as written; that round trip is not proved.
+- "Nothing bad happens" is routine. "Something good eventually happens" is proved once, in `examples/Bank/Pending.lean`.
+- A decision cannot be sent through a hosted function; hosting takes commands only.
+- A link joins two models, one way.
+- The Cloudflare bindings have no laws and no access vocabulary yet.
