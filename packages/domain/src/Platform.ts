@@ -10,11 +10,11 @@ import type { ReplayInput, ReplayResult } from "./CatchUp.ts";
 import type * as Decision from "./Decision.ts";
 import { ModelHostedTwice } from "./DefinitionError.ts";
 import { DefinitionError } from "./internal.ts";
+import type { KeyStore } from "./KeyStore.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
 import type * as DomainStream from "./Stream.ts";
 import { TraceJson } from "./Telemetry.ts";
-import type { KeyStore } from "./Vault.ts";
 import type * as View from "./View.ts";
 
 /**

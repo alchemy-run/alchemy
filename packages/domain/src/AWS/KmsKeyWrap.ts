@@ -5,7 +5,8 @@ import type { Key } from "@alchemy.run/aws/KMS/Key";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import { fromBase64, KeyWrap, toBase64, VaultError } from "../Vault.ts";
+import { fromBase64, KeyWrap, toBase64 } from "../KeyWrap.ts";
+import { VaultError } from "../VaultError.ts";
 
 const KMS = "kms.";
 

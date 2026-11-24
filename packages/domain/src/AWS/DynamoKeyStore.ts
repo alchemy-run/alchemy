@@ -5,7 +5,8 @@ import type { Table } from "@alchemy.run/aws/DynamoDB/Table";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { KeyStore, VaultError } from "../Vault.ts";
+import { KeyStore } from "../KeyStore.ts";
+import { VaultError } from "../VaultError.ts";
 
 /**
  * A Vault's keys in a DynamoDB table, one item per subject. The table's

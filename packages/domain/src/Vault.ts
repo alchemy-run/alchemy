@@ -1,12 +1,11 @@
-import type { RuntimeContext } from "alchemy/RuntimeContext";
-import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import { Platform } from "./Platform.ts";
+import { VaultError } from "./VaultError.ts";
+
+export { VaultError } from "./VaultError.ts";
 
 /**
  * A value encrypted under one subject's key. It names the subject and holds
@@ -41,7 +40,8 @@ export type AnySealed = SealedSchema<Schema.Top>;
 
 const PLAIN = "plain.";
 const CLEAR = "clear.";
-const AES = "v1.";
+/** The prefix of a box sealed with AES-256-GCM. @internal */
+export const AES = "v1.";
 
 /** Whether a sealed value is still plain text: made with `plain`, and not yet through a command. */
 export const isPlain = (sealed: SealedJson): boolean => sealed.box.startsWith(PLAIN);
@@ -55,7 +55,9 @@ export const isPlain = (sealed: SealedJson): boolean => sealed.box.startsWith(PL
  * ```typescript
  * import * as Domain from "@alchemy.run/domain";
  * import * as Schema from "effect/Schema";
-import { Platform } from "./Platform.ts";
+import { VaultError } from "./VaultError.ts";
+
+export { VaultError } from "./VaultError.ts";
  *
  * export const Name = Domain.Sealed(Schema.String);
  *
@@ -86,16 +88,6 @@ export const make = <S extends Schema.Top>(value: S): SealedSchema<S> => {
   }) as unknown as SealedSchema<S>;
 };
 
-/** The Vault or its key store failed: a key could not be read, or a box is not one of this vault's. */
-export class VaultError extends Schema.TaggedError<VaultError>()("VaultError", {
-  subject: Schema.String,
-  reason: Schema.String,
-}) {
-  override get message() {
-    return `Vault: ${this.reason} (subject ${this.subject})`;
-  }
-}
-
 /**
  * A command carried a value to be sealed, and the model has no Vault. Nothing
  * was stored.
@@ -117,77 +109,6 @@ export class Unsealed extends Schema.TaggedError<Unsealed>()("Unsealed", {
     return `${this.event} holds a value for ${this.subject} that was never sealed: seal it with the Vault, or send it in a command`;
   }
 }
-
-/**
- * Where a Vault keeps one key per subject, as the text {@link KeyWrap} made
- * of it. Its methods may need the runtime they run in (`RuntimeContext`), as
- * a database binding does.
- *
- * A backup of the store that is restored brings shredded keys back: keep it
- * somewhere whose backups you control, apart from the model's own.
- *
- * ### Writing a key store
- * **Example:** Keys in a table of your own
- * ```typescript
- * export const MyKeyStore = Layer.effect(
- *   Domain.KeyStore,
- *   Effect.gen(function* () {
- *     const table = yield* Keys;
- *     return {
- *       get: (subject) => table.find(subject),
- *       // The first key stored for a subject wins: return the one it has now.
- *       create: (subject, key) => table.insertIfAbsent(subject, key),
- *       delete: (subject) => table.remove(subject),
- *     };
- *   }),
- * );
- * ```
- */
-export class KeyStore extends Context.Service<
-  KeyStore,
-  {
-    /** The subject's stored key, if it has one. */
-    readonly get: (
-      subject: string,
-    ) => Effect.Effect<Option.Option<string>, VaultError, RuntimeContext>;
-    /**
-     * Store `key` for a subject that has none, and return the key the
-     * subject now has: `key`, or the one another caller stored first.
-     */
-    readonly create: (
-      subject: string,
-      key: string,
-    ) => Effect.Effect<string, VaultError, RuntimeContext>;
-    /** Remove the subject's key for good. Removing a key that is not there is not an error. */
-    readonly delete: (subject: string) => Effect.Effect<void, VaultError, RuntimeContext>;
-  }
->()("alchemy/Domain/KeyStore") {}
-
-/** A subject's new key: `key` encrypts, and `wrapped` is what a {@link KeyStore} keeps of it. */
-export interface WrappedKey {
-  /** The AES-256 key, as base64 text. It is never stored. */
-  readonly key: string;
-  /** The key as it is stored: encrypted under a root key, or as it is. */
-  readonly wrapped: string;
-}
-
-/**
- * Makes each subject's key, and turns it into the text a {@link KeyStore}
- * keeps. A wrap that encrypts under a root key leaves the store holding
- * nothing that opens a value on its own.
- */
-export class KeyWrap extends Context.Service<
-  KeyWrap,
-  {
-    /** A new key for a subject, with the text to store for it. */
-    readonly make: (subject: string) => Effect.Effect<WrappedKey, VaultError, RuntimeContext>;
-    /** The key inside a stored text. It fails when the text was not wrapped for this subject. */
-    readonly unwrap: (
-      subject: string,
-      wrapped: string,
-    ) => Effect.Effect<string, VaultError, RuntimeContext>;
-  }
->()("alchemy/Domain/KeyWrap") {}
 
 /**
  * Seals values under a key per subject, opens them, and shreds a subject's
@@ -240,26 +161,8 @@ export class Vault extends Context.Service<
   }
 >()("alchemy/Domain/Vault") {}
 
-/** @internal */
-export const toBase64 = (bytes: Uint8Array): string => {
-  let text = "";
-  for (const byte of bytes) text += String.fromCharCode(byte);
-  return btoa(text);
-};
-
-/** @internal */
-export const fromBase64 = (text: string): Uint8Array<ArrayBuffer> => {
-  const raw = atob(text);
-  const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-  return bytes;
-};
-
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
-/** The schema-aware half of a Vault, over what encrypts and decrypts text. */
-const vaultOver = (text: {
+/** The schema-aware half of a Vault, over what encrypts and decrypts text. @internal */
+export const vaultOver = (text: {
   readonly seal: (subject: string, plain: string) => Effect.Effect<string, VaultError>;
   readonly open: (subject: string, box: string) => Effect.Effect<Option.Option<string>, VaultError>;
   readonly shred: (subject: string) => Effect.Effect<void, VaultError>;
@@ -299,267 +202,6 @@ const vaultOver = (text: {
     }),
   };
 };
-
-/** A subject's key store and key wrap, as the Vault calls them inside the model's runtime. */
-interface Keys {
-  readonly get: (subject: string) => Effect.Effect<Option.Option<string>, VaultError>;
-  readonly create: (subject: string, key: string) => Effect.Effect<string, VaultError>;
-  readonly delete: (subject: string) => Effect.Effect<void, VaultError>;
-  readonly make: (subject: string) => Effect.Effect<WrappedKey, VaultError>;
-  readonly unwrap: (subject: string, wrapped: string) => Effect.Effect<string, VaultError>;
-}
-
-const failed = (subject: string, reason: string) => () => VaultError.make({ subject, reason });
-
-const importAes = (subject: string, key: Uint8Array<ArrayBuffer>) =>
-  Effect.tryPromise({
-    try: () => crypto.subtle.importKey("raw", key, "AES-GCM", false, ["encrypt", "decrypt"]),
-    catch: failed(subject, "its key is not an AES key"),
-  });
-
-/** Encrypt `plain` for `subject` under `key`: `<iv>.<ciphertext>`, bound to the subject. */
-const encryptFor = Effect.fn(function* (
-  subject: string,
-  key: CryptoKey,
-  plain: Uint8Array<ArrayBuffer>,
-) {
-  const iv = yield* Effect.sync(() => crypto.getRandomValues(new Uint8Array(12)));
-  const sealed = yield* Effect.tryPromise({
-    try: () =>
-      crypto.subtle.encrypt(
-        { name: "AES-GCM", iv, additionalData: encoder.encode(subject) },
-        key,
-        plain,
-      ),
-    catch: failed(subject, "the value could not be encrypted"),
-  });
-  return `${toBase64(iv)}.${toBase64(new Uint8Array(sealed))}`;
-});
-
-/** What {@link encryptFor} made, or `None` when `key` is not the one it was made under. */
-const decryptFor = (subject: string, key: CryptoKey, iv: string, sealed: string) =>
-  Effect.tryPromise(() =>
-    crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: fromBase64(iv), additionalData: encoder.encode(subject) },
-      key,
-      fromBase64(sealed),
-    ),
-  ).pipe(
-    Effect.map((plain) => Option.some(new Uint8Array(plain))),
-    Effect.orElseSucceed(() => Option.none<Uint8Array<ArrayBuffer>>()),
-  );
-
-/** A new AES-256 key, as base64 text. @internal */
-export const newKey = Effect.sync(() => toBase64(crypto.getRandomValues(new Uint8Array(32))));
-
-/**
- * A Vault that encrypts with AES-256-GCM under one key per subject. A
- * {@link KeyWrap} makes each key and a {@link KeyStore} keeps it. A box is
- * bound to its subject: under another subject, or under a key the subject
- * got after being shredded, it does not open.
- *
- * ### Giving a model a Vault
- * **Example:** Keys on the model's own host, wrapped under a root key
- * ```typescript
- * export const BankLive = Bank.layer(BankHandlers).pipe(
- *   Layer.provide(Domain.VaultLive),
- *   Layer.provide(Domain.HostKeyStore),
- *   Layer.provide(Domain.RootKeyWrap(Config.Redacted("VAULT_ROOT_KEY"))),
- *   Layer.provide(Platform),
- * );
- * ```
- *
- * @layer
- * @provides Domain.Vault
- */
-export const VaultLive: Layer.Layer<Vault, never, KeyStore | KeyWrap> = Layer.effect(
-  Vault,
-  Effect.gen(function* () {
-    // The model runs inside its runtime, which provides RuntimeContext to both.
-    const keys = { ...(yield* KeyStore), ...(yield* KeyWrap) } as unknown as Keys;
-    const keyOf = Effect.fn(function* (subject: string) {
-      const stored = yield* keys.get(subject);
-      if (Option.isNone(stored)) return Option.none<string>();
-      return Option.some(yield* keys.unwrap(subject, stored.value));
-    });
-    const keyFor = Effect.fn(function* (subject: string) {
-      const existing = yield* keyOf(subject);
-      if (Option.isSome(existing)) return existing.value;
-      const made = yield* keys.make(subject);
-      // Another caller may have stored a key first: seal under the one the subject has.
-      const stored = yield* keys.create(subject, made.wrapped);
-      return stored === made.wrapped ? made.key : yield* keys.unwrap(subject, stored);
-    });
-    return vaultOver({
-      seal: Effect.fn(function* (subject, plain) {
-        const key = yield* importAes(subject, fromBase64(yield* keyFor(subject)));
-        return AES + (yield* encryptFor(subject, key, encoder.encode(plain)));
-      }),
-      open: Effect.fn(function* (subject, box) {
-        const [version, iv, sealed] = box.split(".");
-        if (`${version}.` !== AES || iv === undefined || sealed === undefined) {
-          return yield* VaultError.make({
-            subject,
-            reason: "the box was not sealed by this vault",
-          });
-        }
-        const key = yield* keyOf(subject);
-        if (Option.isNone(key)) return Option.none();
-        // A box that does not open with the subject's key was sealed under one
-        // that is gone: the subject was shredded, and has a new key since.
-        const plain = yield* decryptFor(
-          subject,
-          yield* importAes(subject, fromBase64(key.value)),
-          iv,
-          sealed,
-        );
-        return Option.map(plain, (bytes) => decoder.decode(bytes));
-      }),
-      shred: keys.delete,
-    });
-  }),
-);
-
-/**
- * Keys kept in memory, for tests and local runs: they are gone when the
- * process ends, and with them everything sealed.
- *
- * @layer
- * @provides Domain.KeyStore
- */
-export const MemoryKeyStore: Layer.Layer<KeyStore> = Layer.sync(KeyStore, () => memoryKeys());
-
-/** A key store over a map. @internal */
-export const memoryKeys = (): KeyStore["Service"] => {
-  const keys = new Map<string, string>();
-  return {
-    get: (subject) => Effect.sync(() => Option.fromNullishOr(keys.get(subject))),
-    create: (subject, key) =>
-      Effect.sync(() => {
-        const existing = keys.get(subject);
-        if (existing !== undefined) return existing;
-        keys.set(subject, key);
-        return key;
-      }),
-    delete: (subject) => Effect.sync(() => void keys.delete(subject)),
-  };
-};
-
-/**
- * Keys kept on the model's own host, one object per subject: a Durable
- * Object on Cloudflare, an actor on Rivet, an entity on Effect Cluster, and
- * memory on `Domain.InMemory`. Each key lives in its object's own storage,
- * apart from every aggregate's.
- *
- * **Example:** Keys on Durable Objects
- * ```typescript
- * const Platform = DomainCloudflare.layerDurableObjects();
- *
- * export const BankLive = Bank.layer(BankHandlers).pipe(
- *   Layer.provide(Domain.VaultLive),
- *   Layer.provide(Domain.HostKeyStore),
- *   Layer.provide(Domain.NoKeyWrap),
- *   Layer.provide(Platform),
- * );
- * ```
- *
- * @layer
- * @provides Domain.KeyStore
- */
-export const HostKeyStore: Layer.Layer<KeyStore, never, Platform> = Layer.effect(
-  KeyStore,
-  Effect.flatMap(Platform, (platform) => platform.keys),
-);
-
-/**
- * Keys stored as they are, with no root key over them. Whoever can read the
- * {@link KeyStore} can open what it sealed.
- *
- * @layer
- * @provides Domain.KeyWrap
- */
-export const NoKeyWrap: Layer.Layer<KeyWrap> = Layer.succeed(KeyWrap, {
-  make: () => Effect.map(newKey, (key) => ({ key, wrapped: key })),
-  unwrap: (_, wrapped) => Effect.succeed(wrapped),
-});
-
-const ROOT = "r1.";
-
-/**
- * A {@link KeyWrap} that encrypts each subject's key with AES-256-GCM under
- * a root key read by `root`. The root key is any high-entropy secret, such as
- * 32 random bytes as text; it is read on each call, so a rotated secret is
- * picked up.
- *
- * @internal
- */
-export const rootKeyWrap = <E>(
-  root: Effect.Effect<Redacted.Redacted<string>, E, RuntimeContext>,
-): KeyWrap["Service"] => {
-  // Derived once per root value: the same secret is the same AES key.
-  const derived = new Map<string, CryptoKey>();
-  const rootKey = Effect.fn(function* (subject: string) {
-    const secret = Redacted.value(
-      yield* root.pipe(Effect.mapError(failed(subject, "the root key could not be read"))),
-    );
-    const known = derived.get(secret);
-    if (known !== undefined) return known;
-    const digest = yield* Effect.tryPromise({
-      try: () => crypto.subtle.digest("SHA-256", encoder.encode(secret)),
-      catch: failed(subject, "the root key could not be derived"),
-    });
-    const key = yield* importAes(subject, new Uint8Array(digest));
-    derived.set(secret, key);
-    return key;
-  });
-  return {
-    make: Effect.fn(function* (subject) {
-      const key = yield* newKey;
-      const wrapped = yield* encryptFor(subject, yield* rootKey(subject), fromBase64(key));
-      return { key, wrapped: ROOT + wrapped };
-    }),
-    unwrap: Effect.fn(function* (subject, wrapped) {
-      const [version, iv, sealed] = wrapped.split(".");
-      if (`${version}.` !== ROOT || iv === undefined || sealed === undefined) {
-        return yield* VaultError.make({ subject, reason: "its key was not wrapped by a root key" });
-      }
-      const key = yield* decryptFor(subject, yield* rootKey(subject), iv, sealed);
-      if (Option.isNone(key)) {
-        return yield* VaultError.make({
-          subject,
-          reason: "its key does not unwrap under this root key",
-        });
-      }
-      return toBase64(key.value);
-    }),
-  };
-};
-
-/**
- * Wrap each subject's key under a root key you supply, so the
- * {@link KeyStore} alone opens nothing. The root key is a high-entropy
- * secret: 32 random bytes as text, not a password.
- *
- * **Example:** A root key from the environment
- * ```typescript
- * export const BankLive = Bank.layer(BankHandlers).pipe(
- *   Layer.provide(Domain.VaultLive),
- *   Layer.provide(Domain.HostKeyStore),
- *   Layer.provide(Domain.RootKeyWrap(Config.Redacted("VAULT_ROOT_KEY"))),
- *   Layer.provide(Platform),
- * );
- * ```
- *
- * @layer
- * @provides Domain.KeyWrap
- */
-export const RootKeyWrap = (
-  root: Redacted.Redacted<string> | Config.Config<Redacted.Redacted<string>>,
-): Layer.Layer<KeyWrap> =>
-  Layer.succeed(
-    KeyWrap,
-    rootKeyWrap(Redacted.isRedacted(root) ? Effect.succeed(root) : root.pipe(Effect.orDie)),
-  );
 
 /**
  * A sealed value as {@link VaultTest} seals it, for a story to expect.

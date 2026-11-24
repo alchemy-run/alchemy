@@ -36,6 +36,7 @@ import * as Backfill from "./Backfill.ts";
 import { type Routed, targetId } from "./CatchUp.ts";
 import { DecisionsUnsupported, DefinitionError } from "./DefinitionError.ts";
 import { admitStreamWrite, advanceStreamMeta, mergeCheckpoints } from "./InMemory.ts";
+import type { KeyStore } from "./KeyStore.ts";
 import {
   type Accepted,
   type AggregateKit,
@@ -102,7 +103,6 @@ import {
   withoutRevision,
 } from "./Platform.ts";
 import * as TwoPhase from "./TwoPhase.ts";
-import type { KeyStore } from "./Vault.ts";
 
 // ---------------------------------------------------------------- the host
 

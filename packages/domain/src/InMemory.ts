@@ -13,6 +13,7 @@ import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "./Aggregate.ts"
 import * as Backfill from "./Backfill.ts";
 import { type Routed, targetId } from "./CatchUp.ts";
 import * as InMemoryWorkflows from "./InMemoryWorkflows.ts";
+import { memoryKeys } from "./KeyStore.ts";
 import {
   type Accepted,
   awaitsRevision,
@@ -60,7 +61,6 @@ import {
   type ViewSnapshot,
   RunWait,
 } from "./Platform.ts";
-import { memoryKeys } from "./Vault.ts";
 import { serveSocket } from "./Watch.ts";
 
 /**

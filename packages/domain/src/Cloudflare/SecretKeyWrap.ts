@@ -2,7 +2,7 @@ import { ReadSecret } from "@alchemy.run/cloudflare/SecretsStore/ReadSecret";
 import type { Secret } from "@alchemy.run/cloudflare/SecretsStore/Secret";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { KeyWrap, rootKeyWrap } from "../Vault.ts";
+import { KeyWrap, rootKeyWrap } from "../KeyWrap.ts";
 
 /**
  * Wrap each subject's key under a root key kept in Cloudflare Secrets Store,

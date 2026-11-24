@@ -3,7 +3,8 @@ import { QueryDatabase } from "@alchemy.run/cloudflare/D1/QueryDatabase";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { KeyStore, VaultError } from "../Vault.ts";
+import { KeyStore } from "../KeyStore.ts";
+import { VaultError } from "../VaultError.ts";
 
 /** Options for {@link D1KeyStore}. */
 export interface D1KeyStoreOptions {

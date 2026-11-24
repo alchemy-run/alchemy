@@ -2,7 +2,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { SqlClient } from "effect/sql/SqlClient";
-import { KeyStore, VaultError } from "./Vault.ts";
+import { KeyStore } from "./KeyStore.ts";
+import { VaultError } from "./VaultError.ts";
 
 /** Options for {@link SqlKeyStore}. */
 export interface SqlKeyStoreOptions {

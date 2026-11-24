@@ -3,7 +3,8 @@ import { Decrypt } from "@alchemy.run/gcp/KMS/Decrypt";
 import { Encrypt } from "@alchemy.run/gcp/KMS/Encrypt";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { KeyWrap, newKey, VaultError } from "../Vault.ts";
+import { KeyWrap, newKey } from "../KeyWrap.ts";
+import { VaultError } from "../VaultError.ts";
 
 const KMS = "gkms.";
 
