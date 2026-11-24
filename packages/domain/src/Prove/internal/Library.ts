@@ -44,6 +44,7 @@ import * as Hashes from "./Models/Hashes.ts";
 import * as Numbers from "./Models/Numbers.ts";
 import * as Rationals from "./Models/Rationals.ts";
 import * as Results from "./Models/Results.ts";
+import * as Schemas from "./Models/Schemas.ts";
 import * as Streams from "./Models/Streams.ts";
 import * as Strings from "./Models/Strings.ts";
 import type { Term } from "./Smt.ts";
@@ -1336,6 +1337,7 @@ export const make = (host: Host) => {
     ...exits.models,
     ...rationals.models,
     ...folds.models,
+    ...Schemas.make(kit).models,
   };
   /** Classes of the library other than `effect/Data`'s, each with what a class that extends it is. */
   const extending = new WeakMap<object, (name: string) => V>();

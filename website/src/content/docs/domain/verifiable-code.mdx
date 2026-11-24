@@ -2408,6 +2408,38 @@ Resource.refresh(resource);
 Resource.isResource(resource);
 ```
 
+```typescript title="effect/Schema, used in a handler"
+// A schema that only checks a value: the value passes where the prover's formula for it holds.
+// Decoding gives the value back, less the fields the schema does not name.
+Schema.is(Ticket)({ n: a });
+Schema.is(Names)(["x", "y"]);
+Schema.is(Kind)({ kind: "count", n: a });
+Schema.is(Schema.Literals(["on", "off"]))(flag ? "on" : "up");
+Schema.is(Schema.NullOr(Schema.Number))(flag ? null : a);
+Schema.asserts(Names, ["x", "y"]); // throws where it does not pass
+Schema.decodeUnknownSync(Ticket)({ n: 3, extra: a });
+Schema.decodeUnknownOption(Ticket)({ n: a, extra: b });
+Schema.decodeUnknownResult(Ticket)({ n: a });
+Schema.decodeUnknownExit(Ticket)({ n: a });
+Schema.decodeUnknownEffect(Ticket)({ n: a }); // fails with a SchemaError
+Schema.decodeSync(Ticket)({ n: 4 });
+Schema.decodeOption(Ticket)({ n: a, note: "kept" });
+Schema.decodeResult(Ticket)({ n: 3, extra: a });
+Schema.decodeExit(Ticket)({ n: b });
+Schema.decodeEffect(Ticket)({ n: b });
+Schema.encodeUnknownSync(Ticket)({ n: 6 });
+Schema.encodeUnknownOption(Ticket)({ n: a });
+Schema.encodeUnknownResult(Ticket)({ n: a });
+Schema.encodeUnknownExit(Ticket)({ n: a });
+Schema.encodeUnknownEffect(Ticket)({ n: a });
+Schema.encodeSync(Ticket)({ n: 5, extra: a });
+Schema.encodeOption(Ticket)({ n: a, extra: 1 });
+Schema.encodeResult(Ticket)({ n: b });
+Schema.encodeExit(Ticket)({ n: a });
+Schema.encodeEffect(Ticket)({ n: 2, note: "n" });
+Schema.isSchemaError;
+```
+
 ```typescript title="effect/Random"
 // A seed the code writes decides every draw, so a seeded draw is the one the deployed handler makes.
 Random.next.pipe(Random.withSeed("seed"));
@@ -2926,7 +2958,7 @@ import * as Metric from "effect/Metric";
 import * as ErrorReporter from "effect/ErrorReporter";
 ```
 
-A schema is supported where it describes the state, a command or an event. Decoding with one inside a handler is not.
+A schema is supported where it describes the state, a command or an event, and where a handler [checks a value with one](#library-functions). One that changes the value it reads, or that the prover does not read in full, is not: a record, a tuple, a class, a pattern.
 
 ```typescript title="Schemas as code"
 import * as SchemaAST from "effect/SchemaAST";
@@ -2940,9 +2972,8 @@ import * as JsonSchema from "effect/JsonSchema";
 import * as StandardSchema from "effect/StandardSchema";
 import * as Arbitrary from "effect/Arbitrary";
 
-Schema.decodeUnknownSync(Ticket)(input); // and every other decode, encode and is
-Schema.encodeSync(Ticket)(ticket);
-Schema.is(Ticket)(input);
+Schema.decodeUnknownSync(Schema.NumberFromString)("1"); // a schema that changes the value it reads
+Schema.is(Schema.Record(Schema.String, Schema.Number))(input); // a schema the prover does not read in full
 ```
 
 A graph and a ring are built by changing one, and a hash of an object is where it sits in memory. Put a call to one in an exported function, which is then [opaque](#opaque-functions).

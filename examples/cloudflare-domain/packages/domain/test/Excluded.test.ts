@@ -107,6 +107,8 @@ it.effect(
         }),
       );
       expect([...reasons].sort()).toEqual([
+        // A function of `Schema` a handler may call, called here with nothing.
+        "M.f is called in a way the prover has no model for",
         "calls M.f, which the prover has no model for",
         "compares values the prover does not model",
       ]);
