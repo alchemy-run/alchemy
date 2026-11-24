@@ -16,6 +16,8 @@
  *   for a facade over the same service map that reports each `get`. So
  *   `yield*`, `serviceOption`, forked fibers and code behind `catchCause`
  *   are all seen.
+ * - **References**: what a term says it uses ({@link refer}): a process's
+ *   tools, the views and commands of a Domain model it mentions.
  * - **Acquisitions**: every `Binding.Service` call (`ReadWriteBucket(b)`),
  *   attributed to the current frame. These are the permissions.
  *
@@ -77,15 +79,34 @@ export interface Permission extends Acquisition {
   readonly via: ReadonlyArray<string>;
 }
 
-/** A named term of a runtime (a process, a tool), with what it can reach. */
-export interface CapabilityNode {
+/** An edge from one term to another: a process uses a tool, gets a view, sends a command. */
+export interface Reference {
+  /** How it is used: `uses`, or the operation on a Domain piece (`get`, `send`). */
+  readonly relation: string;
+  /** The {@link Term.id} it points at. Every reference of a runtime resolves to one of its terms. */
+  readonly to: string;
+}
+
+/**
+ * One named thing a runtime runs or reaches: a process, a tool, a piece of a
+ * Domain model. A runtime's terms are a flat list: walk it by `id`, and
+ * follow `references` from one term to the next.
+ */
+export interface Term {
+  /** `Kind:name`, unique within the runtime. */
+  readonly id: string;
   readonly kind: string;
   readonly name: string;
-  /** Every binding it reaches, itself or through what it uses. */
-  readonly permissions: ReadonlyArray<Permission>;
-  /** The named terms it uses. */
-  readonly uses: ReadonlyArray<CapabilityNode>;
+  /** What runs it inside the runtime, where that is not the runtime itself: a Durable Object's name. */
+  readonly host?: string;
+  /** The bindings it may use itself. What it reaches through a term it references is on that term. */
+  readonly bindings: ReadonlyArray<Permission>;
+  /** The terms it uses. */
+  readonly references: ReadonlyArray<Reference>;
 }
+
+/** The kind of the frame around what a runtime hosts: a Durable Object. It is not a term. */
+export const HOST = "Host";
 
 export interface CapabilityGraphShape {
   /** Mint a frame. */
@@ -101,12 +122,10 @@ export interface CapabilityGraphShape {
   readonly label: (frame: Frame, name: string) => void;
   /** Every permission reachable from the frames of a named term. */
   readonly ofFrame: (kind: NamedFrameKind, name: string) => ReadonlyArray<Permission>;
-  /**
-   * The named terms, as a forest: each with its permissions and the named
-   * terms it reaches (a process's tools). A term reached from another is
-   * listed under it and not at the top.
-   */
-  readonly describe: () => ReadonlyArray<CapabilityNode>;
+  /** Record that a frame's term uses another term. */
+  readonly refers: (frame: Frame, relation: string, kind: string, name: string) => void;
+  /** The runtime's terms, sorted by id. */
+  readonly describe: () => ReadonlyArray<Term>;
   /** Every permission reachable from the Layer that provides a
    *  service key (a class tool's physics, a skill's service). */
   readonly ofService: (key: string) => ReadonlyArray<Permission>;
@@ -145,6 +164,7 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
   const children = new Map<Frame, Frame[]>();
   const uses = new Map<Frame, Map<string, unknown>>();
   const acquisitions = new Map<Frame, Map<string, Acquisition>>();
+  const references = new Map<Frame, Map<string, Reference>>();
   /** key → frames whose build produced it (several when two Layers
    *  provide one tag). */
   const providersByKey = new Map<string, Set<Frame>>();
@@ -175,7 +195,10 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
     out: Map<string, Permission>,
     visited: Set<string>,
     inside = true,
+    /** Where to stop: another term, whose bindings are its own. */
+    stop: (frame: Frame) => boolean = () => false,
   ): void => {
+    if (stop(frame)) return;
     const seen = `${frame.id}:${inside}`;
     if (visited.has(seen) || visited.has(`${frame.id}:true`)) return;
     visited.add(seen);
@@ -189,20 +212,23 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
     }
     if (inside) {
       for (const child of children.get(frame) ?? []) {
-        collect(child, via, out, visited);
+        collect(child, via, out, visited, true, stop);
       }
     }
     for (const [key, value] of uses.get(frame) ?? []) {
       for (const provider of providersOf(key, value)) {
-        collect(provider, [...via, key], out, visited, provider.kind !== "Layer");
+        collect(provider, [...via, key], out, visited, provider.kind !== "Layer", stop);
       }
     }
   };
 
-  const closure = (roots: Iterable<Frame>): ReadonlyArray<Permission> => {
+  const closure = (
+    roots: Iterable<Frame>,
+    stop?: (frame: Frame) => boolean,
+  ): ReadonlyArray<Permission> => {
     const out = new Map<string, Permission>();
     const visited = new Set<string>();
-    for (const root of roots) collect(root, [], out, visited);
+    for (const root of roots) collect(root, [], out, visited, true, stop);
     return [...out.values()].sort((a, b) =>
       a.via.length !== b.via.length
         ? a.via.length - b.via.length
@@ -255,12 +281,20 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
       (frame as { name: string | undefined }).name = name;
     },
     ofFrame: (kind, name) => closure(frames.filter((f) => f.kind === kind && f.name === name)),
+    refers: (frame, relation, kind, name) => {
+      const reference = { relation, to: `${kind}:${name}` };
+      const map = references.get(frame);
+      const id = `${reference.relation}|${reference.to}`;
+      if (map === undefined) references.set(frame, new Map([[id, reference]]));
+      else map.set(id, reference);
+    },
     describe: () => {
       const idOf = (frame: Frame) => `${frame.kind}:${frame.name}`;
-      const named = frames.filter((f) => f.kind !== "Layer" && f.name !== undefined);
-      /** The named frames a frame reaches without passing through another named frame. */
-      const reached = (root: Frame): ReadonlyArray<Frame> => {
-        const out = new Map<string, Frame>();
+      const isTerm = (frame: Frame) =>
+        frame.kind !== "Layer" && frame.kind !== HOST && frame.name !== undefined;
+      /** The terms a frame reaches by a lookup or by building them, without passing through another. */
+      const reached = (root: Frame): ReadonlyArray<string> => {
+        const out = new Set<string>();
         const visited = new Set<string>([`${root.id}:true`]);
         const walk = (frame: Frame, inside: boolean): void => {
           const next: Array<readonly [Frame, boolean]> = [
@@ -274,58 +308,68 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
             const seen = `${each.id}:${entered}`;
             if (visited.has(seen) || visited.has(`${each.id}:true`)) continue;
             visited.add(seen);
-            if (each.kind !== "Layer" && each.name !== undefined) {
-              if (idOf(each) !== idOf(root)) out.set(idOf(each), each);
+            if (isTerm(each)) {
+              if (idOf(each) !== idOf(root)) out.add(idOf(each));
             } else walk(each, entered);
           }
         };
         walk(root, true);
-        return [...out.values()];
+        return [...out];
+      };
+      /** What hosts a frame: the nearest Host frame around it. */
+      const hostOf = (frame: Frame): string | undefined => {
+        for (let each = frame.parent; each !== undefined; each = each.parent) {
+          if (each.kind === HOST) return each.name;
+        }
+        return undefined;
       };
       const byId = new Map<string, Array<Frame>>();
-      for (const frame of named) {
+      for (const frame of frames.filter(isTerm)) {
         const group = byId.get(idOf(frame));
         if (group === undefined) byId.set(idOf(frame), [frame]);
         else group.push(frame);
       }
-      const usesOf = new Map<string, ReadonlyArray<string>>();
+      const terms = new Map<string, Term>();
       for (const [id, group] of byId) {
-        usesOf.set(id, [...new Set(group.flatMap((frame) => reached(frame).map(idOf)))].sort());
-      }
-      const used = new Set([...usesOf.values()].flat());
-      const node = (id: string, path: ReadonlySet<string>): CapabilityNode => {
-        const group = byId.get(id)!;
-        const used = (usesOf.get(id) ?? [])
-          .filter((each) => !path.has(each))
-          .map((each) => node(each, new Set([...path, id])));
-        // What it reaches itself, and what the terms it uses reach.
-        const reach = new Map<string, Permission>();
-        for (const permission of [
-          ...closure(group),
-          ...used.flatMap((each) =>
-            each.permissions.map((permission) => ({
-              ...permission,
-              via: [`${each.kind} ${each.name}`, ...permission.via],
-            })),
-          ),
-        ]) {
-          const row = keyOf(permission);
-          const known = reach.get(row);
-          if (known === undefined || known.via.length > permission.via.length) {
-            reach.set(row, permission);
+        const refs = new Map<string, Reference>();
+        for (const frame of group) {
+          for (const reference of references.get(frame)?.values() ?? []) {
+            if (reference.to !== id) refs.set(`${reference.relation}|${reference.to}`, reference);
           }
         }
-        return {
+        const named = new Set([...refs.values()].map((reference) => reference.to));
+        for (const to of group.flatMap(reached)) {
+          if (!named.has(to)) refs.set(`uses|${to}`, { relation: "uses", to });
+        }
+        const host = group.map(hostOf).find((each) => each !== undefined);
+        terms.set(id, {
+          id,
           kind: group[0]!.kind,
           name: group[0]!.name!,
-          permissions: [...reach.values()],
-          uses: used,
-        };
-      };
-      return [...byId.keys()]
-        .filter((id) => !used.has(id))
-        .sort()
-        .map((id) => node(id, new Set()));
+          ...(host === undefined ? {} : { host }),
+          bindings: closure(group, (frame) => isTerm(frame) && idOf(frame) !== id),
+          references: [...refs.values()].sort((a, b) =>
+            a.to !== b.to ? (a.to < b.to ? -1 : 1) : a.relation < b.relation ? -1 : 1,
+          ),
+        });
+      }
+      // A term that is only referred to (a piece of a Domain model) has no
+      // build of its own: it is a term all the same, so every reference resolves.
+      for (const term of terms.values()) {
+        for (const { to } of term.references) {
+          if (terms.has(to)) continue;
+          const at = to.indexOf(":");
+          terms.set(to, {
+            id: to,
+            kind: to.slice(0, at),
+            name: to.slice(at + 1),
+            ...(term.host === undefined ? {} : { host: term.host }),
+            bindings: [],
+            references: [],
+          });
+        }
+      }
+      return [...terms.values()].sort((a, b) => (a.id < b.id ? -1 : 1));
     },
     ofService: (key) => closure(providersByKey.get(key) ?? []),
     frames: () => frames,
@@ -335,6 +379,7 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
       children.clear();
       uses.clear();
       acquisitions.clear();
+      references.clear();
       providersByKey.clear();
     },
   };
@@ -359,6 +404,53 @@ export const framed =
         );
       },
     );
+
+/**
+ * Record that the term being built uses another: `refer("uses", "Tool", name)`,
+ * `refer("get", "Domain", "Board.IssueDetail")`. Outside a term, and without a
+ * graph in context, it does nothing.
+ */
+export const refer = (relation: string, kind: string, name: string): Effect.Effect<void> =>
+  Effect.flatMap(
+    Effect.all([Effect.serviceOption(CapabilityGraph), CurrentFrame]),
+    ([graph, frame]) =>
+      Effect.sync(() => {
+        if (Option.isNone(graph)) return;
+        // The term around this point: Layers built inside it are passed over.
+        let term = frame;
+        while (term !== undefined && term.kind === "Layer") term = term.parent;
+        if (term !== undefined && term.kind !== HOST) {
+          graph.value.refers(term, relation, kind, name);
+        }
+      }),
+  );
+
+/**
+ * Every binding a term reaches: its own, and those of every term it
+ * references, however far. `via` starts with the terms passed through.
+ */
+export const reach = (terms: ReadonlyArray<Term>, id: string): ReadonlyArray<Permission> => {
+  const byId = new Map(terms.map((term) => [term.id, term]));
+  const out = new Map<string, Permission>();
+  const visit = (at: string, through: ReadonlyArray<string>, seen: ReadonlySet<string>): void => {
+    const term = byId.get(at);
+    if (term === undefined || seen.has(at)) return;
+    for (const binding of term.bindings) {
+      const permission = { ...binding, via: [...through, ...binding.via] };
+      const known = out.get(keyOf(permission));
+      if (known === undefined || known.via.length > permission.via.length) {
+        out.set(keyOf(permission), permission);
+      }
+    }
+    for (const reference of term.references) {
+      const next = byId.get(reference.to);
+      if (next === undefined) continue;
+      visit(reference.to, [...through, `${next.kind} ${next.name}`], new Set([...seen, at]));
+    }
+  };
+  visit(id, [], new Set());
+  return [...out.values()];
+};
 
 /** `Layer.MemoMap`'s brand — not exported by Effect. */
 const MEMO_MAP_TYPE_ID = "~effect/Layer/MemoMap";
@@ -532,27 +624,22 @@ export interface Policy {
 export const POLICY_KEY = "ALCHEMY_CAPABILITIES";
 
 /** The {@link Policy} for what {@link CapabilityGraphShape.describe} gave. */
-export const policyOf = (nodes: ReadonlyArray<CapabilityNode>): Policy => {
+export const policyOf = (terms: ReadonlyArray<Term>): Policy => {
   const bindings: Array<string> = [];
   const index = new Map<string, number>();
-  const terms: { [term: string]: ReadonlyArray<number> } = {};
-  const visit = (node: CapabilityNode): void => {
-    const id = `${node.kind}:${node.name}`;
-    if (!(id in terms)) {
-      terms[id] = node.permissions.map((permission) => {
-        const key = keyOf(permission);
-        let at = index.get(key);
-        if (at === undefined) {
-          at = bindings.push(key) - 1;
-          index.set(key, at);
-        }
-        return at;
-      });
-    }
-    node.uses.forEach(visit);
-  };
-  nodes.forEach(visit);
-  return { bindings, terms };
+  const held: { [term: string]: ReadonlyArray<number> } = {};
+  for (const term of terms) {
+    held[term.id] = term.bindings.map((permission) => {
+      const key = keyOf(permission);
+      let at = index.get(key);
+      if (at === undefined) {
+        at = bindings.push(key) - 1;
+        index.set(key, at);
+      }
+      return at;
+    });
+  }
+  return { bindings, terms: held };
 };
 
 /**

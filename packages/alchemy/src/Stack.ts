@@ -16,7 +16,7 @@ import type { ArtifactStore } from "./Artifacts.ts";
 import type { CredentialsStore } from "./Auth/Credentials.ts";
 import type { ProfileStore } from "./Auth/Profile.ts";
 import { AuthProvidersLive, type AuthProviders } from "./Auth/Registry.ts";
-import type { CapabilityNode } from "./CapabilityGraph.ts";
+import type { Term } from "./CapabilityGraph.ts";
 import type { Input, InputProps } from "./Input.ts";
 // Type-only: with verbatimModuleSyntax a value import would survive emit and
 // drag the terminal helpers (node:tty, Sigil's ansi helpers) into every unbundled
@@ -258,7 +258,7 @@ export interface StackSpec<Output = any> {
    * evaluated, for the plan to show.
    */
   capabilities?: {
-    [fqn: string]: ReadonlyArray<CapabilityNode>;
+    [fqn: string]: ReadonlyArray<Term>;
   };
   output: Output;
 }

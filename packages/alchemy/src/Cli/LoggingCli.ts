@@ -4,7 +4,7 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as LogLevel from "effect/LogLevel";
-import type { CapabilityNode } from "../CapabilityGraph.ts";
+import type { Term } from "../CapabilityGraph.ts";
 import type { ApplyEvent, ApplyStatus } from "../Events.ts";
 import { NonInteractiveTerminal } from "../Interaction.ts";
 import type { ActionApply, ActionDelete, CRUD, Plan } from "../Plan.ts";
@@ -13,6 +13,7 @@ import { canPromptOnStdin } from "../Util/interactive.ts";
 import { formatResourceTag } from "../Util/ResourceOutput.ts";
 import { terminalStyle } from "../Util/Terminal.ts";
 import { theme } from "../Util/Theme.ts";
+import { capabilityGroups } from "./CapabilityRows.ts";
 import {
   actionStyle,
   applyStatusColor,
@@ -89,33 +90,26 @@ const modeSuffix = (options: Parameters<typeof formatModeNote>[0]): string => {
 };
 
 /**
- * A runtime's processes and tools, indented under it, each with the bindings
- * it reaches. A binding reached through a term listed below is shown there.
+ * What a runtime runs, each line tagged with the runtime and, for what a
+ * Durable Object runs, the object.
  */
-const capabilityLines = (
-  fqn: string,
-  nodes: ReadonlyArray<CapabilityNode>,
-  depth: number,
-): string[] => {
-  const rowOf = (permission: CapabilityNode["permissions"][number]) =>
-    `${permission.binding}|${permission.targets.join(",")}`;
-  const indent = "  ".repeat(depth);
-  return nodes.flatMap((node) => {
-    const below = new Set(node.uses.flatMap((used) => used.permissions.map(rowOf)));
-    return [
-      `${tag(fqn)} ${indent}${dim(node.kind)} ${bold(node.name)}`,
-      ...node.permissions
-        .filter((permission) => !below.has(rowOf(permission)))
-        .map(
-          (permission) =>
-            `${tag(fqn)} ${indent}  ${cyan(permission.binding)}${
-              permission.targets.length === 0 ? "" : ` ${permission.targets.join(", ")}`
-            }${permission.via.length === 0 ? "" : dim(` via ${permission.via.join(" > ")}`)}`,
-        ),
-      ...capabilityLines(fqn, node.uses, depth + 1),
-    ];
-  });
-};
+const capabilityLines = (fqn: string, terms: ReadonlyArray<Term>): string[] =>
+  capabilityGroups(terms).flatMap((group) =>
+    group.rows.map((row) => {
+      const at = `${tag(group.host === undefined ? fqn : `${fqn}/${group.host}`)} ${"  ".repeat(row.depth + 1)}`;
+      const detail = row.detail === undefined || row.detail === "" ? "" : dim(` ${row.detail}`);
+      switch (row.kind) {
+        case "Binding":
+          return `${at}${dim("·")} ${cyan(row.label)}${detail}`;
+        case "Reference":
+          return `${at}${dim("→")} ${row.label}${detail}`;
+        case "Unused":
+          return `${at}${dim(`no process uses: ${row.label}`)}`;
+        default:
+          return `${at}${dim(row.kind)} ${bold(row.label)}`;
+      }
+    }),
+  );
 
 /** Exported for unit tests — pure plan-preview rendering. */
 export const formatPlanLines = (plan: Plan, options: PlanDisplayOptions = {}): string[] => {
@@ -167,7 +161,7 @@ export const formatPlanLines = (plan: Plan, options: PlanDisplayOptions = {}): s
         binding.action === "delete" ? dim("unbind") : actionColor[binding.action](binding.action);
       lines.push(`${tag(`${item.resource.FQN}/${binding.sid}`)} ${bindingAction}`);
     }
-    lines.push(...capabilityLines(item.resource.FQN, item.capabilities ?? [], 1));
+    lines.push(...capabilityLines(item.resource.FQN, item.capabilities ?? []));
     if (
       options.detailed &&
       (item.action === "create" ||

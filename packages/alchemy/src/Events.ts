@@ -67,18 +67,23 @@ export const PlannedPermission = Schema.Struct({
   via: Schema.Array(Schema.String),
 });
 
-/** A process or a tool of a runtime, with what it reaches and the terms it uses. */
-export interface PlannedCapability {
-  readonly kind: string;
-  readonly name: string;
-  readonly permissions: ReadonlyArray<typeof PlannedPermission.Type>;
-  readonly uses: ReadonlyArray<PlannedCapability>;
-}
-export const PlannedCapability: Schema.Codec<PlannedCapability> = Schema.Struct({
+/** An edge from one term of a runtime to another. */
+export const PlannedReference = Schema.Struct({
+  relation: Schema.String,
+  to: Schema.String,
+});
+
+/**
+ * One named thing a runtime runs or reaches (a process, a tool, a piece of a
+ * Domain model). A runtime's terms are a flat list, joined by `references`.
+ */
+export const PlannedTerm = Schema.Struct({
+  id: Schema.String,
   kind: Schema.String,
   name: Schema.String,
-  permissions: Schema.Array(PlannedPermission),
-  uses: Schema.Array(Schema.suspend((): Schema.Codec<PlannedCapability> => PlannedCapability)),
+  host: Schema.optionalKey(Schema.String),
+  bindings: Schema.Array(PlannedPermission),
+  references: Schema.Array(PlannedReference),
 });
 
 /** Serializable view of one resource row in a plan. */
@@ -90,8 +95,8 @@ export const PlannedResource = Schema.Struct({
   action: Schema.Literals(["create", "update", "adopted", "replace", "delete", "orphaned", "noop"]),
   /** Binding rows the node carries; empty when the resource has none. */
   bindings: Schema.Array(PlannedBinding),
-  /** For a runtime: its processes and tools, and the bindings each can reach. */
-  capabilities: PlannedCapability.pipe(Schema.Array, Schema.optionalKey),
+  /** For a runtime: its processes, tools and the Domain pieces they use, with the bindings each may use. */
+  capabilities: PlannedTerm.pipe(Schema.Array, Schema.optionalKey),
   /** Mode the node's provider resolved for; absent for mode-agnostic providers. */
   providerMode: Schema.optionalKey(ProviderMode),
   /** On mode-switch replacements: the mode the old generation was created with. */

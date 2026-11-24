@@ -1,4 +1,4 @@
-import { framed } from "alchemy/CapabilityGraph";
+import { framed, refer } from "alchemy/CapabilityGraph";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -659,15 +659,30 @@ const compileUnframed = (definition: Definition): Effect.Effect<ProcessService<a
       ...[...children.values()].flatMap((child) => childTools(child, state, harness)),
     ];
     const every = [...new Set([...tools, ...generated])];
-    // Name each tool it mentions under this process's frame. A tool's own
-    // Layer was built under a frame of the same name, where it bound what
-    // it uses: the plan joins the two, and lists that under this process.
+    // What this process uses, for a plan: each tool it mentions, each piece
+    // of a Domain model, and each process it may follow or start.
     yield* Effect.forEach(
-      tools.flatMap((tool) => {
-        const name = (tool as { readonly toolName?: unknown }).toolName;
-        return typeof name === "string" ? [name] : [];
-      }),
-      (name) => framed("Tool", name)(Effect.void),
+      tools,
+      (tool) => {
+        const { toolName, refers } = tool as {
+          readonly toolName?: unknown;
+          readonly refers?: {
+            readonly relation: string;
+            readonly kind: string;
+            readonly name: string;
+          };
+        };
+        return refers !== undefined
+          ? refer(refers.relation, refers.kind, refers.name)
+          : typeof toolName === "string"
+            ? refer("uses", "Tool", toolName)
+            : Effect.void;
+      },
+      { discard: true },
+    );
+    yield* Effect.forEach(
+      [...children.keys()].filter((name) => name !== definition.name),
+      (name) => refer("uses", "Process", name),
       { discard: true },
     );
     yield* harness.add({ models, tools: every, context });

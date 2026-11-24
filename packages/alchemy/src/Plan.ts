@@ -25,7 +25,7 @@ import {
 } from "./Artifacts.ts";
 import { demandRemoteCredentials, failCredentialsRequired } from "./Auth/Demand.ts";
 /** @effect-diagnostics missingEffectError:off */
-import type { CapabilityNode } from "./CapabilityGraph.ts";
+import type { Term } from "./CapabilityGraph.ts";
 import {
   dedupeBindings,
   diffBindings,
@@ -128,7 +128,7 @@ export interface BaseNode<R extends ResourceLike<string> = ResourceLike<string>>
    * For a runtime: its processes and tools, and the bindings each can reach
    * (see CapabilityGraph.ts). Absent when it has none.
    */
-  capabilities?: ReadonlyArray<CapabilityNode>;
+  capabilities?: ReadonlyArray<Term>;
 }
 
 /**

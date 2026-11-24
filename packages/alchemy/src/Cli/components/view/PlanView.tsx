@@ -327,10 +327,23 @@ function PlanRowView(props: {
   }
 
   if (row.type === "capability") {
+    const lead =
+      row.kind === "Binding"
+        ? glyphs.bullet
+        : row.kind === "Reference"
+          ? "→"
+          : row.kind === "Unused"
+            ? "no process uses:"
+            : row.kind;
     return (
       <Row gap={1} paddingLeft={row.depth * 2}>
-        <Text tone="muted">{row.kind === "Binding" ? glyphs.bullet : row.kind}</Text>
-        <Text color={row.kind === "Binding" ? theme.color.info : undefined}>{row.id}</Text>
+        <Text tone="muted">{lead}</Text>
+        <Text
+          color={row.kind === "Binding" ? theme.color.info : undefined}
+          tone={row.kind === "Unused" ? "muted" : undefined}
+        >
+          {row.id}
+        </Text>
         {row.detail === undefined ? null : <Text tone="muted">{row.detail}</Text>}
       </Row>
     );

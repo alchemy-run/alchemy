@@ -27,6 +27,7 @@ import {
   observeLayerBuilds,
   observeLookups,
   policyOf,
+  reach,
   recordAcquisition,
 } from "@/CapabilityGraph.ts";
 import { Platform } from "@/Platform.ts";
@@ -161,21 +162,30 @@ describe("CapabilityGraph", { tags: ["unit"] }, () => {
         "Cloudflare.R2.BucketReadWrite",
       ]);
 
-      // As a tree: the process, its tools under it, and what each reaches.
-      const [head, ...rest] = graph.describe();
-      expect(rest).toEqual([]);
-      expect(head).toMatchObject({ kind: "Process", name: "Head" });
-      expect(head!.permissions.map((permission) => permission.binding).sort()).toEqual([
+      // As terms: the process, with a reference to each tool it built.
+      const terms = graph.describe();
+      expect(terms.map((term) => [term.id, term.references])).toEqual([
+        [
+          "Process:Head",
+          [
+            { relation: "uses", to: "Tool:idle" },
+            { relation: "uses", to: "Tool:notify" },
+            { relation: "uses", to: "Tool:park" },
+          ],
+        ],
+        ["Tool:idle", []],
+        ["Tool:notify", []],
+        ["Tool:park", []],
+      ]);
+      // Every binding the process reaches, through its tools.
+      expect(
+        reach(terms, "Process:Head")
+          .map((permission) => permission.binding)
+          .sort(),
+      ).toEqual([
         "AWS.SES.SendEmail",
         "Cloudflare.KV.NamespaceRead",
         "Cloudflare.R2.BucketReadWrite",
-      ]);
-      expect(
-        head!.uses.map((tool) => [tool.name, tool.permissions.map((each) => each.binding)]),
-      ).toEqual([
-        ["idle", []],
-        ["notify", ["Cloudflare.KV.NamespaceRead", "AWS.SES.SendEmail"]],
-        ["park", ["Cloudflare.R2.BucketReadWrite"]],
       ]);
     }),
   );
@@ -206,25 +216,20 @@ describe("CapabilityGraph", { tags: ["unit"] }, () => {
       );
       expect(graph.describe()).toEqual([
         {
+          id: "Process:Triage",
           kind: "Process",
           name: "Triage",
-          permissions: [
-            {
-              binding: "GitHub.SearchIssues",
-              targets: ["GitHub.Repository(repo)"],
-              via: ["test/Search"],
-            },
+          bindings: [],
+          references: [{ relation: "uses", to: "Tool:search" }],
+        },
+        {
+          id: "Tool:search",
+          kind: "Tool",
+          name: "search",
+          bindings: [
+            { binding: "GitHub.SearchIssues", targets: ["GitHub.Repository(repo)"], via: [] },
           ],
-          uses: [
-            {
-              kind: "Tool",
-              name: "search",
-              permissions: [
-                { binding: "GitHub.SearchIssues", targets: ["GitHub.Repository(repo)"], via: [] },
-              ],
-              uses: [],
-            },
-          ],
+          references: [],
         },
       ]);
     }),
@@ -484,31 +489,26 @@ test.provider(
       )!;
       expect(widget.capabilities).toEqual([
         {
+          id: "Process:Prober",
           kind: "Process",
           name: "Prober",
-          permissions: [
-            {
-              binding: "Test.ProbeBinding",
-              targets: ["Test.ModalResource(probed)"],
-              via: ["test/Probe"],
-            },
+          bindings: [],
+          references: [{ relation: "uses", to: "Tool:probe" }],
+        },
+        {
+          id: "Tool:probe",
+          kind: "Tool",
+          name: "probe",
+          bindings: [
+            { binding: "Test.ProbeBinding", targets: ["Test.ModalResource(probed)"], via: [] },
           ],
-          uses: [
-            {
-              kind: "Tool",
-              name: "probe",
-              permissions: [
-                { binding: "Test.ProbeBinding", targets: ["Test.ModalResource(probed)"], via: [] },
-              ],
-              uses: [],
-            },
-          ],
+          references: [],
         },
       ]);
       // The same list is stored on the runtime, where it is the limit.
       expect(JSON.parse(stored.ALCHEMY_CAPABILITIES as string)).toEqual({
         bindings: ["Test.ProbeBinding|Test.ModalResource(probed)"],
-        terms: { "Process:Prober": [0], "Tool:probe": [0] },
+        terms: { "Process:Prober": [], "Tool:probe": [0] },
       });
     }),
   { tags: ["unit"] },

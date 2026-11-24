@@ -133,7 +133,7 @@ describe("a tool and its bindings", { tags: ["unit"] }, () => {
       const listed = Object.fromEntries(
         graph
           .describe()
-          .map((node) => [node.name, node.permissions.map((each) => [each.binding, each.via])]),
+          .map((node) => [node.name, node.bindings.map((each) => [each.binding, each.via])]),
       );
       expect(listed).toEqual({
         by_class: [["Test.Store", []]],

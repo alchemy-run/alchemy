@@ -1,7 +1,7 @@
-import type { CapabilityNode } from "../CapabilityGraph.ts";
 import { toPath } from "../FQN.ts";
 import type { BindingAction, CRUD, ActionApply, ActionDelete, Plan } from "../Plan.ts";
 import type { ProviderMode } from "../ProviderMode.ts";
+import { capabilityGroups, type CapabilityGroup } from "./CapabilityRows.ts";
 import {
   formatDeclaredPropertyYaml,
   formatDriftPropertyYaml,
@@ -152,9 +152,9 @@ export interface FlattenedItem {
   resourceType?: string;
   bindingSid?: string;
   bindingCount?: number;
-  /** For capability items: `Process`, `Tool`, or `Binding` for a binding one of them reaches. */
+  /** For capability items: the row's kind (see `CapabilityRow`). */
   capabilityKind?: string;
-  /** For a capability item of a binding: what it is bound to, and the services it is reached through. */
+  /** For a capability item: what a binding is bound to and reached through, or how a reference is used. */
   capabilityDetail?: string;
   hasChildren?: boolean;
   /** For task items, the Task's Type (e.g. "Sync"). */
@@ -247,22 +247,27 @@ const flattenNamespace = (
               )
             : undefined,
     });
+    const here = [...node.path, resource.resource.LogicalId];
+    const groups = capabilityGroups(resource.capabilities ?? []);
+    const hosted = new Set<string | undefined>();
     for (const binding of [...resource.bindings].sort((a, b) => a.sid.localeCompare(b.sid))) {
       result.push({
         type: "binding",
         depth: depth + 1,
         id: binding.sid,
-        path: [...node.path, resource.resource.LogicalId, binding.sid],
+        path: [...here, binding.sid],
         action: binding.action,
         bindingSid: binding.sid,
       });
+      // What a Durable Object runs is drawn under its row.
+      for (const group of groups.filter((each) => each.host === binding.sid)) {
+        hosted.add(group.host);
+        pushCapabilities(group, depth + 2, [...here, binding.sid], result);
+      }
     }
-    flattenCapabilities(
-      resource.capabilities ?? [],
-      depth + 1,
-      [...node.path, resource.resource.LogicalId],
-      result,
-    );
+    for (const group of groups.filter((each) => !hosted.has(each.host))) {
+      pushCapabilities(group, depth + 1, here, result);
+    }
     if (childNamespace) {
       flattenNamespace(childNamespace, depth + 1, result, options);
     }
@@ -284,49 +289,23 @@ const flattenNamespace = (
   }
 };
 
-/**
- * A runtime's processes and tools, each with the bindings it reaches. A
- * binding a term reaches through one of the terms listed under it is shown
- * there, not repeated above.
- */
-const flattenCapabilities = (
-  nodes: ReadonlyArray<CapabilityNode>,
+/** The rows of what one host runs, as items of the plan tree. */
+const pushCapabilities = (
+  group: CapabilityGroup,
   depth: number,
   path: ReadonlyArray<string>,
   result: FlattenedItem[],
 ): void => {
-  const rowOf = (permission: CapabilityNode["permissions"][number]) =>
-    `${permission.binding}|${permission.targets.join(",")}`;
-  for (const node of nodes) {
-    const id = `${node.kind}:${node.name}`;
-    const here = [...path, id];
+  for (const row of group.rows) {
     result.push({
       type: "capability",
-      depth,
-      id: node.name,
-      path: here,
+      depth: depth + row.depth,
+      id: row.label,
+      path: [...path, row.key],
       action: "noop",
-      capabilityKind: node.kind,
+      capabilityKind: row.kind,
+      ...(row.detail === undefined ? {} : { capabilityDetail: row.detail }),
     });
-    const below = new Set(node.uses.flatMap((used) => used.permissions.map(rowOf)));
-    for (const permission of node.permissions) {
-      if (below.has(rowOf(permission))) continue;
-      result.push({
-        type: "capability",
-        depth: depth + 1,
-        id: permission.binding,
-        path: [...here, rowOf(permission)],
-        action: "noop",
-        capabilityKind: "Binding",
-        capabilityDetail: [
-          permission.targets.join(", "),
-          permission.via.length === 0 ? "" : `via ${permission.via.join(" > ")}`,
-        ]
-          .filter((part) => part !== "")
-          .join(" "),
-      });
-    }
-    flattenCapabilities(node.uses, depth + 1, here, result);
   }
 };
 

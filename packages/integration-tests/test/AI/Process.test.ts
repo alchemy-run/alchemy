@@ -7,6 +7,7 @@ import {
   makeCapabilityGraph,
   observeLayerBuilds,
   observeLookups,
+  reach,
   recordAcquisition,
 } from "alchemy/CapabilityGraph";
 import { RuntimeContext } from "alchemy/RuntimeContext";
@@ -441,27 +442,27 @@ describe("AI.Process", { tags: ["unit"] }, () => {
       const harness = recording();
       return Effect.gen(function* () {
         yield* Editor;
-        const [editor, ...rest] = graph.describe();
-        // The process that is used is listed under the one that uses it, and
-        // a tool nobody mentions is not under either.
-        expect(editor).toMatchObject({ kind: "Process", name: "Editor" });
-        expect(editor!.uses.map((used) => `${used.kind} ${used.name}`)).toContain(
-          "Process Glossary",
-        );
-        const glossary = editor!.uses.find((used) => used.name === "Glossary")!;
-        expect(glossary.uses).toEqual([
+        const terms = graph.describe();
+        // A process refers to what it mentions, and to the tools of a process
+        // it may follow: following one, it calls them itself. A tool nobody
+        // mentions is a term no reference points at.
+        expect(terms.map((term) => [term.id, term.references.map((each) => each.to)])).toEqual([
+          ["Process:Editor", ["Process:Glossary", "Tool:lookup"]],
+          ["Process:Glossary", ["Tool:lookup"]],
+          ["Tool:lookup", []],
+          ["Tool:unused", []],
+        ]);
+        expect(terms.find((term) => term.id === "Tool:lookup")!.bindings).toEqual([
+          { binding: "Test.GetItem", targets: ["Test.Table(words)"], via: [] },
+        ]);
+        // What a process reaches is what the terms it refers to reach.
+        expect(reach(terms, "Process:Editor")).toEqual([
           {
-            kind: "Tool",
-            name: "lookup",
-            permissions: [{ binding: "Test.GetItem", targets: ["Test.Table(words)"], via: [] }],
-            uses: [],
+            binding: "Test.GetItem",
+            targets: ["Test.Table(words)"],
+            via: ["Tool lookup"],
           },
         ]);
-        // What a process reaches is what its tools reach.
-        expect(editor!.permissions.map((permission) => permission.binding)).toEqual([
-          "Test.GetItem",
-        ]);
-        expect(rest.map((node) => `${node.kind} ${node.name}`)).toEqual(["Tool unused"]);
       }).pipe(
         Effect.provide(
           Layer.mergeAll(
