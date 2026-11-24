@@ -116,6 +116,39 @@ export class PostAnswer extends AI.Tool<PostAnswer>()("post_answer", {
 
 The LLM reads a failure as the tool's result and can try something else.
 
+The class is only the tool's name and shape. A Layer provides its handler, an Effect that runs in your program:
+
+```typescript title="src/PostAnswer.tool.ts"
+export const PostAnswerLive = PostAnswer.make(
+  Effect.gen(function* () {
+    const comment = yield* GitHub.CreateIssueComment(yield* Repo);
+
+    return Effect.fn(function* ({ issue, markdown }) {
+      const posted = yield* comment({ issue_number: issue, body: markdown }).pipe(Effect.orDie);
+      return { url: posted.html_url };
+    });
+  }),
+).pipe(Layer.provide(GitHub.CreateIssueCommentHttp));
+```
+
+The handler reaches the outside world through resources and bindings. `Repo` is a GitHub repository this program declares, and `GitHub.CreateIssueComment` is a binding that lets the handler comment on it. Any resource works the same way. A tool that saves a report binds to an S3 bucket:
+
+```typescript title="src/SaveReport.tool.ts"
+export const Reports = AWS.S3.Bucket("Reports", {});
+
+export const SaveReportLive = SaveReport.make(
+  Effect.gen(function* () {
+    const putObject = yield* AWS.S3.PutObject(yield* Reports);
+
+    return Effect.fn(function* ({ name, markdown }) {
+      yield* putObject({ Key: name, Body: markdown }).pipe(Effect.orDie);
+    });
+  }),
+).pipe(Layer.provide(AWS.S3.PutObjectHttp));
+```
+
+Alchemy deploys what a tool binds to and grants only that access, so a tool can do what its bindings allow and nothing more.
+
 A few tools are the same everywhere: run a command, read a file, edit one, search. Those are names (`AI.Bash`, `AI.Read`, `AI.Edit`, `AI.Grep`) that each harness implements its own way. An MCP server is mentioned like a tool and stands for every tool it offers.
 
 See [Tools](/ai/tools), [Coding tools](/ai/coding-tools) and [MCP servers](/ai/mcp-servers).
@@ -204,20 +237,7 @@ See [Processes and Domain models](/ai/domain).
 
 ## Layers: providing implementations
 
-A **Layer** provides an implementation. It connects a tool, a model or a process to something concrete in the outside world, through resources and bindings. A tool's Layer is its handler. This one binds to a GitHub repository, so the tool comments on a real issue:
-
-```typescript title="src/PostAnswer.tool.ts"
-export const PostAnswerLive = PostAnswer.make(
-  Effect.gen(function* () {
-    const comment = yield* GitHub.CreateIssueComment(yield* Repo);
-
-    return Effect.fn(function* ({ issue, markdown }) {
-      const posted = yield* comment({ issue_number: issue, body: markdown }).pipe(Effect.orDie);
-      return { url: posted.html_url };
-    });
-  }),
-).pipe(Layer.provide(GitHub.CreateIssueCommentHttp));
-```
+A **Layer** provides an implementation. It connects a tool, a model or a process to something concrete in the outside world, through resources and bindings. A process's Layer is its prose, and a tool's Layer is its handler.
 
 A model's Layer is the LLM behind its name:
 
