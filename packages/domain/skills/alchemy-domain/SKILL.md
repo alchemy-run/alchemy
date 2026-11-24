@@ -19,6 +19,7 @@ Work in this order. Each step has a reference file with templates.
 4. **Specify behavior with stories** before and while you implement it, and **state each rule that must always hold** as an invariant that `Verify` checks. See [references/testing.md](references/testing.md).
 5. **Host the model** on Cloudflare from the server package, export its traces, and deploy with one alchemy stack. See [references/hosting.md](references/hosting.md).
 6. **Drive it from foldkit** in the web package. See [references/frontend.md](references/frontend.md).
+7. **Add agents**, if a language model does part of the work: follow the `alchemy-ai` skill, which builds on this model and returns here for the front end.
 
 More: [Tutorial, part 1](https://alchemy.run/domain/tutorial/part-1).
 
@@ -38,6 +39,7 @@ Read the requirements as a story of facts, and name each kind of thing you find:
 - A record with periods the business names (months, statements, matches): an instance per period, with the period in the id. No new block.
 - An instance's log grows without end and has no periods (a chat room, a device): a **Compaction**.
 - Something outside the model you call (fraud scoring, payments): an **External System**.
+- Work a language model does (triage an issue, answer a customer): an **External System** the model calls, implemented by an AI process. Use the **`alchemy-ai` skill** (`packages/ai/skills/alchemy-ai`, or https://alchemy.run/ai) for the process, its tools and where it runs. The model never imports a process.
 - Writes to a store outside the model (a ledger table): a **Projection**. An ordered, readable log per key (account cards): a **Stream** that a projection appends to.
 - A question across keys, answered from that store (an account's ledger, paged; large withdrawals across all accounts, largest first): a **Query**. Never a hand-written route.
 - Who can do and see what: an **Api** listing commands and reads, with **middleware** (sessions, MFA) and each block authorizing itself: a command in `decide`, a view or stream in its Layer's `validate`, a query in its handler.

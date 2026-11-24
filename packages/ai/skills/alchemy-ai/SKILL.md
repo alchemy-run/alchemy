@@ -1,6 +1,6 @@
 ---
 name: alchemy-ai
-description: Build AI agents with @alchemy.run/ai - describe work as an AI.Process (prose that mentions the tools, models, other processes and Domain model commands it uses), declare tools one per file, start and talk to sessions, choose a harness (Pi or OpenCode) as a Layer, run sessions in a Durable Object, give tools a sandbox, and connect a process to an @alchemy.run/domain model with sessions that act as a user. Use when designing or changing a process, adding a tool, wiring a harness, hosting or a sandbox, connecting agents to a Domain model, or reviewing such code.
+description: Build AI agents and the app around them with @alchemy.run/ai - describe work as an AI.Process (prose that mentions the tools, models, other processes and Domain model commands it uses), declare tools one per file, start and talk to sessions, choose a harness (Pi or OpenCode) as a Layer, run sessions in a Durable Object, give tools a sandbox, connect a process to an @alchemy.run/domain model, record what a session does into that model, and serve it to a front end. Use when designing or changing a process, adding a tool, wiring a harness, hosting or a sandbox, connecting agents to a Domain model, building a UI over agent sessions, or reviewing such code. Works with the alchemy-domain skill, which covers the model itself and the front end in depth.
 ---
 
 # Building with @alchemy.run/ai
@@ -9,17 +9,33 @@ description: Build AI agents with @alchemy.run/ai - describe work as an AI.Proce
 
 Docs: https://alchemy.run/ai, with every page listed in https://alchemy.run/llms.txt. Every section here and in the reference files ends with a More link to the docs page that covers it in depth. A complete reference project: `examples/cloudflare-ai-issues` in the alchemy repo (a GitHub issue board whose policy hands each issue to a session).
 
+## The whole app, top down
+
+An app with agents has four layers. Build them in this order, and each one only knows the one below it.
+
+1. **The business**: a Domain model. Its commands, events and views are the rules, and they hold whoever sends a command, a person or an agent. Use the **`alchemy-domain` skill** for this layer (`packages/domain/skills/alchemy-domain`, or https://alchemy.run/domain). Everything about aggregates, views, policies, stories and hosting the model is there, not here.
+2. **The work**: processes and tools over that model. A process mentions the model's commands and views. The model asks for work through a `Domain.ExternalSystem` and never imports a process.
+3. **The runtime**: a harness, a Durable Object that runs sessions, a sandbox. It also records what each session does back into the model, as a command.
+4. **The front end**: one Api over the model. A page sends commands and watches views and streams. It never talks to a session.
+
+When a step below says "see the `alchemy-domain` skill", load that skill and follow its reference file. Don't re-derive Domain patterns from this one.
+
+More: [What is Alchemy AI?](https://alchemy.run/ai/what-is-alchemy-ai), [Domain](https://alchemy.run/domain).
+
 ## Workflow
 
 Work in this order. Each step has a reference file with templates.
 
-1. **Describe the work** as processes: what each is told, what it is started with, what it may use. See [references/processes.md](references/processes.md).
-2. **Lay out the files**: one per tool and per process, kind-suffixed. See [references/layout.md](references/layout.md).
-3. **Declare each tool and model** from its template. See [references/tools-and-models.md](references/tools-and-models.md).
-4. **Connect a Domain model**, if the work reads or changes business state, and say who each session acts as. See [references/domain.md](references/domain.md).
-5. **Run it**: a harness Layer, a Durable Object that yields the process, and a sandbox if tools need files. See [references/running.md](references/running.md).
+1. **Model the business** with the `alchemy-domain` skill: its `references/modeling.md` and `references/building-blocks.md`. Skip this only when the work touches no business state.
+2. **Lay out the files**: the model in a folder or package of its own, one file per tool and per process, the page in `web/`. See [references/layout.md](references/layout.md).
+3. **Describe the work** as processes: what each is told, what it is started with, what it may use. See [references/processes.md](references/processes.md).
+4. **Declare each tool and model** from its template. See [references/tools-and-models.md](references/tools-and-models.md).
+5. **Connect the processes to the model**: mention its commands and views, say who each session acts as, and let a policy ask for the work. See [references/domain.md](references/domain.md).
+6. **Run it**: a harness Layer, a Durable Object that yields the process, and a sandbox if tools need files. See [references/running.md](references/running.md).
+7. **Serve it to a front end**: record sessions into the model, list what a page may send, and build the page. See [references/front-end.md](references/front-end.md), then the `alchemy-domain` skill's `references/frontend.md` for the page itself.
+8. **Test every layer**: stories and `Verify` for the model, stories for the page, the page with the board in memory, then the deployed app. See [references/testing.md](references/testing.md).
 
-More: [Tutorial, part 1](https://alchemy.run/ai/tutorial/part-1).
+More: [Tutorial, part 1](https://alchemy.run/ai/tutorial/part-1), [Connect a front end](https://alchemy.run/ai/front-end).
 
 ## From requirements to declarations
 
@@ -44,7 +60,8 @@ More: [What is Alchemy AI?](https://alchemy.run/ai/what-is-alchemy-ai).
 - **A process's file holds the process.** A tagged process keeps its `toLayer` there as `<Name>Live`.
 - **Models share `Models.ts`.** `.model.ts` means a Domain model.
 - **The Durable Object, the Worker and the sandbox Layer keep plain names** (`Agents.ts`, `Worker.ts`, `Sandbox.ts`).
-- **A Domain model never imports a process or a tool.** It asks for work through a `Domain.ExternalSystem`.
+- **A Domain model never imports a process or a tool.** It asks for work through a `Domain.ExternalSystem`. Its own files follow the `alchemy-domain` skill's conventions (`<Noun>.<kind>.ts`).
+- **The page lives in `web/`** and imports only the model's Api, ids and value Schemas, never a process, a tool or the Durable Object.
 
 More: [Project layout](https://alchemy.run/ai/project-layout).
 
@@ -68,10 +85,12 @@ More: [Processes](https://alchemy.run/ai/processes), [Processes and Domain model
 
 ## Checklist for a change
 
-1. Name the work. Put each process in `<Name>.process.ts` with a `description`.
-2. Put each new tool in `<Name>.tool.ts`, with its class and `<Name>Live`. Mention it in the prose that uses it.
-3. Mention the Domain commands and views the work needs, through the model. Start each session with `as` if one is behind a middleware.
-4. Provide every new Layer where the process runs: each tool, each model, the hosted Domain model, and a Layer for each middleware that checks something. A missing one is a type error.
-5. Deploy and send one real message. Read `session.history()` to see what the model did.
+1. If the business changes, change the model first, with the `alchemy-domain` skill's checklist.
+2. Name the work. Put each process in `<Name>.process.ts` with a `description`.
+3. Put each new tool in `<Name>.tool.ts`, with its class and `<Name>Live`. Mention it in the prose that uses it.
+4. Mention the Domain commands and views the work needs, through the model. Start each session with `as` if one is behind a middleware.
+5. Provide every new Layer where the process runs: each tool, each model, the hosted Domain model, and a Layer for each middleware that checks something. A missing one is a type error.
+6. If a page shows it, add the command to the page's Api, and show the change at once in the page before the board answers.
+7. Run the tests of each layer you touched. Then deploy and send one real message: read the transcript and check that every tool call succeeded, not only that the work finished.
 
 More: [Where sessions run](https://alchemy.run/ai/hosting).

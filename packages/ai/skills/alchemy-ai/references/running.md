@@ -85,20 +85,6 @@ More: [Read the transcript](https://alchemy.run/ai/processes#read-the-transcript
 
 ## Connect a front end
 
-Make the session part of the Domain model, so a front end uses one Api.
+A page reads sessions through the Domain model, not from the Durable Object. See [front-end.md](front-end.md).
 
-- A `RecordActivity` command carries a batch: status, queue and items (`@alchemy.run/ai/Session` has the Schemas). Its aggregate drops items it already has.
-- A view holds the status. A stream, appended by a projection, holds the transcript.
-- The session's Durable Object reads `session.events({ after })` and sends the command. A job from `Alchemy.makeCallback` on the object's alarm records what is missing after an eviction, until the session is idle.
-- The front end's Api lists only the commands a page may send. Acting on the session is a command that a policy passes on.
-
-```typescript
-yield* triage.get(issue).events({ after: recorded.seq }).pipe(
-  Stream.groupedWithin(50, "100 millis"),
-  Stream.runForEach((batch) => sessions.send(new RecordActivity(batchOf(issue, batch)))),
-);
-```
-
-Without a model, serve a session over your own Effect RPC group from a `Cloudflare.RpcDurableObject`.
-
-More: [Record what the session does](https://alchemy.run/ai/front-end#record-what-the-session-does), [Keep recording through an eviction](https://alchemy.run/ai/front-end#keep-recording-through-an-eviction), [Read it in a Foldkit app](https://alchemy.run/ai/front-end#read-it-in-a-foldkit-app), [Without a Domain model](https://alchemy.run/ai/front-end#without-a-domain-model).
+More: [Connect a front end](https://alchemy.run/ai/front-end).

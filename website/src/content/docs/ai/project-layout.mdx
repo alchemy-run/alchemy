@@ -102,4 +102,35 @@ src/
   Triage.process.ts
 ```
 
+## With a front end
+
+A page reads sessions through the model, so what records a session sits with the model's files. The page is in `web/`, and imports only the model's Api, ids and value Schemas.
+
+```text
+src/
+  Board/
+    WebApi.api.ts               what a page may send and read
+    IssueSession.aggregate.ts   what was recorded of an issue's session
+    RecordActivity.command.ts
+    SessionStatus.view.ts
+    Transcript.stream.ts
+    Transcripts.projection.ts
+    IssueList.view.ts
+  Agents.ts                     runs the session, and records it
+  Worker.ts
+web/
+  src/
+    Board.ts                    Model, Message, update, Commands, Subscriptions
+    View.ts
+    entry.ts
+    worker.ts                   serves the build, forwards /api to the board
+test/
+  Board.verify.test.ts          the model's rules
+  Board.story.test.ts           the page's update
+  App.test.ts                   the page with the board, in memory
+  integ.test.ts                 the page with the deployed app
+```
+
+See [Connect a front end](/ai/front-end) for what each file holds.
+
 [`examples/cloudflare-ai-issues`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-ai-issues) is laid out this way.
