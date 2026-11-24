@@ -226,9 +226,18 @@ def ShopStack : Stack Kind Outputs where
 
 ## 9. Prove who can touch what
 
-Permissions are where infrastructure goes wrong quietly. Someone adds a read to a function, its role widens, and nothing fails. Six months later a function that only files packing slips can read every order. The usual defence is a person reviewing IAM diffs.
+Take the bucket in this stack. It holds two things with very different stakes.
 
-Here the role is worked out from the code, so the question becomes: what should be true of those roles, whatever the code grows into? You write that down once.
+Under `journal/` is the shop's history: every order and every payment. It is the system of record. Everything proved in steps 3 to 6 assumes one thing about it: only the function that hosts the model appends to it. If anything else can write there, an order can be recorded as paid that nobody charged, and every domain proof is about a history that is no longer the real one.
+
+Under `packed/` are packing slips, written by a warehouse function that has no business seeing what customers ordered or paid.
+
+So there are two rules this infrastructure must keep, and today they are usually kept by someone reading IAM policy diffs in review:
+
+1. **One writer for the system of record.** Only the Api writes under `journal/`.
+2. **The warehouse cannot read customer data.** It writes slips and reads nothing.
+
+Here they are theorems about the stack.
 
 ```lean
 /-- Only the Api writes the shop's history. -/
@@ -244,7 +253,7 @@ theorem theWarehouseReadsNothing :
 
 **Reading it.** `prod` is the stack at the "prod" stage and `out` is what it built. `S3.writing out.orders ["journal"]` means writing any object under `journal/`, so each rule covers every key, not a sample. `stack_rule` computes each function's role from the stack and checks the rule against it.
 
-**What you get.** Now suppose someone edits the Warehouse to peek at the journal:
+**What you get.** The rules hold as the code changes. Suppose someone, months later, makes the Warehouse read the order count from the journal to number its slips:
 
 ```diff
   SQS.consume shipments fun shipment => do
@@ -261,7 +270,7 @@ The call asks for a grant, the Warehouse's role gains "read Orders/journal", and
 Shop.lean: error: unsolved goals          ← theWarehouseReadsNothing
 ```
 
-Nobody reviewed a policy. The person who wrote the rule did not need to know this change was coming, and the person making the change did not need to know the rule existed.
+Nobody reviewed a policy. The change looked harmless and would have deployed; the build refused it because the rule about customer data was written down once. The first rule is what connects the two halves of this guide: it is the stack-side fact that the domain proofs rely on.
 
 The opposite mistake is a permission left behind after the code that needed it is gone. That cannot happen here, because a role holds only what a call in the code asks for, and one line states it:
 
