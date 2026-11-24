@@ -68,9 +68,9 @@ export interface DomainOwnershipProps {
  * `status` is as of the deploy. A domain ownership that is not `verified` is
  * read again on every deploy, so `alchemy plan` lists it as an update until
  * Prisma verifies it: it checks its record once at the nameservers without
- * waiting for it, asks Prisma to verify only when the record is there, and
- * logs a warning while it is still `unverified` or `expiring`. A verified one
- * is not read again. The Domains page shows it live.
+ * waiting for it, and only when the record is there waits about 10 seconds
+ * and asks Prisma to verify. It logs a warning while it is still
+ * `unverified` or `expiring`. A verified one is not read again. The Domains page shows it live.
  *
  * Destroying it deletes the domain ownership and, with `dns`, the record. A
  * domain ownership the stack did not create, made in the Console, by a

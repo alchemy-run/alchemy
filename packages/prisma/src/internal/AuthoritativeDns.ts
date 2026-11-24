@@ -44,8 +44,9 @@ export type NameserverSearch = "parent" | "name";
 
 export interface CheckOptions {
   /**
-   * `if-unseen` skips the margin when the first check already sees the
-   * record, i.e. it was published before this deploy reached it.
+   * `always` waits a 10-second margin after the record is seen, also after a
+   * single check. `if-unseen` skips the margin when the first check already
+   * sees the record, i.e. it was published before this deploy reached it.
    */
   readonly margin: "always" | "if-unseen";
   readonly nameservers: NameserverSearch;
@@ -225,6 +226,7 @@ const authoritativeServers = (dns: DnsLookups, name: string, search: NameserverS
  * for anycast edges we cannot see once every one returns it.
  */
 const RECHECK_INTERVAL = Duration.seconds(3);
+const ANYCAST_MARGIN = Duration.seconds(10);
 
 const waitUntilVisible = <A>(
   check: Effect.Effect<A>,
@@ -246,7 +248,7 @@ const waitUntilVisible = <A>(
             }),
           )
         : first;
-    if (visibilityOf(last) === "seen") yield* Effect.sleep("10 seconds");
+    if (visibilityOf(last) === "seen") yield* Effect.sleep(ANYCAST_MARGIN);
     return last;
   });
 
