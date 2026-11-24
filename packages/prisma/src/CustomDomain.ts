@@ -68,7 +68,9 @@ export interface CustomDomainProps {
   hostname: string;
   /**
    * Ownership that proves the workspace owns the hostname, exact or
-   * wildcard. Passing it creates the domain after the proof.
+   * wildcard. Passing it creates the domain after the domain ownership is
+   * saved; while it is not `verified`, the create fails with
+   * `PrismaDomainOwnershipRequired`.
    */
   ownership?: DomainOwnership;
 }

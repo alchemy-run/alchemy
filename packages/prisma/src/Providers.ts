@@ -23,6 +23,10 @@ import { Deployment, DeploymentProvider } from "./Deployment.ts";
 import { EnvironmentVariable, EnvironmentVariableProvider } from "./EnvironmentVariable.ts";
 import * as Credentials from "./internal/Credentials.ts";
 import {
+  DomainOwnershipCheck,
+  DomainOwnershipCheckProvider,
+} from "./internal/DomainOwnershipCheck.ts";
+import {
   DomainOwnershipProof,
   DomainOwnershipProofProvider,
 } from "./internal/DomainOwnershipProof.ts";
@@ -190,6 +194,7 @@ export const providers = () =>
       CustomDomain,
       DomainVerification,
       DomainOwnershipProof,
+      DomainOwnershipCheck,
       ...RoutingUrlResources,
       EnvironmentVariable,
       SourceRepository,
@@ -213,6 +218,7 @@ export const providers = () =>
         CustomDomainProvider(),
         DomainVerificationProvider(),
         DomainOwnershipProofProvider(),
+        DomainOwnershipCheckProvider(),
         RoutingUrlProvider(),
         EnvironmentVariableProvider(),
         SourceRepositoryProvider(),

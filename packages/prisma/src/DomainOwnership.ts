@@ -5,16 +5,17 @@ import * as Output from "alchemy/Output";
 import type { ResourceLike } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { ProjectReference } from "./internal/DomainOwnership.ts";
+import { DomainOwnershipCheck } from "./internal/DomainOwnershipCheck.ts";
 import { DomainOwnershipProof } from "./internal/DomainOwnershipProof.ts";
-import { DomainVerification } from "./internal/DomainVerification.ts";
+import { publishesDns } from "./internal/PublishesDns.ts";
 
 export { PrismaDomainOwnershipRequired } from "./internal/DomainOwnership.ts";
 
-/** A domain a Prisma workspace has proved it owns. */
-export type DomainOwnership = DomainOwnershipProof;
+/** A workspace's domain ownership, as the deploy last saw it. */
+export type DomainOwnership = DomainOwnershipProof | DomainOwnershipCheck;
 
 export interface DomainOwnershipProps {
-  /** Project (or project ID) whose workspace proves ownership. */
+  /** Project (or project ID) whose workspace owns the domain ownership. */
   project: Input<ProjectReference>;
   /**
    * An exact hostname such as `app.example.com`, or a wildcard such as
@@ -25,51 +26,57 @@ export interface DomainOwnershipProps {
   /**
    * DNS host that publishes the verification `TXT` record, e.g.
    * `Cloudflare.DNS.Adapter()` (see
-   * [DNS Adapters](/infrastructure-as-code/dns-adapters)). Omitted: publish
-   * it yourself; until it resolves, the deploy fails with
-   * {@link PrismaDomainOwnershipRequired}, which names the record.
+   * [DNS Adapters](/infrastructure-as-code/dns-adapters)). The record is
+   * published after the domain ownership is saved, and the deploy waits up to
+   * 3 minutes for it at the authoritative nameservers before asking Prisma to
+   * verify; it does not fail when the record never appears or Prisma has not
+   * verified it. Nothing is published under `alchemy dev`. Omitted: publish
+   * `recordName` and `recordValue` yourself.
    */
   dns?: DNS.DnsConfig;
 }
 
-const publishVerificationRecord = (
-  project: Input<ProjectReference>,
-  domain: string,
-  dnsConfig: DNS.DnsConfig,
-) =>
-  Effect.gen(function* () {
-    const dns = yield* DNS.resolve(dnsConfig);
-    const verification = yield* DomainVerification("Verification", { project, domain });
-    return yield* dns.records("Record", {
-      records: Output.map(
-        Output.all(verification.recordName, verification.recordValue),
-        ([name, value]): DNS.DnsRecord[] => [{ name, type: "TXT", value }],
-      ),
-    });
-  });
-
 /**
- * A domain ownership: Prisma's record that a workspace has proved it owns a
- * domain, which is an exact hostname or a wildcard. A hostname serves only
- * once a verified domain ownership covers it.
+ * A domain ownership: the workspace's record that it owns a domain, an exact
+ * hostname or a wildcard. A `Prisma.RoutingUrl` serves only once a verified
+ * domain ownership covers its hostname. It belongs to the workspace, not to a
+ * project: every project in the workspace can use it.
  *
- * Prisma creates the domain ownership for a `Prisma.RoutingUrl`'s exact
- * hostname itself. Don't declare this resource for that same hostname: it
- * takes over the domain ownership Prisma created and deletes it on destroy.
- * A wildcard such as `*.example.com` covers every hostname under it, so a
- * RoutingUrl there serves without a `TXT` record of its own; one with `dns`
- * still publishes its own `TXT`, which does no harm.
+ * The deploy saves it without waiting for DNS, and reports Prisma's `status`.
+ * It proves ownership with a `TXT` record named `recordName` whose value,
+ * `recordValue`, is the same for every domain in the workspace. With `dns`
+ * the record is published for you, and Prisma is asked to verify once the
+ * record is seen. `unverified` at the end of a deploy means Prisma has not
+ * seen the record yet: with `dns`, Prisma picks it up later on its own;
+ * without `dns`, publish it, then press Check on the workspace's Domains page
+ * or call `POST /v1/domain-ownerships/{id}/verify` to make Prisma look now.
+ * Each covered RoutingUrl becomes `active` on its own once it is verified.
+ * `status` is as of the deploy's last write or verify request, and an
+ * unchanged redeploy does not read it again; the Domains page shows it live.
  *
- * The proof is a `TXT` record named `_prisma-verification.{domain}` whose
- * value is the same for every domain in the workspace; a wildcard and its apex
- * share one record name. With `dns`, the record is published for you. The
- * deploy creates nothing while an authoritative nameserver answers without the
- * record, and succeeds once Prisma reports the ownership `verified`. `status`
- * and `expiresAt` are what Prisma reported when the deploy last proved the
- * domain; an unchanged redeploy does not check again. Destroying the resource
- * removes the ownership and the record.
+ * Destroying it deletes the domain ownership and, with `dns`, the record. A
+ * domain ownership the stack did not create, made in the Console, by a
+ * RoutingUrl with `createDomainOwnership: true`, by Prisma for an older
+ * custom domain, or by another stack, needs `--adopt`, or better `adopt(true)`
+ * on this resource alone. Once two stacks have it, destroying either deletes
+ * it for both, so declare a shared one in one stack, with
+ * `RemovalPolicy.retain()` if it must outlive that stack.
  *
  * ### Proving a Domain
+ * **Example:** Prove a hostname and serve it
+ * ```typescript
+ * yield* Prisma.DomainOwnership("api-domain", {
+ *   project,
+ *   domain: "api.example.com",
+ *   dns: Cloudflare.DNS.Adapter(),
+ * });
+ * yield* Prisma.RoutingUrl("api", {
+ *   app: api,
+ *   hostname: "api.example.com",
+ *   dns: Cloudflare.DNS.Adapter(),
+ * });
+ * ```
+ *
  * **Example:** Prove a wildcard for the hostnames under it
  * ```typescript
  * yield* Prisma.DomainOwnership("example.com", {
@@ -83,12 +90,12 @@ const publishVerificationRecord = (
  *
  * **Example:** Publish the record with your own DNS host
  * ```typescript
- * // fails with PrismaDomainOwnershipRequired until
- * // TXT _prisma-verification.example.com resolves
  * const ownership = yield* Prisma.DomainOwnership("example.com", {
  *   project,
  *   domain: "*.example.com",
  * });
+ * // ownership.status: "unverified" until TXT ownership.recordName,
+ * // with value ownership.recordValue, is published and Prisma looks
  * ```
  *
  * @resource
@@ -96,15 +103,25 @@ const publishVerificationRecord = (
  */
 export const DomainOwnership = (id: string, props: DomainOwnershipProps) =>
   Effect.gen(function* () {
-    const published = props.dns
-      ? yield* publishVerificationRecord(props.project, props.domain, props.dns)
-      : undefined;
-    return yield* DomainOwnershipProof("Ownership", {
+    const dns = props.dns !== undefined && (yield* publishesDns) ? props.dns : undefined;
+    const row = yield* DomainOwnershipProof("Ownership", {
       project: props.project,
-      // Proving looks the record up, so it must be published first.
-      domain:
-        published === undefined
-          ? props.domain
-          : Output.map(Output.of(published as ResourceLike), () => props.domain),
+      domain: props.domain,
+      ...(dns === undefined ? {} : { publishesRecord: true }),
+    });
+    if (dns === undefined) return row;
+    const published = yield* (yield* DNS.resolve(dns)).records("Record", {
+      records: Output.map(
+        Output.all(row.recordName, row.recordValue),
+        ([name, value]): DNS.DnsRecord[] => [{ name, type: "TXT", value }],
+      ),
+    });
+    return yield* DomainOwnershipCheck("Check", {
+      domainOwnershipId: Output.map(
+        Output.all(row.domainOwnershipId, Output.of(published as ResourceLike)),
+        ([domainOwnershipId]) => domainOwnershipId,
+      ),
+      recordName: row.recordName,
+      recordValue: row.recordValue,
     });
   }).pipe(Namespace.push(id));

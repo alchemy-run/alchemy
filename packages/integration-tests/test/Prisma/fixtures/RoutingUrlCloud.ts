@@ -21,6 +21,14 @@ import {
   type CheckOptions,
 } from "../../../../prisma/src/internal/AuthoritativeDns.ts";
 import {
+  DomainOwnershipCheck,
+  DomainOwnershipCheckProvider,
+} from "../../../../prisma/src/internal/DomainOwnershipCheck.ts";
+import {
+  DomainOwnershipProof,
+  DomainOwnershipProofProvider,
+} from "../../../../prisma/src/internal/DomainOwnershipProof.ts";
+import {
   data,
   failure,
   type FakeManagementApi,
@@ -162,12 +170,48 @@ export const customDomain = (id: string, hostname: string, serviceId = "svc-1") 
 
 export type WireCustomDomain = ReturnType<typeof customDomain>;
 
+export type OwnershipStatus = "unverified" | "verified" | "expiring";
+
+/** The `TXT` that proves `domain`; a wildcard shares its apex's record name. */
+export const txtFor = (domain: string): DNS.DnsRecord => ({
+  name: `_prisma-verification.${domain.replace(/^\*\./, "")}`,
+  type: "TXT",
+  value: TXT.value,
+});
+
+/** A domain ownership as `/v1/domain-ownerships/{id}` returns it. */
+export const domainOwnership = (id: string, domain: string, status: OwnershipStatus) => ({
+  id,
+  type: "domainOwnership",
+  workspaceId: "ws-1",
+  domain,
+  verification: { ...TXT, name: txtFor(domain).name },
+  status,
+  expiresAt: status === "expiring" ? "2026-12-01T00:00:00.000Z" : null,
+  verificationRecordLastSeenAt: null,
+  verificationRecordPresent: null,
+  verificationRecordSyncError: null,
+  createdAt: WIRE_CREATED_AT,
+});
+
+export type WireOwnership = ReturnType<typeof domainOwnership>;
+
+/** `*.example.com` for `api.example.com`. */
+export const wildcardOf = (hostname: string) => {
+  const labels = hostname.split(".");
+  return labels.length >= 3 ? `*.${labels.slice(1).join(".")}` : undefined;
+};
+
 export interface CloudState {
   /** What the authoritative nameservers show for the new hostname's switchboard DNS. */
   dns: SwitchboardDnsVisibility;
   /** What the switchboard DNS check was asked. */
   checked: Array<[ExpectedSwitchboardDns, SwitchboardCheckOptions]>;
-  /** Status of the workspace's domain ownership for the new hostname, if any. */
+  /**
+   * Status of a domain ownership that covers every hostname, exact or by
+   * wildcard, if any. Domain ownerships created through the API are in
+   * `ownerships`.
+   */
   ownership: "verified" | "unverified" | undefined;
   /** Whether that domain ownership is for the exact hostname or its wildcard. */
   ownershipOn: "exact" | "wildcard";
@@ -202,6 +246,10 @@ export interface CloudState {
   throttle: Array<{ route: string; retryAfter: number; status?: number }>;
   /** How many TXT checks had run when Prisma received a `/check`. */
   txtCheckedAtCheck: number | undefined;
+  /** The status a domain ownership's verify request reports, instead of the zone. */
+  verifiesAs: OwnershipStatus | undefined;
+  /** What the zone held, and how many requests were captured, at each domain ownership create. */
+  atOwnershipCreate: Array<{ txtPublished: boolean; requests: number }>;
 }
 
 /** One DNS host's records, as the test DNS adapter publishes them. */
@@ -213,6 +261,11 @@ export interface Zone {
   publishes: number;
   /** The host options each alias and record set was declared with. */
   options: Array<{ method: "alias" | "records"; options: DNS.DnsZone["options"] }>;
+  /**
+   * Whether Prisma has a verified domain ownership covering the hostname. It
+   * is Prisma's state, not DNS, kept here so `progress` can read it.
+   */
+  ownershipVerified: (hostname: string) => boolean;
 }
 
 export const sameRecord = (a: DNS.DnsRecord) => (b: DNS.DnsRecord) =>
@@ -232,21 +285,30 @@ export const served = (row: WireRoutingUrl): WireRoutingUrl => ({
   customDomain: row.customDomain,
 });
 
-/** Whether the DNS host has published both of the row's records. */
+/** Whether a verified domain ownership covers the row and the DNS host has published its `CNAME`. */
 export const published = (row: WireRoutingUrl, zone: Zone) =>
-  recordsFor(row.hostname).every((record) => zone.records.some(sameRecord(record)));
+  zone.ownershipVerified(row.hostname) && zone.records.some(sameRecord(cnameFor(row.hostname)));
 
 /**
  * Prisma looks a pending row's DNS up when it is written or checked, and
- * serves it then if both records are published. A read changes nothing.
+ * serves it then if it is published. A read changes nothing.
  */
 export const looksOnWrite = (row: WireRoutingUrl, zone: Zone, event: PrismaEvent) =>
   event !== "read" && row.status === "pending" && published(row, zone) ? served(row) : row;
 
+const SEEDED_OWNERSHIP_ID = "do-seeded";
+
 export const makeUrlCloud = () => {
   const rows = new Map<string, WireRoutingUrl>();
   const domains = new Map<string, WireCustomDomain>();
-  const zone: Zone = { records: [], removed: [], publishes: 0, options: [] };
+  const ownerships = new Map<string, WireOwnership>();
+  const zone: Zone = {
+    records: [],
+    removed: [],
+    publishes: 0,
+    options: [],
+    ownershipVerified: (hostname) => covering(hostname).some((row) => row.status === "verified"),
+  };
   const state: CloudState = {
     dns: { visibility: "absent", cname: "absent" },
     checked: [],
@@ -264,10 +326,79 @@ export const makeUrlCloud = () => {
     loseCreateReply: false,
     txtCheckedAtPatch: undefined,
     txtCheckedAtCheck: undefined,
+    verifiesAs: undefined,
+    atOwnershipCreate: [],
   };
   let next = 0;
-  const progressed = (row: WireRoutingUrl, event: PrismaEvent) => {
-    const moved = state.progress(row, zone, event);
+  const seeded = (domain: string): WireOwnership[] =>
+    state.ownership !== undefined && domain.startsWith("*.") === (state.ownershipOn === "wildcard")
+      ? [domainOwnership(SEEDED_OWNERSHIP_ID, domain, state.ownership)]
+      : [];
+  const ownershipsOn = (domain: string) => [
+    ...[...ownerships.values()].filter((row) => row.domain === domain),
+    ...seeded(domain),
+  ];
+  const coveringDomains = (hostname: string) =>
+    [hostname, wildcardOf(hostname)].filter((domain) => domain !== undefined);
+  const covering = (hostname: string) => coveringDomains(hostname).flatMap(ownershipsOn);
+  const txtPublished = (domain: string) => zone.records.some(sameRecord(txtFor(domain)));
+  /** Prisma looks a domain ownership's record up, and syncs every RoutingUrl it covers when its status changes. */
+  const lookUp = (row: WireOwnership, verifiesAs?: OwnershipStatus) => {
+    const status = verifiesAs ?? (txtPublished(row.domain) ? "verified" : row.status);
+    const looked = { ...row, status };
+    if (row.id === SEEDED_OWNERSHIP_ID) {
+      state.ownership = status === "verified" ? "verified" : "unverified";
+    } else {
+      ownerships.set(row.id, looked);
+    }
+    if (status !== row.status) {
+      for (const url of [...rows.values()]) {
+        if (covering(url.hostname).some((each) => each.id === row.id)) progressed(url, "write");
+      }
+    }
+    return looked;
+  };
+  const syncOwnerships = (hostname: string) => {
+    for (const row of covering(hostname)) if (row.status !== "verified") lookUp(row);
+  };
+  const createOwnership = (domain: string) => {
+    state.atOwnershipCreate.push({
+      txtPublished: txtPublished(domain),
+      requests: fake.captured.length,
+    });
+    const created = domainOwnership(`do-${++next}`, domain, "unverified");
+    ownerships.set(created.id, created);
+    return lookUp(created);
+  };
+  /** A RoutingUrl write with `createDomainOwnership: true` creates the exact one when no verified one covers the hostname. */
+  const ensureOwnershipFor = (hostname: string, body: Record<string, unknown> | undefined) => {
+    syncOwnerships(hostname);
+    if (body?.createDomainOwnership !== true) return;
+    if (covering(hostname).some((row) => row.status === "verified")) return;
+    if (ownershipsOn(hostname).length > 0) return;
+    createOwnership(hostname);
+  };
+  const withOwnershipState = (row: WireRoutingUrl): WireRoutingUrl => {
+    if (
+      row.status !== "pending" ||
+      !["no_domain_ownership", "not_verified", "waiting_for_dns"].includes(row.state)
+    ) {
+      return row;
+    }
+    const rowsCovering = covering(row.hostname);
+    if (rowsCovering.some((each) => each.status === "verified")) {
+      return {
+        ...row,
+        state: "waiting_for_dns",
+        conditions: { ...row.conditions, ownershipVerified: "met" },
+        firstUnmetCondition: "dnsPointsAtSwitchboard",
+        records: row.records.filter((record) => record.condition !== "ownershipVerified"),
+      };
+    }
+    return { ...row, state: rowsCovering.length === 0 ? "no_domain_ownership" : "not_verified" };
+  };
+  const progressed = (row: WireRoutingUrl, event: PrismaEvent): WireRoutingUrl => {
+    const moved = withOwnershipState(state.progress(row, zone, event));
     rows.set(moved.id, moved);
     return moved;
   };
@@ -341,6 +472,7 @@ export const makeUrlCloud = () => {
       if (logicalId !== null && [...rows.values()].some((row) => row.logicalId === logicalId)) {
         return failure(409, "logical-id-taken", "Another live RoutingUrl has this logicalId.");
       }
+      ensureOwnershipFor(String(body?.hostname), body);
       const created = progressed(
         routingUrl(`url-${++next}`, {
           hostname: String(body?.hostname),
@@ -373,33 +505,41 @@ export const makeUrlCloud = () => {
       });
     }
     if (path === "/v1/workspaces/ws-1/domain-ownerships") {
-      const domain = new URLSearchParams(request.search).get("domain") ?? "";
-      const ownership = state.ownership;
-      return page(
-        ownership && domain.startsWith("*.") === (state.ownershipOn === "wildcard")
-          ? [
-              {
-                id: "do-1",
-                type: "domainOwnership",
-                workspaceId: "ws-1",
-                domain,
-                verification: TXT,
-                status: ownership,
-                expiresAt: null,
-                verificationRecordLastSeenAt: null,
-                verificationRecordPresent: null,
-                verificationRecordSyncError: null,
-                createdAt: WIRE_CREATED_AT,
-              },
-            ]
-          : [],
-      );
+      if (request.method === "GET") {
+        const domain = new URLSearchParams(request.search).get("domain");
+        return page(
+          domain === null
+            ? [...ownerships.values()]
+            : ownershipsOn(domain).filter((row) => row.domain === domain),
+        );
+      }
+      if (request.method === "POST") {
+        const domain = String(body?.domain);
+        const [existing] = ownershipsOn(domain);
+        if (existing) return data(lookUp(existing));
+        return data(createOwnership(domain), { status: 201 });
+      }
+    }
+    const ownershipMatch = /^\/v1\/domain-ownerships\/([^/]+)(\/verify)?$/.exec(path);
+    if (ownershipMatch) {
+      const row = ownerships.get(ownershipMatch[1]!);
+      if (row === undefined) return notFound("Domain ownership not found.");
+      if (ownershipMatch[2] && request.method === "POST") {
+        return data(lookUp(row, state.verifiesAs));
+      }
+      if (request.method === "GET") return data(row);
+      if (request.method === "DELETE") {
+        ownerships.delete(row.id);
+        return noContent();
+      }
     }
     const checkMatch = /^\/v1\/urls\/([^/]+)\/check$/.exec(path);
     if (checkMatch && request.method === "POST") {
       const row = rows.get(checkMatch[1]!);
       state.txtCheckedAtCheck = state.txtChecked.length;
-      return row === undefined ? notFound("RoutingUrl not found") : data(progressed(row, "check"));
+      if (row === undefined) return notFound("RoutingUrl not found");
+      syncOwnerships(row.hostname);
+      return data(progressed(row, "check"));
     }
     const urlMatch = /^\/v1\/urls\/([^/]+)$/.exec(path);
     if (urlMatch) {
@@ -415,6 +555,7 @@ export const makeUrlCloud = () => {
         state.zoneAtPatch = [...zone.records];
         state.txtCheckedAtPatch = state.txtChecked.length;
         const hostname = (body?.hostname as string | undefined) ?? row.hostname;
+        ensureOwnershipFor(hostname, body);
         const updated = {
           ...routingUrl(row.id, {
             hostname,
@@ -434,6 +575,7 @@ export const makeUrlCloud = () => {
   const reset = (options: Partial<CloudState> = {}, ...initial: WireRoutingUrl[]) => {
     rows.clear();
     domains.clear();
+    ownerships.clear();
     next = 0;
     Object.assign(zone, { records: [], removed: [], publishes: 0, options: [] });
     for (const row of initial) rows.set(row.id, row);
@@ -456,6 +598,8 @@ export const makeUrlCloud = () => {
         loseCreateReply: false,
         txtCheckedAtPatch: undefined,
         txtCheckedAtCheck: undefined,
+        verifiesAs: undefined,
+        atOwnershipCreate: [],
       },
       options,
     );
@@ -474,7 +618,22 @@ export const makeUrlCloud = () => {
     zone.records.some(sameRecord({ name: expected.name, type: "TXT", value: expected.value ?? "" }))
       ? "seen"
       : "absent");
-  return { fake, rows, domains, state, zone, dnsSeen, txtSeen, reset, routes };
+  const seedOwnership = (domain: string, status: OwnershipStatus, id = `do-seed-${domain}`) => {
+    ownerships.set(id, domainOwnership(id, domain, status));
+  };
+  return {
+    fake,
+    rows,
+    domains,
+    ownerships,
+    state,
+    zone,
+    dnsSeen,
+    txtSeen,
+    reset,
+    routes,
+    seedOwnership,
+  };
 };
 
 export const json = (value: unknown) =>
@@ -593,9 +752,21 @@ export const testFor = (cloud: UrlCloud, options: { dev?: boolean } = {}) =>
     ...(options.dev ? { dev: true, sidecar: false } : {}),
     providers: Layer.effect(
       TestPrismaProviders,
-      Provider.collection([...RoutingUrlResources, CustomDomain]),
+      Provider.collection([
+        ...RoutingUrlResources,
+        CustomDomain,
+        DomainOwnershipProof,
+        DomainOwnershipCheck,
+      ]),
     ).pipe(
-      Layer.provideMerge(Layer.mergeAll(RoutingUrlProvider(), CustomDomainProvider())),
+      Layer.provideMerge(
+        Layer.mergeAll(
+          RoutingUrlProvider(),
+          CustomDomainProvider(),
+          DomainOwnershipProofProvider(),
+          DomainOwnershipCheckProvider(),
+        ),
+      ),
       Layer.provide(
         Layer.succeed(AuthoritativeRecordCheck, (expected, options) =>
           Effect.sync(() => {
@@ -630,7 +801,13 @@ export const testFor = (cloud: UrlCloud, options: { dev?: boolean } = {}) =>
     ),
   });
 
+export const cnameFor = (hostname: string): DNS.DnsRecord => ({
+  name: hostname,
+  type: "CNAME",
+  value: "switchboard.us-east-1.prisma.build",
+});
+
 export const recordsFor = (hostname: string): DNS.DnsRecord[] => [
-  { name: `_prisma-verification.${hostname}`, type: "TXT", value: TXT.value },
-  { name: hostname, type: "CNAME", value: "switchboard.us-east-1.prisma.build" },
+  txtFor(hostname),
+  cnameFor(hostname),
 ];
