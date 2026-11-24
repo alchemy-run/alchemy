@@ -212,7 +212,7 @@ yield* Prisma.Website.Vite("Web", { project, domain: { name: "www.example.com", 
 yield* Prisma.Website.Vite("Docs", { project, domain: { name: "docs.example.com", dns, ownership: example } });
 ```
 
-A site given `ownership` declares no domain ownership and publishes no `TXT`. `ownership` must be for the site's hostname, or for the wildcard one label above it; otherwise the deploy stops before the site's hostname is saved. When `ownership` is not `verified`, the deploy logs a warning that the hostname serves only once it is.
+A site given `ownership` declares no domain ownership and publishes no `TXT`. `ownership` must be for the site's hostname, or for the wildcard one label above it; otherwise the deploy stops before the site's hostname is saved. When `ownership` is not `verified`, the deploy logs a warning: an `unverified` one serves nothing until Prisma verifies it, and an `expiring` one keeps a serving hostname serving only until its `expiresAt`, unless its `TXT` is published. For a domain ownership declared in the stack, the warning is about the status the stack last saved, which an unchanged redeploy does not refresh.
 
 For a domain ownership made in the Console or by another stack, pass a lookup. It is read while the deploy is planned and never changed, and the deploy fails if it does not exist:
 
@@ -231,10 +231,12 @@ Cases to know:
 
 ### Upgrading a site deployed with an earlier release
 
-A site deployed with an earlier release keeps serving through the upgrade: the RoutingUrl takes over the hostname Prisma recorded for the site's custom domain, and its `CNAME` stays published. Its workspace usually already has a domain ownership for the hostname, made by Prisma or in the Console. The site then refuses to deploy while the deploy is planned, before anything changes: the refusal names `Prisma.DomainOwnership`, or with `dns` `Prisma.DomainVerification`, and says to re-run with `--adopt`. Prefer one of these:
+A site deployed with an earlier release keeps serving through the upgrade: the RoutingUrl takes over the hostname Prisma recorded for the site's custom domain, and its `CNAME` stays published. Its workspace usually already has a domain ownership for the hostname. Prisma made one for each custom domain created before RoutingUrls, as `expiring`: it keeps the hostname serving until its `expiresAt`, about 30 days after Prisma made it, and then stops it unless Prisma finds its `TXT`. The earlier release published no `TXT`.
 
-1. Pass the existing one: `ownership: Prisma.DomainOwnership.lookup({ project, domain: "app.example.com" })`. Destroying the site then leaves it.
-2. After reading `alchemy plan`, pipe `adopt(true)` onto the site's call for one deploy. That adopts every resource of the site, not only the domain ownership; for example, a RoutingUrl another stage on the same Branch uses with the same `logicalId` moves to this site's app. The site then owns the domain ownership and deletes it when destroyed. `--adopt` is wider still: it adopts everything in the deploy.
+Such a site refuses to deploy while the deploy is planned, before anything changes: the refusal names `Prisma.DomainOwnership`, or with `dns` `Prisma.DomainVerification`, and says to re-run with `--adopt`. Choose the fix by who should own the domain ownership:
+
+- **The site should own it**, the usual case for one site on its hostname: after reading `alchemy plan`, pipe `adopt(true)` onto the site's call for one deploy. With `dns`, the site then publishes the `TXT`, and Prisma verifies the domain ownership. The site owns it from then on and deletes it when destroyed. `adopt(true)` adopts every resource of the site, not only the domain ownership; for example, a RoutingUrl another stage on the same Branch uses with the same `logicalId` moves to this site's app. `--adopt` is wider still: it adopts everything in the deploy.
+- **It is managed elsewhere**, shared by several sites or by an Admin: pass `ownership: Prisma.DomainOwnership.lookup({ project, domain: "app.example.com" })`. The site then publishes no `TXT`, and destroying it leaves the domain ownership. If it is `expiring`, the deploy logs a warning, and the hostname stops serving at its `expiresAt` unless whoever manages it publishes its `TXT`.
 
 Deploy the upgrade with the same `domain` first, and change the hostname in a later deploy. A deploy that upgrades and changes the hostname at once stops serving the old hostname without checking that the new one can serve.
 

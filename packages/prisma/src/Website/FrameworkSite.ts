@@ -97,9 +97,13 @@ export interface FrameworkSiteProps {
    * published through the DNS host, and the deploy waits up to about 7
    * minutes for them to reach the nameservers. A domain ownership that
    * already exists for `name`, such as one Prisma made for a site deployed
-   * with an earlier release, refuses the deploy until it is passed as
-   * `ownership: Prisma.DomainOwnership.lookup({ project, domain })`, or
-   * adopted with `adopt(true)` on the site for one deploy. See
+   * with an earlier release, refuses the deploy. If the site should own it,
+   * pipe `adopt(true)` onto the site for one deploy after reading the plan:
+   * it adopts every resource of the site, and with `dns` publishes the
+   * `TXT`. If it is managed elsewhere, pass
+   * `ownership: Prisma.DomainOwnership.lookup({ project, domain })`; the site
+   * then publishes no `TXT`, and a row Prisma made is `expiring` and stops
+   * serving at its `expiresAt` unless its `TXT` is published. See
    * [DNS Adapters](/infrastructure-as-code/dns-adapters).
    */
   domain?: WebsiteDomain;

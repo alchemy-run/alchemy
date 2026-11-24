@@ -998,6 +998,29 @@ urlTestFor(lookedUp).test.provider(
   { tags: lookupTags },
 );
 
+const lookedUpInDev = makeUrlCloud();
+urlTestFor(lookedUpInDev, { dev: true }).test.provider(
+  "lookup asks Prisma under alchemy dev too",
+  (stack) =>
+    Effect.gen(function* () {
+      lookedUpInDev.reset();
+      lookedUpInDev.seedOwnership("*.example.com", "verified", "do-console");
+      yield* stack.destroy();
+
+      yield* stack.deploy(
+        lookupProbe(DomainOwnership.lookup({ project: "proj-1", domain: "*.example.com" })),
+      );
+
+      expect(lookedUpInDev.zone.records.map((record) => record.value)).toEqual([
+        "do-console *.example.com verified",
+      ]);
+      expect(lookedUpInDev.routes()).toContain(LIST);
+
+      yield* stack.destroy();
+    }),
+  { tags: lookupTags },
+);
+
 const lookedUpMissing = makeUrlCloud();
 urlTestFor(lookedUpMissing).test.provider(
   "lookup of a domain ownership that does not exist fails the deploy with LookupNotFoundError",

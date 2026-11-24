@@ -774,7 +774,15 @@ export interface AppRef extends Resource<
 > {}
 export const AppRef = Resource<AppRef>("Test.AppRef");
 
-export const testFor = (cloud: UrlCloud, options: { dev?: boolean; adopt?: boolean } = {}) =>
+export const testFor = (
+  cloud: UrlCloud,
+  options: {
+    dev?: boolean;
+    adopt?: boolean;
+    /** Providers for resources the cloud does not serve, such as a site's Compute. */
+    providers?: Layer.Layer<never>;
+  } = {},
+) =>
   Test.make({
     ...(options.dev ? { dev: true, sidecar: false } : {}),
     ...(options.adopt ? { adopt: true } : {}),
@@ -814,6 +822,7 @@ export const testFor = (cloud: UrlCloud, options: { dev?: boolean; adopt?: boole
         ),
       ),
       Layer.merge(testDns(cloud.zone)),
+      Layer.merge(options.providers ?? Layer.empty),
       Layer.merge(
         Provider.succeed(AppRef, {
           reconcile: () =>

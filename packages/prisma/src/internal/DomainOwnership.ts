@@ -117,6 +117,17 @@ export const findOwnership = (workspaceId: string, domain: string) =>
 /** Prisma names the `TXT` record of `*.example.com` after `example.com`, so a wildcard and its apex share one record. */
 export const recordDomainOf = (domain: string) => domain.replace(/^\*\./, "");
 
+/**
+ * The domains whose domain ownership covers a normalized `hostname`: the
+ * hostname itself, and the wildcard whose `*` stands for its first label
+ * (`*.example.com` for `api.example.com`). A wildcard's base needs two
+ * labels, and a wildcard does not cover its apex.
+ */
+export const coveringDomainsOf = (hostname: string): ReadonlyArray<string> => {
+  const labels = hostname.split(".");
+  return labels.length >= 3 ? [hostname, `*.${labels.slice(1).join(".")}`] : [hostname];
+};
+
 export const domainSharingRecordWith = (domain: string) =>
   domain.startsWith("*.") ? recordDomainOf(domain) : `*.${domain}`;
 

@@ -14,8 +14,8 @@ import {
   type RoutingUrlInvalidProps,
 } from "../RoutingUrl.ts";
 import type { WebsiteDomain } from "../Website/FrameworkSite.ts";
-import type { ProjectReference } from "./DomainOwnership.ts";
-import { normalizeHostname, wildcardOf } from "./Hostname.ts";
+import { coveringDomainsOf, type ProjectReference } from "./DomainOwnership.ts";
+import { normalizeHostname } from "./Hostname.ts";
 import { cnameTarget, requiredRecords } from "./RoutingUrlRequiredRecords.ts";
 
 /** Id of the RoutingUrl a site declares for its custom hostname. */
@@ -31,8 +31,8 @@ export const RELEASED_ALIAS_ID = "DomainAlias";
 export const RELEASED_CUSTOM_DOMAIN_ID = "Domain";
 
 /** A site's `domain.ownership` is for a domain that does not cover `domain.name`. */
-export class WebsiteDomainOwnershipMismatch extends Data.TaggedError(
-  "WebsiteDomainOwnershipMismatch",
+export class WebsiteDomainOwnershipDoesNotCover extends Data.TaggedError(
+  "WebsiteDomainOwnershipDoesNotCover",
 )<{
   readonly message: string;
   readonly hostname: string;
@@ -54,40 +54,80 @@ const invalidConfiguration = <A, R>(
     }),
   );
 
-const covers = (ownershipDomain: string, hostname: string) =>
-  ownershipDomain === hostname || ownershipDomain === wildcardOf(hostname);
+type OwnershipState = Pick<
+  DomainOwnership["Attributes"],
+  "domain" | "status" | "expiresAt" | "recordName"
+>;
+
+const doesNotCover = (hostname: string, ownershipDomain: string) => {
+  const covering = coveringDomainsOf(hostname)
+    .map((domain) => `'${domain}'`)
+    .join(" or ");
+  const apex = ownershipDomain === `*.${hostname}` ? " A wildcard does not cover its apex." : "";
+  return new WebsiteDomainOwnershipDoesNotCover({
+    hostname,
+    ownershipDomain,
+    message: `domain.ownership is the domain ownership of '${ownershipDomain}', which does not cover '${hostname}'. Pass one for ${covering}.${apex} Nothing was saved for '${hostname}'.`,
+  });
+};
+
+/**
+ * What a site's hostname can expect from a domain ownership that is not
+ * verified. A looked-up one's status is Prisma's, read while the deploy is
+ * planned; a declared one's is what the stack last saved.
+ */
+const notVerifiedWarning = (
+  hostname: string,
+  { domain, status, expiresAt, recordName }: OwnershipState,
+  lookedUp: boolean,
+) => {
+  const is = lookedUp ? "is" : "was, when this stack last saved it,";
+  return status === "expiring"
+    ? `The domain ownership of '${domain}' ${is} expiring: a hostname it covers keeps serving only until ${expiresAt ?? "it expires"}, and none starts serving; publish TXT ${recordName} to keep '${hostname}' serving.`
+    : `The domain ownership of '${domain}' ${is} ${status}, so '${hostname}' does not serve until Prisma verifies it.`;
+};
 
 /**
  * The site's app id, resolved only once `ownership` is saved and covers
  * `hostname`. Passed as `app` to every resource the site declares for the
  * hostname, it saves them after the domain ownership, so a serving site's
- * hostname change finds the new domain ownership and its `TXT` in place.
+ * hostname change finds the new domain ownership and its `TXT` in place. With
+ * `warnsWhenUnverified`, it logs once per deploy when `ownership` is not
+ * verified.
  */
 const appOnceOwned = (
   compute: Compute,
   ownership: DomainOwnership,
   hostname: string,
-  managedElsewhere: boolean,
+  warnsWhenUnverified: boolean,
 ): Input<string> =>
   Output.mapEffect(
-    ([appId, domain, status]: [string, string, DomainOwnership["Attributes"]["status"]]) => {
-      const ownershipDomain = normalizeHostname(domain);
-      if (!covers(ownershipDomain, hostname)) {
-        return Effect.die(
-          new WebsiteDomainOwnershipMismatch({
-            hostname,
-            ownershipDomain,
-            message: `domain.ownership is the domain ownership of '${ownershipDomain}', which does not cover '${hostname}'. Pass one for '${hostname}'${wildcardOf(hostname) === undefined ? "" : ` or '${wildcardOf(hostname)}'`}; a wildcard does not cover its apex. Nothing was saved for '${hostname}'.`,
-          }),
-        );
+    ([appId, domain, status, expiresAt, recordName]: [
+      string,
+      string,
+      OwnershipState["status"],
+      OwnershipState["expiresAt"],
+      string,
+    ]) => {
+      const state = { domain: normalizeHostname(domain), status, expiresAt, recordName };
+      if (!coveringDomainsOf(hostname).includes(state.domain)) {
+        return Effect.die(doesNotCover(hostname, state.domain));
       }
-      return managedElsewhere && status !== "verified"
+      return warnsWhenUnverified && state.status !== "verified"
         ? Effect.logWarning(
-            `The domain ownership of '${ownershipDomain}' is ${status}, so '${hostname}' serves only once Prisma verifies it.`,
+            notVerifiedWarning(hostname, state, Output.isLookupExpr(ownership)),
           ).pipe(Effect.as(appId))
         : Effect.succeed(appId);
     },
-  )(Output.all(compute.appId, ownership.domain, ownership.status));
+  )(
+    Output.all(
+      compute.appId,
+      ownership.domain,
+      ownership.status,
+      ownership.expiresAt,
+      ownership.recordName,
+    ),
+  );
 
 /**
  * The site's custom hostname: a RoutingUrl, with its records published

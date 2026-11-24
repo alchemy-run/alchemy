@@ -1,11 +1,11 @@
 import * as DNS from "alchemy/DNS/Adapter";
-import type { Input } from "alchemy/Input";
+import type { Input, PropsInput } from "alchemy/Input";
 import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
 import type { ResourceLike } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { type ProjectReference, recordDomainOf } from "./internal/DomainOwnership.ts";
-import { DomainOwnershipRow } from "./internal/DomainOwnershipRow.ts";
+import { type DomainOwnershipLookup, DomainOwnershipRow } from "./internal/DomainOwnershipRow.ts";
 import { DomainVerification } from "./internal/DomainVerification.ts";
 import { normalizeHostname } from "./internal/Hostname.ts";
 import { publishesDns } from "./internal/PublishesDns.ts";
@@ -170,7 +170,6 @@ export const DomainOwnership = Object.assign(
       });
     }).pipe(Namespace.push(id)),
   {
-    lookup: (props: Parameters<typeof DomainOwnershipRow.lookup>[0]) =>
-      DomainOwnershipRow.lookup(props),
+    lookup: (props: PropsInput<DomainOwnershipLookup>) => DomainOwnershipRow.lookup(props),
   },
 );

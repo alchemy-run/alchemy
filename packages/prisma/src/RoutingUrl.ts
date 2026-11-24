@@ -35,7 +35,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { AuthoritativeRecordCheck, SwitchboardDnsCheck } from "./internal/AuthoritativeDns.ts";
 import { attrOrString, devId, devProvider } from "./internal/DevStub.ts";
-import { isPlainHostname, normalizeHostname, wildcardOf } from "./internal/Hostname.ts";
+import { coveringDomainsOf } from "./internal/DomainOwnership.ts";
+import { isPlainHostname, normalizeHostname } from "./internal/Hostname.ts";
 import { publishesDns } from "./internal/PublishesDns.ts";
 import { concreteIdOf, isPrismaDevId } from "./internal/Refs.ts";
 import {
@@ -634,7 +635,7 @@ const ProviderLive = () =>
       ) =>
         Effect.gen(function* () {
           const workspaceId = (yield* getProject({ id: service.projectId })).data.workspace.id;
-          const covering = [to, wildcardOf(to)].filter((domain) => domain !== undefined);
+          const covering = coveringDomainsOf(to);
           const rows = (yield* Effect.forEach(covering, (domain) =>
             getWorkspaceDomainOwnerships({ workspaceId, domain }).pipe(
               Effect.map((response) => response.data),

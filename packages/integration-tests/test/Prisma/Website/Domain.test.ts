@@ -2,11 +2,13 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import * as Prisma from "@alchemy.run/prisma";
-import type { Compute } from "@alchemy.run/prisma/Compute";
+import { Compute } from "@alchemy.run/prisma/Compute";
 import { CustomDomain } from "@alchemy.run/prisma/CustomDomain";
 import { DomainOwnership } from "@alchemy.run/prisma/DomainOwnership";
+import { Project } from "@alchemy.run/prisma/Project";
 import { RoutingUrl } from "@alchemy.run/prisma/RoutingUrl";
-import type { WebsiteDomain } from "@alchemy.run/prisma/Website/FrameworkSite";
+import { WebsiteArtifact } from "@alchemy.run/prisma/Website/Artifact";
+import { deployWebsite, type WebsiteDomain } from "@alchemy.run/prisma/Website/FrameworkSite";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
@@ -23,6 +25,7 @@ import { adopt } from "alchemy/AdoptPolicy";
 import * as DNS from "alchemy/DNS/Adapter";
 import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
+import * as Provider from "alchemy/Provider";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import type { ResourceLike } from "alchemy/Resource";
 import * as Cause from "effect/Cause";
@@ -60,6 +63,8 @@ import {
 
 const SITE_HOST = "app.example.com";
 const PROJECT = "proj-1";
+/** The `expiresAt` the fake gives an `expiring` domain ownership. */
+const EXPIRES_AT = "2026-12-01T00:00:00.000Z";
 const unitTags = [
   "unit",
   "provider:prisma",
@@ -166,15 +171,19 @@ testFor(withDns).test.provider(
 
 const plain = makeUrlCloud();
 testFor(plain).test.provider(
-  "a site with a plain domain declares its domain ownership and a pending RoutingUrl, and publishes nothing",
+  "a site with a plain domain declares its domain ownership and a pending RoutingUrl, publishes nothing, and does not warn that its own is unverified",
   (stack) =>
     Effect.gen(function* () {
       plain.reset();
       yield* stack.destroy();
       plain.state.throttle = [{ route: OWNERSHIP_CREATE, retryAfter: 1 }];
 
-      const { url, ownership } = yield* stack.deploy(siteDomain(SITE_HOST));
+      const {
+        result: { url, ownership },
+        warnings,
+      } = yield* warningsOf(stack.deploy(siteDomain(SITE_HOST)));
 
+      expect(warnings).toEqual([]);
       expect(url.status).toBe("pending");
       expect(url.state).toBe("not_verified");
       expect(url.records.map((record) => record.type)).toEqual(["TXT", "CNAME"]);
@@ -268,7 +277,7 @@ testFor(lookedUp).test.provider(
 
 const mismatchedLookup = makeUrlCloud();
 testFor(mismatchedLookup).test.provider(
-  "a site whose looked-up domain ownership does not cover its hostname stops before any write",
+  "a site whose looked-up domain ownership does not cover its hostname stops before anything is saved for the hostname",
   (stack) =>
     Effect.gen(function* () {
       mismatchedLookup.reset({ fromZone: true });
@@ -285,8 +294,9 @@ testFor(mismatchedLookup).test.provider(
         ),
       );
 
-      expect(failure).toContain("WebsiteDomainOwnershipMismatch");
-      expect(failure).toContain("a wildcard does not cover its apex");
+      expect(failure).toContain("WebsiteDomainOwnershipDoesNotCover");
+      expect(failure).toContain(`Pass one for '${SITE_HOST}' or '*.example.com'.`);
+      expect(failure).not.toContain("apex");
       expect(writes(mismatchedLookup)).toEqual([]);
       expect(mismatchedLookup.zone.publishes).toBe(0);
 
@@ -312,7 +322,7 @@ testFor(mismatchedShared).test.provider(
         ),
       );
 
-      expect(failure).toContain("WebsiteDomainOwnershipMismatch");
+      expect(failure).toContain("WebsiteDomainOwnershipDoesNotCover");
       expect(mismatchedShared.routes()).not.toContain(URL_CREATE);
       expect(mismatchedShared.zone.records).toEqual([txtFor("*.other.com")]);
 
@@ -433,11 +443,63 @@ testFor(unverified).test.provider(
       );
 
       expect(warnings).toEqual([
-        `The domain ownership of '*.example.com' is unverified, so '${SITE_HOST}' serves only once Prisma verifies it.`,
+        `The domain ownership of '*.example.com' is unverified, so '${SITE_HOST}' does not serve until Prisma verifies it.`,
       ]);
       expect([...unverified.ownerships.keys()]).toEqual(["do-console"]);
       expect(unverified.rows.get(own.url.routingUrlId)?.status).toBe("pending");
       expect(unverified.zone.records).toEqual([cnameFor(SITE_HOST)]);
+
+      yield* stack.destroy();
+    }),
+  { tags: unitTags },
+);
+
+const apexMismatch = makeUrlCloud();
+testFor(apexMismatch).test.provider(
+  "a site on an apex given the wildcard above it stops, saying a wildcard does not cover its apex",
+  (stack) =>
+    Effect.gen(function* () {
+      apexMismatch.reset({ fromZone: true });
+      apexMismatch.seedOwnership("*.example.com", "verified", "do-console");
+      yield* stack.destroy();
+
+      const failure = yield* failureOf(
+        stack.deploy(
+          siteDomain({
+            name: "example.com",
+            dns: TEST_DNS,
+            ownership: DomainOwnership.lookup({ project: PROJECT, domain: "*.example.com" }),
+          }),
+        ),
+      );
+
+      expect(failure).toContain("WebsiteDomainOwnershipDoesNotCover");
+      expect(failure).toContain("Pass one for 'example.com'. A wildcard does not cover its apex.");
+      expect(writes(apexMismatch)).toEqual([]);
+
+      yield* stack.destroy();
+    }),
+  { tags: unitTags },
+);
+
+const declaredUnverified = makeUrlCloud();
+testFor(declaredUnverified).test.provider(
+  "a site given an unverified domain ownership declared in the stack warns once per deploy, about the status the stack last saved",
+  (stack) =>
+    Effect.gen(function* () {
+      declaredUnverified.reset();
+      yield* stack.destroy();
+      const program = Effect.gen(function* () {
+        const example = yield* sharedOwnership("*.example.com", false);
+        return yield* siteDomain({ name: SITE_HOST, ownership: example });
+      });
+      const expected = `The domain ownership of '*.example.com' was, when this stack last saved it, unverified, so '${SITE_HOST}' does not serve until Prisma verifies it.`;
+
+      const first = yield* warningsOf(stack.deploy(program));
+      expect(first.warnings).toEqual([expected]);
+
+      const again = yield* warningsOf(stack.deploy(program));
+      expect(again.warnings).toEqual([expected]);
 
       yield* stack.destroy();
     }),
@@ -456,7 +518,7 @@ for (const withRecords of [true, false]) {
         refused.reset({ fromZone: true });
         yield* stack.destroy();
         yield* stack.deploy(releasedSiteDomain(domain));
-        refused.seedOwnership(SITE_HOST, "verified", "do-backfill");
+        refused.seedOwnership(SITE_HOST, "expiring", "do-backfill");
         const [customDomain] = Array.from(refused.domains.keys());
 
         refused.fake.captured.length = 0;
@@ -469,15 +531,21 @@ for (const withRecords of [true, false]) {
         expect(writes(refused)).toEqual([]);
         expect(refused.domains.has(customDomain!)).toBe(true);
 
-        const looked = yield* stack.deploy(
-          siteDomain({
-            name: SITE_HOST,
-            ...(withRecords ? { dns: TEST_DNS } : {}),
-            ownership: DomainOwnership.lookup({ project: PROJECT, domain: SITE_HOST }),
-          }),
+        const { result: looked, warnings } = yield* warningsOf(
+          stack.deploy(
+            siteDomain({
+              name: SITE_HOST,
+              ...(withRecords ? { dns: TEST_DNS } : {}),
+              ownership: DomainOwnership.lookup({ project: PROJECT, domain: SITE_HOST }),
+            }),
+          ),
         );
         expect(looked.ownership.domainOwnershipId).toBe("do-backfill");
         expect(ownershipWrites(refused)).toEqual([]);
+        expect(refused.zone.records.filter((record) => record.type === "TXT")).toEqual([]);
+        expect(warnings).toEqual([
+          `The domain ownership of '${SITE_HOST}' is expiring: a hostname it covers keeps serving only until ${EXPIRES_AT}, and none starts serving; publish TXT ${txtFor(SITE_HOST).name} to keep '${SITE_HOST}' serving.`,
+        ]);
 
         yield* stack.destroy();
         expect([...refused.ownerships.keys()]).toEqual(["do-backfill"]);
@@ -493,11 +561,15 @@ for (const withRecords of [true, false]) {
         adopted.reset({ fromZone: true });
         yield* stack.destroy();
         yield* stack.deploy(releasedSiteDomain(domain));
-        adopted.seedOwnership(SITE_HOST, "verified", "do-backfill");
+        adopted.seedOwnership(SITE_HOST, "expiring", "do-backfill");
 
         const taken = yield* stack.deploy(siteDomain(domain).pipe(adopt(true)));
 
         expect(taken.ownership.domainOwnershipId).toBe("do-backfill");
+        expect(taken.ownership.status).toBe(withRecords ? "verified" : "expiring");
+        expect(adopted.zone.records.filter((record) => record.type === "TXT")).toEqual(
+          withRecords ? [txtFor(SITE_HOST)] : [],
+        );
         expect(adopted.routes()).not.toContain(OWNERSHIP_CREATE);
 
         yield* stack.deploy(siteDomain(domain));
@@ -581,8 +653,13 @@ testFor(hostnameChange).test.provider(
       expect(moved.url.hostname).toBe("new.example.com");
       expect(moved.ownership.domain).toBe("new.example.com");
       expect(hostnameChange.state.zoneAtPatch).toEqual(
-        expect.arrayContaining([txtFor("new.example.com"), cnameFor("new.example.com")]),
+        expect.arrayContaining([
+          txtFor("new.example.com"),
+          cnameFor("new.example.com"),
+          txtFor(SITE_HOST),
+        ]),
       );
+      expect(hostnameChange.zone.removed).toContainEqual(txtFor(SITE_HOST));
       const routes = hostnameChange.routes();
       const patch = routes.indexOf(`PATCH /v1/urls/${first.url.routingUrlId}`);
       expect(patch).toBeGreaterThanOrEqual(0);
@@ -673,6 +750,103 @@ for (const retained of [true, false]) {
     { tags: unitTags },
   );
 }
+
+const SITE_PROJECT = "proj-site";
+
+/** The artifact, Compute and Project a site declares, answered without a build or Prisma: the fake serves only the domain routes. */
+const siteProviders = Layer.mergeAll(
+  Provider.succeed(Compute, {
+    reconcile: ({ news }) =>
+      Effect.succeed({
+        appId: "svc-1",
+        deploymentId: "dep-1",
+        projectId: String(news.project),
+        appName: "web",
+        regionId: "us-east-1",
+        deploymentEndpointDomain: undefined,
+        deploymentUrl: undefined,
+        appEndpointDomain: "svc-1.us-east-1.prisma.build",
+        url: "https://svc-1.us-east-1.prisma.build",
+        promoted: true,
+        previousDeploymentId: null,
+        previousDeploymentAction: null,
+      } as Compute["Attributes"]),
+    delete: () => Effect.void,
+  }),
+  Provider.succeed(WebsiteArtifact, {
+    reconcile: () =>
+      Effect.succeed({ directory: "artifact", artifactPath: "site.tar.gz", hash: "hash" }),
+    delete: () => Effect.void,
+  }),
+  Provider.succeed(Project, {
+    reconcile: () =>
+      Effect.succeed({
+        projectId: SITE_PROJECT,
+        projectName: "web",
+        workspaceId: "ws-1",
+        createdAt: "2026-11-01T00:00:00.000Z",
+        defaultRegion: "us-east-1",
+        databaseId: undefined,
+        defaultConnectionId: undefined,
+        directConnectionString: undefined,
+        pooledConnectionString: undefined,
+        accelerateConnectionString: undefined,
+        host: undefined,
+        user: undefined,
+      } as Project["Attributes"]),
+    delete: () => Effect.void,
+  }),
+);
+
+/** `Prisma.Website`'s live half, as every framework site calls it once its artifact is built. */
+const website = (domain: WebsiteDomain) =>
+  Effect.gen(function* () {
+    const artifact = yield* WebsiteArtifact("Artifact", { root: ".", distDir: "dist" });
+    return yield* deployWebsite({ domain }, artifact);
+  }).pipe(Namespace.push("Web"));
+
+const site = makeUrlCloud();
+testFor(site, { providers: siteProviders }).test.provider(
+  "a site returns its domain ownership, declared with the site's project, and adopt(true) and RemovalPolicy.retain() on the site's call work as the docs say",
+  (stack) =>
+    Effect.gen(function* () {
+      site.reset({ fromZone: true });
+      site.seedOwnership(SITE_HOST, "expiring", "do-backfill");
+      yield* stack.destroy();
+      const domain = { name: SITE_HOST, dns: TEST_DNS };
+
+      const refused = yield* failureOf(stack.deploy(website(domain)));
+      expect(refused).toContain("(Prisma.DomainVerification)");
+
+      const adopted = yield* stack.deploy(website(domain).pipe(adopt(true)));
+      expect(adopted.url).toBe(`https://${SITE_HOST}`);
+      expect(adopted.domain?.hostname).toBe(SITE_HOST);
+      expect(adopted.domainOwnership?.domainOwnershipId).toBe("do-backfill");
+      expect(adopted.domainOwnership?.status).toBe("verified");
+      const plan = yield* stack.plan(website(domain));
+      const saved = plan.resources["Web/DomainOwnership/Ownership"]?.state;
+      expect(saved && "props" in saved ? saved.props.project.projectId : undefined).toBe(
+        SITE_PROJECT,
+      );
+
+      yield* stack.deploy(website(domain).pipe(RemovalPolicy.retain()));
+      const moved = yield* stack.deploy(
+        Effect.gen(function* () {
+          const example = yield* sharedOwnership(SITE_HOST).pipe(adopt(true));
+          return yield* website({ ...domain, ownership: example });
+        }),
+      );
+      expect(moved.domainOwnership?.domainOwnershipId).toBe("do-backfill");
+      expect([...site.ownerships.keys()]).toEqual(["do-backfill"]);
+      expect(byName(site.zone.records)).toEqual(byName(recordsFor(SITE_HOST)));
+
+      yield* stack.destroy();
+      expect(site.ownerships.size).toBe(0);
+      expect(site.rows.size).toBe(0);
+      expect(site.zone.records).toEqual([]);
+    }),
+  { tags: unitTags },
+);
 
 const aliasDropped = makeUrlCloud();
 testFor(aliasDropped).test.provider(
