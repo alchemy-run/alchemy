@@ -425,7 +425,7 @@ const globToRegExp = (glob: string) =>
 const matchesAny = (file: string, globs: string | string[]) =>
   (Array.isArray(globs) ? globs : [globs]).some((glob) => globToRegExp(glob).test(file));
 
-export const getFileOptions = (
+const getFileOptions = (
   file: string,
   options: AssetFileOption[] | undefined,
   textEncoding: WebsiteTextEncoding | undefined,
