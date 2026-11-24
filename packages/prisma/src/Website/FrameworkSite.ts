@@ -100,7 +100,10 @@ export interface FrameworkSiteProps {
    * with an earlier release, refuses the deploy. If the site should own it,
    * pipe `adopt(true)` onto the site for one deploy after reading the plan:
    * it adopts every resource of the site, and with `dns` publishes the
-   * `TXT`. If it is managed elsewhere, pass
+   * `TXT`. Without `dns`, an adopted row Prisma made stays `expiring`:
+   * publish `domainOwnership.recordName` with value
+   * `domainOwnership.recordValue` before its `expiresAt`, or add `dns`. If it
+   * is managed elsewhere, pass
    * `ownership: Prisma.DomainOwnership.lookup({ project, domain })`; the site
    * then publishes no `TXT`, and a row Prisma made is `expiring` and stops
    * serving at its `expiresAt` unless its `TXT` is published. See

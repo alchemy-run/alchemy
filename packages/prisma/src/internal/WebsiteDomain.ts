@@ -56,8 +56,10 @@ const invalidConfiguration = <A, R>(
 
 type OwnershipState = Pick<
   DomainOwnership["Attributes"],
-  "domain" | "status" | "expiresAt" | "recordName"
+  "domain" | "status" | "expiresAt" | "recordName" | "recordValue"
 >;
+
+type NotVerified = Exclude<OwnershipState["status"], "verified">;
 
 const doesNotCover = (hostname: string, ownershipDomain: string) => {
   const covering = coveringDomainsOf(hostname)
@@ -72,48 +74,55 @@ const doesNotCover = (hostname: string, ownershipDomain: string) => {
 };
 
 /**
- * What a site's hostname can expect from a domain ownership that is not
- * verified. A looked-up one's status is Prisma's, read while the deploy is
+ * What a domain ownership that is not verified means for the hostnames it
+ * covers. A looked-up one's status is Prisma's, read while the deploy is
  * planned; a declared one's is what the stack last saved.
  */
 const notVerifiedWarning = (
   hostname: string,
-  { domain, status, expiresAt, recordName }: OwnershipState,
+  { domain, status, expiresAt, recordName, recordValue }: OwnershipState,
   lookedUp: boolean,
 ) => {
   const is = lookedUp ? "is" : "was, when this stack last saved it,";
+  const record = `TXT ${recordName} = ${recordValue}`;
   return status === "expiring"
-    ? `The domain ownership of '${domain}' ${is} expiring: a hostname it covers keeps serving only until ${expiresAt ?? "it expires"}, and none starts serving; publish TXT ${recordName} to keep '${hostname}' serving.`
-    : `The domain ownership of '${domain}' ${is} ${status}, so '${hostname}' does not serve until Prisma verifies it.`;
+    ? `The domain ownership of '${domain}' ${is} expiring: hostnames it covers, such as '${hostname}', stop serving at ${expiresAt ?? "its expiry"} unless ${record} is published, or another verified domain ownership covers them.`
+    : `The domain ownership of '${domain}' ${is} ${status}: it does not make hostnames it covers, such as '${hostname}', serve until Prisma finds ${record}, unless another verified domain ownership covers them.`;
 };
 
 /**
  * The site's app id, resolved only once `ownership` is saved and covers
  * `hostname`. Passed as `app` to every resource the site declares for the
  * hostname, it saves them after the domain ownership, so a serving site's
- * hostname change finds the new domain ownership and its `TXT` in place. With
- * `warnsWhenUnverified`, it logs once per deploy when `ownership` is not
- * verified.
+ * hostname change finds the new domain ownership and its `TXT` in place. It
+ * logs once per deploy when `ownership`'s status is one of `warnsOn`.
  */
 const appOnceOwned = (
   compute: Compute,
   ownership: DomainOwnership,
   hostname: string,
-  warnsWhenUnverified: boolean,
+  warnsOn: ReadonlyArray<NotVerified>,
 ): Input<string> =>
   Output.mapEffect(
-    ([appId, domain, status, expiresAt, recordName]: [
+    ([appId, domain, status, expiresAt, recordName, recordValue]: [
       string,
       string,
       OwnershipState["status"],
       OwnershipState["expiresAt"],
       string,
+      string,
     ]) => {
-      const state = { domain: normalizeHostname(domain), status, expiresAt, recordName };
+      const state = {
+        domain: normalizeHostname(domain),
+        status,
+        expiresAt,
+        recordName,
+        recordValue,
+      };
       if (!coveringDomainsOf(hostname).includes(state.domain)) {
         return Effect.die(doesNotCover(hostname, state.domain));
       }
-      return warnsWhenUnverified && state.status !== "verified"
+      return status !== "verified" && warnsOn.includes(status)
         ? Effect.logWarning(
             notVerifiedWarning(hostname, state, Output.isLookupExpr(ownership)),
           ).pipe(Effect.as(appId))
@@ -126,6 +135,7 @@ const appOnceOwned = (
       ownership.status,
       ownership.expiresAt,
       ownership.recordName,
+      ownership.recordValue,
     ),
   );
 
@@ -149,7 +159,15 @@ export const websiteDomain = Effect.fn(function* (
       domain: hostname,
       ...(dns === undefined ? {} : { dns }),
     }));
-  const app = appOnceOwned(compute, ownership, normalizeHostname(hostname), passed !== undefined);
+  // The site's own domain ownership is unverified on a first deploy, which the
+  // RoutingUrl's state already reports; an expiring one, such as an adopted
+  // backfilled row without `dns`, would otherwise stop serving unannounced.
+  const app = appOnceOwned(
+    compute,
+    ownership,
+    normalizeHostname(hostname),
+    passed === undefined ? ["expiring"] : ["unverified", "expiring"],
+  );
   if (dns === undefined) {
     const url = yield* RoutingUrl(WEBSITE_ROUTING_URL_ID, { app, hostname }).pipe(
       invalidConfiguration,

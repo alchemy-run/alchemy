@@ -65,6 +65,13 @@ const SITE_HOST = "app.example.com";
 const PROJECT = "proj-1";
 /** The `expiresAt` the fake gives an `expiring` domain ownership. */
 const EXPIRES_AT = "2026-12-01T00:00:00.000Z";
+
+const record = (domain: string) => `TXT ${txtFor(domain).name} = ${txtFor(domain).value}`;
+const unverifiedWarning = (domain: string, hostname: string, is = "is") =>
+  `The domain ownership of '${domain}' ${is} unverified: it does not make hostnames it covers, such as '${hostname}', serve until Prisma finds ${record(domain)}, unless another verified domain ownership covers them.`;
+const expiringWarning = (domain: string, hostname: string, is = "is") =>
+  `The domain ownership of '${domain}' ${is} expiring: hostnames it covers, such as '${hostname}', stop serving at ${EXPIRES_AT} unless ${record(domain)} is published, or another verified domain ownership covers them.`;
+const LAST_SAVED = "was, when this stack last saved it,";
 const unitTags = [
   "unit",
   "provider:prisma",
@@ -442,9 +449,7 @@ testFor(unverified).test.provider(
         ),
       );
 
-      expect(warnings).toEqual([
-        `The domain ownership of '*.example.com' is unverified, so '${SITE_HOST}' does not serve until Prisma verifies it.`,
-      ]);
+      expect(warnings).toEqual([unverifiedWarning("*.example.com", SITE_HOST)]);
       expect([...unverified.ownerships.keys()]).toEqual(["do-console"]);
       expect(unverified.rows.get(own.url.routingUrlId)?.status).toBe("pending");
       expect(unverified.zone.records).toEqual([cnameFor(SITE_HOST)]);
@@ -493,7 +498,7 @@ testFor(declaredUnverified).test.provider(
         const example = yield* sharedOwnership("*.example.com", false);
         return yield* siteDomain({ name: SITE_HOST, ownership: example });
       });
-      const expected = `The domain ownership of '*.example.com' was, when this stack last saved it, unverified, so '${SITE_HOST}' does not serve until Prisma verifies it.`;
+      const expected = unverifiedWarning("*.example.com", SITE_HOST, LAST_SAVED);
 
       const first = yield* warningsOf(stack.deploy(program));
       expect(first.warnings).toEqual([expected]);
@@ -543,9 +548,11 @@ for (const withRecords of [true, false]) {
         expect(looked.ownership.domainOwnershipId).toBe("do-backfill");
         expect(ownershipWrites(refused)).toEqual([]);
         expect(refused.zone.records.filter((record) => record.type === "TXT")).toEqual([]);
-        expect(warnings).toEqual([
-          `The domain ownership of '${SITE_HOST}' is expiring: a hostname it covers keeps serving only until ${EXPIRES_AT}, and none starts serving; publish TXT ${txtFor(SITE_HOST).name} to keep '${SITE_HOST}' serving.`,
-        ]);
+        expect(warnings).toEqual([expiringWarning(SITE_HOST, SITE_HOST)]);
+        if (withRecords) {
+          expect(refused.zone.records).toContainEqual(cnameFor(SITE_HOST));
+          expect(refused.zone.removed).toEqual([]);
+        }
 
         yield* stack.destroy();
         expect([...refused.ownerships.keys()]).toEqual(["do-backfill"]);
@@ -555,7 +562,7 @@ for (const withRecords of [true, false]) {
 
   const adopted = makeUrlCloud();
   testFor(adopted).test.provider(
-    `${how}, a released site adopted with adopt(true) on the site takes the existing domain ownership, and destroying it deletes the row`,
+    `${how}, a released site adopted with adopt(true) on the site takes the existing domain ownership, ${withRecords ? "verifies it without a warning" : "warns once that it stays expiring"}, and destroying it deletes the row`,
     (stack) =>
       Effect.gen(function* () {
         adopted.reset({ fromZone: true });
@@ -563,8 +570,13 @@ for (const withRecords of [true, false]) {
         yield* stack.deploy(releasedSiteDomain(domain));
         adopted.seedOwnership(SITE_HOST, "expiring", "do-backfill");
 
-        const taken = yield* stack.deploy(siteDomain(domain).pipe(adopt(true)));
+        const { result: taken, warnings } = yield* warningsOf(
+          stack.deploy(siteDomain(domain).pipe(adopt(true))),
+        );
 
+        expect(warnings).toEqual(
+          withRecords ? [] : [expiringWarning(SITE_HOST, SITE_HOST, LAST_SAVED)],
+        );
         expect(taken.ownership.domainOwnershipId).toBe("do-backfill");
         expect(taken.ownership.status).toBe(withRecords ? "verified" : "expiring");
         expect(adopted.zone.records.filter((record) => record.type === "TXT")).toEqual(
