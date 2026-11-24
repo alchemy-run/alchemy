@@ -252,6 +252,15 @@ interface Read {
 const classes = new WeakMap<object, Read>();
 /** The classes whose bodies are being read: a `static` block may write what the class holds. */
 const building = new WeakSet<object>();
+/** A generator the code called: the function and what it was called with, to run when it is gone over. */
+const generators = new WeakMap<
+  object,
+  { readonly fn: V & { readonly _tag: "Fn" }; readonly args: ReadonlyArray<V> }
+>();
+/** What stops a generator when the loop that goes over it is left: its `finally` runs, and no `catch` sees it. */
+const LEFT: V = { _tag: "Opaque", what: "a loop that was left" };
+const isLeft = (stop: Value.Stop): boolean => stop._tag === "Rejected" && stop.rejection === LEFT;
+
 /** What a `Map` or a `Set` the code made holds, in the order it was put in. A set holds each item as its own key. */
 interface Kept {
   readonly kind: "Map" | "Set";
@@ -1128,6 +1137,44 @@ export const make = (given: Loader, run: Run): Interpreter => {
   /** The class a function was already bound in, kept when it is bound again. */
   const thisOfFn = (fn: V & { readonly _tag: "Fn" }): V | undefined => thisOf(fn.env, "~class");
 
+  /** A generator function, with what each `yield` in its body hands its value to. */
+  const yielding = (fn: V & { readonly _tag: "Fn" }, sink: V): V & { readonly _tag: "Fn" } => {
+    const scope = child(fn.env.scope);
+    scope.variables.set("~yield", sink);
+    return { ...fn, env: { ...fn.env, scope } };
+  };
+
+  /** What a `yield` hands its value to, where the code being read is a generator that is gone over. */
+  const sinkOf = (env: Env): V | undefined => {
+    const sink = thisOf(env, "~yield");
+    return sink && sink._tag !== "Undef" ? sink : undefined;
+  };
+
+  /**
+   * Go over a generator: its body is run, and each value it yields is given
+   * to `each` where the body stands. `each` says whether to go on. When it
+   * says no, the generator is left where it stands, as a loop that is broken
+   * out of leaves one: its `finally` runs.
+   */
+  const through: (
+    generator: { readonly fn: V & { readonly _tag: "Fn" }; readonly args: ReadonlyArray<V> },
+    each: (value: V) => Eval<boolean>,
+  ) => Eval<void> = Effect.fnUntraced(function* (generator, each) {
+    const sink: V = {
+      _tag: "Native",
+      name: "yield",
+      call: ([value]) =>
+        Effect.flatMap(each(value ?? Value.undef), (goesOn) =>
+          goesOn
+            ? Effect.succeed(Value.undef)
+            : Effect.fail(new Value.Rejected({ rejection: LEFT, defect: true, yielded: true })),
+        ),
+    };
+    yield* invoke(yielding(generator.fn, sink), generator.args).pipe(
+      Effect.catchIf(isLeft, () => Effect.succeed(Value.undef)),
+    );
+  });
+
   /** A function with `this` bound to the value it was read from. */
   const bound = (fn: V, self: V, cls?: V): V => {
     if (fn._tag !== "Fn" || fn.node.type === "ArrowFunctionExpression") return fn;
@@ -1270,11 +1317,6 @@ export const make = (given: Loader, run: Run): Interpreter => {
         yield* execute(each.body, { ...env, scope: child(scope) });
         continue;
       }
-      if (each.type === "MethodDefinition" && each.value?.generator)
-        return yield* fail(
-          { module: env.module, node: each },
-          "declares a generator as a method, which the prover does not read",
-        );
       if (each.type !== "PropertyDefinition" || !each.static) continue;
       const key = each.computed ? undefined : keyNameOf(each.key);
       if (key === undefined)
@@ -2211,6 +2253,22 @@ export const make = (given: Loader, run: Run): Interpreter => {
           keeper.kind === "Map" ? made<V>({ _tag: "Arr", items: [k, v] }) : k,
         ),
       );
+    // A generator is run to its end: each value it yields, in order.
+    const generator = generators.get(value);
+    if (generator) {
+      const items: Array<V> = [];
+      return Effect.as(
+        through(generator, (item) =>
+          items.length >= MAX_TURNS
+            ? fail(site, `goes over a generator that has not ended after ${MAX_TURNS} values`)
+            : Effect.sync(() => {
+                items.push(item);
+                return true;
+              }),
+        ),
+        items,
+      );
+    }
     return library.iterate(value._tag === "Applied" ? listOf(value) : value, site);
   };
 
@@ -2247,9 +2305,16 @@ export const make = (given: Loader, run: Run): Interpreter => {
     switch (fn._tag) {
       case "Fn":
         if (fn.node.async) return reaches(site, "calls an async function");
-        // A generator's body runs when it is yielded, as an effect does.
-        if (fn.node.generator || fn.effectful)
-          return Effect.succeed<V>({ _tag: "Effect", run: Effect.suspend(() => invoke(fn, args)) });
+        // A generator's body runs when it is yielded, as an effect does, or when it is gone over.
+        if (fn.node.generator || fn.effectful) {
+          const made_: V = {
+            _tag: "Effect",
+            // Yielded as an effect, a `yield` in it is the effect's own, whatever is around it.
+            run: Effect.suspend(() => invoke(yielding(fn, Value.undef), args)),
+          };
+          if (fn.node.generator) generators.set(made_, { fn, args });
+          return Effect.succeed(made_);
+        }
         const real = fn.real;
         if (real === undefined) return invoke(fn, args);
         // An exported function whose body the prover cannot read is a value it does not look inside.
@@ -2724,7 +2789,22 @@ export const make = (given: Loader, run: Run): Interpreter => {
           args.push(yield* evaluate(argument, env));
         return yield* construct(cls, args, site);
       }
-      case "YieldExpression":
+      case "YieldExpression": {
+        // In a generator that is gone over, a value it yields goes to the loop that goes over it.
+        const sink = sinkOf(env);
+        if (sink && !node.delegate)
+          return yield* call(
+            sink,
+            [node.argument ? yield* evaluate(node.argument, env) : Value.undef],
+            site,
+          );
+        if (sink && node.argument) {
+          // `yield* other`: each value the other gives, in turn.
+          const items = yield* iterate(yield* evaluate(node.argument, env), site);
+          if (!items) return yield* fail(site, "yields each of something that is not a list");
+          for (const item of items) yield* call(sink, [item], site);
+          return Value.undef;
+        }
         return node.delegate && node.argument
           ? yield* settle(yield* evaluate(node.argument, env), site).pipe(
               // An effect that fails leaves the generator: its `try` does not see the failure.
@@ -2739,6 +2819,7 @@ export const make = (given: Loader, run: Run): Interpreter => {
               ),
             )
           : yield* fail(site, "yields without a star");
+      }
       case "SequenceExpression": {
         // `(a, b)`: each is run, and the last is what it gives.
         let last: V = Value.undef;
@@ -3141,8 +3222,10 @@ export const make = (given: Loader, run: Run): Interpreter => {
               : attempt;
             const ended = yield* handled.pipe(
               Effect.map((returned) => ({ returned, thrown: undefined })),
-              Effect.catchIf(thrown, (stop) =>
-                Effect.succeed({ returned: undefined, thrown: stop }),
+              // A generator that is left where it stands runs its `finally` on the way out.
+              Effect.catchIf(
+                (stop): stop is Value.Rejected => thrown(stop) || isLeft(stop),
+                (stop) => Effect.succeed({ returned: undefined, thrown: stop }),
               ),
             );
             if (finalizer) {
@@ -3183,6 +3266,28 @@ export const make = (given: Loader, run: Run): Interpreter => {
           case "ForInStatement": {
             if (statement.await) return yield* reaches(site, "loops with for await");
             const subject = forced(yield* evaluate(statement.right, env));
+            const generator =
+              statement.type === "ForOfStatement" ? generators.get(subject) : undefined;
+            if (generator) {
+              // The generator's body is run, and the loop's body where each value is yielded:
+              // a loop that is left stops the generator there.
+              const target: Node = statement.left;
+              let left: V | undefined;
+              yield* through(generator, (item) =>
+                Effect.gen(function* () {
+                  const scope = child(env.scope);
+                  const inner = { ...env, scope };
+                  if (target.type === "VariableDeclaration")
+                    yield* bind(target.declarations[0].id, item, scope, inner);
+                  else yield* assign(target, item, env, site);
+                  const returned = yield* turn(statement.body, inner, label);
+                  if (returned) left = returned;
+                  return returned === undefined;
+                }),
+              );
+              if (left && left !== BREAK) return left;
+              break;
+            }
             const over =
               statement.type === "ForOfStatement"
                 ? yield* iterate(subject, site)

@@ -2238,6 +2238,30 @@ const syntax: ReadonlyArray<Group> = [
       body(
         `const made = { n: a, twice() { return this.n * 2; }, get half() { return this.n / 2; }, set next(n) { this.n = n; } }; const before = made.twice(); made.next = 4; return [before, made.half, made.n];`,
       ),
+      // A generator: gone over by a loop or a spread, a value at a time.
+      body(`function* each() { yield a; yield a + 1; } return [...each()];`),
+      body(
+        `function* upTo(n) { for (let i = 0; i < n; i++) yield i * a; } let total = 0; for (const n of upTo(4)) total += n; return total;`,
+      ),
+      body(
+        `const seen = []; function* count() { let n = 0; for (;;) { seen.push("made " + n); yield n++; } } for (const n of count()) { if (n > a || n > 2) break; seen.push("took " + n); } return seen;`,
+      ),
+      body(
+        `const seen = []; function* guarded() { try { yield 1; yield 2; } finally { seen.push("closed"); } } for (const n of guarded()) { seen.push(n); break; } return seen;`,
+      ),
+      body(
+        `function* inner() { yield a; yield 2; } function* outer() { yield 0; yield* inner(); yield* [8, 9]; } return [...outer()];`,
+      ),
+      body(
+        `function* pairs() { yield [a, "x"]; yield [2, "y"]; } const out = []; for (const [n, name] of pairs()) out.push(name + n); return out;`,
+      ),
+      body(
+        `const find = (wanted) => { function* each() { yield 1; yield a; yield 3; } for (const n of each()) if (n === wanted) return "found " + n; return "none"; }; return [find(a), find(7)];`,
+      ),
+      body(
+        `class Bag { items = [a, 2]; *each() { for (const item of this.items) yield item * 2; } } return [...new Bag().each()];`,
+      ),
+      body(`const each = function* () { yield a; }; return [...each(), ...each()];`),
       // A loop an input decides the length of, where the input is bounded.
       body(`let i = 0; while (i < a) i++; return i;`),
       body(`let total = 0; for (let i = 0; i < a; i++) total += i; return total;`),
@@ -2332,7 +2356,11 @@ const syntax: ReadonlyArray<Group> = [
         reported,
       ],
       [body(`const run = async () => a; return run();`), reported],
-      [body(`function* each() { yield a; } return [...each()];`), reported],
+      [
+        body(`function* forever() { for (;;) yield a; } return [...forever()];`),
+        /loops more than 10000 times/,
+      ],
+      [body(`function* each() { yield a; } return each().next().value;`), reported],
       [body(`using held = { [Symbol.dispose]() {} }; return a;`), reported],
       [body(`unknownName = a; return a;`), reported],
       [body(`return unknownName + a;`), reported],

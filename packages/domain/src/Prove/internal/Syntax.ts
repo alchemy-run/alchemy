@@ -172,12 +172,11 @@ export const FORMS: ReadonlyArray<Form> = [
   form(
     "FunctionDeclaration: a generator",
     (n) => n.type === "FunctionDeclaration" && !n.async && n.generator === true,
-    false,
   ),
   form("an async function", (n) => isFunction(n) && n.async === true, false),
   form("AwaitExpression", kind("AwaitExpression"), false),
   form("YieldExpression: yield*", (n) => n.type === "YieldExpression" && n.delegate === true),
-  form("YieldExpression: yield", (n) => n.type === "YieldExpression" && !n.delegate, false),
+  form("YieldExpression: yield", (n) => n.type === "YieldExpression" && !n.delegate),
   form("ReturnStatement: a value", (n) => n.type === "ReturnStatement" && Boolean(n.argument)),
   form("ReturnStatement: nothing", (n) => n.type === "ReturnStatement" && !n.argument),
 

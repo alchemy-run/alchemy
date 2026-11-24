@@ -84,6 +84,13 @@ enum Kind {
   Gift = 5, // a member is found by its number too: Kind[5]
 }
 
+function* each() {
+  yield a; // a generator, gone over by a loop or a spread: a loop that is left stops it there
+  yield* [1, 2];
+}
+for (const n of each()) total += n;
+[...each()];
+
 class Local {
   static made = 0; // what the class itself holds
   count = 0;
@@ -136,14 +143,7 @@ A `try` catches what code throws. An effect that fails where it is yielded leave
 
 ```typescript title="Not supported"
 await saved; // async, await and for await
-function* each() {
-  yield a;
-} // a generator, other than the one given to Effect.gen, Effect.fn, Option.gen and Result.gen
-class Stream extends Local {
-  *each() {
-    yield a;
-  }
-} // a generator as a method
+each().next(); // a generator stepped by hand: go over it with a loop or a spread
 using held = resource;
 
 while (count < a * 100) count++; // a loop an input decides the length of, past 64 turns
