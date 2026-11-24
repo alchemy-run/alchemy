@@ -80,7 +80,7 @@ def forward (queue : Queue) [Uses R JobStorage] [Uses R (SQS.SendMessage.Client 
     Effect R ForwardError Unit := do
   let some id := key.getLast? | throw (.notAJob key)
   let content ← getJob id
-  SQS.sendMessage queue content
+  SQS.sendMessageE queue content
 
 def Api (bucket : Bucket) (queue : Queue) : Construct Kind Function := do
   let stage ← stage

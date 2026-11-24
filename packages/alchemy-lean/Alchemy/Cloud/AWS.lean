@@ -249,12 +249,12 @@ def ListObjectsLive (bucket : AWS.Bucket) : Layer Nothing (ListObjects.Client bu
 instance (bucket : AWS.Bucket) : Live (ListObjects.Client bucket) := ⟨ListObjectsLive bucket⟩
 
 /-- Read `under/name`. -/
-def getObject (bucket : AWS.Bucket) (under : Path) (name : String)
+def getObjectE (bucket : AWS.Bucket) (under : Path) (name : String)
     [Uses R (GetObject.Client bucket under)] [Raises ε GetObjectError] : Effect R ε String :=
   use (GetObject.Client bucket under) (·.call name)
 
 /-- Write `under/name`. -/
-def putObject (bucket : AWS.Bucket) (under : Path) (name : String) (body : String)
+def putObjectE (bucket : AWS.Bucket) (under : Path) (name : String) (body : String)
     [Uses R (PutObject.Client bucket under)] : Effect R ε Unit :=
   use (PutObject.Client bucket under) (·.call name body)
 
@@ -316,7 +316,7 @@ def ReceiveMessageLive (queue : AWS.Queue) : Layer Nothing (ReceiveMessage.Clien
 
 instance (queue : AWS.Queue) : Live (ReceiveMessage.Client queue) := ⟨ReceiveMessageLive queue⟩
 
-def sendMessage (queue : AWS.Queue) (body : String) [Uses R (SendMessage.Client queue)] :
+def sendMessageE (queue : AWS.Queue) (body : String) [Uses R (SendMessage.Client queue)] :
     Effect R ε Unit :=
   use (SendMessage.Client queue) (·.call body)
 

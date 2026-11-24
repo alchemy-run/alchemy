@@ -276,11 +276,9 @@ def Api (orders : Bucket) (shipments : Queue) : Construct Kind Function := do
 /-- Consumes the shipments queue and files a packing slip for each. -/
 def Warehouse (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
   Lambda.Function "Warehouse" {} do
-    let slips ← S3.PutObject orders ["packed"]
-
     SQS.consume shipments fun shipment => do
       match shipment.splitOn ":" with
-      | [order, item] => slips.call order item
+      | [order, item] => S3.putObject orders ["packed"] order item
       | _ => pure ()
 
     return fun _ => return { status := 204 }

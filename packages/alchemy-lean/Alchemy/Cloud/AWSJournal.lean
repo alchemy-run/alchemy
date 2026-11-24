@@ -2,6 +2,7 @@ import Std.Data.String.ToNat
 import Alchemy.Cloud.AWSLaws
 import Alchemy.Cloud.HostedLaws
 import Alchemy.Cloud.Tactics
+import Alchemy.Cloud.Infer
 
 /-!
 # A journal in S3
@@ -331,5 +332,44 @@ abbrev invoking (function : AWS.Function) : Doing Kind :=
   ⟨Unit, fun _ => ⟨.function, function, FunctionOp.invoke⟩⟩
 
 end Lambda
+
+end Alchemy.AWS
+
+/-! ## Operations called directly: the call is what asks for the grant -/
+
+namespace Alchemy.AWS
+open Alchemy.Cloud
+
+namespace S3
+
+/-- Write `under/name`. -/
+def putObject {role : Access Kind} (bucket : AWS.Bucket) (under : Path) (name body : String)
+    [granted : Has role (Put bucket under)] : Run role Never Unit :=
+  ((PutObjectLive bucket under).build granted.le ⟨⟩).call name body
+
+/-- Read `under/name`. -/
+def getObject {role : Access Kind} (bucket : AWS.Bucket) (under : Path) (name : String)
+    [granted : Has role (Get bucket under)] : Run role GetObjectError String :=
+  ((GetObjectLive bucket under).build granted.le ⟨⟩).call name
+
+end S3
+
+namespace SQS
+
+/-- Put a message on a queue. -/
+def sendMessage {role : Access Kind} (queue : AWS.Queue) (body : String)
+    [granted : Has role (Send queue)] : Run role Never Unit :=
+  ((SendMessageLive queue).build granted.le ⟨⟩).call body
+
+end SQS
+
+end Alchemy.AWS
+
+namespace Alchemy.AWS
+
+/-- A function's block has its role read off the calls in it. -/
+macro_rules
+  | `(Lambda.Function $id $props $body) =>
+    `(Alchemy.AWS.Lambda.Function $id $props (granted% $body))
 
 end Alchemy.AWS
