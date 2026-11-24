@@ -12,7 +12,7 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Brands from "../Brands.ts";
 import type { Kit, Model, Models } from "../Kit.ts";
-import { arr, callable, dualBy, native, wrongArguments } from "../Kit.ts";
+import { arr, callable, dualBy, native, tagOf, wrongArguments } from "../Kit.ts";
 import * as Timeline from "../Timeline.ts";
 import type { Eval, Site, V } from "../Value.ts";
 import * as Value from "../Value.ts";
@@ -67,7 +67,24 @@ export interface Tools {
  * to the library as one of its own, the library's function is applied, and
  * what it gives is read back, on the handler's timeline.
  */
-export const make = (kit: Kit, base: Models, tools: Tools) => {
+export const make = (
+  kit: Kit,
+  base: Models,
+  tools: Tools,
+  wiring: {
+    /** An effect with services provided around it. */
+    readonly providing: <A>(
+      provided: ReadonlyArray<readonly [service: unknown, value: V]>,
+      self: Eval<A>,
+    ) => Eval<A>;
+    /** What a layer or a context the code gives provides, built now. */
+    readonly provides: (
+      name: string,
+      given: V | undefined,
+      site: Site,
+    ) => Eval<ReadonlyArray<readonly [service: unknown, value: V]>>;
+  },
+) => {
   const { host } = kit;
 
   /** A stream of the code, as one the library runs. */
@@ -1206,6 +1223,197 @@ export const make = (kit: Kit, base: Models, tools: Tools) => {
     ),
   });
 
+  // ---- Streams cut where a function of the code says, and streams that read a service.
+
+  type Provided = ReadonlyArray<readonly [service: unknown, value: V]>;
+  /** A stream with services provided while it is opened and while it is pulled. */
+  const within = (self: Flow, provided: Eval<Provided>): Flow => ({
+    _tag: "Stream",
+    open: Effect.flatMap(provided, (held) =>
+      wiring.providing(
+        held,
+        Effect.map(self.open, (pull) => wiring.providing(held, pull)),
+      ),
+    ),
+  });
+  const serviceOf = (name: string, tag: V | undefined, site: Site): Eval<unknown> =>
+    tag?._tag === "Host" ? Effect.succeed(tag.value) : wrongArguments(site, name);
+  /** A function of a stream that says what is provided to it. */
+  const provided = (
+    name: string,
+    held: (rest: ReadonlyArray<V>, site: Site) => Eval<Provided>,
+  ): Model =>
+    dualBy(name, isFlow, ([self, ...rest], site) =>
+      isFlow(self) ? Effect.succeed(within(self, held(rest, site))) : wrongArguments(site, name),
+    );
+  const reasonOf = (rejection: V, tag: V | undefined): V | undefined =>
+    tag?._tag === "Str" && tagOf(rejection) === tag.value && rejection._tag === "Obj"
+      ? rejection.fields.reason
+      : undefined;
+  /** A stream that goes on as another where its error holds a reason, and fails as it did where it does not. */
+  const byReason = (
+    name: string,
+    next: (
+      to: Handing,
+      reason: V,
+      error: V,
+      rest: ReadonlyArray<V>,
+    ) => Stream.Stream<V, unknown> | undefined,
+  ): Model =>
+    lift(name, (to, self, [errorTag, ...rest]) =>
+      Stream.catch(
+        self,
+        failed((rejection): Stream.Stream<V, unknown> => {
+          const reason = reasonOf(rejection, errorTag);
+          return (reason && next(to, reason, rejection, rest)) ?? failing(rejection);
+        }),
+      ),
+    );
+
+  Object.assign(models, {
+    // Cut at each item the function holds of: the items between two of them, where there are any.
+    "effect/Stream:split": lift("Stream.split", (to, self, [test]) =>
+      Stream.mapAccumArrayEffect(
+        self,
+        (): ReadonlyArray<V> => [],
+        (kept, chunk) =>
+          Effect.gen(function* () {
+            let run = [...kept];
+            const out: Array<V> = [];
+            for (const item of chunk) {
+              if (!(yield* to.test(test)(item))) run.push(item);
+              else if (run.length > 0) {
+                out.push(arr(run));
+                run = [];
+              }
+            }
+            return [run, out] as const;
+          }),
+        { onHalt: (kept) => (kept.length > 0 ? [arr(kept)] : []) },
+      ),
+    ),
+    // Items that follow one another with the same key, as one group.
+    "effect/Stream:groupAdjacentBy": lift("Stream.groupAdjacentBy", (to, self, [f]) =>
+      Stream.mapAccumEffect(
+        self,
+        (): readonly [V, ReadonlyArray<V>] | undefined => undefined,
+        (group, item) =>
+          Effect.gen(function* () {
+            const key = yield* straight(to, f)(item);
+            if (!group) return [[key, [item]] as const, []] as const;
+            const same_ = yield* to.read(
+              Effect.flatMap(host.equal(key, group[0], to.site), (equal) =>
+                host.decide(equal, to.site),
+              ),
+            );
+            return same_
+              ? ([[group[0], [...group[1], item]] as const, []] as const)
+              : ([[key, [item]] as const, [arr([group[0], arr(group[1])])]] as const);
+          }),
+        { onHalt: (group) => (group ? [arr([group[0], arr(group[1])])] : []) },
+      ),
+    ),
+    "effect/Stream:fromIterableEffectRepeat": source(
+      "Stream.fromIterableEffectRepeat",
+      (to, [effect]) =>
+        Stream.fromIterableEffectRepeat(
+          Effect.flatMap(to.eff(effect), (given) => to.read(tools.items(to.name, given, to.site))),
+        ),
+    ),
+    "effect/Stream:catchCauseFilter": lift("Stream.catchCauseFilter", (to, self, [filter, f]) =>
+      Stream.catchCause(self, (cause) =>
+        Stream.unwrap(
+          Effect.flatMap(to.cause(cause), (held) =>
+            Effect.map(
+              Effect.flatMap(straight(to, filter)(held), (made) => sorted(to, made)),
+              (made): Stream.Stream<V, unknown> =>
+                Result.isSuccess(made)
+                  ? to.inner(f)(made.success, held)
+                  : Stream.failCause(tools.realCause(made.failure) ?? cause),
+            ),
+          ),
+        ),
+      ),
+    ),
+    "effect/Stream:catchReason": byReason("Stream.catchReason", (to, reason, error, rest) => {
+      const [reasonTag, f, orElse] = rest;
+      if (reasonTag?._tag !== "Str") return wrongStream(to);
+      if (tagOf(reason) === reasonTag.value) return to.inner(f)(reason, error);
+      return unset(orElse) ? undefined : to.inner(orElse)(reason, error);
+    }),
+    "effect/Stream:catchReasons": byReason("Stream.catchReasons", (to, reason, error, rest) => {
+      const [cases, orElse] = rest;
+      if (cases?._tag !== "Obj") return wrongStream(to);
+      const handler = cases.fields[tagOf(reason) ?? ""];
+      if (!unset(handler)) return to.inner(handler)(reason, error);
+      return unset(orElse) ? undefined : to.inner(orElse)(reason, error);
+    }),
+    "effect/Stream:unwrapReason": byReason("Stream.unwrapReason", (_, reason) => failing(reason)),
+    "effect/Stream:service": source("Stream.service", (to, [tag]) =>
+      Stream.fromEffect(
+        to.read(
+          Effect.flatMap(serviceOf("Stream.service", tag, to.site), (service) => {
+            const given = host.provided.get(service);
+            return given
+              ? Effect.succeed(given)
+              : Effect.fail(
+                  Value.notTranslated(
+                    to.site,
+                    "reads Stream.service of a service that nothing provides",
+                  ),
+                );
+          }),
+        ),
+      ),
+    ),
+    "effect/Stream:serviceOption": source("Stream.serviceOption", (to, [tag]) =>
+      Stream.fromEffect(
+        to.read(
+          Effect.map(serviceOf("Stream.serviceOption", tag, to.site), (service) => {
+            const given = host.provided.get(service);
+            return given ? Value.some(given) : Value.none;
+          }),
+        ),
+      ),
+    ),
+    "effect/Stream:provideService": provided("Stream.provideService", ([tag, value], site) =>
+      Effect.map(serviceOf("Stream.provideService", tag, site), (service) => [
+        [service, value ?? Value.undef] as const,
+      ]),
+    ),
+    "effect/Stream:provideServiceEffect": provided(
+      "Stream.provideServiceEffect",
+      ([tag, effect], site) =>
+        Effect.flatMap(serviceOf("Stream.provideServiceEffect", tag, site), (service) =>
+          effect?._tag === "Effect"
+            ? Effect.map(effect.run, (value) => [[service, value] as const])
+            : wrongArguments(site, "Stream.provideServiceEffect"),
+        ),
+    ),
+    "effect/Stream:provideContext": provided("Stream.provideContext", ([given], site) =>
+      wiring.provides("Stream.provideContext", given, site),
+    ),
+    "effect/Stream:provide": provided("Stream.provide", ([given, options], site) =>
+      unset(options)
+        ? wiring.provides("Stream.provide", given, site)
+        : wrongArguments(site, "Stream.provide"),
+    ),
+    "effect/Stream:updateService": provided("Stream.updateService", ([tag, f], site) =>
+      Effect.flatMap(serviceOf("Stream.updateService", tag, site), (service) => {
+        const before = host.provided.get(service);
+        if (!f) return wrongArguments(site, "Stream.updateService");
+        return before
+          ? Effect.map(host.call(f, [before], site), (next) => [[service, next] as const])
+          : Effect.fail(
+              Value.notTranslated(
+                site,
+                "calls Stream.updateService of a service that nothing provides",
+              ),
+            );
+      }),
+    ),
+  });
+
   /** A stream many may read, made in a scope: `Stream.broadcast` and `Stream.share`. */
   const shared = (
     name: string,
@@ -1246,6 +1454,12 @@ export const make = (kit: Kit, base: Models, tools: Tools) => {
   });
 
   const sited: Readonly<Record<string, (site: Site) => V>> = {
+    "effect/Stream:DefaultChunkSize": () => Value.num(Stream.DefaultChunkSize),
+    // A stream of one empty record, for `Stream.bind` and `Stream.let` to add to.
+    "effect/Stream:Do": (site) =>
+      timed("Stream.Do", site, (timeline) =>
+        Effect.succeed(flow(timeline, Stream.succeed<V>(Value.obj({})), site, same)),
+      ),
     "effect/Stream:never": (site) =>
       timed("Stream.never", site, (timeline) =>
         Effect.succeed(flow(timeline, Stream.never, site, same)),

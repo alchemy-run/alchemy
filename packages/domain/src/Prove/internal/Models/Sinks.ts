@@ -552,6 +552,16 @@ export const make = (
     "effect/Stream:aggregate": flows.lift("Stream.aggregate", (to, self, [into]) =>
       Stream.aggregate(self, built(to, into)),
     ),
+    // The sink ends, and gives what it has, when the schedule says so too.
+    "effect/Stream:aggregateWithin": flows.lift(
+      "Stream.aggregateWithin",
+      (to, self, [into, given]) => {
+        const held = tools.scheduleOf(given);
+        return held
+          ? Stream.aggregateWithin(self, built(to, into), held)
+          : Stream.unwrap(Effect.as(to.wrong<never>(), Stream.empty));
+      },
+    ),
     "effect/Stream:tapSink": flows.lift("Stream.tapSink", (to, self, [into]) =>
       Stream.tapSink(self, built(to, into)),
     ),

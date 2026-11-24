@@ -2870,6 +2870,25 @@ Stream.dropWhileFilter((n) => (n > 2 ? Result.succeed(n) : Result.fail(n)));
 Stream.catchFilter((error) => (error.n > 2 ? Result.succeed(error.n) : Result.fail("small")), (n) => Stream.make(n, b));
 Stream.partition(Stream.make(a, b, 3), (n) => (n > 2 ? Result.succeed(n) : Result.fail(-n))); // in a scope: a stream of each
 Stream.partitionEffect(Stream.make(a, b, 3), (n) => Effect.succeed(n > 2 ? Result.succeed(n) : Result.fail(-n)));
+Stream.catchCauseFilter((cause) => (Cause.hasFails(cause) ? Result.succeed(b) : Result.fail(cause)), (given, cause) => Stream.make(given, Cause.hasDies(cause)));
+Stream.catchReason("Call", "Slow", (reason) => Stream.make(reason.ms), () => Stream.make(-1));
+Stream.catchReasons("Call", { Slow: (reason) => Stream.make(reason.ms), Lost: () => Stream.make(0) });
+Stream.unwrapReason("Call");
+Stream.split((n) => n === 0); // the items between two the function holds of
+Stream.groupAdjacentBy((n) => n % 2); // items that follow one another with the same key
+Stream.fromIterableEffectRepeat(Effect.map(Ref.updateAndGet(turns, (n) => n + 1), (n) => [n, -n]));
+Stream.aggregateWithin(four(a, b), Sink.foldUntil(() => 0, 2, (total, n) => Effect.succeed(total + n)), Schedule.spaced("1 second"));
+Stream.Do;
+Stream.DefaultChunkSize;
+
+// A stream that reads a service, and what is provided to it.
+Stream.service(Rate);
+Stream.serviceOption(Rate);
+Stream.provideService(Rate, { percent: a });
+Stream.provideServiceEffect(Rate, Effect.succeed({ percent: a }));
+Stream.provideContext(Context.make(Rate, { percent: a }));
+Stream.provide(Layer.succeed(Rate, { percent: b }));
+Stream.updateService(Rate, (rate) => ({ percent: rate.percent + 1 }));
 Stream.bindEffect("y", ({ x }) => Effect.succeed(x + 1));
 Stream.throttleEffect({ cost: (chunk) => Effect.succeed(chunk.length), units: 1, duration: "1 second" });
 Stream.transduce(Sink.take(3)); // the sink, run again and again over the stream

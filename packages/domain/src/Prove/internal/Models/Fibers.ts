@@ -5399,10 +5399,9 @@ export const make = (
         f
           ? Timeline.back(
               timeline,
-              Effect.onError(self, (cause) => {
-                const passed = onPassed(timeline, "Effect.onErrorFilter", filter, f, site);
-                return sure(passed(cause));
-              }),
+              Effect.onError(self, (cause) =>
+                cause.pipe(onPassed(timeline, "Effect.onErrorFilter", filter, f, site), sure),
+              ),
               same,
             )
           : wrongArguments(site, "Effect.onErrorFilter"),
