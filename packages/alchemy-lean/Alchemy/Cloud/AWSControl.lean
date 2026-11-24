@@ -412,3 +412,17 @@ def lawful : Lawful providers Service where
       rw [functions]; intro same; cases same; exact ne rfl
 
 end Alchemy.AWS.Control
+
+namespace Alchemy.AWS
+open Alchemy.Cloud
+
+/-- A grant, in words. -/
+def describeGrant : Attempt Kind → String
+  | ⟨.bucket, bucket, .get under⟩ => s!"read {bucket.id}/{"/".intercalate under}"
+  | ⟨.bucket, bucket, .put under⟩ => s!"write {bucket.id}/{"/".intercalate under}"
+  | ⟨.bucket, bucket, .list⟩ => s!"list {bucket.id}"
+  | ⟨.queue, queue, .send⟩ => s!"send to {queue.id}"
+  | ⟨.queue, queue, .receive⟩ => s!"receive from {queue.id}"
+  | ⟨.function, function, .invoke⟩ => s!"invoke {function.id}"
+
+end Alchemy.AWS

@@ -40,3 +40,8 @@ srcDir = "examples"
 [[require]]
 name = "distilled"
 path = "../../submodules/distilled/lean"
+
+[[lean_exe]]
+name = "shop"
+root = "ShopMain"
+srcDir = "examples"

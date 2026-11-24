@@ -266,8 +266,9 @@ def route (request : Request) : Run role Never Response :=
 end Routes
 
 /-- Takes orders. Hosts the shop: its history is in the bucket, and it ships through the queue. -/
-def Api (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
-  Lambda.Function "Api" { url := true } do
+def Api (orders : Bucket) (shipments : Queue) : Construct Kind Function := do
+  let stage ← stage
+  Lambda.Function "Api" { url := true, memory := if stage = "prod" then 1024 else 512 } do
     let journal ← S3.Journal orders
     let queue ← SQS.SendMessage shipments
     return route (served.host journal (outside queue))

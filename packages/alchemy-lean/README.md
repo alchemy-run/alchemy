@@ -386,19 +386,71 @@ structure PutObject.Lawful (client : PutObject.Client bucket under access) : Pro
     (client.call name body).eval InMemory m = (.ok (), m.put bucket (under ++ [name]) body)
 ```
 
-## Deploying
+## Run it
 
-The plan for a fresh account, and a second deploy that changes nothing.
+A stack is a value, so its graph is computed from the code. `lake exe shop graph prod` prints it.
+
+```
+Shop (prod)
+
+  Orders
+  Shipments
+  Api
+    needs      Orders, Shipments
+    may        read Orders/journal
+    may        write Orders/journal
+    may        read Orders/journal/lines
+    may        write Orders/journal/lines
+    may        send to Shipments
+  Warehouse
+    needs      Orders, Shipments
+    may        write Orders/packed
+    may        receive from Shipments
+    consumes   Shipments
+```
+
+`lake exe shop plan prod` prints the plan for a fresh account.
+
+```
+  + create   Orders
+  + create   Shipments
+  + create   Api
+  + create   Warehouse
+
+  4 to create, 0 to update, 0 to replace, 0 to delete, 0 unchanged
+```
+
+`lake exe shop plan prod after dev` plans against an account the dev stage was deployed to.
+
+```
+    no-op    Orders
+    no-op    Shipments
+  ~ update   Api
+    no-op    Warehouse
+
+  0 to create, 1 to update, 0 to replace, 0 to delete, 3 unchanged
+```
+
+The program is three lines.
+
+```lean
+def main (args : List String) : IO UInt32 :=
+  Shop.ShopStack.cli Alchemy.AWS.Control.providers Shop.fresh Alchemy.AWS.describeGrant args
+```
+
+The same plan is a value a theorem can state.
 
 ```lean
 example : plan Control.providers prod fresh.state = [
     ("Orders", .create), ("Shipments", .create), ("Api", .create), ("Warehouse", .create)] := by
   native_decide
+```
 
-example : (deploy prod fresh).2 = true ∧
-    plan Control.providers prod (deploy prod fresh).1.state = [
-      ("Orders", .noop), ("Shipments", .noop), ("Api", .noop), ("Warehouse", .noop)] := by
-  native_decide
+In the editor, `#eval` shows any of it without running a program.
+
+```lean
+#eval prod.order          -- ["Orders", "Shipments", "Api", "Warehouse"]
+#eval prod.edges          -- [("Api", "Orders"), ("Api", "Shipments"), …]
 ```
 
 ## Examples

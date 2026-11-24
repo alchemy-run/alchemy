@@ -30,5 +30,6 @@ import Alchemy.Cloud.Cloudflare
 import Alchemy.Cloud.Api
 import Alchemy.Cloud.Provider
 import Alchemy.Cloud.Engine
+import Alchemy.Cloud.Cli
 import Alchemy.Cloud.AWSControl
 import Alchemy.Cloud.SQSQueue
