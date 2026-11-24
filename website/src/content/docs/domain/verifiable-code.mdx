@@ -1054,6 +1054,11 @@ Match.type().pipe(
   Match.orElse(() => "none"),
 )({ n: a });
 Match.value({ _tag: a > 0 ? "Up" : "Down" }).pipe(Match.tags({ Up: () => 1 }), Match.option);
+Match.value(a).pipe(Match.when((n) => n > b, (n) => n * 2), Match.result); // what the case gives, or the value none of them took
+Match.tagStartsWith("Up", ({ n }) => n);
+Match.discriminatorStartsWith("kind")("x", ({ n }) => n + 1);
+Match.literals({ on: () => 1 });
+Match.literalsExhaustive({ 1: () => "one", 2: (n) => "two" + n });
 Match.value(shape.kind).pipe(
   Match.tag("Gift", () => 1),
   Match.orElse(() => 0),
@@ -2918,6 +2923,24 @@ Layer.provideMerge(Layer.effect(Fee, Effect.map(Rate, (rate) => ({ flat: rate.pe
 Layer.succeedContext(Context.merge(Context.make(Rate, { percent: 1 }), Context.make(Fee, { flat: a })));
 Layer.fresh;
 Layer.isLayer(a);
+Layer.suspend(() => Layer.mergeAll(Layer.succeed(Rate, { percent: a }), Layer.succeed(Fee, { flat: b })));
+Layer.unwrap(Effect.succeed(Layer.succeed(Rate, { percent: a })));
+Layer.effectContext(Effect.succeed(Context.make(Rate, { percent: a })));
+Layer.syncContext(() => Context.make(Fee, { flat: b }));
+Layer.flatMap((context) => Layer.mergeAll(Layer.succeedContext(context), Layer.succeed(Fee, { flat: Context.get(context, Rate).percent + 1 })));
+Layer.tap((context) => Ref.update(seen, (all) => [...all, Context.get(context, Fee).flat]));
+Layer.tapError((error) => Ref.update(seen, (all) => [...all, error.n]));
+Layer.catch((error) => Layer.succeed(Rate, { percent: error.n }));
+Layer.catchTag(Layer.effect(Rate, Effect.fail(new Odd({ n: a }))), "Odd", (error) => Layer.succeed(Rate, { percent: error.n + 1 }));
+Layer.orDie(Layer.effect(Rate, Effect.fail(new Odd({ n: a }))));
+Layer.mock(Fee, { flat: 1 });
+Layer.updateService(Layer.effect(Fee, Effect.map(Rate, (rate) => ({ flat: rate.percent }))), Rate, (rate) => ({ percent: rate.percent + 1 })); // while the layer is built
+Layer.satisfiesSuccessType();
+Layer.satisfiesErrorType();
+Layer.satisfiesServicesType();
+Layer.withSpan("wiring");
+Layer.build(Layer.succeed(Rate, { percent: a })); // the context the layer provides
+Layer.buildWithScope(Layer.succeed(Fee, { flat: b }), scope);
 Effect.provide(priced, Layer.merge(Layer.sync(Rate, () => ({ percent: a * 2 })), Layer.effect(Fee, Effect.succeed({ flat: 1 }))));
 Effect.provide([Layer.succeed(Rate, { percent: a }), Layer.succeed(Fee, { flat: 2 })]);
 Context.make(Rate, { percent: a });
@@ -2925,6 +2948,18 @@ Context.add(Fee, { flat: b });
 Context.empty();
 Context.getOption(Context.make(Rate, { percent: a }), Rate);
 Context.isContext(a);
+Context.get(Context.make(Rate, { percent: a }), Rate);
+Context.getUnsafe(Context.make(Fee, { flat: b }), Fee);
+Context.getOrUndefined(Context.empty(), Rate);
+Context.getOrElse(Context.empty(), Fee, () => a);
+Context.addOrOmit(Context.empty(), Fee, Option.some({ flat: b }));
+Context.mergeAll(Context.make(Rate, { percent: a }), Context.make(Fee, { flat: b }));
+Context.omit(Rate)(Context.make(Rate, { percent: a }));
+Context.pick(Rate);
+Context.isKey(Rate);
+Context.isReference(Step);
+Effect.context(); // every service that is provided where the effect runs
+Effect.contextWith((context) => Effect.succeed(Context.getOption(context, Fee)));
 Effect.provideService(Step, Step, a); // a Context.Reference gives its own value where nothing provides one
 ```
 

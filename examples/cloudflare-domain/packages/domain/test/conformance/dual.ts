@@ -42,7 +42,7 @@ const ONE_WAY: ReadonlySet<string> = new Set([
   // A metric of numbers and one of bigints: two ways to write its options, neither given by `pipe`.
   ...["effect/Metric:counter", "effect/Metric:gauge"],
   // The service comes first either way: `Layer.succeed(Rate)(value)`.
-  ...["effect/Layer:succeed", "effect/Layer:sync", "effect/Layer:effect"],
+  ...["effect/Layer:succeed", "effect/Layer:sync", "effect/Layer:effect", "effect/Layer:mock"],
   // A key and a value, or a record of them: neither is given by `pipe`.
   "effect/Effect:annotateLogsScoped",
 ]);
