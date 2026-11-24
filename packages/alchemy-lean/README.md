@@ -280,7 +280,7 @@ A `Link` says which of one model's calls another model answers.
 ```lean
 def screening : Link Bank Compliance where
   ask
-    | .screen account amount => some ⟨.Watch, (), .assess account amount⟩
+    | .screen account amount => some ⟨.Watch, .system, .assess account amount⟩
     | .wire .. => none
   reply
     | .screen .., ⟨.Watch, _, _⟩, .ok [.flagged _] => .flagged "over the reporting threshold"
