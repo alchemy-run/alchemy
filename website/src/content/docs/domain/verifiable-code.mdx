@@ -2517,6 +2517,49 @@ Schema.encodeEffect(Ticket)({ n: 2, note: "n" });
 Schema.isSchemaError;
 ```
 
+```typescript title="More of Console, Ref, Match and DateTime"
+// What is written out decides nothing.
+Console.assert(true, "fine");
+Console.count("n");
+Console.countReset("n");
+Console.dir({ n: 1 });
+Console.dirxml("x");
+Console.group({ label: "g" });
+Console.table([1]);
+Console.time("t");
+Console.timeLog("t");
+Console.clear;
+Console.trace("here");
+Console.withGroup({ label: "g" });
+Console.withTime("t");
+
+// A change that is made only where the function gives one.
+Ref.updateSome(ref, (n) => (n > 0 ? Option.some(n * 2) : Option.none()));
+Ref.updateSomeAndGet(ref, (n) => Option.some(n + 1));
+Ref.getAndUpdateSome(ref, () => Option.none());
+
+// What a value is, as a matcher asks.
+Match.when(Match.string, () => "text");
+Match.when(Match.number, (n) => "number " + n);
+Match.boolean(flag);
+Match.bigint(1n);
+Match.null(null);
+Match.undefined(a);
+Match.nonEmptyString("x");
+Match.symbol(a);
+Match.is(1, 2)(a);
+
+// The rest of DateTime, of a time the code writes: the library's own.
+DateTime.formatIso(noon);
+DateTime.getPartUtc(noon, "hours");
+DateTime.toPartsUtc(noon);
+DateTime.startOf(noon, "day");
+DateTime.endOf(noon, "hour");
+DateTime.isDateTime(noon);
+DateTime.isUtc(noon);
+DateTime.toEpochSeconds(noon);
+```
+
 ```typescript title="More of effect/Effect"
 // What handles a cause: a failure, a defect or an interrupt, as data.
 Effect.catchCause((cause) => Effect.succeed(Cause.hasFails(cause)));

@@ -45,6 +45,36 @@ export const make = (
 
   const held = (fields: Record<string, V>): V => fields.value ?? Value.undef;
 
+  /** What a function gives of what a cell holds, where it gives a new value: nothing where it gives none. */
+  const some = (
+    name: string,
+    fn: V | undefined,
+    fields: Record<string, V>,
+    site: Site,
+  ): Eval<V | undefined> =>
+    fn
+      ? Effect.flatMap(host.call(fn, [held(fields)], site), (made) => {
+          const option = Value.optionOf(made);
+          return option
+            ? Effect.succeed(option._tag === "Some" ? option.value : undefined)
+            : wrongArguments(site, name);
+        })
+      : wrongArguments(site, name);
+
+  /** A function of an effect that only says how it is written out: the effect is what it was. */
+  const watched =
+    (name: string): Model =>
+    (args) => {
+      const first = args[0];
+      return first?._tag === "Effect"
+        ? Effect.succeed(first)
+        : Effect.succeed(
+            native(name, ([self], at) =>
+              self?._tag === "Effect" ? Effect.succeed(self) : wrongArguments(at, name),
+            ),
+          );
+    };
+
   const changed = (name: string, fn: V | undefined, fields: Record<string, V>, site: Site) =>
     fn ? host.call(fn, [held(fields)], site) : wrongArguments(site, name);
 
@@ -373,6 +403,34 @@ export const make = (
     "effect/Console:warn": () => Effect.succeed(done),
     "effect/Console:info": () => Effect.succeed(done),
     "effect/Console:debug": () => Effect.succeed(done),
+    ...Object.fromEntries(
+      "assert count countReset dir dirxml group table time timeLog trace"
+        .split(" ")
+        .map((name): [string, Model] => [`effect/Console:${name}`, () => Effect.succeed(done)]),
+    ),
+    // The effect, written under a heading or timed: what it gives is what it gave.
+    "effect/Console:withGroup": watched("Console.withGroup"),
+    "effect/Console:withTime": watched("Console.withTime"),
+    // A change that is made only where the function gives one.
+    "effect/Ref:updateSome": onRef("Ref.updateSome", 2, (fields, [fn], site) =>
+      Effect.map(some("Ref.updateSome", fn, fields, site), (next) => {
+        if (next) fields.value = next;
+        return Value.undef;
+      }),
+    ),
+    "effect/Ref:updateSomeAndGet": onRef("Ref.updateSomeAndGet", 2, (fields, [fn], site) =>
+      Effect.map(some("Ref.updateSomeAndGet", fn, fields, site), (next) => {
+        if (next) fields.value = next;
+        return held(fields);
+      }),
+    ),
+    "effect/Ref:getAndUpdateSome": onRef("Ref.getAndUpdateSome", 2, (fields, [fn], site) =>
+      Effect.map(some("Ref.getAndUpdateSome", fn, fields, site), (next) => {
+        const before = held(fields);
+        if (next) fields.value = next;
+        return before;
+      }),
+    ),
     "effect/Ref:make": ([value]) =>
       Effect.succeed(lazy(() => Effect.sync(() => cell(value ?? Value.undef)))),
     "effect/Ref:makeUnsafe": ([value]) => Effect.succeed(cell(value ?? Value.undef)),

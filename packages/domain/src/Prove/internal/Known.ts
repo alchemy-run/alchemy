@@ -68,6 +68,7 @@ const PURE: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   "effect/Bytes": Bytes_,
   "effect/Chunk": Chunk_,
   "effect/Cron": Cron_,
+  "effect/DateTime": DateTime,
   "effect/Duration": Duration,
   "effect/Equal": Equal_,
   "effect/Equivalence": Equivalence_,
@@ -115,6 +116,14 @@ const CLOCKED: ReadonlySet<string> = new Set([
   "effect/Cron:next",
   "effect/Cron:prev",
   "effect/Cron:sequence",
+  // The time now, and the zone and the language of the machine the code runs on.
+  ...["nowUnsafe", "nowAsDate", "nowInCurrentZone", "isFutureUnsafe", "isPastUnsafe"].map(
+    (name) => `effect/DateTime:${name}`,
+  ),
+  ...["formatLocal", "formatIntl", "zoneMakeLocal", "withCurrentZoneLocal"].map(
+    (name) => `effect/DateTime:${name}`,
+  ),
+  ...["layerCurrentZoneLocal", "toDate", "mutate"].map((name) => `effect/DateTime:${name}`),
 ]);
 
 /**

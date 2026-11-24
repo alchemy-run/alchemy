@@ -720,6 +720,49 @@ export const make = (host: Host) => {
       ),
     // What a pattern can be besides a literal: `Match.when(Match.defined, f)`.
     "effect/Match:any": () => Effect.succeed(Value.bool(true)),
+    // What a value is, as a matcher asks: a number, text, and the like.
+    ...Object.fromEntries(
+      (["number", "string", "boolean", "bigint", "symbol"] as const).map(
+        (kind): [string, Model] => [
+          `effect/Match:${kind}`,
+          ([input], site) => {
+            const is = input ? host.kind(input) : undefined;
+            return is === undefined
+              ? wrongArguments(site, `Match.${kind}`)
+              : Effect.succeed(Value.bool(is === kind));
+          },
+        ],
+      ),
+    ),
+    "effect/Match:null": ([input], site) =>
+      input && host.kind(input) !== undefined
+        ? Effect.succeed(Value.bool(input._tag === "Null"))
+        : wrongArguments(site, "Match.null"),
+    "effect/Match:undefined": ([input], site) =>
+      input && host.kind(input) !== undefined
+        ? Effect.succeed(Value.bool(input._tag === "Undef"))
+        : wrongArguments(site, "Match.undefined"),
+    "effect/Match:nonEmptyString": ([input], site) => {
+      if (!input || host.kind(input) === undefined)
+        return wrongArguments(site, "Match.nonEmptyString");
+      return host.kind(input) === "string"
+        ? Effect.flatMap(host.member(input, "length", site), (length) =>
+            host.arithmetic(">", length, Value.num(0), site),
+          )
+        : Effect.succeed(Value.bool(false));
+    },
+    // One of the values given: `Match.is("on", "off")`.
+    "effect/Match:is": (wanted) =>
+      Effect.succeed(
+        native("Match.is", ([input], site) =>
+          Effect.gen(function* () {
+            for (const each of wanted)
+              if (yield* host.decide(yield* host.equal(input ?? Value.undef, each, site), site))
+                return Value.bool(true);
+            return Value.bool(false);
+          }),
+        ),
+      ),
     "effect/Match:defined": ([input]) =>
       Effect.succeed(
         Value.bool(input !== undefined && input._tag !== "Null" && input._tag !== "Undef"),
@@ -1907,6 +1950,7 @@ export const make = (host: Host) => {
     ...streams.values,
     ...folds.constants,
     "effect/Layer:empty": layerOf(() => Effect.succeed([])),
+    "effect/Console:clear": done,
     "Number:MAX_SAFE_INTEGER": Value.num(Number.MAX_SAFE_INTEGER),
     "Number:MIN_SAFE_INTEGER": Value.num(Number.MIN_SAFE_INTEGER),
     ...exits.values,
