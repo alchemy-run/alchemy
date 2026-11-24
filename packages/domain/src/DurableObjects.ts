@@ -48,6 +48,7 @@ import {
   captureContext,
   type Delivery,
   emptySnapshot,
+  sameJson,
   emptyStreamMeta,
   entryChanges,
   type HostedModel,
@@ -77,6 +78,7 @@ import {
   reviseInputs,
   revisionKey,
   type RewriteInput,
+  type RebuildResult,
   type RewriteResult,
   type RewriteStatus,
   type SeedResult,
@@ -1863,6 +1865,50 @@ const aggregateObject = Effect.fn(function* (
     if (outcome.result._tag === "Lossy") return outcome.result;
     return done(outcome.result.version, outcome.result.compacted + (yield* handOver));
   });
+  /**
+   * Fold the instance's state again from its events, a page at a time, and
+   * store it if it differs. Callers run it `exclusively`; `STALE` when
+   * another copy of the instance committed meanwhile.
+   */
+  const rebuildOnce = Effect.fn(function* () {
+    const current = yield* storedMeta;
+    if (current.held) return yield* new InstanceHeld();
+    const unchanged: RebuildResult = { version: current.version, changed: false };
+    let folded: Json = null;
+    let after = 0;
+    while (true) {
+      const rows = [
+        ...(yield* state.storage.list<StoredEvent>({
+          prefix: "event:",
+          start: `event:${pad(after + 1)}`,
+          limit: REWRITE_PAGE,
+        })).values(),
+      ];
+      if (rows.length === 0) break;
+      folded = yield* kit.fold({ state: folded, events: rows });
+      after = rows[rows.length - 1]!.envelope.seq;
+    }
+    // No events: nothing to fold it from.
+    if (after === 0 || sameJson(folded, current.state)) return unchanged;
+    const written = yield* state.storage.transaction(
+      Effect.gen(function* () {
+        if (!(yield* stillAt(current.version))) return STALE;
+        yield* state.storage.put("meta", { ...current, state: folded });
+      }),
+    );
+    if (written === STALE) return STALE;
+    return { version: current.version, changed: true } satisfies RebuildResult;
+  });
+  const rebuild = (id: string) =>
+    whenFree(
+      id,
+      Effect.suspend(rebuildOnce).pipe(
+        Effect.repeat({ until: (done) => done !== STALE, times: STALE_RETRIES }),
+        Effect.flatMap((done) =>
+          done === STALE ? Effect.die(new StaleWrite()) : Effect.succeed(done),
+        ),
+      ),
+    );
   /** Compact, in the background, an instance that holds more events than a compaction's Layer allows. */
   const compactWhenDue = Effect.fn(function* (id: string, version: number) {
     const limits = kit.compactions.filter((c) => c.afterEvents !== undefined);
@@ -2301,6 +2347,7 @@ const aggregateObject = Effect.fn(function* (
     rewrite: (id: string, input: RewriteInput) => reportDefects(rewrite(id, input)),
     rewriteStatus: (rewriteId: string) => reportDefects(rewriteStatus(rewriteId)),
     compact: (id: string, name: string) => reportDefects(compact(id, name)),
+    rebuild: (id: string) => reportDefects(rebuild(id)),
     // A decision, with this instance as its primary: see `TwoPhase.decide`.
     txDecide: (id: string, name: string, command: Json, meta: Aggregate.SendMeta) =>
       Effect.gen(function* () {
@@ -3902,6 +3949,12 @@ export const makePlatform = <R>(
                     announce.pipe(
                       Effect.andThen(
                         unwrapDefects<CompactResult>(namespace.getByName(id).compact(id, name)),
+                      ),
+                    ),
+                  rebuild: (id) =>
+                    announce.pipe(
+                      Effect.andThen(
+                        unwrapDefects<RebuildResult>(namespace.getByName(id).rebuild(id)),
                       ),
                     ),
                   changes: (id) =>

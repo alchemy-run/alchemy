@@ -891,6 +891,7 @@ const build = <A, E, R>(
         rewrite: () => Effect.die(new Error(`${decision.decisionName} has no events to rewrite`)),
         rewritten: () => Effect.die(new Error(`${decision.decisionName} has no events to rewrite`)),
         compact: () => Effect.die(new Error(`${decision.decisionName} has no events to compact`)),
+        rebuild: () => Effect.die(new Error(`${decision.decisionName} has no state to rebuild`)),
       });
     }
     const viewHosts = new Map<string, View.Host<unknown, Key.Any, unknown>>();
@@ -1513,6 +1514,19 @@ const aggregateClient = (
           spanOptions(target),
         ),
       ),
+    rebuild: (target) =>
+      Effect.gen(function* () {
+        const id = Aggregate.targetId(target);
+        const run = store.rebuild;
+        if (run === undefined) {
+          return yield* Effect.die(
+            new Error(`The platform cannot rebuild ${aggregate.aggregateName}`),
+          );
+        }
+        const { version, changed } = yield* run(id);
+        yield* Effect.annotateCurrentSpan("domain.changed", changed);
+        return { stream: `${aggregate.aggregateName}/${id}`, version, changed };
+      }).pipe(Effect.withSpan(`Domain.rebuild ${aggregate.aggregateName}`, spanOptions(target))),
   };
 };
 

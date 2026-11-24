@@ -48,6 +48,7 @@ import {
   type ModelHost,
   type RecordInput,
   type Revised,
+  type RebuildResult,
   type RewriteResult,
   type RewriteStatus,
   type SendResult,
@@ -61,6 +62,7 @@ import {
   type ViewEntry,
   type ViewSnapshot,
   RunWait,
+  sameJson,
 } from "./Platform.ts";
 import { serveSocket } from "./Watch.ts";
 
@@ -1009,6 +1011,17 @@ export const make = (
               yield* enqueue(live.send, kit.deliver);
               return compacted(result.version, left + (yield* handOver(id)));
             });
+          /** Fold an instance's state again from its events, and keep it if it differs. */
+          const rebuild = (id: string) =>
+            Effect.gen(function* () {
+              const current = instance(id);
+              const unchanged: RebuildResult = { version: current.version, changed: false };
+              if (current.events.length === 0) return unchanged;
+              const state = yield* kit.fold({ state: null, events: current.events });
+              if (sameJson(state, current.state)) return unchanged;
+              current.state = state;
+              return { version: current.version, changed: true } satisfies RebuildResult;
+            });
           /** Compact an instance that holds more events than a compaction's Layer allows. */
           const compactWhenDue = (id: string) =>
             Effect.suspend(() => {
@@ -1275,6 +1288,7 @@ export const make = (
             rewriteStatus: (id, rewriteId) =>
               Effect.sync(() => instance(id).rewrites.get(rewriteId)?.status),
             compact: (id, name) => lock.withPermits(1)(compact(id, name)),
+            rebuild: (id) => lock.withPermits(1)(rebuild(id)),
           };
         }),
 

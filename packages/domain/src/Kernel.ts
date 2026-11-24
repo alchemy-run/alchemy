@@ -1421,6 +1421,18 @@ const build = (
         }
         return { state: definition.delete ? null : codecs.state.encode(state), changes };
       }),
+      fold: Effect.fnUntraced(function* (run) {
+        let state = codecs.state.decode(run.state ?? codecs.initial);
+        for (const row of run.events) {
+          const event = (yield* decodeEvent(row.event)) as { readonly _tag: string };
+          state = (def.evolve as Record<string, (...args: any[]) => unknown>)[event._tag](
+            state,
+            event,
+            decodeEnvelope(row.envelope),
+          );
+        }
+        return codecs.state.encode(state);
+      }),
       deletes: (name) =>
         (rewriteByName.get(name)?.cls.definition as { readonly delete?: boolean } | undefined)
           ?.delete === true,

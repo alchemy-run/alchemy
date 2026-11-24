@@ -111,8 +111,9 @@ More: [Aggregate](https://alchemy.run/domain/aggregate).
 - **evolve and reply are total and never fail.** decide already refused the command, so a handler keeps any state its event can't follow: `s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s`. An event that changes the stage returns the new state whole.
 - **Use optics (`effect/Optic`) once an `evolve` nests or repeats a check**, in aggregates and views alike. Never spread three levels deep. `Optic.id<State>().tag("Open").key("balance")` focuses on a field of one state; `.key("issues").at(id)` on a record entry, and does nothing when it is missing; `.key("issues").optionalKey(id)` on one that may be added. `Optic.replace(s, balance, e.balanceAfter)` sets a field, `issue(id).key("replies").modify((n) => n + 1)(s)` changes one, and `pipe(s, a.modify(...), b.modify(...))` makes several changes. An optic that does not match leaves the state as it is, which keeps `evolve` total. The example bank's `Account` and the issue board's `IssueList` view use them.
 - **A compensation never refuses.** A command that undoes another process's step (`RefundTransfer`) records a fact for every state (`TransferRefunded`, or `RefundStranded` when the account closed), so the saga that sent it has no refusal to handle.
+- **A fixed `evolve` doesn't fix stored states.** An instance keeps the state it last folded. After deploying a fix, call `accounts.rebuild(id)` on each instance the bug reached: it folds the state again from the events and stores it. Events, versions, views and projections don't change.
 
-More: [Aggregate: Focus on a state with optics](https://alchemy.run/domain/aggregate#focus-on-a-state-with-optics), [Aggregate: Never refuse a compensation](https://alchemy.run/domain/aggregate#never-refuse-a-compensation).
+More: [Aggregate: Focus on a state with optics](https://alchemy.run/domain/aggregate#focus-on-a-state-with-optics), [Aggregate: Never refuse a compensation](https://alchemy.run/domain/aggregate#never-refuse-a-compensation), [Aggregate: Fold the state again after a fix](https://alchemy.run/domain/aggregate#fold-the-state-again-after-a-fix).
 
 ## Decision
 
