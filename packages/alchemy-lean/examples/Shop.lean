@@ -212,6 +212,38 @@ theorem aRefusedOrderIsDeclinedAndNotShipped (id item reason : String) (amount :
       Shop.waiting shop = [] := by
   behaviour
 
+/-! ## Eventually
+
+The theorems above say where a flow stands. These say it ends: left to run, the
+shop comes to rest, with nothing in flight, and with the order where it should be.
+-/
+
+/--
+Given a new order, when it is placed, the gateway approves and the warehouse
+answers, then eventually the shop is at rest with nothing in flight, the order
+paid and its shipment scheduled.
+-/
+theorem anApprovedOrderEventuallyShips (id item charge : String) (amount : Nat)
+    (priced : amount ≠ 0) :
+    Shop.Eventually
+      (Shop.run [
+        .send ⟨.Order, (), .place id item amount⟩,
+        .answer (.charge id amount) (.approved charge),
+        .answer (.ship id item) ()])
+      fun shop => shop.Settled ∧ (shop.state .Order id).status = .paid charge ∧
+        (shop.state .Shipment id).item = some item := by
+  refine Shop.eventually_now _ ?_ ?_ <;> behaviour
+
+/-- And when the gateway refuses, eventually the shop is at rest with the order declined. -/
+theorem aRefusedOrderEventuallyEnds (id item reason : String) (amount : Nat)
+    (priced : amount ≠ 0) :
+    Shop.Eventually
+      (Shop.run [
+        .send ⟨.Order, (), .place id item amount⟩,
+        .answer (.charge id amount) (.refused reason)])
+      fun shop => shop.Settled ∧ (shop.state .Order id).status = .declined reason := by
+  refine Shop.eventually_now _ ?_ ?_ <;> behaviour
+
 /-! ## Rules about the domain -/
 
 /-- An order is charged at most once, and never more than it costs. -/

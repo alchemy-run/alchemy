@@ -221,6 +221,34 @@ theorem everyWireSentOnce (w : Alchemy.World Signature) (reach : Wires.Reachable
     (payout : String) : SentOnce (w.state .Transfer payout) :=
   Transfer.always (by simp [SentOnce]) sentOnce_kept w reach payout
 
+/-- One step of the wire desk, when nothing is part-way through: an event is taken off the inbox. -/
+theorem step_idle {w w' : Alchemy.World Signature} (idle : w.fibers = [])
+    (step : Wires.stepOnce w = some w') : w'.fibers = [] ∧ w'.inbox.length < w.inbox.length := by
+  unfold Model.stepOnce at step
+  split at step
+  · next event rest inbox =>
+    cases step
+    simp [Model.react, idle, inbox]
+  · simp [idle, Model.tryFibers] at step
+
+/--
+The wire desk comes to rest. From any world with nothing part-way through, it
+stops within as many steps as there are events to deliver: a measure that every
+step lowers.
+-/
+theorem comesToRest (w : Alchemy.World Signature) (idle : w.fibers = []) :
+    Wires.AtRest (Wires.settle w.inbox.length w) :=
+  Wires.comesToRestWithin (fun w => w.fibers = []) (fun w => w.inbox.length)
+    (fun _ _ idle step => (step_idle idle step).1) (fun _ _ idle step => (step_idle idle step).2)
+    _ w idle (Nat.le_refl _)
+
+/-- So eventually the desk is at rest with every wire sent at most once. -/
+theorem eventuallyEveryWireSentOnce (w : Alchemy.World Signature) (reach : Wires.Reachable w)
+    (idle : w.fibers = []) (payout : String) :
+    Wires.Eventually w fun rested => SentOnce (rested.state .Transfer payout) :=
+  ⟨w.inbox.length, comesToRest w idle,
+    everyWireSentOnce _ (Wires.settle_reachable _ w reach) payout⟩
+
 end Wires
 
 /-- The three models. -/

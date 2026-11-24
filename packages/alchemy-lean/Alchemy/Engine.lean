@@ -187,3 +187,105 @@ theorem play_decide_reachable (m : Model) (fuel : Nat) (w : World m.signature)
 
 end Model
 end Alchemy
+
+namespace Alchemy
+namespace Model
+
+variable (m : Model)
+
+/-! ## Eventually
+
+Safety says nothing bad happens. These say something good does: that a model
+left to run comes to rest, and what is true of it once it has.
+-/
+
+/-- Nothing can go on without a caller, an outside answer or the clock. -/
+def AtRest (w : World m.signature) : Prop := m.stepOnce w = none
+
+theorem settle_atRest (fuel : Nat) (w : World m.signature) (rest : m.AtRest w) :
+    m.settle fuel w = w := by
+  cases fuel with
+  | zero => rfl
+  | succ fuel => simp [settle, show m.stepOnce w = none from rest]
+
+/--
+A model comes to rest. Given a measure that every step lowers, running on from
+any world reaches one where nothing can go on, within as many steps as the measure.
+-/
+theorem comesToRest (measure : World m.signature → Nat)
+    (lowers : ∀ w w', m.stepOnce w = some w' → measure w' < measure w) :
+    ∀ fuel w, measure w ≤ fuel → m.AtRest (m.settle fuel w) := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    intro w small
+    show m.stepOnce w = none
+    cases step : m.stepOnce w with
+    | none => rfl
+    | some w' => have := lowers w w' step; omega
+  | succ fuel ih =>
+    intro w small
+    unfold settle
+    cases step : m.stepOnce w with
+    | none => exact step
+    | some w' =>
+      have := lowers w w' step
+      exact ih w' (by omega)
+
+/--
+The same, for the worlds of some kind that steps stay within: the measure need
+only fall there.
+-/
+theorem comesToRestWithin (within : World m.signature → Prop) (measure : World m.signature → Nat)
+    (stays : ∀ w w', within w → m.stepOnce w = some w' → within w')
+    (lowers : ∀ w w', within w → m.stepOnce w = some w' → measure w' < measure w) :
+    ∀ fuel w, within w → measure w ≤ fuel → m.AtRest (m.settle fuel w) := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    intro w inside small
+    show m.stepOnce w = none
+    cases step : m.stepOnce w with
+    | none => rfl
+    | some w' => have := lowers w w' inside step; omega
+  | succ fuel ih =>
+    intro w inside small
+    unfold settle
+    cases step : m.stepOnce w with
+    | none => exact step
+    | some w' =>
+      have := lowers w w' inside step
+      exact ih w' (stays w w' inside step) (by omega)
+
+/-- Running on from `w`, the model comes to rest with `P` true. -/
+def Eventually (w : World m.signature) (P : World m.signature → Prop) : Prop :=
+  ∃ steps, m.AtRest (m.settle steps w) ∧ P (m.settle steps w)
+
+/-- What is true of every world at rest that the model reaches is true eventually, if it comes to rest. -/
+theorem eventually_of_rest {P : World m.signature → Prop} (measure : World m.signature → Nat)
+    (lowers : ∀ w w', m.stepOnce w = some w' → measure w' < measure w)
+    (atRest : ∀ w, m.Reachable w → m.AtRest w → P w)
+    (w : World m.signature) (reach : m.Reachable w) : m.Eventually w P :=
+  ⟨measure w, m.comesToRest measure lowers _ w (Nat.le_refl _),
+    atRest _ (m.settle_reachable _ w reach) (m.comesToRest measure lowers _ w (Nat.le_refl _))⟩
+
+/-- What holds of every reachable world holds eventually, from one that is already at rest. -/
+theorem eventually_now {P : World m.signature → Prop} (w : World m.signature)
+    (rest : m.AtRest w) (holds : P w) : m.Eventually w P :=
+  ⟨0, rest, holds⟩
+
+/--
+A rule about the model once it has settled: every event delivered, and no
+policy or saga part-way through or waiting.
+-/
+def OnceSettled (P : World m.signature → Prop) : Prop :=
+  ∀ w, m.Reachable w → w.Settled → P w
+
+/-- A rule that follows from an invariant once nothing is in flight holds once settled. -/
+theorem onceSettled_of_invariant {I P : World m.signature → Prop}
+    (initially : I (World.start m.signature)) (kept : ∀ w w', I w → m.Step w w' → I w')
+    (settled : ∀ w, I w → w.Settled → P w) : m.OnceSettled P :=
+  fun w reach rest => settled w (m.worldInvariant initially kept w reach) rest
+
+end Model
+end Alchemy

@@ -59,6 +59,7 @@ attribute [behaviour]
   Program.startSaga Program.signalSaga Program.awaitSignal Program.later Program.bind
   Program.pure_eq Program.bind_eq Option.elim
   Link.run Link.play Link.settle_succ Link.settle_zero Link.answerNext Link.fuel
+  Model.AtRest World.Settled
 
 /--
 Proves a behaviour theorem by running the model, with its variables left as
