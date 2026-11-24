@@ -13,7 +13,7 @@ import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
-import { envStrings } from "alchemy/RuntimeContext";
+import { envStrings, packEnvValueKeepRedacted } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import {
   createInternalTags,
@@ -25,6 +25,7 @@ import {
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Assets, ensureLambdaWebCodeAccess } from "../Assets.ts";
@@ -40,6 +41,15 @@ import {
 import { makeFunctionBundler, type FunctionBundleOptions } from "./FunctionBundle.ts";
 import type { NetworkConnectorProps } from "./NetworkConnector.ts";
 import { createConnector, getConnector, syncConnector } from "./NetworkConnectorLifecycle.ts";
+import {
+  deleteSecretEnv,
+  parameterArn,
+  SECRET_ENV,
+  secretEnvStatement,
+  splitSecretEnv,
+  syncSecretEnv,
+  webSecretEnvParameterName,
+} from "./SecretEnv.ts";
 import {
   connectorOfRevision,
   deleteConnectorAndRole,
@@ -597,7 +607,18 @@ export const WebFunction: Platform<
     // check and fails at plan instead of deploying a poller that silently
     // stops consuming.
     const { run: _run, ...context } = createHostRuntimeContext(WebFunctionTypeId)(id);
-    return context;
+    return {
+      ...context,
+      // `packEnvValueKeepRedacted` keeps a secret's `Redacted` on the
+      // outside, so the provider moves it to the function's secret
+      // parameter instead of its plain environment.
+      set: (bindingId: string, output: Output.Output) =>
+        Effect.sync(() => {
+          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+          context.env[key] = output.pipe(Output.map(packEnvValueKeepRedacted));
+          return key;
+        }),
+    };
   },
 });
 
@@ -697,25 +718,39 @@ export const WebFunctionProvider = () =>
         roleName,
         policyName,
         bindings,
+        userEnv,
+        secretParameterArn,
       }: {
         roleName: string;
         policyName: string;
         bindings: ResourceBinding<WebFunction["Binding"]>[];
+        /** The `env` prop, which joins the bindings' env. */
+        userEnv: Record<string, unknown> | undefined;
+        /** The function's secret parameter, when its bootstrap can read one. */
+        secretParameterArn: string | undefined;
       }) {
         const active = bindings.filter(
           (binding: ResourceBinding<WebFunction["Binding"]> & { action?: string }) =>
             binding.action !== "delete",
         );
-        const env = active
-          .map((binding) => binding?.data?.env)
-          .reduce((acc, env) => ({ ...acc, ...env }), {});
-        const policyStatements = active.flatMap(
+        const env: Record<string, unknown> = {
+          ...active
+            .map((binding) => binding?.data?.env)
+            .reduce((acc, env) => ({ ...acc, ...env }), {}),
+          ...userEnv,
+        };
+        const policyStatements: PolicyStatement[] = active.flatMap(
           (binding) =>
             binding?.data?.policyStatements?.map((stmt: PolicyStatement) => ({
               ...stmt,
               Sid: stmt.Sid?.replace(/[^A-Za-z0-9]+/gi, ""),
             })) ?? [],
         );
+        // A secret env value lives in the function's SSM parameter, which
+        // its role reads at start.
+        if (secretParameterArn !== undefined && Object.values(env).some(Redacted.isRedacted)) {
+          policyStatements.push(secretEnvStatement(secretParameterArn));
+        }
         const vpcRequests = active.flatMap((binding) =>
           binding?.data?.vpc ? [binding.data.vpc] : [],
         );
@@ -1226,10 +1261,22 @@ export const WebFunctionProvider = () =>
 
           // Execution role + binding grants.
           const roleArn = yield* ensureRole(id, roleName);
-          const { env: bindingEnv, vpcRequests } = yield* syncBindings({
+          // The Effect form's bootstrap reads secrets from the function's
+          // SSM parameter; an async server ships as is, and reads its env.
+          const secretParameter =
+            news.isExternal || news.bundle === false
+              ? undefined
+              : webSecretEnvParameterName(functionName);
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const secretParameterArn =
+            secretParameter &&
+            parameterArn(partitionOf(region), region, accountId, secretParameter);
+          const { env: mergedEnv, vpcRequests } = yield* syncBindings({
             roleName,
             policyName: names.policyName,
             bindings,
+            userEnv: news.env,
+            secretParameterArn,
           });
           const vpc = mergeVpc(news.vpc, vpcRequests);
           yield* requireHomeRegion(id, vpc, news.regions);
@@ -1251,7 +1298,24 @@ export const WebFunctionProvider = () =>
             news.bundle !== false &&
             (sourcemap === "inline" ||
               ((news.uploadSourceMap ?? true) && (sourcemap === true || sourcemap === "hidden")));
-          const userEnv = envStrings({ ...bindingEnv, ...news.env });
+          // Endpoints may serve from other Regions, so the reference is the
+          // parameter's ARN, which names its Region.
+          const { plain, secret } =
+            secretParameter === undefined
+              ? { plain: mergedEnv, secret: {} }
+              : splitSecretEnv(mergedEnv);
+          const secretRef = secretParameter
+            ? yield* syncSecretEnv(
+                secretParameter,
+                secret,
+                `Secret environment of the Lambda Web Function ${functionName}`,
+              )
+            : undefined;
+          const userEnv = envStrings(
+            secretRef === undefined
+              ? plain
+              : { ...plain, [SECRET_ENV]: `${secretParameterArn}:${secretRef.split(":").at(-1)}` },
+          );
           const nodeOptions = [
             userEnv.NODE_OPTIONS,
             enableSourceMaps ? "--enable-source-maps" : undefined,
@@ -1451,6 +1515,7 @@ export const WebFunctionProvider = () =>
             }),
           );
           yield* waitForFunctionGone(output.functionName);
+          yield* deleteSecretEnv(webSecretEnvParameterName(output.functionName));
           // A connector still referenced at delete time (e.g. by an endpoint
           // that never moved off it) goes with the function.
           yield* deleteEgress(id, session);
