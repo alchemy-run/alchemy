@@ -302,6 +302,8 @@ The page's sidebar needs every issue at once, with whether its agent is working.
 
 ```typescript title="src/Board/IssueList.view.ts"
 import * as Domain from "@alchemy.run/domain";
+import { pipe } from "effect/Function";
+import * as Optic from "effect/Optic";
 import * as Schema from "effect/Schema";
 import { Issue } from "./Issue.aggregate.ts";
 import { IssueId } from "./Issue.id.ts";
@@ -310,6 +312,30 @@ import { Label } from "./LabelIssue.command.ts";
 
 /** The one key the list is kept under. */
 export const ALL = "all";
+
+const Listed = Schema.Struct({
+  title: Schema.String,
+  label: Schema.NullOr(Label),
+  replies: Schema.Int,
+});
+
+const State = Schema.Struct({
+  /** Newest first. */
+  order: Schema.Array(IssueId),
+  issues: Schema.Record(IssueId, Listed),
+  /** The issues whose agent is working now. */
+  working: Schema.Array(IssueId),
+});
+
+// Optics into the list. One that focuses on an issue leaves the list as it
+// is when the issue is not in it, which keeps evolve total.
+const list = Optic.id<typeof State.Type>();
+const order = list.key("order");
+const working = list.key("working");
+const listed = (id: IssueId) => list.key("issues").optionalKey(id);
+const issue = (id: IssueId) => list.key("issues").at(id);
+
+const without = (id: IssueId) => (ids: ReadonlyArray<IssueId>) => ids.filter((each) => each !== id);
 
 /**
  * Every issue of the board, newest first, with whether its agent is working:
@@ -325,42 +351,29 @@ export class IssueList extends Domain.View("IssueList", {
     IssueCommented: () => ALL,
     ActivityRecorded: () => ALL,
   },
-  state: Schema.Struct({
-    /** Newest first. */
-    order: Schema.Array(IssueId),
-    issues: Schema.Record(
-      IssueId,
-      Schema.Struct({ title: Schema.String, label: Schema.NullOr(Label), replies: Schema.Int }),
-    ),
-    /** The issues whose agent is working now. */
-    working: Schema.Array(IssueId),
-  }),
+  state: State,
   initial: { order: [], issues: {}, working: [] },
   evolve: {
-    IssueReported: (list, event, { source }) => ({
-      ...list,
-      order: [source.id, ...list.order.filter((id) => id !== source.id)],
-      issues: { ...list.issues, [source.id]: { title: event.title, label: null, replies: 0 } },
-    }),
-    IssueLabeled: (list, event, { source }) => {
-      const issue = list.issues[source.id];
-      return issue === undefined
-        ? list
-        : { ...list, issues: { ...list.issues, [source.id]: { ...issue, label: event.label } } };
-    },
-    IssueCommented: (list, _, { source }) => {
-      const issue = list.issues[source.id];
-      return issue === undefined
-        ? list
-        : {
-            ...list,
-            issues: { ...list.issues, [source.id]: { ...issue, replies: issue.replies + 1 } },
-          };
-    },
-    ActivityRecorded: (list, event, { source }) => {
-      const others = list.working.filter((id) => id !== source.id);
-      return { ...list, working: event.status === "working" ? [...others, source.id] : others };
-    },
+    IssueReported: (state, event, { source }) =>
+      pipe(
+        state,
+        order.modify((ids) => [source.id, ...without(source.id)(ids)]),
+        listed(source.id).modify(() => ({ title: event.title, label: null, replies: 0 })),
+      ),
+    IssueLabeled: (state, event, { source }) =>
+      issue(source.id)
+        .key("label")
+        .modify(() => event.label)(state),
+    IssueCommented: (state, _, { source }) =>
+      issue(source.id)
+        .key("replies")
+        .modify((replies) => replies + 1)(state),
+    ActivityRecorded: (state, event, { source }) =>
+      working.modify((ids) =>
+        event.status === "working"
+          ? [...without(source.id)(ids), source.id]
+          : without(source.id)(ids),
+      )(state),
   },
 }) {}
 ```
