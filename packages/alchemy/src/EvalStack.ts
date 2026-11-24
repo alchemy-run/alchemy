@@ -34,6 +34,11 @@ const platform = Layer.mergeAll(
   Layer.provide(ProfileStoreLive, PlatformServices),
   Layer.provide(CredentialsStoreLive, PlatformServices),
 );
+// A fresh `AlchemyContextLive`, so it reads the caller's `dotAlchemy` (the test
+// harness's `Test.make({ dotAlchemy })`). `Effect.provide` would otherwise reuse
+// an instance an enclosing `provide` already built from the default directory.
+const alchemyContext = Layer.fresh(AlchemyContextLive);
+
 // override alchemy state store, CLI/reporting, state, and Config
 const alchemy = (overrides?: { dev?: boolean }) =>
   Layer.mergeAll(
@@ -44,9 +49,9 @@ const alchemy = (overrides?: { dev?: boolean }) =>
             AlchemyContext,
             AlchemyContext.useSync((ctx) => ({ ...ctx, dev: overrides.dev! })),
           ),
-          AlchemyContextLive,
+          alchemyContext,
         )
-      : AlchemyContextLive,
+      : alchemyContext,
   );
 
 export const evalStack = <S extends { services: Context.Context<any> }, B, StackErr, Err, Req>(

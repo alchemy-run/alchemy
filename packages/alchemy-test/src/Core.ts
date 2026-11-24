@@ -580,14 +580,17 @@ export const toEffect = <A, ROut = any>(
     );
   }).pipe(
     Effect.provideService(AdoptPolicy, options.adopt ?? false),
-    Effect.provide(
-      overrideAlchemyContext({ dev: resolveDev(options), dotAlchemy: options.dotAlchemy }),
-    ),
     // `options.state` (e.g. `Cloudflare.state()`) itself requires
     // `AuthProviders` to read credentials, so AuthProviders must be provided
     // AFTER the state layer or the state layer's requirement is never
     // satisfied — which surfaces as `Service not found: AuthProviders`.
     Effect.provide(testStateLayer(options.state ?? State.localState())),
+    // AFTER the state layer too, so the store is built with this file's
+    // `dotAlchemy` and `dev`: `localState()` fixes its directory from
+    // `AlchemyContext` when its layer is built.
+    Effect.provide(
+      overrideAlchemyContext({ dev: resolveDev(options), dotAlchemy: options.dotAlchemy }),
+    ),
     Effect.provideService(AuthProviders, {}),
     Effect.provide(Layer.provideMerge(alchemyLayer, platformLayer())),
   );
