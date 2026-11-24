@@ -344,7 +344,13 @@ export const PoolProvider = () =>
             // (destroyed before this pool, e.g. by an interrupted destroy)
             // took the pool with it.
             Effect.catchTag(
-              ["BadGateway", "ServiceUnavailable", "GatewayTimeout", "TimeoutError"],
+              [
+                "BadGateway",
+                "ServiceUnavailable",
+                "GatewayTimeout",
+                "TimeoutError",
+                "EngineNotReady",
+              ],
               () =>
                 session.note(
                   `Rivet pool ${output.name}'s control plane is unreachable; dropping it.`,

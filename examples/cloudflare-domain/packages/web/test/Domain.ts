@@ -2,6 +2,7 @@ import * as Domain from "@alchemy.run/domain";
 import { customer } from "@bank/domain/Actor";
 import { Bank, BankReads } from "@bank/domain/Bank.model";
 import { CurrentActor } from "@bank/domain/CurrentActor.context";
+import { CustomerAddress, CustomerAddressLive } from "@bank/domain/Customer/CustomerAddress.query";
 import {
   MainAccountProvisioning,
   MainAccountProvisioningLive,
@@ -23,15 +24,21 @@ class WebBank extends Domain.Model("WebBank", {
   // Registration opens the main account, so the app can write and read it back.
   policies: [MainAccountProvisioning],
   projections: [Ledger],
-  queries: [AccountLedger],
+  // Every query the CustomerApi exposes.
+  queries: [AccountLedger, CustomerAddress],
 }) {}
+// The Vault the Worker uses, with its keys in memory.
+const Sealing = Domain.VaultLive.pipe(
+  Layer.provide(Layer.merge(Domain.MemoryKeyStore, Domain.NoKeyWrap)),
+);
 const Hosted = WebBank.layer(
   Layer.mergeAll(
     BankReads,
     MainAccountProvisioningLive,
+    CustomerAddressLive,
     Layer.merge(LedgerLive, AccountLedgerLive).pipe(Layer.provide(memoryLedger())),
   ),
-).pipe(Layer.provide(Domain.InMemory));
+).pipe(Layer.provide(Domain.InMemory), Layer.provideMerge(Sealing));
 const Middleware = Layer.merge(
   Layer.succeed(Session, (effect) => Effect.provideService(effect, CurrentActor, customer("c-1"))),
   Layer.succeed(MfaChallenge, () => Effect.fail(MfaRequired.make({}))),

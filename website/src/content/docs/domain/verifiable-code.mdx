@@ -1,52 +1,272 @@
 ---
-title: What the prover reads
-description: The TypeScript, the Effect helpers and the schemas that Verify reads as logic, and what happens to code outside that set.
+title: What can be verified
+description: The TypeScript, the Effect helpers and the schemas that Verify supports, and what happens to code outside that set.
 ---
 
-`Verify` proves a rule by reading your `decide`, `evolve`, `keyOf` and rules as logic. It reads a subset of TypeScript. Code outside it is never guessed at: the report names the file, the line and what it met, and the rule is not proved.
+`Verify` proves a rule from the code of your `decide`, `evolve`, `keyOf` and rules. It supports a subset of TypeScript and of Effect. Code outside it is never guessed at: the report names the file, the line and what it met, and the rule is not proved.
 
 ```text
-Not read
+Not supported
   Label.aggregate.ts:23  reads .localeCompare of a string
 ```
 
-A handler has to be a plain function of what it is given: the state, the command and the context. It can call other functions in your own files, which are read the same way. A function from Effect is read if it is listed under [Library functions](#library-functions), and one from [a package of your own](#your-own-packages) is read like your files. An exported function that cannot be read is [opaque](#opaque-functions).
+What a handler returns has to depend only on what it is given: the state, the command and the context. It can return a value or an Effect, written with `Effect.gen` or `Effect.fn`.
+
+In the snippets, `a` and `b` are whole numbers, `flag` is a boolean, `text` and `other` are strings and `items` is a list of numbers, each a field of the state or the command.
 
 ## Statements
 
-Read: `const`, `let` and `var`, assignment to a local variable or to several at once (`[x, y] = [y, x]`), `+=` and the other compound assignments, `++` and `--`, `if` and `else`, `switch`, `return`, block statements, and function declarations, which a block can call before the line that declares them.
+```typescript title="Supported"
+const fee = 5;
+let total = a;
+let count = 0, extra; // several at once, with a value or without
+var seen = 0;
 
-Loops are read: `for`, `for…of`, `for…in`, `while` and `do…while`, with `break` and `continue`. A loop has to end after a number of turns the prover can count, so a loop over a list from the state or a command is tried for short lists only (see [Lists](#lists)).
+total = total + fee; // assignment to a local variable
+[total, count] = [count, total]; // to several at once
+({ total } = { total: 0 }); // into a pattern
+total += fee; // and -=, *=, /=, %=, ??=, ||=, &&=
+count++; // and count--, ++count, --count
 
-Not read: `try`, `catch` and `throw`, `async` and `await`, `for await`, labels, and generators other than `Effect.gen`, `Effect.fn`, `Option.gen` and `Result.gen`. A `class` is read only where it extends one of `effect/Data`'s and adds nothing: `class Overweight extends Data.TaggedError("Overweight")<{ over: number }> {}`.
+const made = { n: 0, list: [0] }; // an object or an array the code made can be changed
+made.n = a;
+made.list[0] = a;
+made.list.push(1);
+
+if (total > 100) {
+  total = 100;
+} else if (total < 0) {
+  total = 0;
+} else {
+  count = 1;
+}
+
+switch (a) {
+  case 1: // one case falling into the next
+  case 2:
+    total = 12;
+    break;
+  case 3: {
+    total = 3;
+    break;
+  }
+  default:
+    total = 0;
+}
+
+for (const n of items) total += n;
+for (const [index, n] of items.entries()) total += index * n;
+for (const key in made) seen++;
+for (let i = 0; i < 3; i++) total += i;
+for (let i = 0; i < items.length; i++) total += items[i]!;
+while (count < 3) count++;
+do {
+  count++;
+} while (count < 6);
+for (const n of items) {
+  if (n < 0) continue;
+  if (n > a) break;
+  total += n;
+}
+
+const doubled = twice(a); // a function declared further down
+function twice(n: number): number {
+  return n * 2;
+}
+function countdown(n: number): number {
+  return n <= 0 ? 0 : 1 + countdown(n - 1); // a function that calls itself, on a number the code writes
+}
+
+type Amount = number; // types and interfaces
+interface Line {
+  readonly amount: Amount;
+}
+```
+
+```typescript title="Not supported"
+try {
+  total = twice(a);
+} catch {
+  total = 0;
+} // try, catch and finally
+throw new Error("no");
+await saved; // async, await and for await
+outer: for (const n of items) break outer; // labels
+function* each() {
+  yield a;
+} // a generator, other than the one given to Effect.gen, Effect.fn, Option.gen and Result.gen
+class Local {
+  n = a;
+} // a class in a function
+enum Kind {
+  Good,
+  Gift,
+}
+using held = resource;
+debugger;
+
+while (count < a) count++; // a loop that an input decides the length of
+for (let i = 0; i < a; i++) count++;
+
+items.push(1); // changing a value the handler was given
+items[0] = 1;
+items.sort();
+items.reverse();
+
+total **= 2; // and <<=, >>=, >>>=, &=, |=, ^=
+```
 
 ## Expressions
 
-Read:
+```typescript title="Supported"
+// Values
+[1, 1.5, "text", true, false, null, undefined, 10n];
+`${text}:${a}:${flag}:${null}`; // each value written as JavaScript writes it
+"n" + a;
 
-- Arithmetic on whole numbers: `+`, `-`, `*`, `/`, `%`, and the comparisons `<`, `<=`, `>`, `>=`.
-- `===` and `!==`. `==` and `!=` are read only against `null`.
-- `&&`, `||`, `??`, `!`, the conditional `a ? b : c`, and optional chaining: `a?.b`, `a?.b.c()` and `f?.()`.
-- `typeof`, `void` and `in`.
-- Object and array literals, spread in both, and property access by a name or by a key the prover can see.
-- Destructuring of objects and arrays, with defaults and rest patterns.
-- Arrow functions and function expressions, and calls to them.
-- Template literals, and `+` on strings. A number, a boolean, `null` and `undefined` are written into one as JavaScript writes them.
-- `new` on an event, a rejection or a command, and the class's `make`: `Started.make({})` is `new Started({})`.
-- `new` on a class of `effect/Data` (`Data.Class`, `Data.TaggedClass`, `Data.Error`, `Data.TaggedError`) or of `effect/Schema` (`Schema.Class`, `Schema.TaggedClass`, `Schema.TaggedError`). The instance is its fields and its `_tag`.
-- TypeScript's `as`, `satisfies` and `!`, which change nothing at run time.
+// Whole numbers
+a + b;
+a - b;
+a * b;
+a % 3;
+-a;
+a < b;
+a <= b;
+a > b;
+a >= b;
+a === b;
+a !== b;
 
-Not read: bitwise operators, `**`, `instanceof`, the comma operator, regular expressions, tagged templates, `delete`, `this`, a getter or a setter in an object literal, and a property read by a key that depends on an input.
+// Truth
+!flag;
+flag && a;
+flag || a;
+maybe ?? b;
+flag ? a : b;
+maybe == null; // == and != against null or undefined
+maybe != null;
+typeof a;
+void a;
+
+// Objects
+({ a, b: b + 1, "quoted": a, 3: flag, ["k" + 1]: a });
+({ ...made, n: 0 });
+({ twice(n: number) { return n * 2; } });
+made.n;
+made["n"];
+"n" in made;
+maybe?.n;
+maybe?.twice(a);
+callback?.(a);
+
+// Arrays
+[a, b];
+[...items, a];
+items[0];
+items[1 - 1];
+items.length;
+
+// Functions
+(n: number) => n + 1;
+(n: number, m = 2) => n * m;
+(...rest: number[]) => rest.length;
+(n: number) => {
+  return n;
+};
+(function (n: number) {
+  return n - 1;
+});
+twice(...[a]);
+
+// Patterns, in a parameter or a declaration
+const { x, y = 3, z: renamed, inner: { deep }, ...others } = record;
+const [first, , third = 7, ...rest] = items;
+
+// Classes of the model and of the library
+new Started({}); // an event, a rejection or a command
+Started.make({}); // the same
+new Overweight({ over: a }); // Data.Class, TaggedClass, Error, TaggedError; Schema.Class, TaggedClass, TaggedError
+
+// TypeScript that changes nothing when the code runs
+a as number;
+a satisfies number;
+items[0]!;
+<number>a;
+identity<number>(a);
+```
+
+```typescript title="Not supported"
+a ** 2;
+a & b; // and |, ^, ~, <<, >>, >>>
+a == b; // == and != between two values: write === and !==
+items instanceof Array;
+(a, b); // the comma operator
+/a+/.test(text); // regular expressions
+tag`x${a}`; // tagged templates
+delete made.n;
+this;
+({ get n() { return a; } }); // a getter or a setter
+items[a]; // a place an input decides
+import.meta.url;
+
+Date.now(); // globals that are not the same every time
+new Date();
+Math.random();
+globalThis.name;
+
+JSON.stringify(made); // globals with no model
+parseInt(text);
+Number(text);
+String(a);
+Boolean(a);
+a.toString();
+a.toFixed(2);
+new Map();
+new Set();
+Symbol("s");
+structuredClone(made);
+
+absurd(a); // what code calls where it cannot be: reaching it is reported
+```
 
 ## Numbers
 
 A whole number is exact, and a `bigint` is exact with no limit. A number is assumed to stay within ±2^53, which the report lists under what it assumes.
 
-A division is read where its result is exact: through `Math.floor`, `Math.ceil` or `Math.trunc`, or compared with a whole number. `Math.abs` is read too, and `Math.max` and `Math.min` of any number of numbers.
+```typescript title="Supported"
+a + b * 2 - 1;
+a % 3;
+10n + BigInt(a) * 2n;
 
-Arithmetic on numbers that may not be whole is not proved. A solver counts exactly and JavaScript rounds, so `0.1 + 0.2 === 0.3` is true to one and false to the other. Keep money in whole cents, or in a [decimal](#decimals).
+a / 4; // a division by a whole number the code writes
+a / 4 < 1;
+Math.floor(a / 2);
+Math.ceil(a / 2);
+Math.trunc(a / 2);
 
-`effect/Number` and `effect/BigInt` are the same operators as functions, and are read the same way: `Number.sum`, `Number.clamp`, `BigInt.max`.
+Math.abs(a);
+Math.max(a, b, 0);
+Math.min(a, b, 0);
+
+Number.sum(a, b); // effect/Number and effect/BigInt are the same operators as functions
+Number.clamp(a, { minimum: 0, maximum: 9 });
+```
+
+```typescript title="Not supported"
+a / b; // a division by a number an input holds
+a % b;
+
+a / 3 + 0.5; // arithmetic on a number that may not be whole
+(a / 3) * 3;
+a * 0.5;
+
+Math.round(a / 2);
+Math.sqrt(a);
+Math.pow(a, 2);
+Number.isInteger(a);
+```
+
+JavaScript rounds a number that is not whole and a solver does not, so `0.1 + 0.2 === 0.3` is true to one and false to the other. Keep money in whole cents, or in a [decimal](#decimals).
 
 ## Decimals
 
@@ -61,15 +281,90 @@ invariants: {
 },
 ```
 
-A sum, a difference, a product, a comparison, `min`, `max`, `clamp`, `abs`, `negate`, `floor`, `ceil` and `truncate` are read on any decimal. A division is read only between decimals the code writes: the library rounds one that does not end, and the solver does not.
+Here `amount` and `fee` are decimals of the state or the command, and `RATE` is one the code writes.
+
+```typescript title="Supported"
+BigDecimal.sum(amount, fee);
+BigDecimal.subtract(amount, fee);
+BigDecimal.multiply(amount, RATE);
+BigDecimal.isLessThan(amount, fee); // and the other comparisons, and equals
+BigDecimal.min(amount, fee);
+BigDecimal.max(amount, fee);
+BigDecimal.clamp(amount, { minimum: fee, maximum: RATE });
+BigDecimal.abs(amount);
+BigDecimal.negate(amount);
+BigDecimal.floor(amount);
+BigDecimal.ceil(amount);
+BigDecimal.truncate(amount);
+
+BigDecimal.divide(RATE, BigDecimal.fromNumberUnsafe(4)); // a division between decimals the code writes
+```
+
+```typescript title="Not supported"
+BigDecimal.divide(amount, fee); // the library rounds a division that does not end, and the solver does not
+```
 
 ## Strings
 
-A string is compared with `===`, joined with `+` or a template literal, and has a `length`.
+```typescript title="Supported"
+text === other;
+text + other;
+`${text}:${other.length}`;
+text.length;
 
-On a string from the state or a command, these methods are read: `startsWith`, `endsWith`, `includes`, `indexOf`, `lastIndexOf`, `charAt`, `concat`, `slice`, `substring`, `split`, and `replace` and `replaceAll` of one string by another. `effect/String` has the same as functions.
+text.startsWith(other);
+text.endsWith("z");
+text.includes(other);
+text.indexOf(other);
+text.lastIndexOf("@"); // from the end, a separator the code writes
+text.charAt(0);
+text.at(0); // and text.at(-1), counted from the end
+text.concat(other, "!");
+text.replace("a", "o");
+text.replaceAll("a", "o");
 
-An id that holds structure is taken apart the usual ways, and a rule about a part is proved:
+text.slice(1, 3);
+text.slice(-2); // counted from the end
+text.slice(a, b); // at a place an input decides
+text.slice(0, text.indexOf("@")); // before a separator
+text.slice(text.lastIndexOf("@") + 1); // after the last one
+text.substring(a, b);
+
+text.split("@")[0]; // the first part and the last, however many parts there are
+text.split("@").at(-1);
+const [name] = text.split("@");
+
+text.split(",").length; // the parts counted, or one in the middle: up to two separators
+text.split(",")[1];
+text.split(",").map((part) => part.length);
+
+"Label".toUpperCase(); // changing letters, on a string the code writes
+" label ".trim();
+"7".padStart(3, "0");
+"ab".repeat(2);
+
+String.startsWith("ab")(text); // effect/String has the same as functions
+```
+
+```typescript title="Not supported"
+text.toUpperCase(); // changing the letters of a string an input holds
+text.toLowerCase();
+text.trim();
+text.padStart(4, "-");
+text.repeat(2);
+
+text[0];
+text.charCodeAt(0);
+text.split(""); // into letters
+text.split(other); // by a separator an input holds
+
+text < other; // putting two strings in order
+text.localeCompare(other);
+text.normalize();
+text.match("a"); // and search, and every regular expression
+```
+
+A rule about a part of an id is proved for every id:
 
 ```typescript
 invariants: { NameHasNoAt: (tag) => !tag.name.includes("@") },
@@ -80,165 +375,2009 @@ decide: {
 },
 ```
 
-`slice` and `substring` are read at any place: one the code writes, one counted from the end, or one an input decides, such as where a separator is. The separator given to `indexOf`, `lastIndexOf` and `split` is a string the code writes.
-
-The first part of a `split` and the last are read however many parts there are: `parts[0]`, `parts.at(-1)` and `const [name] = ref.split("@")`. Code that counts the parts, or reads one in the middle, is read for a string of up to two separators, and its rule is then checked for short lists only.
-
-A method that changes letters is read only on a string the code writes: `toUpperCase`, `toLowerCase`, `trim`, `padStart`, `repeat`. `localeCompare`, `normalize` and regular expressions are not read at all. Two strings from an input are not put in order: `Order.String` is read on strings the code writes.
-
 ## Lists
 
-An array the code builds has a known length, and everything is read on it: an index, `length`, `at`, `slice`, `concat`, `includes`, `indexOf`, `join`, `flat`, `toReversed`, and the methods that take a function, `map`, `filter`, `flatMap`, `find`, `findIndex`, `findLast`, `findLastIndex`, `some`, `every`, `forEach` and `reduce`. `push` is read on an array the code made, not on one it was given.
+```typescript title="Supported"
+items.length;
+items[0];
+items.at(-1);
+[...items, a];
+items.concat([a], 7);
+items.slice(1);
+items.includes(a);
+items.indexOf(a);
+items.join("-");
+items.toReversed();
+[items, [a]].flat();
+[...items.entries()];
+[...items.keys()];
 
-A list that comes from the state or a command has no known length, so it is tried with every length up to two items more than its schema asks for. A rule that passes that way is `Checked`, not `Proved`, and the report says how long the lists were.
+items.map((n, i) => n * 2 + i);
+items.filter((n) => n > a);
+items.flatMap((n) => [n, n + a]);
+items.find((n) => n > a);
+items.findIndex((n) => n > a);
+items.findLast((n) => n > a);
+items.findLastIndex((n) => n > a);
+items.some((n) => n > a);
+items.every((n) => n > a);
+items.reduce((total, n) => total + n, 0);
 
-`Object.keys`, `Object.values` and `Object.entries` are read on an object whose keys are known.
+const seen: Array<number> = []; // an array the code made
+items.forEach((n) => seen.push(n));
+seen.push(a);
+seen[0] = b;
+
+Array.isArray(items);
+Object.keys(made); // an object whose keys the code writes
+Object.values(made);
+Object.entries(made);
+
+Array.sort(items, Order.Number); // effect/Array: see the list below
+```
+
+```typescript title="Not supported"
+items.push(1); // changing a list the handler was given
+items.sort(); // and every method that changes an array in place:
+items.reverse(); // sort, reverse, splice, fill, pop, shift, unshift
+
+items.toSorted();
+items.reduceRight((total, n) => total + n, 0);
+items.lastIndexOf(a);
+items.with(0, a);
+Array.from(items);
+
+Object.assign({}, made);
+Object.fromEntries([["a", a]]);
+Object.hasOwn(made, "n");
+```
+
+A list of the state or a command has no known length, so it is tried with every length up to two items more than its schema asks for. A rule that passes that way is `Checked`, not `Proved`, and the report says how long the lists were.
 
 ## Hash sets and hash maps
 
-A `HashSet` and a `HashMap` from the state or a command are tried like a list: with up to two items, no two of them equal. Whether a value is in one is read as it is, for every value:
+A `HashSet` and a `HashMap` of the state or a command are tried like a list: with up to two items, no two of them equal.
 
-```typescript
-invariants: {
-  OnlyAMemberHasPoints: (roster) =>
-    HashMap.every(roster.points, (_points, person) => HashSet.has(roster.members, person)),
-  TheTotalIsTheSumOfThePoints: (roster) =>
-    roster.total === HashMap.reduce(roster.points, 0, (sum, points) => sum + points),
-},
+```typescript title="Supported"
+HashSet.has(roster.members, person); // for every value
+HashMap.get(roster.points, person);
+HashMap.every(roster.points, (_points, person) => HashSet.has(roster.members, person));
+HashMap.reduce(roster.points, 0, (sum, points) => sum + points);
+HashSet.size(roster.members);
+Equal.equals(roster.members, other.members); // two sets, two maps, two decimals, two objects: by what they hold
+
+for (const person of roster.members) seen.push(person); // in order: tried in every order, for up to four items
+[...roster.members];
+[...HashMap.keys(roster.points)];
 ```
 
-The library gives the items of a set and the pairs of a map in the order of their hashes, which is not an order the code chose. So code that reads them in order (`reduce`, `forEach`, `findFirst`, `HashMap.keys`, a `for…of` loop, a spread) is read once for every order, and a rule is proved only if it holds in each. Up to four items are read that way. `Equal.equals` compares two sets, two maps, two decimals and two objects by what they hold.
+The library gives the items of a set and the pairs of a map in the order of their hashes, which the code did not choose. A rule about code that takes them in order is proved only if it holds in every order.
 
 ## Schemas
 
-The state, each command's input and each request context start as any value their schema allows. These are read:
+The state, each command's input and each request context start as any value their schema allows.
 
-- `Schema.String`, `Schema.Number`, `Schema.Int`, `Schema.BigInt` and `Schema.Boolean`.
-- `Schema.Literal` and `Schema.Literals`, `Schema.Null` and `Schema.Undefined`.
-- `Schema.Struct` and `Schema.TaggedStruct`, with optional fields.
-- `Schema.Union`, `Schema.NullOr` and the others built on it. A proof starts from each member in turn.
-- `Schema.TaggedUnion`, and a union made one with `Schema.toTaggedUnion`. Its `guards`, `isAnyOf`, `match` and `matchOrElse` are read as tests of the tag: `Status.guards.Open(ticket.status)`.
-- `Schema.Array`, tried as described under [Lists](#lists).
-- `Schema.Option`, started as `none` and as `some`.
-- `Schema.Result`, started as a success and as a failure.
-- `Schema.DateTimeUtc`, and `Schema.Duration` as a whole number of milliseconds.
-- `Schema.BigDecimal`. A `Schema.Rational` is not started from: make a fraction from whole numbers with `Rational.make`.
-- `Schema.HashSet` and `Schema.HashMap`, tried as described under [Hash sets and hash maps](#hash-sets-and-hash-maps).
-- A branded schema, read as what it brands.
+```typescript title="Supported"
+Schema.String;
+Schema.Number;
+Schema.Int;
+Schema.BigInt;
+Schema.Boolean;
+Schema.Literal("open");
+Schema.Literals(["open", "closed"]);
+Schema.Null;
+Schema.Undefined;
 
-A field that may be left out, a union and an `Option` are each a choice, and a proof takes every choice in turn. The choice is made when the code first reads the field, so a field no handler or rule reads adds nothing: a decision that reads only `items.length` is read once for each length, however many optional fields an item has.
+Schema.Struct({ name: Schema.String, note: Schema.optionalKey(Schema.String) });
+Schema.TaggedStruct("Good", { grams: Schema.Int });
+Schema.Array(Schema.Int); // tried as a list
+Schema.Union([Schema.String, Schema.Int]); // a proof starts from each member in turn
+Schema.NullOr(Schema.String);
+Schema.Option(Schema.Int); // started as none and as some
+Schema.Result(Schema.Int, Schema.String); // started as a success and as a failure
 
-Checks on a number are read: `isInt`, `isFinite`, `isGreaterThan`, `isGreaterThanOrEqualTo`, `isLessThan`, `isLessThanOrEqualTo`, `isBetween`, and `isMultipleOf` a whole number. On a string or a list, `isMinLength` and `isMaxLength` are read. On a decimal, `isGreaterThanBigDecimal`, `isGreaterThanOrEqualToBigDecimal`, `isLessThanBigDecimal`, `isLessThanOrEqualToBigDecimal` and `isBetweenBigDecimal` are read.
+Schema.DateTimeUtc;
+Schema.Duration; // a whole number of milliseconds
+Schema.BigDecimal;
+Schema.HashSet(Schema.String); // tried as a hash set
+Schema.HashMap(Schema.String, Schema.Int);
+Schema.String.pipe(Schema.brand("AccountId")); // a brand, as what it brands
 
-A check the prover does not read is not assumed and not dropped in silence. The report lists it under "Schema checks not proved kept", with the command that writes the field.
+const Status = Schema.TaggedUnion({ Open: {}, Closed: { at: Schema.DateTimeUtc } });
+Status.guards.Open(ticket.status); // a test of the tag
+Status.isAnyOf(["Open"])(ticket.status);
+Status.match(ticket.status, { Open: () => 0, Closed: () => 1 });
+Status.matchOrElse(ticket.status, { Open: () => 0 }, () => 1);
+```
 
-A `Schema.Record`, and any other schema not listed, is a value the prover cannot see into. Code that only passes it along is still read. Code that looks inside it is not.
+```typescript title="Supported checks"
+Schema.Int.check(Schema.isGreaterThan(0)); // and isGreaterThanOrEqualTo, isLessThan, isLessThanOrEqualTo
+Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 9 }));
+Schema.Int.check(Schema.isMultipleOf(5));
+Schema.Number.check(Schema.isInt()); // and isFinite
+Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(40));
+Schema.Array(Schema.Int).check(Schema.isMinLength(1), Schema.isMaxLength(4));
+Schema.BigDecimal.check(Schema.isGreaterThanBigDecimal(ZERO)); // and the other four BigDecimal checks
+```
+
+```typescript title="Not supported"
+Schema.Record(Schema.String, Schema.Int); // a value the prover cannot see into: it can be kept and passed along
+Schema.Rational; // make a fraction from whole numbers with Rational.make
+Schema.String.check(Schema.isPattern(/^[a-z]+$/)); // a check not listed above: reported, never assumed
+```
+
+A check that is not supported is not assumed and not dropped in silence. The report lists it under "Schema checks not proved kept", with the command that writes the field.
+
+A field that may be left out, a union and an `Option` are each a choice, and a proof takes every choice in turn. The choice is made when the code first uses the field, so a field no handler or rule uses adds nothing.
+
+A field read only for its value or a default isn't a choice. Both ways go on to the same code, so the proof keeps one value that depends on whether the field is there:
+
+```typescript
+command.note ?? "none";
+Option.getOrElse(command.memo, () => "none");
+command.memo.pipe(Option.getOrElse(() => "none"));
+Option.match(command.memo, { onNone: () => "none", onSome: (memo) => memo + "!" });
+
+const { note } = command; // a name the field is given is the field
+note ?? "none";
+```
+
+This holds for a field that is a string, a number or a boolean, alone or with `null` and `undefined` beside it, and for an `Option` of one. The default, and what each case of `Option.match` returns, has to be a value the code only computes: a literal, a name, a property, or a sum, a product or a comparison of those. A default that calls a function or tests something is a choice as before.
+
+A test is a choice too, but only of the sides an input can reach. After `command.kind === "refund"` is true, `command.kind === "sale"` is false, and the proof doesn't go the other way.
 
 ## Library functions
 
-A call to a package is read when it is one of these. Each does to a value from the state or a command what the real function does: every path the prover reads is then run on the real code, and the two have to agree.
+A function of Effect is supported when it is called below. Each does to a value of the state or a command what the real function does: every path of a proof is then run on the real code, and the two have to agree. Every function Effect writes both ways is supported both ways, `f(self, arg)` and `pipe(self, f(arg))`, whichever way it is written below: a test calls each one both ways and compares it with the real code.
 
-- **`effect/Effect`:**
-  - Making one: `gen`, `fn`, `fnUntraced`, `succeed`, `succeedNone`, `succeedSome`, `fail`, `failSync`, `die`, `sync`, `suspend`, `void`, `yieldNow`, `fromOption`, `fromNullishOr`, `fromResult`, `service`, `Do`, `bind`, `bindTo`, `let`.
-  - Going on: `map`, `flatMap`, `andThen`, `tap`, `as`, `asSome`, `asVoid`, `flatten`, `flip`, `zip`, `zipWith`, `when`, `filterOrFail`, `filterOrElse`, `ensuring`.
-  - Many at once, one after another: `all` (an array or an object of effects), `forEach`, `reduce`, `filter`, `findFirst`, `partition`.
-  - Failures: `catch`, `catchTag`, `catchTags`, `catchIf`, `catchNoSuchElement`, `mapError`, `mapBoth`, `orElseSucceed`, `tapError`, `tapErrorTag`, `ignore`, `match`, `matchEffect`, `result`, `option`, `isSuccess`, `isFailure`, `orDie`.
-  - Left as they are: `provideService`, `withSpan`, `annotateSpans`, `annotateLogs`, `withLogSpan`, `annotateCurrentSpan`, `log` and the other log levels. `runSync` gives what the effect gives.
-- **`effect/Result`:** `succeed`, `fail`, `succeedNone`, `succeedSome`, `failVoid`, `isResult`, `isSuccess`, `isFailure`, `match`, `map`, `mapError`, `mapBoth`, `flatMap`, `andThen`, `tap`, `flip`, `merge`, `getOrElse`, `getOrNull`, `getOrUndefined`, `getOrThrow`, `getOrThrowWith`, `orElse`, `getSuccess`, `getFailure`, `fromOption`, `fromNullishOr`, `filterOrFail`, `liftPredicate`, `all`, `gen`.
-- **`effect/Option`:** `some`, `none`, `fromNullishOr`, `fromNullOr`, `fromUndefinedOr`, `isOption`, `isSome`, `isNone`, `match`, `map`, `flatMap`, `flatMapNullishOr`, `andThen`, `tap`, `as`, `asVoid`, `flatten`, `filter`, `exists`, `contains`, `getOrElse`, `getOrUndefined`, `getOrNull`, `getOrThrow`, `getOrThrowWith`, `orElse`, `orElseSome`, `toArray`, `zipWith`, `zipLeft`, `zipRight`, `product`, `all`, `firstSomeOf`, `liftPredicate`, `getSuccess`, `getFailure`, `gen`.
-- **`effect/Match`:** `value`, `type`, `when`, `not`, `whenOr`, `whenAnd`, `tag`, `tags`, `tagsExhaustive`, `discriminator`, `discriminators`, `discriminatorsExhaustive`, `valueTags`, `typeTags`, `withReturnType`, `orElse`, `orElseAbsurd`, `exhaustive`, `option`, and the patterns `any` and `defined`.
-- **`effect/Array`:**
-  - Making one: `make`, `of`, `empty`, `range`, `makeBy`, `replicate`, `fromIterable`, `fromOption`, `fromNullishOr`, `fromRecord`, `ensure`, `copy`.
-  - Reading one: `length`, `head`, `last`, `get`, `getUnsafe`, `tail`, `init`, `headNonEmpty`, `lastNonEmpty`, `tailNonEmpty`, `initNonEmpty`, `unprepend`, `unappend`, `contains`, `some`, `every`, `countBy`, `findFirst`, `findLast`, `findFirstIndex`, `findLastIndex`, `min`, `max`, `match`, `matchLeft`, `matchRight`, `isArray`, `isArrayEmpty`, `isArrayNonEmpty` and their readonly forms.
-  - Changing one: `map`, `filter`, `filterMap`, `flatMap`, `flatMapNullishOr`, `flatten`, `append`, `prepend`, `appendAll`, `prependAll`, `insertAt`, `modify`, `replace`, `remove`, `take`, `takeRight`, `takeWhile`, `drop`, `dropRight`, `dropWhile`, `span`, `splitAt`, `chunksOf`, `reverse`, `intersperse`, `dedupe`, `dedupeWith`, `sort`, `sortBy`, `sortWith`.
-  - Two of them: `zip`, `zipWith`, `unzip`, `cartesian`, `cartesianWith`, `union`, `intersection`, `difference`.
-  - To a value: `reduce`, `reduceRight`, `scan`, `mapAccum`, `join`, `forEach`, `groupBy`, `partition`, `separate`, `getSomes`, `getSuccesses`, `getFailures`.
-- **`effect/Chunk` and `effect/Iterable`:** read as the array of their items, through the functions they share with `effect/Array`.
-- **`effect/Record`:** `empty`, `singleton`, `get`, `has`, `set`, `remove`, `modify`, `replace`, `pop`, `map`, `mapKeys`, `mapEntries`, `filter`, `filterMap`, `partition`, `getSomes`, `reduce`, `collect`, `some`, `every`, `findFirst`, `union`, `intersection`, `difference`, `keys`, `values`, `toEntries`, `fromEntries`, `fromIterableWith`, `fromIterableBy`, `size`, `isEmptyRecord`, `isEmptyReadonlyRecord`.
-- **`effect/Struct` and `effect/Tuple`:** `omit`, `pick`, `get`, `keys`, `assign`, `evolve`, `renameKeys`, and `Tuple.make`, `get`, `appendElement`, `appendElements`.
-- **`effect/HashSet`:** `empty`, `make`, `fromIterable`, `isHashSet`, `size`, `isEmpty`, `has`, `add`, `remove`, `union`, `intersection`, `difference`, `isSubset`, `map`, `filter`, `some`, `every`, `reduce`.
-- **`effect/HashMap`:** `empty`, `make`, `fromIterable`, `isHashMap`, `size`, `isEmpty`, `has`, `get`, `getUnsafe`, `set`, `setMany`, `remove`, `removeMany`, `modify`, `modifyAt`, `union`, `map`, `filter`, `filterMap`, `compact`, `some`, `every`, `hasBy`, `reduce`, `forEach`, `findFirst`, `keys`, `values`, `entries`, `toValues`, `toEntries`.
-- **`effect/Number` and `effect/BigInt`:** `sum`, `subtract`, `multiply`, `divide`, `divideUnsafe`, `remainder`, `increment`, `decrement`, `min`, `max`, `clamp`, `between`, `sign`, `sumAll`, `multiplyAll`, the four comparisons, `isNumber` and `isBigInt`, `BigInt.abs`. On numbers the code writes: `Number.round`, `Number.parse`, `BigInt.gcd`, `lcm`, `sqrt`, `toNumber`, `fromNumber`, `fromString`.
-- **`effect/BigDecimal`:** `make`, `fromNumber`, `fromNumberUnsafe`, `fromBigInt`, `fromString`, `fromStringUnsafe`, `isBigDecimal`, `sum`, `subtract`, `multiply`, `sumAll`, `multiplyAll`, `negate`, `abs`, `min`, `max`, `clamp`, `between`, `sign`, `equals`, the four comparisons, `isZero`, `isPositive`, `isNegative`, `isInteger`, `floor`, `ceil`, `truncate`, `normalize`, `Order`. On decimals the code writes: `divide`, `divideUnsafe`, `format`, `scale`, `toNumberUnsafe`.
-- **`effect/Rational`:** `make`, `makeUnsafe`, `fromBigInt`, `fromNumber`, `fromNumberUnsafe`, `fromBigDecimal`, `fromString`, `fromStringUnsafe`, `isRational`, `sum`, `subtract`, `multiply`, `divide`, `divideUnsafe`, `sumAll`, `multiplyAll`, `negate`, `abs`, `min`, `max`, `clamp`, `between`, `sign`, `equals`, the four comparisons, `isZero`, `isPositive`, `isNegative`, `isInteger`, `Order`. A fraction is exact, so a division is read on any two of them. On fractions the code writes: `format`, `toNumberUnsafe`.
-- **`effect/String`:** `length`, `isEmpty`, `isNonEmpty`, `isString`, `concat`, `startsWith`, `endsWith`, `includes`, `indexOf`, `lastIndexOf`, `charAt`, `slice`, `substring`, `split`, `takeLeft`, `replace`, `replaceAll`. On strings the code writes: `at`, `takeRight`, `trim`, `trimStart`, `trimEnd`, `toUpperCase`, `toLowerCase`, `capitalize`, `uncapitalize`, `padStart`, `padEnd`, `repeat`.
-- **`effect/Boolean`:** `and`, `or`, `not`, `xor`, `nand`, `nor`, `eqv`, `implies`, `match`, `every`, `some`, `isBoolean`.
-- **`effect/Predicate`:** `and`, `or`, `not`, `xor`, `nand`, `nor`, `eqv`, `implies`, `mapInput`, `isString`, `isNumber`, `isBoolean`, `isBigInt`, `isFunction`, `isNull`, `isNotNull`, `isUndefined`, `isNotUndefined`, `isNullish`, `isNotNullish`, `isTruthy`, `isTagged`, `hasProperty`.
-- **`effect/Order` and `effect/Equivalence`:** `Order.Number`, `BigInt`, `Boolean`, `String`, and the `Order` of `Number`, `BigInt`, `BigDecimal`, `DateTime` and `Duration`; `make`, `flip`, `mapInput`, `combine`, `min`, `max`, `clamp`, `isBetween`, `isLessThan`, `isLessThanOrEqualTo`, `isGreaterThan`, `isGreaterThanOrEqualTo`. `Equivalence.make`, `strictEqual`, `mapInput`. A function you write as an order or an equivalence is read as one.
-- **`effect/Equal`:** `equals`, which compares objects, arrays and the library's own data by what they hold.
-- **`effect/Data`:** `Class`, `TaggedClass`, `Error`, `TaggedError`, and `taggedEnum` with its constructors, `$is` and `$match`.
-- **`effect/Brand` and `effect/Newtype`:** `Brand.nominal`, `Newtype.value`.
-- **`effect/Ref` and `effect/MutableRef`:** `make`, `makeUnsafe`, `get`, `getUnsafe`, `set`, `setAndGet`, `getAndSet`, `update`, `updateAndGet`, `getAndUpdate`, `modify`, and `MutableRef`'s `increment`, `decrement`, `incrementAndGet`, `decrementAndGet`, `getAndIncrement`, `getAndDecrement`, `toggle`. A cell a handler makes is read as a local variable is.
-- **`effect/MutableHashSet` and `effect/MutableHashMap`:** `empty`, `make`, `fromIterable`, `add`, `has`, `get`, `set`, `remove`, `modify`, `modifyAt`, `size`, `isEmpty`, `keys`, `values`, `clear`.
-- **`effect/Exit` and `effect/Cause`:** `Effect.exit` and `Effect.failCause`; `Exit.succeed`, `fail`, `die`, `isSuccess`, `isFailure`, `match`, `map`, `mapError`, `asVoid`, `getSuccess`, `getCause`, `findErrorOption`, `hasFails`, `hasDies`; `Cause.fail`, `die`, `hasFails`, `hasDies`, `findErrorOption`, `squash`.
-- **`effect/Filter`:** `make`, `fromPredicate`, `tagged`, `equals`, `toPredicate`, `toOption`, `toResult`.
-- **`effect/Redacted`:** `make`, `value`, `isRedacted`.
-- **`effect/Console`:** `log`, `error`, `warn`, `info`, `debug`, which a handler's result does not depend on.
-- **`effect/Ordering` and `effect/UndefinedOr`:** `Ordering.reverse`, `match`; `UndefinedOr.map`, `match`, `getOrThrow`.
-- **`effect/Function`:** `pipe`, `flow`, `compose`, `identity`, `constant`, `constTrue`, `constFalse`, `constNull`, `constUndefined`, `constVoid`, `apply`, `tupled`, `untupled`, `flip`, `dual`, `satisfies`, `cast`, and `.pipe` on a value of the library's.
-- **`effect/Stream`:** see [Streams](#streams).
-- **`effect/Optic`:** `id`, `modify`, `replace`, and an optic's `key` and `tag`.
-- **`effect/DateTime`:** `make`, `makeUnsafe`, `toEpochMillis`, `isLessThan`, `isLessThanOrEqualTo`, `isGreaterThan`, `isGreaterThanOrEqualTo`, `between`, `min`, `max`, `distance`, `addDuration`, `subtractDuration`, `add` and `subtract` (in milliseconds, seconds, minutes, hours, days and weeks), `now`, `isPast`, `isFuture`, `formatIsoDate`, `formatIsoDateUtc`, `Order`.
-- **`effect/Duration`:** `millis`, `seconds`, `minutes`, `hours`, `days`, `weeks`, `zero`, `toMillis`, `toSeconds`, `toMinutes`, `toHours`, `toDays`, `toWeeks`, `sum`, `subtract`, `times`, `negate`, `abs`, `min`, `max`, `clamp`, `between`, `equals`, `isZero`, `isNegative`, `isPositive`, `isLessThan`, `isLessThanOrEqualTo`, `isGreaterThan`, `isGreaterThanOrEqualTo`, `Order`. Where a function takes a duration, a number of milliseconds and text such as `"7 days"` are read too.
-- **`effect/Clock`:** `currentTimeMillis`, `currentTimeNanos`.
-- **`Math`:** `floor`, `ceil`, `trunc`, `abs`, `max`, `min`.
-- **`Object`:** `keys`, `values`, `entries`.
+```typescript title="The names the snippets use"
+// Fields of the state or a command, which a proof holds for every value:
+//   a, b, c       whole numbers            flag     a boolean
+//   text, other   strings                  items    a list of whole numbers
+//   maybe         an Option of a number    amount   a BigDecimal
+//   at            a DateTime               wait     a Duration
+//   members       a HashSet of numbers     scores   a HashMap of numbers by name
+//   shape         a record with a tagged union in `kind` and a record in `inner`
+
+class Odd extends Data.TaggedError("Odd")<{ readonly n: number }> {}
+class Negative extends Data.TaggedError("Negative")<{ readonly n: number }> {}
+class Point extends Data.Class<{ readonly x: number; readonly y: number }> {}
+class Circle extends Data.TaggedClass("Circle")<{ readonly radius: number }> {}
+const Shape = Data.taggedEnum<Data.TaggedEnum<{ Dot: {}; Line: { readonly length: number } }>>();
+
+const even = (n: number) => (n % 2 === 0 ? Effect.succeed(n) : Effect.fail(new Odd({ n })));
+const positive = (n: number) => (n >= 0 ? Effect.succeed(n) : Effect.fail(new Negative({ n })));
+const halved = (n: number) => (n % 2 === 0 ? Result.succeed(n * 3) : Result.fail("odd"));
+const byN = Order.mapInput(Order.Number, (pair: { readonly n: number }) => pair.n);
+const third = Rational.makeUnsafe(1n, 3n);
+const ratio = (n: number) => Rational.fromBigInt(BigInt(n));
+const fee = BigDecimal.fromStringUnsafe("2.5");
+const decimal = (n: number) => BigDecimal.fromNumberUnsafe(n);
+const noon = DateTime.makeUnsafe(43200000);
+```
+
+```typescript title="pipe"
+// pipe(value, f, g), with any number of steps
+pipe(a);
+pipe(a, (n) => n + 1, (n) => n * b);
+pipe(a, Number.sum(b), Number.multiply(2), Number.increment);
+pipe(a, (n) => pipe(n, Number.sum(b)), Number.decrement);
+flow((n: number) => n + 1, Number.multiply(b))(a);
+
+// value.pipe(f, g), on every value of Effect that has it
+Effect.succeed(a).pipe(Effect.map((n) => n + 1), Effect.flatMap(even), Effect.result);
+Stream.make(a, b).pipe(Stream.map((n) => n + 1), Stream.runCollect);
+Option.some(a).pipe(Option.map((n) => n + b), Option.filter((n) => n > 0), Option.getOrElse(() => 0));
+halved(a).pipe(Result.map((n) => n + b), Result.getOrElse(() => -1));
+Duration.seconds(a).pipe(Duration.sum(Duration.millis(b)), Duration.toMillis);
+at.pipe(DateTime.addDuration(wait), DateTime.toEpochMillis);
+decimal(a).pipe(BigDecimal.sum(fee), BigDecimal.isGreaterThan(decimal(b)));
+ratio(a).pipe(Rational.sum(third), Rational.isGreaterThan(ratio(b)));
+Redacted.make(a).pipe(Redacted.value);
+new Point({ x: a, y: b }).pipe((point) => point.x - point.y);
+HashSet.make(a, b).pipe(HashSet.add(1), HashSet.has(a));
+HashMap.make(["x", a]).pipe(HashMap.set("y", b), HashMap.get("y"));
+Match.value(a).pipe(Match.when((n) => n > b, () => "more"), Match.orElse(() => "less"));
+cell.pipe(Ref.updateAndGet((n) => n + 1)); // a Ref, a SynchronizedRef and a SubscriptionRef
+```
+
+```typescript title="effect/Effect"
+Effect.Do.pipe(
+  Effect.bind("x", () => Effect.succeed(a)),
+  Effect.let("y", ({ x }) => x + b),
+  Effect.bind("z", ({ y }) => even(y)),
+  Effect.result,
+);
+Effect.all([Effect.succeed(a), Effect.succeed(b)]);
+Effect.andThen(Effect.succeed(a), Effect.succeed(b));
+Effect.gen(function* () {
+  yield* Effect.log("l");
+  yield* Effect.logDebug("d");
+  yield* Effect.logTrace("t");
+  yield* Effect.annotateCurrentSpan("a", a);
+  yield* Effect.yieldNow;
+  return a;
+});
+Effect.succeed(a).pipe(
+  Effect.withSpan("s"),
+  Effect.annotateLogs("a", a),
+  Effect.annotateSpans("b", b),
+  Effect.withLogSpan("t"),
+);
+Effect.as(Effect.succeed(a), b);
+Effect.asSome(Effect.succeed(a));
+Effect.asVoid(Effect.succeed(a)).pipe(Effect.as("void"));
+Effect.succeed(a).pipe(Effect.bindTo("a"));
+Effect.catch(even(a), (error) => Effect.succeed(-error.n));
+Effect.catchIf(
+  even(a),
+  (error) => error.n > 0,
+  () => Effect.succeed(0),
+).pipe(Effect.result);
+Effect.fromOption(a > 0 ? Option.some(a) : Option.none()).pipe(Effect.catchNoSuchElement);
+Effect.catchTag(even(a), "Odd", () => Effect.succeed(0));
+Effect.flatMap(even(a), positive).pipe(
+  Effect.catchTags({
+    Odd: () => Effect.succeed(1),
+    Negative: (error) => Effect.succeed(error.n * 2),
+  }),
+);
+Effect.die("gone").pipe(Effect.exit, Effect.map(Exit.isFailure));
+Effect.ensuring(even(a), Effect.void).pipe(Effect.option);
+Effect.exit(even(a)).pipe(Effect.map((exit) => Exit.getSuccess(Exit.map(exit, (n) => n + 1))));
+Effect.fail(a).pipe(
+  Effect.orDie,
+  Effect.catch(() => Effect.succeed(-1)),
+  Effect.exit,
+  Effect.map(Exit.hasDies),
+);
+Effect.failCause(Cause.fail(a)).pipe(Effect.flip);
+Effect.failSync(() => a).pipe(Effect.flip);
+Effect.filter([a, b], (n) => Effect.succeed(n > 0));
+Effect.filterOrElse(
+  Effect.succeed(a),
+  (n) => n > b,
+  (n) => Effect.succeed(-n),
+);
+Effect.filterOrFail(
+  Effect.succeed(a),
+  (n) => n > b,
+  (n) => "small " + n,
+).pipe(Effect.result);
+Effect.findFirst([a, b], (n) => Effect.succeed(n > 0));
+Effect.flatMap(Effect.succeed(a), (n) => Effect.succeed(n - b));
+Effect.flatten(Effect.succeed(Effect.succeed(a)));
+Effect.flip(even(a)).pipe(Effect.option);
+Effect.fn(function* (x, y = 2) {
+  return (yield* Effect.succeed(x)) * y;
+})(a);
+Effect.fnUntraced(function* (n) {
+  return n * 2;
+})(a);
+Effect.forEach([a, b], even).pipe(Effect.result);
+Effect.fromNullishOr(a > 0 ? a : null).pipe(Effect.option);
+Effect.fromResult(halved(a)).pipe(Effect.result);
+Effect.gen(function* () {
+  yield* Effect.void;
+  return a;
+});
+Effect.ignore(even(a)).pipe(Effect.as("ignored"));
+Effect.isFailure(even(a));
+Effect.isSuccess(even(a));
+Effect.gen(function* () {
+  yield* Effect.logInfo("i");
+  yield* Effect.logWarning("w");
+  yield* Effect.logError("e");
+  yield* Effect.logFatal("f");
+  return b;
+});
+Effect.map(Effect.succeed(a), (n) => n + b);
+Effect.mapBoth(even(a), { onFailure: (error) => error.n, onSuccess: (n) => "" + n }).pipe(
+  Effect.result,
+);
+Effect.mapError(even(a), (error) => error.n).pipe(Effect.result);
+Effect.match(even(a), { onFailure: () => "odd", onSuccess: () => "even" });
+Effect.matchEffect(even(a), {
+  onFailure: (error) => Effect.succeed(error.n),
+  onSuccess: positive,
+}).pipe(Effect.result);
+Effect.option(even(a));
+Effect.orElseSucceed(even(a), () => 0);
+Effect.partition([a, b], even);
+Effect.service(Counter).pipe(
+  Effect.provideService(Counter, { start: a }),
+  Effect.map((counter) => counter.start + b),
+);
+Effect.reduce(
+  [a, b],
+  () => 1,
+  (total, n) => Effect.succeed(total + n),
+);
+Effect.result(even(a));
+Effect.sync(() => Effect.runSync(Effect.succeed(a + b)));
+Effect.succeed(a);
+Effect.succeedNone;
+Effect.succeedSome(a);
+Effect.suspend(() => Effect.succeed(a));
+Effect.sync(() => a + b);
+Effect.tap(Effect.succeed(a), () => Effect.succeed(b));
+Effect.tapError(even(a), () => Effect.void).pipe(Effect.option);
+Effect.tapErrorTag(even(a), "Odd", () => Effect.void).pipe(Effect.option);
+Effect.when(Effect.succeed(a), Effect.succeed(a > b));
+Effect.zip(Effect.succeed(a), Effect.succeed(b));
+Effect.zipWith(Effect.succeed(a), Effect.succeed(b), (x, y) => x - y);
+```
+
+```typescript title="effect/Effect: an effect run again, and a time limit"
+const ran = yield* Ref.make(0);
+const step = Ref.updateAndGet(ran, (n) => n + 1);
+
+// Nothing in a handler waits, so each run follows the last at once.
+Effect.retry(even(a), { times: 2 }); // a count the code writes
+Effect.retry(even(a), { times: 5, while: (error) => error.n !== 2 });
+Effect.retry(even(a), { times: 5, until: (error) => error.n === 1 });
+Effect.retry(even(a), Schedule.recurs(2)); // the one schedule that does not wait
+Effect.repeat(step, { times: 2 }); // gives what the last run gave
+Effect.repeat(step, { times: 4, while: (n) => n < a + 3 });
+Effect.repeat(step, { times: 4, until: (n) => n === a + 2 });
+Effect.repeat(step, { schedule: Schedule.recurs(2) });
+Effect.repeat(step, Schedule.recurs(2)); // gives how many times it ran again
+
+// An effect is done before any time is up.
+Effect.timeout(even(a), "1 second");
+Effect.timeoutOption(even(a), "1 second");
+Effect.timeoutOrElse(even(a), { duration: "1 second", orElse: () => Effect.succeed(b) });
+```
+
+```typescript title="effect/Exit"
+Effect.exit(even(a)).pipe(
+  Effect.map((exit) => [
+    Exit.isSuccess(exit),
+    Exit.hasFails(exit),
+    Option.isSome(Exit.getCause(exit)),
+    Exit.getSuccess(Exit.asVoid(exit)),
+  ]),
+);
+Effect.succeed([
+  Cause.squash(Cause.fail(a)),
+  Cause.hasDies(Cause.die(a)),
+  Cause.findErrorOption(Cause.fail(b)),
+  Cause.findErrorOption(Cause.die(b)),
+  Exit.isSuccess(Exit.succeed(a)),
+  Exit.hasDies(Exit.die(a)),
+  Exit.isFailure(Exit.fail(a)),
+]);
+Effect.exit(even(a)).pipe(
+  Effect.map(Exit.findErrorOption),
+  Effect.map(Option.map((error) => error.n)),
+);
+Effect.exit(even(a)).pipe(Effect.map((exit) => Exit.getSuccess(Exit.map(exit, (n) => n + 1))));
+stream.pipe(
+  Stream.mapEffect(positive),
+  Stream.orDie,
+  Stream.runCollect,
+  Effect.exit,
+  Effect.map(Exit.hasDies),
+);
+Effect.die("gone").pipe(Effect.exit, Effect.map(Exit.isFailure));
+Effect.exit(even(a)).pipe(
+  Effect.map((exit) => Exit.findErrorOption(Exit.mapError(exit, (error) => error.n))),
+);
+Effect.exit(even(a)).pipe(
+  Effect.map((exit) =>
+    Exit.match(exit, {
+      onSuccess: (n) => n,
+      onFailure: (cause) => (Cause.hasFails(cause) ? -1 : -2),
+    }),
+  ),
+);
+```
+
+```typescript title="effect/Cause"
+Effect.succeed([
+  Cause.squash(Cause.fail(a)),
+  Cause.hasDies(Cause.die(a)),
+  Cause.findErrorOption(Cause.fail(b)),
+  Cause.findErrorOption(Cause.die(b)),
+  Exit.isSuccess(Exit.succeed(a)),
+  Exit.hasDies(Exit.die(a)),
+  Exit.isFailure(Exit.fail(a)),
+]);
+Effect.failCause(Cause.fail(a)).pipe(Effect.flip);
+Effect.exit(even(a)).pipe(
+  Effect.map((exit) =>
+    Exit.match(exit, {
+      onSuccess: (n) => n,
+      onFailure: (cause) => (Cause.hasFails(cause) ? -1 : -2),
+    }),
+  ),
+);
+```
+
+```typescript title="effect/Result"
+Result.all([halved(a), Result.succeed(b)]);
+Result.andThen(halved(a), (n) => n * 3);
+Result.fail(a);
+Result.isFailure(Result.failVoid);
+Result.filterOrFail(
+  halved(a),
+  (n) => n > b,
+  () => "small",
+);
+Result.flatMap(halved(a), halved);
+Result.flip(halved(a));
+Result.fromNullishOr(a > 0 ? a : null, () => "nothing");
+Result.fromOption(a > 0 ? Option.some(a) : Option.none(), () => "none");
+Result.gen(function* () {
+  const n = yield* halved(a);
+  const m = yield* halved(n);
+  return n + m;
+});
+Result.getFailure(halved(a));
+Result.getOrElse(halved(a), () => -1);
+Result.getOrNull(halved(a));
+Result.getOrThrow(Result.succeed(a));
+Result.getOrThrowWith(Result.succeed(a), () => "no");
+Result.getOrUndefined(halved(a)) ?? "nothing";
+Result.getSuccess(halved(a));
+Result.isFailure(halved(a));
+Result.isResult(a);
+Result.isSuccess(halved(a));
+Result.liftPredicate(
+  a,
+  (n) => n > b,
+  (n) => "no " + n,
+);
+Result.map(halved(a), (n) => n + b);
+Result.mapBoth(halved(a), { onFailure: (error) => error.length, onSuccess: (n) => "" + n });
+Result.mapError(halved(a), (error) => error + "!");
+Result.match(halved(a), { onFailure: (error) => error.length, onSuccess: (n) => n });
+Result.merge(halved(a));
+Result.orElse(halved(a), () => Result.succeed(b));
+Result.succeedNone;
+Result.succeedSome(a);
+Result.tap(halved(a), () => undefined);
+```
+
+```typescript title="effect/Option"
+Option.all([maybe, Option.some(a)]);
+Option.andThen(maybe, (n) => n + 1);
+Option.as(maybe, a);
+Option.asVoid(maybe);
+Option.contains(maybe, a);
+Option.exists(maybe, (n) => n > a);
+Option.filter(maybe, (n) => n > a);
+Option.firstSomeOf([Option.none(), maybe, Option.some(a)]);
+Option.flatMap(maybe, (n) => (n > a ? Option.some(n - a) : Option.none()));
+Option.flatMapNullishOr(maybe, (n) => (n > a ? n : null));
+Option.flatten(Option.some(maybe));
+Option.fromNullOr(a > 0 ? a : null);
+Option.fromNullishOr(a > 0 ? a : null);
+Option.fromUndefinedOr(a > 0 ? a : undefined);
+Option.gen(function* () {
+  const n = yield* maybe;
+  const m = yield* Option.liftPredicate(a, (x) => x > 0);
+  return n + m;
+});
+Option.getFailure(halved(a));
+Option.getOrElse(maybe, () => a);
+Option.getOrNull(maybe);
+Option.isSome(maybe) ? Option.getOrThrow(maybe) : a;
+Option.isSome(maybe) ? Option.getOrThrowWith(maybe, () => "none") : a;
+Option.getOrUndefined(maybe) ?? "nothing";
+Option.getSuccess(halved(a));
+Option.isNone(maybe);
+Option.isOption(a);
+Option.isSome(maybe);
+Option.liftPredicate(a, (n) => n > 0);
+Option.map(maybe, (n) => n + a);
+Option.match(maybe, { onNone: () => a, onSome: (n) => n * 2 });
+Option.orElse(maybe, () => Option.some(a));
+Option.orElseSome(maybe, () => a);
+Option.product(maybe, Option.some(a));
+Option.tap(maybe, (n) => (n > a ? Option.some(n) : Option.none()));
+Option.toArray(maybe);
+Option.zipLeft(maybe, Option.some(a));
+Option.zipRight(maybe, Option.some(a));
+Option.zipWith(maybe, Option.some(a), (x, y) => x + y);
+```
+
+```typescript title="effect/UndefinedOr"
+UndefinedOr.getOrThrow(a);
+UndefinedOr.map(a > 0 ? a : undefined, (n) => n + 1) ?? "nothing";
+UndefinedOr.match(a > 0 ? a : undefined, { onUndefined: () => 0, onDefined: (n) => n * 2 });
+```
+
+```typescript title="effect/Match"
+Match.value(a > 0 ? a : null).pipe(
+  Match.when(Match.defined, (n) => n),
+  Match.when(Match.any, () => -1),
+  Match.exhaustive,
+);
+Match.value({ kind: a > b ? "x" : "y", n: a }).pipe(
+  Match.discriminator("kind")("x", () => 1),
+  Match.discriminators("kind")({ y: () => 2 }),
+  Match.exhaustive,
+);
+Match.value({ kind: a > b ? "x" : "y" }).pipe(
+  Match.discriminatorsExhaustive("kind")({ x: () => 1, y: () => 2 }),
+);
+Match.type().pipe(
+  Match.when({ n: 1 }, () => "one"),
+  Match.not({ n: 0 }, () => "some"),
+  Match.orElse(() => "none"),
+)({ n: a });
+Match.value({ _tag: a > 0 ? "Up" : "Down" }).pipe(Match.tags({ Up: () => 1 }), Match.option);
+Match.value(shape.kind).pipe(
+  Match.tag("Gift", () => 1),
+  Match.orElse(() => 0),
+);
+Match.value(a > 0 ? { _tag: "Up" } : { _tag: "Down" }).pipe(
+  Match.tags({ Down: () => "down", Up: () => "up" }),
+  Match.orElseAbsurd,
+);
+Match.value({ _tag: a > 0 ? "Up" : "Down", n: a }).pipe(
+  Match.tagsExhaustive({ Up: ({ n }) => n, Down: () => -1 }),
+);
+Match.typeTags()({ Up: () => 1, Down: () => 2 })({ _tag: a > 0 ? "Up" : "Down" });
+Match.valueTags({ _tag: a > 0 ? "Up" : "Down" }, { Up: () => 1, Down: () => 2 });
+Match.value(shape).pipe(
+  Match.when({ inner: { flag: true } }, () => "set"),
+  Match.orElse(() => "not"),
+);
+Match.value({ n: a, m: b }).pipe(
+  Match.whenAnd({ n: 1 }, { m: -1 }, () => "both"),
+  Match.whenOr({ n: 0 }, { n: 4 }, () => "either"),
+  Match.orElse(() => "neither"),
+);
+Match.value(a).pipe(
+  Match.withReturnType(),
+  Match.when(
+    (n) => n > 0,
+    () => "up",
+  ),
+  Match.orElse(() => "down"),
+);
+```
+
+```typescript title="effect/Array"
+Array.append(items, a);
+Array.appendAll(items, [a, 1]);
+Array.cartesian(items, [a, 1]);
+Array.cartesianWith(items, [a, 1], (x, y) => x - y);
+Array.chunksOf(items, 5);
+Array.contains(items, a);
+Array.copy(items);
+Array.countBy(items, (n) => n > a);
+Array.dedupe(items);
+Array.dedupeWith(items, (item, kept) => item > kept);
+Array.difference(items, [a]);
+Array.drop(items, 0);
+Array.dropRight(items, 0);
+Array.dropWhile(items, (n) => n > a);
+Array.empty();
+Array.ensure(a);
+Array.every(items, (n) => n > a);
+Array.filter(items, (n) => n > a);
+Array.filterMap(items, halved);
+Array.findFirst(items, (n) => n > a);
+Array.findFirstIndex(items, (n) => n > a);
+Array.findLast(items, (n) => n > a);
+Array.findLastIndex(items, (n) => n > a);
+Array.flatMap(items, (n) => [n, a]);
+Array.flatMapNullishOr(items, (n) => (n > a ? n : null));
+Array.flatten([items, [a]]);
+Array.forEach(items, () => undefined) ?? "done";
+Array.fromIterable(items);
+Array.fromNullishOr(a > 0 ? a : null);
+Array.fromOption(Option.none());
+Array.fromRecord({ a });
+Array.get(items, 0);
+Array.getFailures(Array.map(items, halved));
+Array.getSomes(Array.map(items, (n) => (n > a ? Option.some(n) : Option.none())));
+Array.getSuccesses(Array.map(items, halved));
+Array.getUnsafe(Array.append(items, a), 0);
+Array.groupBy(items, (n) => (n > a ? "up" : "down"));
+Array.head(items);
+Array.isReadonlyArrayNonEmpty(items)
+  ? [
+      Array.headNonEmpty(items),
+      Array.lastNonEmpty(items),
+      Array.tailNonEmpty(items),
+      Array.initNonEmpty(items),
+      Array.unprepend(items),
+      Array.unappend(items),
+    ]
+  : [];
+Array.init(items);
+Array.insertAt(items, 0, a);
+Array.intersection(items, [a, 1]);
+Array.intersperse(items, 0);
+Array.isArray(items);
+Array.isArrayEmpty(items);
+Array.isArrayNonEmpty(items);
+Array.isReadonlyArrayEmpty(items);
+Array.isReadonlyArrayNonEmpty(items);
+Array.join(
+  Array.map(items, (n) => "" + n),
+  "+",
+);
+Array.last(items);
+Array.length(items);
+Array.make(a, 1);
+Array.makeBy(2, (i) => i * a); // on values the code writes
+Array.map(items, (n, i) => n + i);
+Array.mapAccum(items, 0, (total, n) => [total + n, n * 2]);
+Array.match(items, { onEmpty: () => a, onNonEmpty: (all) => all.length });
+Array.matchLeft(items, { onEmpty: () => a, onNonEmpty: (head, tail) => head + tail.length });
+Array.matchRight(items, { onEmpty: () => a, onNonEmpty: (init, last) => last + init.length });
+Array.max(items, Order.Number);
+Array.min(items, Order.Number);
+Array.modify(items, 9, (n) => n + a);
+Array.of(a);
+Array.partition(items, halved);
+Array.prepend(items, a);
+Array.prependAll(items, [a, 1]);
+Array.range(1, 3); // on values the code writes
+Array.reduce(items, a, (total, n) => total - n);
+Array.reduceRight(items, a, (total, n) => total - n);
+Array.remove(items, 1);
+Array.replace(items, 9, a);
+Array.replicate(a, 2); // on values the code writes
+Array.reverse(items);
+Array.scan(items, 0, (total, n) => total + n);
+Array.separate(Array.map(items, halved));
+Array.some(items, (n) => n > a);
+Array.sort(items, Order.Number);
+pipe(
+  items,
+  Array.sortBy(
+    Order.mapInput(Order.Number, (n) => n % 2),
+    Order.Number,
+  ),
+);
+Array.sortWith(items, (n) => -n, Order.Number);
+Array.span(items, (n) => n > a);
+Array.splitAt(items, 0);
+Array.tail(items);
+Array.take(items, 1);
+Array.takeRight(items, 0);
+Array.takeWhile(items, (n) => n > a);
+Array.unappend(items);
+Array.union(items, []);
+Array.unprepend(items);
+Array.unzip(Array.zip(items, items));
+Array.zip(items, []);
+Array.zipWith(items, items, (x, y) => x - y);
+```
+
+```typescript title="effect/Chunk"
+const chunk = Chunk.fromIterable(items);
+const other = Chunk.make(a, 1);
+
+Chunk.toReadonlyArray(Chunk.append(chunk, a));
+Chunk.toReadonlyArray(Chunk.appendAll(chunk, other));
+Chunk.toReadonlyArray(Chunk.map(Chunk.chunksOf(chunk, 2), Chunk.toReadonlyArray));
+Chunk.contains(chunk, a);
+Chunk.toReadonlyArray(Chunk.dedupe(chunk));
+Chunk.toReadonlyArray(Chunk.difference(chunk, other));
+Chunk.toReadonlyArray(Chunk.drop(chunk, 1));
+Chunk.toReadonlyArray(Chunk.dropRight(chunk, 1));
+Chunk.toReadonlyArray(Chunk.dropWhile(chunk, (n) => n > a));
+Chunk.toReadonlyArray(Chunk.empty());
+Chunk.every(chunk, (n) => n > a);
+Chunk.toReadonlyArray(Chunk.filter(chunk, (n) => n > a));
+Chunk.toReadonlyArray(Chunk.filterMap(chunk, halved));
+Chunk.findFirst(chunk, (n) => n > a);
+Chunk.findFirstIndex(chunk, (n) => n > a);
+Chunk.findLast(chunk, (n) => n > a);
+Chunk.findLastIndex(chunk, (n) => n > a);
+Chunk.toReadonlyArray(Chunk.flatMap(chunk, (n) => Chunk.make(n, a)));
+Chunk.toReadonlyArray(Chunk.flatten(Chunk.make(chunk, other)));
+Chunk.forEach(chunk, () => undefined) ?? "done";
+Chunk.toReadonlyArray(Chunk.fromArrayUnsafe(items));
+Chunk.size(Chunk.fromIterable(items));
+Chunk.toReadonlyArray(Chunk.fromNonEmptyArrayUnsafe([a, ...items]));
+Chunk.get(chunk, 0);
+Chunk.head(Chunk.fromIterable(items));
+Chunk.headNonEmpty(other);
+Chunk.toReadonlyArray(Chunk.intersection(chunk, other));
+Chunk.isEmpty(Chunk.fromIterable(items));
+Chunk.isNonEmpty(Chunk.fromIterable(items));
+Chunk.join(
+  Chunk.map(chunk, (n) => "" + n),
+  "+",
+);
+Chunk.last(chunk);
+Chunk.lastNonEmpty(other);
+Chunk.toReadonlyArray(Chunk.make(a, 1));
+Chunk.toReadonlyArray(Chunk.makeBy(2, (i) => i * a));
+(([total, mapped]) => [total, Chunk.toReadonlyArray(mapped)])(
+  Chunk.mapAccum(chunk, 0, (total, n) => [total + n, n * 2]),
+);
+Option.isNone(Chunk.modify(chunk, 9, (n) => n + a));
+Chunk.toReadonlyArray(Chunk.of(a));
+(([left, right]) => [Chunk.toReadonlyArray(left), Chunk.toReadonlyArray(right)])(
+  Chunk.partition(chunk, halved),
+);
+Chunk.toReadonlyArray(Chunk.prepend(chunk, a));
+Chunk.toReadonlyArray(Chunk.prependAll(chunk, other));
+Chunk.toReadonlyArray(Chunk.range(1, 3));
+Chunk.reduce(chunk, a, (total, n) => total - n);
+Chunk.reduceRight(chunk, a, (total, n) => total - n);
+Chunk.toReadonlyArray(Chunk.remove(chunk, 0));
+Option.map(Chunk.replace(chunk, 0, a), Chunk.toReadonlyArray);
+Chunk.toReadonlyArray(Chunk.reverse(chunk));
+(([left, right]) => [Chunk.toReadonlyArray(left), Chunk.toReadonlyArray(right)])(
+  Chunk.separate(Chunk.map(chunk, halved)),
+);
+Chunk.some(chunk, (n) => n > a);
+Chunk.toReadonlyArray(Chunk.sort(chunk, Order.Number));
+Chunk.toReadonlyArray(Chunk.sortWith(chunk, (n) => -n, Order.Number));
+(([left, right]) => [Chunk.toReadonlyArray(left), Chunk.toReadonlyArray(right)])(
+  Chunk.splitAt(chunk, 1),
+);
+Chunk.toReadonlyArray(Chunk.tailNonEmpty(other));
+Chunk.toReadonlyArray(Chunk.take(chunk, 1));
+Chunk.toReadonlyArray(Chunk.takeRight(chunk, 1));
+Chunk.toReadonlyArray(Chunk.takeWhile(chunk, (n) => n > a));
+Chunk.toArray(chunk);
+Chunk.toReadonlyArray(Chunk.union(chunk, other));
+(([left, right]) => [Chunk.toReadonlyArray(left), Chunk.toReadonlyArray(right)])(
+  Chunk.unzip(Chunk.zip(chunk, chunk)),
+);
+Chunk.toReadonlyArray(Chunk.zip(chunk, other));
+Chunk.toReadonlyArray(Chunk.zipWith(chunk, other, (x, y) => x * y));
+```
+
+```typescript title="effect/Iterable"
+Array.fromIterable(Iterable.append(items, a));
+Array.fromIterable(Iterable.appendAll(items, [a, 1]));
+Array.fromIterable(Iterable.cartesian(items, [a, 1]));
+Array.fromIterable(Iterable.cartesianWith(items, [a, 1], (x, y) => x - y));
+Array.fromIterable(Iterable.chunksOf(items, 2));
+Iterable.contains(items, a);
+Iterable.countBy(items, (n) => n > a);
+Array.fromIterable(Iterable.drop(items, 1));
+Array.fromIterable(Iterable.empty());
+Array.fromIterable(Iterable.filter(items, (n) => n > a));
+Array.fromIterable(Iterable.filterMap(items, halved));
+Iterable.findFirst(items, (n) => n > a);
+Iterable.findLast(items, (n) => n > a);
+Array.fromIterable(Iterable.flatMap(items, (n) => [n, a]));
+Array.fromIterable(Iterable.flatten([items, [a]]));
+Iterable.forEach(items, () => undefined) ?? "done";
+Array.fromIterable(Iterable.fromRecord({ a }));
+Array.fromIterable(Iterable.getFailures(Array.map(items, halved)));
+Array.fromIterable(
+  Iterable.getSomes(Array.map(items, (n) => (n > a ? Option.some(n) : Option.none()))),
+);
+Array.fromIterable(Iterable.getSuccesses(Array.map(items, halved)));
+Iterable.groupBy(items, (n) => (n > a ? "up" : "down"));
+Iterable.head(items);
+Array.fromIterable(Iterable.intersperse(items, 0));
+Iterable.isEmpty(items);
+Array.fromIterable(Iterable.makeBy((i) => i * a, { length: 2 }));
+Array.fromIterable(Iterable.map(items, (n, i) => n + i));
+Array.fromIterable(Iterable.of(a));
+Array.fromIterable(Iterable.prepend(items, a));
+Array.fromIterable(Iterable.prependAll(items, [a, 1]));
+Array.fromIterable(Iterable.range(1, 3));
+Iterable.reduce(items, a, (total, n) => total - n);
+Array.fromIterable(Iterable.scan(items, 0, (total, n) => total + n));
+Iterable.size(items);
+Iterable.some(items, (n) => n > a);
+Array.fromIterable(Iterable.take(items, 1));
+Array.fromIterable(Iterable.takeWhile(items, (n) => n > a));
+Array.fromIterable(Iterable.zip(items, [1, 2]));
+Array.fromIterable(Iterable.zipWith(items, [1, 2, 3], (x, y) => x * y));
+```
+
+```typescript title="effect/Record"
+Record.collect({ a, b }, (key, n) => key + n);
+Record.difference({ a, b }, { b: 2, c: 3 });
+Record.empty();
+Record.every({ a, b }, (n) => n > 0);
+Record.filter({ a, b }, (n) => n > 0);
+Record.filterMap({ a, b }, halved);
+Record.findFirst({ a, b }, (n) => n > 1);
+Record.fromEntries([
+  ["k", a],
+  ["l", b],
+]);
+Record.fromIterableBy(["x", "yy"], (key) => key);
+Record.fromIterableWith(["x", "y"], (key) => [key, a]);
+Record.get({ a }, "z");
+Record.getSomes({ a: Option.some(a), b: Option.none() });
+Record.has({ a }, "a");
+Record.intersection({ a, c: 3 }, { a: b, d: 1 }, (x, y) => x * y);
+Record.isEmptyReadonlyRecord({ a });
+Record.isEmptyRecord({});
+Record.keys({ a, b });
+Record.map({ a, b }, (n, key) => n + key.length);
+Record.mapEntries({ a, b }, (n, key) => [key + "2", n + 1]);
+Record.mapKeys({ a, b }, (key) => key + "!");
+Record.modify({ a }, "a", (n) => n + 1);
+Record.partition({ a, b }, halved);
+Record.pop({ a }, "z");
+Record.reduce({ a, b }, 1, (total, n) => total + n);
+Record.remove({ a, b }, "a");
+Record.replace({ a }, "a", b);
+Record.set({ a }, "b", b);
+Record.singleton("a", a);
+Record.size({ a, b });
+Record.some({ a, b }, (n) => n > 0);
+Record.toEntries({ a, b });
+Record.union({ a }, { a: 1, b }, (x, y) => x + y);
+Record.values({ a, b });
+```
+
+```typescript title="effect/Struct"
+Struct.assign({ a }, { b });
+Struct.evolve({ a, b }, { a: (n) => n + 1 });
+Struct.get({ a, b }, "b");
+Struct.keys({ a, b });
+Struct.omit({ a, b, c: 1 }, ["a"]);
+Struct.pick(shape, ["n", "label"]);
+Struct.renameKeys({ a, b }, { a: "c" });
+```
+
+```typescript title="effect/Tuple"
+Tuple.appendElement(Tuple.make(a), b);
+Tuple.appendElements(Tuple.make(a), [b, 1]);
+Tuple.get(Tuple.make(a, b), 1);
+Tuple.make(a, "x", flag);
+```
+
+```typescript title="effect/HashSet"
+HashSet.add(members, a);
+HashSet.difference(members, HashSet.make(a));
+HashSet.empty();
+HashSet.every(members, (n) => n > a);
+HashSet.filter(members, (n) => n > a);
+HashSet.fromIterable([a, 1, a]);
+HashSet.has(members, a);
+HashSet.intersection(members, HashSet.make(a, 2));
+HashSet.isEmpty(members);
+HashSet.isHashSet(members);
+HashSet.isSubset(HashSet.make(a), members);
+HashSet.make(a, a, 1);
+HashSet.map(members, (n) => (n > 0 ? 1 : 0));
+HashSet.reduce(members, 0, (sum, n) => sum + n);
+HashSet.remove(members, a);
+HashSet.size(members);
+HashSet.some(members, (n) => n > a);
+HashSet.union(members, HashSet.make(a, 1));
+```
+
+```typescript title="effect/HashMap"
+HashMap.compact(HashMap.map(scores, (n) => (n > a ? Option.some(n) : Option.none())));
+HashMap.empty();
+Array.length(Array.fromIterable(HashMap.entries(scores)));
+HashMap.every(scores, (n) => n > a);
+HashMap.filter(scores, (n) => n > a);
+HashMap.filterMap(scores, halved);
+Option.isSome(HashMap.findFirst(scores, (n) => n > a));
+(() => {
+  let total = 0;
+  HashMap.forEach(scores, (n) => {
+    total += n;
+  });
+  return total;
+})();
+HashMap.fromIterable([
+  ["x", a],
+  ["y", 2],
+]);
+HashMap.get(scores, "a");
+HashMap.has(scores, "a") ? HashMap.getUnsafe(scores, "a") : a;
+HashMap.has(scores, "a");
+HashMap.hasBy(scores, (n, key) => key === "a" && n > 0);
+HashMap.isEmpty(scores);
+HashMap.isHashMap(scores);
+Array.length(Array.fromIterable(HashMap.keys(scores)));
+HashMap.make(["x", a], ["x", 2]);
+HashMap.map(scores, (n, key) => n + key.length);
+HashMap.modify(scores, "a", (n) => n + 1);
+HashMap.modifyAt(scores, "b", (held) => (Option.isSome(held) ? Option.none() : Option.some(a)));
+HashMap.reduce(scores, 0, (sum, n) => sum + n);
+HashMap.remove(scores, "a");
+HashMap.removeMany(scores, ["a", "z"]);
+HashMap.set(scores, "a", a);
+HashMap.setMany(scores, [
+  ["a", a],
+  ["z", 1],
+]);
+HashMap.size(scores);
+HashMap.some(scores, (n) => n > a);
+Array.length(HashMap.toEntries(scores));
+Array.sort(HashMap.toValues(scores), Order.Number);
+HashMap.union(scores, HashMap.make(["a", a]));
+Array.sort(Array.fromIterable(HashMap.values(scores)), Order.Number);
+```
+
+```typescript title="effect/MutableHashSet"
+(() => {
+  const seen = MutableHashSet.fromIterable(members);
+  MutableHashSet.add(seen, a);
+  MutableHashSet.remove(seen, 2);
+  return [MutableHashSet.size(seen), MutableHashSet.has(seen, a)];
+})();
+(() => {
+  const seen = MutableHashSet.make(a);
+  MutableHashSet.clear(seen);
+  return MutableHashSet.size(seen);
+})();
+MutableHashSet.size(MutableHashSet.empty());
+```
+
+```typescript title="effect/MutableHashMap"
+(() => {
+  const held = MutableHashMap.make(["a", a]);
+  MutableHashMap.modifyAt(held, "b", () => Option.some(1));
+  const size = MutableHashMap.size(held);
+  MutableHashMap.clear(held);
+  return [size, MutableHashMap.size(held), MutableHashMap.size(MutableHashMap.empty())];
+})();
+(() => {
+  const held = MutableHashMap.fromIterable(scores);
+  MutableHashMap.set(held, "q", a);
+  MutableHashMap.modify(held, "q", (n) => n + 1);
+  MutableHashMap.remove(held, "a");
+  return [
+    MutableHashMap.get(held, "q"),
+    MutableHashMap.has(held, "a"),
+    MutableHashMap.size(held),
+    MutableHashMap.isEmpty(held),
+  ];
+})();
+(() => {
+  const held = MutableHashMap.make(["a", a], ["b", b]);
+  return [
+    Array.sort(Array.fromIterable(MutableHashMap.keys(held)), Order.String),
+    Array.sort(Array.fromIterable(MutableHashMap.values(held)), Order.Number),
+  ];
+})();
+```
+
+```typescript title="effect/Number"
+Number.Equivalence(a, b);
+Number.Order(a, b);
+Number.between(a, { minimum: -1, maximum: 4 });
+Number.clamp(a, { minimum: -1, maximum: 4 });
+Number.decrement(a);
+Number.divide(a, 0);
+Number.divideUnsafe(a * 4, 4);
+Number.increment(a);
+Number.isGreaterThan(a, b);
+Number.isGreaterThanOrEqualTo(a, b);
+Number.isLessThan(a, b);
+Number.isLessThanOrEqualTo(a, b);
+Number.isNumber(a);
+Number.max(a, b);
+Number.min(a, b);
+Number.multiply(a, b);
+Number.multiplyAll([a, b, 2]);
+Number.parse("x"); // on values the code writes
+Number.remainder(a, 3);
+Number.round(a / 3, 2); // on values the code writes
+Number.sign(a);
+Number.subtract(a, b);
+Number.sum(a, b);
+Number.sumAll(items);
+```
+
+```typescript title="effect/BigInt, imported as BigInts"
+BigInts.Equivalence(BigInt(a), BigInt(b));
+BigInts.Order(BigInt(a), BigInt(b));
+BigInts.abs(BigInt(a));
+BigInts.between(BigInt(a), { minimum: -1n, maximum: 4n });
+BigInts.clamp(BigInt(a), { minimum: -1n, maximum: 4n });
+BigInts.decrement(BigInt(a));
+BigInts.divide(BigInt(a), 3n);
+BigInts.divideUnsafe(BigInt(a), 3n);
+BigInts.fromNumber(a); // on values the code writes
+BigInts.fromString("x"); // on values the code writes
+BigInts.gcd(12n, 18n); // on values the code writes
+BigInts.increment(BigInt(a));
+BigInts.isBigInt(BigInt(a));
+BigInts.isGreaterThan(BigInt(a), BigInt(b));
+BigInts.isGreaterThanOrEqualTo(BigInt(a), BigInt(b));
+BigInts.isLessThan(BigInt(a), BigInt(b));
+BigInts.isLessThanOrEqualTo(BigInt(a), BigInt(b));
+BigInts.lcm(4n, 6n); // on values the code writes
+BigInts.max(BigInt(a), BigInt(b));
+BigInts.min(BigInt(a), BigInt(b));
+BigInts.multiply(BigInt(a), BigInt(b));
+BigInts.multiplyAll([BigInt(a), 2n]);
+BigInts.remainder(BigInt(a), 3n);
+BigInts.sign(BigInt(a));
+BigInts.sqrt(16n); // on values the code writes
+BigInts.subtract(BigInt(a), BigInt(b));
+BigInts.sum(BigInt(a), BigInt(b));
+BigInts.sumAll([BigInt(a), BigInt(b), 1n]);
+BigInts.toNumber(BigInt(a)); // on values the code writes
+```
+
+```typescript title="Math"
+Math.abs(a);
+Math.ceil(a / 2);
+Math.floor(a / 2);
+Math.max(a, b);
+Math.min(a, b);
+Math.trunc(a / 2);
+```
+
+```typescript title="effect/BigDecimal"
+BigDecimal.Order(amount, fee);
+BigDecimal.abs(amount);
+BigDecimal.between(amount, { minimum: decimal(0), maximum: fee });
+BigDecimal.ceil(amount);
+BigDecimal.clamp(amount, { minimum: decimal(0), maximum: fee });
+BigDecimal.divide(amount, fee); // on values the code writes
+BigDecimal.divideUnsafe(amount, fee); // on values the code writes
+BigDecimal.equals(amount, fee);
+BigDecimal.floor(amount);
+BigDecimal.format(amount); // on values the code writes
+BigDecimal.fromBigInt(BigInt(a));
+BigDecimal.fromNumber(a);
+BigDecimal.fromNumberUnsafe(a);
+BigDecimal.fromString("x"); // on values the code writes
+BigDecimal.fromStringUnsafe("1.250"); // on values the code writes
+BigDecimal.isBigDecimal(amount);
+BigDecimal.isGreaterThan(amount, fee);
+BigDecimal.isGreaterThanOrEqualTo(amount, fee);
+BigDecimal.isInteger(amount);
+BigDecimal.isLessThan(amount, fee);
+BigDecimal.isLessThanOrEqualTo(amount, fee);
+BigDecimal.isNegative(amount);
+BigDecimal.isPositive(amount);
+BigDecimal.isZero(amount);
+BigDecimal.make(125n, 2); // on values the code writes
+BigDecimal.max(amount, fee);
+BigDecimal.min(amount, fee);
+BigDecimal.multiply(amount, fee);
+BigDecimal.multiplyAll([amount, fee]);
+BigDecimal.negate(amount);
+BigDecimal.normalize(amount);
+BigDecimal.scale(amount, 3); // on values the code writes
+BigDecimal.sign(amount);
+BigDecimal.subtract(amount, fee);
+BigDecimal.sum(amount, fee);
+BigDecimal.sumAll([amount, fee, decimal(a)]);
+BigDecimal.toNumberUnsafe(amount); // on values the code writes
+BigDecimal.truncate(amount);
+```
+
+```typescript title="effect/Rational"
+Rational.Order(ratio(a), third);
+Rational.abs(ratio(a));
+Rational.between(ratio(a), { minimum: ratio(0), maximum: Rational.makeUnsafe(7n, 2n) });
+Rational.clamp(ratio(a), { minimum: ratio(0), maximum: Rational.makeUnsafe(7n, 2n) });
+Rational.divide(ratio(a), ratio(b));
+Rational.equals(Rational.divideUnsafe(ratio(a), third), ratio(a * 3));
+Rational.format(Rational.sum(ratio(a), third)); // on values the code writes
+Rational.fromBigDecimal(amount);
+Rational.fromBigInt(BigInt(a));
+Rational.fromNumber(a);
+Rational.fromNumberUnsafe(a);
+Rational.fromString("3/4"); // on values the code writes
+Rational.fromStringUnsafe("6/8"); // on values the code writes
+Rational.isGreaterThan(ratio(a), third);
+Rational.isGreaterThanOrEqualTo(ratio(a), third);
+Rational.isInteger(Rational.makeUnsafe(BigInt(a), 2n));
+Rational.isLessThan(ratio(a), third);
+Rational.isLessThanOrEqualTo(ratio(a), third);
+Rational.isNegative(ratio(a));
+Rational.isPositive(ratio(a));
+Rational.isRational(ratio(a));
+Rational.isZero(ratio(a));
+Rational.make(BigInt(a), BigInt(b));
+Rational.makeUnsafe(BigInt(a), 3n);
+Rational.max(ratio(a), third);
+Rational.min(ratio(a), third);
+Rational.multiply(ratio(a), third);
+Rational.multiplyAll([third, ratio(a)]);
+Rational.negate(Rational.makeUnsafe(BigInt(a), 3n));
+Rational.sign(Rational.subtract(ratio(a), third));
+Rational.subtract(ratio(a), third);
+Rational.sum(ratio(a), third);
+Rational.sumAll([third, third, ratio(a)]);
+Rational.toNumberUnsafe(Rational.makeUnsafe(BigInt(a), 4n)); // on values the code writes
+```
+
+```typescript title="effect/String"
+String.Equivalence(text, other);
+String.Order("a", "a"); // on values the code writes
+String.at(0)(text); // on values the code writes
+String.at(text, 1); // on values the code writes
+String.capitalize(text); // on values the code writes
+String.charAt(1)(text);
+String.charAt(text, 0); // on values the code writes
+String.concat(text, other);
+String.empty; // on values the code writes
+String.endsWith(other)(text);
+String.includes(other)(text);
+String.indexOf("b")(text);
+String.isEmpty(text);
+String.isNonEmpty(text);
+String.isString(text);
+String.lastIndexOf(",")(text);
+String.length(text);
+String.padEnd(4, "-")(text); // on values the code writes
+String.padStart(4, "-")(text); // on values the code writes
+String.repeat(2)(text); // on values the code writes
+String.replace("a", "o")(text);
+String.replaceAll("a", "o")(text);
+String.slice(1)(text);
+String.split(text, ",")[0];
+String.startsWith(other)(text);
+String.substring(0, 2)(text);
+String.takeLeft(text, 0);
+String.takeRight(text, 0); // on values the code writes
+String.toLowerCase(text); // on values the code writes
+String.toUpperCase(text); // on values the code writes
+String.trim(" " + text + " "); // on values the code writes
+String.trimEnd(text + " "); // on values the code writes
+String.trimStart(" " + text); // on values the code writes
+String.uncapitalize(text); // on values the code writes
+```
+
+```typescript title="effect/Boolean"
+Boolean.Equivalence(flag, a > 0);
+Boolean.Order(flag, a > 0);
+Boolean.and(flag, a > 0);
+Boolean.eqv(flag, a > b);
+Boolean.every([flag, a > 0, b > 0]);
+Boolean.implies(flag, a > b);
+Boolean.isBoolean(flag);
+Boolean.match(flag, { onFalse: () => a, onTrue: () => b });
+Boolean.nand(flag, a > b);
+Boolean.nor(flag, a > b);
+Boolean.not(flag);
+Boolean.or(flag, a > 0);
+Boolean.some([flag, a > 0]);
+Boolean.xor(flag, a > b);
+```
+
+```typescript title="effect/Predicate"
+Predicate.and(
+  (n) => n > 0,
+  (n) => n < 5,
+)(a);
+Predicate.eqv(
+  (n) => n > 0,
+  (n) => n > 5,
+)(a);
+Predicate.hasProperty({ n: a }, "n");
+Predicate.implies(
+  (n) => n > 0,
+  (n) => n > 5,
+)(a);
+Predicate.isBigInt(BigInt(a));
+Predicate.isBoolean(flag);
+Predicate.isFunction(() => a);
+Predicate.isNotNull(a);
+Predicate.isNotNullish(a);
+Predicate.isNotUndefined(a);
+Predicate.isNull(null);
+Predicate.isNullish(null);
+Predicate.isNumber(a);
+Predicate.isString(a);
+Predicate.isTagged(shape.kind, "Service");
+Predicate.isTruthy(a);
+Predicate.isUndefined(undefined);
+Predicate.mapInput(
+  (n) => n > 0,
+  (pair) => pair.n,
+)({ n: a });
+Predicate.nand(
+  (n) => n > 0,
+  (n) => n > 5,
+)(a);
+Predicate.nor(
+  (n) => n > 0,
+  (n) => n > 5,
+)(a);
+Predicate.not((n) => n > 0)(a);
+Predicate.or(
+  (n) => n > 5,
+  (n) => n < -1,
+)(a);
+Predicate.xor(
+  (n) => n > 0,
+  (n) => n > 5,
+)(a);
+```
+
+```typescript title="effect/Order"
+Order.BigInt(BigInt(a), BigInt(b));
+Order.Boolean(flag, a > 0);
+Order.Number(a, b);
+(() => {
+  const held = MutableHashMap.make(["a", a], ["b", b]);
+  return [
+    Array.sort(Array.fromIterable(MutableHashMap.keys(held)), Order.String),
+    Array.sort(Array.fromIterable(MutableHashMap.values(held)), Order.Number),
+  ];
+})();
+Order.clamp(Order.Number)(a, { minimum: 0, maximum: 3 });
+Order.combine(
+  Order.mapInput(Order.Boolean, (n) => n > 0),
+  Order.Number,
+)(a, b);
+Order.flip(Order.Number)(a, b);
+Order.isBetween(Order.Number)(a, { minimum: 0, maximum: 3 });
+Order.isGreaterThan(Order.Number)(a, b);
+Order.isGreaterThanOrEqualTo(Order.Number)(a, b);
+Order.isLessThan(Order.Number)(a, b);
+Order.isLessThanOrEqualTo(Order.Number)(a, b);
+Order.make((x, y) => (x < y ? -1 : x > y ? 1 : 0))(a, b);
+Order.mapInput(Order.Number, (pair) => pair.n)({ n: a }, { n: b });
+Order.max(Order.Number)(a, b);
+Order.min(Order.Number)(a, b);
+```
+
+```typescript title="effect/Ordering"
+Ordering.match(Order.Number(a, b), {
+  onLessThan: () => "less",
+  onEqual: () => "equal",
+  onGreaterThan: () => "more",
+});
+Ordering.reverse(Order.Number(a, b));
+```
+
+```typescript title="effect/Equivalence"
+Equivalence.BigInt(BigInt(a), BigInt(b));
+Equivalence.Boolean(flag, a > 0);
+Equivalence.Number(a, b);
+Equivalence.String("a" + a, "a" + b);
+Equivalence.make((x, y) => x % 2 === y % 2)(a, b);
+Equivalence.mapInput(Equivalence.strictEqual(), (pair) => pair.n)({ n: a }, { n: b });
+Equivalence.strictEqual()(a, b);
+```
+
+```typescript title="effect/Equal"
+Equal.equals(text, other);
+```
+
+```typescript title="effect/Data"
+class Point extends Data.Class<{ readonly x: number; readonly y: number }> {}
+class Plain extends Data.Error<{ readonly code: number }> {}
+class Circle extends Data.TaggedClass("Circle")<{ readonly radius: number }> {}
+class Odd extends Data.TaggedError("Odd")<{ readonly n: number }> {}
+```
+
+```typescript title="effect/Brand"
+Brand.nominal()(a);
+```
+
+```typescript title="effect/Newtype"
+Newtype.value(a);
+```
+
+```typescript title="effect/Ref"
+Effect.gen(function* () {
+  const cell = yield* Ref.make(a);
+  yield* Ref.update(cell, (n) => n + b);
+  const before = yield* cell.pipe(Ref.getAndUpdate((n) => n * 2));
+  const taken = yield* Ref.modify(cell, (n) => [n - 1, n + 1]);
+  yield* Ref.set(cell, (yield* Ref.get(cell)) + 1);
+  return [
+    before,
+    taken,
+    yield* Ref.get(cell),
+    yield* Ref.getAndSet(cell, 0),
+    yield* Ref.setAndGet(cell, b),
+    yield* Ref.updateAndGet(cell, (n) => n + 1),
+  ];
+});
+Ref.getUnsafe(Ref.makeUnsafe(a));
+```
+
+```typescript title="effect/SynchronizedRef"
+const cell = yield* SynchronizedRef.make(a);
+const made = SynchronizedRef.makeUnsafe(a);
+SynchronizedRef.get(cell);
+SynchronizedRef.getUnsafe(cell);
+SynchronizedRef.set(cell, a + b);
+SynchronizedRef.setAndGet(cell, b);
+SynchronizedRef.getAndSet(cell, a);
+SynchronizedRef.update(cell, (n) => n * 2);
+SynchronizedRef.updateAndGet(cell, (n) => n + 1);
+SynchronizedRef.getAndUpdate(cell, (n) => n * 2);
+SynchronizedRef.modify(cell, (n) => [n > b, n - 1]);
+SynchronizedRef.updateEffect(cell, (n) => Effect.succeed(n + 1)); // a change that fails leaves the cell as it was
+SynchronizedRef.updateAndGetEffect(cell, (n) => positive(n));
+SynchronizedRef.getAndUpdateEffect(cell, (n) => Effect.succeed(n * 2));
+SynchronizedRef.modifyEffect(cell, (n) => Effect.succeed([n > b, n - 1]));
+```
+
+```typescript title="effect/SubscriptionRef"
+const cell = yield* SubscriptionRef.make(a);
+SubscriptionRef.get(cell);
+SubscriptionRef.getUnsafe(cell);
+SubscriptionRef.set(cell, a + b);
+SubscriptionRef.setAndGet(cell, b);
+SubscriptionRef.getAndSet(cell, a);
+SubscriptionRef.update(cell, (n) => n * 2);
+SubscriptionRef.updateAndGet(cell, (n) => n + 1);
+SubscriptionRef.getAndUpdate(cell, (n) => n * 2);
+SubscriptionRef.modify(cell, (n) => [n > b, n - 1]);
+SubscriptionRef.updateEffect(cell, (n) => Effect.succeed(n + 1)); // a change that fails leaves the cell as it was
+SubscriptionRef.updateAndGetEffect(cell, (n) => positive(n));
+SubscriptionRef.getAndUpdateEffect(cell, (n) => Effect.succeed(n * 2));
+SubscriptionRef.modifyEffect(cell, (n) => Effect.succeed([n > b, n - 1]));
+```
+
+```typescript title="effect/Deferred"
+// A handler is one fiber, so a Deferred is what the handler itself completed it with.
+const done = yield* Deferred.make();
+const made = Deferred.makeUnsafe();
+Deferred.succeed(done, a); // gives whether it was the first to complete it
+Deferred.sync(done, () => a + b);
+Deferred.fail(done, new Odd({ n: a }));
+Deferred.failSync(done, () => a);
+Deferred.die(done, "gone");
+Deferred.dieSync(done, () => "gone");
+Deferred.await(done); // once the handler has completed it
+Deferred.isDone(done);
+Deferred.isDoneUnsafe(done);
+Deferred.poll(done);
+```
+
+```typescript title="effect/Latch"
+const gate = yield* Latch.make(); // closed, or Latch.make(true)
+const made = Latch.makeUnsafe(false);
+gate.open;
+gate.close;
+gate.release;
+gate.await; // once the handler has opened it
+gate.whenOpen(Effect.succeed(a));
+gate.isOpen();
+gate.openUnsafe();
+gate.closeUnsafe();
+Latch.open(gate);
+Latch.close(gate);
+Latch.release(gate);
+Latch.await(gate);
+Latch.whenOpen(gate, even(a));
+Latch.whenOpen(gate)(Effect.succeed(b));
+Latch.isOpen(gate);
+Latch.openUnsafe(gate);
+Latch.closeUnsafe(gate);
+```
+
+```typescript title="effect/Semaphore"
+const permits = yield* Semaphore.make(2); // a count the code writes
+const made = Semaphore.makeUnsafe(1);
+permits.withPermits(1)(Effect.succeed(a)); // while there are that many free
+permits.withPermit(Effect.succeed(b));
+permits.withPermitsIfAvailable(2)(Effect.succeed(b));
+permits.take(1);
+permits.takeIfAvailable(2);
+permits.release(1);
+permits.releaseAll;
+permits.resize(3);
+Semaphore.withPermits(permits, 2)(Effect.succeed(a));
+Semaphore.withPermits(permits, 2, Effect.succeed(b));
+Semaphore.withPermit(permits, Effect.succeed(a));
+Semaphore.withPermit(permits)(Effect.succeed(b));
+Semaphore.withPermitsIfAvailable(permits, 4)(Effect.succeed(a));
+Semaphore.withPermitsIfAvailable(permits, 1, Effect.succeed(a));
+Semaphore.take(permits, 2);
+Semaphore.takeIfAvailable(permits, 2);
+Semaphore.release(permits, 1);
+Semaphore.resize(permits, 5);
+Semaphore.releaseAll(permits);
+```
+
+```typescript title="effect/Queue"
+const line = yield* Queue.unbounded();
+const short = yield* Queue.bounded(2); // a size the code writes
+Queue.offer(line, a); // while there is room
+Queue.offerAll(line, [b, a + b]);
+Queue.offerUnsafe(line, a);
+Queue.take(line); // while there is something in it
+Queue.takeAll(line);
+Queue.takeN(line, 1);
+Queue.peek(line);
+Queue.poll(line);
+Queue.clear(line);
+Queue.size(line);
+Queue.sizeUnsafe(line);
+Queue.isFull(line);
+Queue.isFullUnsafe(line);
+```
+
+```typescript title="effect/MutableRef"
+(() => {
+  const count = MutableRef.make(a);
+  MutableRef.set(count, a + b);
+  MutableRef.update(count, (n) => n * 2);
+  MutableRef.increment(count);
+  MutableRef.decrement(count);
+  return MutableRef.get(count);
+})();
+(() => {
+  const count = MutableRef.make(a);
+  return [
+    MutableRef.setAndGet(count, b),
+    MutableRef.getAndSet(count, a),
+    MutableRef.updateAndGet(count, (n) => n + 1),
+    MutableRef.getAndUpdate(count, (n) => n * 2),
+    MutableRef.incrementAndGet(count),
+    MutableRef.decrementAndGet(count),
+    MutableRef.getAndIncrement(count),
+    MutableRef.getAndDecrement(count),
+    MutableRef.get(count),
+  ];
+})();
+pipe(MutableRef.make(a), MutableRef.set(b), MutableRef.get);
+(() => {
+  const on = MutableRef.make(flag);
+  MutableRef.toggle(on);
+  return MutableRef.get(on);
+})();
+```
+
+```typescript title="effect/Filter"
+Filter.equals(b)(a);
+Filter.fromPredicate((n) => n > b)(a);
+Filter.make((n) => (n > b ? Result.succeed(n) : Result.fail(n)))(a);
+Filter.tagged("Dot")(Shape.Dot());
+Filter.toOption(Filter.fromPredicate((n) => n > b))(a);
+Filter.toPredicate(Filter.fromPredicate((n) => n > b))(a);
+Filter.toResult(Filter.fromPredicate((n) => n > b))(a);
+```
+
+```typescript title="effect/Redacted"
+Redacted.isRedacted(a);
+Redacted.value(Redacted.make(a));
+```
+
+```typescript title="effect/Console"
+Effect.gen(function* () {
+  yield* Console.log("l");
+  yield* Console.debug("d");
+  yield* Console.info("i");
+  yield* Console.warn("w");
+  yield* Console.error("e");
+  return a;
+});
+```
+
+```typescript title="effect/Clock"
+Effect.gen(function* () {
+  return [(yield* Clock.currentTimeMillis) >= 0, (yield* Clock.currentTimeNanos) >= 0n];
+});
+```
+
+```typescript title="effect/DateTime"
+DateTime.Equivalence(at, noon);
+DateTime.Order(at, noon);
+DateTime.add(at, { days: a, hours: 1 });
+DateTime.addDuration(at, wait);
+DateTime.between(at, { minimum: DateTime.makeUnsafe(0), maximum: noon });
+DateTime.distance(at, noon);
+DateTime.formatIsoDate(at); // on values the code writes
+DateTime.formatIsoDateUtc(at); // on values the code writes
+Effect.gen(function* () {
+  return [
+    DateTime.toEpochMillis(yield* DateTime.now) >= 0,
+    yield* DateTime.isPast(DateTime.makeUnsafe(-1)),
+    yield* DateTime.isFuture(DateTime.makeUnsafe("2970-01-01T00:00:00Z")),
+  ];
+});
+DateTime.isGreaterThan(at, noon);
+DateTime.isGreaterThanOrEqualTo(at, noon);
+DateTime.isLessThan(at, noon);
+DateTime.isLessThanOrEqualTo(at, noon);
+DateTime.make(a);
+DateTime.makeUnsafe(a);
+DateTime.max(at, noon);
+DateTime.min(at, noon);
+DateTime.subtract(at, { minutes: a, seconds: 30 });
+DateTime.subtractDuration(at, wait);
+DateTime.toEpochMillis(at);
+```
+
+```typescript title="effect/Duration"
+Duration.Equivalence(wait, Duration.zero);
+Duration.Order(wait, Duration.seconds(1));
+Duration.abs(wait);
+Duration.between(wait, { minimum: Duration.zero, maximum: Duration.minutes(2) });
+Duration.clamp(wait, { minimum: Duration.zero, maximum: Duration.minutes(2) });
+Duration.days(a);
+Duration.equals(wait, Duration.zero);
+Duration.hours(a);
+Duration.isFinite(wait);
+Duration.isGreaterThan(wait, Duration.seconds(1));
+Duration.isGreaterThanOrEqualTo(wait, Duration.seconds(1));
+Duration.isLessThan(wait, Duration.seconds(1));
+Duration.isLessThanOrEqualTo(wait, Duration.seconds(1));
+Duration.isNegative(wait);
+Duration.isPositive(wait);
+Duration.isZero(wait);
+Duration.max(wait, Duration.seconds(1));
+Duration.millis(a);
+Duration.min(wait, Duration.seconds(1));
+Duration.minutes(a);
+Duration.negate(wait);
+Duration.seconds(a);
+Duration.subtract(wait, Duration.millis(5));
+Duration.sum(wait, Duration.hours(1));
+Duration.times(wait, a);
+Math.ceil(Duration.toDays(wait));
+Math.floor(Duration.toHours(wait));
+Duration.toMillis(wait);
+Duration.toMinutes(wait) >= 1;
+Duration.toSeconds(wait) < 2;
+Math.trunc(Duration.toWeeks(wait));
+Duration.weeks(a);
+```
+
+```typescript title="effect/Function"
+apply(a)((n) => n - 1);
+cast(a);
+compose(
+  (n) => n + 1,
+  (n) => n * 2,
+)(a);
+constFalse();
+constNull();
+constTrue();
+constUndefined() ?? "undefined";
+constVoid() ?? "void";
+constant(a)();
+dual(2, (x, y) => x - y)(a, b);
+flip((x) => (y) => x - y)(a)(b);
+flow(Number.increment, Number.multiply(2))(a);
+identity(a);
+memoize((pair) => pair.n + 1)({ n: a });
+pipe(a, Number.sum(b));
+satisfies()(a);
+tupled((x, y) => x - y)([a, b]);
+untupled((pair) => pair[0] - pair[1])(a, b);
+```
+
+```typescript title="effect/Optic"
+Optic.id().key("n").replace(a, { n: 0, m: b });
+Optic.id()
+  .key("n")
+  .modify((n) => n + a)({ n: 1 });
+Optic.modify({ n: a, m: b }, Optic.id().key("n"), (n) => n + 1);
+pipe({ n: a, m: b }, Optic.modify(Optic.id().key("n"), (n) => n + 1));
+Optic.replace({ n: a, m: b }, Optic.id().key("m"), a);
+pipe({ n: a, m: b }, Optic.replace(Optic.id().key("m"), a));
+```
+
+```typescript title="effect/Stream"
+const stream = Stream.fromIterable(items);
+
+stream.pipe(Stream.as(a), Stream.runCollect);
+stream.pipe(
+  Stream.mapEffect(even),
+  Stream.catch((error) => Stream.make(error.n, 0)),
+  Stream.runCollect,
+);
+stream.pipe(
+  Stream.mapEffect(even),
+  Stream.catchIf(
+    (error) => error.n > a,
+    () => Stream.make(0),
+  ),
+  Stream.runCollect,
+  Effect.result,
+);
+stream.pipe(
+  Stream.mapEffect(even),
+  Stream.catchTag("Odd", (error) => Stream.make(-error.n)),
+  Stream.runCollect,
+);
+stream.pipe(
+  Stream.mapEffect((n) => Effect.flatMap(even(n), positive)),
+  Stream.catchTags({ Odd: () => Stream.make(1), Negative: (error) => Stream.make(error.n) }),
+  Stream.runCollect,
+);
+Stream.make(a, a, 1, 1, a).pipe(Stream.changes, Stream.runCollect);
+Stream.make(a, a + 2, 1, 3).pipe(
+  Stream.changesWith((x, y) => x % 2 === y % 2),
+  Stream.runCollect,
+);
+Stream.runCollect(Stream.concat(stream, Stream.make(a)));
+Stream.die("gone").pipe(Stream.runCollect, Effect.exit, Effect.map(Exit.isFailure));
+stream.pipe(Stream.drain, Stream.runCollect);
+stream.pipe(Stream.drop(0), Stream.runCollect);
+stream.pipe(
+  Stream.dropWhile((n) => n > a),
+  Stream.runCollect,
+);
+Stream.runCollect(Stream.empty);
+Stream.fail("no").pipe(Stream.runCollect, Effect.result);
+Stream.runCollect(Stream.filter(stream, (n) => n > a));
+stream.pipe(
+  Stream.filterEffect((n) => Effect.map(even(n), (m) => m > a)),
+  Stream.take(1),
+  Stream.runCollect,
+  Effect.result,
+);
+stream.pipe(Stream.filterMap(halved), Stream.runCollect);
+stream.pipe(
+  Stream.flatMap((n) => Stream.make(n, n + 1)),
+  Stream.runCollect,
+);
+Stream.runCollect(Stream.fromArray(items));
+Stream.runCollect(Stream.fromArrayEffect(Effect.succeed([a, 1])));
+Stream.runCollect(Stream.fromEffect(Effect.succeed(a)));
+Stream.runCollect(Stream.fromIterable(items));
+Stream.runCollect(Stream.fromIterableEffect(Effect.succeed(items)));
+Stream.make(1, 2, a, 4, 5).pipe(Stream.grouped(2), Stream.runCollect);
+Stream.iterate(a, (n) => n + 2).pipe(Stream.take(3), Stream.runCollect);
+Stream.make("a", "b").pipe(Stream.mkString);
+Stream.runCollect(Stream.map(stream, (n, i) => n * 2 + i));
+stream.pipe(
+  Stream.mapAccum(
+    () => 0,
+    (total, n) => [total + n, [total, n]],
+  ),
+  Stream.runCollect,
+);
+stream.pipe(Stream.mapEffect(even), Stream.runHead, Effect.result);
+stream.pipe(
+  Stream.mapEffect(even),
+  Stream.mapError((error) => error.n),
+  Stream.runCollect,
+  Effect.result,
+);
+stream.pipe(
+  Stream.mapEffect(positive),
+  Stream.orDie,
+  Stream.runCollect,
+  Effect.exit,
+  Effect.map(Exit.hasDies),
+);
+stream.pipe(
+  Stream.mapEffect(positive),
+  Stream.orElseSucceed(() => 0),
+  Stream.runCollect,
+);
+Stream.paginate(0, (page) =>
+  Effect.succeed([[page, a], page < 2 ? Option.some(page + 1) : Option.none()]),
+).pipe(Stream.runCollect);
+stream.pipe(Stream.prepend([a]), Stream.runCollect);
+Stream.zipWith(stream, Stream.range(1, 5), (x, y) => x * y).pipe(Stream.runCollect);
+stream.pipe(Stream.rechunk(5), Stream.runCollect);
+Stream.run(stream, Sink.sum);
+Stream.runCollect(stream);
+Stream.runCount(stream);
+Stream.runDrain(stream).pipe(Effect.as("drained"));
+Stream.runFold(
+  stream,
+  () => a,
+  (total, n) => total + n,
+);
+Stream.runFoldEffect(
+  stream,
+  () => 0,
+  (total, n) => Effect.map(positive(n), (m) => total + m),
+).pipe(Effect.result);
+Effect.gen(function* () {
+  const seen = [];
+  yield* stream.pipe(Stream.runForEach((n) => Effect.sync(() => void seen.push(n))));
+  return seen;
+});
+Effect.gen(function* () {
+  const seen = [];
+  yield* stream.pipe(
+    Stream.runForEachWhile((n) =>
+      Effect.sync(() => {
+        seen.push(n);
+        return n > a;
+      }),
+    ),
+  );
+  return seen;
+});
+Stream.runHead(stream);
+Stream.runLast(stream);
+Stream.runSum(stream);
+stream.pipe(
+  Stream.scan(
+    () => 0,
+    (total, n) => total + n,
+  ),
+  Stream.runCollect,
+);
+Stream.runCollect(Stream.succeed(a));
+Stream.runCollect(Stream.suspend(() => Stream.make(a)));
+Stream.runCollect(Stream.sync(() => a));
+Stream.runCollect(Stream.take(stream, 0));
+stream.pipe(Stream.takeRight(5), Stream.runCollect);
+stream.pipe(
+  Stream.takeUntil((n) => n > a),
+  Stream.runCollect,
+);
+stream.pipe(
+  Stream.takeWhile((n) => n > a),
+  Stream.runCollect,
+);
+stream.pipe(Stream.tap(even), Stream.runHead, Effect.result);
+Stream.unfold(1, (n) => Effect.succeed(n < 4 ? [n * a, n + 1] : undefined)).pipe(Stream.runCollect);
+Stream.runCollect(Stream.unwrap(Effect.succeed(Stream.make(a))));
+stream.pipe(Stream.withSpan("s"), Stream.runCount);
+stream.pipe(Stream.zip(Stream.make("x", "y")), Stream.runCollect);
+stream.pipe(Stream.zipWithIndex, Stream.runCollect);
+```
+
+```typescript title="effect/Sink"
+const stream = Stream.fromIterable(items);
+
+Stream.run(stream, Sink.collect());
+stream.pipe(Stream.run(Sink.count));
+Stream.run(stream, Sink.drain).pipe(Effect.as("drained"));
+Stream.run(
+  stream,
+  Sink.every((n) => n > a),
+);
+Stream.run(stream, Sink.fail("no")).pipe(Effect.result);
+Stream.run(
+  stream,
+  Sink.find((n) => n > a),
+);
+Stream.run(
+  stream,
+  Sink.fold(
+    () => 0,
+    (total) => total < 5,
+    (total, n) => Effect.succeed(total + n),
+  ),
+);
+Effect.gen(function* () {
+  const seen = [];
+  yield* Stream.run(
+    stream,
+    Sink.forEach((n) => Effect.sync(() => void seen.push(n))),
+  );
+  return seen;
+});
+Stream.run(stream, Sink.head());
+Stream.run(stream, Sink.last());
+Stream.run(
+  stream,
+  Sink.map(Sink.count, (n) => n * 10),
+);
+Stream.run(
+  stream,
+  Sink.reduce(
+    () => a,
+    (total, n) => total - n,
+  ),
+);
+Stream.run(
+  stream,
+  Sink.some((n) => n > a),
+);
+Stream.run(stream, Sink.succeed(a));
+Stream.run(stream, Sink.sum);
+Stream.run(stream, Sink.take(0));
+```
+
+```typescript title="Object"
+Object.entries({ a, b });
+Object.keys({ a, b });
+Object.values({ a, b });
+```
 
 ## The rest of Effect
 
-Every module of Effect is either read as above, run as it is, or left unread on purpose.
+Every module of Effect is either supported as above, run as it is, or [not supported](#not-supported) on purpose.
 
-**Run as it is, on values the code writes.** A pure function the prover has no reading of its own for is computed by the library itself when every argument is known: a constant, or something made from constants. That covers `SemVer`, `SemVerRange`, `ByteSize`, `Trie`, `TextDiff`, `JsonPatch`, `JsonPointer`, `Glob`, `RegExp.escape`, `Formatter`, `LogLevel`, `Cron.parse` and `Cron.match`, and the functions of the modules above that are not listed, such as `Array.rotate`, `String.camelToSnake` and `Duration.format`.
+**Run as it is, on values the code writes.** A pure function that is not on the list above is computed by the library itself when every argument is known: a constant, or something made from constants. That covers `SemVer`, `SemVerRange`, `ByteSize`, `Trie`, `TextDiff`, `JsonPatch`, `JsonPointer`, `Glob`, `RegExp.escape`, `Formatter`, `LogLevel`, `Cron.parse` and `Cron.match`, and the functions of the modules above that are not listed, such as `Array.rotate`, `String.camelToSnake` and `Duration.format`.
 
 ```typescript
 const MINIMUM = SemVer.parseUnsafe("1.9.3");
 const LIMIT = ByteSize.mebibytes(5);
 ```
 
-Called on a value from the state or a command, or given a function of yours, such a function is not read, and the report names it. `Combiner` and `Reducer` are made from functions, and `Bytes` works on byte arrays, so they are not read: write the fold.
+Called on a value from the state or a command, or given a function of yours, such a function is not supported, and the report names it.
 
-Every name on these lists has a line in a table the tests run: each call is read on values the prover knows and on values the solver holds, and both have to be what the real code gives. A test fails when the prover reads a function, a method or a kind of syntax that no table has.
+Every name on these lists has a line in a table the tests run: each call is tried on values the code writes and on values of a command, and both have to be what the real code gives. The language is a list of the same kind, one entry for each way a piece of it is written, marked as supported or not. A test fails when a function, a method or a form of the language has no line in a table, and when a table is written with a form the list does not have.
 
-**Left unread.** A call to one of these is reported with its name, and the rule is not proved.
+## Not supported
 
-- **The outside world.** `Random`, `Config`, `ConfigProvider`, `FileSystem`, `Path`, `Terminal`, `Stdio`, `Effect.promise`, and the packages under `effect/http`, `effect/sql`, `effect/rpc`, `effect/ai`, `effect/cluster`, `effect/workflow` and the others. A handler is a function of the state, the command and the time. What it needs from outside comes in as a field of the command.
-- **Time passing and things running together.** `Effect.sleep`, `timeout`, `retry`, `repeat`, `race` and `fork`, `Schedule`, `Scheduler`, `Fiber`, `FiberHandle`, `FiberMap`, `FiberSet`, `Deferred`, `Latch`, `Semaphore`, `PartitionedSemaphore`, `Queue`, `PubSub`, `Pool`, `Cache`, `ScopedCache`, `Request`, `RequestResolver`, `Channel`, `Pull`, `Take`, `SubscriptionRef`, `SynchronizedRef`, `ExecutionPlan` and the `Tx` modules. Which of two things happens first is not something a handler decides, and a handler does not wait. `Cron.next`, `prev` and `sequence` read the clock when they are given no time.
-- **Wiring.** `Layer`, `LayerMap`, `LayerRef`, `Context`, `References`, `Scope`, `ScopedRef`, `RcMap`, `RcRef`, `Resource`, `Runtime`, `ManagedRuntime`, `Logger`, `Tracer`, `Metric`, `ErrorReporter`. They say how a program is put together and watched, not what it decides. A request context a handler yields is read, as above.
-- **Schemas as code.** `Schema.decode`, `encode`, `is`, and `SchemaAST`, `SchemaGetter`, `SchemaIssue`, `SchemaParser`, `SchemaRepresentation`, `SchemaTransformation`, `ChannelSchema`, `JsonSchema`, `StandardSchema`, `Arbitrary`. A schema is read where it describes the state, a command or an event. Decoding with one inside a handler is not.
-- **Values changed in place, or known by where they are.** `Graph`, `HashRing`, `MutableList`, and `Hash`. A graph and a ring are built by changing one, and a hash of an object is where it sits in memory. Put a call to one in an exported function, which is then [opaque](#opaque-functions).
-- **Nothing to run.** `Types`, `HKT`, `Unify`, `Utils`, `Pipeable`, `Effectable`, `Differ`, `PlatformError`, `Redactable`, `Version`, and `Newtype` and `Brand` beyond the two functions above.
+A call to one of these is reported with its name, and the rule is not proved.
 
-In `Effect.gen`, `yield*` on an `Option` or a `Result` is not read: it fails where it runs. Use `Option.gen` and `Result.gen`, or `Effect.fromOption` and `Effect.fromResult`.
+A handler depends on the state, the command and the time. What it needs from the outside world comes in as a field of the command.
+
+```typescript title="The outside world"
+import * as Random from "effect/Random";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Terminal from "effect/Terminal";
+import * as Stdio from "effect/Stdio";
+// and every package under effect/http, effect/sql, effect/rpc, effect/ai, effect/cluster, effect/workflow
+
+Effect.promise(() => fetch(url));
+Effect.tryPromise(() => fetch(url));
+```
+
+Which of two things happens first is not something a handler decides. A deployed handler can wait, but a proof is held against the handler run at once, without waiting, so a `sleep`, a `delay` and a schedule that waits are reported. A handler is one fiber that runs to its end, so a `Deferred`, a `Queue`, a `Semaphore` and a `Latch` are [supported](#library-functions) where the handler itself has done what the call waits for, and reported where it has not.
+
+```typescript title="Time passing and things running together"
+import * as Scheduler from "effect/Scheduler";
+import * as Fiber from "effect/Fiber";
+import * as FiberHandle from "effect/FiberHandle";
+import * as FiberMap from "effect/FiberMap";
+import * as FiberSet from "effect/FiberSet";
+import * as PartitionedSemaphore from "effect/PartitionedSemaphore";
+import * as PubSub from "effect/PubSub";
+import * as Pool from "effect/Pool";
+import * as Cache from "effect/Cache";
+import * as ScopedCache from "effect/ScopedCache";
+import * as Request from "effect/Request";
+import * as RequestResolver from "effect/RequestResolver";
+import * as Channel from "effect/Channel";
+import * as Pull from "effect/Pull";
+import * as Take from "effect/Take";
+import * as ExecutionPlan from "effect/ExecutionPlan";
+import * as TxChunk from "effect/TxChunk";
+import * as TxDeferred from "effect/TxDeferred";
+import * as TxHashMap from "effect/TxHashMap";
+import * as TxHashSet from "effect/TxHashSet";
+import * as TxPriorityQueue from "effect/TxPriorityQueue";
+import * as TxPubSub from "effect/TxPubSub";
+import * as TxQueue from "effect/TxQueue";
+import * as TxReentrantLock from "effect/TxReentrantLock";
+import * as TxRef from "effect/TxRef";
+import * as TxSemaphore from "effect/TxSemaphore";
+import * as TxSubscriptionRef from "effect/TxSubscriptionRef";
+
+Effect.sleep("1 second");
+Effect.delay(effect, "1 second");
+Deferred.await(done); // a wait for what the handler has not done itself: it would never end
+gate.await;
+Queue.take(line);
+permits.take(3);
+Effect.repeat(effect, { schedule: Schedule.spaced("1 second") }); // a schedule that waits: every one but Schedule.recurs
+Effect.retry(effect, { times: command.attempts }); // a count an input decides
+Effect.race(first, second);
+SubscriptionRef.changes(cell); // a stream of what a cell held
+Effect.forkChild(effect); // and every other way to start a fiber
+
+Cron.next(cron); // next, prev and sequence use the clock when they are given no time
+```
+
+These say how a program is put together and watched, not what it decides. A [request context](#effects-and-failures) a handler yields is supported.
+
+```typescript title="Wiring"
+import * as Layer from "effect/Layer";
+import * as LayerMap from "effect/LayerMap";
+import * as LayerRef from "effect/LayerRef";
+import * as Context from "effect/Context";
+import * as References from "effect/References";
+import * as Scope from "effect/Scope";
+import * as ScopedRef from "effect/ScopedRef";
+import * as RcMap from "effect/RcMap";
+import * as RcRef from "effect/RcRef";
+import * as Resource from "effect/Resource";
+import * as Runtime from "effect/Runtime";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Logger from "effect/Logger";
+import * as Tracer from "effect/Tracer";
+import * as Metric from "effect/Metric";
+import * as ErrorReporter from "effect/ErrorReporter";
+```
+
+A schema is supported where it describes the state, a command or an event. Decoding with one inside a handler is not.
+
+```typescript title="Schemas as code"
+import * as SchemaAST from "effect/SchemaAST";
+import * as SchemaGetter from "effect/SchemaGetter";
+import * as SchemaIssue from "effect/SchemaIssue";
+import * as SchemaParser from "effect/SchemaParser";
+import * as SchemaRepresentation from "effect/SchemaRepresentation";
+import * as SchemaTransformation from "effect/SchemaTransformation";
+import * as ChannelSchema from "effect/ChannelSchema";
+import * as JsonSchema from "effect/JsonSchema";
+import * as StandardSchema from "effect/StandardSchema";
+import * as Arbitrary from "effect/Arbitrary";
+
+Schema.decodeUnknownSync(Ticket)(input); // and every other decode, encode and is
+Schema.encodeSync(Ticket)(ticket);
+Schema.is(Ticket)(input);
+```
+
+A graph and a ring are built by changing one, and a hash of an object is where it sits in memory. Put a call to one in an exported function, which is then [opaque](#opaque-functions).
+
+```typescript title="Values changed in place, or known by where they are"
+import * as Graph from "effect/Graph";
+import * as HashRing from "effect/HashRing";
+import * as MutableList from "effect/MutableList";
+import * as Hash from "effect/Hash";
+```
+
+`Combiner` and `Reducer` are made from functions, and `Bytes` works on byte arrays: write the fold.
+
+```typescript title="Made from functions, or working on bytes"
+import * as Combiner from "effect/Combiner";
+import * as Reducer from "effect/Reducer";
+import * as Bytes from "effect/Bytes";
+```
+
+These hold types and the library's own machinery, with nothing for a handler to call.
+
+```typescript title="Nothing to run"
+import * as Types from "effect/Types";
+import * as HKT from "effect/HKT";
+import * as Unify from "effect/Unify";
+import * as Utils from "effect/Utils";
+import * as Pipeable from "effect/Pipeable"; // the type behind `.pipe`, which is supported: see "pipe" above
+import * as Effectable from "effect/Effectable";
+import * as Differ from "effect/Differ";
+import * as PlatformError from "effect/PlatformError";
+import * as Redactable from "effect/Redactable";
+import * as Version from "effect/Version";
+// and effect/Newtype and effect/Brand beyond Newtype.value and Brand.nominal
+```
 
 ## Effects and failures
 
-Inside `Effect.gen` and `Effect.fn`, `yield*` is read on an effect, on a rejection (which rejects the command), on an error of `Data.TaggedError` or `Schema.TaggedError` (which fails with it) and on a request context (which gives any value its schema allows).
+```typescript title="Supported"
+Pack: Effect.fn(function* (parcel, command) {
+  const grams = yield* Effect.succeed(command.grams); // an effect
+  const [x, y] = yield* Effect.all([weigh(command.first), weigh(command.second)]);
+  const user = yield* CurrentUser; // a request context: any value its schema allows
+  const now = yield* DateTime.now; // the time the command is handled at
 
-A helper's failure is handled the way the code handles it, and becomes a rejection only where the code makes it one:
+  if (grams <= 0) return yield* new Empty(); // a rejection: rejects the command
+  if (grams > 100) return yield* new Overweight({ over: grams - 100 }); // a Data.TaggedError or Schema.TaggedError: fails with it
 
-```typescript
-class Overweight extends Data.TaggedError("Overweight")<{ readonly over: number }> {}
+  const total = yield* Effect.fromResult(fits(parcel.grams, grams)).pipe(
+    Effect.mapError((error) => new TooHeavy({ over: error.over })), // a failure becomes a rejection where the code makes it one
+  );
+  for (const item of command.items) yield* weigh(item); // in a loop, a branch or a switch
+  return [new Packed({ grams: total })];
+}),
+```
 
-decide: {
-  Pack: Effect.fn(function* (parcel, command) {
-    const weights = yield* Effect.forEach(command.items, weigh);
-    const total = yield* Effect.fromResult(fits(parcel.grams, Number.sumAll(weights))).pipe(
-      Effect.mapError((error) => new TooHeavy({ over: error.over })),
-    );
-    return [new Packed({ grams: total - parcel.grams })];
-  }),
-},
+```typescript title="Not supported"
+yield* Effect.promise(() => fetch(url)); // the outside world
+yield* Effect.tryPromise(() => fetch(url));
+yield* Effect.sleep("1 second"); // time passing: sleep, delay, a schedule that waits, race, a fiber
+yield a; // yield without the star
+yield* Option.some(a); // an Option or a Result in Effect.gen: use Option.gen, Result.gen, Effect.fromOption, Effect.fromResult
 ```
 
 A defect is not a failure. After `Effect.die`, `Effect.orDie` or a `getOrThrow` on nothing, the command fails and records nothing, and no `catch` after it handles it.
+
+### An effect run again
+
+`Effect.retry` and `Effect.repeat` are proved by running the effect once for each time the code allows. The count is a number the code writes, so there is no loop for the solver to reason about.
+
+```typescript title="Run again"
+const tries = yield* Ref.make(0);
+const attempt = Ref.updateAndGet(tries, (n) => n + 1).pipe(
+  Effect.flatMap((n) => (n < a ? Effect.fail(new Odd({ n })) : Effect.succeed(n))),
+);
+const made = yield* attempt.pipe(Effect.retry(Schedule.recurs(2)), Effect.result);
+```
+
+Each run can succeed or fail, and the proof takes both. Here `a` is a field of the command, and there are four ways through: the first run succeeds (`a` is at most 1), the second does (`a` is 2), the third does (`a` is 3), or all three fail. A rule is checked on each. What one run writes, the next one reads: the third run sees `tries` at 2.
+
+`while` and `until` are called on what the last run gave, and each is one more branch. A count of 2 is cheap. A large count on an effect that branches is not, since every run can double the ways through.
+
+`Effect.repeat(effect, { times: 2 })` gives what the last run gave. `Effect.repeat(effect, Schedule.recurs(2))` gives how many times it ran again, as Effect does.
 
 `Effect.all`, `forEach` and the others run one effect after another. Their `concurrency` option changes nothing a handler can see, since nothing in a handler waits.
 
 ## Streams
 
-A stream is read where it is a list worked through in order: made from values the code has, changed one item at a time, and run to a value.
+A stream is supported where it is a list worked through in order: made from values the code has, changed one item at a time, and run to a value.
 
-```typescript
+```typescript title="Supported"
 const kept = yield* Stream.fromIterable(command.readings).pipe(
   Stream.filter((reading) => reading >= 0),
   Stream.mapEffect(checked),
@@ -247,21 +2386,59 @@ const kept = yield* Stream.fromIterable(command.readings).pipe(
 );
 ```
 
-It is read as the library runs it. A step that runs an effect for each item takes the items one at a time, so a stream that stops early runs the effects the real one runs and no others: above, a reading after the second is never checked, and a failure it would have given never happens.
+A step that runs an effect for each item takes the items one at a time, so a stream that stops early runs the effects the real one runs and no others: above, a reading after the second is never checked, and a failure it would have given never happens.
 
-- **Made with:** `make`, `succeed`, `empty`, `fromIterable`, `fromArray`, `fromEffect`, `fromArrayEffect`, `fromIterableEffect`, `sync`, `suspend`, `unwrap`, `fail`, `die`, `range`, `iterate`, `unfold`, `paginate`.
-- **Changed with:** `map`, `as`, `filter`, `filterMap`, `filterEffect`, `mapEffect`, `tap`, `flatMap`, `take`, `takeWhile`, `takeUntil`, `takeRight`, `drop`, `dropWhile`, `scan`, `mapAccum`, `concat`, `prepend`, `zip`, `zipWith`, `zipWithIndex`, `changes`, `changesWith`, `rechunk`, `grouped`, `drain`.
-- **Failures:** `catch`, `catchTag`, `catchTags`, `catchIf`, `orElseSucceed`, `mapError`, `orDie`.
-- **Run with:** `runCollect`, `runFold`, `runFoldEffect`, `runForEach`, `runForEachWhile`, `runHead`, `runLast`, `runCount`, `runSum`, `runDrain`, `mkString`, and `run` into a sink.
-- **Sinks:** `Sink.collect`, `count`, `sum`, `drain`, `head`, `last`, `take`, `reduce`, `fold`, `every`, `some`, `find`, `forEach`, `succeed`, `fail`, `map`. A sink that has what it wants pulls nothing more.
+Every function of `effect/Stream` and `effect/Sink` that is supported is under [Library functions](#library-functions). A sink that has what it wants pulls nothing more.
 
-`Stream.iterate`, `unfold` and `paginate` may never end. One that is cut with `take` is read; one run to its end is not, and the report says so. A `take` of a count that comes from an input is not read, since how many items that is, is not a thing the prover sees.
+```typescript title="Not supported"
+Stream.iterate(1, (n) => n + 1).pipe(Stream.runCollect); // a stream with no end: cut it with Stream.take(3)
+Stream.take(stream, command.count); // a count an input decides
+Stream.tick("1 second"); // a stream of time: tick, debounce, throttle, a schedule
+Stream.fromQueue(queue); // of a queue or a pub-sub
+Stream.merge(first, second); // which item comes first is not something the code decides
+Stream.mapEffect(stream, checked, { concurrency: 2 });
+```
 
-Not read: a stream of time (`tick`, `debounce`, `throttle`, a schedule), of a queue or a pub-sub, a `merge` of two streams, and `mapEffect` or `flatMap` with a `concurrency` above one. Which item comes first there is not something the code decides.
+## Your own files
+
+A name a handler uses is found where its file declares or imports it, and the file it comes from is held to the same list.
+
+```typescript title="Supported"
+import { canClose, limit as LIMIT } from "./rules.ts";
+import * as Rules from "./rules.ts"; // Rules.hidden is undefined for a name rules.ts does not export
+import byDefault from "./rules.ts";
+import type { Ticket } from "./Ticket.aggregate.ts";
+
+export { canClose as mayClose } from "./rules.ts";
+export * from "./rules.ts";
+export * as rules from "./rules.ts";
+
+const SETTINGS = { step: 5, bounds: [0, 100] };
+const { step, bounds: [low, high] } = SETTINGS; // a pattern at the top of a file
+let calls = 0;
+
+export const isDue = (n: number) => n % step === 0 && within(n); // a function can use what is declared below it
+function within(n: number) {
+  return n >= low && n <= high;
+}
+export default isDue;
+
+export class Overweight extends Data.TaggedError("Overweight")<{ over: number }> {} // a class of effect/Data or effect/Schema that adds nothing
+export enum Kind { Good, Gift } // an exported enum or namespace
+```
+
+```typescript title="Not supported"
+enum Local { Good, Gift } // an enum or a namespace the file does not export
+class Parcel {
+  grams = 0; // a class with a body
+}
+```
+
+Two files can import each other.
 
 ## Your own packages
 
-Rules that several aggregates share often live in a package of their own. Its code is read like the files of the model:
+Rules that several aggregates share often live in a package of their own. Its code is held to the same list as the files of the model:
 
 ```typescript title="packages/domain/src/Ticket.aggregate.ts"
 import { canClose } from "@acme/rules";
@@ -317,18 +2494,18 @@ export class Pay extends Domain.Decision(PayRef, {
 
 In `keyOf`, what `nameOf` returns is an id: the accounts read are the ones it names. Compared with `from.id` it is text, and next to a number or a boolean it is one of those. `Option.isNone(versionOf(cmd.ref))` takes the result for an `Option`: a `None` on one path, and a `Some` of a value the prover does not look inside on another.
 
-A result that is spread, looped over, or read with an array's `map`, `filter` and the like is a list of up to two items, so `keyOf: (cmd) => ({ to: [...partsOf(cmd.to)] })` reads one account for each. Its rule is then checked for short lists only. A number is any number: nothing says the function gives a whole one. It is compared with `<` and `===`, and a sum or a product of it is not read.
+A result that is spread, looped over, or read with an array's `map`, `filter` and the like is a list of up to two items, so `keyOf: (cmd) => ({ to: [...partsOf(cmd.to)] })` reads one account for each. Its rule is then checked for short lists only. A number is any number: nothing says the function gives a whole one. It is compared with `<` and `===`, and a sum or a product of it is not supported.
 
-A rule that reads into the result any other way is not proved, and the report says which function stands in the way, and why it was not read:
+A rule that reads into the result any other way is not proved, and the report says which function stands in the way, and why:
 
 ```text
-Not read
+Not supported
   Ticket.aggregate.ts:32  reads .length of what idOf returned, which the prover does not look inside: idOf reads .update of what createHash returned, which the prover does not look inside: createHash is a function of node:crypto, which is not code the prover reads
 ```
 
 Where the prover runs your real code, to confirm a counterexample or to check its own reading, it calls the real function. A counterexample is always one the real `idOf` produces.
 
-This takes the function to be pure: the same result for the same arguments, and nothing changed. The report lists each such function under what it assumes. A function is never taken to be pure when what stops the prover could make it otherwise: a global such as `Date` or `Math.random`, a package function the prover has no model for, or a change to a value it was given. That code is reported as not read.
+This takes the function to be pure: the same result for the same arguments, and nothing changed. The report lists each such function under what it assumes. A function is never taken to be pure when what stops the prover could make it otherwise: a global such as `Date` or `Math.random`, a package function the prover has no model for, or a change to a value it was given. That code is reported.
 
 Where you know such a function is pure, name it. A function the prover could read can be named too, to keep its body out of the proof:
 
@@ -340,7 +2517,18 @@ Verify.aggregate(Ticket, { opaque: [DateTime.formatIso] });
 
 ## What a handler is given
 
-`decide` is read with its three arguments: the state, the command, and the context with `id`, `now`, `commandId`, `stream` and `version`. `now` is any time, so a rule that depends on the clock is proved for every time. `evolve` is read with the state, the event and its envelope.
+```typescript
+decide: {
+  // the state, the command, and the context: id, now, commandId, stream and version
+  Renew: (lease, command, { id, now, commandId, stream, version }) => [new Renewed({ until: now })],
+},
+evolve: {
+  // the state, the event and its envelope
+  Renewed: (lease, event, envelope) => ({ ...lease, until: event.until, renewals: envelope.seq }),
+},
+```
+
+`now` is any time, so a rule that depends on the clock is proved for every time.
 
 The clock inside `decide` is that same `now`. `yield* DateTime.now` and `yield* Clock.currentTimeMillis` give the time the command is handled at, in the proof and when the command runs:
 
@@ -352,22 +2540,93 @@ Renew: Effect.fn(function* (lease) {
 }),
 ```
 
-A time is compared and moved in whole milliseconds. A month and a year are not one length, so `DateTime.add(time, { months: 1 })` is not read. The clock anywhere but `decide` is not the time of a command, and is not read.
+A time is compared and moved in whole milliseconds. A month and a year are not one length, so `DateTime.add(time, { months: 1 })` is not supported, and neither is the clock anywhere but `decide`, where it is not the time of a command.
 
 A request context a handler yields is any value its schema allows. Middleware is not run, so a rule is proved for every caller, including ones your middleware would turn away.
 
-## When code is not read
+## When code is not supported
 
-A rule whose command meets unread code is not proved, and the verification fails. The line in the report says what to change:
+A rule whose command meets unsupported code is not proved, and the verification fails. The line in the report says what to change:
 
 ```text
-Not read
+Not supported
   Label.aggregate.ts:23  reads .localeCompare of a string
 ```
 
-Rewrite the line with what is read, or put it in an exported function, which is then [opaque](#opaque-functions). You can also move it out of the handler: compute it where the command is built and pass the result in as a field. What `decide` then checks is the field, which the prover reads.
+Rewrite the line with what is supported, or put it in an exported function, which is then [opaque](#opaque-functions). You can also move it out of the handler: compute it where the command is built and pass the result in as a field. What `decide` then checks is the field.
 
-A policy's or a saga's handler is read the same way when the model is searched. One the search cannot follow fails the check until it is allowed by name:
+### What a line says, and what to write
+
+Each kind of line has one change that fixes it. The first line of each pair is what the report prints.
+
+```typescript title="What the report says, and what to write"
+// calls Math.sqrt, which the prover has no model for
+// refers to JSON, which the prover cannot find
+// calls toUpperCase on a string an input holds, in a way the prover does not translate
+//   There is nothing to rewrite it with. Put the call in an exported function,
+//   or compute it where the command is built and pass the result in as a field.
+
+// divides with / in a way the prover does not translate
+Math.floor(a / 2); // divide by a number the code writes, and say how it rounds
+
+// applies * to numbers that may not be whole, which JavaScript rounds and the prover does not
+BigDecimal.multiply(amount, RATE); // keep the number whole, or in a BigDecimal
+
+// loops a number of times that depends on an input
+for (const n of items) total += n; // go over a list, or count up to a number the code writes
+
+// pushes onto an array it was given, which changes it
+// changes a value it was given
+[...items, a]; // make a new one
+
+// reads a property by a key the prover cannot see
+HashMap.get(roster.points, person); // look a key from an input up in a HashMap
+
+// uses ==, where the prover reads ===
+a === b;
+
+// uses a TryStatement, which the prover does not read
+//   Fail with a Data.TaggedError and handle it with Effect.catchTag.
+
+// calls Effect.retry without a count of times the prover can see
+// calls Schedule.spaced, which the prover has no model for
+Effect.retry(even(a), { times: 2 }); // a count the code writes
+Effect.retry(even(a), Schedule.recurs(2));
+
+// takes from a Queue with nothing in it
+// waits for a Deferred the handler has not completed
+//   The deployed handler would never finish here. Ask without waiting:
+Queue.poll(line);
+Deferred.poll(done);
+```
+
+### The last line of a proof
+
+A proof ends by saying how it was held against the real code. For each way through a command the prover picks inputs, runs the real `decide` and `evolve` on them, and compares.
+
+```text title="Nothing to do"
+Agreed with the real code: inputs picked for each of 86 paths through the commands did what the prover read
+```
+
+```text title="Nothing to do: the order of a hash set"
+Agreed with the real code: inputs picked for each of 86 paths through the commands did what the prover read (12 more could not be run: 12 take the items of a hash set or a hash map in an order the real one does not give)
+```
+
+The prover reads every order a `HashSet` or a `HashMap` could give its items in, and the real one gives one. The order it gives is compared on its own path.
+
+```text title="Proved, and not run"
+Agreed with the real code: inputs picked for each of 86 paths through the commands did what the prover read (3 more could not be run: the prover cannot build the inputs of 3)
+```
+
+The prover picked inputs it could not run: a value it cannot build as a real one, or inputs a schema check it does not support refuses. The report lists such a check under "Schema checks not supported". The rules are still proved on those paths. They were not run on the real code as well.
+
+```text title="A bug in the prover"
+✗ The real code does something else on 1 of the 86 paths compared
+```
+
+The prover read a line of code wrongly, and the rules of that command are not proved. The line under it names the inputs and what each side did. Put the code it names in an exported function, which the prover then does not read, and [report it](https://github.com/alchemy-run/alchemy/issues).
+
+A policy's or a saga's handler is held to the same list when the model is searched. One the search cannot follow fails the check until it is allowed by name:
 
 ```typescript
 Verify.model(Bank, {

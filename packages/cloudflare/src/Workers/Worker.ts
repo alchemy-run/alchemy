@@ -1036,8 +1036,11 @@ export interface WorkerProps<
    * When Alchemy bundles {@link main}, rules add to the built-in ones
    * (`.wasm`, `.bin`, `.txt`, `.html`, `.sql`) and are checked first: an
    * imported file that matches is uploaded as a module instead of bundled.
-   * JavaScript, TypeScript and JSON are always bundled, and imports inside
-   * nested `?worker` modules don't use rules. For files outside the entry's
+   * JavaScript and TypeScript are always bundled, and imports inside
+   * nested `?worker` modules don't use rules. JSON is bundled unless a rule
+   * matches it: `{ type: "Text", globs: ["**\/openapi.json"] }` uploads a
+   * large document as a string module instead of an object literal the
+   * Worker builds at startup. For files outside the entry's
    * directory, globs may start with `../` or be absolute. `!` globs exclude
    * across your rules; an excluded `.txt` or `.wasm` still matches the
    * built-in rules.
