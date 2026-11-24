@@ -27,15 +27,18 @@ abbrev Api : Rpc where
 
 /-! ## The Workers -/
 
+/-- Stores a message under the next number. -/
+helper store {role : Access Kind} (mail : Bucket) (message : String) : Run role Never Unit := do
+  let stored ← R2.list mail
+  R2.put mail (toString stored.length) message
+
 /--
 Accepts messages over HTTP and puts them on a queue; consumes the queue and
 stores each message; tells other Workers what is stored.
 -/
 def Inbox (mail : Bucket) (incoming : Queue) : Construct Kind (Worker Api) :=
   Workers.Worker "Inbox" {} Api do
-    Queues.consume incoming fun message => do
-      let stored ← R2.list mail
-      R2.put mail (toString stored.length) message
+    Queues.consume incoming fun message => store mail message
 
     return {
       fetch := fun request => do
@@ -135,5 +138,24 @@ theorem whoCallsWhom :
     prod.whoCan ⟨.worker, inbox, WorkerOp.call⟩ = ["Web"] ∧
       prod.whoCan ⟨.worker, web, WorkerOp.call⟩ = [] := by
   constructor <;> rfl
+
+/-! ## What the consumer does, for every message -/
+
+/--
+Given whatever mail is stored, when a message is consumed, then it is stored
+under the next number: one more than the mail already there.
+-/
+theorem aConsumedMessageIsStoredNext {role : Access Kind}
+    [Has role (.on mail BucketOp.read)] [Has role (.on mail BucketOp.write)]
+    (message : String) (cloud : Memory) :
+    ((store (role := role) mail message).eval (InMemory prod) cloud).2.object mail
+        (toString (cloud.keys mail).length)
+      = some message := by
+  show (Run.eval (InMemory prod) (Run.bind _ _) cloud).2.object mail _ = _
+  rw [Run.eval_bind, R2.list_eval]
+  show (Run.eval (InMemory prod) (R2.put mail (toString (cloud.keys mail).length) message) cloud).2.object
+    mail _ = _
+  rw [R2.put_eval]
+  exact Memory.object_written cloud mail _ message
 
 end Inbox

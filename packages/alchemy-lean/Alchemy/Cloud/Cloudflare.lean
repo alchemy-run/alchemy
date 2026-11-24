@@ -1,6 +1,7 @@
 import Alchemy.Cloud.Host
 import Alchemy.Cloud.Infer
 import Alchemy.Cloud.Tactics
+import Alchemy.Cloud.Laws
 import Alchemy.Cloud.Hosted
 
 /-!
@@ -334,10 +335,66 @@ def simulate (g : Graph Kind) :
             | _ => none, out.state, out.events)
 
 /-- Cloudflare, in memory, running the Workers of a graph. -/
-def InMemory (g : Graph Kind) (depth : Nat := 8) : Sim Kind where
+abbrev InMemory (g : Graph Kind) (depth : Nat := 8) : Sim Kind where
   State := Memory
   init := {}
   call := simulate g depth
+
+/-! ## What the operations do
+
+Each operation, against the model: what it answers and what it leaves.
+-/
+
+/-- What was just written at a key is what the bucket holds there. -/
+theorem Memory.object_written (m : Memory) (bucket : Cloudflare.Bucket) (key body : String) :
+    ({ m with
+        objects := (m.objects.filter fun (id, k, _) => !(id == bucket.id && k == key))
+          ++ [(bucket.id, key, body)] } : Memory).object bucket key = some body := by
+  simp only [Memory.object, List.find?_append]
+  rw [List.find?_eq_none.mpr]
+  · simp
+  · intro x mem
+    simp only [List.mem_filter] at mem
+    have differs := mem.2
+    simp only [Bool.not_eq_true', Bool.and_eq_false_iff, beq_eq_false_iff_ne] at differs
+    intro same
+    simp only [Bool.and_eq_true, beq_iff_eq] at same
+    rcases differs with n | n
+    · exact n same.1
+    · exact n same.2
+
+section Laws
+variable {role : Access Kind} (g : Graph Kind) (depth : Nat)
+
+/-- Reading answers what the bucket holds at the key, and changes nothing. -/
+theorem R2.get_eval (bucket : Cloudflare.Bucket) (key : String)
+    [Has role (.on bucket BucketOp.read)] (m : Memory) :
+    (R2.get (role := role) bucket key).eval (InMemory g depth) m = (.ok (m.object bucket key), m) := by
+  cases depth <;> rfl
+
+/-- Listing answers the bucket's keys, and changes nothing. -/
+theorem R2.list_eval (bucket : Cloudflare.Bucket) [Has role (.on bucket BucketOp.read)]
+    (m : Memory) :
+    (R2.list (role := role) bucket).eval (InMemory g depth) m = (.ok (m.keys bucket), m) := by
+  cases depth <;> rfl
+
+/-- Writing leaves the object at the key, replacing whatever was there. -/
+theorem R2.put_eval (bucket : Cloudflare.Bucket) (key body : String)
+    [Has role (.on bucket BucketOp.write)] (m : Memory) :
+    (R2.put (role := role) bucket key body).eval (InMemory g depth) m
+      = (.ok (), { m with
+          objects := (m.objects.filter fun (id, k, _) => !(id == bucket.id && k == key))
+            ++ [(bucket.id, key, body)] }) := by
+  cases depth <;> rfl
+
+/-- Sending records the message, and touches no object. -/
+theorem Queues.send_eval (queue : Cloudflare.Queue) (body : String)
+    [Has role (.on queue QueueOp.send)] (m : Memory) :
+    (Queues.send (role := role) queue body).eval (InMemory g depth) m
+      = (.ok (), { m with sent := m.sent ++ [(queue.id, body)] }) := by
+  cases depth <;> rfl
+
+end Laws
 
 /-- A test's expectation: the Worker answers exactly this over HTTP. -/
 def responds (expected : Response) : Cloud.Response Kind.worker → Bool :=

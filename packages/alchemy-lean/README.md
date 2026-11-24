@@ -329,9 +329,7 @@ A Cloudflare Worker is the same, and ends with `fetch` and typed methods other W
 ```lean
 def Inbox (mail : Bucket) (incoming : Queue) : Construct Kind (Worker Api) :=
   Workers.Worker "Inbox" {} Api do
-    Queues.consume incoming fun message => do
-      let stored ← R2.list mail
-      R2.put mail (toString stored.length) message
+    Queues.consume incoming fun message => store mail message
 
     return {
       fetch := fun request => do
@@ -551,4 +549,4 @@ In the editor, `#eval` shows any of it without running a program.
 - A host handles one request at a time, by design.
 - `model` takes one saga and string ids. Streams, queries and actors are written without it.
 - The request theorems assume JSON written to the journal reads back as written.
-- Cloudflare has no control-plane model, so no plan, and its operations have no laws.
+- Cloudflare has no control-plane model, so its stacks have a graph but no plan.
