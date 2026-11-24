@@ -2,6 +2,7 @@ import Lean
 import Alchemy.Attr
 import Alchemy.Model
 import Alchemy.History
+import Alchemy.Caused
 import Alchemy.Reads
 import Alchemy.Cloud.Hosted
 import Alchemy.Codec
@@ -264,6 +265,11 @@ macro_rules
 
 /-- An aggregate, by the namespace that defines it. -/
 syntax &"aggregate " ident : modelItem
+/--
+An aggregate callers cannot command: only the model's own policies and sagas
+send it commands.
+-/
+syntax &"internal " &"aggregate " ident : modelItem
 /-- A call to a system outside the model, and what it answers. -/
 syntax &"call " ident callBinder* " : " term : modelItem
 /-- What to do whenever an aggregate records an event: `| id, event => …`. -/
@@ -329,6 +335,7 @@ macro_rules
     let mut views : Array Ident := #[]
     let mut projections : Array Ident := #[]
     let mut decisions : Array Ident := #[]
+    let mut internals : Array Ident := #[]
     let mut streams : Array Ident := #[]
     let mut queries : Array Ident := #[]
     let mut decisionCommands : Array Term := #[]
@@ -341,6 +348,9 @@ macro_rules
     for item in items do
       match item with
       | `(modelItem| aggregate $a:ident) => aggregates := aggregates.push a
+      | `(modelItem| internal aggregate $a:ident) =>
+        aggregates := aggregates.push a
+        internals := internals.push a
       | `(modelItem| call $c:ident $binders* : $reply:term) =>
         let mut ctorBinders := #[]
         let mut arguments : Array Ident := #[]
@@ -645,6 +655,13 @@ macro_rules
       else match sagas[0]? with
         | some (g, _, _, _) => `($(under m (g.getId ++ `run)))
         | none => `(fun _ _ => Alchemy.Program.pure ())
+    let publics := aggregates.filter fun a => !internals.any (·.getId == a.getId)
+    let offeredTerm : Term ← if internals.isEmpty then `(fun _ => True) else do
+      let closed ← internals.mapM fun a =>
+        `(Term.matchAltExpr| | $(under (under m `Name) a.getId):ident => False)
+      let closed : Array (TSyntax ``Term.matchAlt) :=
+        (closed.push (← `(Term.matchAltExpr| | _ => True))).map fun alt => ⟨alt.raw⟩
+      `(fun s => match s.to with $closed:matchAlt*)
     commands := commands.push (← `(command|
       $[$doc:docComment]? abbrev $m:ident : Alchemy.Model where
         name := $(text m)
@@ -655,7 +672,8 @@ macro_rules
         projections := [$[$(projections.map (under m ·.getId))],*]
         streams := [$[$(streams.map (under m ·.getId))],*]
         queries := [$[$(queries.map (under m ·.getId))],*]
-        saga := $sagaRun))
+        saga := $sagaRun
+        offered := $offeredTerm))
     -- What callers send, how the model is served, and each aggregate's rules lifted to the model.
     commands := commands.push (← `(command| namespace $m))
     -- The model as it is stored: its policies and views look at an event as it is, so each
@@ -728,14 +746,14 @@ macro_rules
       /-- Everything the model asks of its host. -/
       abbrev $(mkIdent `Services) (μ : Type → Type) := Alchemy.Services μ $signature $readsId))
     let input := mkIdent `Input
-    let inputCtors ← aggregates.mapM fun a =>
+    let inputCtors ← publics.mapM fun a =>
       `(Command.ctor| | $a:ident (command : $(rooted a `Command))
           (actor : $(rooted a `Actor) := by exact default))
     commands := commands.push (← `(command|
       /-- What callers send: a command for one of the aggregates. -/
       inductive $input where $inputCtors*))
     commands := commands.push (← `(command| derive_tokens $input))
-    let commandAlts ← aggregates.mapM fun a =>
+    let commandAlts ← publics.mapM fun a =>
       `(Term.matchAltExpr| | $(under input a.getId):ident command actor =>
           ⟨$(under name a.getId), actor, command⟩)
     let served := mkIdent `served
@@ -744,7 +762,8 @@ macro_rules
         /-- How the model is spoken to: callers send commands, and its history is written as JSON. -/
         abbrev $served : Alchemy.Cloud.Served $(rooted m) where
           Input := $input
-          command := fun input => match input with $commandAlts:matchAlt*))
+          command := fun input => match input with $commandAlts:matchAlt*
+          offered := by intro input; cases input <;> exact True.intro))
     else
       let deciding := mkIdent `Deciding
       let decidingCtors ← (decisions.zip decisionCommands).mapM fun (d, command) =>
@@ -766,6 +785,7 @@ macro_rules
         abbrev $served : Alchemy.Cloud.Served $(rooted m) where
           Input := $input
           command := fun input => match input with $commandAlts:matchAlt*
+          offered := by intro input; cases input <;> exact True.intro
           Deciding := $deciding
           decision := fun input => match input with $decisionAlts:matchAlt*))
     for a in aggregates do

@@ -99,7 +99,8 @@ derive_tokens Charge
 
 model Shop where
   aggregate Order
-  aggregate Shipment
+  -- nobody asks for a shipment: one is scheduled because an order was paid
+  internal aggregate Shipment
 
   call charge (order : String) (amount : Nat) : Charge
   call ship (order item : String) : Unit

@@ -5,6 +5,7 @@ import Alchemy.Program
 import Alchemy.View
 import Alchemy.Model
 import Alchemy.History
+import Alchemy.Caused
 import Alchemy.Engine
 import Alchemy.Stored
 import Alchemy.Refines
