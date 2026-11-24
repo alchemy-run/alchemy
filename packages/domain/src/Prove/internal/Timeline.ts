@@ -223,16 +223,35 @@ const unseeded = (timeline: Timeline, site: Site): Random.Random => {
   return { nextIntUnsafe: draw, nextDoubleUnsafe: draw };
 };
 
-/** The clock the library reads while it runs a handler: its time stands still, and a sleep is the timeline's. */
-const clockOf = (timeline: Timeline): Clock.Clock => ({
-  currentTimeMillisUnsafe: () => 0,
-  currentTimeMillis: Effect.succeed(0),
-  currentTimeNanosUnsafe: () => 0n,
-  currentTimeNanos: Effect.succeed(0n),
-  monotonicTimeNanosUnsafe: () => 0n,
-  monotonicTimeNanos: Effect.succeed(0n),
-  sleep: (duration) => timeline.instant.sleep(Duration.toMillis(duration)),
-});
+/** How many waits one handler may make before the prover stops: one that waits again and again never ends. */
+const MAX_WAITS = 10_000;
+
+/**
+ * The clock the library reads while it runs a handler. Its time stands still,
+ * as a handler's does: the time it reads is the time the command is handled
+ * at, however long it waits. A sleep is the timeline's.
+ */
+const clockOf = (timeline: Timeline, site: Site): Clock.Clock => {
+  let waits = 0;
+  return {
+    currentTimeMillisUnsafe: () => 0,
+    currentTimeMillis: Effect.succeed(0),
+    currentTimeNanosUnsafe: () => 0n,
+    currentTimeNanos: Effect.succeed(0n),
+    monotonicTimeNanosUnsafe: () => 0n,
+    monotonicTimeNanos: Effect.succeed(0n),
+    sleep: (duration) => {
+      if (++waits <= MAX_WAITS) return timeline.instant.sleep(Duration.toMillis(duration));
+      // A deadline the library works out from the clock never comes, since the clock does not move.
+      const stop = Value.notTranslated(
+        site,
+        `waits more than ${MAX_WAITS} times: the handler would never end`,
+      );
+      timeline.fatal ??= stop;
+      return Effect.die(new Fatal(stop));
+    },
+  };
+};
 
 /**
  * Read a handler on a timeline of its own. It ends when its own fiber does.
@@ -262,7 +281,7 @@ export const run = <A>(current: () => Run, site: Site, self: Eval<A>): Eval<A> =
     const fiber = Effect.runFork(
       self.pipe(
         Effect.provideService(Current, timeline),
-        Effect.provideService(Clock.Clock, clockOf(timeline)),
+        Effect.provideService(Clock.Clock, clockOf(timeline, site)),
         Effect.provideService(Random.Random, unseeded(timeline, site)),
       ),
       { scheduler: timeline.instant.scheduler },

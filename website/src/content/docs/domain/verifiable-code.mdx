@@ -2575,6 +2575,63 @@ Effect.provideServiceEffect(Effect.map(Rate, (rate) => rate.percent), Rate, Effe
 Effect.provideContext(priced, Context.make(Rate, { percent: 1 }).pipe(Context.add(Fee, { flat: a })));
 ```
 
+```typescript title="More of effect/Stream"
+// Each is the library's own, given the code's functions and streams, on the handler's clock.
+Stream.onStart(log(seen, "start"));
+Stream.onFirst((n) => log(seen, n));
+Stream.onEnd(log(seen, "end"));
+Stream.ensuring(log(seen, "closed"));
+Stream.onExit((exit) => log(seen, Exit.isSuccess(exit)));
+Stream.onError((cause) => log(seen, "error"));
+Stream.tapError((error) => log(seen, error.n));
+Stream.tapCause((cause) => log(seen, Cause.hasFails(cause)));
+Stream.tapBoth({ onElement: (n) => log(seen, n), onError: (error) => log(seen, "no") });
+Stream.catchCause((cause) => Stream.make(Cause.hasFails(cause) ? -1 : -2));
+Stream.catchCauseIf(Cause.hasFails, () => Stream.make(0));
+Stream.ignore;
+Stream.ignoreCause;
+Stream.mapBoth({ onElement: (n) => n + 1, onError: (error) => error.n });
+Stream.result; // each item as a Result, and a failure as the last one
+Stream.flatten(); // a stream of streams
+Stream.flattenEffect(); // a stream of effects
+Stream.flattenIterable;
+Stream.flattenArray;
+Stream.switchMap((n) => Stream.make(n, n + 1));
+Stream.forever;
+Stream.scanEffect(() => a, (sum, n) => Effect.succeed(sum + n));
+Stream.mapAccumEffect(() => 0, (sum, n) => Effect.succeed([sum + n, [n, sum + n]]));
+Stream.takeWhileEffect((n) => Effect.succeed(n < 3));
+Stream.takeUntilEffect((n) => Effect.succeed(n > 1));
+Stream.dropWhileEffect((n) => Effect.succeed(n < 2));
+Stream.dropUntilEffect((n) => Effect.succeed(n > 1));
+Stream.dropUntil((n) => n > 1);
+Stream.dropRight(1);
+Stream.intersperse(0);
+Stream.intersperseAffixes({ start: "[", middle: ",", end: "]" });
+Stream.sliding(2);
+Stream.chunks;
+Stream.repeatElements(Schedule.recurs(1));
+Stream.timeoutOrElse({ duration: "5 seconds", orElse: () => Stream.make(-1) });
+Stream.mergeEffect(Effect.sleep(1));
+Stream.orElseIfEmpty(() => Stream.make(a));
+Stream.interleave(Stream.make(a, b), Stream.make(1, 2, 3));
+Stream.mergeLeft(paced(1, a), paced(2, b));
+Stream.mergeRight(Stream.make(a, b));
+Stream.cross(Stream.make(a, b), Stream.make(1, 2));
+Stream.crossWith(Stream.make(1, 2), (left, right) => left * right);
+Stream.bindTo("x");
+Stream.bind("y", ({ x }) => Stream.make(x + 1));
+Stream.let("z", ({ x, y }) => x + y);
+Stream.fromEffectDrain(Effect.succeed(a));
+Stream.fromEffectRepeat(Ref.updateAndGet(turns, (n) => n + 1));
+Stream.fromEffectSchedule(Ref.updateAndGet(turns, (n) => n + b), Schedule.recurs(2));
+Stream.failSync(() => a);
+Stream.fromArrays([a, b], [3]);
+Stream.runForEachArray(Stream.make(a, b), (chunk) => log(seen, chunk.length));
+Stream.runIntoQueue(Stream.make(a, b), queue);
+Stream.isStream(a);
+```
+
 ```typescript title="effect/Layer, effect/Context and services"
 // A service is an effect that gives what the code around provides for it.
 Effect.provideService(Effect.map(Rate, (rate) => rate.percent + a), Rate, { percent: b });
@@ -3307,6 +3364,7 @@ Stream.iterate(1, (n) => n + 1).pipe(Stream.runCollect); // a stream with no end
 Stream.take(stream, command.count); // a count an input decides, where it may be below 0 or above 64
 Stream.tick("1 second").pipe(Stream.runCollect); // a stream of time with no end: cut it with Stream.take(3)
 Stream.never.pipe(Stream.runCollect); // a stream that gives nothing and does not end
+Stream.never.pipe(Stream.timeout("1 second"), Stream.runCollect); // a stream's time limit is worked out from the clock, which a handler's does not move
 Stream.merge(paced(3, a), paced(3, b)).pipe(Stream.runCollect); // two items that come at the same moment
 Stream.throttle(stream, { cost: (chunk) => chunk[0], units: 1, duration: 1 }); // a cost an input decides: the library asks for it at once
 ```

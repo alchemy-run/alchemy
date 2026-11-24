@@ -1,13 +1,16 @@
 import * as Cause from "effect/Cause";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import type * as PubSub from "effect/PubSub";
 import * as Pull from "effect/Pull";
 import type * as Queue from "effect/Queue";
+import * as Result from "effect/Result";
 import type * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as Brands from "../Brands.ts";
 import type { Kit, Model, Models } from "../Kit.ts";
 import { arr, callable, dualBy, native, wrongArguments } from "../Kit.ts";
 import * as Timeline from "../Timeline.ts";
@@ -48,6 +51,8 @@ export interface Tools {
     v: V | undefined,
   ) => A | undefined;
   readonly plainOf: (v: V | undefined) => unknown;
+  readonly exitOf: (timeline: Timeline.Timeline, exit: Exit.Exit<unknown, unknown>) => Eval<V>;
+  readonly sure: <A>(self: Effect.Effect<A, Held>) => Effect.Effect<A>;
 }
 
 /**
@@ -437,6 +442,392 @@ export const make = (kit: Kit, base: Models, tools: Tools) => {
       );
     }),
   };
+
+  // ---- More of `Stream`, each the library's own, given the code's functions and streams.
+
+  /** What the models of one function hand the library, for the handler that runs the stream. */
+  const handing = (timeline: Timeline.Timeline, name: string, site: Site) => {
+    const wrong = <A>(): Effect.Effect<A, Held> =>
+      Timeline.real(timeline, wrongArguments(site, name));
+    /** A function of the code that gives an effect or a plain value. */
+    const fn =
+      (f: V | undefined) =>
+      (...args: ReadonlyArray<V>): Effect.Effect<V, Held> =>
+        f && callable(f)
+          ? Timeline.real(
+              timeline,
+              Effect.flatMap(host.call(f, args, site), (made) =>
+                made._tag === "Effect" ? made.run : Effect.succeed(made),
+              ),
+            )
+          : wrong();
+    const test =
+      (f: V | undefined) =>
+      (...args: ReadonlyArray<V>): Effect.Effect<boolean, Held> =>
+        Effect.flatMap(fn(f)(...args), (v) => Timeline.real(timeline, host.decide(v, site)));
+    const eff = (v: V | undefined): Effect.Effect<V, Held> =>
+      tools.effectOf(timeline, v, site) ?? wrong();
+    /** A stream the code gives, or one a function of the code gives. */
+    const sub = (v: V | undefined): Real =>
+      isFlow(v) ? real(timeline, v) : Stream.unwrap(Effect.as(wrong<never>(), Stream.empty));
+    const inner =
+      (f: V | undefined) =>
+      (...args: ReadonlyArray<V>): Real =>
+        Stream.unwrap(Effect.map(fn(f)(...args), sub));
+    const cause = (failed: Cause.Cause<unknown>): Effect.Effect<V, Held> =>
+      Effect.map(Timeline.real(timeline, tools.exitOf(timeline, Exit.failCause(failed))), (exit) =>
+        exit._tag === "Obj" ? (exit.fields.cause ?? Value.undef) : Value.undef,
+      );
+    const exit = (ended: Exit.Exit<unknown, unknown>): Effect.Effect<V, Held> =>
+      Timeline.real(timeline, tools.exitOf(timeline, ended));
+    const read = <A>(self: Eval<A>): Effect.Effect<A, Held> => Timeline.real(timeline, self);
+    return { timeline, name, site, wrong, fn, test, eff, sub, inner, cause, exit, read };
+  };
+  type Handing = ReturnType<typeof handing>;
+
+  /** A function of a stream that gives a stream: the library's, on the stream as its own. */
+  const lift = (
+    name: string,
+    build: (to: Handing, self: Real, rest: ReadonlyArray<V>) => Stream.Stream<V, unknown>,
+  ): Model =>
+    on(name, (timeline, self, rest, site) =>
+      Effect.sync(() =>
+        flow(timeline, build(handing(timeline, name, site), self, rest), site, same),
+      ),
+    );
+  /** A function of two streams. */
+  const lift2 = (
+    name: string,
+    build: (
+      to: Handing,
+      self: Real,
+      that: Real,
+      rest: ReadonlyArray<V>,
+    ) => Stream.Stream<V, unknown>,
+  ): Model =>
+    pairing(name, (timeline, self, that, rest, site) =>
+      Effect.sync(() =>
+        flow(timeline, build(handing(timeline, name, site), self, that, rest), site, same),
+      ),
+    );
+  /** A stream made of values the code has, when it is opened. */
+  const source =
+    (
+      name: string,
+      build: (to: Handing, args: ReadonlyArray<V>) => Stream.Stream<V, unknown>,
+    ): Model =>
+    (args, site) =>
+      Effect.succeed(
+        timed(name, site, (timeline) =>
+          Effect.sync(() => flow(timeline, build(handing(timeline, name, site), args), site, same)),
+        ),
+      );
+  /** An effect of a stream. */
+  const ran_ = (
+    name: string,
+    body: (to: Handing, self: Real, rest: ReadonlyArray<V>) => Effect.Effect<V, unknown>,
+  ): Model =>
+    dualBy(name, isFlow, ([self, ...rest], site) =>
+      isFlow(self)
+        ? Effect.succeed<V>({
+            _tag: "Effect",
+            run: Effect.flatMap(Timeline.current(site, `runs ${name}`), (timeline) =>
+              Timeline.back(
+                timeline,
+                body(handing(timeline, name, site), real(timeline, self), rest),
+                same,
+              ),
+            ),
+          })
+        : wrongArguments(site, name),
+    );
+  const failing = (rejection: V): Stream.Stream<never, Held> =>
+    Stream.fail(new Value.Rejected({ rejection }));
+  const rejectionOf = (error: unknown): V =>
+    typeof error === "object" && error !== null && "_tag" in error && error._tag === "Rejected"
+      ? (error as Held).rejection
+      : Timeline.errorOf(error);
+  /** A function of an error of the code, given the error the library holds. */
+  const failed =
+    <A>(use: (rejection: V) => A) =>
+    (error: unknown): A =>
+      use(rejectionOf(error));
+  const field = (v: V | undefined, key: string): V | undefined =>
+    v?._tag === "Obj" ? v.fields[key] : undefined;
+  const readOptions = <A>(v: V | undefined): A | undefined =>
+    v === undefined || v._tag === "Undef" ? undefined : (tools.plainOf(v) as A | undefined);
+
+  Object.assign(models, {
+    "effect/Stream:isStream": ([value]: ReadonlyArray<V>) =>
+      Effect.succeed(Value.bool(isFlow(value))),
+    "effect/Stream:ensuring": lift("Stream.ensuring", (to, self, [effect]) =>
+      Stream.ensuring(self, tools.sure(to.eff(effect))),
+    ),
+    "effect/Stream:onExit": lift("Stream.onExit", (to, self, [f]) =>
+      Stream.onExit(self, (ended) =>
+        tools.sure(Effect.flatMap(to.exit(ended), (held) => to.fn(f)(held))),
+      ),
+    ),
+    "effect/Stream:onEnd": lift("Stream.onEnd", (to, self, [effect]) =>
+      Stream.onEnd(self, to.eff(effect)),
+    ),
+    "effect/Stream:onStart": lift("Stream.onStart", (to, self, [effect]) =>
+      Stream.onStart(self, to.eff(effect)),
+    ),
+    "effect/Stream:onFirst": lift("Stream.onFirst", (to, self, [f]) =>
+      Stream.onFirst(self, (item) => to.fn(f)(item)),
+    ),
+    "effect/Stream:onError": lift("Stream.onError", (to, self, [f]) =>
+      Stream.onError(self, (cause) =>
+        tools.sure(Effect.flatMap(to.cause(cause), (held) => to.fn(f)(held))),
+      ),
+    ),
+    "effect/Stream:tapError": lift("Stream.tapError", (to, self, [f]) =>
+      Stream.tapError(self, failed(to.fn(f))),
+    ),
+    "effect/Stream:tapCause": lift("Stream.tapCause", (to, self, [f]) =>
+      Stream.tapCause(self, (cause) => Effect.flatMap(to.cause(cause), (held) => to.fn(f)(held))),
+    ),
+    "effect/Stream:tapBoth": lift("Stream.tapBoth", (to, self, [given]) =>
+      Stream.tapBoth(self, {
+        onElement: (item) => to.fn(field(given, "onElement"))(item),
+        onError: failed(to.fn(field(given, "onError"))),
+      }),
+    ),
+    "effect/Stream:catchCause": lift("Stream.catchCause", (to, self, [f]) =>
+      Stream.catchCause(self, (cause) =>
+        Stream.unwrap(Effect.map(to.cause(cause), (held) => to.inner(f)(held))),
+      ),
+    ),
+    "effect/Stream:catchCauseIf": lift("Stream.catchCauseIf", (to, self, [test, f]) =>
+      Stream.catchCause(self, (cause) =>
+        Stream.unwrap(
+          Effect.flatMap(to.cause(cause), (held) =>
+            Effect.map(to.test(test)(held), (holds): Stream.Stream<V, unknown> =>
+              holds ? to.inner(f)(held) : Stream.failCause(cause),
+            ),
+          ),
+        ),
+      ),
+    ),
+    "effect/Stream:ignore": lift("Stream.ignore", (_, self) => Stream.ignore(self)),
+    "effect/Stream:ignoreCause": lift("Stream.ignoreCause", (to, self) =>
+      Stream.catchCause(self, (cause) => Stream.unwrap(Effect.as(to.cause(cause), Stream.empty))),
+    ),
+    "effect/Stream:mapBoth": lift("Stream.mapBoth", (to, self, [given]) =>
+      Stream.mapEffect(
+        Stream.catch(self, (error) => {
+          const mapped = failed(to.fn(field(given, "onError")))(error);
+          return Stream.unwrap(Effect.map(mapped, failing));
+        }),
+        (item) => to.fn(field(given, "onElement"))(item),
+      ),
+    ),
+    "effect/Stream:result": lift("Stream.result", (_, self) =>
+      Stream.map(Stream.result(self), (result) =>
+        Result.isSuccess(result)
+          ? Brands.success(result.success)
+          : failed(Brands.failure)(result.failure),
+      ),
+    ),
+    "effect/Stream:flatten": lift("Stream.flatten", (to, self, [given]) =>
+      Stream.flatten(Stream.map(self, to.sub), readOptions(given)),
+    ),
+    "effect/Stream:flattenEffect": lift("Stream.flattenEffect", (to, self, [given]) =>
+      Stream.flattenEffect(
+        Stream.map(self, (item) => to.eff(item)),
+        readOptions(given),
+      ),
+    ),
+    "effect/Stream:flattenIterable": lift("Stream.flattenIterable", (to, self) =>
+      Stream.flattenIterable(
+        Stream.mapEffect(self, (item) => to.read(tools.items(to.name, item, to.site))),
+      ),
+    ),
+    "effect/Stream:flattenArray": lift("Stream.flattenArray", (to, self) =>
+      Stream.flattenIterable(
+        Stream.mapEffect(self, (item) => to.read(tools.items(to.name, item, to.site))),
+      ),
+    ),
+    "effect/Stream:switchMap": lift("Stream.switchMap", (to, self, [f, given]) =>
+      Stream.switchMap(self, (item) => to.inner(f)(item), readOptions(given)),
+    ),
+    "effect/Stream:forever": lift("Stream.forever", (_, self) => Stream.forever(self)),
+    "effect/Stream:scanEffect": lift("Stream.scanEffect", (to, self, [initial, f]) =>
+      Stream.unwrap(
+        Effect.map(to.fn(initial)(), (first) =>
+          Stream.scanEffect(
+            self,
+            () => first,
+            (state, item) => to.fn(f)(state, item),
+          ),
+        ),
+      ),
+    ),
+    "effect/Stream:mapAccumEffect": lift("Stream.mapAccumEffect", (to, self, [initial, f]) =>
+      Stream.unwrap(
+        Effect.map(to.fn(initial)(), (first) =>
+          Stream.mapAccumEffect(
+            self,
+            () => first,
+            (state: V, item) =>
+              Effect.flatMap(to.fn(f)(state, item), (pair) =>
+                Effect.gen(function* () {
+                  const [next, out] = yield* to.read(tools.items(to.name, pair, to.site));
+                  const values = yield* to.read(tools.items(to.name, out, to.site));
+                  return [next ?? Value.undef, values] as const;
+                }),
+              ),
+          ),
+        ),
+      ),
+    ),
+    "effect/Stream:takeWhileEffect": lift("Stream.takeWhileEffect", (to, self, [f]) =>
+      Stream.takeWhileEffect(self, (item, index) => to.test(f)(item, Value.num(index))),
+    ),
+    "effect/Stream:takeUntilEffect": lift("Stream.takeUntilEffect", (to, self, [f, given]) =>
+      Stream.takeUntilEffect(
+        self,
+        (item, index) => to.test(f)(item, Value.num(index)),
+        readOptions(given),
+      ),
+    ),
+    "effect/Stream:dropWhileEffect": lift("Stream.dropWhileEffect", (to, self, [f]) =>
+      Stream.dropWhileEffect(self, (item, index) => to.test(f)(item, Value.num(index))),
+    ),
+    "effect/Stream:dropUntilEffect": lift("Stream.dropUntilEffect", (to, self, [f]) =>
+      Stream.dropUntilEffect(self, (item, index) => to.test(f)(item, Value.num(index))),
+    ),
+    "effect/Stream:dropUntil": lift("Stream.dropUntil", (to, self, [f]) =>
+      Stream.dropUntilEffect(self, (item, index) => to.test(f)(item, Value.num(index))),
+    ),
+    "effect/Stream:dropRight": on("Stream.dropRight", (timeline, self, [n], site) =>
+      Effect.map(tools.count("Stream.dropRight", n, site), (count) =>
+        flow(timeline, Stream.dropRight(self, count), site, same),
+      ),
+    ),
+    "effect/Stream:intersperse": lift("Stream.intersperse", (_, self, [element]) =>
+      Stream.intersperse(self, element ?? Value.undef),
+    ),
+    "effect/Stream:intersperseAffixes": lift("Stream.intersperseAffixes", (_, self, [given]) =>
+      Stream.intersperseAffixes(self, {
+        start: field(given, "start") ?? Value.undef,
+        middle: field(given, "middle") ?? Value.undef,
+        end: field(given, "end") ?? Value.undef,
+      }),
+    ),
+    "effect/Stream:sliding": on("Stream.sliding", (timeline, self, [n], site) =>
+      Effect.map(tools.count("Stream.sliding", n, site), (size) =>
+        flow(timeline, Stream.sliding(self, size), site, (window): V => arr([...window])),
+      ),
+    ),
+    "effect/Stream:chunks": on("Stream.chunks", (timeline, self, _, site) =>
+      Effect.sync(() => flow(timeline, Stream.chunks(self), site, (chunk): V => arr([...chunk]))),
+    ),
+    "effect/Stream:repeatElements": lift("Stream.repeatElements", (to, self, [given]) => {
+      const held = tools.scheduleOf(given);
+      return held
+        ? Stream.repeatElements(self, held)
+        : Stream.unwrap(Effect.as(to.wrong<never>(), Stream.empty));
+    }),
+    "effect/Stream:timeoutOrElse": on("Stream.timeoutOrElse", (timeline, self, [given], site) =>
+      Effect.map(tools.written("Stream.timeoutOrElse", field(given, "duration"), site), (time) => {
+        const to = handing(timeline, "Stream.timeoutOrElse", site);
+        return flow(
+          timeline,
+          Stream.timeoutOrElse(self, {
+            duration: time,
+            orElse: () => to.inner(field(given, "orElse"))(),
+          }),
+          site,
+          same,
+        );
+      }),
+    ),
+    "effect/Stream:mergeEffect": lift("Stream.mergeEffect", (to, self, [effect]) =>
+      Stream.mergeEffect(self, to.eff(effect)),
+    ),
+    "effect/Stream:orElseIfEmpty": lift("Stream.orElseIfEmpty", (to, self, [f]) =>
+      Stream.orElseIfEmpty(self, () => to.inner(f)()),
+    ),
+    "effect/Stream:interleave": lift2("Stream.interleave", (_, self, that) =>
+      Stream.interleave(self, that),
+    ),
+    "effect/Stream:mergeLeft": lift2("Stream.mergeLeft", (_, self, that) =>
+      Stream.mergeLeft(self, that),
+    ),
+    "effect/Stream:mergeRight": lift2("Stream.mergeRight", (_, self, that) =>
+      Stream.mergeRight(self, that),
+    ),
+    "effect/Stream:cross": lift2("Stream.cross", (_, self, that) =>
+      Stream.map(Stream.cross(self, that), ([left, right]): V => arr([left, right])),
+    ),
+    "effect/Stream:crossWith": lift2("Stream.crossWith", (to, self, that, [f]) =>
+      Stream.mapEffect(Stream.cross(self, that), ([left, right]) => to.fn(f)(left, right)),
+    ),
+    "effect/Stream:bindTo": lift("Stream.bindTo", (to, self, [name]) =>
+      name?._tag === "Str"
+        ? Stream.map(self, (item): V => Value.obj({ [name.value]: item }))
+        : Stream.unwrap(Effect.as(to.wrong<never>(), Stream.empty)),
+    ),
+    "effect/Stream:bind": lift("Stream.bind", (to, self, [name, f, given]) =>
+      name?._tag === "Str"
+        ? Stream.flatMap(
+            self,
+            (item) =>
+              Stream.map(to.inner(f)(item), (made): V =>
+                Value.obj({ ...(item._tag === "Obj" ? item.fields : {}), [name.value]: made }),
+              ),
+            readOptions(given),
+          )
+        : Stream.unwrap(Effect.as(to.wrong<never>(), Stream.empty)),
+    ),
+    "effect/Stream:let": lift("Stream.let", (to, self, [name, f]) =>
+      name?._tag === "Str"
+        ? Stream.mapEffect(self, (item) =>
+            Effect.map(to.fn(f)(item), (made): V =>
+              Value.obj({ ...(item._tag === "Obj" ? item.fields : {}), [name.value]: made }),
+            ),
+          )
+        : Stream.unwrap(Effect.as(to.wrong<never>(), Stream.empty)),
+    ),
+    "effect/Stream:fromEffectDrain": source("Stream.fromEffectDrain", (to, [effect]) =>
+      Stream.fromEffectDrain(to.eff(effect)),
+    ),
+    "effect/Stream:fromEffectRepeat": source("Stream.fromEffectRepeat", (to, [effect]) =>
+      Stream.fromEffectRepeat(to.eff(effect)),
+    ),
+    "effect/Stream:fromEffectSchedule": source(
+      "Stream.fromEffectSchedule",
+      (to, [effect, given]) => {
+        const held = tools.scheduleOf(given);
+        return held
+          ? Stream.fromEffectSchedule(to.eff(effect), held)
+          : Stream.unwrap(Effect.as(to.wrong<never>(), Stream.empty));
+      },
+    ),
+    "effect/Stream:failSync": source("Stream.failSync", (to, [f]) =>
+      Stream.unwrap(Effect.map(to.fn(f)(), failing)),
+    ),
+    "effect/Stream:fromArrays": source("Stream.fromArrays", (to, args) =>
+      Stream.unwrap(
+        Effect.map(
+          Effect.forEach(args, (each) => to.read(tools.items(to.name, each, to.site))),
+          (all) => Stream.fromIterable(all.flat()),
+        ),
+      ),
+    ),
+    "effect/Stream:runForEachArray": ran_("Stream.runForEachArray", (to, self, [f]) =>
+      Effect.as(
+        Stream.runForEachArray(self, (chunk) => to.fn(f)(arr(chunk))),
+        Value.undef,
+      ),
+    ),
+    "effect/Stream:runIntoQueue": ran_("Stream.runIntoQueue", (to, self, [queue]) => {
+      const held = tools.heldOf<Queue.Queue<V, Held | Cause.Done>>("Queue", queue);
+      return held ? Effect.as(Stream.runIntoQueue(self, held), Value.undef) : to.wrong<V>();
+    }),
+  });
 
   /** A stream many may read, made in a scope: `Stream.broadcast` and `Stream.share`. */
   const shared = (
