@@ -5211,9 +5211,286 @@ export const make = (
       Effect.succeed(bool(heldOf<PL>("Pool", value) !== undefined)),
   };
 
+  // ---- Filters: a function of the code that passes a value on, or turns it away.
+
+  type Sorted = NonNullable<ReturnType<typeof Brands.resultOf>>;
+  const sortedOf = (name: string, made: V, site: Site): Eval<Sorted> => {
+    const read = Brands.resultOf(made);
+    return read ? Effect.succeed(read) : wrongArguments(site, name);
+  };
+  const filteredBy = (
+    name: string,
+    filter: V | undefined,
+    args: ReadonlyArray<V>,
+    site: Site,
+  ): Eval<Sorted> =>
+    filter
+      ? Effect.flatMap(host.call(filter, args, site), (made) => sortedOf(name, made, site))
+      : wrongArguments(site, name);
+  /** The same, of a filter that gives an effect. */
+  const filteredByEffect = (
+    name: string,
+    filter: V | undefined,
+    args: ReadonlyArray<V>,
+    site: Site,
+  ): Eval<Sorted> =>
+    filter
+      ? Effect.flatMap(ran(filter, args, site), (made) => sortedOf(name, made, site))
+      : wrongArguments(site, name);
+  /** A failure the code can handle: not a defect, and not what stops the prover. */
+  const handled = (stop: Value.Stop): stop is Value.Rejected =>
+    stop._tag === "Rejected" && stop.defect !== true;
+  const unset = (v: V | undefined): boolean => v === undefined || v._tag === "Undef";
+  /** A function of an effect whose last argument may be left out. */
+  const optional =
+    (name: string, run: (self: Eval<V>, rest: ReadonlyArray<V>, site: Site) => Eval<V>): Model =>
+    (args, site) =>
+      onEffectPlain(
+        name,
+        args[0]?._tag === "Effect" ? args.length - 1 : args.length,
+        run,
+      )(args, site);
+  const mapping = (name: string, by: typeof filteredBy, index: boolean, found: boolean): Model =>
+    dualBy(
+      name,
+      (v) => !callable(v),
+      ([given_, filter, options_], site) =>
+        unset(options_)
+          ? Effect.succeed(
+              lazy(() =>
+                Effect.gen(function* () {
+                  const kept: Array<V> = [];
+                  const all = yield* items(name, given_, site);
+                  for (const [at, item] of all.entries()) {
+                    const made = yield* by(name, filter, index ? [item, num(at)] : [item], site);
+                    if (made._tag !== "Success") continue;
+                    if (found) return Value.some(made.success);
+                    kept.push(made.success);
+                  }
+                  return found ? Value.none : arr(kept);
+                }),
+              ),
+            )
+          : wrongArguments(site, name),
+    );
+  /** The reason an error holds, where the error has the tag the code names. */
+  const reasonOf = (stop: Value.Stop, tag: V | undefined): V | undefined =>
+    handled(stop) &&
+    tag?._tag === "Str" &&
+    tagOf(stop.rejection) === tag.value &&
+    stop.rejection._tag === "Obj"
+      ? stop.rejection.fields.reason
+      : undefined;
+  const sortedCause = (
+    timeline: Timeline.Timeline,
+    name: string,
+    filter: V | undefined,
+    held: V,
+    site: Site,
+  ): Effect.Effect<Sorted, Held> => Timeline.real(timeline, filteredBy(name, filter, [held], site));
+  /** What a function of the code does with a cause a filter passes on: nothing with one it turns away. */
+  const onPassed =
+    (timeline: Timeline.Timeline, name: string, filter: V | undefined, f: V, site: Site) =>
+    (cause: Cause.Cause<unknown>): Effect.Effect<V, Held> =>
+      Effect.flatMap(causeTo(timeline, cause), (held) =>
+        Effect.flatMap(sortedCause(timeline, name, filter, held, site), (made) =>
+          made._tag === "Success"
+            ? called(timeline, f, site)(made.success, held)
+            : Effect.succeed(Value.undef),
+        ),
+      );
+
+  const filters: Models = {
+    "effect/Effect:filterMap": mapping("Effect.filterMap", filteredBy, false, false),
+    "effect/Effect:filterMapEffect": mapping(
+      "Effect.filterMapEffect",
+      filteredByEffect,
+      false,
+      false,
+    ),
+    "effect/Effect:findFirstFilter": mapping(
+      "Effect.findFirstFilter",
+      filteredByEffect,
+      true,
+      true,
+    ),
+    "effect/Effect:filterMapOrElse": onEffectPlain(
+      "Effect.filterMapOrElse",
+      2,
+      (self, [filter, orElse], site) =>
+        Effect.flatMap(self, (value) =>
+          Effect.flatMap(filteredBy("Effect.filterMapOrElse", filter, [value], site), (made) => {
+            if (made._tag === "Success") return Effect.succeed(made.success);
+            return orElse
+              ? ran(orElse, [made.failure], site)
+              : wrongArguments(site, "Effect.filterMapOrElse");
+          }),
+        ),
+    ),
+    "effect/Effect:filterMapOrFail": onEffectPlain(
+      "Effect.filterMapOrFail",
+      1,
+      (self, [filter], site) =>
+        Effect.flatMap(self, (value) =>
+          Effect.flatMap(
+            filteredBy("Effect.filterMapOrFail", filter, [value], site),
+            (made): Eval<V> =>
+              made._tag === "Success"
+                ? Effect.succeed(made.success)
+                : Effect.fail(
+                    new Value.Rejected({ rejection: Value.libraryError("NoSuchElementError") }),
+                  ),
+          ),
+        ),
+    ),
+    "effect/Effect:head": onEffectPlain("Effect.head", 0, (self, _, site) =>
+      Effect.flatMap(self, (value) =>
+        Effect.flatMap(items("Effect.head", value, site), (all): Eval<V> =>
+          all[0]
+            ? Effect.succeed(all[0])
+            : Effect.fail(
+                new Value.Rejected({ rejection: Value.libraryError("NoSuchElementError") }),
+              ),
+        ),
+      ),
+    ),
+    // An error the filter turns away is still what the effect fails with, where nothing is given for it.
+    "effect/Effect:catchFilter": optional("Effect.catchFilter", (self, [filter, f, orElse], site) =>
+      f
+        ? Effect.catchIf(self, handled, (stop) =>
+            Effect.flatMap(
+              filteredBy("Effect.catchFilter", filter, [stop.rejection], site),
+              (made): Eval<V> => {
+                if (made._tag === "Success") return ran(f, [made.success], site);
+                return orElse && !unset(orElse)
+                  ? ran(orElse, [made.failure], site)
+                  : Effect.fail(stop);
+              },
+            ),
+          )
+        : wrongArguments(site, "Effect.catchFilter"),
+    ),
+    "effect/Effect:catchCauseFilter": onEffect(
+      "Effect.catchCauseFilter",
+      2,
+      (timeline, self, [filter, f], site) =>
+        f
+          ? Timeline.back(
+              timeline,
+              Effect.catchCause(self, (cause) =>
+                Effect.flatMap(causeTo(timeline, cause), (held) =>
+                  Effect.flatMap(
+                    sortedCause(timeline, "Effect.catchCauseFilter", filter, held, site),
+                    (made): Effect.Effect<V, unknown> =>
+                      made._tag === "Success"
+                        ? called(timeline, f, site)(made.success, held)
+                        : Effect.failCause(realCause(made.failure) ?? cause),
+                  ),
+                ),
+              ),
+              same,
+            )
+          : wrongArguments(site, "Effect.catchCauseFilter"),
+    ),
+    "effect/Effect:onErrorFilter": onEffect(
+      "Effect.onErrorFilter",
+      2,
+      (timeline, self, [filter, f], site) =>
+        f
+          ? Timeline.back(
+              timeline,
+              Effect.onError(self, (cause) => {
+                const passed = onPassed(timeline, "Effect.onErrorFilter", filter, f, site);
+                return sure(passed(cause));
+              }),
+              same,
+            )
+          : wrongArguments(site, "Effect.onErrorFilter"),
+    ),
+    "effect/Effect:tapCauseFilter": onEffect(
+      "Effect.tapCauseFilter",
+      2,
+      (timeline, self, [filter, f], site) =>
+        f
+          ? Timeline.back(
+              timeline,
+              Effect.tapCause(self, onPassed(timeline, "Effect.tapCauseFilter", filter, f, site)),
+              same,
+            )
+          : wrongArguments(site, "Effect.tapCauseFilter"),
+    ),
+    "effect/Effect:onExitFilter": onEffect(
+      "Effect.onExitFilter",
+      2,
+      (timeline, self, [filter, f], site) =>
+        f
+          ? Timeline.back(
+              timeline,
+              Effect.onExit(self, (exit) =>
+                Effect.flatMap(Timeline.real(timeline, exitOf(timeline, exit)), (held) =>
+                  Effect.flatMap(
+                    sortedCause(timeline, "Effect.onExitFilter", filter, held, site),
+                    (made) =>
+                      made._tag === "Success"
+                        ? called(timeline, f, site)(made.success, held)
+                        : Effect.succeed(Value.undef),
+                  ),
+                ),
+              ),
+              same,
+            )
+          : wrongArguments(site, "Effect.onExitFilter"),
+    ),
+    // An error that holds a reason: handled by the reason, where the error has the tag.
+    "effect/Effect:catchReason": optional(
+      "Effect.catchReason",
+      (self, [errorTag, reasonTag, f, orElse], site) =>
+        f && reasonTag?._tag === "Str"
+          ? Effect.catchIf(
+              self,
+              (stop): stop is Value.Rejected => reasonOf(stop, errorTag) !== undefined,
+              (stop): Eval<V> => {
+                const reason = reasonOf(stop, errorTag)!;
+                if (tagOf(reason) === reasonTag.value)
+                  return ran(f, [reason, stop.rejection], site);
+                return orElse && !unset(orElse)
+                  ? ran(orElse, [reason, stop.rejection], site)
+                  : Effect.fail(stop);
+              },
+            )
+          : wrongArguments(site, "Effect.catchReason"),
+    ),
+    "effect/Effect:catchReasons": optional(
+      "Effect.catchReasons",
+      (self, [errorTag, cases, orElse], site) =>
+        cases?._tag === "Obj"
+          ? Effect.catchIf(
+              self,
+              (stop): stop is Value.Rejected => reasonOf(stop, errorTag) !== undefined,
+              (stop): Eval<V> => {
+                const reason = reasonOf(stop, errorTag)!;
+                const handler = cases.fields[tagOf(reason) ?? ""];
+                if (handler && !unset(handler)) return ran(handler, [reason, stop.rejection], site);
+                return orElse && !unset(orElse)
+                  ? ran(orElse, [reason, stop.rejection], site)
+                  : Effect.fail(stop);
+              },
+            )
+          : wrongArguments(site, "Effect.catchReasons"),
+    ),
+    "effect/Effect:unwrapReason": onEffectPlain("Effect.unwrapReason", 1, (self, [errorTag]) =>
+      Effect.catchIf(
+        self,
+        (stop): stop is Value.Rejected => reasonOf(stop, errorTag) !== undefined,
+        (stop) => Effect.fail(new Value.Rejected({ rejection: reasonOf(stop, errorTag)! })),
+      ),
+    ),
+  };
+
   const models: Models = {
     ...yetMore,
     ...lastFew,
+    ...filters,
     ...turns,
     ...rest,
     ...more,

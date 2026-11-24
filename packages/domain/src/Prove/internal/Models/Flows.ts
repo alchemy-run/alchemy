@@ -1132,6 +1132,80 @@ export const make = (kit: Kit, base: Models, tools: Tools) => {
     }),
   });
 
+  // ---- Filters: a function of the code that passes an item on, or turns it away.
+
+  /** The `Result` a filter of the code gave, as the library's. */
+  const sorted = (to: Handing, made: V): Effect.Effect<Result.Result<V, V>, Held> => {
+    const read = Brands.resultOf(made);
+    if (!read) return to.wrong();
+    return Effect.succeed(
+      read._tag === "Success" ? Result.succeed(read.success) : Result.fail(read.failure),
+    );
+  };
+  const passes = (to: Handing, filter: V | undefined) => (item: V) =>
+    Effect.map(
+      Effect.flatMap(straight(to, filter)(item), (made) => sorted(to, made)),
+      Result.isSuccess,
+    );
+  const parted = (
+    name: string,
+    by: (to: Handing, filter: V | undefined) => (item: V) => Effect.Effect<V, Held>,
+  ): Model =>
+    scoped_(name, (to, self, [filter, given]) =>
+      Effect.map(
+        Stream.partitionEffect(
+          self,
+          (item) => Effect.flatMap(by(to, filter)(item), (made) => sorted(to, made)),
+          readOptions(given),
+        ),
+        ([passed, failed_]): V =>
+          arr([
+            flow(to.timeline, passed, to.site, same),
+            flow(to.timeline, failed_, to.site, same),
+          ]),
+      ),
+    );
+
+  Object.assign(models, {
+    "effect/Stream:filterMapEffect": lift("Stream.filterMapEffect", (to, self, [filter]) =>
+      Stream.filterMapEffect(self, (item) =>
+        Effect.flatMap(to.fn(filter)(item), (made) => sorted(to, made)),
+      ),
+    ),
+    // Each item the filter passes on, as the filter gives it, until one it turns away.
+    "effect/Stream:takeWhileFilter": lift("Stream.takeWhileFilter", (to, self, [filter]) =>
+      Stream.mapEffect(Stream.takeWhileEffect(self, passes(to, filter)), (item) =>
+        Effect.flatMap(
+          Effect.flatMap(straight(to, filter)(item), (made) => sorted(to, made)),
+          (made) => (Result.isSuccess(made) ? Effect.succeed(made.success) : to.wrong<V>()),
+        ),
+      ),
+    ),
+    "effect/Stream:dropWhileFilter": lift("Stream.dropWhileFilter", (to, self, [filter]) =>
+      Stream.dropWhileEffect(self, passes(to, filter)),
+    ),
+    "effect/Stream:catchFilter": lift("Stream.catchFilter", (to, self, [filter, f, orElse]) =>
+      Stream.catch(
+        self,
+        failed((rejection) =>
+          Stream.unwrap(
+            Effect.map(
+              Effect.flatMap(straight(to, filter)(rejection), (made) => sorted(to, made)),
+              (made): Stream.Stream<V, unknown> => {
+                if (Result.isSuccess(made)) return to.inner(f)(made.success);
+                return unset(orElse) ? failing(made.failure) : to.inner(orElse)(made.failure);
+              },
+            ),
+          ),
+        ),
+      ),
+    ),
+    "effect/Stream:partition": parted("Stream.partition", straight),
+    "effect/Stream:partitionEffect": parted("Stream.partitionEffect", (to, filter) =>
+      to.fn(filter),
+    ),
+  });
+
   /** A stream many may read, made in a scope: `Stream.broadcast` and `Stream.share`. */
   const shared = (
     name: string,
@@ -1178,7 +1252,7 @@ export const make = (kit: Kit, base: Models, tools: Tools) => {
       ),
   };
 
-  const lifts = { handing, lift, ran_, scoped_, straight, failed, some, flow };
+  const lifts = { handing, lift, ran_, scoped_, straight, failed, some, flow, sorted };
   return { models, sited, real, flow, lifts };
 };
 

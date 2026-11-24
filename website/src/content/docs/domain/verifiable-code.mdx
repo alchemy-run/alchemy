@@ -2714,6 +2714,25 @@ Effect.scheduleFrom(Ref.update(runs, (n) => n + 1), a, Schedule.recurs(2));
 Effect.validate([a, b], (n) => even(n)); // every item is tried, and it fails with all their errors
 Effect.validate((n, i) => positive(n - i), { discard: true });
 Effect.transposeOption(Option.some(even(a)));
+Effect.head(Effect.succeed([a, b])); // the first item, or a NoSuchElementError
+
+// A filter passes a value on as a success, or turns it away as a failure.
+Effect.filterMap([a, b, 3], (n) => (n > 2 ? Result.succeed(n * 2) : Result.fail(n)));
+Effect.filterMapEffect((n) => Effect.succeed(n > 2 ? Result.succeed(n + 1) : Result.fail(n)));
+Effect.filterMapOrElse(Effect.succeed(a), (n) => (n > b ? Result.succeed(n) : Result.fail(b - n)), (gap) => Effect.succeed(-gap));
+Effect.filterMapOrFail((n) => (n > 2 ? Result.succeed(n) : Result.fail(n)));
+Effect.findFirstFilter([a, b, 3], (n, i) => Effect.succeed(n > 2 ? Result.succeed([n, i]) : Result.fail(n)));
+Effect.catchFilter((error) => (error.n > 2 ? Result.succeed(error.n) : Result.fail("small")), (n) => Effect.succeed(-n)); // an error that is turned away is still what it fails with
+Effect.catchFilter((error) => (error.n > 2 ? Result.succeed(error.n) : Result.fail(error.n + 1)), (n) => Effect.succeed(-n), (m) => Effect.succeed(m * 10));
+Effect.catchCauseFilter((cause) => (Cause.hasFails(cause) ? Result.succeed(1) : Result.fail(cause)), (one, cause) => Effect.succeed(one + (Cause.hasDies(cause) ? 1 : 0)));
+Effect.onErrorFilter((cause) => (Cause.hasFails(cause) ? Result.succeed("failed") : Result.fail(cause)), (what) => log(seen, what));
+Effect.tapCauseFilter((cause) => (Cause.hasDies(cause) ? Result.succeed("died") : Result.fail(cause)), (what) => log(seen, what));
+Effect.onExitFilter((exit) => (Exit.isSuccess(exit) ? Result.succeed("ok") : Result.fail(exit)), (what) => log(seen, what));
+
+// An error that holds a reason, handled by the reason.
+Effect.catchReason("Call", "Slow", (reason, error) => Effect.succeed(reason.ms + 1), (reason) => Effect.succeed(-1));
+Effect.catchReasons("Call", { Slow: (reason) => Effect.succeed(reason.ms), Lost: () => Effect.succeed(0) });
+Effect.unwrapReason("Call"); // it fails with the reason
 Effect.failCauseSync(() => Cause.fail(new Odd({ n: a })));
 Effect.onExitIf(Exit.isFailure, () => log(seen, "failed"));
 Effect.awaitAllChildren(Effect.forkChild(Effect.andThen(Effect.sleep(1), log(seen, a))));
@@ -2845,6 +2864,12 @@ Stream.scoped;
 Stream.slidingSize(2, 2);
 Stream.accumulate;
 Stream.collect;
+Stream.filterMapEffect((n) => Effect.succeed(n > 2 ? Result.succeed(n * 2) : Result.fail(n)));
+Stream.takeWhileFilter((n) => (n > 2 ? Result.succeed(n + 1) : Result.fail(n)));
+Stream.dropWhileFilter((n) => (n > 2 ? Result.succeed(n) : Result.fail(n)));
+Stream.catchFilter((error) => (error.n > 2 ? Result.succeed(error.n) : Result.fail("small")), (n) => Stream.make(n, b));
+Stream.partition(Stream.make(a, b, 3), (n) => (n > 2 ? Result.succeed(n) : Result.fail(-n))); // in a scope: a stream of each
+Stream.partitionEffect(Stream.make(a, b, 3), (n) => Effect.succeed(n > 2 ? Result.succeed(n) : Result.fail(-n)));
 Stream.bindEffect("y", ({ x }) => Effect.succeed(x + 1));
 Stream.throttleEffect({ cost: (chunk) => Effect.succeed(chunk.length), units: 1, duration: "1 second" });
 Stream.transduce(Sink.take(3)); // the sink, run again and again over the stream
@@ -2860,6 +2885,8 @@ Sink.takeWhileEffect((n) => Effect.succeed(n !== b));
 Sink.takeUntil((n) => n > a);
 Sink.takeUntilEffect((n) => Effect.succeed(n === 3));
 Sink.findEffect((n) => Effect.succeed(n > a));
+Sink.takeWhileFilter((n) => (n < 3 ? Result.succeed(n * 2) : Result.fail(n)));
+Sink.takeWhileFilterEffect((n) => Effect.succeed(n !== b ? Result.succeed(n) : Result.fail(n)));
 Sink.reduceEffect(() => 0, (total, n) => Effect.succeed(total + n));
 Sink.reduceArray(() => 0, (total, chunk) => total + chunk.length);
 Sink.reduceWhile(() => 0, (total) => total < 5, (total, n) => total + n);

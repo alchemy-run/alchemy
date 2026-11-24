@@ -331,6 +331,22 @@ export const make = (
     "effect/Sink:takeUntilEffect": made("Sink.takeUntilEffect", (to, [test]) =>
       taking(to, test, true),
     ),
+    "effect/Sink:takeWhileFilter": made("Sink.takeWhileFilter", (to, [filter]) =>
+      Sink.map(
+        Sink.takeWhileFilterEffect((item: V) =>
+          Effect.flatMap(straight(to, filter)(item), (made_) => flows.sorted(to, made_)),
+        ),
+        (all): V => arr(all),
+      ),
+    ),
+    "effect/Sink:takeWhileFilterEffect": made("Sink.takeWhileFilterEffect", (to, [filter]) =>
+      Sink.map(
+        Sink.takeWhileFilterEffect((item: V) =>
+          Effect.flatMap(to.fn(filter)(item), (made_) => flows.sorted(to, made_)),
+        ),
+        (all): V => arr(all),
+      ),
+    ),
     "effect/Sink:reduceEffect": made("Sink.reduceEffect", (to, [initial, f]) =>
       reducingWhile(
         to,
