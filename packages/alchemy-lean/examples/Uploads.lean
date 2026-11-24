@@ -122,37 +122,140 @@ theorem noFunctionInvokesAnother (function : Function) :
     prod.nobody (Lambda.invoking function) := by
   stack_rule in prod using [out]
 
-/-! ## What the Scanner's code does, for every file -/
+/-! ## What a function can do if it is taken over
+
+The rules above are about roles. These are about code: any code at all,
+running with a public function's role. They hold because a call the role does
+not permit cannot be written, so they cover an attacker's code as well as ours.
+-/
+
+/-- Whatever runs as `Upload`, it cannot publish or alter a published file. -/
+theorem uploadCannotPublish {ε α : Type} (code : Run (prod.roleOf "Upload") ε α) (cloud : Memory)
+    (name : String) :
+    (code.exec InMemory cloud).state.object out.files ["clean", name]
+      = cloud.object out.files ["clean", name] := by
+  refine Run.leaves code cloud _ _ ?_
+  have role : prod.roleOf "Upload" = computed% (prod.roleOf "Upload") := rfl
+  have differ : ¬BucketOp.put ["incoming"] = BucketOp.put ["clean", name] := by simp
+  simp [role, out, Access.permits, permitsOn, Kinds.covers, BucketOp.covers, List.isPrefixOf, differ]
+
+/-- Whatever runs as `Download`, it cannot either. -/
+theorem downloadCannotPublish {ε α : Type} (code : Run (prod.roleOf "Download") ε α)
+    (cloud : Memory) (name : String) :
+    (code.exec InMemory cloud).state.object out.files ["clean", name]
+      = cloud.object out.files ["clean", name] := by
+  refine Run.leaves code cloud _ _ ?_
+  have role : prod.roleOf "Download" = computed% (prod.roleOf "Download") := rfl
+  simp [role, out, Kinds.covers, BucketOp.covers]
+
+/-! ## The whole design: nothing infected is ever published -/
+
+/-- Every published file is clean. -/
+def Safe (cloud : Memory) : Prop :=
+  ∀ name body, cloud.object out.files ["clean", name] = some body → infected body = false
 
 section
-variable {role : Access Kind} {files : Bucket}
-  [Has role (S3.Get files ["incoming"])] [Has role (S3.Put files ["clean"])]
-  [Has role (S3.Put files ["quarantine"])]
+variable {role : Access Kind}
+  [Has role (S3.Get out.files ["incoming"])] [Has role (S3.Put out.files ["clean"])]
+  [Has role (S3.Put out.files ["quarantine"])]
 
-/--
-The Scanner never publishes an infected file. Whatever the bucket holds and
-whatever the file is called, if the upload is infected then after the scan
-`clean/` is exactly as it was.
--/
-theorem anInfectedFileIsNeverPublished (name body : String) (cloud : Memory)
-    (uploaded : cloud.object files ["incoming", name] = some body) (bad : infected body = true)
-    (published : String) :
-    ((scan (role := role) files name).eval InMemory cloud).2.object files ["clean", published]
-      = cloud.object files ["clean", published] := by
-  have read : (S3.getObject (role := role) files ["incoming"] name).eval InMemory cloud
-      = (.ok body, cloud) := by
-    have := S3.getObject_eval (role := role) files ["incoming"] name cloud
-    simpa [uploaded] using this
-  have evaluated : (scan (role := role) files name).eval InMemory cloud
-      = (.ok (), cloud.put files ["quarantine", name] body) := by
-    show Run.eval InMemory (Run.bind _ _) cloud = _
-    rw [Run.eval_bind, Run.eval_result, read]
-    simp only [bad, ite_true]
-    exact S3.putObject_eval files ["quarantine"] name body cloud
-  rw [evaluated]
-  exact Memory.object_put_other _ _ _ _ _ _ (by simp)
+/-- What a scan leaves: nothing, the file in quarantine, or the file published. -/
+theorem scan_eval (name : String) (cloud : Memory) :
+    ((scan (role := role) out.files name).eval InMemory cloud).2 =
+      match cloud.object out.files ["incoming", name] with
+      | none => cloud
+      | some body =>
+        if infected body then cloud.put out.files ["quarantine", name] body
+        else cloud.put out.files ["clean", name] body := by
+  have read := S3.getObject_eval (role := role) out.files ["incoming"] name cloud
+  show (Run.eval InMemory (Run.bind _ _) cloud).2 = _
+  rw [Run.eval_bind, Run.eval_result, read]
+  have key : (["incoming"] ++ [name] : Path) = ["incoming", name] := rfl
+  rw [key]
+  cases found : cloud.object out.files ["incoming", name] with
+  | none => rfl
+  | some body =>
+    by_cases bad : infected body = true
+    · simp only [bad, ite_true]
+      exact congrArg Prod.snd (S3.putObject_eval out.files ["quarantine"] name body cloud)
+    · simp only [bad]
+      exact congrArg Prod.snd (S3.putObject_eval out.files ["clean"] name body cloud)
+
+/-- A scan keeps every published file clean. -/
+theorem scan_safe (name : String) (cloud : Memory) (safe : Safe cloud) :
+    Safe ((scan (role := role) out.files name).eval InMemory cloud).2 := by
+  rw [scan_eval]
+  cases found : cloud.object out.files ["incoming", name] with
+  | none => exact safe
+  | some body =>
+    intro published content held
+    by_cases bad : infected body = true
+    · simp only [bad, ite_true] at held
+      rw [Memory.object_put_other _ _ _ _ _ _ (by simp)] at held
+      exact safe published content held
+    · have clean : infected body = false := by simpa using bad
+      simp only [clean, Bool.false_eq_true, ite_false] at held
+      by_cases same : published = name
+      · subst same
+        rw [Memory.object_put_self] at held
+        cases held
+        exact clean
+      · rw [Memory.object_put_other _ _ _ _ _ _ (by simp [same])] at held
+        exact safe published content held
 
 end
+
+/--
+The states of the cloud this stack can reach. The Scanner runs its own code on
+any upload. The two public functions run any code whatever under their roles:
+ours, or an attacker's.
+-/
+inductive Reaches : Memory → Prop where
+  | start : Reaches {}
+  | upload {cloud ε α} (code : Run (prod.roleOf "Upload") ε α) :
+      Reaches cloud → Reaches (code.exec InMemory cloud).state
+  | download {cloud ε α} (code : Run (prod.roleOf "Download") ε α) :
+      Reaches cloud → Reaches (code.exec InMemory cloud).state
+  | scan {cloud} {role : Access Kind}
+      [Has role (S3.Get out.files ["incoming"])] [Has role (S3.Put out.files ["clean"])]
+      [Has role (S3.Put out.files ["quarantine"])] (name : String) :
+      Reaches cloud → Reaches ((scan (role := role) out.files name).eval InMemory cloud).2
+
+/--
+No infected file is ever published. In every state this stack can reach,
+whatever is uploaded, in whatever order things run, and even if both public
+functions are taken over, every file `Download` can serve is clean.
+-/
+theorem noInfectedFileIsEverPublished (cloud : Memory) (reach : Reaches cloud) : Safe cloud := by
+  induction reach with
+  | start => intro name body held; simp [Memory.object] at held
+  | upload code _ safe =>
+    intro name body held
+    rw [uploadCannotPublish] at held
+    exact safe name body held
+  | download code _ safe =>
+    intro name body held
+    rw [downloadCannotPublish] at held
+    exact safe name body held
+  | scan name _ safe => exact scan_safe name _ safe
+
+/--
+So nothing `Download` serves is infected. In any state the stack can reach, if
+a file can be read from where `Download` reads, it is clean.
+-/
+theorem nothingServedIsInfected {role : Access Kind} [Has role (S3.Get out.files ["clean"])]
+    (cloud : Memory) (reach : Reaches cloud) (name body : String)
+    (served : ((S3.getObject (role := role) out.files ["clean"] name).eval InMemory cloud).1
+      = .ok body) : infected body = false := by
+  rw [S3.getObject_eval] at served
+  have key : (["clean"] ++ [name] : Path) = ["clean", name] := rfl
+  rw [key] at served
+  cases held : cloud.object out.files ["clean", name] with
+  | none => simp [held] at served
+  | some content =>
+    simp only [held, Except.ok.injEq] at served
+    subst served
+    exact noInfectedFileIsEverPublished cloud reach name content held
 
 /-! ## Tests of the stack -/
 

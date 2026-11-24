@@ -161,3 +161,43 @@ theorem ReceiveMessageLive.lawful (queue : AWS.Queue)
 end SQS
 
 end Alchemy.AWS
+
+namespace Alchemy.AWS
+open Alchemy.Cloud
+
+/--
+Code cannot change an object its role does not let it write. Whatever the code
+is, whatever it is asked and whatever the cloud holds: if the role does not
+permit writing a key, that key holds afterwards what it held before.
+-/
+theorem Run.leaves {access : Access Kind} {ε α : Type} (run : Run access ε α) (m : Memory)
+    (bucket : AWS.Bucket) (key : Path)
+    (cannot : access.permits ⟨.bucket, bucket, BucketOp.put key⟩ = false) :
+    (run.exec InMemory m).state.object bucket key = m.object bucket key := by
+  induction run generalizing m with
+  | pure a => rfl
+  | fail e => rfl
+  | call ref c ok next ih =>
+    rename_i k
+    show ((next (simulate ref c m).1).exec InMemory (simulate ref c m).2.1).state.object bucket key = _
+    rw [ih]
+    cases k with
+    | function => exact nomatch c
+    | queue => cases c <;> simp [simulate]
+    | bucket =>
+      cases c with
+      | getObject key' => rfl
+      | listObjects => rfl
+      | putObject key' body =>
+        show (m.put ref key' body).object bucket key = _
+        by_cases same : ref.id = bucket.id ∧ key' = key
+        · obtain ⟨sameId, rfl⟩ := same
+          have : ref = bucket := by cases ref; cases bucket; simp_all
+          subst this
+          have permitted : access.permits ⟨.bucket, ref, BucketOp.put key'⟩ = true := ok
+          rw [permitted] at cannot
+          cases cannot
+        · exact Memory.object_put_other m ref bucket key' key body
+            (fun h => same ⟨h.1.symm, h.2.symm⟩)
+
+end Alchemy.AWS

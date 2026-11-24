@@ -223,3 +223,36 @@ theorem LeastPrivilege.of_tests {g : Graph K} (tests : List (List (Step K sim)))
   · cases mem
 
 end Alchemy.Cloud.Graph
+
+namespace Alchemy.Cloud
+
+variable {K : Type} [Cloud K]
+
+/-- What one host can do to the cloud: answer a request, or handle an event it listens for. -/
+def Node.Does (node : Node K) (sim : Sim K) (s s' : sim.State) : Prop :=
+  match node.serve with
+  | none => False
+  | some serve =>
+    (∃ request, s' = ((serve.fetch request).exec sim s).state) ∨
+      ∃ sub ∈ serve.on, ∃ event, s' = ((sub.handle event).exec sim s).state
+
+/--
+The states of the cloud a stack can reach: from an empty cloud, any host
+answering any request or handling any event, in any order, any number of times.
+-/
+inductive Graph.Reaches (g : Graph K) (sim : Sim K) : sim.State → Prop where
+  | start : Graph.Reaches g sim sim.init
+  | step {s s'} (node : Node K) : node ∈ g.nodes → Graph.Reaches g sim s → node.Does sim s s' →
+      Graph.Reaches g sim s'
+
+/-- A rule that holds of an empty cloud, and that no host breaks, holds of every state the stack reaches. -/
+theorem Graph.Reaches.invariant {g : Graph K} {sim : Sim K} {rule : sim.State → Prop}
+    (initially : rule sim.init)
+    (kept : ∀ node ∈ g.nodes, ∀ s s', rule s → node.Does sim s s' → rule s') :
+    ∀ s, g.Reaches sim s → rule s := by
+  intro s reach
+  induction reach with
+  | start => exact initially
+  | step node mem _ does ih => exact kept node mem _ _ ih does
+
+end Alchemy.Cloud
