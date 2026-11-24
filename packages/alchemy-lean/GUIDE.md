@@ -172,21 +172,22 @@ theorem anApprovedOrderIsPaidAndShipped (id item charge : String) (amount : Nat)
 The same thing with real values, so a person can read it and check it is what they meant.
 
 ```lean
-example : Shop.passes [
-    .when ⟨.Order, (), .place "o-1" "kettle" 40⟩,
-    .call (.charge "o-1" 40),
-    .answer (.charge "o-1" 40) (.approved "ch_1"),
-    .recorded .Order "o-1" [.placed "kettle" 40, .paid "ch_1" "kettle" 40],
-    .recorded .Shipment "o-1" [.scheduled "kettle"],
-    .call (.ship "o-1" "kettle"),
-    .answer (.ship "o-1" "kettle") (),
-    .view Revenue () 40,
-    .when ⟨.Order, (), .settle "o-1" "ch_2"⟩,
-    .rejected .Order .notAwaitingPayment
-  ] = true := by decide
+def aKettle : List (Story.ModelStep Shop) := [
+  .when ⟨.Order, (), .place "o-1" "kettle" 40⟩,
+  .call (.charge "o-1" 40),
+  .answer (.charge "o-1" 40) (.approved "ch_o-1"),
+  .recorded .Order "o-1" [.placed "kettle" 40, .paid "ch_o-1" "kettle" 40],
+  .recorded .Shipment "o-1" [.scheduled "kettle"],
+  .call (.ship "o-1" "kettle"),
+  .answer (.ship "o-1" "kettle") (),
+  .view Revenue () 40,
+  .when ⟨.Order, (), .place "o-1" "kettle" 40⟩,
+  .rejected .Order .alreadyPlaced ]
+
+example : Shop.passes aKettle = true := by decide
 ```
 
-**Reading it.** `example` is a theorem with no name. `by decide` proves it by running it, which works because nothing is unknown. A theorem says it always holds; a story shows what "it" is.
+**Reading it.** `def` names the story so it can be told again later. `example` is a theorem with no name. `by decide` proves it by running it, which works because nothing is unknown. A theorem says it always holds; a story shows what "it" is.
 
 ## 8. Put it on infrastructure
 
@@ -296,14 +297,7 @@ $ lake exe shop graph prod --why
 The domain's story also runs against the stack. It is step 7 again, but each command goes in through the Api, and the gateway and the queue answer the model's calls. This is what shows the wiring does what the model says.
 
 ```lean
-example : prod.tells deployed [
-    .when ⟨.Order, (), .place "o-1" "kettle" 40⟩,
-    .recorded .Order "o-1" [.placed "kettle" 40, .paid "ch_o-1" "kettle" 40],
-    .recorded .Shipment "o-1" [.scheduled "kettle"],
-    .view Revenue () 40,
-    .when ⟨.Order, (), .place "o-1" "kettle" 40⟩,
-    .rejected .Order .alreadyPlaced
-  ] = true := by native_decide
+example : prod.tells deployed aKettle = true := by native_decide
 ```
 
 ## 10. Run it

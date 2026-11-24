@@ -8,7 +8,7 @@ import Alchemy.Cloud.Hosted
 A story is written in the model's own words: commands, events, views. Told to
 the model alone, the story plays the outside systems. Told to a stack, each
 command goes in through the host that runs the model, and the stack's own
-bindings answer the model's calls. The steps are the same.
+bindings answer the model's calls. One story can be told both ways.
 -/
 
 namespace Alchemy.Cloud
@@ -53,7 +53,9 @@ def tellStep (g : Graph K) (telling : Telling m sim) (told : Told m sim) :
         else .error s!"a listener failed: {running.failures}"
       | (some (.error why), _) => .error s!"the host failed: {why}"
       | (none, _) => .error "the stack has no such host"
-  | .call _ | .answer .. => .error "a stack answers the model's calls itself"
+  -- The stack answers the model's calls itself, so the story's own answers are passed over.
+  -- If they are not the answers the stack gives, what is recorded differs and a later step fails.
+  | .call _ | .answer .. => .ok told
   | .given .. | .decide .. | .pass _ | .next _ => .error "this step is not told to a stack"
   | step =>
     -- Everything else only looks: at what was recorded, at a state, at a view.

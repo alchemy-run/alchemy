@@ -326,19 +326,21 @@ example (log : List (Emitted Aggregates)) :
 example (log : List (Emitted Aggregates)) :
     Packing.table log = log.flatMap Packing.rows := Packing.exact log
 
-/-- The domain by itself, with the outside systems played by the story. -/
-example : Shop.passes [
-    .when ⟨.Order, (), .place "o-1" "kettle" 40⟩,
-    .call (.charge "o-1" 40),
-    .answer (.charge "o-1" 40) (.approved "ch_1"),
-    .recorded .Order "o-1" [.placed "kettle" 40, .paid "ch_1" "kettle" 40],
-    .recorded .Shipment "o-1" [.scheduled "kettle"],
-    .call (.ship "o-1" "kettle"),
-    .answer (.ship "o-1" "kettle") (),
-    .view Revenue () 40,
-    .when ⟨.Order, (), .settle "o-1" "ch_2"⟩,
-    .rejected .Order .notAwaitingPayment
-  ] = true := by decide
+/-- One story, in the shop's words: a kettle is ordered, paid for and shipped, and cannot be ordered twice. -/
+def aKettle : List (Story.ModelStep Shop) := [
+  .when ⟨.Order, (), .place "o-1" "kettle" 40⟩,
+  .call (.charge "o-1" 40),
+  .answer (.charge "o-1" 40) (.approved "ch_o-1"),
+  .recorded .Order "o-1" [.placed "kettle" 40, .paid "ch_o-1" "kettle" 40],
+  .recorded .Shipment "o-1" [.scheduled "kettle"],
+  .call (.ship "o-1" "kettle"),
+  .answer (.ship "o-1" "kettle") (),
+  .view Revenue () 40,
+  .when ⟨.Order, (), .place "o-1" "kettle" 40⟩,
+  .rejected .Order .alreadyPlaced ]
+
+/-- Told to the domain by itself, with the story playing the outside systems. -/
+example : Shop.passes aKettle = true := by decide
 
 /-! ## The stack -/
 
@@ -540,6 +542,22 @@ theorem placingAnOrderTwiceIsRefused (id item : String) (amount : Nat) (cloud : 
     Except.map] at answered
   exact answered
 
+/-- A posted body that reads as a command reaches the route for that command. -/
+theorem postingReachesTheCommand (body : String) (command : Order.Command)
+    (reads : Text.read (α := Order.Command) body = some command) :
+    route (theShop (role := role) orders shipments) { method := .post, path := ["orders"], body }
+      = postOrder (theShop (role := role) orders shipments) command := by
+  simp [route, reads]
+
+/-- A posted body that does not read as a command is refused, and nothing is touched. -/
+theorem aMalformedBodyIsRefused (body : String)
+    (unreadable : Text.read (α := Order.Command) body = none) (cloud : Memory) :
+    (route (theShop (role := role) orders shipments)
+        { method := .post, path := ["orders"], body }).eval InMemory cloud
+      = (.ok { status := 400, body := "not a command" }, cloud) := by
+  simp only [route, unreadable]
+  rfl
+
 /-- The routes are the requests: each request reaches the route its path names. -/
 example (id : String) :
     route (theShop (role := role) orders shipments) { method := .get, path := ["orders", id] }
@@ -563,16 +581,14 @@ def deployed : Telling Shop InMemory where
     | ⟨.Shipment, _, command⟩ => (post out.api "/shipments" command).request
   world := shopIn out.orders
 
+/-- The same story as the domain's, word for word, told to the stack. -/
+example : prod.tells deployed aKettle = true := by native_decide
+
+/-- And one the stack decides for itself: its gateway refuses an order over its limit. -/
 example : prod.tells deployed [
-    .when ⟨.Order, (), .place "o-1" "kettle" 40⟩,
-    .recorded .Order "o-1" [.placed "kettle" 40, .paid "ch_o-1" "kettle" 40],
-    .recorded .Shipment "o-1" [.scheduled "kettle"],
-    .view Revenue () 40,
-    .when ⟨.Order, (), .place "o-1" "kettle" 40⟩,
-    .rejected .Order .alreadyPlaced,
     .when ⟨.Order, (), .place "o-2" "yacht" 5000⟩,
     .recorded .Order "o-2" [.placed "yacht" 5000, .declined "over the limit"],
-    .view Revenue () 40
+    .view Revenue () 0
   ] = true := by native_decide
 
 /-! ## Tests of the stack
