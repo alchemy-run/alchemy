@@ -14,7 +14,10 @@ import type { WebsiteTextEncoding } from "./shared.ts";
 
 export interface AssetFileOption {
   /**
-   * Glob or globs of files to match.
+   * Glob or globs of files to match, relative to `sourcePath`. `*` matches
+   * within one path segment, `**` matches across segments (`**\/*.html`
+   * includes a root `index.html`), and `?` matches one character. When
+   * several rules match a file, the last one wins.
    */
   files: string | string[];
   /**
