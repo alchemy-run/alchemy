@@ -25,6 +25,7 @@ inductive Command where
   | withdraw (id : String) (amount : Nat)
   | freeze (id reason : String)
   | close (id : String)
+  | requestPayout (id payout : String) (amount : Nat)
 deriving DecidableEq, Repr, Lean.ToJson, Lean.FromJson
 
 inductive Event where
@@ -35,6 +36,7 @@ inductive Event where
   | transferredIn (amount : Nat)
   | frozen (reason : String)
   | closed
+  | payoutRequested (payout : String) (amount : Nat)
 deriving DecidableEq, Repr
 
 inductive Rejection where
@@ -63,7 +65,8 @@ structure State where
 deriving DecidableEq, Repr
 
 def key : Command → String
-  | .open id _ | .deposit id _ | .withdraw id _ | .freeze id _ | .close id => id
+  | .open id _ | .deposit id _ | .withdraw id _ | .freeze id _ | .close id
+  | .requestPayout id _ _ => id
 
 /-- Decide: the events a command records, or why it is refused. -/
 def decide (s : State) : Command → Except Rejection (List Event)
@@ -89,6 +92,8 @@ def decide (s : State) : Command → Except Rejection (List Event)
     if s.status = .open then
       if s.balance = 0 then .ok [.closed] else .error (.notEmpty s.balance)
     else .error .notOpen
+  | .requestPayout _ payout amount =>
+    if s.status = .open then .ok [.payoutRequested payout amount] else .error .notOpen
 
 /-- Evolve: what an event does to the state. -/
 def evolve (s : State) : Event → State
@@ -103,6 +108,7 @@ def evolve (s : State) : Event → State
     { s with balance := s.balance + amount, deposited := s.deposited + amount }
   | .frozen reason => { s with status := .frozen reason }
   | .closed => { s with status := .closed }
+  | .payoutRequested .. => s
 
 end Account
 
@@ -127,6 +133,23 @@ inductive TransferRefused where
   | insufficientFunds (balance requested : Nat)
 deriving DecidableEq, Repr
 
+/-- What a payout is started with. -/
+structure PayoutRequest where
+  account : String
+  amount : Nat
+deriving DecidableEq, Repr
+
+/-- What the wire service answers. -/
+inductive WireResult where
+  | sent
+  | bounced
+deriving DecidableEq, Repr, Lean.ToJson, Lean.FromJson
+
+inductive PayoutFailed where
+  | refused
+  | bounced
+deriving DecidableEq, Repr
+
 model Bank where
   aggregate Account
 
@@ -144,6 +167,19 @@ model Bank where
         Account.record destination (.transferredIn amount)]
 
   call screen (account : String) (amount : Nat) : Screening
+  call wire (payout account : String) (amount : Nat) : WireResult
+
+  -- A payout takes the money out, then wires it. If the wire bounces, the money goes back.
+  saga Payout (PayoutRequest) (Unit) : PayoutFailed
+    | payout, ⟨account, amount⟩ => do
+      Account.must (.withdraw account amount) fun _ => .refused
+      Account.undoWith (.deposit account amount)
+      match ← wire payout account amount with
+      | .sent => pure ()
+      | .bounced => failWith .bounced
+
+  policy Payouts on Account
+    | id, .payoutRequested payout amount => Payout.start payout ⟨id, amount⟩
 
   -- Whenever a large deposit arrives, have it screened, and freeze the account if it is flagged.
   policy Compliance on Account
@@ -460,6 +496,21 @@ example : Bank.passes [
     .recorded .Account "a-2" [.opened "Alex", .transferredIn 100],
     .when ⟨.Account, (), .withdraw "a-1" 100⟩,
     .rejected .Account (.frozen "source of funds")
+  ] = true := by decide
+
+/-- A payout whose wire bounces: the money is taken out, and put back. -/
+example : Bank.passes [
+    .when ⟨.Account, (), .open "a-1" "Sam"⟩,
+    .when ⟨.Account, (), .deposit "a-1" 500⟩,
+    .when ⟨.Account, (), .requestPayout "a-1" "p-1" 200⟩,
+    .call (.wire "p-1" "a-1" 200),
+    .state .Account "a-1"
+      { status := .open, owner := "Sam", balance := 300, deposited := 500, withdrawn := 200 },
+    .answer (.wire "p-1" "a-1" 200) .bounced,
+    .saga "p-1" (.failed .bounced),
+    .recorded .Account "a-1" [.opened "Sam", .deposited 500, .payoutRequested "p-1" 200,
+      .withdrawn 200, .deposited 200],
+    .view Holdings () 500
   ] = true := by decide
 
 end Bank
