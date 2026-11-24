@@ -1,4 +1,5 @@
 import Alchemy.Model
+import Alchemy.Attr
 
 /-!
 # Commands only a reaction sends
@@ -442,4 +443,45 @@ theorem backed (m : Model) (noDecisions : m.decisions = [])
   exact ⟨c, by rw [grew]; exact List.mem_append_left _ inLog, is⟩
 
 end Model
+
+/-- Walks a program, branch by branch, leaving one goal for each command it sends. -/
+macro "only_sends" : tactic => `(tactic| (
+  try simp only [Alchemy.Policy.on, ↓reduceDIte, behaviour]
+  repeat' (first
+    | exact Alchemy.Program.Only.pure _
+    | exact Alchemy.Program.Only.fail _
+    | refine Alchemy.Program.Only.call _ _ ?_
+    | refine Alchemy.Program.Only.send _ _ ?_ ?_
+    | refine Alchemy.Program.Only.await _ ?_
+    | refine Alchemy.Program.Only.compensate _ _ ?_ ?_
+    | refine Alchemy.Program.Only.start _ _ _ ?_
+    | refine Alchemy.Program.Only.signal _ _ _ ?_
+    | refine Alchemy.Program.Only.schedule _ _ _ ?_ ?_
+    | intro _
+    | split)))
+
+/--
+`caused_by reach` proves that every `effect` recorded has its `cause` recorded,
+in a world the model reaches: `Model.Backed effect cause w.log`. It checks that
+callers are offered no command that records an effect, then walks each policy's
+reaction to each event, and each saga. A command that could record an effect is
+allowed where the event being reacted to is its cause.
+-/
+macro "caused_by " reach:term : tactic => `(tactic| (
+  refine Alchemy.Model.backed _ rfl ?_ ?_ ?_ _ $reach
+  · rintro ⟨to, actor, command⟩ isOffered x seq time
+    cases to <;> first | exact id | exact isOffered.elim
+  · intro p mem log history e inLog
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at mem
+    obtain ⟨n, id, event, seq, time⟩ := e
+    repeat' (first | (rcases mem with h | mem; subst h) | subst mem)
+    all_goals (cases n <;> cases event <;> only_sends)
+    all_goals first
+      | exact ⟨_, inLog, rfl⟩
+      | (rename_i h; exact False.elim h)
+  · intro log saga input
+    only_sends
+    all_goals first
+      | (rename_i h; exact False.elim h)))
+
 end Alchemy

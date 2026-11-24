@@ -352,6 +352,31 @@ theorem noOrderIsPaidBeforeItIsPlaced (w : Alchemy.World Signature) (reach : Sho
     Aggregate.Follows Order.isPlaced Order.isPaid (w.toRecorded.eventsAt .Order id) :=
   Order.follows paymentNeedsAPlacedOrder w reach id
 
+/-! ## Across aggregates: nothing ships unless it was paid
+
+Shipments are internal: no caller can ask for one. So a shipment is only ever
+scheduled by a policy, and the only policy that schedules one reacts to a payment.
+-/
+
+/-- An event a shipment recorded. -/
+def isShipment : Emitted Aggregates → Prop
+  | ⟨.Shipment, _, _, _, _⟩ => True
+  | _ => False
+
+/-- The payment a shipment needs: the same order, paid. -/
+def paidFor : Emitted Aggregates → Emitted Aggregates → Prop
+  | ⟨.Shipment, id, _, _, _⟩, ⟨.Order, id', .paid .., _, _⟩ => id = id'
+  | _, _ => False
+
+/--
+Nothing ships unless it was paid. In every world the shop can reach, whatever
+callers send and the gateway answers, every shipment recorded is for an order
+whose payment is recorded.
+-/
+theorem nothingShipsUnlessPaid (w : Alchemy.World Signature) (reach : Shop.Reachable w) :
+    Model.Backed isShipment paidFor w.log := by
+  caused_by reach
+
 /-- One story, in the shop's words: a kettle is ordered, paid for and shipped, and cannot be ordered twice. -/
 def aKettle : List (Story.ModelStep Shop) := [
   .when ⟨.Order, (), .place "o-1" "kettle" 40⟩,
