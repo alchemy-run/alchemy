@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClientError from "effect/http/HttpClientError";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import type { ActorOptions } from "./DurableObject.ts";
 import { withConnection, type ConnectionProps } from "./internal/Connection.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -74,6 +75,8 @@ export interface PoolDurableObject {
    * `Rivet.DurableObject`. It owns the pool's nodes.
    */
   external?: boolean;
+  /** The RivetKit actor options, in milliseconds, the pool's nodes host it with. */
+  options?: ActorOptions;
 }
 
 /** Data the Durable Objects a pool hosts bind onto it. */
@@ -341,7 +344,13 @@ export const PoolProvider = () =>
             // (destroyed before this pool, e.g. by an interrupted destroy)
             // took the pool with it.
             Effect.catchTag(
-              ["BadGateway", "ServiceUnavailable", "GatewayTimeout", "TimeoutError"],
+              [
+                "BadGateway",
+                "ServiceUnavailable",
+                "GatewayTimeout",
+                "TimeoutError",
+                "EngineNotReady",
+              ],
               () =>
                 session.note(
                   `Rivet pool ${output.name}'s control plane is unreachable; dropping it.`,

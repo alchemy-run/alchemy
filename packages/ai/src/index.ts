@@ -1,3 +1,30 @@
+export {
+  CodeMode,
+  CodeModeAsync,
+  CodeModeConvention,
+  CodeModeEffect,
+  CodeModeError,
+  Eval,
+  EvalQuickJS,
+  isCodeMode,
+  programBody,
+  type CodeModeGroup,
+  type Convention,
+  type Evaluation,
+  type Evaluator,
+  type Program,
+  type ScriptTools,
+} from "./CodeMode.ts";
+export {
+  DuplicateDeclaration,
+  manifestOf,
+  type JsonSchema,
+  type Manifest,
+  renderDeclarations,
+  type DeclarationForm,
+  type DeclaredNamespace,
+  type DeclaredTool,
+} from "./Declarations.ts";
 export { isModel, Model, type AnyModel, type ModelClass, type ModelOptions } from "./Model.ts";
 export {
   Sandbox,

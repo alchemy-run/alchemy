@@ -52,14 +52,22 @@ export const systemdEnvFile = (env: Record<string, unknown>) =>
  * {@link systemdEnvFile} for a unit that runs a container. It also sets
  * {@link DOCKER_ENV} to `-e NAME` for each key, so `docker run` copies every
  * value from its own environment. Docker's `--env-file` can't hold a newline;
- * a value systemd loads can.
+ * a value systemd loads can. `forward` names variables the unit loads from
+ * another file, which `docker run` copies too.
  */
-export const containerEnvFile = (env: Record<string, unknown>) =>
-  sorted(env, DOCKER_ENV).pipe(
-    Effect.map((entries) =>
-      [
-        ...entries.map(([key, text]) => line(key, text)),
-        line(DOCKER_ENV, entries.map(([key]) => `-e ${key}`).join(" ")),
-      ].join("\n"),
-    ),
-  );
+export const containerEnvFile = (
+  env: Record<string, unknown>,
+  forward: ReadonlyArray<string> = [],
+) =>
+  Effect.gen(function* () {
+    const entries = yield* sorted(env, DOCKER_ENV);
+    const forwarded = (yield* sorted(
+      Object.fromEntries(forward.map((key) => [key, ""])),
+      DOCKER_ENV,
+    )).map(([key]) => key);
+    const names = [...new Set([...entries.map(([key]) => key), ...forwarded])];
+    return [
+      ...entries.map(([key, text]) => line(key, text)),
+      line(DOCKER_ENV, names.map((key) => `-e ${key}`).join(" ")),
+    ].join("\n");
+  });

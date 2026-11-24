@@ -4,6 +4,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import { findAvailablePort } from "alchemy/Util/Node";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -11,6 +12,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { applyObject, connectCluster } from "./Client.ts";
 import type { Connection, ContainerRegistry } from "./Connection.ts";
@@ -27,7 +29,7 @@ export interface LocalClusterProps extends KindClusterConfig {
   /**
    * Host port of the cluster's image registry, reachable from the deploying
    * machine as `localhost:<registryPort>`. Give each local cluster its own
-   * port.
+   * port, or `0` for a free one (read it from `registry`).
    * @default 5001
    */
   registryPort?: number;
@@ -99,7 +101,10 @@ export interface KindNode {
 export interface KindPortMapping {
   /** Port on the node container, e.g. a NodePort or hostPort. */
   containerPort: number;
-  /** Port on the host. */
+  /**
+   * Port on the host, or `0` for a free one kind picks (read it from the
+   * cluster's `ports`).
+   */
   hostPort: number;
   /**
    * Host address to listen on.
@@ -172,6 +177,11 @@ export interface LocalCluster extends Resource<
     /** CPU architecture of the cluster's nodes (the Docker host's). */
     architecture: "amd64" | "arm64";
     /**
+     * The host ports forwarded to the cluster's nodes, including the ones
+     * kind picked for a `hostPort` of `0` and the API server's.
+     */
+    ports: LocalClusterPort[];
+    /**
      * Connection for `Kubernetes.*` resources, including the registry and
      * node architecture. Pass the whole resource as their `cluster`.
      */
@@ -181,6 +191,17 @@ export interface LocalCluster extends Resource<
   Providers,
   LocalClusterLookup
 > {}
+
+/** A host port forwarded to a node of a `LocalCluster`. */
+export interface LocalClusterPort {
+  /** The node's container name, e.g. `<name>-control-plane`. */
+  node: string;
+  /** Port on the node container. */
+  containerPort: number;
+  /** Port on the host. */
+  hostPort: number;
+  protocol: "TCP" | "UDP" | "SCTP";
+}
 
 /**
  * Props for {@link LocalCluster.lookup}: find a kind cluster this
@@ -254,6 +275,24 @@ export interface LocalClusterLookup {
  * });
  * ```
  *
+ * **Example:** Forward a NodePort to a free host port
+ * ```typescript
+ * const cluster = yield* Kubernetes.LocalCluster("Cluster", {
+ *   nodes: [
+ *     {
+ *       role: "control-plane",
+ *       extraPortMappings: [{ containerPort: 30080, hostPort: 0 }],
+ *     },
+ *   ],
+ * });
+ * const url = cluster.ports.pipe(
+ *   Output.map((ports) => {
+ *     const port = ports.find((p) => p.containerPort === 30080);
+ *     return `http://localhost:${port?.hostPort}`;
+ *   }),
+ * );
+ * ```
+ *
  * ### Registry Port
  * **Example:** Two local clusters
  * ```typescript
@@ -262,6 +301,12 @@ export interface LocalClusterLookup {
  *   name: "green",
  *   registryPort: 5002,
  * });
+ * ```
+ *
+ * **Example:** A registry on a free port
+ * ```typescript
+ * const cluster = yield* Kubernetes.LocalCluster("Cluster", { registryPort: 0 });
+ * cluster.registry; // { server: "localhost:<a free port>" }
  * ```
  *
  * ### Looking up an existing cluster
@@ -305,13 +350,17 @@ const sanitizeName = (name: string) =>
     .replaceAll(/[^a-z0-9-]/g, "-")
     .replaceAll(/^-+|-+$/g, "");
 
-interface RegistryInspect {
+interface ContainerInspect {
   State?: { Running?: boolean };
   Config?: { Labels?: Record<string, string> | null };
   HostConfig?: {
     PortBindings?: Record<string, Array<{ HostPort?: string }> | null> | null;
   };
-  NetworkSettings?: { Networks?: Record<string, unknown> | null };
+  NetworkSettings?: {
+    Networks?: Record<string, unknown> | null;
+    /** The ports Docker published, including the ones it picked. */
+    Ports?: Record<string, Array<{ HostPort?: string }> | null> | null;
+  };
 }
 
 export const LocalClusterProvider = () =>
@@ -373,8 +422,17 @@ export const LocalClusterProvider = () =>
         return result;
       });
 
+      // kind locks the kubeconfig while it writes a context and fails at once
+      // when another kind process holds the lock, as one does while another
+      // cluster in the same kubeconfig is created or deleted.
       const kind = Effect.fn(function* (args: string[]) {
-        return yield* exec(yield* KindBin, args);
+        return yield* exec(yield* KindBin, args).pipe(
+          Effect.retry({
+            while: (error) => /failed to lock config file/i.test(error.message),
+            schedule: Schedule.spaced("2 seconds"),
+            times: 30,
+          }),
+        );
       });
       const docker = Effect.fn(function* (args: string[], stdin?: string) {
         return yield* exec(yield* DockerBin, args, stdin);
@@ -401,17 +459,60 @@ export const LocalClusterProvider = () =>
         return stdout.split(/\r?\n/).some((line) => line.trim() === name);
       });
 
-      const inspectRegistry = Effect.fn(function* (container: string) {
+      const inspectContainer = Effect.fn(function* (container: string) {
         const result = yield* run(yield* DockerBin, ["container", "inspect", container]);
         if (result.exitCode !== 0) return undefined;
-        const [info] = JSON.parse(result.stdout) as RegistryInspect[];
+        const [info] = JSON.parse(result.stdout) as ContainerInspect[];
         return info;
       });
 
-      const registryHostPort = (info: RegistryInspect | undefined) => {
-        const binding = info?.HostConfig?.PortBindings?.["5000/tcp"]?.[0];
-        return binding?.HostPort !== undefined ? Number(binding.HostPort) : undefined;
+      // A port Docker picks is in `NetworkSettings.Ports`; the binding has
+      // none.
+      const registryHostPort = (info: ContainerInspect | undefined) => {
+        const binding = (
+          info?.NetworkSettings?.Ports?.["5000/tcp"] ?? info?.HostConfig?.PortBindings?.["5000/tcp"]
+        )?.[0];
+        return binding?.HostPort ? Number(binding.HostPort) : undefined;
       };
+
+      const nodeNames = Effect.fn(function* (name: string) {
+        const { stdout } = yield* kind(["get", "nodes", "--name", name]);
+        return stdout
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0);
+      });
+
+      /** The host ports published on each of the cluster's nodes. */
+      const publishedPorts = Effect.fn(function* (name: string) {
+        const nodes = yield* nodeNames(name);
+        const ports = yield* Effect.forEach(
+          nodes,
+          (node) =>
+            inspectContainer(node).pipe(
+              Effect.map((info) =>
+                Object.entries(info?.NetworkSettings?.Ports ?? {}).flatMap(([key, bindings]) => {
+                  const [containerPort, protocol = "tcp"] = key.split("/");
+                  const hostPort = bindings?.[0]?.HostPort;
+                  return hostPort
+                    ? [
+                        {
+                          node,
+                          containerPort: Number(containerPort),
+                          hostPort: Number(hostPort),
+                          protocol: protocol.toUpperCase() as LocalClusterPort["protocol"],
+                        },
+                      ]
+                    : [];
+                }),
+              ),
+            ),
+          { concurrency: "unbounded" },
+        );
+        return ports
+          .flat()
+          .sort((a, b) => a.node.localeCompare(b.node) || a.containerPort - b.containerPort);
+      });
 
       const hostArchitecture = Effect.gen(function* () {
         const { stdout } = yield* docker(["version", "--format", "{{.Server.Arch}}"]);
@@ -423,6 +524,7 @@ export const LocalClusterProvider = () =>
         kubeconfig: string | undefined;
         registryPort: number;
         architecture: "amd64" | "arm64";
+        ports: LocalClusterPort[];
       }): LocalCluster["Attributes"] => {
         const context = `kind-${options.name}`;
         const registry = { server: `localhost:${options.registryPort}` };
@@ -433,6 +535,7 @@ export const LocalClusterProvider = () =>
           registry,
           registryContainer: `${options.name}-registry`,
           architecture: options.architecture,
+          ports: options.ports,
           connection: {
             auth: {
               kind: "kubeconfig",
@@ -506,33 +609,73 @@ export const LocalClusterProvider = () =>
         session: { note: (message: string) => Effect.Effect<void> };
       }) {
         const container = `${options.name}-registry`;
-        let info = yield* inspectRegistry(container);
-        if (info !== undefined && registryHostPort(info) !== options.registryPort) {
+        let info = yield* inspectContainer(container);
+        // `0` keeps whichever free port the running registry was given.
+        if (
+          info !== undefined &&
+          options.registryPort !== 0 &&
+          registryHostPort(info) !== options.registryPort
+        ) {
           yield* docker(["container", "rm", "--force", container]);
           info = undefined;
         }
         if (info === undefined) {
-          yield* options.session.note(
-            `Starting image registry on localhost:${options.registryPort}...`,
-          );
           const labels = yield* createInternalTags(options.id);
-          yield* docker([
-            "container",
-            "run",
-            "--detach",
-            "--restart=always",
-            "--publish",
-            `127.0.0.1:${options.registryPort}:5000`,
-            "--network",
-            "bridge",
-            "--name",
-            container,
-            ...Object.entries(labels).flatMap(([key, value]) => ["--label", `${key}=${value}`]),
-            REGISTRY_IMAGE,
-          ]);
-          info = yield* inspectRegistry(container);
+          const start = Effect.fn(function* (port: number) {
+            yield* options.session.note(`Starting image registry on localhost:${port}...`);
+            yield* docker([
+              "container",
+              "run",
+              "--detach",
+              "--restart=always",
+              "--publish",
+              `127.0.0.1:${port}:5000`,
+              "--network",
+              "bridge",
+              "--name",
+              container,
+              ...Object.entries(labels).flatMap(([key, value]) => ["--label", `${key}=${value}`]),
+              REGISTRY_IMAGE,
+            ]);
+          });
+          if (options.registryPort !== 0) {
+            yield* start(options.registryPort);
+          } else {
+            // Docker Desktop's daemon can't reach a port Docker picks
+            // (`127.0.0.1::5000`) at its own `localhost`, so pushes hang:
+            // pick a free port here and publish it explicitly, as kind does.
+            yield* Effect.gen(function* () {
+              const port = yield* findAvailablePort().pipe(
+                Effect.mapError(
+                  (error) => new LocalClusterError({ message: `No free port: ${error.message}` }),
+                ),
+              );
+              yield* start(port).pipe(
+                // A failed `run` can leave a created container behind.
+                Effect.tapError(() =>
+                  Effect.flatMap(DockerBin, (bin) =>
+                    run(bin, ["container", "rm", "--force", container]),
+                  ),
+                ),
+              );
+            }).pipe(
+              // Another process may take the port before the registry binds it.
+              Effect.retry({
+                while: (error) => /already allocated|address already in use/i.test(error.message),
+                times: 5,
+              }),
+            );
+          }
+          info = yield* inspectContainer(container);
         } else if (info.State?.Running !== true) {
           yield* docker(["container", "start", container]);
+          info = yield* inspectContainer(container);
+        }
+        const registryPort = registryHostPort(info);
+        if (registryPort === undefined) {
+          return yield* new LocalClusterError({
+            message: `The image registry ${container} published no host port.`,
+          });
         }
         if (info?.NetworkSettings?.Networks?.kind === undefined) {
           yield* docker(["network", "connect", "kind", container]).pipe(
@@ -544,12 +687,8 @@ export const LocalClusterProvider = () =>
 
         // containerd on each node: pull `localhost:<port>/…` from the
         // registry container over the kind network.
-        const registryDir = `/etc/containerd/certs.d/localhost:${options.registryPort}`;
-        const { stdout } = yield* kind(["get", "nodes", "--name", options.name]);
-        const nodes = stdout
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter((line) => line.length > 0);
+        const registryDir = `/etc/containerd/certs.d/localhost:${registryPort}`;
+        const nodes = yield* nodeNames(options.name);
         yield* Effect.forEach(
           nodes,
           (node) =>
@@ -562,6 +701,7 @@ export const LocalClusterProvider = () =>
             }),
           { concurrency: "unbounded" },
         );
+        return registryPort;
       });
 
       return {
@@ -584,25 +724,27 @@ export const LocalClusterProvider = () =>
         }),
         lookup: Effect.fn(function* ({ name, kubeconfig }) {
           if (!(yield* clusterExists(name))) return undefined;
-          const registryInfo = yield* inspectRegistry(`${name}-registry`);
+          const registryInfo = yield* inspectContainer(`${name}-registry`);
           return toAttributes({
             name,
             kubeconfig,
             registryPort: registryHostPort(registryInfo) ?? DEFAULT_REGISTRY_PORT,
             architecture: yield* hostArchitecture,
+            ports: yield* publishedPorts(name),
           });
         }),
 
         read: Effect.fn(function* ({ id, olds, output, previous }) {
           const name = yield* clusterName(id, olds, output);
           if (!(yield* clusterExists(name))) return undefined;
-          const registryInfo = yield* inspectRegistry(`${name}-registry`);
+          const registryInfo = yield* inspectContainer(`${name}-registry`);
           const attrs = toAttributes({
             name,
             kubeconfig: output?.kubeconfig ?? olds?.kubeconfig,
             registryPort:
               registryHostPort(registryInfo) ?? olds?.registryPort ?? DEFAULT_REGISTRY_PORT,
             architecture: yield* hostArchitecture,
+            ports: yield* publishedPorts(name),
           });
           if (output) return attrs;
           // kind clusters carry no ownership marker; the registry container
@@ -612,7 +754,6 @@ export const LocalClusterProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* clusterName(id, news, output);
-          const registryPort = news.registryPort ?? DEFAULT_REGISTRY_PORT;
           yield* ensureCluster({
             name,
             nodeImage: news.nodeImage,
@@ -620,12 +761,18 @@ export const LocalClusterProvider = () =>
             config: kindConfigOf(news),
             session,
           });
-          yield* ensureRegistry({ id, name, registryPort, session });
+          const registryPort = yield* ensureRegistry({
+            id,
+            name,
+            registryPort: news.registryPort ?? DEFAULT_REGISTRY_PORT,
+            session,
+          });
           const attrs = toAttributes({
             name,
             kubeconfig: news.kubeconfig,
             registryPort,
             architecture: yield* hostArchitecture,
+            ports: yield* publishedPorts(name),
           });
 
           // Advertise the registry to in-cluster tooling (KEP-1755).

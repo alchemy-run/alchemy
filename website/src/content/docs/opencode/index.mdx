@@ -1,17 +1,17 @@
 ---
 title: OpenCode
-description: Run the OpenCode coding agent with Alchemy. A sandbox for each session, your models and tools answered from your own runtime, and no API key in the sandbox.
+description: Run the OpenCode coding agent with Alchemy, inside a Cloudflare Durable Object. Your models answer it and your tools run beside it, and a sandbox is only where tools find files and a shell.
 ---
 
 import HubMap from "../../../components/HubMap.astro";
 
-[OpenCode](https://opencode.ai) is an open-source coding agent that runs as a server: it keeps sessions, runs its own tools on the machine it is on, and asks a model provider for each answer. Alchemy runs it in a sandbox for each session, and answers its model requests and its calls to your tools from your Durable Object. The sandbox holds no API key. Models, tools, skills and sandboxes are the ones you declare with [`@alchemy.run/ai`](/ai).
+[OpenCode](https://opencode.ai) is an open-source coding agent: it keeps sessions, runs a loop of model requests and tool calls, and stores each transcript. OpenCode 2 runs inside a Cloudflare Durable Object, on the object's own SQLite. Alchemy starts it there, answers its model requests with your models, and registers your tools with it, all in the same isolate. A sandbox is only where tools that need files or a shell do their work. Models, tools, skills and sandboxes are the ones you declare with [`@alchemy.run/ai`](/ai).
 
 **New to OpenCode?** Start with [What is OpenCode?](/opencode/what-is-opencode).
 
 ## A quick example
 
-A model, and where sandboxes run:
+A model, and where the coding tools find files and a shell:
 
 ```typescript title="src/agent.ts"
 import * as AI from "@alchemy.run/ai";
@@ -44,10 +44,9 @@ import { Fast, FastLive, Sandbox } from "./agent.ts";
 
 const HarnessLive = Layer.mergeAll(
   FastLive,
-  Sandbox,
   OpenCode.CodingTools,
-  OpenCodeCloudflare.DurableObjectInstance,
-);
+  OpenCodeCloudflare.DurableObjectStorage,
+).pipe(Layer.provideMerge(Sandbox));
 
 export default class Coder extends Cloudflare.DurableObject<Coder>()(
   "Coder",

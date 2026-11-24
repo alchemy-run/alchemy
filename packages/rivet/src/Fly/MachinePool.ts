@@ -4,7 +4,7 @@ import {
   bundleNodes,
   isImageProgram,
   makePoolLayer,
-  nodeEnvironment,
+  secretNodeEnvironment,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 
@@ -36,6 +36,10 @@ export interface MachinePoolOptions extends PoolSettings {
  *
  * Every Durable Object given the same pool shares its nodes: declare the
  * pool once and provide it to each class.
+ *
+ * The control plane's token, and every secret a class reads as config,
+ * reach the nodes as secrets of the Service's App: Fly encrypts them and
+ * keeps them out of the Machine config.
  *
  * ### Running Durable Objects on Fly
  * **Example:** Two nodes
@@ -73,7 +77,10 @@ export const MachinePool = (id: string, options: MachinePoolOptions = {}) =>
         region: options.region ?? "iad",
         count: options.replicas ?? 1,
         guest: options.guest ?? { cpus: 1, memoryMb: 1024 },
-        env: nodeEnvironment(nodes),
+        // The token and every secret a class reads as config stay
+        // `Redacted`: the Service keeps them as secrets of its App, out of
+        // the Machine config.
+        env: secretNodeEnvironment(nodes),
       });
     }),
   });

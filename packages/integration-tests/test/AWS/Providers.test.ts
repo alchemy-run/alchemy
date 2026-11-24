@@ -81,7 +81,10 @@ const provided = Test.make({
   providers: AWS.providers().pipe(Layer.provide(providedEnvironment)),
 });
 
-provided.test.provider(
+// A dev run (`ALCHEMY_TEST_DEV`, as the floci suite sets) emulates the
+// bucket in floci's one region, so the provided region is only observable
+// against live providers.
+provided.test.provider.skipIf(!!process.env.ALCHEMY_TEST_DEV)(
   "a provided AWSEnvironment drives providers() and state()",
   (stack) =>
     Effect.gen(function* () {

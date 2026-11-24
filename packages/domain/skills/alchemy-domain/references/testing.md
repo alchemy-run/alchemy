@@ -143,6 +143,17 @@ The statuses are `NotStarted`, `Running`, `Completed`, `Rejected`, `Interrupted`
 
 More: [Saga: Test it](https://alchemy.run/domain/saga#test-it).
 
+A rewrite and a compaction are steps, and a saga no event starts is started by one:
+
+```ts
+Story.rewrite(account, new ForgetOwner({ customerId })), // waits for views, projections and streams
+Story.compact(account, BringForward),                    // the next `then` sees the roll-up
+Story.start(EraseCustomer, customerId, {}),
+Story.saga(EraseCustomer, customerId, { _tag: "Completed", result: undefined }),
+```
+
+More: [Story: Rewrite, compact and start a saga](https://alchemy.run/domain/story#rewrite-compact-and-start-a-saga).
+
 ### The declaration
 
 Building the model's Layer dies with a `Domain.DefinitionError` for every definition problem (missing `keyOf`, view `state` without `initial`, a policy or projection `on` an event no source emits, a stream with two writers, duplicate names, a schema with no JSON form such as `Schema.instanceOf(Foo)`, an `initial` that doesn't survive JSON). Every story builds it, so stories catch them; a model without stories keeps one test that builds it:
@@ -225,18 +236,20 @@ Rules of thumb:
 
 - A failure prints the shortest sequence that breaks the rule, and a `Story` to paste in as a regression test. Fix the model, or fix the rule when the business agrees it was wrong.
 - `Proved` holds for every state and input. `Checked` holds in the sequences run (2 commands deep by default, each event delivered twice, each saga step run twice, reactions reordered, schedules late, every answer an external system's schema allows). `Sampled` is 200 seeded random walks of up to 12 commands, for rules that take longer to break. Raise `depth` with `faults` off, or `walks`, when you need more.
-- Keep numbers that are added or multiplied whole (`Schema.Int`, `Schema.BigInt`, money in cents). Arithmetic JavaScript rounds is reported as not read. A division is read through `Math.floor`, `Math.ceil` or `Math.trunc`.
+- Keep numbers that are added or multiplied whole (`Schema.Int`, `Schema.BigInt`, money in cents) or in a `BigDecimal`, which is exact and read as written. Arithmetic JavaScript rounds is reported as not read. A division is read through `Math.floor`, `Math.ceil` or `Math.trunc`.
 - A `Domain.Decision` states rules about its step in `transitions`: `({ before, after, command, events })`, with each state under its name in `reads`. `Verify.model` proves them, and proves the decision keeps the rules of every aggregate it records on; `Prove.decision(Transfer, { source })` does it for one decision. Two names of the same aggregate are tried as two instances and as one. An aggregate a decision records on is verified through its model, not alone.
 - A model's `relations` relate a few instances, each made with `Domain.Relation({ over: { customer: Customer, claim: UsernameClaim }, holds: ({ customer, claim }) => ... })`. `holds` is given `{ id, state }` for each name and starts with which instances it is about (`claim.state.customerId !== customer.id || ...`). `Verify.model` proves one where every command and decision that records on its aggregates keeps it, so a decision that writes both sides is what makes it provable. When a proof fails on states nothing reaches, add the relation that rules them out: relations are proved together.
-- `decide`, `evolve` and rules are plain functions of their inputs: loops, `+=`, rest patterns, `Option`, `effect/Array`, `effect/Record`, `effect/Struct` and `effect/Match` helpers are read. Code outside what the prover reads is reported with its file and line and fails the check: the full list is in [What the prover reads](https://alchemy.run/domain/verifiable-code). A loop over a list from the state or a command is tried up to 2 items past what its schema asks for, so its rule is `Checked`, not `Proved`.
+- What `decide`, `evolve` and rules return depends only on their inputs, as a value or an Effect (`Effect.gen`, `Effect.fn`): loops, `+=`, rest patterns, and Effect's own library are supported. That is `Effect` with its failures (`catchTag`, `mapError`, `all`, `forEach`), `Option`, `Result`, `Match`, `Array`, `Record`, `Struct`, `Number`, `String`, `Order`, `BigDecimal`, `HashSet`, `HashMap`, `DateTime`, `Duration`, `Data.TaggedError` and a `Stream` run to a value. An id is taken apart with `slice`, `indexOf`, `lastIndexOf` and `split`, and a tagged union is tested with its `guards`. What reads the outside world (`Random`, a promise, a sleep, a queue) is never supported. Unsupported code is reported with its file and line and fails the check: the full list is in [What can be verified](https://alchemy.run/domain/verifiable-code). A loop over a list from the state or a command is tried up to 2 items past what its schema asks for, so its rule is `Checked`, not `Proved`.
+- A helper the prover cannot read (a hash, a parser, a regular expression) goes in an exported function: the prover takes it to be pure and does not look inside, and rules that do not read its result are still proved. One that reads a global (`Date`, `Math.random`) or calls a package function with no model is not taken to be pure: name it in `opaque: [DateTime.formatIso]` only when it is. Shared rules in another package are read like your own files.
 - Pin the rules that must stay proved with `require: { proved: ["Account.NeverOverdrawn"] }`: one that slips to `Checked` then fails the test.
 - Keep rules from being weakened with `lock: "./Bank.lock.json"`: the first run writes the file, commit it. A rule removed, or changed to allow more, then fails. Never set `UPDATE_VERIFY_LOCK=1` or edit the file to make a test pass: relocking a rule that says less is the user's call.
 - Where a proof fails from a state no sequence reaches, the report may print the invariant to add (`Add it to the invariants:`). Add it as written.
 - Never widen `allow` to get a pass. It names what the check may skip, and each entry is something no longer verified.
 - A rule that is true but not proved needs a second invariant that rules out the state the prover started from.
+- The model's rewrites and compactions are verified with it. A compaction is proved to lose nothing, a rewrite to keep every invariant. With `story`, each is also put into every sequence: `View.Compaction` breaks when a view's roll-up handler says less than the events did, `Rewrite.Compaction` when the rewrite has no matching handler for the roll-up. Fix the handler; name a view that keeps less on purpose in `allow: { lossy: ["Statement.ArchiveBook"] }`. `Prove.compaction(C, { source })` and `Prove.rewrite(R, { source, compactions })` do one alone.
 - An external call listed under "called again" must be safe to repeat: give the vendor an idempotency key made from the event.
 
-More: [Verifying a model](https://alchemy.run/domain/verifying-models).
+More: [Verifying a model](https://alchemy.run/domain/verifying-models), [Verifying a model: Rewrites and compactions are verified too](https://alchemy.run/domain/verifying-models#rewrites-and-compactions-are-verified-too).
 
 ## Api tests: the client's view
 

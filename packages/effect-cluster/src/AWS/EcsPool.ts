@@ -1,5 +1,7 @@
+import * as EC2 from "@alchemy.run/aws/EC2";
 import * as ECS from "@alchemy.run/aws/ECS";
 import * as SecretsManager from "@alchemy.run/aws/SecretsManager";
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
@@ -16,9 +18,22 @@ const RDS_RUNNER_DOCKERFILE = RUNNER_DOCKERFILE.replace(
 ADD ${RDS_CA_BUNDLE} /etc/ssl/rds-ca.pem
 ENV NODE_EXTRA_CA_CERTS=/etc/ssl/rds-ca.pem`,
 );
-import { awsNetworkOf, makeAwsGateway, type AwsNetwork } from "./internal/Gateway.ts";
+import type { Gateway } from "./Gateway.ts";
+import { awsNetworkOf, makeAwsGateway } from "./internal/Gateway.ts";
+import { resolveNetwork } from "./internal/Network.ts";
+import type { Network, NetworkInput } from "./Network.ts";
 
-export interface EcsPoolOptions extends PoolSettings {
+/** The VPC a pool's runners run in beside a database in none. */
+export interface EcsPoolNetwork extends Network {
+  /**
+   * The security group every runner joins. It must reach the database and
+   * let runners reach each other on port 34431. When omitted, the pool
+   * creates one that does the second.
+   */
+  readonly securityGroupId?: Input<string>;
+}
+
+export interface EcsPoolOptions<R = never> extends PoolSettings {
   /**
    * Number of runners.
    * @default 2
@@ -41,13 +56,38 @@ export interface EcsPoolOptions extends PoolSettings {
    */
   architecture?: "X86_64" | "ARM64";
   /**
-   * The VPC runners run in when the database is in none, such as
-   * `Cluster.Database.fromUrl`. `securityGroupId` is the group every runner
-   * joins; it must let runners reach each other on port 34431 and reach
-   * the database. Ignored when the database is in a VPC.
+   * Where callers reach the pool: `ClusterAWS.LoadBalancerGateway(…)` or
+   * `ClusterAWS.CloudFrontGateway(…)`.
+   * @default ClusterAWS.LoadBalancerGateway(): internet-facing, plain HTTP
    */
-  network?: Omit<AwsNetwork, "kind">;
+  gateway?: Gateway;
+  /**
+   * The VPC runners run in when the database is in none, such as
+   * `Cluster.Database.fromUrl`, by id, or an Effect that yields the
+   * resources the ids come from and returns them. Ignored when the
+   * database is in a VPC.
+   */
+  network?: NetworkInput<EcsPoolNetwork, never, R>;
 }
+
+/** A security group for a pool's runners, which reach each other on the runner port. */
+const runnersGroup = Effect.fn(function* (id: string, vpcId: Input<string>) {
+  const runners = yield* EC2.SecurityGroup(`${id}RunnersGroup`, {
+    vpcId: vpcId as Input<EC2.VpcId>,
+    description: "Effect Cluster runners",
+    egress: [{ ipProtocol: "-1", cidrIpv4: "0.0.0.0/0" }],
+  });
+  // Runners send each other messages for the shards they own.
+  yield* EC2.SecurityGroupRule(`${id}RunnerPeers`, {
+    groupId: runners.groupId,
+    type: "ingress",
+    ipProtocol: "tcp",
+    fromPort: RUNNER_PORT,
+    toPort: RUNNER_PORT,
+    referencedGroupId: runners.groupId,
+  });
+  return runners;
+});
 
 /**
  * Keep a runner secret in a Secrets Manager secret of the pool's own, and
@@ -66,13 +106,13 @@ const runnerSecret = Effect.fn(function* (
 
 /**
  * Run a pool of Effect Cluster runners on ECS Fargate: an ECS service whose tasks
- * host every class given this pool, in the database's VPC, behind a
- * load balancer that serves their gateway to callers anywhere. With a
- * database in no VPC (`Cluster.Database.fromUrl`), give the pool its `network`.
+ * host every class given this pool, in the database's VPC, behind the
+ * gateway its callers reach it through. With a database in no VPC
+ * (`Cluster.Database.fromUrl`), give the pool its `network`.
  *
  * Runners reach each other and the database through the cluster's runner
- * security group; the load balancer only reaches the gateway, which checks
- * every call's token.
+ * security group; the gateway's load balancer only reaches the gateway, which
+ * checks every call's token.
  *
  * The database URL, the gateway token, and every other secret bound into
  * the runners' environment are kept in Secrets Manager secrets of the
@@ -97,9 +137,66 @@ const runnerSecret = Effect.fn(function* (
  * }).pipe(Layer.provide(Database));
  * ```
  *
+ * ### Choosing the gateway
+ * Without a `gateway`, an internet-facing load balancer serves plain HTTP.
+ *
+ * **Example:** HTTPS on your domain
+ * ```typescript
+ * export const Default = ClusterAWS.EcsPool("Default", {
+ *   gateway: ClusterAWS.LoadBalancerGateway({ domain: "cluster.example.com" }),
+ * }).pipe(Layer.provide(Database));
+ * ```
+ *
+ * **Example:** HTTPS without a domain, through CloudFront
+ * ```typescript
+ * export const Default = ClusterAWS.EcsPool("Default", {
+ *   gateway: ClusterAWS.CloudFrontGateway(),
+ * }).pipe(Layer.provide(Database));
+ * ```
+ *
+ * **Example:** Only callers inside the VPC
+ * ```typescript
+ * export const Default = ClusterAWS.EcsPool("Default", {
+ *   gateway: ClusterAWS.LoadBalancerGateway({ scheme: "internal" }),
+ * }).pipe(Layer.provide(Database));
+ * ```
+ *
+ * ### Running beside a database by URL
+ * Runners join the `securityGroupId`, which must reach the database; without
+ * one, the pool creates a group the database must admit.
+ *
+ * **Example:** Runners in a VPC by id
+ * ```typescript
+ * export const Database = Cluster.Database.fromUrl(Config.redacted("DATABASE_URL"));
+ * export const Default = ClusterAWS.EcsPool("Default", {
+ *   network: {
+ *     vpcId: "vpc-0123456789abcdef0",
+ *     subnetIds: ["subnet-0123456789abcdef0", "subnet-0fedcba9876543210"],
+ *     securityGroupId: "sg-0123456789abcdef0",
+ *   },
+ * }).pipe(Layer.provide(Database));
+ * ```
+ *
+ * **Example:** Runners in a VPC another stack owns
+ * ```typescript
+ * export const Database = Cluster.Database.fromUrl(Config.redacted("DATABASE_URL"));
+ * export const Default = ClusterAWS.EcsPool("Default", {
+ *   network: Effect.gen(function* () {
+ *     const vpc = yield* EC2.Vpc.ref("AppVpc", { stack: "network" });
+ *     const a = yield* EC2.Subnet.ref("PrivateSubnetA", { stack: "network" });
+ *     const b = yield* EC2.Subnet.ref("PrivateSubnetB", { stack: "network" });
+ *     return {
+ *       vpcId: vpc.vpcId,
+ *       subnetIds: [a.subnetId, b.subnetId],
+ *       assignPublicIp: false,
+ *     };
+ *   }),
+ * }).pipe(Layer.provide(Database));
+ * ```
+ *
  * @primitive
  */
-export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
+export const EcsPool = <R = never>(id: string, options: EcsPoolOptions<R> = {}) =>
   makePoolLayer({
     label: "ClusterAWS.EcsPool",
     id,
@@ -109,11 +206,22 @@ export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
     // verify the database's certificate.
     dockerfile: RDS_RUNNER_DOCKERFILE,
     network: awsNetworkOf,
-    ownNetwork: Effect.succeed(
-      options.network === undefined ? undefined : { kind: "aws" as const, ...options.network },
-    ),
+    ownNetwork: Effect.gen(function* () {
+      if (options.network === undefined) return undefined;
+      const network = yield* resolveNetwork(options.network);
+      return {
+        kind: "aws" as const,
+        vpcId: network.vpcId,
+        subnetIds: [...network.subnetIds],
+        publicSubnetIds: network.publicSubnetIds && [...network.publicSubnetIds],
+        securityGroupId:
+          network.securityGroupId ?? (yield* runnersGroup(id, network.vpcId)).groupId,
+        cidrBlock: network.cidrBlock,
+        assignPublicIp: network.assignPublicIp,
+      };
+    }),
     secretsSeparately: true,
-    gateway: (_name, network) => makeAwsGateway(id, network, "ip"),
+    gateway: (_name, network) => makeAwsGateway(id, network, "ip", options.gateway),
     nodes: ({ network, gateway, program, environment, secrets }) =>
       Effect.gen(function* () {
         const cluster = yield* ECS.Cluster(`${id}Cluster`, {});
@@ -151,7 +259,7 @@ export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
           vpcId: network.vpcId,
           subnets: [...network.subnetIds],
           securityGroups: [network.securityGroupId, gateway.securityGroupId],
-          assignPublicIp: true,
+          assignPublicIp: network.assignPublicIp ?? true,
           loadBalancers: [
             {
               targetGroupArn: gateway.targetGroupArn as unknown as string,

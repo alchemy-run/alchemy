@@ -16,7 +16,12 @@ type TypeId = typeof TypeId;
  * The cloud-provider object storage a Cloud Connector rule routes matching
  * traffic to.
  */
-export type CloudConnectorProvider = "aws_s3" | "cloudflare_r2" | "gcp_storage" | "azure_storage";
+export type CloudConnectorProvider =
+  | "aws_s3"
+  | "cloudflare_r2"
+  | "gcp_storage"
+  | "azure_storage"
+  | "oci_storage";
 
 /**
  * A single Cloud Connector rule routing matching traffic directly to a
@@ -33,9 +38,16 @@ export interface Rule {
    */
   expression: string;
   /**
-   * Host of the target bucket — e.g. `mybucket.s3.amazonaws.com` for S3,
-   * or an R2 bucket's public host. Accepts an `Input` so it can reference
-   * another resource's output (commonly an `Bucket`).
+   * Host of the target bucket, without protocol, port, or path. Each
+   * provider accepts its own formats:
+   *
+   * - `aws_s3`: `<bucket>.s3.amazonaws.com`, `s3.<region>.amazonaws.com`, or an S3 website endpoint
+   * - `cloudflare_r2`: the bucket's custom domain, in the same zone (`r2.dev` is not supported)
+   * - `gcp_storage`: `<bucket>.storage.googleapis.com` or `storage.googleapis.com`
+   * - `azure_storage`: `<account>.blob.core.windows.net` or `<account>.web.core.windows.net`
+   * - `oci_storage`: `<namespace>.compat.objectstorage.<region>.oraclecloud.com`,
+   *   `<namespace>.compat.objectstorage.<region>.oci.customer-oci.com`, or
+   *   `<bucket>.vhcompat.objectstorage.<region>.oci.customer-oci.com`
    */
   host: string;
   /**
@@ -95,7 +107,8 @@ export type Rules = Resource<TypeId, RulesProps, RulesAttributes, never, Provide
  *
  * Cloud Connector routes matching traffic directly from Cloudflare's edge
  * to a cloud-provider object-storage bucket (Cloudflare R2, Amazon S3,
- * Google Cloud Storage, or Azure Blob Storage) without an origin server.
+ * Google Cloud Storage, Azure Blob Storage, or Oracle Cloud Infrastructure
+ * Object Storage) without an origin server.
  * Each rule pairs a Rules-language expression with the target bucket host.
  *
  * The zone has exactly one rule list — the API only supports replacing the
@@ -135,9 +148,33 @@ export type Rules = Resource<TypeId, RulesProps, RulesAttributes, never, Provide
  *     {
  *       provider: "cloudflare_r2",
  *       expression: 'http.request.uri.path wildcard "/assets/*"',
- *       // public R2 bucket host (r2.dev or a custom domain)
- *       host: publicBucketHost,
+ *       // the bucket's custom domain, in the same zone (r2.dev is not supported)
+ *       host: "assets.example.com",
  *       description: "static assets from R2",
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * **Example:** Route by path to several clouds
+ * ```typescript
+ * yield* Cloudflare.CloudConnector.Rules("Rules", {
+ *   zoneId: zone.zoneId,
+ *   rules: [
+ *     {
+ *       provider: "gcp_storage",
+ *       expression: 'http.request.uri.path wildcard "/media/*"',
+ *       host: "storage.googleapis.com",
+ *     },
+ *     {
+ *       provider: "azure_storage",
+ *       expression: 'http.request.uri.path wildcard "/docs/*"',
+ *       host: "myaccount.blob.core.windows.net",
+ *     },
+ *     {
+ *       provider: "oci_storage",
+ *       expression: 'http.request.uri.path wildcard "/archive/*"',
+ *       host: "mynamespace.compat.objectstorage.us-ashburn-1.oraclecloud.com",
  *     },
  *   ],
  * });

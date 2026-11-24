@@ -15,6 +15,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import { ManifestJson, type ManifestPackage } from "../Manifest.ts";
 import {
@@ -22,10 +23,12 @@ import {
   Forbidden,
   manifestArtifactName,
   MissingTarballs,
+  NoOpenPullRequest,
   PackageTooLarge,
   PkgApi,
   RunNotInProgress,
   RunRef,
+  Unavailable,
   Upstream,
 } from "../Protocol.ts";
 import {
@@ -161,13 +164,22 @@ const lookupRun = Effect.fn("lookupRun")(function* (ref: RunRef) {
     // the run's head lives in. The same commit can head several pull
     // requests, including one opened from a fork against a commit the
     // repository already published; matching the head repository keeps a
-    // run's publication on its own pull request.
+    // run's publication on its own pull request. GitHub can list a pull
+    // request a moment late, so an empty answer is checked again before the
+    // run counts as having no open pull request.
     const pulls = yield* github
       .pullRequestsForCommit(ref.repo, headRepo, data.head_branch, data.head_sha)
-      .pipe(Effect.mapError(upstream));
+      .pipe(
+        Effect.mapError(upstream),
+        Effect.repeat({
+          until: (found) => found.length > 0,
+          schedule: Schedule.spaced("2 seconds"),
+          times: 3,
+        }),
+      );
     const first = pulls[0];
     if (first === undefined) {
-      return yield* BadRequest.make({
+      return yield* NoOpenPullRequest.make({
         message: `no open pull request from ${headRepo} has head ${data.head_sha}`,
       });
     }
@@ -191,14 +203,20 @@ const lookupRun = Effect.fn("lookupRun")(function* (ref: RunRef) {
  * named by the manifest's hash. Only the job can add artifacts to the
  * run, and GitHub reports the run's artifacts to the App, so a matching
  * name means this run vouched for exactly this manifest text.
+ *
+ * GitHub lists an artifact a second or two after the upload finishes, and
+ * the job publishes right after uploading, so the lookup is repeated for up
+ * to 20 seconds before the run counts as not having vouched.
  */
 const requireVouched = Effect.fn("requireVouched")(function* (run: Run, manifestText: string) {
   const github = yield* GitHub.GitHubApp;
   const expected = manifestArtifactName(yield* sha256(manifestText));
-  const artifacts = yield* github
-    .listRunArtifacts(run.repo, run.runId, expected)
-    .pipe(Effect.mapError(upstream));
-  if (!artifacts.some((a) => a.name === expected && !a.expired)) {
+  const vouched = yield* github.listRunArtifacts(run.repo, run.runId, expected).pipe(
+    Effect.mapError(upstream),
+    Effect.map((artifacts) => artifacts.some((a) => a.name === expected && !a.expired)),
+    Effect.repeat({ until: (found) => found, schedule: Schedule.spaced("2 seconds"), times: 10 }),
+  );
+  if (!vouched) {
     return yield* Forbidden.make({
       message: `run ${run.runId} has not vouched for this manifest (no artifact ${expected})`,
     });
@@ -318,6 +336,13 @@ const publish = Effect.fn("publish")(function* (run: Run, manifestText: string) 
 });
 
 /**
+ * R2 errors that pass on their own: internal error, service unavailable,
+ * and too many requests. The body has been consumed by then, so the client
+ * sends it again.
+ */
+const TRANSIENT_R2_CODES = new Set([10001, 10043, 10058]);
+
+/**
  * Content-addressed upload, streamed straight into R2 with the hash
  * verified by R2 itself. Untagged objects are swept after a day.
  */
@@ -350,7 +375,13 @@ const uploadTarball = Effect.fn("uploadTarball")(function* (
       // The params schema already constrained this to 64 hex chars.
       sha256: Result.getOrThrow(Hex.decode(sha256)),
     })
-    .pipe(Effect.mapError((e) => BadRequest.make({ message: `upload rejected: ${String(e)}` })));
+    .pipe(
+      Effect.mapError((e) =>
+        e._tag === "R2Error" && e.code !== undefined && TRANSIENT_R2_CODES.has(e.code)
+          ? Unavailable.make({ message: `upload failed, try again: ${String(e)}` })
+          : BadRequest.make({ message: `upload rejected: ${String(e)}` }),
+      ),
+    );
   return { name, sha256, size: contentLength, uploaded: true };
 });
 

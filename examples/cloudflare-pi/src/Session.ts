@@ -1,4 +1,5 @@
 import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
@@ -14,7 +15,7 @@ import { Add, AddLive } from "./tools.ts";
 const HarnessLive = Layer.mergeAll(
   FastLive,
   AddLive,
-  Pi.CodeModeAsync.pipe(Layer.provide(PiCloudflare.EvalInline())),
+  AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalQuickJS())),
   PiCloudflare.DurableObjectStorage,
   Cloudflare.KV.ReadWriteNamespaceBinding,
 );
@@ -43,8 +44,9 @@ export default class Session extends Cloudflare.DurableObject<Session>()(
 
     const harness = yield* Pi.Harness({
       models: [Fast],
-      tools: [Add, SaveNote],
-      extensions: [Guard, Greeting, Pi.CodeMode],
+      // `add` is offered both ways: as a direct call, and from programs.
+      tools: [Add, SaveNote, AI.CodeMode(Add)],
+      extensions: [Guard, Greeting],
     });
 
     const toolOf = (name: ToolName) => (name === "add" ? Add : SaveNote);
@@ -96,7 +98,7 @@ export default class Session extends Cloudflare.DurableObject<Session>()(
         /** Let the conversation write programs that call its tools. */
         enableCodeMode: Effect.fn(function* (name: string) {
           const conversation = yield* harness.conversationByName(name);
-          yield* conversation.configure({ extensions: { add: [Pi.CodeMode] } });
+          yield* conversation.configure({ tools: { add: [AI.CodeMode(Add)] } });
         }),
         /** Offer the conversation the greeting skill. */
         addSkill: Effect.fn(function* (name: string) {
