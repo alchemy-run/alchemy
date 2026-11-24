@@ -102,7 +102,10 @@ describe.skipIf(!!process.env.FAST)(
         expect(url).toBeTruthy();
         baseUrl = String(url).replace(/\/+$/, "");
       }),
-      { timeout: 2_400_000 },
+      // A leftover stack takes ~20 minutes to destroy (a VPC function's
+      // network interfaces hold its subnets), then RDS, the NAT gateway and
+      // CloudFront deploy.
+      { timeout: 3_600_000 },
     );
 
     afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), { timeout: 1_800_000 });
