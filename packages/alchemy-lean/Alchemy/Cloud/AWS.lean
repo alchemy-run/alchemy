@@ -379,6 +379,26 @@ def object (m : Memory) (bucket : AWS.Bucket) (key : Path) : Option String :=
 def queued (m : Memory) (queue : AWS.Queue) : List String :=
   (m.messages.filter (·.1 == queue.id)).map (·.2)
 
+/-- The keys of a bucket. -/
+def keys (m : Memory) (bucket : AWS.Bucket) : List Path :=
+  (m.objects.filter (·.1 == bucket.id)).map (·.2.1)
+
+/-- Write an object, replacing whatever was at its key. -/
+def put (m : Memory) (bucket : AWS.Bucket) (key : Path) (body : String) : Memory :=
+  { m with
+    objects := (m.objects.filter fun (id, k, _) => !(id == bucket.id && k == key))
+      ++ [(bucket.id, key, body)] }
+
+/-- Put a message at the back of a queue. -/
+def send (m : Memory) (queue : AWS.Queue) (body : String) : Memory :=
+  { m with messages := m.messages ++ [(queue.id, body)] }
+
+/-- Take the message at the front of a queue off it. -/
+def receive (m : Memory) (queue : AWS.Queue) : Memory :=
+  match m.messages.find? (·.1 == queue.id) with
+  | none => m
+  | some message => { m with messages := m.messages.erase message }
+
 end Memory
 
 def simulate : {k : Kind} → Ref k → (c : Call k) → Memory → Reply c × Memory × List (Cloud.Emitted Kind)
@@ -387,22 +407,14 @@ def simulate : {k : Kind} → Ref k → (c : Call k) → Memory → Reply c × M
       | some body => .ok body
       | none => .error { bucket := bucket.id, key }, m, [])
   | .bucket, bucket, .putObject key body, m =>
-    ((), { m with
-        objects := (m.objects.filter fun (id, k, _) => !(id == bucket.id && k == key))
-          ++ [(bucket.id, key, body)] },
-      [(⟨.bucket, bucket, .objectCreated key⟩ : Cloud.Emitted Kind)])
-  | .bucket, bucket, .listObjects, m =>
-    ((m.objects.filter (·.1 == bucket.id)).map (·.2.1), m, [])
+    ((), m.put bucket key body, [(⟨.bucket, bucket, .objectCreated key⟩ : Cloud.Emitted Kind)])
+  | .bucket, bucket, .listObjects, m => (m.keys bucket, m, [])
   | .queue, queue, .sendMessage body, m =>
-    ((), { m with messages := m.messages ++ [(queue.id, body)] },
-      [(⟨.queue, queue, .messageSent⟩ : Cloud.Emitted Kind)])
-  | .queue, queue, .receiveMessage, m =>
-    match m.messages.find? (·.1 == queue.id) with
-    | none => (none, m, [])
-    | some message => (some message.2, { m with messages := m.messages.erase message }, [])
+    ((), m.send queue body, [(⟨.queue, queue, .messageSent⟩ : Cloud.Emitted Kind)])
+  | .queue, queue, .receiveMessage, m => ((m.queued queue).head?, m.receive queue, [])
 
 /-- AWS, in memory. -/
-def InMemory : Sim Kind where
+abbrev InMemory : Sim Kind where
   State := Memory
   init := {}
   call := simulate

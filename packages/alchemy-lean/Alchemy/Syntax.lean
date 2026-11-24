@@ -225,7 +225,7 @@ macro_rules
         theorem $(mkIdent (a.getId ++ `deployed)) {P : $(rooted a `State) → Prop}
             (initially : P (Alchemy.Aggregate.initial $(rooted a)))
             (kept : Alchemy.Aggregate.Keeps $(rooted a) P)
-            (journal : List String) (id : String) :
+            (journal : List Alchemy.Cloud.Journal.Line) (id : String) :
             P ((Alchemy.Cloud.Served.replay $served journal).state $(under name a.getId) id) :=
           $always initially kept _ (Alchemy.Cloud.Served.replay_reachable $served journal) id))
     commands := commands.push (← `(command| end $m))

@@ -28,10 +28,16 @@ instance {α : Type} [ToJson α] [FromJson α] : Text α where
   write a := (toJson a).compress
   read text := do (fromJson? (← (Json.parse text).toOption)).toOption
 
+/-- One line of a model's history: something a caller sent, or an answer an outside system gave. -/
+inductive Journal.Line where
+  | input (text : String)
+  | answer (text : String)
+deriving DecidableEq, Repr
+
 /-- Where a model's history is kept: lines, in the order they were written. -/
 structure Journal (access : Access K) where
-  read : Run access Never (List String)
-  append : String → Run access Never Unit
+  read : Run access Never (List Journal.Line)
+  append : Journal.Line → Run access Never Unit
 
 /-- How a model is spoken to: what callers send, and how its history is written down. -/
 structure Served (m : Model) where
@@ -52,14 +58,13 @@ variable {m : Model}
 def fuel : Nat := 1000
 
 /-- The world after one line of the journal. A line that does not read is skipped. -/
-def apply (served : Served m) (w : Alchemy.World m.signature) (line : String) :
-    Alchemy.World m.signature :=
-  let text := toString (line.drop 2)
-  if line.startsWith "> " then
+def apply (served : Served m) (w : Alchemy.World m.signature) :
+    Journal.Line → Alchemy.World m.signature
+  | .input text =>
     match served.input.read text with
     | some input => m.play fuel w (.send (served.command input))
     | none => w
-  else
+  | .answer text =>
     match m.waiting w with
     | c :: _ =>
       match (served.reply c).read text with
@@ -68,25 +73,28 @@ def apply (served : Served m) (w : Alchemy.World m.signature) (line : String) :
     | [] => w
 
 /-- The world a journal leaves. -/
-def replay (served : Served m) (lines : List String) : Alchemy.World m.signature :=
+def replay (served : Served m) (lines : List Journal.Line) : Alchemy.World m.signature :=
   lines.foldl served.apply (World.start m.signature)
 
-theorem apply_reachable (served : Served m) (w : Alchemy.World m.signature) (line : String)
+theorem apply_reachable (served : Served m) (w : Alchemy.World m.signature) (line : Journal.Line)
     (reach : m.Reachable w) : m.Reachable (served.apply w line) := by
-  unfold apply
-  split
-  · show m.Reachable (match served.input.read (toString (line.drop 2)) with
+  cases line with
+  | input text =>
+    show m.Reachable (match served.input.read text with
       | some input => m.play fuel w (.send (served.command input))
       | none => w)
     split
     · exact m.play_send_reachable fuel w _ (served.offered _) reach
     · exact reach
-  · split
-    · next c _ _ =>
-      show m.Reachable (match (served.reply c).read (toString (line.drop 2)) with
+  | answer text =>
+    show m.Reachable (match m.waiting w with
+      | c :: _ =>
+        match (served.reply c).read text with
         | some reply => m.play fuel w (.answer c reply)
-        | none => w)
-      split
+        | none => w
+      | [] => w)
+    split
+    · split
       · exact m.play_answer_reachable fuel w _ _ reach
       · exact reach
     · exact reach
@@ -95,7 +103,7 @@ theorem apply_reachable (served : Served m) (w : Alchemy.World m.signature) (lin
 Whatever a journal holds, written by this host or not, in order or not, it
 replays to a world the model can reach.
 -/
-theorem replay_reachable (served : Served m) (lines : List String) :
+theorem replay_reachable (served : Served m) (lines : List Journal.Line) :
     m.Reachable (served.replay lines) := by
   unfold replay
   suffices ∀ w, m.Reachable w → m.Reachable (lines.foldl served.apply w) from this _ .start
@@ -113,7 +121,7 @@ theorem always (served : Served m) {P : Model.Rule m.signature.aggregates}
     (kept : ∀ n, (m.signature.aggregates.of n).Keeps (P n))
     (decided : ∀ d ∈ m.decisions, ∀ r (ctx : Context d.Actor) c,
       Model.Holds P r → Model.Holds P (r.decide d ctx c))
-    (lines : List String) : Model.Holds P (served.replay lines).toRecorded :=
+    (lines : List Journal.Line) : Model.Holds P (served.replay lines).toRecorded :=
   m.always initially kept decided _ (served.replay_reachable lines)
 
 end Served
@@ -146,7 +154,7 @@ def answerCalls (hosted : Hosted served role) :
     | [] => pure w
     | c :: _ => do
       let reply ← hosted.call c
-      hosted.journal.append ("< " ++ (served.reply c).write reply)
+      hosted.journal.append (.answer ((served.reply c).write reply))
       hosted.answerCalls calls (m.play Served.fuel w (.answer c reply))
 
 /--
@@ -158,7 +166,7 @@ def send (hosted : Hosted served role) (input : served.Input) :
       (Answer m.signature.aggregates (served.command input).to × Alchemy.World m.signature) := do
   let before ← hosted.world
   let command := served.command input
-  hosted.journal.append ("> " ++ served.input.write input)
+  hosted.journal.append (.input (served.input.write input))
   let after ← hosted.answerCalls 100 (m.play Served.fuel before (.send command))
   return (before.toRecorded.outcome before.now command, after)
 

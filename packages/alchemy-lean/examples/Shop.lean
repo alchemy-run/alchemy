@@ -118,7 +118,7 @@ theorem everyOrderChargedOnce (w : Alchemy.World Signature) (reach : Shop.Reacha
   Order.always (by simp [ChargedOnce]) chargedOnce w reach id
 
 /-- And of the shop as deployed: whatever its journal holds. -/
-theorem deployedOrdersChargedOnce (journal : List String) (id : String) :
+theorem deployedOrdersChargedOnce (journal : List Journal.Line) (id : String) :
     ChargedOnce ((served.replay journal).state .Order id) :=
   Order.deployed (by simp [ChargedOnce]) chargedOnce journal id
 
@@ -156,15 +156,19 @@ def describe (order : Order.State) : Response :=
   | .paid charge => { status := 200, body := s!"paid {charge}" }
   | .declined reason => { status := 402, body := reason }
 
+/-- Who answers each call the shop makes to the outside. -/
+def outside {role : Access Kind} {shipments : Queue} (queue : SQS.SendMessage.Client shipments role) :
+    (c : Call) → Run role Never (Reply c)
+  | .charge order amount => pure (sandboxCharge order amount)
+  | .ship order item => queue.call s!"{order}:{item}"
+
 /-- Takes orders. Hosts the shop: its history is in the bucket, and it ships through the queue. -/
 def Api (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
   Lambda.Function "Api" { url := true } do
     let journal ← S3.Journal orders
     let queue ← SQS.SendMessage shipments
 
-    let shop := served.host journal fun
-      | .charge order amount => pure (sandboxCharge order amount)
-      | .ship order item => queue.call s!"{order}:{item}"
+    let shop := served.host journal (outside queue)
 
     return fun request => do
       match request.method, request.path with
@@ -217,6 +221,41 @@ def out : Outputs := computed% (ShopStack.outputs "prod")
 example : ShopStack.problem "prod" = none ∧ prod.deployable = true := by decide
 
 example : prod.order = ["Orders", "Shipments", "Api", "Packer"] := by decide
+
+/-! ## What is proved about the Api's code -/
+
+/--
+The Api records what it applies. For any command, in any cloud whose journal is
+sound, the journal afterwards replays to exactly the world the Api answered
+with, and is still sound for the next request. Proved from the laws of the
+bindings alone: the journal's, and that sending to a queue touches no object.
+-/
+theorem theApiRecordsWhatItApplies {role : Access Kind} (orders : Bucket) (shipments : Queue)
+    (le : (S3.JournalLive orders).needs ≤ role)
+    (queue : SQS.SendMessage.Client shipments role) (sends : SQS.SendMessage.Lawful queue)
+    (faithful : served.Faithful) (command : Order.Command) (m : Memory)
+    (sound : S3.Sound orders ["journal"] m) :
+    let shop := served.host ((S3.JournalLive orders).build le ⟨⟩) (outside queue)
+    ∃ answer after, ((shop.send (.Order command)).eval InMemory m).1 = .ok (answer, after) ∧
+      served.replay (S3.lines orders ["journal"] ((shop.send (.Order command)).eval InMemory m).2)
+        = after ∧
+      S3.Sound orders ["journal"] ((shop.send (.Order command)).eval InMemory m).2 := by
+  intro shop
+  refine Hosted.send_recorded (sim := InMemory) (lines := S3.lines orders ["journal"])
+    (sound := S3.Sound orders ["journal"]) shop
+    (S3.JournalLive.lawful orders ["journal"] le) faithful ?_ (.Order command) m sound
+  intro c m sound
+  cases c with
+  | charge order amount => exact ⟨rfl, sound⟩
+  | ship order item =>
+    have sent : (outside queue (.ship order item)).eval InMemory m
+        = (.ok (), m.send shipments s!"{order}:{item}") := sends.send m _
+    show S3.lines orders ["journal"] ((outside queue (.ship order item)).eval InMemory m).2 = _ ∧
+      S3.Sound orders ["journal"] ((outside queue (.ship order item)).eval InMemory m).2
+    rw [sent]
+    have same := S3.untouched (bucket := orders) (under := ["journal"])
+      (m := m) (m' := m.send shipments s!"{order}:{item}") (fun _ => rfl)
+    exact ⟨same.1, same.2 sound⟩
 
 /-! ## Stories: the whole stack, run in memory -/
 
