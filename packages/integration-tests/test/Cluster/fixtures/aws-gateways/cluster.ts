@@ -21,14 +21,14 @@ export const Edge = ClusterAWS.EcsPool("Edge", {
 }).pipe(Layer.provide(Database));
 
 const zone = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
-// One name per stage, so users and worktrees never share a record.
-const stage = (process.env.ALCHEMY_TEST_STAGE ?? "local")
-  .toLowerCase()
-  .replaceAll(/[^a-z0-9-]/g, "-")
-  .slice(0, 40);
+// One name per stage, so users and worktrees never share a record, short
+// enough for an ACM certificate (64 characters): the stage's FNV-1a hash.
+const stageHash = [...(process.env.ALCHEMY_TEST_STAGE ?? "local")]
+  .reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0, 2166136261)
+  .toString(36);
 
 /** The name the secure pool's gateway serves. */
-export const SECURE_DOMAIN = `cluster-gw-${stage}.${zone}`;
+export const SECURE_DOMAIN = `cluster-gw-${stageHash}.${zone}`;
 
 export const Secure = ClusterAWS.EcsPool("Secure", {
   replicas: 1,

@@ -116,7 +116,12 @@ const makeBalancer = Effect.fn(function* (
       : {}),
     targetGroupArn: targets.targetGroupArn,
   });
-  return { balancer, listener, targets, gatewayGroup };
+  // ECS registers a service only with a target group a load balancer
+  // forwards to: hand the group out once the listener does.
+  const targetGroupArn = Output.all(targets.targetGroupArn, listener.listenerArn).pipe(
+    Output.map(([arn]) => arn),
+  );
+  return { balancer, listener, targets: { targetGroupArn }, gatewayGroup };
 });
 
 const domainOf = (domain: string | GatewayDomain | undefined): GatewayDomain | undefined =>

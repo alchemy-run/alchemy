@@ -20,7 +20,7 @@ export default class Front extends Lambda.Function<Front>()(
     const network = yield* AppNetwork;
     const group = yield* EC2.SecurityGroup("ClusterGatewaysFrontGroup", {
       vpcId: network.vpcId,
-      description: "The gateways suite's front",
+      description: "Effect Cluster gateways suite front",
       egress: [{ ipProtocol: "-1", cidrIpv4: "0.0.0.0/0" }],
     });
     return {
