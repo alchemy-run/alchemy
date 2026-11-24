@@ -643,11 +643,10 @@ export const make = (
       }
       return found;
     };
-    // Every consumer in the model of the latest build, and the tuning: keys waiting on
-    // discovery ask again on the work queue, as soon as other work has run.
+    // Every consumer in the model of the latest build.
     let model: ReadonlyArray<string> = [];
     let planOf: (target: string) => Backfill.Plan | undefined = () => undefined;
-    const limits: Backfill.Limits = { ...Backfill.defaultLimits, pollMillis: 0 };
+    const limits = Backfill.defaultLimits;
     // The source and consumer parts of each hosted entity, as of the latest build.
     const sourceRoles = new Map<string, (id: string) => Backfill.Source>();
     /** What a decision needs of each aggregate type: its lock, its instances, and how to record on one. */
@@ -767,6 +766,7 @@ export const make = (
       run: {
         begin: (target, plan) => Effect.suspend(() => run(target).begin(target, plan)),
         phase: (target) => Effect.suspend(() => run(target).phase(target)),
+        whenReady: (target, key) => Effect.suspend(() => run(target).whenReady(target, key)),
         progress: (target) => Effect.suspend(() => run(target).progress(target)),
       },
     };
