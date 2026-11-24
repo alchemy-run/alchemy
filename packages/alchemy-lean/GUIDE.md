@@ -243,12 +243,12 @@ Here they are theorems about the stack.
 /-- Only the Api writes the shop's history. -/
 theorem onlyTheApiWritesHistory :
     prod.only [out.api] (S3.writing out.orders ["journal"]) := by
-  stack_rule in prod using [out, BucketOp.covers]
+  stack_rule in prod
 
 /-- The Warehouse reads nothing in the bucket: no order, and none of the history. -/
 theorem theWarehouseReadsNothing :
     prod.never out.warehouse (S3.reading out.orders) := by
-  stack_rule in prod using [out, BucketOp.covers]
+  stack_rule in prod
 ```
 
 **Reading it.** `prod` is the stack at the "prod" stage and `out` is what it built. `S3.writing out.orders ["journal"]` means writing any object under `journal/`, so each rule covers every key, not a sample. `stack_rule` computes each function's role from the stack and checks the rule against it.

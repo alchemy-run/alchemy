@@ -1,3 +1,4 @@
+import Alchemy.Attr
 import Alchemy.Cloud.Host
 
 /-!
@@ -48,7 +49,7 @@ instance : (k : Kind) → DecidableEq (Op k)
   | .function => inferInstanceAs (DecidableEq FunctionOp)
 
 /-- A grant on a prefix covers every key under it. -/
-def BucketOp.covers : BucketOp → BucketOp → Bool
+@[stack_facts] def BucketOp.covers : BucketOp → BucketOp → Bool
   | .get under, .get key => under.isPrefixOf key
   | .put under, .put key => under.isPrefixOf key
   | _, _ => false

@@ -83,7 +83,7 @@ def UploadStack : Stack Kind Outputs where
     return { files, scans, upload, scanner, download }
 
 def prod : Graph Kind := UploadStack.graph "prod"
-def out : Outputs := computed% (UploadStack.outputs "prod")
+@[stack_facts] def out : Outputs := computed% (UploadStack.outputs "prod")
 
 /-! ## What must be true of this stack -/
 
@@ -97,11 +97,11 @@ design exists for, and it holds for every file name.
 theorem nothingPublicReadsAnUnscannedFile :
     nothingExposed prod (S3.reading out.files ["incoming"]) := by
   simp only [nothingExposed, whatIsPublic]
-  stack_rule in prod using [out, BucketOp.covers]
+  stack_rule in prod
 
 /-- Nothing public can read what was quarantined, either. In fact nothing at all can. -/
 theorem nobodyReadsTheQuarantine : prod.nobody (S3.reading out.files ["quarantine"]) := by
-  stack_rule in prod using [out, BucketOp.covers]
+  stack_rule in prod
 
 /--
 Only the Scanner publishes. So every file `Download` can serve was put there by
@@ -109,22 +109,22 @@ the Scanner: there is no way around the scan.
 -/
 theorem onlyTheScannerPublishes :
     prod.only [out.scanner] (S3.writing out.files ["clean"]) := by
-  stack_rule in prod using [out, BucketOp.covers]
+  stack_rule in prod
 
 /-- If `Upload` is taken over, it can read nothing: not uploads, not published files. -/
 theorem uploadReadsNothing : prod.never out.upload (S3.reading out.files) := by
-  stack_rule in prod using [out, BucketOp.covers]
+  stack_rule in prod
 
 /-- If `Download` is taken over, it can change nothing: no file, and no scan request. -/
 theorem downloadChangesNothing :
     prod.never out.download (S3.writing out.files) ∧
       prod.only [out.upload] (SQS.sending out.scans) := by
-  constructor <;> stack_rule in prod using [out, BucketOp.covers]
+  constructor <;> stack_rule in prod
 
 /-- No function can invoke another, so taking one over does not lead to the others. -/
 theorem noFunctionInvokesAnother (function : Function) :
     prod.nobody (Lambda.invoking function) := by
-  stack_rule in prod using [out]
+  stack_rule in prod
 
 /-! ## What a function can do if it is taken over
 

@@ -1,4 +1,5 @@
 import Lean
+import Alchemy.Attr
 import Alchemy.Cloud.Sim
 import Alchemy.Aggregate
 
@@ -77,13 +78,23 @@ elab "roles_do_not_allow " g:term : tactic => do
     `graph --why` prints the call behind each permission."
 
 /--
-Proves a rule about who can do what in a stack: `stack_rule in prod using [out]`. The
-list names what the rule is stated with: the stack's outputs, and how grants
-cover one another.
+Proves a rule about who can do what in a stack: `stack_rule in prod`. It uses
+whatever is tagged `@[stack_facts]`, which is where a stack's outputs go.
 -/
-syntax "stack_rule" " in " term " using " "[" Lean.Parser.Tactic.simpLemma,* "]" : tactic
+syntax "stack_rule" " in " term (" using " "[" Lean.Parser.Tactic.simpLemma,* "]")? : tactic
 
 macro_rules
+  | `(tactic| stack_rule in $g) =>
+    `(tactic| (
+        try simp only [Graph.only, Graph.nobody, Graph.never, Graph.may]
+        intros
+        have roles : Graph.roles $g = computed% (Graph.roles $g) := rfl
+        first
+          | (simp [Graph.mem_whoCan, Graph.can, Access.permits, permitsOn, Kinds.covers,
+              roles, stack_facts] at * <;> done)
+          | (simp [Graph.mem_whoCan, Graph.can, Access.permits, permitsOn, Kinds.covers,
+              roles, stack_facts] at * <;> grind)
+          | roles_do_not_allow $g))
   | `(tactic| stack_rule in $g using [$lemmas,*]) =>
     `(tactic| (
         try simp only [Graph.only, Graph.nobody, Graph.never, Graph.may]
@@ -91,9 +102,9 @@ macro_rules
         have roles : Graph.roles $g = computed% (Graph.roles $g) := rfl
         first
           | (simp [Graph.mem_whoCan, Graph.can, Access.permits, permitsOn, Kinds.covers,
-              roles, $lemmas,*] at * <;> done)
+              roles, stack_facts, $lemmas,*] at * <;> done)
           | (simp [Graph.mem_whoCan, Graph.can, Access.permits, permitsOn, Kinds.covers,
-              roles, $lemmas,*] at * <;> grind)
+              roles, stack_facts, $lemmas,*] at * <;> grind)
           | roles_do_not_allow $g))
 
 end Alchemy.Cloud

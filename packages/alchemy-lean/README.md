@@ -344,19 +344,19 @@ Who can do what, for every key under a prefix. `stack_rule` computes each role f
 ```lean
 theorem onlyTheApiWritesHistory :
     prod.only [out.api] (S3.writing out.orders ["journal"]) := by
-  stack_rule in prod using [out, BucketOp.covers]
+  stack_rule in prod
 
 theorem theWarehouseReadsNothing :
     prod.never out.warehouse (S3.reading out.orders) := by
-  stack_rule in prod using [out, BucketOp.covers]
+  stack_rule in prod
 
 theorem nobodyListsTheOrders : prod.nobody (S3.listing out.orders) := by
-  stack_rule in prod using [out, BucketOp.covers]
+  stack_rule in prod
 
 theorem shipmentsGoOneWay :
     prod.only [out.api] (SQS.sending out.shipments) ∧
       prod.only [out.warehouse] (SQS.receiving out.shipments) := by
-  constructor <;> stack_rule in prod using [out]
+  constructor <;> stack_rule in prod
 ```
 
 ## A story, told to the stack

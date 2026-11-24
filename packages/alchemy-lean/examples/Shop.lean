@@ -346,7 +346,7 @@ def ShopStack : Stack Kind Outputs where
 def prod : Graph Kind := ShopStack.graph "prod"
 
 /-- What the stack built, for tests and theorems to name. -/
-def out : Outputs := computed% (ShopStack.outputs "prod")
+@[stack_facts] def out : Outputs := computed% (ShopStack.outputs "prod")
 
 example : ShopStack.problem "prod" = none ∧ prod.deployable = true := by decide
 
@@ -523,37 +523,37 @@ example : prod.passes postingAnOrderTooLarge = true := by native_decide
 /-- Only the Api writes the shop's history. -/
 theorem onlyTheApiWritesHistory :
     prod.only [out.api] (S3.writing out.orders ["journal"]) := by
-  stack_rule in prod using [out, BucketOp.covers]
+  stack_rule in prod
 
 /-- Only the Warehouse files packing slips. -/
 theorem onlyTheWarehouseFilesSlips :
     prod.only [out.warehouse] (S3.writing out.orders ["packed"]) := by
-  stack_rule in prod using [out, BucketOp.covers]
+  stack_rule in prod
 
 /-- The Warehouse reads nothing in the bucket: no order, and none of the history. -/
 theorem theWarehouseReadsNothing :
     prod.never out.warehouse (S3.reading out.orders) := by
-  stack_rule in prod using [out, BucketOp.covers]
+  stack_rule in prod
 
 /-- Nothing can list the bucket. -/
 theorem nobodyListsTheOrders : prod.nobody (S3.listing out.orders) := by
-  stack_rule in prod using [out, BucketOp.covers]
+  stack_rule in prod
 
 /-- Only the Api asks for a shipment, and only the Warehouse takes one. -/
 theorem shipmentsGoOneWay :
     prod.only [out.api] (SQS.sending out.shipments) ∧
       prod.only [out.warehouse] (SQS.receiving out.shipments) := by
-  constructor <;> stack_rule in prod using [out]
+  constructor <;> stack_rule in prod
 
 /-- Neither function can invoke the other. -/
 theorem noFunctionInvokesAnother (function : Function) :
     prod.nobody (Lambda.invoking function) := by
-  stack_rule in prod using [out]
+  stack_rule in prod
 
 /-- The Api can read back all of the history it writes. -/
 theorem theApiReadsItsHistory :
     prod.may out.api (S3.reading out.orders ["journal"]) := by
-  stack_rule in prod using [out, BucketOp.covers]
+  stack_rule in prod
 
 /--
 Least privilege: no function holds a grant it does not need. For each one there
