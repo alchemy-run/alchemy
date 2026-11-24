@@ -2553,17 +2553,17 @@ Effect.promise(() => fetch(url));
 Effect.tryPromise(() => fetch(url));
 ```
 
-A handler's sleeps, time limits, races and fibers are [supported](#time-and-fibers). What is left is a wait that never ends, two waits that end at the same moment, and what the library keeps between calls.
+A handler's sleeps, time limits, races, fibers, queues, transactions and requests are [supported](#time-and-fibers). What is left is a wait that never ends, two waits that end at the same moment, a count or a key an input decides, and the few modules below.
 
 ```typescript title="Time passing and things running together"
-import * as Scheduler from "effect/Scheduler";
-import * as Channel from "effect/Channel";
+import * as Scheduler from "effect/Scheduler"; // what decides which fiber runs: a proof has its own
+import * as Channel from "effect/Channel"; // what a stream is made of: write the stream
 import * as Pull from "effect/Pull";
 import * as Take from "effect/Take";
-import * as ExecutionPlan from "effect/ExecutionPlan";
-import * as TxHashMap from "effect/TxHashMap";
+import * as ExecutionPlan from "effect/ExecutionPlan"; // each step provides a Layer, which is wiring
+import * as TxHashMap from "effect/TxHashMap"; // found by the hash of a key, which an input's value does not have
 import * as TxHashSet from "effect/TxHashSet";
-import * as TxPriorityQueue from "effect/TxPriorityQueue";
+import * as TxPriorityQueue from "effect/TxPriorityQueue"; // kept in an order the library works out as it goes
 
 Deferred.await(done); // a wait for what no fiber of the handler does: the handler would never end
 gate.await;
@@ -2574,6 +2574,8 @@ Effect.race(Effect.as(Effect.sleep(10), a), Effect.as(Effect.sleep(10), b)); // 
 Effect.repeat(effect, { schedule: Schedule.spaced("1 second") }); // an effect run again more than 100 times
 Effect.retry(effect, { times: command.attempts }); // a count an input decides
 Effect.retry(effect, Schedule.jittered(Schedule.spaced("1 second"))); // a schedule that draws a random number
+Cache.get(prices, command.item); // a key an input decides: the library finds one by its hash
+Effect.request(GetPrice({ item: command.item }), prices); // a request of values an input decides
 
 Cron.next(cron); // next, prev and sequence use the clock when they are given no time
 ```
