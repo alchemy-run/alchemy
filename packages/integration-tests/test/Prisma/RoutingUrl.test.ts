@@ -1160,6 +1160,58 @@ testFor(bothResources).test.provider(
   { tags },
 );
 
+const underWildcard = makeUrlCloud();
+testFor(underWildcard).test.provider(
+  "a wildcard domain ownership with dns and two RoutingUrls with dns under it publish one TXT record, and destroy removes everything",
+  (stack) =>
+    Effect.gen(function* () {
+      underWildcard.reset({ fromZone: true });
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const ownership = yield* DomainOwnership("Domain", {
+            project: "proj-1",
+            domain: "*.example.com",
+            dns: TEST_DNS,
+          });
+          const app = Output.map(ownership.domainOwnershipId, () => "svc-1");
+          const api = yield* RoutingUrl("Api", { app, hostname: HOSTNAME, dns: TEST_DNS });
+          const admin = yield* RoutingUrl("Admin", {
+            app,
+            hostname: "admin.example.com",
+            dns: TEST_DNS,
+          });
+          return { ownership, api, admin };
+        }),
+      );
+
+      expect(deployed.ownership.status).toBe("verified");
+      const routes = underWildcard.routes();
+      const ownershipCreate = routes.indexOf("POST /v1/workspaces/ws-1/domain-ownerships");
+      const urlCreates = routes.flatMap((route, index) =>
+        route === "POST /v1/services/svc-1/urls" ? [index] : [],
+      );
+      expect(ownershipCreate).toBeGreaterThan(-1);
+      expect(urlCreates).toHaveLength(2);
+      expect(urlCreates.every((index) => index > ownershipCreate)).toBe(true);
+      expect(underWildcard.zone.records.filter((record) => record.type === "TXT")).toEqual([
+        txtFor("example.com"),
+      ]);
+      expect(underWildcard.zone.records).toEqual(
+        expect.arrayContaining([cnameFor(HOSTNAME), cnameFor("admin.example.com")]),
+      );
+      expect(underWildcard.zone.records).toHaveLength(3);
+      expect([deployed.api.status, deployed.admin.status]).toEqual(["active", "active"]);
+
+      yield* stack.destroy();
+      expect(underWildcard.rows.size).toBe(0);
+      expect(underWildcard.ownerships.size).toBe(0);
+      expect(underWildcard.zone.records).toEqual([]);
+    }),
+  { tags },
+);
+
 const unpublishable = makeUrlCloud();
 testFor(unpublishable).test.provider(
   "with dns, refuses a hostname it cannot publish, an app with no endpoint or on no Branch before publishing anything",

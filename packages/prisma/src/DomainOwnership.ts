@@ -7,9 +7,12 @@ import * as Effect from "effect/Effect";
 import type { ProjectReference } from "./internal/DomainOwnership.ts";
 import { DomainOwnershipRow } from "./internal/DomainOwnershipRow.ts";
 import { DomainVerification } from "./internal/DomainVerification.ts";
+import { normalizeHostname } from "./internal/Hostname.ts";
 import { publishesDns } from "./internal/PublishesDns.ts";
 
 export { PrismaDomainOwnershipRequired } from "./internal/DomainOwnership.ts";
+
+const recordSetId = (domain: string) => `Record-${normalizeHostname(domain).replace(/^\*\./, "")}`;
 
 /** A workspace's domain ownership, as the deploy last saw it. */
 export type DomainOwnership = DomainOwnershipRow;
@@ -33,7 +36,10 @@ export interface DomainOwnershipProps {
    * Prisma has not verified it. Nothing is published under `alchemy dev`.
    * Removing `dns` from a deployed domain ownership deletes the record, and a
    * verified domain ownership becomes `expiring` at Prisma's next lookup of
-   * that record. Omitted: publish `recordName` and `recordValue` yourself.
+   * that record. Adding `dns` to a deployed domain ownership does not check
+   * for a domain ownership of the wildcard or apex that shares the record
+   * name, so prove only one of the two per zone. Omitted: publish
+   * `recordName` and `recordValue` yourself.
    */
   dns?: DNS.DnsConfig;
 }
@@ -65,11 +71,15 @@ export interface DomainOwnershipProps {
  * custom domain, or by another stack, needs `--adopt`, or better `adopt(true)`
  * on this resource alone. The refusal can name `Prisma.DomainVerification`,
  * the resource that checks for an existing domain ownership of this domain,
- * or of the wildcard or apex that shares its record. Once two stacks have it,
+ * and with `dns` of the wildcard or apex that shares its record. Adopting in
+ * that last case makes the stack publish, and on destroy delete, the record
+ * the other domain ownership also uses. Once two stacks have it,
  * destroying either deletes it for both, so declare a shared one in one
  * stack, with `RemovalPolicy.retain()` if it must outlive that stack. A
  * domain ownership belongs to a workspace: moving `project` to another
- * workspace fails the deploy and changes nothing.
+ * workspace fails the deploy and changes nothing: point `project` back, or
+ * remove the domain ownership from the stack and deploy, which deletes it
+ * from the old workspace, then declare it again.
  *
  * ### Proving a Domain
  * **Example:** Prove a hostname and serve it
@@ -116,6 +126,7 @@ export const DomainOwnership = (id: string, props: DomainOwnershipProps) =>
     const verification = yield* DomainVerification("Verification", {
       project: props.project,
       domain: props.domain,
+      ...(dns === undefined ? {} : { publishesRecord: true }),
     });
     if (dns === undefined) {
       return yield* DomainOwnershipRow("Ownership", {
@@ -123,7 +134,7 @@ export const DomainOwnership = (id: string, props: DomainOwnershipProps) =>
         domain: props.domain,
       });
     }
-    const published = yield* (yield* DNS.resolve(dns)).records("Record", {
+    const published = yield* (yield* DNS.resolve(dns)).records(recordSetId(props.domain), {
       records: Output.map(
         Output.all(verification.recordName, verification.recordValue),
         ([name, value]): DNS.DnsRecord[] => [{ name, type: "TXT", value }],

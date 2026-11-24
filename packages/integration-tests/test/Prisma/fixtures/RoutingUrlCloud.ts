@@ -53,6 +53,8 @@ export const TXT = {
   ttl: 300,
 };
 
+export const OTHER_WORKSPACE_TXT_VALUE = `prisma-verification=${"b".repeat(64)}`;
+
 export const service = (id: string) => ({
   id,
   type: "app",
@@ -499,10 +501,15 @@ export const makeUrlCloud = () => {
     if (path === "/v1/projects/proj-1") {
       return data(wireProject({ id: "proj-1", workspaceId: "ws-1" }));
     }
-    if (path === "/v1/workspaces/ws-1/domain-ownerships/verification") {
+    const verificationMatch = /^\/v1\/workspaces\/(ws-[12])\/domain-ownerships\/verification$/.exec(
+      path,
+    );
+    if (verificationMatch) {
+      const domain = String(new URLSearchParams(request.search).get("domain"));
       return data({
         ...TXT,
-        name: `_prisma-verification.${new URLSearchParams(request.search).get("domain")}`,
+        name: txtFor(domain).name,
+        value: verificationMatch[1] === "ws-1" ? TXT.value : OTHER_WORKSPACE_TXT_VALUE,
       });
     }
     if (path === "/v1/workspaces/ws-1/domain-ownerships") {

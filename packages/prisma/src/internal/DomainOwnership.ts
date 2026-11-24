@@ -114,21 +114,19 @@ export const findOwnership = (workspaceId: string, domain: string) =>
     ),
   );
 
-/** The other domain whose ownership shares `domain`'s `TXT` record name: a wildcard's apex, or an apex's wildcard. */
-export const sharingRecordWith = (domain: string) =>
+export const domainSharingRecord = (domain: string) =>
   domain.startsWith("*.") ? domain.slice(2) : `*.${domain}`;
 
-/** Fails when the stack recorded the domain ownership in another workspace than `project`'s. */
 export const ensureSameWorkspace = (
   domain: string,
   recordedWorkspaceId: string | undefined,
   workspaceId: string,
 ) => {
-  if (recordedWorkspaceId === undefined || recordedWorkspaceId === workspaceId) return Effect.void;
-  if (recordedWorkspaceId.startsWith("dev:")) return Effect.void;
+  const recorded = concreteIdOf(recordedWorkspaceId);
+  if (recorded === undefined || recorded === workspaceId) return Effect.void;
   return Effect.fail(
     new DomainOwnershipOperationFailed({
-      message: `The domain ownership of '${domain}' belongs to workspace '${recordedWorkspaceId}', but the project is now in workspace '${workspaceId}'. A domain ownership belongs to a workspace and does not move with a project. Destroy it in the old stack, or remove it from state, and deploy again.`,
+      message: `The domain ownership of '${domain}' belongs to workspace '${recorded}', but the project is now in workspace '${workspaceId}'. A domain ownership belongs to a workspace and does not move with a project. Point project back to a project in workspace '${recorded}', or remove this Prisma.DomainOwnership from the stack and deploy, which deletes it from workspace '${recorded}', then declare it again.`,
     }),
   );
 };

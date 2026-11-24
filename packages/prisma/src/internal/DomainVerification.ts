@@ -7,11 +7,11 @@ import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import { devProvider } from "./DevStub.ts";
 import {
+  domainSharingRecord,
   ensureSameWorkspace,
   findOwnership,
   type ProjectReference,
   resolveWorkspaceId,
-  sharingRecordWith,
 } from "./DomainOwnership.ts";
 import { normalizeHostname } from "./Hostname.ts";
 import { isInputObject } from "./Refs.ts";
@@ -21,6 +21,8 @@ export interface DomainVerificationProps {
   project: ProjectReference;
   /** An exact hostname such as `app.example.com`, or a wildcard such as `*.example.com`. */
   domain: string;
+  /** Whether the stack publishes the `TXT` record, which the wildcard or apex sharing its name also uses. */
+  publishesRecord?: boolean;
 }
 
 /** The `TXT` record that proves a domain ownership; unowned while a domain ownership this stack did not record shares it. */
@@ -63,8 +65,9 @@ const ProviderLive = () =>
           const domain = normalizeHostname(olds.domain);
           const recorded =
             previous?.workspaceId === workspaceId ? normalizeHostname(previous.domain) : undefined;
+          const sharing = olds.publishesRecord === true ? [domainSharingRecord(domain)] : [];
           const existing = yield* Effect.forEach(
-            [domain, sharingRecordWith(domain)].filter((each) => each !== recorded),
+            [domain, ...sharing].filter((each) => each !== recorded),
             (each) => findOwnership(workspaceId, each),
           );
           const unrecorded = existing.find((ownership) => ownership !== undefined);
