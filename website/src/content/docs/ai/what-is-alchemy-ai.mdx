@@ -147,7 +147,7 @@ export const SaveReportLive = SaveReport.make(
 ).pipe(Layer.provide(AWS.S3.PutObjectHttp));
 ```
 
-Alchemy deploys what a tool binds to and grants only that access, so a tool can do what its bindings allow and nothing more.
+Alchemy deploys the bucket and grants what the binding needs: `s3:PutObject` on that one bucket. A tool can do what its bindings allow.
 
 A few tools are the same everywhere: run a command, read a file, edit one, search. Those are names (`AI.Bash`, `AI.Read`, `AI.Edit`, `AI.Grep`) that each harness implements its own way. An MCP server is mentioned like a tool and stands for every tool it offers.
 
