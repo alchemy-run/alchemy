@@ -89,7 +89,22 @@ export const make = (kit: Kit) => {
       );
     };
 
+  const said = (message: V | undefined): Record<string, V> =>
+    message && message._tag !== "Undef" ? { message } : {};
   const models: Models = {
+    // The errors the library makes, made by the code: `new Cause.TimeoutError("too slow")`.
+    ...Object.fromEntries(
+      ["NoSuchElementError", "TimeoutError", "IllegalArgumentError", "ExceededCapacityError"].map(
+        (tag): [string, Model] => [
+          `effect/Cause:${tag}`,
+          ([message]) => Effect.succeed(Value.libraryError(tag, said(message))),
+        ],
+      ),
+    ),
+    "effect/Cause:UnknownError": ([cause, message]) =>
+      Effect.succeed(
+        Value.libraryError("UnknownError", { cause: cause ?? Value.undef, ...said(message) }),
+      ),
     // How the effect ended, as a value: a defect too, which nothing else here handles.
     "effect/Effect:exit": onEffect("Effect.exit", 0, (self) =>
       Effect.map(self, success).pipe(

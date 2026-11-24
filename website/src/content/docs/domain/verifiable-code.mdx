@@ -2068,11 +2068,16 @@ FiberSet.join(set); // fails when one of its fibers does
 FiberSet.awaitEmpty(set);
 FiberSet.clear(set);
 FiberSet.size(set);
+FiberSet.addUnsafe(set, one);
+FiberSet.isFiberSet(set);
 const handle = yield* FiberHandle.make();
 FiberHandle.run(handle, Effect.andThen(Effect.sleep(1), even(a))); // stops the fiber it held
 FiberHandle.join(handle);
 FiberHandle.awaitEmpty(handle);
 FiberHandle.clear(handle);
+FiberHandle.set(handle, one); // the fiber it held is interrupted
+FiberHandle.setUnsafe(handle, two);
+FiberHandle.isFiberHandle(handle);
 ```
 
 ```typescript title="effect/TxRef, effect/TxQueue and Effect.tx"
@@ -2097,6 +2102,24 @@ TxQueue.poll(line);
 TxQueue.size(line);
 TxQueue.isEmpty(line);
 TxQueue.isFull(line);
+TxQueue.dropping(1);
+TxQueue.sliding(1);
+TxQueue.takeBetween(line, 1, 2);
+TxQueue.clear(line);
+TxQueue.end(line);
+TxQueue.fail(line, a);
+TxQueue.failCause(line, Cause.fail(b));
+TxQueue.interrupt(one);
+TxQueue.shutdown(two);
+TxQueue.awaitCompletion(line);
+TxQueue.isOpen(line);
+TxQueue.isNonEmpty(line);
+TxQueue.isClosing(line);
+TxQueue.isDone(line);
+TxQueue.isShutdown(line);
+TxQueue.isTxQueue(line);
+TxQueue.isTxEnqueue(line);
+TxQueue.isTxDequeue(a);
 ```
 
 ```typescript title="effect/Cache, effect/FiberMap and effect/Pool"
@@ -2123,6 +2146,12 @@ FiberMap.remove(jobs, 4);
 FiberMap.clear(jobs);
 FiberMap.size(jobs);
 FiberMap.awaitEmpty(jobs);
+FiberMap.set(jobs, "one", one);
+FiberMap.setUnsafe(jobs, "two", two);
+FiberMap.hasUnsafe(jobs, "one");
+FiberMap.getUnsafe(jobs, "two");
+FiberMap.join(jobs); // fails when one of its fibers does
+FiberMap.isFiberMap(jobs);
 const pool = yield* Pool.make({ acquire: Ref.updateAndGet(made, (n) => n + 1), size: 2 });
 Pool.get(pool); // in a scope: waits for an item to be given back
 Pool.isPool(pool);
@@ -2183,6 +2212,10 @@ TxPubSub.size(hub);
 TxPubSub.isEmpty(hub);
 TxPubSub.isFull(hub);
 TxPubSub.isShutdown(hub);
+TxPubSub.awaitShutdown(hub);
+TxPubSub.isNonEmpty(hub);
+TxPubSub.capacity(hub);
+TxPubSub.isTxPubSub(hub);
 TxPubSub.shutdown(hubs[0]);
 const cell = yield* TxSubscriptionRef.make(a);
 const changes = yield* TxSubscriptionRef.changes(cell); // in a scope: a TxQueue
@@ -2224,6 +2257,11 @@ ScopedCache.has(files, "milk");
 ScopedCache.set(files, "milk", b);
 ScopedCache.invalidate(files, "tea");
 ScopedCache.size(files);
+ScopedCache.getOption(files, "tea"); // what is kept, and nothing is looked up
+ScopedCache.getSuccess(files, "milk");
+ScopedCache.refresh(files, "tea");
+ScopedCache.values(files);
+ScopedCache.invalidateAll(files);
 ```
 
 ```typescript title="effect/Request and effect/RequestResolver"
@@ -2646,6 +2684,12 @@ Cause.findDie(Cause.fail(a));
 Cause.findInterrupt(Cause.interrupt());
 Cause.isNoSuchElementError(a); // an error the library made, by the library's own mark
 Cause.isTimeoutError({ _tag: "TimeoutError" });
+Cause.isTimeoutError({ _tag: "TimeoutError" });
+new Cause.NoSuchElementError("gone"); // the library's own errors, made by the code
+new Cause.TimeoutError("slow");
+new Cause.IllegalArgumentError("bad");
+new Cause.ExceededCapacityError("full");
+new Cause.UnknownError(a, "what");
 Cause.isUnknownError(a);
 Cause.isIllegalArgumentError(a);
 Cause.isExceededCapacityError(a);
@@ -3267,6 +3311,9 @@ Optic.modify({ n: a, m: b }, Optic.id().key("n"), (n) => n + 1);
 pipe({ n: a, m: b }, Optic.modify(Optic.id().key("n"), (n) => n + 1));
 Optic.replace({ n: a, m: b }, Optic.id().key("m"), a);
 pipe({ n: a, m: b }, Optic.replace(Optic.id().key("m"), a));
+pipe({ n: a, m: b }, Optic.replace(Optic.id().key("m"), a));
+Optic.id().key("n").get({ n: a, m: b });
+Optic.get({ n: { deep: a } }, Optic.id().key("n").key("deep"));
 ```
 
 ```typescript title="effect/Stream"
@@ -3857,6 +3904,8 @@ Renew: Effect.fn(function* (lease) {
   return [Renewed.make({ until: DateTime.addDuration(lease.until, "30 days") })];
 }),
 ```
+
+How long an effect took is not read from that clock. `Effect.timed`, `Sink.timed` and `Sink.withDuration` measure with the machine's own, so they are not supported, and the report names the call.
 
 A time is compared and moved in whole milliseconds. A month and a year are not one length, so `DateTime.add(time, { months: 1 })` is not supported, and neither is the clock anywhere but `decide`, where it is not the time of a command.
 

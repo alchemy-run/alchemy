@@ -2535,6 +2535,8 @@ export const make = (given: Loader, run: Run): Interpreter => {
         return yield* constructData(cls, args, site);
       if (cls._tag === "Native" && (library.isClass(cls) || ERROR_CLASSES.has(cls)))
         return yield* cls.call(args, site);
+      if (cls._tag === "Lib" && library.constructed(cls.module, cls.path))
+        return yield* call(cls, args, site);
       if (cls === BYTES) return yield* BYTES.call(args, site);
       if (cls === KEEPERS.get("Map")) return yield* keeping("Map", args[0], site);
       if (cls === KEEPERS.get("Set")) return yield* keeping("Set", args[0], site);

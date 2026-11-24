@@ -106,6 +106,29 @@ export const make = (host: Host) => {
     );
   };
 
+  /** What an optic focuses on, where every step is a key. */
+  const focused = (path: ReadonlyArray<OpticStep>, source: V, site: Site): Eval<V> => {
+    const [step, ...rest] = path;
+    if (step === undefined) return Effect.succeed(source);
+    return step._tag === "Key"
+      ? Effect.flatMap(host.member(source, step.key, site), (focus) => focused(rest, focus, site))
+      : Effect.fail(
+          Value.notTranslated(site, "reads Optic.get of an optic that may not find its focus"),
+        );
+  };
+  /** `Optic.get(source, optic)`, or `Optic.get(optic)` then the source. */
+  const got: Model = (args, site) => {
+    const [a, b] = args;
+    if (args.length === 2 && a && b?._tag === "Optic") return focused(b.path, a, site);
+    if (args.length === 1 && a?._tag === "Optic")
+      return Effect.succeed(
+        native("Optic.get", ([source], at) =>
+          source ? focused(a.path, source, at) : wrongArguments(at, "Optic.get"),
+        ),
+      );
+    return wrongArguments(site, "Optic.get");
+  };
+
   /** `modify` and `replace`, data-first (`source, optic, x`) or data-last (`optic, x` then `source`). */
   const update =
     (name: string, change: (x: V, site: Site) => (focus: V) => Eval<V>): Model =>
@@ -139,6 +162,10 @@ export const make = (host: Host) => {
         return extend((tag) => ({ _tag: "Tag", tag }));
       case "key":
         return extend((key) => ({ _tag: "Key", key }));
+      case "get":
+        return native("optic.get", ([source], site) =>
+          source ? focused(optic.path, source, site) : wrongArguments(site, "optic.get"),
+        );
       case "modify":
         return native("optic.modify", ([f], site) =>
           f ? modify([optic, f], site) : wrongArguments(site, "optic.modify"),
@@ -1436,6 +1463,7 @@ export const make = (host: Host) => {
     "effect/Effect:logWarning": ignored,
     "effect/Effect:logError": ignored,
     "effect/Optic:id": () => Effect.succeed<V>({ _tag: "Optic", path: [] }),
+    "effect/Optic:get": got,
     "effect/Optic:modify": modify,
     "effect/Optic:replace": replace,
     "effect/DateTime:formatIsoDate": isoDate,
@@ -2478,6 +2506,9 @@ export const make = (host: Host) => {
     iterate: kit.iterate,
     /** Whether a value is a class of `effect/Data`, which `new` makes an instance of. */
     isClass: (value: V): boolean => classes.has(value),
+    /** A class of the library the code makes an instance of with `new`: its model is what makes it. */
+    constructed: (module: string, path: ReadonlyArray<string>): boolean =>
+      module === "effect/Cause" && path.length === 1 && path[0]!.endsWith("Error"),
     /** A class a file declares by extending one of `effect/Data`'s: its own class, with the same fields. */
     subclass: (base: V, name: string): V | undefined => {
       const extended = extending.get(base);

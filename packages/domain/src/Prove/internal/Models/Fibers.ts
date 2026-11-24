@@ -5209,6 +5209,235 @@ export const make = (
     ),
     "effect/Pool:isPool": ([value]) =>
       Effect.succeed(bool(heldOf<PL>("Pool", value) !== undefined)),
+
+    // ---- The last few of what holds fibers, and of the caches and queues of a transaction.
+    "effect/FiberHandle:isFiberHandle": isKind("FiberHandle"),
+    "effect/FiberMap:isFiberMap": isKind("FiberMap"),
+    "effect/FiberSet:isFiberSet": isKind("FiberSet"),
+    "effect/TxQueue:isTxQueue": isKind("TxQueue"),
+    "effect/TxQueue:isTxEnqueue": isKind("TxQueue"),
+    "effect/TxQueue:isTxDequeue": isKind("TxQueue"),
+    "effect/TxPubSub:isTxPubSub": isKind("TxPubSub"),
+    "effect/FiberHandle:set": later<FH, void>(
+      "FiberHandle",
+      "set",
+      2,
+      (held, [fiber], site) => {
+        const given_ = heldOf<F>("Fiber", fiber);
+        return given_
+          ? Effect.succeed(FiberHandle.set(held, given_))
+          : wrongArguments(site, "FiberHandle.set");
+      },
+      none,
+    ),
+    "effect/FiberHandle:setUnsafe": dual("FiberHandle.setUnsafe", 2, ([self, fiber], site) => {
+      const [held, given_] = [heldOf<FH>("FiberHandle", self), heldOf<F>("Fiber", fiber)];
+      return held && given_
+        ? Effect.sync(() => {
+            FiberHandle.setUnsafe(held, given_);
+            return Value.undef;
+          })
+        : wrongArguments(site, "FiberHandle.setUnsafe");
+    }),
+    "effect/FiberSet:addUnsafe": dual("FiberSet.addUnsafe", 2, ([self, fiber], site) => {
+      const [held, given_] = [heldOf<FS>("FiberSet", self), heldOf<F>("Fiber", fiber)];
+      return held && given_
+        ? Effect.sync(() => {
+            FiberSet.addUnsafe(held, given_);
+            return Value.undef;
+          })
+        : wrongArguments(site, "FiberSet.addUnsafe");
+    }),
+    "effect/FiberMap:set": byKey<FM, void>(
+      "FiberMap",
+      "set",
+      3,
+      (held, key, [fiber], site) => {
+        const given_ = heldOf<F>("Fiber", fiber);
+        return given_
+          ? Effect.succeed(FiberMap.set(held, key, given_))
+          : wrongArguments(site, "FiberMap.set");
+      },
+      none,
+    ),
+    "effect/FiberMap:setUnsafe": dual("FiberMap.setUnsafe", 3, ([self, key, fiber], site) => {
+      const [held, given_] = [heldOf<FM>("FiberMap", self), heldOf<F>("Fiber", fiber)];
+      return held && given_
+        ? Effect.map(keyOf("FiberMap.setUnsafe", key, site), (read) => {
+            FiberMap.setUnsafe(held, read, given_);
+            return Value.undef;
+          })
+        : wrongArguments(site, "FiberMap.setUnsafe");
+    }),
+    "effect/FiberMap:getUnsafe": dual("FiberMap.getUnsafe", 2, ([self, key], site) => {
+      const held = heldOf<FM>("FiberMap", self);
+      return held
+        ? Effect.map(keyOf("FiberMap.getUnsafe", key, site), (read) => {
+            const found = FiberMap.getUnsafe(held, read);
+            return Option.isSome(found) ? Value.some(wrap("Fiber", found.value)) : Value.none;
+          })
+        : wrongArguments(site, "FiberMap.getUnsafe");
+    }),
+    "effect/FiberMap:hasUnsafe": dual("FiberMap.hasUnsafe", 2, ([self, key], site) => {
+      const held = heldOf<FM>("FiberMap", self);
+      return held
+        ? Effect.map(keyOf("FiberMap.hasUnsafe", key, site), (read) =>
+            bool(FiberMap.hasUnsafe(held, read)),
+          )
+        : wrongArguments(site, "FiberMap.hasUnsafe");
+    }),
+    "effect/FiberMap:join": on<FM, void>(
+      "FiberMap",
+      "join",
+      1,
+      (held) => FiberMap.join(held),
+      none,
+      "waits for a FiberMap none of whose fibers fails",
+    ),
+    "effect/ScopedCache:getOption": byKey<SC, Option.Option<V>>(
+      "ScopedCache",
+      "getOption",
+      2,
+      (held, key) => Effect.succeed(ScopedCache.getOption(held, key)),
+      option,
+    ),
+    "effect/ScopedCache:getSuccess": byKey<SC, Option.Option<V>>(
+      "ScopedCache",
+      "getSuccess",
+      2,
+      (held, key) => Effect.succeed(ScopedCache.getSuccess(held, key)),
+      option,
+    ),
+    "effect/ScopedCache:refresh": byKey<SC, V>(
+      "ScopedCache",
+      "refresh",
+      2,
+      (held, key) => Effect.succeed(ScopedCache.refresh(held, key)),
+      same,
+    ),
+    "effect/ScopedCache:invalidateAll": on<SC, void>(
+      "ScopedCache",
+      "invalidateAll",
+      1,
+      (held) => ScopedCache.invalidateAll(held),
+      none,
+    ),
+    "effect/ScopedCache:values": on<SC, ReadonlyArray<V>>(
+      "ScopedCache",
+      "values",
+      1,
+      (held) => ScopedCache.values(held),
+      list,
+    ),
+    "effect/TxQueue:dropping": made("TxQueue", ([size], site) =>
+      Effect.flatMap(capacity("TxQueue.dropping", size, site), (n) => TxQueue.dropping<V, Held>(n)),
+    ),
+    "effect/TxQueue:sliding": made("TxQueue", ([size], site) =>
+      Effect.flatMap(capacity("TxQueue.sliding", size, site), (n) => TxQueue.sliding<V, Held>(n)),
+    ),
+    "effect/TxQueue:clear": on<TQ, ReadonlyArray<V>>(
+      "TxQueue",
+      "clear",
+      1,
+      (held) => TxQueue.clear(held),
+      list,
+    ),
+    "effect/TxQueue:end": on<TQ, boolean>(
+      "TxQueue",
+      "end",
+      1,
+      (held) => TxQueue.end(held as unknown as TxQueue.TxQueue<V, Cause.Done>),
+      bool,
+    ),
+    "effect/TxQueue:fail": on<TQ, boolean>(
+      "TxQueue",
+      "fail",
+      2,
+      (held, [error]) =>
+        TxQueue.fail(held, new Value.Rejected({ rejection: error ?? Value.undef })),
+      bool,
+    ),
+    "effect/TxQueue:failCause": later<TQ, boolean>(
+      "TxQueue",
+      "failCause",
+      2,
+      (held, [cause], site) => {
+        const real = realCause(cause);
+        return real
+          ? Effect.succeed(TxQueue.failCause(held, real))
+          : wrongArguments(site, "TxQueue.failCause");
+      },
+      bool,
+    ),
+    "effect/TxQueue:interrupt": on<TQ, boolean>(
+      "TxQueue",
+      "interrupt",
+      1,
+      (held) => TxQueue.interrupt(held),
+      bool,
+    ),
+    "effect/TxQueue:shutdown": on<TQ, boolean>(
+      "TxQueue",
+      "shutdown",
+      1,
+      (held) => TxQueue.shutdown(held),
+      bool,
+    ),
+    ...Object.fromEntries(
+      Object.entries({
+        isClosing: TxQueue.isClosing,
+        isDone: TxQueue.isDone,
+        isNonEmpty: TxQueue.isNonEmpty,
+        isOpen: TxQueue.isOpen,
+        isShutdown: TxQueue.isShutdown,
+      }).map(([name, asks]): [string, Model] => [
+        `effect/TxQueue:${name}`,
+        on<TQ, boolean>("TxQueue", name, 1, (held) => asks(held), bool),
+      ]),
+    ),
+    "effect/TxQueue:awaitCompletion": on<TQ, void>(
+      "TxQueue",
+      "awaitCompletion",
+      1,
+      (held) => TxQueue.awaitCompletion(held),
+      none,
+      "waits for a TxQueue that nothing ends",
+    ),
+    "effect/TxQueue:takeBetween": later<TQ, ReadonlyArray<V>>(
+      "TxQueue",
+      "takeBetween",
+      3,
+      (held, [min, max], site) =>
+        Effect.flatMap(count("TxQueue.takeBetween", min, site), (least) =>
+          Effect.map(count("TxQueue.takeBetween", max, site), (most) =>
+            TxQueue.takeBetween(held, least, most),
+          ),
+        ),
+      list,
+      TX_EMPTY,
+    ),
+    "effect/TxPubSub:awaitShutdown": on<TP, void>(
+      "TxPubSub",
+      "awaitShutdown",
+      1,
+      (held) => TxPubSub.awaitShutdown(held),
+      none,
+      "waits for a TxPubSub that nothing shuts down",
+    ),
+    "effect/TxPubSub:isNonEmpty": on<TP, boolean>(
+      "TxPubSub",
+      "isNonEmpty",
+      1,
+      (held) => TxPubSub.isNonEmpty(held),
+      bool,
+    ),
+    "effect/TxPubSub:capacity": now<TP, number>(
+      "TxPubSub",
+      "capacity",
+      1,
+      (held) => TxPubSub.capacity(held),
+      num,
+    ),
   };
 
   // ---- Filters: a function of the code that passes a value on, or turns it away.
