@@ -23,6 +23,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 const queueFixtureDir = pathe.resolve(import.meta.dirname, "vite-queue-fixture");
 const cronFixtureDir = pathe.resolve(import.meta.dirname, "vite-cron-fixture");
 const tailFixtureDir = pathe.resolve(import.meta.dirname, "vite-tail-fixture");
+const d1FixtureDir = pathe.resolve(import.meta.dirname, "vite-d1-fixture");
 // Keep the temp clone under the workspace so Vite can express the project
 // root relative to cwd (see the note on `tempRoot` in Vite.test.ts).
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
@@ -243,6 +244,76 @@ test.provider(
     }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:kv", "provider:cloudflare:website", "local"],
+    timeout: 240_000,
+  },
+);
+
+/**
+ * Regression test for #3758: the Vite child and the local runtime each run
+ * a workerd, and both used to open the D1 database they share, so
+ * concurrent writes failed with `SQLITE_BUSY`. Every write from both must
+ * land.
+ */
+test.provider(
+  "Vite dev: site and Worker sharing a D1 database take concurrent writes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(d1FixtureDir, {
+        prefix: "alchemy-vite-d1-",
+        tempRoot,
+        entries: fixtureEntries,
+      });
+
+      const { site, worker } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const db = yield* Cloudflare.D1.Database("ViteSharedDB");
+          const worker = yield* Cloudflare.Worker("ViteSharedDBWorker", {
+            main: pathe.resolve(import.meta.dirname, "../D1/fixtures/d1-local-worker.ts"),
+            env: { DB: db },
+            dev: { port: 0 },
+          });
+          const site = yield* Cloudflare.Website.Vite("ViteSharedDBSite", {
+            rootDir,
+            main: "worker.ts",
+            workersDev: true,
+            compatibility: { date: "2024-09-23" },
+            memo: { include: fixtureEntries },
+            assets: { runWorkerFirst: true },
+            dev: { port: 0 },
+            env: { DB: db },
+          });
+          return { site, worker };
+        }),
+      );
+
+      // Both serve before the writes start, so the writes overlap.
+      yield* getJsonReady(`${site.url}/api/ready`);
+      yield* getJsonReady(`${worker.url}/tables`);
+
+      const [fromSite, fromWorker] = (yield* Effect.all(
+        [
+          getJsonReady(`${site.url}/api/concurrent?who=site&count=200`),
+          getJsonReady(`${worker.url}/concurrent?who=worker&count=200`),
+        ],
+        { concurrency: "unbounded" },
+      )) as [{ errors: string[] }, { errors: string[] }];
+      expect(fromSite.errors).toEqual([]);
+      expect(fromWorker.errors).toEqual([]);
+
+      const writes = (yield* getJsonReady(`${worker.url}/writes`)) as {
+        writes: Array<{ who: string; n: number }>;
+      };
+      expect(writes.writes).toEqual([
+        { who: "site", n: 200 },
+        { who: "worker", n: 200 },
+      ]);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:d1", "provider:cloudflare:website", "local"],
     timeout: 240_000,
   },
 );
