@@ -41,7 +41,7 @@ The examples come from an issue board that looks after a GitHub repository, the 
   caption="Respond opens a pull request for an issue and starts Review to check it. The pull request lives in the Domain model, and both processes act on it through commands. A tool reaches GitHub through a binding, and Alchemy deploys all of it."
 />
 
-## A process: a description of work
+## Process: a description of work
 
 A **process** has two parts. The class is its name, which the rest of your program refers to:
 
@@ -169,7 +169,7 @@ Processes that mention each other are how you model a team or an organization.
 
 See [Processes that use processes](/ai/process-graphs).
 
-## The Domain model: the business a process works on
+## Domain model: the business a process works on
 
 A [Domain model](/domain) is your business in code: what can happen, what did happen, and the rules that decide. An issue board has issues that are reported, labeled and replied to.
 
@@ -237,7 +237,7 @@ export class Answering extends AI.Process<Answering>()("Answering", {
 ` {}
 ```
 
-## The harness: what runs a session
+## Harness: what runs a session
 
 Something has to run the loop: send the LLM the conversation and its tools, run the tools it asks for, and ask again until it answers. That program is an **agent harness**. Pi and OpenCode are harnesses, and so are Claude Code and Codex.
 
