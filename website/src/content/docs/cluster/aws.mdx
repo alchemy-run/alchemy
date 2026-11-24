@@ -115,7 +115,7 @@ export const Default = ClusterAWS.EcsPool("Default", { replicas: 2 }).pipe(
 );
 ```
 
-Given resource by resource, runners take no public IP, so the subnets need a NAT gateway (or VPC endpoints) for the runners to pull their image. Subnets without one take `assignPublicIp: true`.
+Given resource by resource, runners take no public IP, so the subnets need a NAT gateway (or VPC endpoints) for the runners to pull their image. Subnets without one take `assignPublicIp: true`. An internet-facing gateway's load balancer goes in `publicSubnets`, which default to `subnets`; an `EC2.Network`'s public subnets are used automatically.
 
 ## The pool
 
