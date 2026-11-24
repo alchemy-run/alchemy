@@ -144,6 +144,30 @@ test.provider.skipIf(!owner)(
       expect(waitAfterUpdate).toBeUndefined();
       expect((yield* listBranchPolicies(name)).sort()).toEqual(["branch:main", "tag:main"]);
 
+      // Tags only — the branch policies are removed, so no branch can deploy.
+      const tagsOnly = yield* stack.deploy(
+        Effect.gen(function* () {
+          const repository = yield* GitHub.Repository("Repo", {
+            owner,
+            name: repo,
+            description: "alchemy-effect environment test",
+            visibility: "public",
+          });
+
+          return yield* GitHub.Environment("Env", {
+            owner,
+            repository: repoName(repository),
+            name,
+            deploymentBranchPolicy: { customTagPolicies: ["v*"] },
+          }).pipe(destroy());
+        }),
+      );
+
+      expect(tagsOnly.environmentId).toEqual(created.environmentId);
+      expect(yield* listBranchPolicies(name)).toEqual(["tag:v*"]);
+      const afterTagsOnly = yield* getEnvironment(name);
+      expect(afterTagsOnly?.deployment_branch_policy?.custom_branch_policies).toBe(true);
+
       // Switch the policy mode to protected branches only.
       const switched = yield* stack.deploy(
         Effect.gen(function* () {
