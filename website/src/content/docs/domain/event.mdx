@@ -137,6 +137,16 @@ MoneyWithdrawn: (_, e, { at }) => ({
 
 The `commandId` lets a client recognize the events its own commands caused, which is how an app confirms an [optimistic update](/domain/optimistic-updates).
 
+### Who sent the command
+
+A command that was sent with a `Domain.Originator` in its request context commits events whose envelope has an `originator`: the value, as the app encoded it. A [middleware](/domain/sessions) provides it next to the rest of the request's context. A command sent without one commits events with no `originator`.
+
+```typescript title="src/Session.middleware.ts"
+Effect.provideService(effect, Domain.Originator, { actor: actor.customerId })
+```
+
+Views, policies and projections read it from the envelope they receive, so an audit row can say who deposited without the event carrying a field for it. A decision records it on every instance it writes, and a view passes it on with the events it emits. It is part of the envelope's schema, so an [Api](/domain/api) client that reads events sees it too.
+
 ## Delivered to views and policies
 
 In the same commit that stores an event, the instance records a delivery for every [view](/domain/view) and [policy](/domain/policy) that consumes it. After the commit, each delivery is sent. Every consumer receives every event it consumes at least once, and in the order the instance recorded them.

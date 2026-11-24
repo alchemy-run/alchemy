@@ -1328,6 +1328,7 @@ export const make = (
                       now: at,
                       correlationId: result.correlationId,
                       trace: result.trace,
+                      originator: result.originator,
                     });
                   }
                   const sent: DecisionResult = { _tag: "Accepted", receipt: result.receipt };
