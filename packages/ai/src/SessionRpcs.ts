@@ -65,7 +65,7 @@ export class SessionRpcs extends RpcGroup.make(
 ) {}
 
 const failed = (error: NotStarted | HarnessError) =>
-  new SessionError({
+  SessionError.make({
     message:
       error._tag === "NotStarted"
         ? `The ${error.process} session ${error.key} was not started`
