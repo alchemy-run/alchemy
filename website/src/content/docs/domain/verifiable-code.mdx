@@ -666,6 +666,24 @@ Effect.zip(Effect.succeed(a), Effect.succeed(b));
 Effect.zipWith(Effect.succeed(a), Effect.succeed(b), (x, y) => x - y);
 ```
 
+```typescript title="effect/Effect: an effect run again, and a time limit"
+const ran = yield* Ref.make(0);
+const step = Ref.updateAndGet(ran, (n) => n + 1);
+
+// Nothing in a handler waits, so each run follows the last at once.
+Effect.retry(even(a), { times: 2 }); // a count the code writes
+Effect.retry(even(a), { times: 5, while: (error) => error.n !== 2 });
+Effect.retry(even(a), { times: 5, until: (error) => error.n === 1 });
+Effect.repeat(step, { times: 2 }); // gives what the last run gave
+Effect.repeat(step, { times: 4, while: (n) => n < a + 3 });
+Effect.repeat(step, { times: 4, until: (n) => n === a + 2 });
+
+// An effect is done before any time is up.
+Effect.timeout(even(a), "1 second");
+Effect.timeoutOption(even(a), "1 second");
+Effect.timeoutOrElse(even(a), { duration: "1 second", orElse: () => Effect.succeed(b) });
+```
+
 ```typescript title="effect/Exit"
 Effect.exit(even(a)).pipe(
   Effect.map((exit) => [
@@ -1610,6 +1628,41 @@ Effect.gen(function* () {
 Ref.getUnsafe(Ref.makeUnsafe(a));
 ```
 
+```typescript title="effect/SynchronizedRef"
+const cell = yield* SynchronizedRef.make(a);
+const made = SynchronizedRef.makeUnsafe(a);
+SynchronizedRef.get(cell);
+SynchronizedRef.getUnsafe(cell);
+SynchronizedRef.set(cell, a + b);
+SynchronizedRef.setAndGet(cell, b);
+SynchronizedRef.getAndSet(cell, a);
+SynchronizedRef.update(cell, (n) => n * 2);
+SynchronizedRef.updateAndGet(cell, (n) => n + 1);
+SynchronizedRef.getAndUpdate(cell, (n) => n * 2);
+SynchronizedRef.modify(cell, (n) => [n > b, n - 1]);
+SynchronizedRef.updateEffect(cell, (n) => Effect.succeed(n + 1)); // a change that fails leaves the cell as it was
+SynchronizedRef.updateAndGetEffect(cell, (n) => positive(n));
+SynchronizedRef.getAndUpdateEffect(cell, (n) => Effect.succeed(n * 2));
+SynchronizedRef.modifyEffect(cell, (n) => Effect.succeed([n > b, n - 1]));
+```
+
+```typescript title="effect/SubscriptionRef"
+const cell = yield* SubscriptionRef.make(a);
+SubscriptionRef.get(cell);
+SubscriptionRef.getUnsafe(cell);
+SubscriptionRef.set(cell, a + b);
+SubscriptionRef.setAndGet(cell, b);
+SubscriptionRef.getAndSet(cell, a);
+SubscriptionRef.update(cell, (n) => n * 2);
+SubscriptionRef.updateAndGet(cell, (n) => n + 1);
+SubscriptionRef.getAndUpdate(cell, (n) => n * 2);
+SubscriptionRef.modify(cell, (n) => [n > b, n - 1]);
+SubscriptionRef.updateEffect(cell, (n) => Effect.succeed(n + 1)); // a change that fails leaves the cell as it was
+SubscriptionRef.updateAndGetEffect(cell, (n) => positive(n));
+SubscriptionRef.getAndUpdateEffect(cell, (n) => Effect.succeed(n * 2));
+SubscriptionRef.modifyEffect(cell, (n) => Effect.succeed([n > b, n - 1]));
+```
+
 ```typescript title="effect/MutableRef"
 (() => {
   const count = MutableRef.make(a);
@@ -2043,8 +2096,6 @@ import * as RequestResolver from "effect/RequestResolver";
 import * as Channel from "effect/Channel";
 import * as Pull from "effect/Pull";
 import * as Take from "effect/Take";
-import * as SubscriptionRef from "effect/SubscriptionRef";
-import * as SynchronizedRef from "effect/SynchronizedRef";
 import * as ExecutionPlan from "effect/ExecutionPlan";
 import * as TxChunk from "effect/TxChunk";
 import * as TxDeferred from "effect/TxDeferred";
@@ -2059,10 +2110,12 @@ import * as TxSemaphore from "effect/TxSemaphore";
 import * as TxSubscriptionRef from "effect/TxSubscriptionRef";
 
 Effect.sleep("1 second");
-Effect.timeout(effect, "1 second");
-Effect.retry(effect, { times: 3 });
-Effect.repeat(effect, { times: 3 });
+Effect.delay(effect, "1 second");
+Effect.retry(effect, Schedule.recurs(3)); // retry and repeat on a schedule: write { times: 3 }
+Effect.repeat(effect, { schedule: Schedule.spaced("1 second") });
+Effect.retry(effect, { times: command.attempts }); // a count an input decides
 Effect.race(first, second);
+SubscriptionRef.changes(cell); // a stream of what a cell held
 Effect.fork(effect);
 
 Cron.next(cron); // next, prev and sequence use the clock when they are given no time
@@ -2164,7 +2217,7 @@ Pack: Effect.fn(function* (parcel, command) {
 ```typescript title="Not supported"
 yield* Effect.promise(() => fetch(url)); // the outside world
 yield* Effect.tryPromise(() => fetch(url));
-yield* Effect.sleep("1 second"); // time passing: sleep, delay, timeout, retry, repeat, race, fork
+yield* Effect.sleep("1 second"); // time passing: sleep, delay, a schedule, race, fork
 yield a; // yield without the star
 yield* Option.some(a); // an Option or a Result in Effect.gen: use Option.gen, Result.gen, Effect.fromOption, Effect.fromResult
 ```

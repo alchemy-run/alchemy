@@ -161,6 +161,64 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
     );
   };
 
+  /** How often an effect is run again: a count the code writes, and a test of what the last run gave. */
+  const again = (
+    name: string,
+    options: V | undefined,
+    site: Site,
+  ): Eval<{ readonly times: number; readonly goesOn: (last: V) => Eval<boolean> }> => {
+    const fields = options?._tag === "Obj" && !options.brand ? options.fields : undefined;
+    const times = fields?.times;
+    // A schedule waits between runs, and a handler does not wait.
+    if (!fields || !Object.keys(fields).every((key) => ["times", "while", "until"].includes(key)))
+      return Effect.fail(
+        Value.notTranslated(
+          site,
+          `calls ${name} with a schedule: the prover reads a count of times, with while or until`,
+        ),
+      );
+    if (times?._tag !== "Num" || !Number.isInteger(times.value) || times.value < 0)
+      return Effect.fail(
+        Value.notTranslated(site, `calls ${name} without a count of times the prover can see`),
+      );
+    const whilst = fields.while;
+    const until = fields.until;
+    return Effect.succeed({
+      times: times.value,
+      goesOn: (last) =>
+        Effect.gen(function* () {
+          if (whilst && !(yield* kit.holds(whilst, [last], site))) return false;
+          if (until && (yield* kit.holds(until, [last], site))) return false;
+          return true;
+        }),
+    });
+  };
+
+  /** The effect run again while it fails: nothing waits, so each run follows the last at once. */
+  const retry: Model = onEffect("Effect.retry", 1, (self, [options], site) =>
+    Effect.gen(function* () {
+      const { times, goesOn } = yield* again("Effect.retry", options, site);
+      for (let left = times; ; left--) {
+        const made = yield* attempt(self);
+        const read = Brands.resultOf(made);
+        if (!read) return yield* wrongArguments(site, "Effect.retry");
+        if (read._tag === "Success") return read.success;
+        if (left <= 0 || !(yield* goesOn(read.failure))) return yield* rejected(read.failure);
+      }
+    }),
+  );
+
+  /** The effect run again while it succeeds: what it gives is what its last run gave. */
+  const repeat: Model = onEffect("Effect.repeat", 1, (self, [options], site) =>
+    Effect.gen(function* () {
+      const { times, goesOn } = yield* again("Effect.repeat", options, site);
+      for (let left = times; ; left--) {
+        const made = yield* self;
+        if (left <= 0 || !(yield* goesOn(made))) return made;
+      }
+    }),
+  );
+
   const models: Models = {
     "effect/Effect:as": onEffect("Effect.as", 1, (self, [value]) =>
       Effect.as(self, value ?? Value.undef),
@@ -517,6 +575,14 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
       self?._tag === "Effect"
         ? onFailure(self.run, (error) => rejected(error, true))
         : wrongArguments(site, "Effect.runSync"),
+    "effect/Effect:retry": retry,
+    "effect/Effect:repeat": repeat,
+    // Nothing in a handler waits, so an effect is done before any time is up.
+    "effect/Effect:timeout": onEffect("Effect.timeout", 1, (self) => self),
+    "effect/Effect:timeoutOption": onEffect("Effect.timeoutOption", 1, (self) =>
+      Effect.map(self, Value.some),
+    ),
+    "effect/Effect:timeoutOrElse": onEffect("Effect.timeoutOrElse", 1, (self) => self),
     "effect/Effect:withSpan": transparent("Effect.withSpan"),
     "effect/Effect:annotateSpans": transparent("Effect.annotateSpans"),
     "effect/Effect:annotateLogs": transparent("Effect.annotateLogs"),
