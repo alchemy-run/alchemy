@@ -45,7 +45,7 @@ import {
 } from "./FunctionSource.ts";
 
 const DEFAULT_ENVIRONMENT = "GEN_2";
-const DEFAULT_RUNTIME = "nodejs20";
+const DEFAULT_RUNTIME = "nodejs22";
 const MAX_NAME_LENGTH = 63;
 
 export type StorageSource = {
@@ -85,9 +85,9 @@ export type Source = {
 
 export type BuildConfig = {
   /**
-   * Runtime to build and run (e.g. `nodejs20`, `python312`). Required on
+   * Runtime to build and run (e.g. `nodejs22`, `python312`). Required on
    * create.
-   * @default "nodejs20"
+   * @default "nodejs22"
    */
   runtime?: string;
   /**
@@ -326,7 +326,7 @@ export type Function = Resource<
     state: string | undefined;
     /** KMS key used for encryption, if any. */
     kmsKeyName: string | undefined;
-    /** Runtime (e.g. `nodejs20`). */
+    /** Runtime (e.g. `nodejs22`). */
     runtime: string | undefined;
     /** Source entry point. */
     entryPoint: string | undefined;
@@ -408,7 +408,7 @@ export type FunctionShape = Main<FunctionServices>;
  * ```typescript
  * const hello = yield* GCP.CloudFunctions.Function("Hello", {
  *   buildConfig: {
- *     runtime: "nodejs20",
+ *     runtime: "nodejs22",
  *     entryPoint: "helloHttp",
  *     source: {
  *       storageSource: {
@@ -428,7 +428,7 @@ export type FunctionShape = Main<FunctionServices>;
  *   description: "HTTP handler",
  *   labels: { env: "prod" },
  *   buildConfig: {
- *     runtime: "nodejs20",
+ *     runtime: "nodejs22",
  *     entryPoint: "helloHttp",
  *     source: {
  *       storageSource: { bucket: "my-source", object: "hello.zip" },
@@ -447,7 +447,7 @@ export type FunctionShape = Main<FunctionServices>;
  * ```typescript
  * const consumer = yield* GCP.CloudFunctions.Function("Consume", {
  *   buildConfig: {
- *     runtime: "nodejs20",
+ *     runtime: "nodejs22",
  *     entryPoint: "onMessage",
  *     source: {
  *       storageSource: { bucket: "my-source", object: "consumer.zip" },
