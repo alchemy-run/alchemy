@@ -1,9 +1,11 @@
+import * as Explore from "@alchemy.run/domain/Explore";
 import * as Prove from "@alchemy.run/domain/Prove";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import { Dispatch, Hold, Send, Sent } from "./fixtures/Dispatch.aggregate.ts";
+import { Patient, PatientApi } from "./fixtures/Patient.model.ts";
 
 // A handler that waits: it races two sleeps under a time limit, and how long
 // each takes is a field of the command. The prover reads it on time that
@@ -68,3 +70,21 @@ it("a prediction of a handler that never ends says so", () => {
     "the handler waits for something outside it, which a prediction does not run",
   );
 });
+
+it.effect(
+  "a policy that sleeps and races is followed by the search of the model",
+  () =>
+    Effect.gen(function* () {
+      const report = yield* Explore.check(Patient, {
+        source: new URL("./fixtures/Patient.model.ts", import.meta.url),
+        apis: [PatientApi],
+        depth: 1,
+      });
+      // The policy is read, not left out: it waits a second and then holds the order.
+      expect(report.skipped).toEqual([]);
+      expect(report.eventually).toEqual([
+        expect.objectContaining({ name: "APlacedOrderIsHeld", broken: undefined }),
+      ]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  120_000,
+);

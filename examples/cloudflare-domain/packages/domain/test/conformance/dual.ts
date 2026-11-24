@@ -29,6 +29,8 @@ const ONE_WAY: ReadonlySet<string> = new Set([
   "effect/Semaphore:withPermitsIfAvailable",
   // An effect and a function of how it ended: the effect comes first either way.
   ...["effect/Effect:forkChild", "effect/Effect:forkDetach"],
+  // The set or the handle comes first either way, and then the effect.
+  ...["effect/FiberSet:run", "effect/FiberHandle:run"],
 ]);
 
 const declared = new Map<string, ReadonlySet<string>>();

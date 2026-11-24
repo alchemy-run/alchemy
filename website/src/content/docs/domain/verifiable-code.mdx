@@ -1893,6 +1893,43 @@ Queue.isFull(line);
 Queue.isFullUnsafe(line);
 ```
 
+```typescript title="effect/FiberSet and effect/FiberHandle"
+// A set of fibers, and a place for one. Each is stopped when its scope closes.
+const set = yield* FiberSet.make(); // in a scope
+FiberSet.run(set, Effect.sleep(1));
+FiberSet.run(set)(Effect.onInterrupt(Effect.sleep(20), () => log(seen, "stopped")));
+FiberSet.add(set, fiber);
+FiberSet.join(set); // fails when one of its fibers does
+FiberSet.awaitEmpty(set);
+FiberSet.clear(set);
+FiberSet.size(set);
+const handle = yield* FiberHandle.make();
+FiberHandle.run(handle, Effect.andThen(Effect.sleep(1), even(a))); // stops the fiber it held
+FiberHandle.join(handle);
+FiberHandle.awaitEmpty(handle);
+FiberHandle.clear(handle);
+```
+
+```typescript title="effect/PubSub"
+// What is published reaches each one who subscribed before it was.
+const hub = yield* PubSub.unbounded();
+PubSub.unbounded({ replay: 1 });
+PubSub.bounded(2);
+PubSub.dropping(1);
+PubSub.sliding(1);
+const one = yield* PubSub.subscribe(hub); // in a scope
+PubSub.publish(hub, a);
+PubSub.publishAll(hub, [b, 1]);
+PubSub.take(one); // waits for a fiber to publish
+PubSub.takeAll(two);
+PubSub.takeUpTo(one, 5);
+PubSub.remaining(one);
+PubSub.size(hub);
+PubSub.isEmpty(hub);
+PubSub.isFull(hub);
+PubSub.shutdown(hub);
+```
+
 ```typescript title="effect/MutableRef"
 (() => {
   const count = MutableRef.make(a);
@@ -2238,6 +2275,11 @@ Stream.make(a, b, 1).pipe(Stream.schedule(Schedule.spaced("1 second")), Stream.r
 Stream.make(a, b).pipe(Stream.repeat(Schedule.recurs(1)), Stream.runCollect);
 paced(3, a, b, 1).pipe(Stream.interruptWhen(Effect.sleep(7)), Stream.runCollect);
 paced(3, a, b, 1).pipe(Stream.haltWhen(Effect.sleep(7)), Stream.runCollect);
+Stream.race(paced(5, "slow", "slower"), paced(3, a, b)).pipe(Stream.runCollect);
+paced(2, a, b, 1).pipe(Stream.buffer({ capacity: 2 }), Stream.runCollect);
+Stream.fromPubSub(hub).pipe(Stream.take(2), Stream.runCollect);
+Stream.fromSubscription(one).pipe(Stream.take(2), Stream.runCollect);
+Stream.retry(Schedule.spaced("1 second"));
 ```
 
 ```typescript title="effect/Sink"
@@ -2338,11 +2380,8 @@ A handler's sleeps, time limits, races and fibers are [supported](#time-and-fibe
 
 ```typescript title="Time passing and things running together"
 import * as Scheduler from "effect/Scheduler";
-import * as FiberHandle from "effect/FiberHandle";
 import * as FiberMap from "effect/FiberMap";
-import * as FiberSet from "effect/FiberSet";
 import * as PartitionedSemaphore from "effect/PartitionedSemaphore";
-import * as PubSub from "effect/PubSub";
 import * as Pool from "effect/Pool";
 import * as Cache from "effect/Cache";
 import * as ScopedCache from "effect/ScopedCache";
@@ -2540,7 +2579,7 @@ Stream.take(stream, command.count); // a count an input decides
 Stream.tick("1 second").pipe(Stream.runCollect); // a stream of time with no end: cut it with Stream.take(3)
 Stream.never.pipe(Stream.runCollect); // a stream that gives nothing and does not end
 Stream.merge(paced(3, a), paced(3, b)).pipe(Stream.runCollect); // two items that come at the same moment
-Stream.throttle(stream, options); // and Stream.fromPubSub, broadcast, share
+Stream.throttle(stream, options); // and Stream.broadcast and Stream.share
 ```
 
 ## Your own files
@@ -2733,7 +2772,7 @@ a === b;
 //   Fail with a Data.TaggedError and handle it with Effect.catchTag.
 
 // calls Effect.retry without a count of times the prover can see
-// Effect.repeat runs an effect again more than 100 times
+// runs an effect again more than 100 times, with Effect.repeat
 Effect.retry(even(a), { times: 2 }); // a count the code writes
 Effect.retry(even(a), Schedule.recurs(2));
 

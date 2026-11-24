@@ -4,6 +4,8 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as FiberHandle from "effect/FiberHandle";
+import * as FiberSet from "effect/FiberSet";
 import * as Latch from "effect/Latch";
 import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
@@ -24,10 +26,23 @@ const REF: Value.Brand = { kind: "Ref", cls: undefined };
 const IS = "~is";
 const HELD = "~held";
 
-type Kind = "Deferred" | "Queue" | "Latch" | "Semaphore" | "Fiber" | "Schedule";
+type Kind =
+  | "Deferred"
+  | "Queue"
+  | "Latch"
+  | "Semaphore"
+  | "Fiber"
+  | "Schedule"
+  | "PubSub"
+  | "Subscription"
+  | "FiberSet"
+  | "FiberHandle";
 
 /** How often effects may be run again in one handler before the prover stops reading. */
 const MAX_TURNS = 100;
+
+/** Options that are not numbers and text the code writes. */
+const NOT_PLAIN = Symbol("not plain");
 
 /** What the library keeps while it runs effects of the code: a value, or the failure the code can handle. */
 type Held = Value.Rejected;
@@ -337,7 +352,7 @@ export const make = (kit: Kit, base: Models) => {
       ++timeline.turns > MAX_TURNS
         ? Timeline.real(
             timeline,
-            unseen(site, `${name} runs an effect again more than ${MAX_TURNS} times`),
+            unseen(site, `runs an effect again more than ${MAX_TURNS} times, with ${name}`),
           )
         : self,
     );
@@ -660,6 +675,150 @@ export const make = (kit: Kit, base: Models) => {
       1,
       (held) => Queue.shutdown(held),
       bool,
+    ),
+  };
+
+  // ---- PubSub: what is published reaches each one who subscribed before it was.
+
+  type P = PubSub.PubSub<V>;
+  type S = PubSub.Subscription<V>;
+
+  /** Numbers and text the code writes, as the library takes its options. */
+  const plainOf = (v: V | undefined): unknown => {
+    if (v === undefined || v._tag === "Undef") return undefined;
+    if (v._tag === "Num" || v._tag === "Str" || v._tag === "Bool") return v.value;
+    if (v._tag === "Obj" && !v.brand) {
+      const out: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(v.fields)) {
+        const made = plainOf(value);
+        if (made === NOT_PLAIN) return NOT_PLAIN;
+        out[key] = made;
+      }
+      return out;
+    }
+    return NOT_PLAIN;
+  };
+
+  const options = <A>(name: string, v: V | undefined, site: Site): Eval<A> => {
+    const made = plainOf(v);
+    return made === NOT_PLAIN
+      ? unseen(site, `calls ${name} with options the prover cannot see`)
+      : Effect.succeed(made as A);
+  };
+
+  /** Options the code writes, or none where it writes something else. */
+  const optionsOf = (v: V | undefined): unknown => {
+    const read = plainOf(v);
+    return read === NOT_PLAIN ? undefined : read;
+  };
+
+  const SUBSCRIPTION_WAIT = "takes from a PubSub that nothing publishes to";
+
+  const pubsubs: Models = {
+    "effect/PubSub:unbounded": made("PubSub", ([given_], site) =>
+      Effect.flatMap(options<{ replay?: number }>("PubSub.unbounded", given_, site), (read) =>
+        PubSub.unbounded<V>(read),
+      ),
+    ),
+    "effect/PubSub:bounded": made("PubSub", ([given_], site) =>
+      Effect.flatMap(options<number>("PubSub.bounded", given_, site), (read) =>
+        PubSub.bounded<V>(read),
+      ),
+    ),
+    "effect/PubSub:dropping": made("PubSub", ([given_], site) =>
+      Effect.flatMap(options<number>("PubSub.dropping", given_, site), (read) =>
+        PubSub.dropping<V>(read),
+      ),
+    ),
+    "effect/PubSub:sliding": made("PubSub", ([given_], site) =>
+      Effect.flatMap(options<number>("PubSub.sliding", given_, site), (read) =>
+        PubSub.sliding<V>(read),
+      ),
+    ),
+    "effect/PubSub:publish": on<P, boolean>(
+      "PubSub",
+      "publish",
+      2,
+      (held, [value]) => PubSub.publish(held, value ?? Value.undef),
+      bool,
+      "publishes to a full PubSub that nothing takes from",
+    ),
+    "effect/PubSub:publishAll": later<P, boolean>(
+      "PubSub",
+      "publishAll",
+      2,
+      (held, [values], site) =>
+        Effect.map(items("PubSub.publishAll", values, site), (found) =>
+          PubSub.publishAll(held, found),
+        ),
+      bool,
+      "publishes to a full PubSub that nothing takes from",
+    ),
+    "effect/PubSub:size": on<P, number>("PubSub", "size", 1, (held) => PubSub.size(held), num),
+    "effect/PubSub:isFull": on<P, boolean>(
+      "PubSub",
+      "isFull",
+      1,
+      (held) => PubSub.isFull(held),
+      bool,
+    ),
+    "effect/PubSub:isEmpty": on<P, boolean>(
+      "PubSub",
+      "isEmpty",
+      1,
+      (held) => PubSub.isEmpty(held),
+      bool,
+    ),
+    "effect/PubSub:shutdown": on<P, void>(
+      "PubSub",
+      "shutdown",
+      1,
+      (held) => PubSub.shutdown(held),
+      none,
+    ),
+    "effect/PubSub:subscribe": ([self], site) => {
+      const held = heldOf<P>("PubSub", self);
+      return held
+        ? Effect.succeed(
+            scoped(
+              "PubSub.subscribe",
+              site,
+              () => PubSub.subscribe(held),
+              (subscription) => wrap("Subscription", subscription),
+            ),
+          )
+        : wrongArguments(site, "PubSub.subscribe");
+    },
+    "effect/PubSub:take": on<S, V>(
+      "Subscription",
+      "take",
+      1,
+      (held) => PubSub.take(held),
+      same,
+      SUBSCRIPTION_WAIT,
+    ),
+    "effect/PubSub:takeAll": on<S, ReadonlyArray<V>>(
+      "Subscription",
+      "takeAll",
+      1,
+      (held) => PubSub.takeAll(held),
+      list,
+      SUBSCRIPTION_WAIT,
+    ),
+    "effect/PubSub:takeUpTo": later<S, ReadonlyArray<V>>(
+      "Subscription",
+      "takeUpTo",
+      2,
+      (held, [max], site) =>
+        Effect.map(count("PubSub.takeUpTo", max, site), (most) => PubSub.takeUpTo(held, most)),
+      list,
+    ),
+    "effect/PubSub:remaining": on<S, number>(
+      "Subscription",
+      "remaining",
+      1,
+      (held) => PubSub.remaining(held),
+      num,
     ),
   };
 
@@ -1502,8 +1661,137 @@ export const make = (kit: Kit, base: Models) => {
     },
   };
 
+  // ---- A set of fibers, and a place for one: stopped when their scope closes.
+
+  type FS = FiberSet.FiberSet<V, Held>;
+  type FH = FiberHandle.FiberHandle<V, Held>;
+
+  /** `FiberSet.run(set, effect)`, or `FiberSet.run(set)` then the effect. */
+  const running = <H>(
+    kind: "FiberSet" | "FiberHandle",
+    run: (held: H, effect: Effect.Effect<V, Held>, options: unknown) => Effect.Effect<F>,
+  ): Model => {
+    const name = `${kind}.run`;
+    const start = (held: H, effect: V | undefined, given_: V | undefined, site: Site): Eval<V> =>
+      effect?._tag === "Effect"
+        ? Effect.succeed(
+            timed(
+              name,
+              (timeline) =>
+                Timeline.back(
+                  timeline,
+                  run(held, Timeline.real(timeline, effect.run), optionsOf(given_)),
+                  (fiber) => wrap("Fiber", fiber),
+                ),
+              site,
+            ),
+          )
+        : wrongArguments(site, name);
+    return ([self, second, third], site) => {
+      const held = heldOf<H>(kind, self);
+      if (held === undefined) return wrongArguments(site, name);
+      return second?._tag === "Effect"
+        ? start(held, second, third, site)
+        : Effect.succeed(native(name, ([effect], at) => start(held, effect, second, at)));
+    };
+  };
+
+  const sets: Models = {
+    "effect/FiberSet:make": (_, site) =>
+      Effect.succeed(
+        scoped(
+          "FiberSet.make",
+          site,
+          () => FiberSet.make<V, Held>(),
+          (held) => wrap("FiberSet", held),
+        ),
+      ),
+    "effect/FiberSet:run": running<FS>("FiberSet", (held, effect, read) =>
+      FiberSet.run(held, effect, read as never),
+    ),
+    "effect/FiberSet:add": later<FS, void>(
+      "FiberSet",
+      "add",
+      2,
+      (held, [fiber], site) => {
+        const given_ = heldOf<F>("Fiber", fiber);
+        return given_
+          ? Effect.succeed(FiberSet.add(held, given_))
+          : wrongArguments(site, "FiberSet.add");
+      },
+      none,
+    ),
+    "effect/FiberSet:join": on<FS, void>(
+      "FiberSet",
+      "join",
+      1,
+      (held) => FiberSet.join(held),
+      none,
+      "waits for a FiberSet none of whose fibers fails",
+    ),
+    "effect/FiberSet:awaitEmpty": on<FS, void>(
+      "FiberSet",
+      "awaitEmpty",
+      1,
+      (held) => FiberSet.awaitEmpty(held),
+      none,
+      "waits for the fibers of a FiberSet, which never end",
+    ),
+    "effect/FiberSet:clear": on<FS, void>(
+      "FiberSet",
+      "clear",
+      1,
+      (held) => FiberSet.clear(held),
+      none,
+    ),
+    "effect/FiberSet:size": on<FS, number>(
+      "FiberSet",
+      "size",
+      1,
+      (held) => FiberSet.size(held),
+      num,
+    ),
+    "effect/FiberHandle:make": (_, site) =>
+      Effect.succeed(
+        scoped(
+          "FiberHandle.make",
+          site,
+          () => FiberHandle.make<V, Held>(),
+          (held) => wrap("FiberHandle", held),
+        ),
+      ),
+    "effect/FiberHandle:run": running<FH>("FiberHandle", (held, effect, read) =>
+      FiberHandle.run(held, effect, read as never),
+    ),
+    "effect/FiberHandle:join": on<FH, void>(
+      "FiberHandle",
+      "join",
+      1,
+      (held) => FiberHandle.join(held),
+      none,
+      "waits for a FiberHandle whose fiber does not fail",
+    ),
+    "effect/FiberHandle:awaitEmpty": on<FH, void>(
+      "FiberHandle",
+      "awaitEmpty",
+      1,
+      (held) => FiberHandle.awaitEmpty(held),
+      none,
+      "waits for the fiber of a FiberHandle, which never ends",
+    ),
+    "effect/FiberHandle:clear": on<FH, void>(
+      "FiberHandle",
+      "clear",
+      1,
+      (held) => FiberHandle.clear(held),
+      none,
+    ),
+  };
+
   const models: Models = {
+    ...sets,
     ...changes,
+    ...pubsubs,
     ...scopes,
     ...deferreds,
     ...queues,
@@ -1527,6 +1815,10 @@ export const make = (kit: Kit, base: Models) => {
     effectOf,
     scheduleOf,
     heldOf,
+    plainOf: (v: V | undefined): unknown => {
+      const read = plainOf(v);
+      return read === NOT_PLAIN ? undefined : read;
+    },
   };
 
   return { models, sited, member, tools };

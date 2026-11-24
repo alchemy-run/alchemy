@@ -2509,6 +2509,8 @@ const rest: ReadonlyArray<Group> = [
     effectful: true,
     prelude: [
       `import * as Deferred from "effect/Deferred";`,
+      `import * as FiberSet from "effect/FiberSet";`,
+      `import * as FiberHandle from "effect/FiberHandle";`,
       `import * as Fiber from "effect/Fiber";`,
       `import * as Latch from "effect/Latch";`,
       `import * as Queue from "effect/Queue";`,
@@ -2573,6 +2575,12 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const cell = yield* SubscriptionRef.make(a); return yield* Stream.runCollect(Stream.take(SubscriptionRef.changes(cell), 1)); })`,
       `Effect.gen(function* () { const cell = yield* SubscriptionRef.make(a); const fiber = yield* Effect.forkChild(Stream.runCollect(Stream.take(SubscriptionRef.changes(cell), 3))); yield* Effect.yieldNow; yield* SubscriptionRef.set(cell, b); yield* SubscriptionRef.update(cell, (n) => n + 1); return yield* Fiber.join(fiber); })`,
       `Effect.gen(function* () { const cell = yield* SubscriptionRef.make(a); yield* SubscriptionRef.set(cell, b); const late = yield* Effect.forkChild(Stream.runCollect(Stream.take(SubscriptionRef.changes(cell), 2))); yield* Effect.yieldNow; yield* SubscriptionRef.updateEffect(cell, (n) => Effect.succeed(n * 2)); return yield* Fiber.join(late); })`,
+      // A set of fibers, and a place for one: each is stopped when its scope closes.
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const sizes = yield* Effect.scoped(Effect.gen(function* () { const set = yield* FiberSet.make(); yield* FiberSet.run(set, Effect.andThen(Effect.sleep(2), log(seen, "two"))); yield* FiberSet.run(set)(Effect.onInterrupt(Effect.sleep(20), () => log(seen, "stopped"))); const before = yield* FiberSet.size(set); yield* Effect.sleep(5); return [before, yield* FiberSet.size(set)]; })); return [sizes, yield* Ref.get(seen)]; })`,
+      `Effect.scoped(Effect.gen(function* () { const set = yield* FiberSet.make(); const fiber = yield* Effect.forkChild(Effect.as(Effect.sleep(3), a)); yield* FiberSet.add(set, fiber); yield* FiberSet.run(set, Effect.sleep(1)); yield* FiberSet.awaitEmpty(set); return [yield* FiberSet.size(set), yield* Fiber.join(fiber)]; }))`,
+      `Effect.scoped(Effect.gen(function* () { const set = yield* FiberSet.make(); yield* FiberSet.run(set, Effect.andThen(Effect.sleep(1), even(a))); yield* FiberSet.run(set, Effect.sleep(9)); const failed = yield* Effect.result(Effect.timeoutOption(FiberSet.join(set), 5)); yield* FiberSet.clear(set); return [failed, yield* FiberSet.size(set)]; }))`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.scoped(Effect.gen(function* () { const handle = yield* FiberHandle.make(); yield* FiberHandle.run(handle, Effect.onInterrupt(Effect.sleep(20), () => log(seen, "first stopped"))); yield* Effect.sleep(1); yield* FiberHandle.run(handle)(Effect.andThen(Effect.sleep(2), log(seen, "second done"))); yield* FiberHandle.awaitEmpty(handle); yield* FiberHandle.run(handle, Effect.onInterrupt(Effect.sleep(20), () => log(seen, "third stopped"))); yield* Effect.sleep(1); yield* FiberHandle.clear(handle); })); return yield* Ref.get(seen); })`,
+      `Effect.scoped(Effect.gen(function* () { const handle = yield* FiberHandle.make(); yield* FiberHandle.run(handle, Effect.andThen(Effect.sleep(1), even(a))); return yield* Effect.result(Effect.timeoutOption(FiberHandle.join(handle), 5)); }))`,
       // Effects run together.
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const made = yield* Effect.all([Effect.as(Effect.andThen(Effect.sleep(2), log(seen, "a")), a), Effect.as(Effect.andThen(Effect.sleep(1), log(seen, "b")), b), Effect.as(log(seen, "c"), 1)], { concurrency: "unbounded" }); return [made, yield* Ref.get(seen)]; })`,
       `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.all([Effect.andThen(Effect.sleep(2), log(seen, "a")), Effect.andThen(Effect.sleep(1), log(seen, "b")), log(seen, "c"), Effect.andThen(Effect.sleep(4), log(seen, "d"))], { concurrency: 2, discard: true }); return yield* Ref.get(seen); })`,
@@ -2619,6 +2627,8 @@ const rest: ReadonlyArray<Group> = [
     prelude: [
       `import * as Queue from "effect/Queue";`,
       `import * as Schedule from "effect/Schedule";`,
+      `import * as PubSub from "effect/PubSub";`,
+      `import * as Fiber from "effect/Fiber";`,
       `import * as Deferred from "effect/Deferred";`,
       `const log = (cell, entry) => Ref.update(cell, (entries) => [...entries, entry]);`,
       `const paced = (millis, ...items) => Stream.fromIterable(items).pipe(Stream.mapEffect((item) => Effect.as(Effect.sleep(millis), item)));`,
@@ -2647,6 +2657,19 @@ const rest: ReadonlyArray<Group> = [
       `paced(3, a, b, 1).pipe(Stream.interruptWhen(Effect.sleep(7)), Stream.runCollect)`,
       `paced(3, a, b, 1).pipe(Stream.haltWhen(Effect.sleep(7)), Stream.runCollect)`,
       `Effect.gen(function* () { const stop = yield* Deferred.make(); const seen = yield* Ref.make([]); const made = yield* paced(3, a, b, 1).pipe(Stream.tap((n) => (n === b ? Deferred.succeed(stop, n) : Effect.void)), Stream.haltWhen(Deferred.await(stop)), Stream.runCollect); return made.length; })`,
+      // A PubSub: what is published reaches each one who subscribed before it was.
+      `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.unbounded(); const one = yield* PubSub.subscribe(hub); const two = yield* PubSub.subscribe(hub); const sent = yield* PubSub.publish(hub, a); yield* PubSub.publishAll(hub, [b, 1]); return [sent, yield* PubSub.take(one), yield* PubSub.takeAll(two), yield* PubSub.remaining(one), yield* PubSub.takeUpTo(one, 5), yield* PubSub.size(hub), yield* PubSub.isEmpty(hub), yield* PubSub.isFull(hub)]; }))`,
+      `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.unbounded({ replay: 1 }); yield* PubSub.publish(hub, a); yield* PubSub.publish(hub, b); const late = yield* PubSub.subscribe(hub); return yield* PubSub.take(late); }))`,
+      `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.bounded(2); const one = yield* PubSub.subscribe(hub); yield* Effect.forkChild(Effect.forEach([a, b, 1], (n) => PubSub.publish(hub, n))); return [yield* PubSub.take(one), yield* PubSub.take(one), yield* PubSub.take(one)]; }))`,
+      `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.dropping(1); const one = yield* PubSub.subscribe(hub); const sent = [yield* PubSub.publish(hub, a), yield* PubSub.publish(hub, b)]; return [sent, yield* PubSub.takeAll(one)]; }))`,
+      `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.sliding(1); const one = yield* PubSub.subscribe(hub); const sent = [yield* PubSub.publish(hub, a), yield* PubSub.publish(hub, b)]; return [sent, yield* PubSub.takeAll(one)]; }))`,
+      `Effect.gen(function* () { const hub = yield* PubSub.unbounded(); const fiber = yield* Effect.forkChild(Stream.fromPubSub(hub).pipe(Stream.take(2), Stream.runCollect)); yield* Effect.yieldNow; yield* PubSub.publishAll(hub, [a, b, 1]); return yield* Fiber.join(fiber); })`,
+      `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.unbounded(); const one = yield* PubSub.subscribe(hub); yield* PubSub.publishAll(hub, [a, b]); return yield* Stream.fromSubscription(one).pipe(Stream.take(2), Stream.runCollect); }))`,
+      `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.unbounded(); const one = yield* PubSub.subscribe(hub); yield* PubSub.publish(hub, a); yield* PubSub.shutdown(hub); return Exit.hasInterrupts(yield* Effect.exit(PubSub.take(one))); }))`,
+      `Stream.race(paced(5, "slow", "slower"), paced(3, a, b)).pipe(Stream.runCollect)`,
+      `paced(2, a, b, 1).pipe(Stream.buffer({ capacity: "unbounded" }), Stream.runCollect)`,
+      `paced(2, a, b, 1).pipe(Stream.buffer({ capacity: 2 }), Stream.runCollect)`,
+      `Effect.gen(function* () { const ran = yield* Ref.make(0); const made = yield* Stream.fromEffect(Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => (n < 3 ? Effect.fail(n) : Effect.succeed(n + a)))).pipe(Stream.retry(Schedule.spaced("1 second")), Stream.runCollect); return [made, yield* Ref.get(ran)]; })`,
       // A stream that stops early stops what it began.
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const made = yield* Stream.make(1, 9).pipe(Stream.mapEffect((n) => Effect.as(Effect.onInterrupt(Effect.sleep(n), () => log(seen, "stopped " + n)), n), { concurrency: 2, unordered: true }), Stream.take(1), Stream.runCollect); return [made, yield* Ref.get(seen)]; })`,
     ],
@@ -2660,6 +2683,14 @@ const rest: ReadonlyArray<Group> = [
       [
         `Stream.tick(text)`.replace("text", "a").concat(`.pipe(Stream.take(1), Stream.runCollect)`),
         /a duration an input decides/,
+      ],
+      [
+        `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.unbounded(); const one = yield* PubSub.subscribe(hub); return yield* PubSub.take(one); }))`,
+        /takes from a PubSub that nothing publishes to/,
+      ],
+      [
+        `Effect.gen(function* () { const hub = yield* PubSub.unbounded(); return yield* PubSub.subscribe(hub); })`,
+        /outside Effect\.scoped/,
       ],
     ],
   },

@@ -2,6 +2,7 @@ import * as Cause from "effect/Cause";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import type * as PubSub from "effect/PubSub";
 import * as Pull from "effect/Pull";
 import type * as Queue from "effect/Queue";
 import type * as Schedule from "effect/Schedule";
@@ -42,7 +43,11 @@ export interface Tools {
     site: Site,
   ) => Effect.Effect<V, Held> | undefined;
   readonly scheduleOf: (v: V | undefined) => Schedule.Schedule<unknown, unknown> | undefined;
-  readonly heldOf: <A>(kind: "Queue", v: V | undefined) => A | undefined;
+  readonly heldOf: <A>(
+    kind: "Queue" | "PubSub" | "Subscription",
+    v: V | undefined,
+  ) => A | undefined;
+  readonly plainOf: (v: V | undefined) => unknown;
 }
 
 /**
@@ -202,6 +207,51 @@ export const make = (kit: Kit, base: Models, tools: Tools) => {
           )
         : wrongArguments(site, "Stream.fromQueue");
     },
+    "effect/Stream:fromPubSub": ([pubsub], site) => {
+      const held = tools.heldOf<PubSub.PubSub<V>>("PubSub", pubsub);
+      return held
+        ? Effect.succeed(
+            timed("Stream.fromPubSub", site, (timeline) =>
+              Effect.succeed(flow(timeline, Stream.fromPubSub(held), site, same)),
+            ),
+          )
+        : wrongArguments(site, "Stream.fromPubSub");
+    },
+    "effect/Stream:fromSubscription": ([subscription], site) => {
+      const held = tools.heldOf<PubSub.Subscription<V>>("Subscription", subscription);
+      return held
+        ? Effect.succeed(
+            timed("Stream.fromSubscription", site, (timeline) =>
+              Effect.succeed(flow(timeline, Stream.fromSubscription(held), site, same)),
+            ),
+          )
+        : wrongArguments(site, "Stream.fromSubscription");
+    },
+    "effect/Stream:buffer": on("Stream.buffer", (timeline, self, [options], site) => {
+      const read = tools.plainOf(options) as
+        | { readonly capacity?: unknown; readonly strategy?: unknown }
+        | undefined;
+      const capacity = read?.capacity;
+      const strategy = read?.strategy;
+      if (capacity === "unbounded")
+        return Effect.succeed(flow(timeline, Stream.buffer(self, { capacity }), site, same));
+      return typeof capacity === "number" &&
+        (strategy === undefined ||
+          strategy === "dropping" ||
+          strategy === "sliding" ||
+          strategy === "suspend")
+        ? Effect.succeed(flow(timeline, Stream.buffer(self, { capacity, strategy }), site, same))
+        : wrongArguments(site, "Stream.buffer");
+    }),
+    "effect/Stream:retry": on("Stream.retry", (timeline, self, [schedule], site) => {
+      const held = tools.scheduleOf(schedule);
+      return held
+        ? Effect.succeed(flow(timeline, Stream.retry(self, held), site, same))
+        : wrongArguments(site, "Stream.retry");
+    }),
+    "effect/Stream:race": pairing("Stream.race", (timeline, self, that, _, site) =>
+      Effect.succeed(flow(timeline, Stream.race(self, that), site, same)),
+    ),
     "effect/Stream:debounce": on("Stream.debounce", (timeline, self, [duration], site) =>
       Effect.map(tools.written("Stream.debounce", duration, site), (time) =>
         flow(timeline, Stream.debounce(self, time), site, same),
