@@ -6,7 +6,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import BoardAgents, { BoardLive } from "./Agents.ts";
-import { CommentOnIssue, Issue, IssueDetail, ReportIssue } from "./Board.ts";
+import { BoardApi, CommentOnIssue, Issue, IssueDetail, ReportIssue } from "./Board.ts";
 import { IssueId } from "./Issue.id.ts";
 
 /**
@@ -21,10 +21,15 @@ export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
     const issues = yield* Issue;
     const details = yield* IssueDetail;
     const agents = yield* BoardAgents;
+    const api = yield* BoardApi;
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
+        // What a front end uses: commands, and live reads over WebSockets.
+        if (new URL(request.url, "http://board").pathname.startsWith("/api")) {
+          return yield* api.fetch;
+        }
         const [, action, id] = new URL(request.url, "http://board").pathname.split("/");
         const issueId = IssueId.make(id ?? "");
         const body = (yield* request.json) as {

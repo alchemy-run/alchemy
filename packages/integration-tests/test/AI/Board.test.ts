@@ -1,14 +1,20 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import * as Read from "@alchemy.run/domain/Read";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
+import * as Socket from "effect/socket/Socket";
+import * as Stream from "effect/Stream";
+import { BoardApi } from "./fixtures/board/Board.ts";
 import BoardWorker from "./fixtures/board/BoardWorker.ts";
+import { IssueId } from "./fixtures/board/Issue.id.ts";
 
 const providers = Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers());
 
@@ -96,5 +102,50 @@ test(
     const detail = yield* labeled(issue, "question");
     expect(detail?.comments).toHaveLength(1);
   }),
+  { tags, timeout: 240_000 },
+);
+
+test(
+  "a front end follows the session through the board's Api alone",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const issue = IssueId.make("slow-search-2");
+    yield* call(`issue/${issue}`);
+    const api = yield* BoardApi.clientWebSocket(`${url}/api`);
+
+    // Following first: the transcript is empty, and every item arrives as it is recorded.
+    const following = yield* api.Transcript.events(issue).pipe(
+      Stream.filter(Read.isEvent),
+      Stream.takeUntil(
+        ({ event }) => event.item.type === "assistant" && event.item.toolCalls.length === 0,
+      ),
+      Stream.runCollect,
+      Effect.forkChild,
+    );
+    yield* api.ReportIssue(
+      { issueId: issue, title: "Search takes ten seconds to answer" },
+      { commandId: `report:${issue}` },
+    );
+    const items = Array.from(yield* Fiber.join(following)).map(({ event }) => ({
+      seq: event.seq,
+      item: event.item,
+    }));
+
+    expect(items[0]?.item).toEqual({ type: "user", text: `The issue is ${issue}.` });
+    expect(JSON.stringify(items)).toContain("LabelIssue");
+    // The board holds what the harness holds, item for item.
+    const { messages } = (yield* call(`session/${issue}`)) as unknown as { messages: string };
+    expect(items).toEqual(JSON.parse(messages));
+
+    // Its status is a view, and settles on idle.
+    const status = yield* api.SessionStatus.get(issue).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (status) => status?.status === "idle",
+        times: 30,
+      }),
+    );
+    expect(status).toEqual({ status: "idle", queued: [] });
+  }).pipe(Effect.scoped, Effect.provide(Socket.layerWebSocketConstructorGlobal)),
   { tags, timeout: 240_000 },
 );

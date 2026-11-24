@@ -1,9 +1,17 @@
 import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import { IssueId } from "./Issue.id.ts";
+import {
+  IssueSession,
+  SessionStatus,
+  Transcript,
+  Transcripts,
+  TranscriptsLive,
+} from "./Session.ts";
 
 export const Label = Schema.Literals(["bug", "feature", "question"]);
 
@@ -137,7 +145,18 @@ export const IssueWorkLive = IssueWork.toLayer(
 );
 
 export class Board extends Domain.Model("Board", {
-  aggregates: [Issue],
-  views: [IssueDetail],
+  aggregates: [Issue, IssueSession],
+  views: [IssueDetail, SessionStatus],
   policies: [IssueWork],
+  projections: [Transcripts],
+  streams: [Transcript],
 }) {}
+
+/** What a front end may do and read. Labeling and recording belong to the session's object. */
+export class BoardApi extends Domain.Api("BoardApi", {
+  model: Board,
+  commands: ["ReportIssue", "CommentOnIssue"],
+}) {}
+
+/** Every handler the board needs. */
+export const BoardHandlers = Layer.mergeAll(IssueWorkLive, TranscriptsLive);
