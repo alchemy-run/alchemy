@@ -9,6 +9,8 @@ const REF: Value.Brand = { kind: "Ref", cls: undefined };
 /** The functions of a `Ref` that a `SynchronizedRef` and a `SubscriptionRef` have too. */
 const SHARED =
   "make get getUnsafe set setAndGet getAndSet update updateAndGet getAndUpdate modify".split(" ");
+/** The field of a `SubscriptionRef` that holds how its readers are told of a value. */
+export const CHANGES = "~changes";
 const REDACTED: Value.Brand = { kind: "Redacted", cls: undefined };
 
 /**
@@ -135,12 +137,38 @@ export const make = (
    * holds it and nothing runs beside a handler, so it is the same cell: a
    * change that fails leaves it as it was.
    */
+  /**
+   * A `SubscriptionRef` tells whoever reads its changes of every value it is
+   * given. The cell does so wherever it is written: {@link CHANGES} holds
+   * what is told, once a stream of its changes was asked for.
+   */
+  const published = (made: V): V => {
+    const fields = cellOf(made);
+    if (!fields) return made;
+    let value = fields.value ?? Value.undef;
+    Object.defineProperty(fields, "value", {
+      enumerable: true,
+      get: () => value,
+      set: (next: V) => {
+        value = next;
+        const told = fields[CHANGES];
+        if (told?._tag === "Host") (told.value as (value: V) => void)(next);
+      },
+    });
+    return made;
+  };
+
   const synchronized = (module: string): Models => ({
     ...Object.fromEntries(
       SHARED.concat(module === "SynchronizedRef" ? ["makeUnsafe"] : []).map(
         (name): [string, Model] => [
           `effect/${module}:${name}`,
-          (args, site) => call(`effect/Ref:${name}`, args, site),
+          (args, site) =>
+            Effect.map(call(`effect/Ref:${name}`, args, site), (made) =>
+              module === "SubscriptionRef" && name === "make" && made._tag === "Effect"
+                ? lazy(() => Effect.map(made.run, published))
+                : made,
+            ),
         ],
       ),
     ),

@@ -1786,6 +1786,7 @@ SubscriptionRef.updateEffect(cell, (n) => Effect.succeed(n + 1)); // a change th
 SubscriptionRef.updateAndGetEffect(cell, (n) => positive(n));
 SubscriptionRef.getAndUpdateEffect(cell, (n) => Effect.succeed(n * 2));
 SubscriptionRef.modifyEffect(cell, (n) => Effect.succeed([n > b, n - 1]));
+Stream.take(SubscriptionRef.changes(cell), 3); // its value now, then each one it is given
 ```
 
 ```typescript title="effect/Deferred"
@@ -2329,7 +2330,6 @@ Effect.race(Effect.as(Effect.sleep(10), a), Effect.as(Effect.sleep(10), b)); // 
 Effect.repeat(effect, { schedule: Schedule.spaced("1 second") }); // an effect run again more than 100 times
 Effect.retry(effect, { times: command.attempts }); // a count an input decides
 Effect.retry(effect, Schedule.jittered(Schedule.spaced("1 second"))); // a schedule that draws a random number
-SubscriptionRef.changes(cell); // a stream of what a cell held
 
 Cron.next(cron); // next, prev and sequence use the clock when they are given no time
 ```

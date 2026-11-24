@@ -2354,10 +2354,6 @@ const rest: ReadonlyArray<Group> = [
         /runs an effect again more than/,
       ],
       [`Effect.retry(even(a), Schedule.jittered(Schedule.spaced("1 second")))`, reported],
-      [
-        `Effect.gen(function* () { const cell = yield* SubscriptionRef.make(a); return yield* Stream.runCollect(Stream.take(SubscriptionRef.changes(cell), 1)); })`,
-        reported,
-      ],
     ],
   },
   {
@@ -2372,6 +2368,7 @@ const rest: ReadonlyArray<Group> = [
       `import * as Queue from "effect/Queue";`,
       `import * as Semaphore from "effect/Semaphore";`,
       `import * as Fiber from "effect/Fiber";`,
+      `import * as SubscriptionRef from "effect/SubscriptionRef";`,
     ],
     both: [
       `Effect.gen(function* () { const done = yield* Deferred.make(); const first = yield* Deferred.succeed(done, a); const second = yield* Deferred.succeed(done, b); return [first, second, yield* Deferred.await(done), yield* Deferred.isDone(done)]; })`,
@@ -2431,6 +2428,10 @@ const rest: ReadonlyArray<Group> = [
         /would never end/,
       ],
       [`Effect.never`, /waits for Effect.never/],
+      [
+        `Effect.gen(function* () { const cell = yield* SubscriptionRef.make(a); return yield* Stream.runCollect(Stream.take(SubscriptionRef.changes(cell), 2)); })`,
+        /waits for a SubscriptionRef that nothing sets/,
+      ],
       // A handler that stops itself records nothing.
       [`Effect.interrupt`, /the handler interrupts itself/],
       // How many is a number the code writes.
@@ -2512,6 +2513,7 @@ const rest: ReadonlyArray<Group> = [
       `import * as Latch from "effect/Latch";`,
       `import * as Queue from "effect/Queue";`,
       `import * as Semaphore from "effect/Semaphore";`,
+      `import * as SubscriptionRef from "effect/SubscriptionRef";`,
       `const log = (cell, entry) => Ref.update(cell, (entries) => [...entries, entry]);`,
     ],
     both: [
@@ -2567,6 +2569,10 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.timeoutOption(Effect.scoped(Effect.gen(function* () { yield* Effect.acquireRelease(log(seen, "open"), (_, exit) => log(seen, Exit.hasInterrupts(exit) ? "stopped" : "closed")); yield* Effect.sleep(20); })), 10); return yield* Ref.get(seen); })`,
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const made = yield* Effect.result(Effect.acquireUseRelease(Effect.as(log(seen, "open"), a), (n) => Effect.andThen(log(seen, "use"), even(n)), (n, exit) => log(seen, Exit.isSuccess(exit) ? "closed" : "closed after a failure"))); return [made, yield* Ref.get(seen)]; })`,
       `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.scoped(Effect.gen(function* () { yield* Effect.forkScoped(Effect.onInterrupt(Effect.andThen(Effect.sleep(20), log(seen, "late")), () => log(seen, "stopped with the scope"))); yield* Effect.sleep(1); })); return yield* Ref.get(seen); })`,
+      // What a cell held, as a stream: its value now, then each one it is given.
+      `Effect.gen(function* () { const cell = yield* SubscriptionRef.make(a); return yield* Stream.runCollect(Stream.take(SubscriptionRef.changes(cell), 1)); })`,
+      `Effect.gen(function* () { const cell = yield* SubscriptionRef.make(a); const fiber = yield* Effect.forkChild(Stream.runCollect(Stream.take(SubscriptionRef.changes(cell), 3))); yield* Effect.yieldNow; yield* SubscriptionRef.set(cell, b); yield* SubscriptionRef.update(cell, (n) => n + 1); return yield* Fiber.join(fiber); })`,
+      `Effect.gen(function* () { const cell = yield* SubscriptionRef.make(a); yield* SubscriptionRef.set(cell, b); const late = yield* Effect.forkChild(Stream.runCollect(Stream.take(SubscriptionRef.changes(cell), 2))); yield* Effect.yieldNow; yield* SubscriptionRef.updateEffect(cell, (n) => Effect.succeed(n * 2)); return yield* Fiber.join(late); })`,
       // Effects run together.
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const made = yield* Effect.all([Effect.as(Effect.andThen(Effect.sleep(2), log(seen, "a")), a), Effect.as(Effect.andThen(Effect.sleep(1), log(seen, "b")), b), Effect.as(log(seen, "c"), 1)], { concurrency: "unbounded" }); return [made, yield* Ref.get(seen)]; })`,
       `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.all([Effect.andThen(Effect.sleep(2), log(seen, "a")), Effect.andThen(Effect.sleep(1), log(seen, "b")), log(seen, "c"), Effect.andThen(Effect.sleep(4), log(seen, "d"))], { concurrency: 2, discard: true }); return yield* Ref.get(seen); })`,

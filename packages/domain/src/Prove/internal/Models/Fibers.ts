@@ -6,6 +6,7 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Latch from "effect/Latch";
 import * as Option from "effect/Option";
+import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
@@ -16,6 +17,7 @@ import { arr, callable, dual, dualBy, lazy, native, wrongArguments } from "../Ki
 import * as Timeline from "../Timeline.ts";
 import type { Eval, Site, V } from "../Value.ts";
 import * as Value from "../Value.ts";
+import { CHANGES } from "./Cells.ts";
 
 const REF: Value.Brand = { kind: "Ref", cls: undefined };
 /** The field that says which of these a value is, and the one that holds the library's own. */
@@ -1450,7 +1452,58 @@ export const make = (kit: Kit, base: Models) => {
         : wrongArguments(site, "Effect.forkScoped"),
   };
 
+  // ---- A stream of what a `SubscriptionRef` held: its value now, then each one it is given.
+
+  const changes: Models = {
+    "effect/SubscriptionRef:changes": ([cell], site) => {
+      const fields =
+        cell?._tag === "Obj" && cell.brand?.kind === "Ref" && !cell.fields[IS]
+          ? (cell.fields as Record<string, V>)
+          : undefined;
+      if (!fields) return wrongArguments(site, "SubscriptionRef.changes");
+      const open = Effect.gen(function* () {
+        const timeline = yield* Timeline.current(site, "reads SubscriptionRef.changes");
+        // The library's own: it keeps the last value for one who subscribes later.
+        const held = fields[CHANGES];
+        const pubsub =
+          held?._tag === "Host"
+            ? (held as { readonly pubsub?: PubSub.PubSub<V> }).pubsub!
+            : yield* PubSub.unbounded<V>({ replay: 1 });
+        if (held?._tag !== "Host") {
+          PubSub.publishUnsafe(pubsub, fields.value ?? Value.undef);
+          fields[CHANGES] = Object.assign(
+            {
+              _tag: "Host" as const,
+              name: "SubscriptionRef.changes",
+              value: (value: V) => void PubSub.publishUnsafe(pubsub, value),
+            },
+            { pubsub },
+          );
+        }
+        const scope = yield* Scope.make();
+        const subscription = yield* Effect.provideService(
+          PubSub.subscribe(pubsub),
+          Scope.Scope,
+          scope,
+        );
+        const pull: Eval<ReadonlyArray<V> | undefined> = Timeline.back(
+          timeline,
+          Timeline.waiting(
+            timeline,
+            "waits for a SubscriptionRef that nothing sets",
+            site,
+            PubSub.take(subscription),
+          ),
+          same,
+        ).pipe(Effect.map((value) => [value]));
+        return pull;
+      });
+      return Effect.succeed<V>({ _tag: "Stream", open });
+    },
+  };
+
   const models: Models = {
+    ...changes,
     ...scopes,
     ...deferreds,
     ...queues,
