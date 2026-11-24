@@ -425,4 +425,17 @@ def describeGrant : Attempt Kind → String
   | ⟨.queue, queue, .receive⟩ => s!"receive from {queue.id}"
   | ⟨.function, function, .invoke⟩ => s!"invoke {function.id}"
 
+/-- A resource's settings, by name. -/
+def describeSettings : (k : Kind) → Cloud.Props k → List (String × String)
+  | .bucket, (props : BucketProps) => [("versioned", toString props.versioned)]
+  | .queue, (props : QueueProps) =>
+    [("fifo", toString props.fifo), ("visibilityTimeout", toString props.visibilityTimeout)]
+  | .function, (props : FunctionProps) =>
+    [("url", toString props.url), ("memory", toString props.memory)]
+
+/-- Run a stack from the command line, against an empty model of an AWS account. -/
+def cli {Out : Type} (stack : Stack Kind Out) (args : List String) : IO UInt32 :=
+  stack.cli Control.providers (⟨.empty, {}⟩ : Cloud.World Kind Control.Service) describeGrant
+    describeSettings args
+
 end Alchemy.AWS

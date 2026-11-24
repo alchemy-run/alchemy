@@ -36,9 +36,20 @@ def report (g : Graph K) (grant : Attempt K → String) (why : Bool := false) : 
 
 end Graph
 
-/-- The plan as text. -/
-def planReport (plan : List (String × Action)) : String :=
-  let lines := plan.map fun (id, action) => s!"  {action.sign}  {id}"
+/-- What changes on a resource: each setting whose value differs, before and after. -/
+def changes (before after : List (String × String)) : List String :=
+  after.filterMap fun (name, value) =>
+    match before.find? (·.1 == name) with
+    | some (_, was) => if was == value then none else some s!"{name}: {was} → {value}"
+    | none => some s!"{name}: {value}"
+
+/-- The plan as text, with what changes on each resource that is updated or replaced. -/
+def planReport (plan : List (String × Action)) (changed : String → List String := fun _ => []) :
+    String :=
+  let lines := plan.map fun (id, action) =>
+    let detail := if action == .update || action == .replace
+      then String.join ((changed id).map fun change => s!"\n                 {change}") else ""
+    s!"  {action.sign}  {id}{detail}"
   let count := fun (a : Action) => (plan.filter (·.2 == a)).length
   String.intercalate "\n" lines ++
     s!"\n\n  {count .create} to create, {count .update} to update, {count .replace} to replace, " ++
@@ -51,6 +62,7 @@ other stage was deployed to. Deploys are to the model of the cloud, in memory.
 -/
 def Stack.cli {Out : Type} {api : Api} {m : Model api} (stack : Stack K Out)
     (providers : Providers K api) (fresh : World K m) (grant : Attempt K → String)
+    (settings : (k : K) → Cloud.Props k → List (String × String))
     (args : List String) : IO UInt32 := do
   let stageOf := fun (i : Nat) => (args.filter (· != "--why")).getD i "dev"
   let build := fun (stage : String) =>
@@ -79,7 +91,11 @@ def Stack.cli {Out : Type} {api : Api} {m : Model api} (stack : Stack K Out)
       let from_ := match args with
         | [_, _, "after", earlier] => s!" after {earlier}"
         | _ => " on a fresh account"
-      IO.println s!"{stack.name} ({stageOf 1}){from_}\n\n{planReport (plan providers graph world.state)}"
+      let changed := fun (id : String) =>
+        match world.state.row id, graph.find id with
+        | some row, some node => changes (settings row.kind row.props) (settings node.kind node.props)
+        | _, _ => []
+      IO.println s!"{stack.name} ({stageOf 1}){from_}\n\n{planReport (plan providers graph world.state) changed}"
       return 0
   | _ =>
     IO.println s!"usage: graph [stage] | plan [stage] | plan [stage] after [stage]"

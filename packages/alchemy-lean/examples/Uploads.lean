@@ -323,6 +323,4 @@ def anInfectedFile : List (Graph.Step Kind InMemory) := [
 example : prod.passes aCleanFile = true := by native_decide
 example : prod.passes anInfectedFile = true := by native_decide
 
-def fresh : Cloud.World Kind Control.Service := ⟨.empty, {}⟩
-
 end Uploads

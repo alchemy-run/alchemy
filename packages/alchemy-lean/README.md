@@ -493,16 +493,16 @@ Shop (prod)
     no-op    Orders
     no-op    Shipments
   ~ update   Api
+                 memory: 512 → 1024
     no-op    Warehouse
 
   0 to create, 1 to update, 0 to replace, 0 to delete, 3 unchanged
 ```
 
-The program is three lines.
+The program is one line.
 
 ```lean
-def main (args : List String) : IO UInt32 :=
-  Shop.ShopStack.cli Alchemy.AWS.Control.providers Shop.fresh Alchemy.AWS.describeGrant args
+def main (args : List String) : IO UInt32 := Alchemy.AWS.cli Shop.ShopStack args
 ```
 
 The same plan is a value a theorem can state.

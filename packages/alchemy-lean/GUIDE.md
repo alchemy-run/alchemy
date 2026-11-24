@@ -321,6 +321,7 @@ lake exe shop plan prod after dev # what a deploy would change
     no-op    Orders
     no-op    Shipments
   ~ update   Api
+                 memory: 512 → 1024
     no-op    Warehouse
 ```
 
