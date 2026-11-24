@@ -270,7 +270,7 @@ export const reader = (interpreter: Interpreter, impl: DecisionImpl, run: Value.
       if (text === other) return { index, slot: existing.slot };
       if (id._tag === "Str" && existing.slot.id._tag === "Str") continue;
       // Two names of one aggregate: the same instance, or two.
-      if (run.branch(`(= ${text} ${other})`)) return { index, slot: existing.slot };
+      if (yield* interpreter.branch(`(= ${text} ${other})`)) return { index, slot: existing.slot };
     }
     const at = read.length + 1;
     // Assume: the state the decision reads satisfies every invariant of its aggregate.

@@ -1475,7 +1475,7 @@ export const make = (host: Host) => {
         if (!seen(value) || cases?._tag !== "Obj") return yield* wrongArguments(site, what);
         for (const tag of Object.keys(union.cases)) {
           const is = yield* tagged(value, tag, site);
-          if (typeof is === "boolean" ? !is : !host.current.run.branch(is)) continue;
+          if (typeof is === "boolean" ? !is : !(yield* host.branch(is))) continue;
           const handler = cases.fields[tag] ?? orElse;
           return handler
             ? yield* host.call(handler, [value], site)

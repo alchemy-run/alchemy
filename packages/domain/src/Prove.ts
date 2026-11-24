@@ -17,6 +17,7 @@ import type * as Aggregate from "./Aggregate.ts";
 import type * as Compaction from "./Compaction.ts";
 import type * as Decision from "./Decision.ts";
 import type { Verdict } from "./Prove/internal/Check.ts";
+import * as Check from "./Prove/internal/Check.ts";
 import * as History from "./Prove/internal/History.ts";
 import * as Induction from "./Prove/internal/Induction.ts";
 import * as Interpreter from "./Prove/internal/Interpreter.ts";
@@ -237,6 +238,7 @@ export const report = (
     >;
     const solver = yield* Smt.solver;
     const interpreter = Interpreter.make(loader, new Value.Run([]));
+    interpreter.current.feasible = Check.feasible(solver);
 
     const own = yield* Induction.rows(solver, interpreter, aggregate, definition);
     // Each decision that records on the aggregate is one more command its rules must survive.
@@ -594,6 +596,7 @@ export const decisionReport = (
     loader.adopt(decision);
     const solver = yield* Smt.solver;
     const interpreter = Interpreter.make(loader, new Value.Run([]));
+    interpreter.current.feasible = Check.feasible(solver);
     const impl = yield* decisionAt(loader, interpreter, decision, options.source);
     const row = yield* Induction.decisionRow(solver, interpreter, impl);
     const aggregates = [...new Set(Object.values(impl.reads))].filter(
@@ -794,6 +797,7 @@ export const compactionReport = (
     loader.adopt(compaction);
     const solver = yield* Smt.solver;
     const interpreter = Interpreter.make(loader, new Value.Run([]));
+    interpreter.current.feasible = Check.feasible(solver);
     const file = yield* fileOf(options.source);
     const modules = yield* Paths.reach(loader, file);
     const written = History.compactionIn(modules, compaction);
@@ -963,6 +967,7 @@ export const rewriteReport = (
     loader.adopt(rewrite);
     const solver = yield* Smt.solver;
     const interpreter = Interpreter.make(loader, new Value.Run([]));
+    interpreter.current.feasible = Check.feasible(solver);
     const file = yield* fileOf(options.source);
     const modules = yield* Paths.reach(loader, file);
     const written = History.rewriteIn(modules, rewrite);

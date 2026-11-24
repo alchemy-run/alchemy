@@ -104,7 +104,19 @@ const child = (parent: Scope | undefined): Scope => ({ variables: new Map(), par
 
 export interface Interpreter {
   /** The run the interpreter records choices and assumptions in. */
-  readonly current: { run: Run };
+  readonly current: {
+    run: Run;
+    /**
+     * Whether some inputs take the run's path and make a condition true.
+     * Without it, both sides of every test are taken.
+     */
+    feasible?: (run: Run, condition: string) => Effect.Effect<boolean>;
+  };
+  /**
+   * Take one side of a condition of the inputs. A side no inputs reach on
+   * this path is not taken, and makes no path.
+   */
+  readonly branch: (condition: string) => Eval<boolean>;
   readonly evaluate: (node: Node, env: Env) => Eval<V>;
   readonly call: (fn: V, args: ReadonlyArray<V>, site: Site) => Eval<V>;
   /** The result of `yield*` on a value: an effect's result, or a request context's value. */
@@ -153,6 +165,31 @@ const shown = (v: V): string =>
     : v._tag === "Undef"
       ? "undefined"
       : String((v as { readonly value?: unknown }).value);
+
+/** The syntax that only says what type an expression has. */
+const WRAPPERS = new Set([
+  "ParenthesizedExpression",
+  "TSAsExpression",
+  "TSSatisfiesExpression",
+  "TSNonNullExpression",
+  "TSTypeAssertion",
+]);
+
+/** `pipe`, as a function: what it is given first is what the steps work on. */
+const PIPES = new Set(["effect/pipe:", "effect/Function:pipe"]);
+
+/**
+ * Whether an expression only names a value: a literal, a name, a property of
+ * one. Evaluating it tests nothing, calls nothing and writes nothing, so it
+ * may be evaluated on a path the code would not evaluate it on.
+ */
+const isPlain = (node: Node): boolean =>
+  node.type === "Literal" ||
+  node.type === "Identifier" ||
+  (node.type === "TemplateLiteral" && node.expressions.length === 0) ||
+  (node.type === "UnaryExpression" && node.operator === "-" && node.argument.type === "Literal") ||
+  (node.type === "MemberExpression" && !node.computed && !node.optional && isPlain(node.object)) ||
+  (WRAPPERS.has(node.type) && isPlain(node.expression));
 
 /** What a chain of `?.` gives once a link of it is `null` or `undefined`: the rest of it is not run. */
 const SHORT: V = { _tag: "Undef" };
@@ -237,7 +274,25 @@ const kindOf = (v: V): string | undefined => {
  * at anything else.
  */
 export const make = (loader: Loader, run: Run): Interpreter => {
-  const current = { run };
+  const current: Interpreter["current"] = { run };
+
+  const branch: Interpreter["branch"] = (condition) =>
+    Effect.suspend(() => {
+      const run = current.run;
+      const known = run.sideOf(condition);
+      if (known !== undefined) return Effect.succeed(known);
+      const feasible = current.feasible;
+      if (!feasible) return Effect.succeed(run.branch(condition));
+      return feasible(run, condition).pipe(
+        Effect.flatMap((holds) =>
+          holds ? feasible(run, Smt.not(condition)) : Effect.succeed(undefined),
+        ),
+        // It can hold and it can fail: two paths. Otherwise the one side that can occur.
+        Effect.map((fails) =>
+          run.branch(condition, fails === undefined ? false : fails ? undefined : true),
+        ),
+      );
+    });
   const hooks: Hooks = {
     service: undefined,
     host: undefined,
@@ -312,17 +367,21 @@ export const make = (loader: Loader, run: Run): Interpreter => {
   const sameAs = (a: V, b: V): Compare.Known => same(alike(a, b), alike(b, a));
 
   /** What an opaque function returned, as the `Option` it is: a `Some` of what it holds, or nothing. */
-  const optionOf = (applied: V & { readonly _tag: "Applied" }): V => {
+  const optionOf = (applied: V & { readonly _tag: "Applied" }): Eval<V> => {
     const some = current.run.observe(applied, "is a Some", "Bool", (value) =>
       Option.isOption(value) ? Option.isSome(value) : undefined,
     );
-    return current.run.branch(some.text)
-      ? Value.some(
-          Value.derived(applied, "the value of", (value) =>
-            Option.isOption(value) && Option.isSome(value) ? value.value : undefined,
-          ),
-        )
-      : Value.none;
+    return branch(some.text).pipe(
+      Effect.map((is) =>
+        is
+          ? Value.some(
+              Value.derived(applied, "the value of", (value) =>
+                Option.isOption(value) && Option.isSome(value) ? value.value : undefined,
+              ),
+            )
+          : Value.none,
+      ),
+    );
   };
 
   /**
@@ -359,7 +418,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
    * function works on, an `Option` for `effect/Option` and a list for
    * `effect/Array`. `undefined` when there is nothing to take another way.
    */
-  const reshaped = (fn: V, args: ReadonlyArray<V>): ReadonlyArray<V> | undefined => {
+  const reshaped = (fn: V, args: ReadonlyArray<V>): Eval<ReadonlyArray<V>> | undefined => {
     const [self, ...rest] = args;
     if (self?._tag !== "Applied") return undefined;
     const family =
@@ -369,9 +428,9 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           ? fn.name.slice(0, Math.max(0, fn.name.indexOf(".")))
           : "";
     return family === "Option"
-      ? [optionOf(self), ...rest]
+      ? optionOf(self).pipe(Effect.map((option) => [option, ...rest]))
       : family === "Array"
-        ? [listOf(self), ...rest]
+        ? Effect.succeed([listOf(self), ...rest])
         : undefined;
   };
 
@@ -582,6 +641,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
 
   const library = Library.make({
     current,
+    branch: (condition) => branch(condition),
     provided: hooks.provided,
     now: () => hooks.now,
     extra: hooks.models,
@@ -774,7 +834,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
             at,
             inside("looks for", item, wanted) ?? "looks for a value the prover does not model",
           );
-        if (typeof equal === "boolean" ? equal : current.run.branch(equal)) return Value.num(index);
+        if (typeof equal === "boolean" ? equal : yield* branch(equal)) return Value.num(index);
       }
       return Value.num(-1);
     }),
@@ -977,6 +1037,129 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     }
   });
 
+  /** A field of an input, read as the code reads it: the run chooses what it holds. */
+  const chosen = (value: V): V =>
+    value._tag === "Pending" ? (Symbolic.resolve(value, current.run) ?? Value.undef) : value;
+
+  /**
+   * What an expression gives, with a field of an input left as it is: the
+   * code that asked says whether it has to be looked at.
+   */
+  const unread: (node: Node, env: Env) => Eval<V> = Effect.fnUntraced(function* (
+    node: Node,
+    env: Env,
+  ) {
+    if (WRAPPERS.has(node.type)) return yield* unread(node.expression, env);
+    if (node.type !== "MemberExpression" || node.computed || node.optional)
+      return yield* evaluate(node, env);
+    const object = yield* evaluate(node.object, env);
+    if (object === SHORT) return SHORT;
+    const key: string = node.property.name;
+    const held = object._tag === "Obj" ? object.fields[key] : undefined;
+    return held?._tag === "Pending" &&
+      object._tag === "Obj" &&
+      !(object.brand && Brands.SEALED.has(object.brand.kind)) &&
+      !library.waitMember(object, key)
+      ? held
+      : yield* member(object, key, { module: env.module, node });
+  });
+
+  /** A value as the solver holds one: a string, a number or a boolean. */
+  const scalar = (value: V): Smt.Term | undefined =>
+    value._tag === "Term"
+      ? value.big || value.quotient
+        ? undefined
+        : value.term
+      : value._tag === "Bool"
+        ? Smt.bool(value.value)
+        : value._tag === "Num"
+          ? Compare.numeric(value)
+          : Compare.textual(value);
+
+  /** `value` where `present` holds and `other` where it does not, as one value. */
+  const oneOf = (present: Smt.Term, value: V, other: V): V | undefined => {
+    const a = scalar(value);
+    const b = scalar(other);
+    if (!a || !b) return undefined;
+    const numbers =
+      a.sort !== "Bool" && a.sort !== "String" && b.sort !== "Bool" && b.sort !== "String";
+    if (!numbers && a.sort !== b.sort) return undefined;
+    const [l, r] = numbers ? Compare.promote(a, b) : [a, b];
+    return l.text === r.text
+      ? value
+      : { _tag: "Term", term: { sort: l.sort, text: `(ite ${present.text} ${l.text} ${r.text})` } };
+  };
+
+  /** Whether calling a function only gives a value: no test, no call, nothing written. */
+  const givesValue = (fn: V | undefined): fn is V & { readonly _tag: "Fn" } =>
+    fn?._tag === "Fn" &&
+    !fn.effectful &&
+    fn.node.type === "ArrowFunctionExpression" &&
+    (fn.node.params as ReadonlyArray<Node>).every((param) => param.type === "Identifier") &&
+    fn.node.body.type !== "BlockStatement" &&
+    isPlain(fn.node.body);
+
+  /** The function of `effect/Option` a value is, where it is one that only takes a value or a default. */
+  const optionReader = (fn: V | undefined): "getOrElse" | "match" | undefined => {
+    const name =
+      fn?._tag === "Lib" && fn.module === "effect/Option"
+        ? fn.path.join(".")
+        : fn?._tag === "Native" && fn.given && fn.name.startsWith("Option.")
+          ? fn.name.slice("Option.".length)
+          : undefined;
+    return name === "getOrElse" || name === "match" ? name : undefined;
+  };
+
+  const isPipe = (fn: V): boolean =>
+    fn._tag === "Lib" && PIPES.has(`${fn.module}:${fn.path.join(".")}`);
+
+  /** What a function gives, or `undefined` where the prover cannot read it. */
+  const tried = (run: Eval<V>): Eval<V | undefined> =>
+    run.pipe(Effect.catchTag("NotTranslated", () => Effect.succeed(undefined)));
+
+  /**
+   * `Option.getOrElse(field, () => other)` and `Option.match(field, cases)`,
+   * where the field is an `Option` an input holds that no code looked at, and
+   * each case only gives a value: one value, and no path for each case.
+   * `step` is the function, and `extra` what it is given after the field.
+   * `undefined` for any other call, and the field is then read as it was.
+   */
+  const defaulted: (
+    self: V | undefined,
+    step: V | undefined,
+    extra: ReadonlyArray<V>,
+    site: Site,
+  ) => Eval<V | undefined> = Effect.fnUntraced(function* (
+    self: V | undefined,
+    step: V | undefined,
+    extra: ReadonlyArray<V>,
+    site: Site,
+  ) {
+    const reader = optionReader(step);
+    if (self?._tag !== "Pending" || !step || !reader) return undefined;
+    // `f(field, x)`, or `f(x)` given the field later: what it was given first is kept.
+    const given = step._tag === "Native" ? (extra.length === 0 ? step.given : undefined) : extra;
+    const [first] = given ?? [];
+    const cases =
+      reader === "getOrElse"
+        ? { onSome: undefined, onNone: first }
+        : first?._tag === "Obj"
+          ? { onSome: first.fields.onSome, onNone: first.fields.onNone }
+          : undefined;
+    if (
+      given?.length !== 1 ||
+      !cases ||
+      !givesValue(cases.onNone) ||
+      !(cases.onSome === undefined || givesValue(cases.onSome))
+    )
+      return undefined;
+    const held = Symbolic.keep(self, current.run);
+    if (!held?.option) return undefined;
+    const none = yield* tried(call(cases.onNone, [], site));
+    const some = cases.onSome ? yield* tried(call(cases.onSome, [held.value], site)) : held.value;
+    return none && some ? oneOf(held.present, some, none) : undefined;
+  });
+
   const truthOf: Interpreter["truth"] = (value, site) => {
     // Whether an opaque function's result is truthy is an input: both ways are tried.
     if (value._tag === "Applied") return Effect.succeed(current.run.truthy(value).text);
@@ -988,7 +1171,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
 
   const decide: Interpreter["decide"] = (value, site) =>
     truthOf(value, site).pipe(
-      Effect.map((t) => (typeof t === "boolean" ? t : current.run.branch(t))),
+      Effect.flatMap((t) => (typeof t === "boolean" ? Effect.succeed(t) : branch(t))),
     );
 
   const bind: (pattern: Node, value: V, scope: Scope, env: Env) => Eval<void> = Effect.fnUntraced(
@@ -1178,7 +1361,9 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         ? made.pipe(
             Effect.catchTag("NotTranslated", (stop) => {
               const again = stop.reaches ? undefined : reshaped(fn, args);
-              return again ? call(fn, again, site) : Effect.fail(stop);
+              return again
+                ? again.pipe(Effect.flatMap((taken) => call(fn, taken, site)))
+                : Effect.fail(stop);
             }),
           )
         : made;
@@ -1562,18 +1747,56 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           : yield* fail(site, "reads a property by a key the prover cannot see");
       }
       case "CallExpression": {
-        const callee = yield* evaluate(node.callee, env);
+        // `field.pipe(f)`: the field is not looked at before `f` is known.
+        const receiver =
+          node.callee.type === "MemberExpression" &&
+          !node.callee.computed &&
+          !node.callee.optional &&
+          node.callee.property.name === "pipe"
+            ? yield* unread(node.callee.object, env)
+            : undefined;
+        if (receiver === SHORT) return SHORT;
+        const callee =
+          receiver === undefined
+            ? yield* evaluate(node.callee, env)
+            : receiver._tag === "Pending"
+              ? receiver
+              : yield* member(receiver, "pipe", { module: env.module, node: node.callee });
         if (callee === SHORT) return SHORT;
         if (node.optional && (callee._tag === "Null" || callee._tag === "Undef")) return SHORT;
+        // An `Option` an input holds is not looked at before the function it is given to is known.
+        const lazily = optionReader(callee) !== undefined || isPipe(callee);
         const args: Array<V> = [];
-        for (const argument of node.arguments as ReadonlyArray<Node>) {
+        for (const [index, argument] of (node.arguments as ReadonlyArray<Node>).entries()) {
           if (argument.type === "SpreadElement") {
             const spread = yield* iterate(yield* evaluate(argument.argument, env), site);
             if (!spread) return yield* fail(site, "spreads arguments that are not a known array");
             args.push(...spread);
-          } else args.push(yield* evaluate(argument, env));
+          } else
+            args.push(
+              index === 0 && lazily ? yield* unread(argument, env) : yield* evaluate(argument, env),
+            );
         }
-        return yield* call(callee, args, site);
+        // `field.pipe(f, g)` and `pipe(field, f, g)`: `f` reads the field, and `g` what `f` gave.
+        const [self, ...steps] = callee._tag === "Pending" ? [callee, ...args] : args;
+        const piped = callee._tag === "Pending" || isPipe(callee);
+        const either = piped
+          ? yield* defaulted(self, steps[0], [], site)
+          : yield* defaulted(self, callee, steps, site);
+        if (either && piped) {
+          let value = either;
+          for (const step of steps.slice(1)) value = yield* call(step, [value], site);
+          return value;
+        }
+        if (either) return either;
+        const given = self?._tag === "Pending" ? [chosen(self), ...steps] : args;
+        return callee._tag === "Pending"
+          ? yield* call(
+              yield* member(given[0]!, "pipe", { module: env.module, node: node.callee }),
+              steps,
+              site,
+            )
+          : yield* call(callee, given, site);
       }
       case "NewExpression": {
         const cls = yield* evaluate(node.callee, env);
@@ -1591,7 +1814,16 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           ? yield* evaluate(node.consequent, env)
           : yield* evaluate(node.alternate, env);
       case "LogicalExpression": {
-        const left = yield* evaluate(node.left, env);
+        const read =
+          node.operator === "??" && isPlain(node.right)
+            ? yield* unread(node.left, env)
+            : yield* evaluate(node.left, env);
+        // `field ?? other`, where both are values the solver holds: one value, and no path each way.
+        const held = read._tag === "Pending" ? Symbolic.keep(read, current.run) : undefined;
+        const other = held && !held.option ? yield* tried(evaluate(node.right, env)) : undefined;
+        const either = held && other ? oneOf(held.present, held.value, other) : undefined;
+        if (either) return either;
+        const left = chosen(read);
         if (node.operator === "??" && left._tag === "Applied")
           return yield* fail(site, inside("uses ?? on", left)!);
         if (node.operator === "??")
@@ -1814,7 +2046,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
                   site,
                   inside("switches on", subject) ?? "switches on a value the prover does not model",
                 );
-              if (typeof equal === "boolean" ? equal : current.run.branch(equal)) {
+              if (typeof equal === "boolean" ? equal : yield* branch(equal)) {
                 at = index;
                 break;
               }
@@ -1912,6 +2144,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     evaluate,
     call,
     settle,
+    branch,
     member,
     decide,
     truth: truthOf,
