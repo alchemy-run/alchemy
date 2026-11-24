@@ -92,6 +92,8 @@ inductive Story.ModelStep (m : Model) where
   | pass (duration : Time)
   /-- Anything else about the world. -/
   | holds (what : String) (check : World m.signature → Bool)
+  /-- The next moves of the scenario the story follows happen: one, unless said otherwise. -/
+  | next (moves : Nat := 1)
 
 namespace Story
 
@@ -175,6 +177,7 @@ def stepModel (p : Progress m) : ModelStep m → Except String (Progress m)
     if p.world.sagas saga = status then .ok p else .error "the saga does not stand where expected"
   | .pass duration => .ok { p with world := m.pass fuel p.world duration }
   | .holds what check => if check p.world then .ok p else .error s!"does not hold: {what}"
+  | .next _ => .error "this story follows no scenario"
 
 def runModel (p : Progress m) : List (ModelStep m) → Nat → Except String Unit
   | [], _ =>
@@ -188,7 +191,59 @@ def runModel (p : Progress m) : List (ModelStep m) → Nat → Except String Uni
     | .ok p' => runModel p' rest (index + 1)
     | .error why => .error s!"step {index + 1}: {why}"
 
+/-- A move of a scenario, as the story step that makes it. -/
+def stepOf : Model.Move m → Option (ModelStep m)
+  | .send s => some (.when s)
+  | .decide d actor c => some (.decide d actor c)
+  | .answer c reply => some (.answer c reply)
+  | .pass duration => some (.pass duration)
+  | .redeliver _ => none
+
+/-- Makes the next moves of a scenario. -/
+def advance (p : Progress m) : Nat → List (Model.Move m) →
+    Except String (Progress m × List (Model.Move m))
+  | 0, scenario => .ok (p, scenario)
+  | _ + 1, [] => .error "the scenario has no more moves"
+  | moves + 1, move :: rest =>
+    match stepOf move with
+    | none => advance { p with world := m.play fuel p.world move } moves rest
+    | some step =>
+      match stepModel p step with
+      | .ok p' => advance p' moves rest
+      | .error why => .error why
+
+def followModel (p : Progress m) (scenario : List (Model.Move m)) :
+    List (ModelStep m) → Nat → Except String Unit
+  | [], index =>
+    if scenario.length ≠ 0 then .error "the story ends before the scenario does"
+    else runModel p [] index
+  | .next moves :: rest, index =>
+    match advance p moves scenario with
+    | .ok (p', scenario') => followModel p' scenario' rest (index + 1)
+    | .error why => .error s!"step {index + 1}: {why}"
+  | step :: rest, index =>
+    match stepModel p step with
+    | .ok p' => followModel p' scenario rest (index + 1)
+    | .error why => .error s!"step {index + 1}: {why}"
+
 end Story
+
+/--
+Runs a story that follows a scenario: `.next` makes the scenario's next move,
+and the steps between say what must be true there. The moves are the
+scenario's own, so a theorem about the scenario is about this story.
+-/
+def Model.following (m : Model) (scenario : List (Model.Move m))
+    (steps : List (Story.ModelStep m)) : Except String Unit :=
+  Story.followModel { world := World.start m.signature, asserted := [], pending := none }
+    scenario steps 0
+
+/-- Whether a story that follows a scenario passes. -/
+def Model.follows (m : Model) (scenario : List (Model.Move m))
+    (steps : List (Story.ModelStep m)) : Bool :=
+  match m.following scenario steps with
+  | .ok _ => true
+  | .error _ => false
 
 /-- Runs a story on the model, in memory. `.ok ()` when every step holds. -/
 def Model.story (m : Model) (steps : List (Story.ModelStep m)) : Except String Unit :=

@@ -470,7 +470,7 @@ theorem deployedClosedAccountsAreEmpty (journal : List Journal.Line) (id : Strin
 
 /-! ## Stories and theorems, together
 
-One scenario, written once, used three ways: a story checks it step by step for
+One scenario, written once, used three ways: a story follows it step by step for
 one customer; a theorem proves its outcome for every customer; and the theorem,
 given that customer, is the story's outcome again.
 -/
@@ -482,15 +482,16 @@ def aPayoutBounces (id owner payout : String) (held amount : Nat) : List (Model.
   .send ⟨.Account, (), .requestPayout id payout amount⟩,
   .answer (.wire payout id amount) .bounced]
 
-/-- The story: Sam's payout of 200 from 500. It shows each step on the way, with real values. -/
-example : Bank.passes [
-    .when ⟨.Account, (), .open "a-1" "Sam"⟩,
-    .when ⟨.Account, (), .deposit "a-1" 500⟩,
-    .when ⟨.Account, (), .requestPayout "a-1" "p-1" 200⟩,
+/--
+The story: Sam's payout of 200 from 500. It follows the scenario, and says
+what is seen on the way, with real values.
+-/
+example : Bank.follows (aPayoutBounces "a-1" "Sam" "p-1" 500 200) [
+    .next 3,
     .call (.wire "p-1" "a-1" 200),
     .state .Account "a-1"
       { status := .open, owner := "Sam", balance := 300, deposited := 500, withdrawn := 200 },
-    .answer (.wire "p-1" "a-1" 200) .bounced,
+    .next,
     .saga "p-1" (.failed .bounced),
     .recorded .Account "a-1" [.opened "Sam", .deposited 500, .payoutRequested "p-1" 200,
       .withdrawn 200, .deposited 200]
