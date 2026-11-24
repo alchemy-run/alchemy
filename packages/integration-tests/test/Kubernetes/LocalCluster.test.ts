@@ -302,6 +302,22 @@ describe("Kubernetes LocalCluster E2E", { tags: [...tags, "live"] }, () => {
     { timeout: 120_000 },
   );
 
+  // #3708: the diff hashes a `context` source the way the reconcile's
+  // registry build tags it, so an unchanged source plans no update.
+  test.provider("an unchanged Dockerfile Job plans no update", () =>
+    Effect.gen(function* () {
+      const plan = yield* stack.plan(
+        Effect.gen(function* () {
+          yield* TestLocalCluster;
+          yield* LocalEffectJob;
+          yield* LocalDockerfileJob;
+          yield* LocalEffectServer;
+        }),
+      );
+      expect(plan.resources.LocalDockerfileJob?.action).toBe("noop");
+    }),
+  );
+
   test.provider(
     "a Dockerfile Job exports its registry layer cache next to its image",
     () =>
