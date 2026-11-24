@@ -352,6 +352,27 @@ def getObject {role : Access Kind} (bucket : AWS.Bucket) (under : Path) (name : 
     [granted : Has role (Get bucket under)] : Run role GetObjectError String :=
   ((GetObjectLive bucket under).build granted.le ⟨⟩).call name
 
+/-- A journal kept in a bucket, under a prefix. Using it asks for reading and writing there. -/
+def journal {role : Access Kind} (bucket : AWS.Bucket) (under : Path := ["journal"])
+    [counts : Has role (Get bucket under)] [setsCount : Has role (Put bucket under)]
+    [reads : Has role (Get bucket (under ++ ["lines"]))]
+    [writes : Has role (Put bucket (under ++ ["lines"]))] : Cloud.Journal role :=
+  journalOf ((GetObjectLive bucket under).build counts.le ⟨⟩)
+    ((PutObjectLive bucket under).build setsCount.le ⟨⟩)
+    ((GetObjectLive bucket (under ++ ["lines"])).build reads.le ⟨⟩)
+    ((PutObjectLive bucket (under ++ ["lines"])).build writes.le ⟨⟩)
+
+/-- It keeps the journal's law. -/
+theorem journal_lawful {role : Access Kind} (bucket : AWS.Bucket) (under : Path)
+    [Has role (Get bucket under)] [Has role (Put bucket under)]
+    [Has role (Get bucket (under ++ ["lines"]))] [Has role (Put bucket (under ++ ["lines"]))] :
+    (journal (role := role) bucket under).Lawful InMemory (lines bucket under) (Sound bucket under) := by
+  apply journalOf_lawful
+  · exact GetObjectLive.lawful _ _ _
+  · exact PutObjectLive.lawful _ _ _
+  · exact GetObjectLive.lawful _ _ _
+  · exact PutObjectLive.lawful _ _ _
+
 end S3
 
 namespace SQS
@@ -360,6 +381,12 @@ namespace SQS
 def sendMessage {role : Access Kind} (queue : AWS.Queue) (body : String)
     [granted : Has role (Send queue)] : Run role Never Unit :=
   ((SendMessageLive queue).build granted.le ⟨⟩).call body
+
+/-- Sending a message does what the model says. -/
+theorem sendMessage_eval {role : Access Kind} (queue : AWS.Queue) (body : String)
+    [granted : Has role (Send queue)] (m : Memory) :
+    (sendMessage (role := role) queue body).eval InMemory m = (.ok (), m.send queue body) :=
+  (SendMessageLive.lawful queue granted.le).send m body
 
 end SQS
 

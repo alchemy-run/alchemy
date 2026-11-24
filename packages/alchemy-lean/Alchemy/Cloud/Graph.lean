@@ -35,6 +35,8 @@ structure Node (K : Type) [Cloud K] where
   ref : Ref kind
   props : Cloud.Props kind
   serve : Option (Serve kind) := none
+  /-- Where in the code each grant is asked for: the grant, and the call that asks. -/
+  sites : List (Access K × String) := []
 
 namespace Node
 

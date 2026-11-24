@@ -255,40 +255,33 @@ def ShopStack : Stack Kind Outputs where
     return { orders, shipments, api, warehouse }
 ```
 
-A binding is a step of a function's block. Its grant goes into the function's role; nobody writes the role.
-
-```lean
-def Api (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
-  Lambda.Function "Api" { url := true } do
-    let journal ← S3.Journal orders
-    let queue ← SQS.SendMessage shipments
-    return route (served.host journal (outside queue))
-```
-
-`served.host` runs a domain model on a journal. Each outside call of the model is answered through a binding.
-
-```lean
-def outside (queue : SQS.SendMessage.Client shipments role) : (c : Call) → Run role Never (Reply c)
-  | .charge order amount => pure (sandboxCharge order amount)
-  | .ship order item => queue.call s!"{order}:{item}"
-```
-
-Consuming a queue is a step. It registers the function as the queue's consumer.
+A function calls the operations it needs. Its role is read off those calls; nobody writes it.
 
 ```lean
 def Warehouse (orders : Bucket) (shipments : Queue) : Construct Kind Function :=
   Lambda.Function "Warehouse" {} do
-    let slips ← S3.PutObject orders ["packed"]
-
     SQS.consume shipments fun shipment => do
       match shipment.splitOn ":" with
-      | [order, item] => slips.call order item
+      | [order, item] => S3.putObject orders ["packed"] order item
       | _ => pure ()
 
     return fun _ => return { status := 204 }
 ```
 
-A Cloudflare Worker is the same, and ends with `fetch` and typed methods other Workers call.
+`served.host` runs a domain model on a journal. Each outside call of the model is answered by an operation.
+
+```lean
+def outside (shipments : Queue) [Has role (SQS.Send shipments)] : (c : Call) → Run role Never (Reply c)
+  | .charge order amount => pure (sandboxCharge order amount)
+  | .ship order item => SQS.sendMessage shipments s!"{order}:{item}"
+
+def Api (orders : Bucket) (shipments : Queue) : Construct Kind Function := do
+  let stage ← stage
+  Lambda.Function "Api" { url := true, memory := if stage = "prod" then 1024 else 512 } do
+    return route (served.host (S3.journal orders) (outside shipments))
+```
+
+A Cloudflare Worker ends with `fetch` and typed methods other Workers call. Its bindings are still taken as steps.
 
 ```lean
 def Inbox (mail : Bucket) (incoming : Queue) : Construct Kind (Worker Api) :=
@@ -351,7 +344,30 @@ def anOrder : List (Graph.Step Kind InMemory) := [
 example : prod.passes anOrder = true := by native_decide
 ```
 
-No function holds a grant it never uses. The story is the run that uses each one.
+## Least privilege
+
+Every grant of every function is asked for by a call written in that function. It is read off the code, with no story.
+
+```lean
+theorem everyGrantIsCalledFor : prod.EveryGrantIsCalledFor := by decide
+```
+
+`lake exe shop graph prod --why` prints the call behind each grant.
+
+```
+  Api
+    may        read Orders/journal
+                 ← Shop.lean:272  S3.journal orders
+    may        send to Shipments
+                 ← Shop.lean:272  outside shipments
+  Warehouse
+    may        write Orders/packed
+                 ← Shop.lean:279  S3.putObject orders ["packed"] order item
+    may        receive from Shipments
+                 ← Shop.lean:277  SQS.consume shipments fun shipment => do match shipment.s…
+```
+
+A story gives the stronger claim: each grant is not only written but used in a run.
 
 ```lean
 theorem leastPrivilege : prod.LeastPrivilege InMemory :=
@@ -364,7 +380,7 @@ Given what the bucket holds, when a request arrives, then the response and the b
 
 ```lean
 theorem gettingAnOrder (id : String) (cloud : Memory) :
-    (getOrder (theShop le queue) id).eval InMemory cloud
+    (getOrder (theShop role orders shipments) id).eval InMemory cloud
       = (.ok (describe ((shopIn orders cloud).state .Order id)), cloud)
 ```
 
@@ -374,7 +390,7 @@ A response follows from the domain's `decide`, for every item and amount.
 theorem placingAnOrderTwiceIsRefused (id item : String) (amount : Nat) (cloud : Memory)
     (whole : Whole orders cloud)
     (placed : ((shopIn orders cloud).state .Order id).status ≠ .new) :
-    ((postOrder (theShop le queue) (.place id item amount)).eval InMemory cloud).1
+    ((postOrder (theShop role orders shipments) (.place id item amount)).eval InMemory cloud).1
       = .ok { status := 409, body := reprStr Order.Rejection.alreadyPlaced }
 ```
 

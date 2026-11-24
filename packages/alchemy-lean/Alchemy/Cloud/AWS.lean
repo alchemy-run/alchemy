@@ -330,13 +330,12 @@ the function is registered as the queue's consumer when the stack is built. It
 grants receiving from the queue, which is what takes the message off it.
 -/
 def consume {role : Access Kind} {ε : Type} [Repr ε] (queue : AWS.Queue)
-    (handle : String → Run role ε Unit) : Host role Unit := do
-  let messages ← ReceiveMessage queue
+    (handle : String → Run role ε Unit) [granted : Has role (Receive queue)] : Host role Unit :=
   Host.listen {
     kind := .queue
     source := queue
     handle := fun (_ : QueueEvent) => do
-      match ← messages.call.mapError (fun e => nomatch e) with
+      match ← (((ReceiveMessageLive queue).build granted.le ⟨⟩).call).mapError (fun e => nomatch e) with
       | some message => (handle message).mapError reprStr
       | none => pure () }
 

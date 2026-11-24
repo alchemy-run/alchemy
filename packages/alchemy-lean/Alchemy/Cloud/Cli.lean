@@ -1,4 +1,5 @@
 import Alchemy.Cloud.Engine
+import Alchemy.Cloud.Host
 
 /-!
 # Running a stack from the command line
@@ -22,10 +23,12 @@ def Action.sign : Action → String
 namespace Graph
 
 /-- The graph as text: each resource, what it needs, what it may do, and what it listens to. -/
-def report (g : Graph K) (grant : Attempt K → String) : String :=
+def report (g : Graph K) (grant : Attempt K → String) (why : Bool := false) : String :=
   String.intercalate "\n" <| g.order.filterMap fun id => (g.find id).map fun node =>
     let needs := if node.needs.isEmpty then "" else s!"\n    needs      {", ".intercalate node.needs}"
-    let grants := node.access.atoms.map fun atom => s!"\n    may        {grant atom}"
+    let grants := node.access.atoms.map fun atom =>
+      let calls := if why then (g.why id atom).map fun call => s!"\n                 ← {call}" else []
+      s!"\n    may        {grant atom}{String.join calls}"
     let listens := match node.serve with
       | some serve => serve.on.map fun sub => s!"\n    consumes   {sub.source.id}"
       | none => []
@@ -42,14 +45,14 @@ def planReport (plan : List (String × Action)) : String :=
     s!"{count .delete} to delete, {count .noop} unchanged"
 
 /--
-`graph [stage]` prints the stack's graph. `plan [stage]` prints the plan for a
+`graph [stage]` prints the stack's graph, and with `--why` the call that asks for each grant. `plan [stage]` prints the plan for a
 fresh account, and `plan [stage] after [stage]` the plan for an account the
 other stage was deployed to. Deploys are to the model of the cloud, in memory.
 -/
 def Stack.cli {Out : Type} {api : Api} {m : Model api} (stack : Stack K Out)
     (providers : Providers K api) (fresh : World K m) (grant : Attempt K → String)
     (args : List String) : IO UInt32 := do
-  let stageOf := fun (i : Nat) => args.getD i "dev"
+  let stageOf := fun (i : Nat) => (args.filter (· != "--why")).getD i "dev"
   let build := fun (stage : String) =>
     match stack.build stage with
     | .ok (_, graph) =>
@@ -61,7 +64,7 @@ def Stack.cli {Out : Type} {api : Api} {m : Model api} (stack : Stack K Out)
     match build (stageOf 1) with
     | .error why => IO.eprintln why; return 1
     | .ok graph =>
-      IO.println s!"{stack.name} ({stageOf 1})\n\n{graph.report grant}"
+      IO.println s!"{stack.name} ({stageOf 1})\n\n{graph.report grant (args.contains "--why")}"
       return 0
   | "plan" :: _ =>
     match build (stageOf 1) with
