@@ -2699,21 +2699,19 @@ const projectionObject = (
      */
     const upgrade = (meta: ProjectionMeta) =>
       Effect.gen(function* () {
-        if (
-          meta.intake === undefined &&
-          meta.checkpoints === undefined &&
-          meta.taken === undefined
-        ) {
-          return meta;
-        }
-        const { intake = {}, checkpoints = {}, taken = {}, ...scalars } = meta;
-        const rows: Array<readonly [string, number]> = [];
-        for (const [source, seq] of Object.entries(intake)) rows.push([INTAKE + source, seq]);
-        for (const [source, seq] of Object.entries(checkpoints)) {
-          rows.push([CHECKPOINT + source, seq]);
-        }
-        for (const [source, n] of Object.entries(taken)) rows.push([TAKEN + source, n]);
-        yield* putRows(state.storage, rows);
+        const { intake, checkpoints, taken, ...scalars } = meta;
+        if (intake === undefined && checkpoints === undefined && taken === undefined) return meta;
+        const maps = [
+          [INTAKE, intake],
+          [CHECKPOINT, checkpoints],
+          [TAKEN, taken],
+        ] as const;
+        yield* putRows(
+          state.storage,
+          maps.flatMap(([prefix, map]) =>
+            Object.entries(map ?? {}).map(([source, n]) => [prefix + source, n] as const),
+          ),
+        );
         yield* state.storage.put("meta", scalars);
         return scalars;
       });
@@ -2737,15 +2735,13 @@ const projectionObject = (
             ...Object.fromEntries(rows.map(([row, seq]) => [row.slice(CHECKPOINT.length), seq])),
           };
         }
-        const seqs = yield* Effect.forEach(sources, (source) =>
+        const found = yield* Effect.forEach(sources, (source) =>
           Effect.map(
             state.storage.get<number>(CHECKPOINT + source),
-            (seq) => seq ?? legacy[source],
+            (seq) => [source, seq ?? legacy[source]] as const,
           ),
         );
-        return Object.fromEntries(
-          sources.flatMap((source, i) => (seqs[i] === undefined ? [] : [[source, seqs[i]]])),
-        );
+        return Object.fromEntries(found.filter(([, seq]) => seq !== undefined));
       });
     const size = kit.options.batch?.size ?? 1;
     const waitMillis = kit.options.batch?.waitMillis ?? 0;
