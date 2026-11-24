@@ -468,24 +468,53 @@ theorem deployedClosedAccountsAreEmpty (journal : List Journal.Line) (id : Strin
   (Account.deployed (by simp [ClosedIsEmpty]) closedIsEmpty_kept journal id
     transfer_closedIsEmpty : ClosedIsEmpty _) closed
 
-/-! ## Behaviour across the model: a saga, and its undo -/
+/-! ## Stories and theorems, together
+
+One scenario, written once, used three ways: a story checks it step by step for
+one customer; a theorem proves its outcome for every customer; and the theorem,
+given that customer, is the story's outcome again.
+-/
+
+/-- The scenario: an account is opened and funded, a payout is requested, and the wire bounces. -/
+def aPayoutBounces (id owner payout : String) (held amount : Nat) : List (Model.Move Bank) := [
+  .send ⟨.Account, (), .open id owner⟩,
+  .send ⟨.Account, (), .deposit id held⟩,
+  .send ⟨.Account, (), .requestPayout id payout amount⟩,
+  .answer (.wire payout id amount) .bounced]
+
+/-- The story: Sam's payout of 200 from 500. It shows each step on the way, with real values. -/
+example : Bank.passes [
+    .when ⟨.Account, (), .open "a-1" "Sam"⟩,
+    .when ⟨.Account, (), .deposit "a-1" 500⟩,
+    .when ⟨.Account, (), .requestPayout "a-1" "p-1" 200⟩,
+    .call (.wire "p-1" "a-1" 200),
+    .state .Account "a-1"
+      { status := .open, owner := "Sam", balance := 300, deposited := 500, withdrawn := 200 },
+    .answer (.wire "p-1" "a-1" 200) .bounced,
+    .saga "p-1" (.failed .bounced),
+    .recorded .Account "a-1" [.opened "Sam", .deposited 500, .payoutRequested "p-1" 200,
+      .withdrawn 200, .deposited 200]
+  ] = true := by decide
 
 /--
-Given an open account with money in it, when a payout is requested and the wire
-bounces, then the money is back in the account and the payout has failed.
+The theorem: given an open account with money in it, when a payout is requested
+and the wire bounces, then the money is back and the payout has failed. For
+every account, owner and amount.
 -/
 theorem aBouncedPayoutIsRefunded (id owner payout : String) (held amount : Nat)
     (some : amount ≠ 0) (enough : amount ≤ held) (modest : held < 10000) :
-    let bank := Bank.run [
-      .send ⟨.Account, (), .open id owner⟩,
-      .send ⟨.Account, (), .deposit id held⟩,
-      .send ⟨.Account, (), .requestPayout id payout amount⟩,
-      .answer (.wire payout id amount) .bounced]
+    let bank := Bank.run (aPayoutBounces id owner payout held amount)
     (bank.state .Account id).balance = held ∧ bank.sagas payout = .failed .bounced := by
   have held' : held ≠ 0 := by omega
   have small : ¬10000 ≤ held := by omega
   have small' : ¬10000 ≤ amount := by omega
-  behaviour
+  behaviour [aPayoutBounces]
+
+/-- Sam's case is one instance of the theorem: nothing is run, the values are filled in. -/
+example :
+    let bank := Bank.run (aPayoutBounces "a-1" "Sam" "p-1" 500 200)
+    (bank.state .Account "a-1").balance = 500 ∧ bank.sagas "p-1" = .failed .bounced :=
+  aBouncedPayoutIsRefunded "a-1" "Sam" "p-1" 500 200 (by decide) (by decide) (by decide)
 
 /-! What is read from the bank. These came with the model. -/
 
@@ -515,21 +544,6 @@ example : Bank.passes [
     .recorded .Account "a-2" [.opened "Alex", .transferredIn 100],
     .when ⟨.Account, (), .withdraw "a-1" 100⟩,
     .rejected .Account (.frozen "source of funds")
-  ] = true := by decide
-
-/-- A payout whose wire bounces: the money is taken out, and put back. -/
-example : Bank.passes [
-    .when ⟨.Account, (), .open "a-1" "Sam"⟩,
-    .when ⟨.Account, (), .deposit "a-1" 500⟩,
-    .when ⟨.Account, (), .requestPayout "a-1" "p-1" 200⟩,
-    .call (.wire "p-1" "a-1" 200),
-    .state .Account "a-1"
-      { status := .open, owner := "Sam", balance := 300, deposited := 500, withdrawn := 200 },
-    .answer (.wire "p-1" "a-1" 200) .bounced,
-    .saga "p-1" (.failed .bounced),
-    .recorded .Account "a-1" [.opened "Sam", .deposited 500, .payoutRequested "p-1" 200,
-      .withdrawn 200, .deposited 200],
-    .view Holdings () 500
   ] = true := by decide
 
 end Bank
