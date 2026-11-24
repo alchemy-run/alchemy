@@ -19,7 +19,11 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 class CasesRequestFailed extends Data.TaggedError("CasesRequestFailed")<{
   readonly status: number;
   readonly body: string;
-}> {}
+}> {
+  override get message() {
+    return `HTTP ${this.status}: ${this.body.slice(0, 2000)}`;
+  }
+}
 
 const passed = Object.fromEntries(caseNames.map((name) => [name, true]));
 
