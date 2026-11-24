@@ -137,6 +137,8 @@ total &= a; // the bits of a number an input holds: and |=, ^=, <<=, >>=, >>>=
 `${text}:${a}:${flag}:${null}`; // each value written as JavaScript writes it
 "n" + a;
 
+items[a]; // a place an input decides: one of the places the list has, or undefined
+a.toString(); // as a template writes it
 a ** 2; // a power the code writes
 (a, b); // the comma: both are run, and the last is what it gives
 a == b; // == and != between two values of one kind, as === and !==
@@ -222,7 +224,6 @@ tag`x${a}`; // tagged templates
 delete made.n;
 this;
 ({ get n() { return a; } }); // a getter or a setter
-items[a]; // a place an input decides
 import.meta.url;
 
 Date.now(); // globals that are not the same every time
@@ -232,8 +233,7 @@ globalThis.name;
 
 JSON.stringify(made); // of a value an input decides
 parseInt("1" + a); // of text an input decides: so are parseFloat and Number
-a.toString();
-a.toFixed(2);
+a.toFixed(2); // a number an input holds, rounded as text
 new Map();
 new Set();
 

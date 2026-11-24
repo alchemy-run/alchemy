@@ -881,7 +881,9 @@ export const make = (given: Loader, run: Run): Interpreter => {
     at: (self, [index], at) =>
       index?._tag === "Num"
         ? Effect.succeed(self.items.at(index.value) ?? Value.undef)
-        : fail(at, "reads an array at a place the prover cannot see"),
+        : index?._tag === "Term" && index.term.sort === "Int" && index.big !== true
+          ? placed(self.items, index.term.text, true)
+          : fail(at, "reads an array at a place the prover cannot see"),
     entries: (self) =>
       Effect.succeed<V>({
         _tag: "Arr",
@@ -1011,6 +1013,41 @@ export const make = (given: Loader, run: Run): Interpreter => {
     }),
   });
 
+  /** `n.toString()` and `n.toFixed(2)`: a number as text. */
+  const numberMember = (value: V, key: string): V | undefined =>
+    key === "toString"
+      ? {
+          _tag: "Native",
+          name: "toString",
+          call: ([radix], at) =>
+            radix === undefined || radix._tag === "Undef"
+              ? arithmetic("+", Value.str(""), value, at)
+              : value._tag === "Num" && radix._tag === "Num"
+                ? Effect.succeed(Value.str(value.value.toString(radix.value)))
+                : fail(at, "writes a number an input holds in another base"),
+        }
+      : key === "toFixed"
+        ? {
+            _tag: "Native",
+            name: "toFixed",
+            call: ([digits], at) =>
+              value._tag === "Num" && (digits === undefined || digits._tag === "Num")
+                ? Effect.succeed(Value.str(value.value.toFixed(digits?.value)))
+                : fail(at, "calls toFixed on a number an input holds, which it rounds"),
+          }
+        : undefined;
+
+  /** `items[n]`, for a place an input decides: one of the places the array has, or nothing. */
+  const placed: (items: ReadonlyArray<V>, place: string, wraps: boolean) => Eval<V> =
+    Effect.fnUntraced(function* (items: ReadonlyArray<V>, place: string, wraps: boolean) {
+      for (const [index, item] of items.entries()) {
+        if (yield* branch(`(= ${place} ${index})`)) return item;
+        // `items.at(-1)`: from the end.
+        if (wraps && (yield* branch(`(= ${place} (- ${items.length - index}))`))) return item;
+      }
+      return Value.undef;
+    });
+
   const member: Interpreter["member"] = Effect.fnUntraced(function* (
     value: V,
     key: string,
@@ -1083,14 +1120,24 @@ export const make = (given: Loader, run: Run): Interpreter => {
             }),
           };
         }
+        // A place the array does not have, such as `-1` or `1.5`, holds nothing.
         return /^\d+$/.test(key)
           ? (value.items[Number(key)] ?? Value.undef)
-          : yield* fail(site, `reads .${key} of an array`);
+          : /^-?\d+(\.\d+)?$/.test(key)
+            ? Value.undef
+            : yield* fail(site, `reads .${key} of an array`);
       case "Str":
         return key === "length"
           ? Value.num(value.value.length)
           : (library.stringMember(value, key) ?? (yield* fail(site, `reads .${key} of a string`)));
+      case "Num":
+      case "Big":
+        return numberMember(value, key) ?? (yield* fail(site, `reads .${key} of a ${value._tag}`));
       case "Term":
+        if (value.term.sort === "Int" || value.term.sort === "Real") {
+          const method = numberMember(value, key);
+          if (method) return method;
+        }
         return value.term.sort === "String" && key === "length"
           ? Value.term("Int", `(str.len ${value.term.text})`)
           : ((value.term.sort === "String" ? library.stringMember(value, key) : undefined) ??
@@ -1971,6 +2018,10 @@ export const make = (given: Loader, run: Run): Interpreter => {
         const key = node.computed
           ? yield* evaluate(node.property, env)
           : Value.str(node.property.name);
+        if (key._tag === "Term" && key.term.sort === "Int" && key.big !== true) {
+          const list = forced(object);
+          if (list._tag === "Arr") return yield* placed(list.items, key.term.text, false);
+        }
         return key._tag === "Str" || key._tag === "Num"
           ? yield* member(object, String(key.value), site)
           : yield* fail(site, "reads a property by a key the prover cannot see");

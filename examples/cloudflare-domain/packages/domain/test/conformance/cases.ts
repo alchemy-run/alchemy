@@ -1917,6 +1917,11 @@ const syntax: ReadonlyArray<Group> = [
     both: [
       // Powers, loose equality between two of a kind, the comma, and helpers of arrays and objects.
       `a ** 2`,
+      // A place an input decides, and a number as text.
+      `[10, 20, 30][a]`,
+      `[[10, b, 30][a], [10, 20].at(a), [10, 20].at(b)]`,
+      `[a.toString(), (a + b).toString(), (1.5).toString(), (255).toString(16)]`,
+      `[(1.005).toFixed(2), (3).toFixed(), (2.5).toFixed(0)]`,
       `[a ** 0, a ** 3, 2 ** 5]`,
       `[a == b, a != b, "x" == "x", flag == true]`,
       `(a, b)`,
@@ -2051,6 +2056,8 @@ const syntax: ReadonlyArray<Group> = [
       `[BigInt(a) & 3n, BigInt(a) | 4n, BigInt(a) ^ 1n, ~BigInt(a), BigInt(a) << 2n, BigInt(a) >> 1n].map((n) => n === 0n)`,
     ],
     unread: [
+      [`a.toFixed(2)`, /calls toFixed on a number an input holds, which it rounds/],
+      [`a.toString(2)`, /writes a number an input holds in another base/],
       // `==` between two kinds turns one into the other, which is not read.
       [`a == "1"`, /uses ==, where the prover reads ===/],
       [`a != flag`, /uses !=, where the prover reads ===/],
