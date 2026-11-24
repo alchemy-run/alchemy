@@ -984,6 +984,18 @@ export const make = (host: Host) => {
       }),
     "JSON:stringify": ([value, replacer, space], site) => {
       const real = value ? Known.real(value) : { value: undefined };
+      const bare =
+        (replacer === undefined || replacer._tag === "Null" || replacer._tag === "Undef") &&
+        (space === undefined || space._tag === "Undef");
+      // A value an input decides, where it is made of whole numbers, booleans and text the code writes.
+      if (!real && value && bare)
+        return Effect.flatMap(jsonOf(value, site), (text) =>
+          text
+            ? Effect.succeed(text)
+            : Effect.fail(
+                Value.notTranslated(site, "calls JSON.stringify on a value the prover cannot see"),
+              ),
+        );
       if (
         !real ||
         (replacer !== undefined && replacer._tag !== "Null" && replacer._tag !== "Undef")
@@ -1572,6 +1584,54 @@ export const make = (host: Host) => {
     (key) => values[key] ?? Value.undef,
   );
   const rationals = Rationals.make(kit);
+
+  /**
+   * A value as JSON, where the prover can write it: a whole number an input
+   * holds as its digits, a boolean as `true` or `false`. Text an input holds
+   * is not written, since what it holds may need a backslash.
+   */
+  const jsonOf = (value: V, site: Site): Eval<V | undefined> =>
+    Effect.gen(function* () {
+      const joined = (parts: ReadonlyArray<V>): Eval<V> =>
+        Effect.gen(function* () {
+          let out: V = Value.str("");
+          for (const part of parts) out = yield* host.arithmetic("+", out, part, site);
+          return out;
+        });
+      const v = host.force(value);
+      const known = Known.real(v);
+      if (known) {
+        const text: string | undefined = JSON.stringify(known.value);
+        return text === undefined ? undefined : Value.str(text);
+      }
+      if (v._tag === "Term" && v.big !== true && v.term.sort === "Int")
+        return yield* host.arithmetic("+", Value.str(""), v, site);
+      if (v._tag === "Term" && v.term.sort === "Bool")
+        return Value.term("String", `(ite ${v.term.text} "true" "false")`);
+      if (v._tag === "Arr") {
+        const parts: Array<V> = [Value.str("[")];
+        for (const [index, item] of v.items.entries()) {
+          const text = item._tag === "Undef" ? Value.str("null") : yield* jsonOf(item, site);
+          if (!text) return undefined;
+          parts.push(Value.str(index === 0 ? "" : ","), text);
+        }
+        return yield* joined([...parts, Value.str("]")]);
+      }
+      if (v._tag === "Obj" && !v.brand) {
+        const parts: Array<V> = [Value.str("{")];
+        let first = true;
+        for (const [key, field] of Object.entries(v.fields)) {
+          if (field._tag === "Undef") continue;
+          if (field._tag === "Pending") return undefined;
+          const text = yield* jsonOf(field, site);
+          if (!text) return undefined;
+          parts.push(Value.str(`${first ? "" : ","}${JSON.stringify(key)}:`), text);
+          first = false;
+        }
+        return yield* joined([...parts, Value.str("}")]);
+      }
+      return undefined;
+    });
 
   /** `parseInt` and `parseFloat`, of text the code writes. */
   const parsed = (name: string, text: V | undefined, radix: V | undefined, site: Site): Eval<V> =>

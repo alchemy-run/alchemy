@@ -261,7 +261,7 @@ new Date();
 Math.random();
 globalThis.name;
 
-JSON.stringify(made); // of a value an input decides
+JSON.stringify({ n: "t" + a }); // of text an input decides: it may need a backslash
 parseInt("1" + a); // of text an input decides: so are parseFloat and Number
 a.toFixed(2); // a number an input holds, rounded as text
 
@@ -1471,7 +1471,8 @@ Array.of(a, b, 3);
 Array.from([a, b], (n, index) => n + index);
 Array.from({ length: 3 }, (_, index) => index + a);
 Array.from("abc");
-JSON.stringify({ n: 1, list: [true, null] }); // of a value the code writes
+JSON.stringify({ n: 1, list: [true, null] });
+JSON.stringify({ n: a }); // a whole number or a boolean an input holds is written too
 JSON.parse('{"n":1,"list":[true,null,"x"]}');
 structuredClone(made); // a copy the code may change
 Symbol("s"); // equal only to itself
@@ -2514,6 +2515,35 @@ Schema.encodeEffect(Ticket)({ n: 2, note: "n" });
 Schema.isSchemaError;
 ```
 
+```typescript title="effect/Metric and effect/Hash"
+// What a handler writes to a metric decides nothing, so it is read as doing nothing.
+const orders = Metric.counter("orders");
+Metric.gauge("level");
+Metric.frequency("kinds");
+Metric.histogram("size", { boundaries: Metric.linearBoundaries({ start: 0, width: 10, count: 3 }) });
+Metric.summary("s", { maxAge: "1 minute", maxSize: 10, quantiles: [0.5] });
+Metric.summaryWithTimestamp("st", { maxAge: "1 minute", maxSize: 10, quantiles: [0.5] });
+Metric.timer("t");
+Metric.update(orders, a);
+Metric.modify(Metric.gauge("level"), b);
+Metric.withAttributes(orders, { kind: "gift" });
+Metric.mapInput((n) => n);
+Metric.withConstantInput(1);
+Metric.isMetric(a);
+Metric.exponentialBoundaries({ start: 1, factor: 2, count: 3 });
+Metric.boundariesFromIterable([3, 1, 2]);
+
+// A hash of a value the code writes is the library's own.
+Hash.hash("text");
+Hash.string("s");
+Hash.number(42);
+Hash.optimize(12345);
+Hash.combine(1, 2);
+Hash.array([1, "a", true]);
+Hash.structure({ n: 1, s: "x" });
+Hash.isHash(7);
+```
+
 ```typescript title="effect/Random"
 // A seed the code writes decides every draw, so a seeded draw is the one the deployed handler makes.
 Random.next.pipe(Random.withSeed("seed"));
@@ -3014,6 +3044,7 @@ Cache.get(prices, command.item); // a key an input decides: the library finds on
 Effect.request(GetPrice({ item: command.item }), prices); // a request of values an input decides
 
 Cron.next(cron); // next, prev and sequence use the clock when they are given no time
+Metric.value(orders); // reads a metric: what one holds is not what a handler decides by
 ```
 
 These say how a program is put together and watched, not what it decides. A [request context](#effects-and-failures) a handler yields is supported.
@@ -3028,7 +3059,6 @@ import * as Runtime from "effect/Runtime";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Logger from "effect/Logger";
 import * as Tracer from "effect/Tracer";
-import * as Metric from "effect/Metric";
 import * as ErrorReporter from "effect/ErrorReporter";
 ```
 
@@ -3055,7 +3085,6 @@ A graph and a ring are built by changing one, and a hash of an object is where i
 ```typescript title="Values changed in place, or known by where they are"
 import * as Graph from "effect/Graph";
 import * as HashRing from "effect/HashRing";
-import * as Hash from "effect/Hash";
 ```
 
 `Bytes` works on byte arrays, which are not a value the prover holds.

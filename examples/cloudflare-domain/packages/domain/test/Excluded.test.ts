@@ -25,6 +25,8 @@ const READ = new Set([
   ...["TxHashMap", "TxHashSet", "TxPriorityQueue", "TxQueue", "Channel", "Pull", "Take"],
   ...["Combiner", "Reducer", "MutableList", "Scope", "ScopedRef", "RcRef", "RcMap", "Resource"],
   "Random",
+  "Metric",
+  "Hash",
   ...["TxReentrantLock", "TxRef", "TxSemaphore", "TxSubscriptionRef", "index"],
 ]);
 
@@ -113,7 +115,7 @@ it.effect(
         "compares values the prover does not model",
       ]);
       expect(modules.length).toBeGreaterThan(35);
-      expect(calls.length).toBeGreaterThan(1200);
+      expect(calls.length).toBeGreaterThan(1000);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   300_000,
 );

@@ -37,6 +37,8 @@ const ONE_WAY: ReadonlySet<string> = new Set([
   "effect/RcMap:make",
   // A function of the language, which is never given a value by `pipe`.
   "Array:isArray",
+  // A metric of numbers and one of bigints: two ways to write its options, neither given by `pipe`.
+  ...["effect/Metric:counter", "effect/Metric:gauge"],
 ]);
 
 const declared = new Map<string, ReadonlySet<string>>();

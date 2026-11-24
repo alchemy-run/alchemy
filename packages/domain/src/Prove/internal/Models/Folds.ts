@@ -1,7 +1,10 @@
 import * as Effect from "effect/Effect";
+import * as Hash from "effect/Hash";
+import * as Metric from "effect/Metric";
 import * as MutableList from "effect/MutableList";
 import type { Kit, Model, Models } from "../Kit.ts";
-import { arr, callable, native, wrongArguments } from "../Kit.ts";
+import { arr, callable, done, dual, native, wrongArguments } from "../Kit.ts";
+import * as Known from "../Known.ts";
 import type { Eval, Site, V } from "../Value.ts";
 import * as Value from "../Value.ts";
 
@@ -575,13 +578,107 @@ export const make = (
     ),
   };
 
+  // ---- A metric: what a handler writes to one decides nothing, so it is read as doing nothing.
+
+  /** What marks a value as a metric. */
+  const METRIC = "~metric";
+  const metric = (): Eval<V> => Effect.succeed(Value.obj({ [METRIC]: Value.bool(true) }, REF));
+  const isMetric = (v: V | undefined): boolean =>
+    v?._tag === "Obj" && v.brand?.kind === "Ref" && v.fields[METRIC] !== undefined;
+  const onMetric = (name: string, gives: (self: V) => V): Model =>
+    dual(name, 2, ([self], site) =>
+      self && isMetric(self) ? Effect.succeed(gives(self)) : wrongArguments(site, name),
+    );
+  /** The bounds of a histogram, worked out by the library from numbers the code writes. */
+  const bounds =
+    (name: string, make_: (given: never) => ReadonlyArray<number>): Model =>
+    ([given], site) => {
+      const real = given ? Known.real(given) : undefined;
+      return real
+        ? Effect.try({
+            try: () => arr(make_(real.value as never).map(Value.num)),
+            catch: () => Value.notTranslated(site, `calls ${name} with bounds it does not take`),
+          })
+        : wrongArguments(site, name);
+    };
+
+  const metrics: Models = {
+    "effect/Metric:counter": metric,
+    "effect/Metric:gauge": metric,
+    "effect/Metric:frequency": metric,
+    "effect/Metric:histogram": metric,
+    "effect/Metric:summary": metric,
+    "effect/Metric:summaryWithTimestamp": metric,
+    "effect/Metric:timer": metric,
+    "effect/Metric:isMetric": ([value]) => Effect.succeed(Value.bool(isMetric(value))),
+    "effect/Metric:update": onMetric("Metric.update", () => done),
+    "effect/Metric:modify": onMetric("Metric.modify", () => done),
+    "effect/Metric:withAttributes": onMetric("Metric.withAttributes", (self) => self),
+    "effect/Metric:mapInput": onMetric("Metric.mapInput", (self) => self),
+    "effect/Metric:withConstantInput": onMetric("Metric.withConstantInput", (self) => self),
+    "effect/Metric:linearBoundaries": bounds("Metric.linearBoundaries", Metric.linearBoundaries),
+    "effect/Metric:exponentialBoundaries": bounds(
+      "Metric.exponentialBoundaries",
+      Metric.exponentialBoundaries,
+    ),
+    "effect/Metric:boundariesFromIterable": bounds(
+      "Metric.boundariesFromIterable",
+      Metric.boundariesFromIterable,
+    ),
+    "effect/Metric:value": (_, site) =>
+      Effect.fail(
+        Value.notTranslated(
+          site,
+          "calls Metric.value, which reads a metric: what one holds is not what a handler decides by",
+        ),
+      ),
+  };
+
+  // ---- A hash of a value the code writes: the library's own.
+
+  /** A number, text, a boolean or nothing, as the library hashes one. */
+  const hashed =
+    (name: string, hash: (value: never) => number, plain: boolean): Model =>
+    ([value], site) => {
+      const real =
+        value &&
+        (plain
+          ? ["Num", "Str", "Bool", "Null", "Undef", "Big"].includes(value._tag)
+          : value._tag === "Arr" || (value._tag === "Obj" && !value.brand))
+          ? Known.real(value)
+          : undefined;
+      return real
+        ? Effect.sync(() => Value.num(hash(real.value as never)))
+        : Effect.fail(Value.notTranslated(site, `calls ${name} on a value the prover cannot hash`));
+    };
+
+  const hashes: Models = {
+    "effect/Hash:hash": hashed("Hash.hash", Hash.hash, true),
+    "effect/Hash:number": hashed("Hash.number", Hash.number, true),
+    "effect/Hash:string": hashed("Hash.string", Hash.string, true),
+    "effect/Hash:optimize": hashed("Hash.optimize", Hash.optimize, true),
+    "effect/Hash:array": hashed("Hash.array", Hash.array, false),
+    "effect/Hash:structure": hashed("Hash.structure", Hash.structure, false),
+    "effect/Hash:combine": dual("Hash.combine", 2, ([self, that], site) =>
+      self?._tag === "Num" && that?._tag === "Num"
+        ? Effect.sync(() => Value.num(Hash.combine(self.value, that.value)))
+        : Effect.fail(
+            Value.notTranslated(site, "calls Hash.combine on a value the prover cannot hash"),
+          ),
+    ),
+    "effect/Hash:isHash": ([value], site) =>
+      value && ["Num", "Str", "Bool", "Null", "Undef", "Big", "Arr"].includes(value._tag)
+        ? Effect.succeed(Value.bool(false))
+        : wrongArguments(site, "Hash.isHash"),
+  };
+
   /** `list.length`: how many items a mutable list holds. */
   const member = (value: V, key: string): V | undefined =>
     key === "length" ? listOf(value)?.length : undefined;
 
   return {
     member,
-    models: { ...models, ...lists },
+    models: { ...models, ...lists, ...metrics, ...hashes },
     values,
     constants: { "effect/MutableList:Empty": EMPTY } as Readonly<Record<string, V>>,
   };
