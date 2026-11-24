@@ -88,7 +88,8 @@ export interface ApplicationProps {
   /**
    * UUID of the server that runs the application. For a self-hosted
    * instance this is often the `localhost` server Coolify registers for
-   * itself. Changing it replaces the application.
+   * itself; only a team admin's token may deploy there (others get
+   * `CoolifyHostRequiresAdmin`). Changing it replaces the application.
    */
   server: string;
   /**

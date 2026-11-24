@@ -45,7 +45,7 @@ export default Alchemy.Stack(
 );
 ```
 
-Authenticate with an API token from **Keys & Tokens → API tokens** (`read`, `write` and `deploy`, plus `read:sensitive` to read database URLs back):
+Authenticate with an API token from **Keys & Tokens → API tokens** with `read`, `write`, `deploy` and `delete` (destroy needs `delete`), plus `read:sensitive` to read database URLs back. A token limited to selected projects can't create projects: use `Coolify.Project.lookup` for its project.
 
 ```sh
 export COOLIFY_TOKEN=...

@@ -4,7 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as CoolifyApi from "@distilled.cloud/coolify";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { applicationGone, hasServer, projectGone, testServer } from "./helpers.ts";
+import { applicationGone, environmentGone, hasServer, testProject, testServer } from "./helpers.ts";
 
 const { test } = Test.make({ providers: Coolify.providers() });
 
@@ -16,20 +16,21 @@ test.provider.skipIf(!hasServer)(
     Effect.gen(function* () {
       yield* stack.destroy();
       const server = yield* testServer;
+      const projectUuid = yield* testProject;
 
       const program = (image: string, env: Record<string, string | Redacted.Redacted<string>>) =>
         Effect.gen(function* () {
-          const project = yield* Coolify.Project("AppProject", {});
+          const environment = yield* Coolify.Environment("Env", { project: projectUuid });
           const app = yield* Coolify.Application("Web", {
-            project: project.projectUuid,
-            environmentName: "production",
+            project: projectUuid,
+            environment: environment.environmentUuid,
             server,
             image,
             ports: [80],
             env,
             tags: ["alchemy-test"],
           });
-          return { project, app };
+          return { environment, app };
         });
 
       const created = yield* stack.deploy(
@@ -84,7 +85,9 @@ test.provider.skipIf(!hasServer)(
 
       yield* stack.destroy();
       expect(yield* applicationGone(created.app.applicationUuid)).toEqual("gone");
-      expect(yield* projectGone(created.project.projectUuid)).toEqual("gone");
+      expect(yield* environmentGone(projectUuid, created.environment.environmentUuid)).toEqual(
+        "gone",
+      );
     }),
   { tags, timeout: 600_000 },
 );
@@ -95,20 +98,21 @@ test.provider.skipIf(!hasServer)(
     Effect.gen(function* () {
       yield* stack.destroy();
       const server = yield* testServer;
+      const projectUuid = yield* testProject;
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Coolify.Project("DockerfileProject", {});
+          const environment = yield* Coolify.Environment("Env", { project: projectUuid });
           const app = yield* Coolify.Application("Hello", {
-            project: project.projectUuid,
-            environmentName: "production",
+            project: projectUuid,
+            environment: environment.environmentUuid,
             server,
             dockerfile: {
               content: 'FROM busybox:1.36\nCMD ["httpd", "-f", "-p", "8080"]\n',
             },
             ports: [8080],
           });
-          return { project, app };
+          return { environment, app };
         }),
       );
       expect(deployed.app.source).toEqual("dockerfile");
@@ -120,7 +124,9 @@ test.provider.skipIf(!hasServer)(
 
       yield* stack.destroy();
       expect(yield* applicationGone(deployed.app.applicationUuid)).toEqual("gone");
-      expect(yield* projectGone(deployed.project.projectUuid)).toEqual("gone");
+      expect(yield* environmentGone(projectUuid, deployed.environment.environmentUuid)).toEqual(
+        "gone",
+      );
     }),
   { tags, timeout: 600_000 },
 );

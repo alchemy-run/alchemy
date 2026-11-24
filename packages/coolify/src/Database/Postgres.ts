@@ -24,7 +24,11 @@ export interface PostgresProps {
    * {@link environment}. Changing it replaces the database.
    */
   environmentName?: string;
-  /** UUID of the server that runs the database. Changing it replaces the database. */
+  /**
+   * UUID of the server that runs the database. Only a team admin's token may
+   * use the server that runs Coolify itself (others get
+   * `CoolifyHostRequiresAdmin`). Changing it replaces the database.
+   */
   server: string;
   /**
    * UUID of the Docker network (destination) on the server. Only needed

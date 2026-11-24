@@ -80,7 +80,7 @@ const coolifyAuth = makeStoredAuthProvider<CoolifyResolvedCredentials>({
       required: true,
       secret: true,
       description:
-        "Coolify API token. Give it the `read`, `write` and `deploy` permissions; add `read:sensitive` to read database passwords and connection URLs back.",
+        "Coolify API token with the `read`, `write`, `deploy` and `delete` permissions (without `delete`, deploys work but destroy fails). Add `read:sensitive` to read database passwords and connection URLs back.",
     },
     {
       name: COOLIFY_API_BASE_URL_ENV,

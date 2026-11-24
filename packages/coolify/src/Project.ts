@@ -57,6 +57,11 @@ export interface ProjectLookup {
  * created by their generated name. A project you name yourself and that
  * already exists is reported as unowned and needs `--adopt`.
  *
+ * Creating a project needs a token with access to all resources in the
+ * team: a token limited to selected projects gets `ActionNotAuthorized`.
+ * With such a token, reference its project with {@link Project.lookup} and
+ * manage environments and resources inside it.
+ *
  * Coolify refuses to delete a project that still has resources. Alchemy
  * deletes a stack's applications and databases before their project, and
  * retries the project delete briefly while Coolify finishes removing them.
@@ -98,6 +103,10 @@ export interface ProjectLookup {
  * **Example:** Deploy into a project created in the dashboard
  * ```typescript
  * const shared = Coolify.Project.lookup({ projectUuid: "k0s8w4gc8owo4o0" });
+ *
+ * const preview = yield* Coolify.Environment("preview", {
+ *   project: shared.projectUuid,
+ * });
  * ```
  *
  * @resource

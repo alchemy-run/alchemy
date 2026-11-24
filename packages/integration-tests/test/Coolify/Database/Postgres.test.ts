@@ -4,7 +4,15 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as CoolifyApi from "@distilled.cloud/coolify";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { databaseGone, hasServer, projectGone, testServer } from "../helpers.ts";
+import {
+  databaseGone,
+  environmentGone,
+  hasHostServer,
+  hasServer,
+  hostServer,
+  testProject,
+  testServer,
+} from "../helpers.ts";
 
 const { test } = Test.make({ providers: Coolify.providers() });
 
@@ -14,19 +22,20 @@ test.provider.skipIf(!hasServer)(
     Effect.gen(function* () {
       yield* stack.destroy();
       const server = yield* testServer;
+      const projectUuid = yield* testProject;
 
       const program = (description: string, memory: string) =>
         Effect.gen(function* () {
-          const project = yield* Coolify.Project("PgProject", {});
+          const environment = yield* Coolify.Environment("Env", { project: projectUuid });
           const db = yield* Coolify.Database.Postgres("Db", {
-            project: project.projectUuid,
-            environmentName: "production",
+            project: projectUuid,
+            environment: environment.environmentUuid,
             server,
             database: "app",
             description,
             limits: { memory },
           });
-          return { project, db };
+          return { environment, db };
         });
 
       const created = yield* stack.deploy(program("first", "512m"));
@@ -51,10 +60,42 @@ test.provider.skipIf(!hasServer)(
 
       yield* stack.destroy();
       expect(yield* databaseGone(created.db.databaseUuid)).toEqual("gone");
-      expect(yield* projectGone(created.project.projectUuid)).toEqual("gone");
+      expect(yield* environmentGone(projectUuid, created.environment.environmentUuid)).toEqual(
+        "gone",
+      );
     }),
   {
     tags: ["provider:coolify", "provider:coolify:database", "live"],
     timeout: 600_000,
   },
+);
+
+// Coolify reserves its own server for team admins. A non-admin token is
+// refused before anything is created.
+test.provider.skipIf(!hasHostServer || hasServer)(
+  "a non-admin token can't place a database on the Coolify host",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const server = yield* hostServer;
+      const projectUuid = yield* testProject;
+
+      const error = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const environment = yield* Coolify.Environment("Env", { project: projectUuid });
+            return yield* Coolify.Database.Postgres("Db", {
+              project: projectUuid,
+              environment: environment.environmentUuid,
+              server,
+            });
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(JSON.stringify(error)).toContain("CoolifyHostRequiresAdmin");
+      expect((yield* CoolifyApi.listDatabases({})).length).toEqual(0);
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:coolify", "provider:coolify:database", "live"], timeout: 120_000 },
 );

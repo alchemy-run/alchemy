@@ -4,7 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as CoolifyApi from "@distilled.cloud/coolify";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { hasServer, projectGone, testServer } from "./helpers.ts";
+import { environmentGone, hasServer, testProject, testServer } from "./helpers.ts";
 
 const { test } = Test.make({ providers: Coolify.providers() });
 
@@ -17,20 +17,21 @@ test.provider.skipIf(!hasServer)(
     Effect.gen(function* () {
       yield* stack.destroy();
       const server = yield* testServer;
+      const projectUuid = yield* testProject;
 
       const program = (apiKey: string) =>
         Effect.gen(function* () {
-          const project = yield* Coolify.Project("EnvVarProject", {});
+          const environment = yield* Coolify.Environment("Env", { project: projectUuid });
           const app = yield* Coolify.Application("Web", {
-            project: project.projectUuid,
-            environmentName: "production",
+            project: projectUuid,
+            environment: environment.environmentUuid,
             server,
             image: "nginx:1.27-alpine",
             ports: [80],
           });
           const db = yield* Coolify.Database.Postgres("Db", {
-            project: project.projectUuid,
-            environmentName: "production",
+            project: projectUuid,
+            environment: environment.environmentUuid,
             server,
           });
           const appVar = yield* Coolify.EnvVar("ApiKey", {
@@ -43,7 +44,7 @@ test.provider.skipIf(!hasServer)(
             key: "TZ",
             value: "Europe/Brussels",
           });
-          return { project, app, db, appVar, dbVar };
+          return { environment, app, db, appVar, dbVar };
         });
 
       const created = yield* stack.deploy(program("one"));
@@ -69,7 +70,9 @@ test.provider.skipIf(!hasServer)(
       expect(valueOf(appEnvsAfter.find((e) => e.key === "API_KEY")?.value)).toEqual("two");
 
       yield* stack.destroy();
-      expect(yield* projectGone(created.project.projectUuid)).toEqual("gone");
+      expect(yield* environmentGone(projectUuid, created.environment.environmentUuid)).toEqual(
+        "gone",
+      );
     }),
   { tags: ["provider:coolify", "provider:coolify:envvar", "live"], timeout: 600_000 },
 );
