@@ -468,6 +468,25 @@ theorem deployedClosedAccountsAreEmpty (journal : List Journal.Line) (id : Strin
   (Account.deployed (by simp [ClosedIsEmpty]) closedIsEmpty_kept journal id
     transfer_closedIsEmpty : ClosedIsEmpty _) closed
 
+/-! ## Behaviour across the model: a saga, and its undo -/
+
+/--
+Given an open account with money in it, when a payout is requested and the wire
+bounces, then the money is back in the account and the payout has failed.
+-/
+theorem aBouncedPayoutIsRefunded (id owner payout : String) (held amount : Nat)
+    (some : amount ≠ 0) (enough : amount ≤ held) (modest : held < 10000) :
+    let bank := Bank.run [
+      .send ⟨.Account, (), .open id owner⟩,
+      .send ⟨.Account, (), .deposit id held⟩,
+      .send ⟨.Account, (), .requestPayout id payout amount⟩,
+      .answer (.wire payout id amount) .bounced]
+    (bank.state .Account id).balance = held ∧ bank.sagas payout = .failed .bounced := by
+  have held' : held ≠ 0 := by omega
+  have small : ¬10000 ≤ held := by omega
+  have small' : ¬10000 ≤ amount := by omega
+  behaviour
+
 /-! What is read from the bank. These came with the model. -/
 
 example (log : List (Emitted Aggregates)) :

@@ -5,6 +5,7 @@ import Alchemy.View
 import Alchemy.Model
 import Alchemy.Engine
 import Alchemy.Compose
+import Alchemy.Behaviour
 import Alchemy.Syntax
 import Alchemy.Story
 import Alchemy.Check

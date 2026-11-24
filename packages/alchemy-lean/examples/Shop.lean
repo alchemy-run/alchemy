@@ -134,6 +134,36 @@ theorem aDeclinedOrderIsNeverCharged (id item reason charge : String) (amount : 
       = .error .notAwaitingPayment := by
   simp [Aggregate.after, Aggregate.apply, Order.decide, Order.evolve]
 
+/-! ## Behaviour across the model
+
+The same shape, but the "when" is now a run of the whole shop: commands sent,
+policies reacting, and the outside systems answering.
+-/
+
+/--
+Given a new order, when it is placed and the gateway approves the charge, then
+it is paid and the warehouse is asked to ship it.
+-/
+theorem anApprovedOrderIsPaidAndShipped (id item charge : String) (amount : Nat)
+    (priced : amount ≠ 0) :
+    let shop := Shop.run [
+      .send ⟨.Order, (), .place id item amount⟩,
+      .answer (.charge id amount) (.approved charge)]
+    (shop.state .Order id).status = .paid charge ∧ Shop.waiting shop = [.ship id item] := by
+  behaviour
+
+/--
+Given a new order, when it is placed and the gateway refuses the charge, then
+it is declined and nothing is shipped.
+-/
+theorem aRefusedOrderIsDeclinedAndNotShipped (id item reason : String) (amount : Nat)
+    (priced : amount ≠ 0) :
+    let shop := Shop.run [
+      .send ⟨.Order, (), .place id item amount⟩,
+      .answer (.charge id amount) (.refused reason)]
+    (shop.state .Order id).status = .declined reason ∧ Shop.waiting shop = [] := by
+  behaviour
+
 /-! ## Rules about the domain -/
 
 /-- An order is charged at most once, and never more than it costs. -/

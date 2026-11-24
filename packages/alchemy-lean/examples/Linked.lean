@@ -92,6 +92,55 @@ theorem bothAreSound (w : screening.Worlds) (reach : screening.Reachable w) (acc
     Bank.noTransferCreatesMoney _ (screening.reachable_left reach),
     Compliance.everyWatchIsSound _ (screening.reachable_right reach) account⟩
 
+/-! ## Behaviour across both models
+
+These are about the two models together: what one does because of what the
+other answered. Each holds for every account and amount.
+-/
+
+/--
+Given an open account, when a deposit over the reporting threshold arrives,
+then compliance flags it and the bank freezes the account.
+-/
+theorem aReportableDepositFreezesTheAccount (id owner : String) (amount : Nat)
+    (reportable : amount ≥ 50000) :
+    let both := screening.run [
+      .send ⟨.Account, (), .open id owner⟩,
+      .send ⟨.Account, (), .deposit id amount⟩]
+    (both.1.state .Account id).status = .frozen "over the reporting threshold" ∧
+      both.2.state .Watch id = { assessed := 1, flagged := 1 } := by
+  have some : amount ≠ 0 := by omega
+  have large : 10000 ≤ amount := by omega
+  behaviour [screening]
+
+/--
+Given an open account, when a large deposit under the reporting threshold
+arrives, then compliance looks at it, has no objection, and the account stays open.
+-/
+theorem aLargeDepositIsLookedAtAndLeftAlone (id owner : String) (amount : Nat)
+    (large : amount ≥ 10000) (unremarkable : amount < 50000) :
+    let both := screening.run [
+      .send ⟨.Account, (), .open id owner⟩,
+      .send ⟨.Account, (), .deposit id amount⟩]
+    (both.1.state .Account id).status = .open ∧
+      both.2.state .Watch id = { assessed := 1, flagged := 0 } := by
+  have some : amount ≠ 0 := by omega
+  have under : ¬50000 ≤ amount := by omega
+  behaviour [screening]
+
+/--
+Given an open account, when a small deposit arrives, then compliance is never
+asked at all.
+-/
+theorem aSmallDepositIsNotScreened (id owner : String) (amount : Nat)
+    (some : amount ≠ 0) (small : amount < 10000) :
+    let both := screening.run [
+      .send ⟨.Account, (), .open id owner⟩,
+      .send ⟨.Account, (), .deposit id amount⟩]
+    (both.1.state .Account id).status = .open ∧ both.2.state .Watch id = {} := by
+  have under : ¬10000 ≤ amount := by omega
+  behaviour [screening]
+
 /-! ## A run of the two together -/
 
 /-- A large deposit: compliance flags it, and the bank freezes the account. -/

@@ -1,4 +1,5 @@
 import Lean
+import Alchemy.Attr
 import Alchemy.Model
 import Alchemy.Cloud.Hosted
 
@@ -83,6 +84,7 @@ macro_rules
     let mut callCtors := #[]
     let mut replyAlts := #[]
     let mut callDefs : Array Command := #[]
+    let mut callNames : Array Ident := #[]
     let mut later : Array Command := #[]
     let mut policies : Array Ident := #[]
     let mut views : Array Ident := #[]
@@ -111,6 +113,7 @@ macro_rules
             types := types ++ ids.map fun _ => type
           | _ => Macro.throwUnsupported
         let ctorType ← types.foldrM (fun type rest => `($type → $rest)) (← `($callId))
+        callNames := callNames.push c
         callCtors := callCtors.push (← `(Command.ctor| | $c:ident : $ctorType))
         let ctor := under callId c.getId
         replyAlts := replyAlts.push (← `(Term.matchAltExpr| | $ctor:ident .. => $reply))
@@ -339,6 +342,20 @@ macro_rules
             P ((Alchemy.Cloud.Served.replay $served journal).state $here id) :=
           $always initially kept _ (Alchemy.Cloud.Served.replay_reachable $served journal) id decided))
     commands := commands.push (← `(command| end $m))
+    -- What a behaviour proof steps through: the model's own definitions.
+    let mut stepped : Array Ident := #[]
+    for a in aggregates do
+      stepped := stepped ++ #[rooted a `decide, rooted a `evolve, rooted a `key]
+      for helper in [`send, `must, `undoWith, `record, `of] do
+        stepped := stepped.push (under m (a.getId ++ helper))
+    for p in policies do stepped := stepped.push (under m p.getId)
+    for d in decisions do stepped := stepped.push (under m (d.getId ++ `decide))
+    for c in callNames do stepped := stepped.push (under m c.getId)
+    if let some g := saga then
+      for helper in [`run, `start, `signal] do
+        stepped := stepped.push (under m (g.getId ++ helper))
+    stepped := stepped ++ #[under m `awaitSignal, under m `failWith]
+    commands := commands.push (← `(command| attribute [behaviour] $stepped*))
     return mkNullNode commands
 
 end Alchemy
