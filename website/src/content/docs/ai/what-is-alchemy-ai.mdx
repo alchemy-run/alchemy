@@ -68,7 +68,7 @@ See [Processes](/ai/processes).
 
 ## Mentions: what a process uses
 
-Prose mentions things with `${}`. The LLM reads the thing's name in the sentence, and the process may use it.
+Prose refers to a tool, a model or another process with `${}`. That is a **mention**. The LLM sees it by name, and the process may use it.
 
 ```typescript title="src/Triage.process.ts"
 export const TriageLive = Triage.toLayer({
