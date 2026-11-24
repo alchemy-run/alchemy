@@ -1919,6 +1919,10 @@ const syntax: ReadonlyArray<Group> = [
     chunk: 1,
     ...numbers,
     both: [
+      // More of Math: a power the code writes, a sign, and the rest on numbers the code writes.
+      `[Math.pow(a, 2), Math.pow(2, 5), Math.pow(a, 0), Math.sign(a), Math.sign(-3)]`,
+      `[Math.sqrt(16), Math.cbrt(27), Math.hypot(3, 4), Math.log2(8), Math.atan2(0, 1), Math.imul(3, 4), Math.clz32(1)]`,
+      `[Math.atan(0), Math.cos(0), Math.sin(0), Math.tan(0), Math.exp(0), Math.log(1), Math.log10(100), Math.fround(1.5)]`,
       // Powers, loose equality between two of a kind, the comma, and helpers of arrays and objects.
       `a ** 2`,
       // A getter and a setter of an object, and `this` in its methods.
@@ -2234,6 +2238,21 @@ const syntax: ReadonlyArray<Group> = [
       body(
         `const made = { n: a, twice() { return this.n * 2; }, get half() { return this.n / 2; }, set next(n) { this.n = n; } }; const before = made.twice(); made.next = 4; return [before, made.half, made.n];`,
       ),
+      // A loop an input decides the length of, where the input is bounded.
+      body(`let i = 0; while (i < a) i++; return i;`),
+      body(`let total = 0; for (let i = 0; i < a; i++) total += i; return total;`),
+      body(`let n = a; let turns = 0; do { n -= 2; turns++; } while (n > 0); return turns;`),
+      // The methods that change an array the code made, where it stands.
+      body(
+        `const made = [3, a, 1]; const last = made.pop(); const first = made.shift(); made.unshift(7, 8); return [made, last, first];`,
+      ),
+      body(
+        `const made = [a, 2, 3, 4]; made.reverse(); const cut = made.splice(1, 2, 9); made.fill(0, 2); return [made, cut];`,
+      ),
+      body(
+        `const made = [3, a, 1]; const same = made.sort((x, y) => x - y); return [made, same === made, ["b", "a"].sort()];`,
+      ),
+      body(`const made = [1, 2, 3]; return [made.splice(1), made, [].pop(), [].shift()];`),
       // A namespace: an object of what it exports, with another inside it.
       body(
         `return [Space.shown, Space.twice(a), Space.Kind.One, Space.hidden, Space.Inner.deep + a];`,
@@ -2288,8 +2307,10 @@ const syntax: ReadonlyArray<Group> = [
         body(`const again = (n) => again(n + 1); return again(a);`),
         /calls functions more than 500 deep: a function that calls itself with no end/,
       ],
-      [body(`let i = 0; while (i < a) i++; return i;`), reported],
-      [body(`for (let i = 0; i < a; i++) {} return a;`), reported],
+      [
+        body(`let i = 0; while (i < a * 100) i++; return i;`),
+        /loops more than 64 times, a number of times that depends on an input/,
+      ],
       [body(`items.push(1); return items.length;`), reported],
       [body(`items[0] = 1; return items.length;`), reported],
       [body(`items.sort(); return items.length;`), reported],

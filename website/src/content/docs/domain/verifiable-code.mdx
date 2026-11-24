@@ -61,6 +61,7 @@ for (const key in made) seen++;
 for (let i = 0; i < 3; i++) total += i;
 for (let i = 0; i < items.length; i++) total += items[i]!;
 while (count < 3) count++;
+while (count < a) count++; // a number of turns an input decides, up to 64: a bound on the input ends it
 do {
   count++;
 } while (count < 6);
@@ -145,8 +146,7 @@ class Stream extends Local {
 } // a generator as a method
 using held = resource;
 
-while (count < a) count++; // a loop that an input decides the length of
-for (let i = 0; i < a; i++) count++;
+while (count < a * 100) count++; // a loop an input decides the length of, past 64 turns
 
 items.push(1); // changing a value the handler was given
 items[0] = 1;
@@ -276,6 +276,11 @@ A whole number is exact, and a `bigint` is exact with no limit. A number is assu
 a + b * 2 - 1;
 a % 3;
 Math.round(a / 2); // a half goes up
+Math.pow(a, 2); // a power the code writes
+Math.sign(a);
+Math.sqrt(16); // and the rest of Math, of numbers the code writes:
+[Math.cbrt(27), Math.hypot(3, 4), Math.log2(8), Math.atan2(0, 1), Math.imul(3, 4), Math.clz32(1)];
+[Math.atan(0), Math.cos(0), Math.sin(0), Math.tan(0), Math.exp(0), Math.log(1), Math.log10(100), Math.fround(1.5)];
 10n + BigInt(a) * 2n;
 
 a / 4; // a division by a whole number the code writes
@@ -300,9 +305,8 @@ a / 3 + 0.5; // arithmetic on a number that may not be whole
 (a / 3) * 3;
 a * 0.5;
 
-Math.sqrt(a);
-Math.pow(a, 2);
-Number.isInteger(a);
+Math.sqrt(a); // and the rest of Math, of a number an input holds
+Math.pow(2, a); // a power an input decides
 ```
 
 JavaScript rounds a number that is not whole and a solver does not, so `0.1 + 0.2 === 0.3` is true to one and false to the other. Keep money in whole cents, or in a [decimal](#decimals).
@@ -465,9 +469,9 @@ Array.sort(items, Order.Number); // effect/Array: see the list below
 ```
 
 ```typescript title="Not supported"
-items.push(1); // changing a list the handler was given
-items.sort(); // and every method that changes an array in place:
-items.reverse(); // sort, reverse, splice, fill, pop, shift, unshift
+items.push(1); // changing a list the handler was given: so are sort, reverse, splice, fill, pop, shift and unshift
+items.sort();
+items.reverse();
 
 items.toSorted(); // by the text of each item, where they are not text the code writes
 Array.from(items);
@@ -3340,7 +3344,7 @@ Math.floor(a / 2); // divide by a number the code writes, and say how it rounds
 // applies * to numbers that may not be whole, which JavaScript rounds and the prover does not
 BigDecimal.multiply(amount, RATE); // keep the number whole, or in a BigDecimal
 
-// loops a number of times that depends on an input
+// loops more than 64 times, a number of times that depends on an input
 for (const n of items) total += n; // go over a list, or count up to a number the code writes
 
 // pushes onto an array it was given, which changes it

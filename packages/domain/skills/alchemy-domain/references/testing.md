@@ -267,7 +267,7 @@ A line under "Not supported" names a file, a line and what the prover met there.
 - `calls X, which the prover has no model for`, `refers to X, which the prover cannot find`, `calls toUpperCase on a string an input holds`: there is no rewrite. Move the call into an exported function, or compute it where the command is built and pass the result in as a field.
 - `divides with /`: divide by a number the code writes and round it, `Math.floor(a / 2)`.
 - `applies * to numbers that may not be whole`: keep the number whole, or use `BigDecimal.multiply`.
-- `loops a number of times that depends on an input`: go over a list (`for (const n of items)`), or count to a number the code writes.
+- `loops more than 64 times, a number of times that depends on an input`: bound the input in its schema, go over a list (`for (const n of items)`), or count to a number the code writes.
 - `pushes onto an array it was given`, `changes a value it was given`: make a new one, `[...items, a]`.
 - `reads a property by a key the prover cannot see`: keep the values in a `HashMap` and use `HashMap.get`.
 - `uses a TryStatement`: fail with a `Data.TaggedError` and handle it with `Effect.catchTag`.

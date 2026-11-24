@@ -1140,6 +1140,60 @@ export const make = (host: Host) => {
         ? Effect.succeed(items[index.value] ? Value.some(items[index.value]!) : Value.none)
         : wrongArguments(site, "Array.get"),
     ),
+    // A power the code writes: that many multiplications.
+    "Math:pow": ([base, power], site) => {
+      if (base?._tag === "Num" && power?._tag === "Num")
+        return Effect.succeed(Value.num(Math.pow(base.value, power.value)));
+      const times = power?._tag === "Num" ? power.value : undefined;
+      if (!base || times === undefined || !Number.isInteger(times) || times < 0 || times > 16)
+        return Effect.fail(
+          Value.notTranslated(site, "raises a number to a power the prover cannot see"),
+        );
+      return Effect.gen(function* () {
+        let out: V = Value.num(1);
+        for (let turns = 0; turns < times; turns++)
+          out = yield* host.arithmetic("*", out, base, site);
+        return out;
+      });
+    },
+    "Math:sign": ([value], site) =>
+      value?._tag === "Num"
+        ? Effect.succeed(Value.num(Math.sign(value.value)))
+        : value?._tag === "Term" &&
+            value.big !== true &&
+            value.term.sort !== "Bool" &&
+            value.term.sort !== "String"
+          ? Effect.succeed(
+              Value.term(
+                "Int",
+                `(ite (> ${value.term.text} 0) 1 (ite (< ${value.term.text} 0) (- 1) 0))`,
+              ),
+            )
+          : wrongArguments(site, "Math.sign"),
+    // The rest of `Math`, of numbers the code writes: the language's own.
+    ...Object.fromEntries(
+      "sqrt cbrt exp log log2 log10 sin cos tan atan atan2 hypot fround clz32 imul"
+        .split(" ")
+        .map((name): [string, Model] => [
+          `Math:${name}`,
+          (args, site) =>
+            args.every((arg) => arg._tag === "Num")
+              ? Effect.succeed(
+                  Value.num(
+                    (Math[name as "sqrt"] as (...given: ReadonlyArray<number>) => number)(
+                      ...args.map((arg) => (arg._tag === "Num" ? arg.value : Number.NaN)),
+                    ),
+                  ),
+                )
+              : Effect.fail(
+                  Value.notTranslated(
+                    site,
+                    `calls Math.${name}, which the prover has no model for`,
+                    true,
+                  ),
+                ),
+        ]),
+    ),
     // A half goes up, as the language rounds one.
     "Math:round": whole(
       "Math.round",

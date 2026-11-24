@@ -64,8 +64,10 @@ const said = (quoted: string): boolean => {
 };
 
 it("a line the prover does not say is found", () => {
-  expect(said("loops a number of times that depends on an input")).toBe(true);
-  expect(said("loops a number of times that depends on the weather")).toBe(false);
+  expect(said("loops more than 64 times, a number of times that depends on an input")).toBe(true);
+  expect(said("loops more than 64 times, a number of times that depends on the weather")).toBe(
+    false,
+  );
   expect(said("calls Math.sqrt, which the prover has no model for")).toBe(true);
   expect(said("calls Math.sqrt, which the prover has never heard of")).toBe(false);
 });

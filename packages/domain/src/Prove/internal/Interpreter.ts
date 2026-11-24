@@ -345,6 +345,8 @@ const CONTINUE: V = { _tag: "Opaque", what: "continue" };
 
 /** The most turns a loop takes before the prover stops reading it. */
 const MAX_TURNS = 10_000;
+/** How many times a loop may go round where an input decides whether it does: a bound on the input ends it sooner. */
+const MAX_DECIDED = 64;
 
 /** What `typeof` gives, for the values it is known of. */
 const kindOf = (v: V): string | undefined => {
@@ -892,6 +894,19 @@ export const make = (given: Loader, run: Run): Interpreter => {
   };
 
   /** The array methods that take values. */
+  /** A method that changes an array where it stands: only an array the code made itself. */
+  const changing = (
+    self: V & { readonly _tag: "Arr" },
+    at: Site,
+    change: (items: Array<V>) => Eval<V>,
+  ): Eval<V> =>
+    mine(self)
+      ? change(self.items as Array<V>)
+      : reaches(
+          at,
+          "changes a value it was given: the prover reads code that changes only what it wrote itself",
+        );
+
   const arrayOwn: Record<
     string,
     (self: V & { readonly _tag: "Arr" }, args: ReadonlyArray<V>, at: Site) => Eval<V>
@@ -1058,6 +1073,45 @@ export const make = (given: Loader, run: Run): Interpreter => {
       (self.items as Array<V>).push(...args);
       return Effect.succeed(Value.num(self.items.length));
     },
+    // The other methods that change an array where it stands, for one the code made itself.
+    pop: (self, _, at) => changing(self, at, (items) => Effect.succeed(items.pop() ?? Value.undef)),
+    shift: (self, _, at) =>
+      changing(self, at, (items) => Effect.succeed(items.shift() ?? Value.undef)),
+    unshift: (self, args, at) =>
+      changing(self, at, (items) => Effect.succeed(Value.num(items.unshift(...args)))),
+    reverse: (self, _, at) =>
+      changing(self, at, (items) => {
+        items.reverse();
+        return Effect.succeed<V>(self);
+      }),
+    fill: (self, [value, from, to], at) =>
+      changing(self, at, (items) => {
+        const place = (v: V | undefined): number | undefined | null =>
+          v === undefined || v._tag === "Undef" ? undefined : v._tag === "Num" ? v.value : null;
+        const [start, end] = [place(from), place(to)];
+        if (start === null || end === null)
+          return fail(at, "fills an array between places the prover cannot see");
+        items.fill(value ?? Value.undef, start, end);
+        return Effect.succeed<V>(self);
+      }),
+    splice: (self, [from, count, ...added], at) =>
+      changing(self, at, (items) => {
+        if (from?._tag !== "Num" || (count !== undefined && count._tag !== "Num"))
+          return fail(at, "splices an array at a place the prover cannot see");
+        const removed =
+          count === undefined
+            ? items.splice(from.value)
+            : items.splice(from.value, count.value, ...added);
+        return Effect.succeed(made<V>({ _tag: "Arr", items: removed }));
+      }),
+    sort: (self, [compare], at) =>
+      changing(self, at, (items) =>
+        Effect.map(arrayOwn.toSorted!(self, [compare ?? Value.undef], at), (sorted) => {
+          const next = sorted._tag === "Arr" ? sorted.items : items;
+          items.splice(0, items.length, ...next);
+          return self as V;
+        }),
+      ),
   };
 
   /** `value.pipe(f, g)`: each function applied to what the one before gave. */
@@ -2123,15 +2177,29 @@ export const make = (given: Loader, run: Run): Interpreter => {
   };
 
   /** Whether a loop goes on. What an input decides, the prover cannot count the turns of. */
-  const goesOn: (test: Node | null, env: Env, site: Site) => Eval<boolean> = Effect.fnUntraced(
-    function* (test: Node | null, env: Env, site: Site) {
-      if (!test) return true;
-      const t = yield* truthOf(yield* evaluate(test, env), site);
-      if (t === true || t === "true") return true;
-      if (t === false || t === "false") return false;
-      return yield* fail(site, "loops a number of times that depends on an input");
-    },
-  );
+  const goesOn: (
+    test: Node | null,
+    env: Env,
+    site: Site,
+    decided: { turns: number },
+  ) => Eval<boolean> = Effect.fnUntraced(function* (
+    test: Node | null,
+    env: Env,
+    site: Site,
+    decided: { turns: number },
+  ) {
+    if (!test) return true;
+    const t = yield* truthOf(yield* evaluate(test, env), site);
+    if (t === true || t === "true") return true;
+    if (t === false || t === "false") return false;
+    // An input decides: each way it can go is a path, as long as the inputs allow another turn.
+    if (++decided.turns > MAX_DECIDED)
+      return yield* fail(
+        site,
+        `loops more than ${MAX_DECIDED} times, a number of times that depends on an input`,
+      );
+    return yield* branch(t);
+  });
 
   /** What a loop or a spread goes over: what an opaque function returned is a list of what it gives. */
   const iterate = (value: V, site: Site): Eval<ReadonlyArray<V> | undefined> => {
@@ -3154,8 +3222,9 @@ export const make = (given: Loader, run: Run): Interpreter => {
               if (returned) return returned;
             } else if (init) yield* evaluate(init, inner);
             let turns = 0;
+            const decided = { turns: 0 };
             let first = statement.type === "DoWhileStatement";
-            while (first || (yield* goesOn(statement.test ?? null, inner, site))) {
+            while (first || (yield* goesOn(statement.test ?? null, inner, site, decided))) {
               first = false;
               if (++turns > MAX_TURNS)
                 return yield* fail(site, `loops more than ${MAX_TURNS} times`);
