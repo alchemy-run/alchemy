@@ -36,6 +36,7 @@ import { Resource } from "alchemy/Resource";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as pathe from "pathe";
@@ -259,6 +260,37 @@ testFor(noOwnership).test.provider(
 
       yield* stack.destroy();
       yield* expectDestroyed(noOwnership);
+    }),
+  { tags },
+);
+
+const warned = makeUrlCloud();
+testFor(warned).test.provider(
+  "logs one warning when the RoutingUrl is saved with no domain ownership covering it, and none when one covers it",
+  (stack) =>
+    Effect.gen(function* () {
+      warned.reset({ fromZone: true });
+      yield* stack.destroy();
+      const warnings: unknown[] = [];
+      const logger = Logger.make(({ logLevel, message }) => {
+        if (logLevel === "Warn") warnings.push(message);
+      });
+      const deployLogged = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        effect.pipe(Effect.provide(Logger.layer([logger])));
+
+      yield* deployLogged(stack.deploy(dnsStack()));
+
+      expect(warnings.map(String)).toEqual([
+        `No domain ownership covered '${HOSTNAME}' when it was saved. If this stack declares one, the hostname moves on once it is verified; otherwise declare Prisma.DomainOwnership or set createDomainOwnership: true.`,
+      ]);
+
+      yield* stack.destroy();
+      warned.reset({ fromZone: true, ownership: "unverified" });
+      warnings.length = 0;
+      yield* deployLogged(stack.deploy(dnsStack()));
+      expect(warnings).toEqual([]);
+
+      yield* stack.destroy();
     }),
   { tags },
 );
@@ -1354,6 +1386,32 @@ testFor(wildcardRecord).test.provider(
       expect(url.hostname).toBe("new.example.com");
       expect(wildcardRecord.state.txtChecked.map((record) => record.name)).toEqual([
         "_prisma-verification.example.com",
+      ]);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const exactUnderWildcard = makeUrlCloud();
+testFor(exactUnderWildcard).test.provider(
+  "with createDomainOwnership under an unverified wildcard, changes an active row's hostname once the exact hostname's TXT is seen",
+  (stack) =>
+    Effect.gen(function* () {
+      exactUnderWildcard.reset({ fromZone: true }, routingUrl("url-1", { status: "active" }));
+      yield* stack.destroy();
+      const withOption = (hostname: string) =>
+        RoutingUrl("Url", { app: "svc-1", hostname, createDomainOwnership: true });
+      yield* stack.deploy(withOption(HOSTNAME));
+
+      Object.assign(exactUnderWildcard.state, { ownership: "unverified", ownershipOn: "wildcard" });
+      exactUnderWildcard.zone.records.push(txtFor("new.example.com"), cnameFor("new.example.com"));
+      const url = yield* stack.deploy(withOption("new.example.com"));
+
+      expect(url.hostname).toBe("new.example.com");
+      expect(exactUnderWildcard.state.txtChecked.map((record) => record.name)).toEqual([
+        "_prisma-verification.example.com",
+        "_prisma-verification.new.example.com",
       ]);
 
       yield* stack.destroy();

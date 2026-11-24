@@ -138,10 +138,15 @@ const url = yield* Prisma.RoutingUrl("api", {
 Without `dns`, both are saved at once, and the records to publish are in the domain ownership's `recordName` and `recordValue` and the `CNAME` in `url.records`:
 
 ```typescript
+const ownership = yield* Prisma.DomainOwnership("api-domain", {
+  project,
+  domain: "api.example.com",
+});
 const url = yield* Prisma.RoutingUrl("api", {
   app,
   hostname: "api.example.com",
 });
+// publish TXT ownership.recordName with value ownership.recordValue
 // url.status: "pending"; "active" once the hostname has gone live, and back to "pending"
 //   only when the hostname changes, the service is deleted, or ownership lapses
 // url.state: what the hostname is doing now, such as "no_domain_ownership",
@@ -179,7 +184,7 @@ Prisma orders a certificate for each new hostname once its records are published
 
 ### Domain ownership
 
-A domain ownership is the workspace's record that it owns a domain, which is an exact hostname or a wildcard. It belongs to the workspace, not to a project. `Prisma.DomainOwnership` saves one without waiting for DNS, and reports Prisma's `status`. With `dns`, it publishes the `TXT` record after saving the domain ownership, waits up to 3 minutes for it at the authoritative nameservers, and asks Prisma to verify; it never fails because the record is missing or Prisma has not verified it. A wildcard covers every hostname under it, so those hostnames need no `TXT` record of their own:
+A domain ownership is the workspace's record that it owns a domain, which is an exact hostname or a wildcard. It belongs to the workspace, not to a project. `Prisma.DomainOwnership` saves one and reports Prisma's `status`. Without `dns`, it does not wait for DNS. With `dns`, it publishes the `TXT` record first, waits up to 3 minutes for it at the authoritative nameservers, then saves the domain ownership and asks Prisma to verify; it never fails because the record is missing or Prisma has not verified it. Removing `dns` from a deployed domain ownership deletes the record, and a verified domain ownership later becomes `expiring`. A wildcard covers every hostname under it, so those hostnames need no `TXT` record of their own:
 
 ```typescript
 yield* Prisma.DomainOwnership("example.com", {
@@ -191,7 +196,7 @@ yield* Prisma.RoutingUrl("api", { app: api, hostname: "api.example.com" });
 yield* Prisma.RoutingUrl("admin", { app: admin, hostname: "admin.example.com" });
 ```
 
-A wildcard and its apex share one record name (`_prisma-verification.example.com`), so prove only one of them per zone. `unverified` at the end of a deploy means Prisma has not seen the record yet. With `dns`, Prisma picks it up later on its own. Without `dns`, publish `recordName` with `recordValue`, then press Check on the workspace's Domains page or call `POST /v1/domain-ownerships/{id}/verify` to make Prisma look now.
+A wildcard and its apex share one record name (`_prisma-verification.example.com`), so prove only one of them per zone. `unverified` at the end of a deploy means Prisma has not seen the record yet; without `dns`, publish `recordName` with `recordValue`. Prisma looks again when Check is pressed on the workspace's Domains page or a RoutingUrl's `setupUrl`, when `POST /v1/domain-ownerships/{id}/verify` or `POST /v1/urls/{id}/check` is called, when a hostname it covers is created, updated or checked, and once 10 minutes after a lookup that did not find the record.
 
 A domain ownership the stack did not create needs `--adopt`, or better `adopt(true)` on that one resource, since `--adopt` adopts everything unowned in the stack. Such rows come from the Console, from a RoutingUrl with `createDomainOwnership: true`, from Prisma's backfill of older custom domains, and from other stacks. Once two stacks have it, destroying either deletes it, and with `dns` its record, for both. Declare a shared one in one stack, with `RemovalPolicy.retain()` if it must outlive that stack.
 

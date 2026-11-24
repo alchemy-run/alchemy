@@ -7,9 +7,12 @@ import { getProject, getWorkspaceDomainOwnerships } from "@distilled.cloud/prism
 import { adopt } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as DeployRetry from "alchemy/DeployRetry";
+import * as DNS from "alchemy/DNS/Adapter";
 import * as Namespace from "alchemy/Namespace";
+import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
+import type { ResourceLike } from "alchemy/Resource";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -21,9 +24,10 @@ import {
 } from "../../../prisma/src/internal/AuthoritativeDns.ts";
 import type { ProjectReference } from "../../../prisma/src/internal/DomainOwnership.ts";
 import {
-  DomainOwnershipProof,
-  DomainOwnershipProofProvider,
-} from "../../../prisma/src/internal/DomainOwnershipProof.ts";
+  DomainOwnershipRow,
+  DomainOwnershipRowProvider,
+} from "../../../prisma/src/internal/DomainOwnershipRow.ts";
+import { DomainVerification } from "../../../prisma/src/internal/DomainVerification.ts";
 import {
   data,
   failure,
@@ -56,10 +60,10 @@ const RECORD = {
 
 type Status = "unverified" | "verified" | "expiring";
 
-const ownership = (id: string, status: Status) => ({
+const ownership = (id: string, status: Status, workspaceId = "ws-1") => ({
   id,
   type: "domainOwnership",
-  workspaceId: "ws-1",
+  workspaceId,
   domain: HOSTNAME,
   verification: RECORD,
   status,
@@ -91,7 +95,7 @@ interface CloudState {
   createFailures: Array<503 | 429>;
 }
 
-/** One workspace's domain ownerships, served over the Management API routes. */
+/** Workspaces' domain ownerships, served over the Management API routes. */
 const makeOwnershipCloud = () => {
   const rows = new Map<string, WireOwnership>();
   const state: CloudState = {
@@ -104,26 +108,30 @@ const makeOwnershipCloud = () => {
   };
   const fake: FakeManagementApi = makeFakeManagementApi((request) => {
     const path = request.pathname;
-    if (path === "/v1/workspaces/ws-1/domain-ownerships/verification") {
-      return data(RECORD);
-    }
-    if (path === "/v1/workspaces/ws-1/domain-ownerships") {
-      if (request.method === "GET") return page(Array.from(rows.values()));
+    const workspace = /^\/v1\/workspaces\/([^/]+)\/domain-ownerships(\/verification)?$/.exec(path);
+    if (workspace?.[2]) return data(RECORD);
+    if (workspace) {
+      const workspaceId = workspace[1]!;
+      const inWorkspace = Array.from(rows.values()).filter(
+        (row) => row.workspaceId === workspaceId,
+      );
+      const createdId = workspaceId === "ws-1" ? "do-created" : `do-created-${workspaceId}`;
+      if (request.method === "GET") return page(inWorkspace);
       if (request.method === "POST") {
         const injected = state.createFailures.shift();
         if (injected === 429) return failure(429, "rate-limited", "Too many requests");
         if (injected === 503) {
-          const processed = ownership("do-created", "unverified");
+          const processed = ownership(createdId, "unverified", workspaceId);
           rows.set(processed.id, processed);
           return failure(503, "service-unavailable", "Service unavailable");
         }
-        const existing = state.unlisted ?? Array.from(rows.values())[0];
+        const existing = state.unlisted ?? inWorkspace[0];
         if (existing) {
           rows.set(existing.id, existing);
           state.unlisted = undefined;
           return data(existing);
         }
-        const created = ownership("do-created", "unverified");
+        const created = ownership(createdId, "unverified", workspaceId);
         rows.set(created.id, created);
         return data(created, { status: 201 });
       }
@@ -172,8 +180,8 @@ class TestPrismaProviders extends Provider.ProviderCollection<TestPrismaProvider
 const testFor = (cloud: OwnershipCloud, adopt = false) =>
   Test.make({
     adopt,
-    providers: Layer.effect(TestPrismaProviders, Provider.collection([DomainOwnershipProof])).pipe(
-      Layer.provideMerge(DomainOwnershipProofProvider()),
+    providers: Layer.effect(TestPrismaProviders, Provider.collection([DomainOwnershipRow])).pipe(
+      Layer.provideMerge(DomainOwnershipRowProvider()),
       Layer.provide(
         Layer.succeed(AuthoritativeRecordCheck, (_record, options) =>
           Effect.sync(() => {
@@ -192,11 +200,11 @@ const testFor = (cloud: OwnershipCloud, adopt = false) =>
     ),
   });
 
-const project = (projectId: string): ProjectReference =>
-  ({ projectId, workspaceId: "ws-1" }) as ProjectReference;
+const project = (projectId: string, workspaceId = "ws-1"): ProjectReference =>
+  ({ projectId, workspaceId }) as ProjectReference;
 
-const ownershipStack = (projectId = "proj-1") =>
-  DomainOwnership("Ownership", { project: project(projectId), domain: HOSTNAME });
+const ownershipStack = (projectId = "proj-1", workspaceId = "ws-1") =>
+  DomainOwnership("Ownership", { project: project(projectId, workspaceId), domain: HOSTNAME });
 
 const CREATE = "POST /v1/workspaces/ws-1/domain-ownerships";
 const LIST = "GET /v1/workspaces/ws-1/domain-ownerships";
@@ -365,7 +373,7 @@ testFor(verifyFails, true).test.provider(
       const deployed = yield* onTestClock(stack.deploy(ownershipStack()));
 
       expect(Result.isSuccess(deployed) && deployed.success.status).toBe("unverified");
-      expect(VERIFIES(verifyFails).length).toBeGreaterThan(0);
+      expect(VERIFIES(verifyFails)).toHaveLength(DeployRetry.MAX_RETRIES + 1);
       expect(verifyFails.deleted()).toBe(false);
 
       verifyFails.reset();
@@ -396,6 +404,29 @@ testFor(replaced).test.provider(
 
       yield* stack.destroy();
       expect(replaced.routes()).toContain("DELETE /v1/domain-ownerships/do-2");
+    }),
+  { tags },
+);
+
+const moved = makeOwnershipCloud();
+testFor(moved).test.provider(
+  "deletes the recorded row when the project moves to another workspace, and records the new one",
+  (stack) =>
+    Effect.gen(function* () {
+      moved.reset();
+      yield* stack.destroy();
+      const first = yield* stack.deploy(ownershipStack());
+      expect(first.workspaceId).toBe("ws-1");
+
+      const second = yield* stack.deploy(ownershipStack("proj-2", "ws-2"));
+
+      expect(second.domainOwnershipId).toBe("do-created-ws-2");
+      expect(second.workspaceId).toBe("ws-2");
+      expect([...moved.rows.keys()]).toEqual(["do-created-ws-2"]);
+      expect(moved.routes()).toContain("DELETE /v1/domain-ownerships/do-created");
+
+      yield* stack.destroy();
+      expect(moved.rows.size).toBe(0);
     }),
   { tags },
 );
@@ -432,7 +463,7 @@ const OWNERSHIP_VERIFIES = (cloud: ReturnType<typeof makeUrlCloud>) =>
 
 const withDns = makeUrlCloud();
 urlTestFor(withDns).test.provider(
-  "with dns, saves the row before publishing its record, then verifies once the record is seen",
+  "with dns, publishes the record and sees it at the nameservers before Prisma creates the row, so the create verifies it",
   (stack) =>
     Effect.gen(function* () {
       withDns.reset({ fromZone: true });
@@ -442,7 +473,12 @@ urlTestFor(withDns).test.provider(
 
       expect(ownership.status).toBe("verified");
       expect(withDns.zone.records).toEqual([txtFor(URL_HOSTNAME)]);
-      expect(withDns.state.atOwnershipCreate.map((each) => each.txtPublished)).toEqual([false]);
+      expect(
+        withDns.state.atOwnershipCreate.map(({ txtPublished, txtChecks }) => ({
+          txtPublished,
+          txtChecks,
+        })),
+      ).toEqual([{ txtPublished: true, txtChecks: 1 }]);
       expect(withDns.state.txtOptions).toEqual([
         {
           margin: "always",
@@ -451,7 +487,7 @@ urlTestFor(withDns).test.provider(
           waitFor: Duration.minutes(3),
         },
       ]);
-      expect(OWNERSHIP_VERIFIES(withDns)).toHaveLength(1);
+      expect(OWNERSHIP_VERIFIES(withDns)).toEqual([]);
 
       withDns.fake.captured.length = 0;
       yield* stack.deploy(dnsStack());
@@ -469,7 +505,7 @@ urlTestFor(recordAbsent).test.provider(
   "with dns, saves the row unverified and sends no verify request when the record never reaches the nameservers",
   (stack) =>
     Effect.gen(function* () {
-      recordAbsent.reset({ txt: "absent" });
+      recordAbsent.reset({ txt: "absent", verifiesAs: "unverified" });
       yield* stack.destroy();
 
       const ownership = yield* stack.deploy(dnsStack());
@@ -524,6 +560,7 @@ urlTestFor(refusedBeforeDns).test.provider(
       const failure = yield* failureOf(stack.deploy(dnsStack()));
 
       expect(failure).toContain("Cannot adopt resource");
+      expect(failure).toContain("Prisma.DomainVerification");
       expect(refusedBeforeDns.zone.publishes).toBe(0);
       expect(refusedBeforeDns.routes().some((route) => !route.startsWith("GET"))).toBe(false);
 
@@ -569,28 +606,39 @@ urlTestFor(inDev, { dev: true }).test.provider(
   { tags },
 );
 
+const publishedBeforeRow = Effect.gen(function* () {
+  const verification = yield* DomainVerification("Verification", {
+    project: "proj-1",
+    domain: URL_HOSTNAME,
+  });
+  const published = yield* (yield* DNS.resolve(TEST_DNS)).records("Record", {
+    records: Output.map(
+      Output.all(verification.recordName, verification.recordValue),
+      ([name, value]): DNS.DnsRecord[] => [{ name, type: "TXT", value }],
+    ),
+  });
+  return yield* DomainOwnershipRow("Ownership", {
+    project: "proj-1",
+    domain: Output.map(Output.of(published as ResourceLike), () => URL_HOSTNAME),
+  });
+}).pipe(Namespace.push("Ownership"));
+
 const upgraded = makeUrlCloud();
 urlTestFor(upgraded).test.provider(
-  "with dns, a verified row recorded without publishesRecord redeploys with one read of the row and no write",
+  "with dns, a verified row recorded without publishesRecord redeploys with no write",
   (stack) =>
     Effect.gen(function* () {
       upgraded.reset({ fromZone: true });
-      upgraded.seedOwnership(URL_HOSTNAME, "verified", "do-recorded");
       yield* stack.destroy();
-      yield* stack.deploy(
-        DomainOwnershipProof("Ownership", { project: "proj-1", domain: URL_HOSTNAME }).pipe(
-          adopt(true),
-          Namespace.push("Ownership"),
-        ),
-      );
+      yield* stack.deploy(publishedBeforeRow);
+      upgraded.ownerships.set("do-1", { ...upgraded.ownerships.get("do-1")!, status: "verified" });
 
       upgraded.fake.captured.length = 0;
+      const publishes = upgraded.zone.publishes;
       const ownership = yield* stack.deploy(dnsStack());
 
       expect(ownership.status).toBe("verified");
-      expect(
-        upgraded.routes().filter((route) => route === "GET /v1/domain-ownerships/do-recorded"),
-      ).toHaveLength(2);
+      expect(upgraded.zone.publishes).toBe(publishes);
       expect(
         upgraded
           .routes()
@@ -598,6 +646,67 @@ urlTestFor(upgraded).test.provider(
       ).toBe(false);
 
       yield* stack.destroy();
+    }),
+  { tags },
+);
+
+for (const status of [429, 503]) {
+  const verifyRefused = makeUrlCloud();
+  urlTestFor(verifyRefused).test.provider(
+    `with dns, gives up a verify request that keeps failing with ${status}, succeeds unverified, and an unchanged redeploy sends no write`,
+    (stack) =>
+      Effect.gen(function* () {
+        verifyRefused.reset({
+          fromZone: true,
+          verifiesAs: "unverified",
+          throttle: Array.from({ length: 20 }, () => ({
+            route: "POST /v1/domain-ownerships/do-1/verify",
+            retryAfter: 0,
+            status,
+          })),
+        });
+        yield* stack.destroy();
+
+        const deployed = yield* onTestClock(stack.deploy(dnsStack()));
+
+        expect(Result.isSuccess(deployed) && deployed.success.status).toBe("unverified");
+        expect(verifyRefused.state.throttle).toHaveLength(20 - (DeployRetry.MAX_RETRIES + 1));
+
+        verifyRefused.state.throttle = [];
+        verifyRefused.fake.captured.length = 0;
+        yield* stack.deploy(dnsStack());
+        expect(verifyRefused.routes().some((route) => !route.startsWith("GET"))).toBe(false);
+
+        yield* stack.destroy();
+      }),
+    { tags, timeout: 60_000 },
+  );
+}
+
+const deletedMidDeploy = makeUrlCloud();
+urlTestFor(deletedMidDeploy).test.provider(
+  "with dns, a row deleted before its verify fails the deploy with how to recover, and the redeploy creates it again",
+  (stack) =>
+    Effect.gen(function* () {
+      deletedMidDeploy.reset({
+        fromZone: true,
+        verifiesAs: "unverified",
+        throttle: [{ route: "POST /v1/domain-ownerships/do-1/verify", retryAfter: 0, status: 404 }],
+      });
+      yield* stack.destroy();
+
+      const failure = yield* failureOf(stack.deploy(dnsStack()));
+      expect(failure).toContain("was deleted during the deploy. Redeploy to create it again.");
+
+      deletedMidDeploy.ownerships.clear();
+      deletedMidDeploy.state.verifiesAs = undefined;
+      const ownership = yield* stack.deploy(dnsStack());
+
+      expect(ownership.status).toBe("verified");
+      expect([...deletedMidDeploy.ownerships.keys()]).toEqual([ownership.domainOwnershipId]);
+
+      yield* stack.destroy();
+      expect(deletedMidDeploy.ownerships.size).toBe(0);
     }),
   { tags },
 );

@@ -8,8 +8,9 @@ import type { Project } from "../Project.ts";
 import { concreteIdOf } from "./Refs.ts";
 
 /**
- * Prisma has not verified that this workspace owns the hostname. Publish a `TXT` record named `recordName` with the value `recordValue`
- * (keep it — later domains on the same hostname reuse it), then redeploy.
+ * Raised by `Prisma.CustomDomain` when Prisma has not verified that the
+ * workspace owns the hostname. Publish a `TXT` record named `recordName` with
+ * the value `recordValue`, keep it, then redeploy.
  */
 export class PrismaDomainOwnershipRequired extends Data.TaggedError(
   "PrismaDomainOwnershipRequired",

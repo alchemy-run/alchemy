@@ -21,13 +21,13 @@ import {
   type CheckOptions,
 } from "../../../../prisma/src/internal/AuthoritativeDns.ts";
 import {
-  DomainOwnershipCheck,
-  DomainOwnershipCheckProvider,
-} from "../../../../prisma/src/internal/DomainOwnershipCheck.ts";
+  DomainOwnershipRow,
+  DomainOwnershipRowProvider,
+} from "../../../../prisma/src/internal/DomainOwnershipRow.ts";
 import {
-  DomainOwnershipProof,
-  DomainOwnershipProofProvider,
-} from "../../../../prisma/src/internal/DomainOwnershipProof.ts";
+  DomainVerification,
+  DomainVerificationProvider,
+} from "../../../../prisma/src/internal/DomainVerification.ts";
 import {
   data,
   failure,
@@ -246,10 +246,10 @@ export interface CloudState {
   throttle: Array<{ route: string; retryAfter: number; status?: number }>;
   /** How many TXT checks had run when Prisma received a `/check`. */
   txtCheckedAtCheck: number | undefined;
-  /** The status a domain ownership's verify request reports, instead of the zone. */
+  /** The status Prisma's create and verify lookups report, instead of the zone, as when its resolver has cached a miss. */
   verifiesAs: OwnershipStatus | undefined;
-  /** What the zone held, and how many requests were captured, at each domain ownership create. */
-  atOwnershipCreate: Array<{ txtPublished: boolean; requests: number }>;
+  /** What the zone held, and how many requests and TXT checks had run, at each domain ownership create. */
+  atOwnershipCreate: Array<{ txtPublished: boolean; requests: number; txtChecks: number }>;
 }
 
 /** One DNS host's records, as the test DNS adapter publishes them. */
@@ -365,10 +365,11 @@ export const makeUrlCloud = () => {
     state.atOwnershipCreate.push({
       txtPublished: txtPublished(domain),
       requests: fake.captured.length,
+      txtChecks: state.txtChecked.length,
     });
     const created = domainOwnership(`do-${++next}`, domain, "unverified");
     ownerships.set(created.id, created);
-    return lookUp(created);
+    return lookUp(created, state.verifiesAs);
   };
   /** A RoutingUrl write with `createDomainOwnership: true` creates the exact one when no verified one covers the hostname. */
   const ensureOwnershipFor = (hostname: string, body: Record<string, unknown> | undefined) => {
@@ -755,16 +756,16 @@ export const testFor = (cloud: UrlCloud, options: { dev?: boolean } = {}) =>
       Provider.collection([
         ...RoutingUrlResources,
         CustomDomain,
-        DomainOwnershipProof,
-        DomainOwnershipCheck,
+        DomainVerification,
+        DomainOwnershipRow,
       ]),
     ).pipe(
       Layer.provideMerge(
         Layer.mergeAll(
           RoutingUrlProvider(),
           CustomDomainProvider(),
-          DomainOwnershipProofProvider(),
-          DomainOwnershipCheckProvider(),
+          DomainVerificationProvider(),
+          DomainOwnershipRowProvider(),
         ),
       ),
       Layer.provide(

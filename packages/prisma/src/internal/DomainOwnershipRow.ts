@@ -5,14 +5,18 @@ import {
   deleteDomainOwnership,
   getDomainOwnership,
   getWorkspaceDomainOwnerships,
+  getWorkspaceDomainOwnershipsVerification,
   getWorkspaces,
 } from "@distilled.cloud/prisma/management";
 import { Unowned } from "alchemy/AdoptPolicy";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
+import { AuthoritativeRecordCheck } from "./AuthoritativeDns.ts";
 import { DEV_TIMESTAMP, devId, devProvider } from "./DevStub.ts";
 import {
   DomainOwnershipOperationFailed,
@@ -23,25 +27,22 @@ import { normalizeHostname } from "./Hostname.ts";
 import { PrismaPaginationError } from "./Pagination.ts";
 import { isInputObject, isPrismaDevId } from "./Refs.ts";
 
-export interface DomainOwnershipProofProps {
-  /** Project (or project ID) whose workspace proves ownership. */
+export interface DomainOwnershipRowProps {
+  /** Project (or project ID) whose workspace owns the domain. */
   project: ProjectReference;
   /** An exact hostname such as `app.example.com`, or a wildcard such as `*.example.com`. */
   domain: string;
-  /**
-   * The wrapper publishes the row's record in this deploy, so Prisma is asked
-   * to verify only once the record is seen, by `DomainOwnershipCheck`.
-   */
+  /** The stack has published the row's `TXT` record. */
   publishesRecord?: boolean;
 }
 
-export interface DomainOwnershipProof extends Resource<
+export interface DomainOwnershipRow extends Resource<
   "Prisma.DomainOwnership",
-  DomainOwnershipProofProps,
+  DomainOwnershipRowProps,
   {
     /** Prisma domain ownership ID. */
     domainOwnershipId: string;
-    /** Workspace that proved it owns the domain. */
+    /** Workspace that owns the domain. */
     workspaceId: string;
     /** Domain the workspace owns. */
     domain: string;
@@ -60,11 +61,11 @@ export interface DomainOwnershipProof extends Resource<
   Providers
 > {}
 
-export const DomainOwnershipProof = Resource<DomainOwnershipProof>("Prisma.DomainOwnership");
+export const DomainOwnershipRow = Resource<DomainOwnershipRow>("Prisma.DomainOwnership");
 
-export type ApiDomainOwnership = CreateWorkspaceDomainOwnershipResponseData;
+type ApiDomainOwnership = CreateWorkspaceDomainOwnershipResponseData;
 
-export const attrsFrom = (ownership: ApiDomainOwnership): DomainOwnershipProof["Attributes"] => ({
+const attrsFrom = (ownership: ApiDomainOwnership): DomainOwnershipRow["Attributes"] => ({
   domainOwnershipId: ownership.id,
   workspaceId: ownership.workspaceId,
   domain: ownership.domain,
@@ -97,26 +98,34 @@ const listOwnerships = (workspaceId: string, domain?: string) =>
     }
   });
 
-const findOwnership = (workspaceId: string, domain: string) =>
+export const findOwnership = (workspaceId: string, domain: string) =>
   listOwnerships(workspaceId, domain).pipe(
     Effect.map((ownerships) =>
       ownerships.find((ownership) => normalizeHostname(ownership.domain) === domain),
     ),
   );
 
-export const getOwnership = (domainOwnershipId: string) =>
+const deleteOwnership = (domainOwnershipId: string) =>
+  deleteDomainOwnership({ domainOwnershipId }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+
+const getOwnership = (domainOwnershipId: string) =>
   getDomainOwnership({ domainOwnershipId }).pipe(
     Effect.map((response) => response.data),
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const createOwnership = (workspaceId: string, domain: string) =>
-  createWorkspaceDomainOwnership({ workspaceId, domain }).pipe(
-    Effect.map((response) => response.data),
-  );
+  Effect.gen(function* () {
+    const created = (yield* createWorkspaceDomainOwnership({ workspaceId, domain })).data;
+    if (normalizeHostname(created.domain) !== domain) {
+      return yield* new DomainOwnershipOperationFailed({
+        message: `Prisma recorded ownership of '${created.domain}', not the requested '${domain}'.`,
+      });
+    }
+    return created;
+  });
 
-/** Errors after which a verify request is given up and the row is reported as last seen. */
-export const VERIFY_GIVE_UPS = [
+const VERIFY_GIVE_UPS = [
   "TooManyRequests",
   "InternalServerError",
   "BadGateway",
@@ -124,17 +133,57 @@ export const VERIFY_GIVE_UPS = [
   "GatewayTimeout",
 ] as const;
 
-/** Ask Prisma to look the record up once now, keeping `ownership` when the request fails. */
-const verifyOnce = (ownership: ApiDomainOwnership) =>
+const verify = (ownership: ApiDomainOwnership, repeats: number) =>
   createDomainOwnershipVerify({ domainOwnershipId: ownership.id }).pipe(
     Effect.map((response) => response.data),
+    Effect.repeat({
+      schedule: Schedule.spaced("5 seconds"),
+      until: (checked) => checked.status === "verified",
+      times: repeats,
+    }),
     Effect.catchTag(VERIFY_GIVE_UPS, () => Effect.succeed(ownership)),
+    Effect.catchTag("NotFound", () =>
+      Effect.fail(
+        new DomainOwnershipOperationFailed({
+          message: `Prisma domain ownership '${ownership.id}' for '${ownership.domain}' was deleted during the deploy. Redeploy to create it again.`,
+        }),
+      ),
+    ),
   );
+
+const RECORD_WAIT = Duration.minutes(3);
 
 const ProviderLive = () =>
   Provider.effect(
-    DomainOwnershipProof,
+    DomainOwnershipRow,
     Effect.gen(function* () {
+      const checkRecord = yield* AuthoritativeRecordCheck;
+
+      // Prisma's create looks the record up, and its resolver caches a miss.
+      const ensureWithPublishedRecord = (
+        workspaceId: string,
+        domain: string,
+        existing: ApiDomainOwnership | undefined,
+      ) =>
+        Effect.gen(function* () {
+          const record =
+            existing?.verification ??
+            (yield* getWorkspaceDomainOwnershipsVerification({ workspaceId, domain })).data;
+          const visibility = yield* checkRecord(
+            { type: "TXT", name: record.name, value: record.value },
+            {
+              margin: "always",
+              nameservers: "parent",
+              attempts: "until-seen",
+              waitFor: RECORD_WAIT,
+            },
+          );
+          const ownership = existing ?? (yield* createOwnership(workspaceId, domain));
+          return visibility === "absent" || ownership.status === "verified"
+            ? ownership
+            : yield* verify(ownership, 6);
+        });
+
       return {
         stables: [],
         list: Effect.fn(function* () {
@@ -179,33 +228,29 @@ const ProviderLive = () =>
             normalizeHostname(recorded.domain) === domain
               ? recorded
               : yield* findOwnership(workspaceId, domain);
-          if (existing) {
-            return attrsFrom(
-              existing.status === "verified" || news.publishesRecord === true
-                ? existing
-                : yield* verifyOnce(existing),
-            );
+          const ownership =
+            existing?.status === "verified"
+              ? existing
+              : news.publishesRecord === true
+                ? yield* ensureWithPublishedRecord(workspaceId, domain, existing)
+                : existing
+                  ? yield* verify(existing, 0)
+                  : yield* createOwnership(workspaceId, domain);
+          if (recorded && recorded.workspaceId !== workspaceId) {
+            yield* deleteOwnership(recorded.id);
           }
-          const created = yield* createOwnership(workspaceId, domain);
-          if (normalizeHostname(created.domain) !== domain) {
-            return yield* new DomainOwnershipOperationFailed({
-              message: `Prisma recorded ownership of '${created.domain}', not the requested '${domain}'.`,
-            });
-          }
-          return attrsFrom(created);
+          return attrsFrom(ownership);
         }),
         delete: Effect.fn(function* ({ output }) {
           if (isPrismaDevId(output.domainOwnershipId)) return;
-          yield* deleteDomainOwnership({ domainOwnershipId: output.domainOwnershipId }).pipe(
-            Effect.catchTag("NotFound", () => Effect.void),
-          );
+          yield* deleteOwnership(output.domainOwnershipId);
         }),
       };
     }),
   );
 
 const ProviderLocal = () =>
-  devProvider(DomainOwnershipProof, ["domainOwnershipId", "workspaceId"], ({ id, news }) => ({
+  devProvider(DomainOwnershipRow, ["domainOwnershipId", "workspaceId"], ({ id, news }) => ({
     domainOwnershipId: devId("domain-ownership", id),
     workspaceId: "dev:workspace:local",
     domain: String(news.domain),
@@ -216,8 +261,8 @@ const ProviderLocal = () =>
     createdAt: DEV_TIMESTAMP,
   }));
 
-export const DomainOwnershipProofProvider = () =>
-  ProviderLayer.dual(DomainOwnershipProof, {
+export const DomainOwnershipRowProvider = () =>
+  ProviderLayer.dual(DomainOwnershipRow, {
     local: () => ProviderLocal(),
     live: () => ProviderLive(),
   });

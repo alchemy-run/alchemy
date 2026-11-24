@@ -249,9 +249,9 @@ export interface RoutingUrl extends Resource<
      * What the hostname is doing now, as of the deploy's last write or check.
      * At the end of a deploy:
      * `no_domain_ownership`: no domain ownership covered the hostname, so
-     * Prisma looked up no `TXT`; when the stack declares a
-     * `Prisma.DomainOwnership`, Prisma picks it up on its own, otherwise
-     * declare one or set `createDomainOwnership: true`.
+     * Prisma looked up no `TXT`; a `Prisma.DomainOwnership` the stack
+     * declares moves it on once verified, otherwise declare one or set
+     * `createDomainOwnership: true`.
      * `not_verified`: a domain ownership covers it but is not verified yet;
      * Prisma continues on its own once it is.
      * `waiting_for_dns`: the `CNAME` does not point at the switchboard yet.
@@ -579,11 +579,9 @@ const wildcardOf = (hostname: string) => {
 /** How long a deploy with `dns` waits for its published `CNAME` to reach every authoritative nameserver. */
 const RECORDS_WAIT = Duration.minutes(3);
 
-/** No domain ownership covers the hostname, so Prisma looks up no `TXT`. */
-const hasNoDomainOwnership = (url: ApiRoutingUrl) => isNoDomainOwnership(url.state);
-
 // TODO(sdk): compare `url.state` directly once the SDK lists `no_domain_ownership` (prisma/pdp-control-plane#6153).
-const isNoDomainOwnership = (state: string) => state === "no_domain_ownership";
+const hasNoDomainOwnership = ({ state }: { readonly state: string }) =>
+  state === "no_domain_ownership";
 
 /**
  * Prisma looks the hostname's DNS up only when the row is written or checked.
@@ -611,13 +609,7 @@ const checkOnce = (url: ApiRoutingUrl) =>
     ),
   );
 
-/**
- * Whether this reconcile may send its one `/check`: this deploy created the
- * row or changed its hostname in Prisma, or this resource has not yet
- * completed a deploy that published this hostname's `CNAME`. A deploy that
- * fails waiting for the `CNAME` commits no props, so the next deploy checks
- * again.
- */
+/** A deploy that fails waiting for the `CNAME` commits no props, so the next deploy checks again. */
 const checksAfterSave = (
   news: RoutingUrl["Props"],
   olds: RoutingUrl["Props"] | undefined,
@@ -629,7 +621,7 @@ const checksAfterSave = (
     normalizeHostname(olds.hostname) !== normalizeHostname(news.hostname));
 
 const noDomainOwnershipWarning = (hostname: string) =>
-  `No domain ownership covered '${hostname}' when it was saved. If this stack declares one, Prisma picks it up on its own; otherwise declare Prisma.DomainOwnership or set createDomainOwnership: true.`;
+  `No domain ownership covered '${hostname}' when it was saved. If this stack declares one, the hostname moves on once it is verified; otherwise declare Prisma.DomainOwnership or set createDomainOwnership: true.`;
 
 const ProviderLive = () =>
   Provider.effect(
@@ -654,16 +646,19 @@ const ProviderLive = () =>
             ),
           )).flat();
           const verified = rows.some((row) => row.status === "verified");
+          const createsExact =
+            createsDomainOwnership && !rows.some((row) => normalizeHostname(row.domain) === to);
           const proofs = verified
             ? []
-            : rows.length > 0
-              ? rows.map((row) => row.verification)
-              : createsDomainOwnership
-                ? [
-                    (yield* getWorkspaceDomainOwnershipsVerification({ workspaceId, domain: to }))
-                      .data,
-                  ]
-                : [];
+            : [
+                ...rows.map((row) => row.verification),
+                ...(createsExact
+                  ? [
+                      (yield* getWorkspaceDomainOwnershipsVerification({ workspaceId, domain: to }))
+                        .data,
+                    ]
+                  : []),
+              ];
           const visibilities = yield* Effect.forEach(proofs, (proof) =>
             checkRecord(
               { type: "TXT", name: proof.name, value: proof.value },

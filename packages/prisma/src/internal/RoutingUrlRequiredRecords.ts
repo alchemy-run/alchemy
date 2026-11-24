@@ -30,12 +30,10 @@ export interface RoutingUrlRequiredRecordsProps {
  * Every DNS record a RoutingUrl's hostname needs, met or not: the `TXT` with
  * the workspace's verification value and the `CNAME` to the app's regional
  * switchboard, read from Prisma. A RoutingUrl's `records` lists only those
- * still to publish, so it cannot drive a DNS host. A RoutingUrl with `dns`
- * publishes only the `CNAME` from these; the `TXT` stays listed because
- * stacks reconcile this resource only when `app` or `hostname` changes. It
- * reads the app's switchboard during the deploy, so `app` can be another
- * resource's output. It refuses a service on no Branch before anything is
- * published. It creates nothing in Prisma, so deleting it does nothing.
+ * still to publish, so it cannot drive a DNS host. It reads the app's
+ * switchboard during the deploy, so `app` can be another resource's output.
+ * It refuses a service on no Branch before anything is published. It creates
+ * nothing in Prisma, so deleting it does nothing.
  */
 export interface RoutingUrlRequiredRecords extends Resource<
   "Prisma.RoutingUrlRequiredRecords",

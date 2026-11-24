@@ -5,14 +5,14 @@ import * as Output from "alchemy/Output";
 import type { ResourceLike } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { ProjectReference } from "./internal/DomainOwnership.ts";
-import { DomainOwnershipCheck } from "./internal/DomainOwnershipCheck.ts";
-import { DomainOwnershipProof } from "./internal/DomainOwnershipProof.ts";
+import { DomainOwnershipRow } from "./internal/DomainOwnershipRow.ts";
+import { DomainVerification } from "./internal/DomainVerification.ts";
 import { publishesDns } from "./internal/PublishesDns.ts";
 
 export { PrismaDomainOwnershipRequired } from "./internal/DomainOwnership.ts";
 
 /** A workspace's domain ownership, as the deploy last saw it. */
-export type DomainOwnership = DomainOwnershipProof | DomainOwnershipCheck;
+export type DomainOwnership = DomainOwnershipRow;
 
 export interface DomainOwnershipProps {
   /** Project (or project ID) whose workspace owns the domain ownership. */
@@ -27,10 +27,12 @@ export interface DomainOwnershipProps {
    * DNS host that publishes the verification `TXT` record, e.g.
    * `Cloudflare.DNS.Adapter()` (see
    * [DNS Adapters](/infrastructure-as-code/dns-adapters)). The record is
-   * published after the domain ownership is saved, and the deploy waits up to
-   * 3 minutes for it at the authoritative nameservers before asking Prisma to
-   * verify; it does not fail when the record never appears or Prisma has not
-   * verified it. Nothing is published under `alchemy dev`. Omitted: publish
+   * published first, and the deploy waits up to 3 minutes for it at the
+   * authoritative nameservers before it saves the domain ownership and asks
+   * Prisma to verify; it does not fail when the record never appears or
+   * Prisma has not verified it. Nothing is published under `alchemy dev`.
+   * Removing `dns` from a deployed domain ownership deletes the record, and a
+   * verified domain ownership later becomes `expiring`. Omitted: publish
    * `recordName` and `recordValue` yourself.
    */
   dns?: DNS.DnsConfig;
@@ -42,15 +44,18 @@ export interface DomainOwnershipProps {
  * domain ownership covers its hostname. It belongs to the workspace, not to a
  * project: every project in the workspace can use it.
  *
- * The deploy saves it without waiting for DNS, and reports Prisma's `status`.
  * It proves ownership with a `TXT` record named `recordName` whose value,
- * `recordValue`, is the same for every domain in the workspace. With `dns`
- * the record is published for you, and Prisma is asked to verify once the
- * record is seen. `unverified` at the end of a deploy means Prisma has not
- * seen the record yet: with `dns`, Prisma picks it up later on its own;
- * without `dns`, publish it, then press Check on the workspace's Domains page
- * or call `POST /v1/domain-ownerships/{id}/verify` to make Prisma look now.
- * Each covered RoutingUrl becomes `active` on its own once it is verified.
+ * `recordValue`, is the same for every domain in the workspace. The deploy
+ * reports Prisma's `status`. Without `dns`, it saves the domain ownership
+ * without waiting for DNS. With `dns`, the record is published for you, and
+ * the domain ownership is saved and Prisma asked to verify once the record is
+ * seen, or after 3 minutes. `unverified` at the end of a deploy means Prisma has not
+ * seen the record yet. Prisma looks again when Check is pressed on the
+ * workspace's Domains page or a RoutingUrl's `setupUrl`, when
+ * `POST /v1/domain-ownerships/{id}/verify` or `POST /v1/urls/{id}/check` is
+ * called, when a hostname it covers is created, updated or checked, and once
+ * 10 minutes after a lookup that did not find the record. Each covered
+ * RoutingUrl becomes `active` on its own once it is verified.
  * `status` is as of the deploy's last write or verify request, and an
  * unchanged redeploy does not read it again; the Domains page shows it live.
  *
@@ -104,24 +109,25 @@ export interface DomainOwnershipProps {
 export const DomainOwnership = (id: string, props: DomainOwnershipProps) =>
   Effect.gen(function* () {
     const dns = props.dns !== undefined && (yield* publishesDns) ? props.dns : undefined;
-    const row = yield* DomainOwnershipProof("Ownership", {
+    if (dns === undefined) {
+      return yield* DomainOwnershipRow("Ownership", {
+        project: props.project,
+        domain: props.domain,
+      });
+    }
+    const verification = yield* DomainVerification("Verification", {
       project: props.project,
       domain: props.domain,
-      ...(dns === undefined ? {} : { publishesRecord: true }),
     });
-    if (dns === undefined) return row;
     const published = yield* (yield* DNS.resolve(dns)).records("Record", {
       records: Output.map(
-        Output.all(row.recordName, row.recordValue),
+        Output.all(verification.recordName, verification.recordValue),
         ([name, value]): DNS.DnsRecord[] => [{ name, type: "TXT", value }],
       ),
     });
-    return yield* DomainOwnershipCheck("Check", {
-      domainOwnershipId: Output.map(
-        Output.all(row.domainOwnershipId, Output.of(published as ResourceLike)),
-        ([domainOwnershipId]) => domainOwnershipId,
-      ),
-      recordName: row.recordName,
-      recordValue: row.recordValue,
+    return yield* DomainOwnershipRow("Ownership", {
+      project: props.project,
+      domain: Output.map(Output.of(published as ResourceLike), () => props.domain),
+      publishesRecord: true,
     });
   }).pipe(Namespace.push(id));
