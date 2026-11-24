@@ -43,6 +43,21 @@ export interface DBInstanceProps {
    */
   dbClusterIdentifier?: string;
   /**
+   * Source instance of a read replica in the same region, by identifier or
+   * ARN. When set, the instance is created with `CreateDBInstanceReadReplica`
+   * and inherits the source's engine version, credentials, database name,
+   * encryption and subnet group, so the props that set those are rejected.
+   * The source itself is never modified.
+   *
+   * The source must keep automated backups enabled and, except on SQL Server
+   * and Db2, must not manage its master password in Secrets Manager (an AWS
+   * limitation). Changing the source forces a new replica. Removing it from
+   * an existing replica fails instead of replacing it, which would delete the
+   * replica and create an empty standalone database. Deleting a replica never
+   * takes a final snapshot.
+   */
+  sourceDBInstanceIdentifier?: string;
+  /**
    * Instance class such as `db.serverless` or `db.t3.micro`.
    */
   dbInstanceClass: string;
@@ -357,6 +372,11 @@ export interface DBInstance extends Resource<
      */
     dbClusterIdentifier: string | undefined;
     /**
+     * Source instance this instance replicates from, if it is a read replica:
+     * its identifier in the same region, its ARN across regions.
+     */
+    readReplicaSourceDBInstanceIdentifier: string | undefined;
+    /**
      * DNS address of the instance endpoint.
      */
     endpointAddress: string | undefined;
@@ -595,7 +615,7 @@ export interface DBInstanceLookup {
  * `modifyDBInstance`. Mutable fields are reconciled in place against the
  * observed cloud state; immutable fields (`engine`, `dbName`,
  * `masterUsername`, `availabilityZone`, `storageEncrypted`, `kmsKeyId`,
- * `dbSubnetGroupName`) force a replacement.
+ * `dbSubnetGroupName`, `sourceDBInstanceIdentifier`) force a replacement.
  * ### Standalone Instance
  * **Example:** A gp3 MySQL instance
  * ```typescript
@@ -709,6 +729,38 @@ export interface DBInstanceLookup {
  *   engine: "aurora-postgresql",
  * });
  * ```
+ *
+ * ### Read Replica
+ * `sourceDBInstanceIdentifier` adds a read replica of an existing standalone
+ * instance, declared in the same stack or found with `DBInstance.lookup`. The
+ * source keeps running unchanged; only the replica is created, updated and
+ * deleted.
+ *
+ * **Example:** Serve reads from a replica of the application database
+ * ```typescript
+ * const db = yield* DBInstance("Db", {
+ *   engine: "postgres",
+ *   dbInstanceClass: "db.t4g.medium",
+ *   masterUsername: "app",
+ *   masterUserPassword: password,
+ *   backupRetentionPeriod: "7 days",
+ *   dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+ * });
+ * const reader = yield* DBInstance("Reader", {
+ *   sourceDBInstanceIdentifier: db.dbInstanceIdentifier,
+ *   engine: "postgres",
+ *   dbInstanceClass: "db.t4g.medium",
+ *   vpcSecurityGroupIds: [readers.groupId],
+ * });
+ * ```
+ *
+ * The replica inherits the source's engine version, credentials, database
+ * name, encryption and subnet group. Its other settings, such as class,
+ * storage, security groups and deletion protection, are its own and follow the
+ * same defaults as any instance. AWS requires automated backups on the source
+ * and does not create replicas of a source whose master password RDS manages
+ * in Secrets Manager (SQL Server and Db2 excepted); both are checked before
+ * the replica is requested.
  *
  * ### Listener Port Defaults
  * Omitted listener ports select the database engine's default: PostgreSQL
@@ -1057,6 +1109,7 @@ const toAttrs = ({
   dbInstanceIdentifier: instance.DBInstanceIdentifier ?? "",
   dbInstanceArn: instance.DBInstanceArn ?? "",
   dbClusterIdentifier: instance.DBClusterIdentifier,
+  readReplicaSourceDBInstanceIdentifier: instance.ReadReplicaSourceDBInstanceIdentifier,
   endpointAddress: instance.Endpoint?.Address,
   endpointPort: instance.Endpoint?.Port,
   dbInstanceClass: instance.DBInstanceClass,
@@ -1587,6 +1640,115 @@ const autoscalingConverged = (desired: StorageConfiguration, observed: rds.DBIns
   return ceiling === observed.MaxAllocatedStorage;
 };
 
+class InvalidDBInstanceReadReplica extends Data.TaggedError("InvalidDBInstanceReadReplica")<{
+  message: string;
+}> {}
+
+// Settings a read replica takes from its source. `CreateDBInstanceReadReplica`
+// has no field for them, and declaring them on a replica would suggest they
+// can differ.
+const inheritedReplicaProps = [
+  "dbClusterIdentifier",
+  "dbName",
+  "masterUsername",
+  "masterUserPassword",
+  "manageMasterUserPassword",
+  "rotateMasterUserPassword",
+  "masterUserSecretKmsKeyId",
+  "masterUserSecretResourcePolicy",
+  "storageEncrypted",
+  "kmsKeyId",
+  "finalDBSnapshotIdentifier",
+  "migrations",
+  "migrationsTransport",
+  "migrationsSecretArn",
+] as const satisfies ReadonlyArray<keyof DBInstanceProps>;
+
+const validateReadReplica = Effect.fn(function* (props: DBInstanceProps) {
+  if (props.sourceDBInstanceIdentifier === undefined) return;
+  if (props.engine.startsWith("aurora") || props.engine.startsWith("custom-")) {
+    return yield* new InvalidDBInstanceReadReplica({
+      message: `Read replicas of '${props.engine}' instances are not supported; Aurora readers are DBInstances with dbClusterIdentifier`,
+    });
+  }
+  const declared: string[] = inheritedReplicaProps.filter((key) => props[key] !== undefined);
+  if (props.skipFinalSnapshot === false) declared.push("skipFinalSnapshot: false");
+  if (declared.length > 0) {
+    return yield* new InvalidDBInstanceReadReplica({
+      message: `A read replica inherits these from its source or cannot use them: ${declared.join(", ")}`,
+    });
+  }
+});
+
+// RDS reports a same-region source by identifier, and identifiers are
+// case-insensitive. A source may be declared by its ARN.
+const isReplicaOf = (instance: rds.DBInstance, source: string) => {
+  const observed = instance.ReadReplicaSourceDBInstanceIdentifier?.toLowerCase();
+  const declared = source.toLowerCase();
+  return observed !== undefined && (observed === declared || declared.endsWith(`:db:${observed}`));
+};
+
+// An instance found under a replica's identifier must replicate the declared
+// source, so a standalone instance or another source's replica is never
+// taken over as this replica.
+const validateReplicaIdentity = Effect.fn(function* (
+  instanceId: string,
+  sourceId: string | undefined,
+  instance: rds.DBInstance,
+) {
+  if (sourceId === undefined || isReplicaOf(instance, sourceId)) return;
+  return yield* new InvalidDBInstanceReadReplica({
+    message: `DB instance '${instanceId}' is not a read replica of '${sourceId}' (observed source: ${instance.ReadReplicaSourceDBInstanceIdentifier ?? "none"})`,
+  });
+});
+
+// Checked before CreateDBInstanceReadReplica so a missing prerequisite names
+// its fix instead of surfacing as an AWS parameter error.
+const validateReplicaSource = Effect.fn(function* (
+  sourceId: string,
+  props: DBInstanceProps,
+  source: rds.DBInstance | undefined,
+) {
+  if (!source?.DBInstanceArn) {
+    return yield* new InvalidDBInstanceReadReplica({
+      message: `Source DB instance '${sourceId}' was not found`,
+    });
+  }
+  if (source.DBClusterIdentifier !== undefined) {
+    return yield* new InvalidDBInstanceReadReplica({
+      message: `Source '${sourceId}' is a member of DB cluster '${source.DBClusterIdentifier}'; add readers to the cluster instead`,
+    });
+  }
+  if (source.Engine !== props.engine) {
+    return yield* new InvalidDBInstanceReadReplica({
+      message: `engine '${props.engine}' does not match source '${sourceId}' engine '${source.Engine}'`,
+    });
+  }
+  if ((source.BackupRetentionPeriod ?? 0) === 0) {
+    return yield* new InvalidDBInstanceReadReplica({
+      message: `Source '${sourceId}' has automated backups disabled; set its backupRetentionPeriod to create a read replica`,
+    });
+  }
+  if (
+    source.MasterUserSecret?.SecretArn !== undefined &&
+    !props.engine.startsWith("sqlserver-") &&
+    !props.engine.startsWith("db2-")
+  ) {
+    return yield* new InvalidDBInstanceReadReplica({
+      message: `Source '${sourceId}' manages its master password in Secrets Manager, and AWS cannot create a read replica of it; set manageMasterUserPassword to false and masterUserPassword on the source first`,
+    });
+  }
+  if (
+    props.dbSubnetGroupName !== undefined &&
+    props.dbSubnetGroupName !== source.DBSubnetGroup?.DBSubnetGroupName
+  ) {
+    return yield* new InvalidDBInstanceReadReplica({
+      message: `A read replica uses its source's subnet group '${source.DBSubnetGroup?.DBSubnetGroupName}', not '${props.dbSubnetGroupName}'`,
+    });
+  }
+  return source;
+});
+
 class InvalidDBInstanceSecretPolicy extends Data.TaggedError("InvalidDBInstanceSecretPolicy")<{
   message: string;
 }> {}
@@ -1954,10 +2116,24 @@ export const DBInstanceProvider = () =>
             news.masterUserSecretResourcePolicy,
             output?.masterUserSecretArn,
           );
+          yield* validateReadReplica(news);
           if (
             (yield* toIdentifier(id, olds ?? ({} as DBInstanceProps))) !==
             (yield* toIdentifier(id, news))
           ) {
+            return { action: "replace" } as const;
+          }
+          if (
+            olds !== undefined &&
+            olds.sourceDBInstanceIdentifier !== news.sourceDBInstanceIdentifier
+          ) {
+            // A replacement would delete the replica and create an empty
+            // standalone database in its place.
+            if (news.sourceDBInstanceIdentifier === undefined) {
+              return yield* new InvalidDBInstanceReadReplica({
+                message: `Removing sourceDBInstanceIdentifier from read replica '${id}' would replace it with an empty database; remove the instance instead`,
+              });
+            }
             return { action: "replace" } as const;
           }
           // Immutable props — any change forces a fresh instance.
@@ -1987,6 +2163,13 @@ export const DBInstanceProvider = () =>
               return { action: "update" } as const;
             }
             if (!instanceReady(instance)) {
+              return { action: "update" } as const;
+            }
+            // E.g. a replica promoted outside the stack: reconcile reports it.
+            if (
+              news.sourceDBInstanceIdentifier !== undefined &&
+              !isReplicaOf(instance, news.sourceDBInstanceIdentifier)
+            ) {
               return { action: "update" } as const;
             }
             const port = yield* desiredInstancePort(news, instance);
@@ -2052,6 +2235,7 @@ export const DBInstanceProvider = () =>
             news.masterUserSecretResourcePolicy,
             output?.masterUserSecretArn,
           );
+          yield* validateReadReplica(news);
           const identifier = output?.dbInstanceIdentifier ?? (yield* toIdentifier(id, news));
           // AWS never returns the master password, so there is nothing to
           // observe-and-diff — fingerprint the configured value instead and
@@ -2081,6 +2265,7 @@ export const DBInstanceProvider = () =>
           let observed = yield* observeReadiness(identifier);
           if (observed?.DBInstanceArn) {
             observed = yield* waitForInstance(identifier);
+            yield* validateReplicaIdentity(identifier, news.sourceDBInstanceIdentifier, observed);
           }
           if (
             news.masterUserSecretResourcePolicy !== undefined &&
@@ -2095,15 +2280,77 @@ export const DBInstanceProvider = () =>
                 "A master secret resource policy requires an instance-managed secret; enable manageMasterUserPassword on a standalone DBInstance",
             });
           }
+          const sourceId = news.sourceDBInstanceIdentifier;
+          // A replica yet to be created runs its source's engine version in
+          // its source's network, and needs at least its source's storage.
+          const source =
+            !observed?.DBInstanceArn && sourceId !== undefined
+              ? yield* validateReplicaSource(sourceId, news, yield* readInstance(sourceId))
+              : undefined;
           let security = securityConfiguration(news, observed);
           let port = yield* desiredInstancePort(news, observed);
-          let associations = yield* resolveAssociations(news, observed);
-          let desiredStorage = yield* resolveStorage(news, observed?.AllocatedStorage);
+          let associations = yield* resolveAssociations(
+            news,
+            observed ??
+              (source && {
+                EngineVersion: source.EngineVersion,
+                DBSubnetGroup: source.DBSubnetGroup,
+              }),
+          );
+          let desiredStorage = yield* resolveStorage(
+            source === undefined
+              ? news
+              : {
+                  ...news,
+                  allocatedStorage:
+                    Math.max(news.allocatedStorage ?? 0, source.AllocatedStorage ?? 0) || undefined,
+                },
+            observed?.AllocatedStorage,
+          );
 
           // Ensure — create if missing. Tolerate
           // `DBInstanceAlreadyExistsFault` as a race with a peer reconciler.
           let created = false;
-          if (!observed?.DBInstanceArn) {
+          if (!observed?.DBInstanceArn && sourceId !== undefined) {
+            yield* rds
+              .createDBInstanceReadReplica({
+                DBInstanceIdentifier: identifier,
+                SourceDBInstanceIdentifier: sourceId,
+                DBInstanceClass: news.dbInstanceClass,
+                // RDS for SQL Server replicas take their storage from the source.
+                ...(news.engine.startsWith("sqlserver-") ? {} : desiredStorage?.request),
+                // Omission at creation leaves autoscaling disabled.
+                MaxAllocatedStorage: storage.maxAllocatedStorage || undefined,
+                Port: port,
+                MultiAZ: news.multiAZ,
+                AvailabilityZone: news.availabilityZone,
+                DBParameterGroupName: associations.dbParameterGroupName,
+                OptionGroupName: news.optionGroupName,
+                CACertificateIdentifier: news.caCertificateIdentifier,
+                EnableIAMDatabaseAuthentication: security.iamAuthentication,
+                EnablePerformanceInsights: news.enablePerformanceInsights,
+                PerformanceInsightsKMSKeyId: news.performanceInsightsKMSKeyId,
+                PerformanceInsightsRetentionPeriod: performanceInsightsRetentionDays,
+                MonitoringInterval: monitoringIntervalSeconds,
+                MonitoringRoleArn: news.monitoringRoleArn,
+                EnableCloudwatchLogsExports: security.logExports,
+                DeletionProtection: security.deletionProtection,
+                NetworkType: security.networkType,
+                VpcSecurityGroupIds: associations.vpcSecurityGroupIds,
+                PubliclyAccessible: security.publiclyAccessible,
+                AutoMinorVersionUpgrade: news.autoMinorVersionUpgrade,
+                CopyTagsToSnapshot: news.copyTagsToSnapshot,
+                Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
+              })
+              .pipe(Effect.catchTag("DBInstanceAlreadyExistsFault", () => Effect.void));
+            observed = yield* waitForInstance(identifier);
+            yield* validateReplicaIdentity(identifier, sourceId, observed);
+            // `created` stays false: settings the replica request has no
+            // field for (backups, windows, engine version) sync below.
+          } else if (!observed?.DBInstanceArn) {
             created = yield* rds
               .createDBInstance({
                 DBInstanceIdentifier: identifier,
@@ -2452,7 +2699,10 @@ export const DBInstanceProvider = () =>
           // the resource was declared with `skipFinalSnapshot: false`, take
           // one — timestamped by default so repeated destroy/create cycles
           // never collide on snapshot names.
-          const skipFinalSnapshot = output.skipFinalSnapshot ?? true;
+          // RDS rejects a final snapshot of a read replica.
+          const skipFinalSnapshot =
+            output.readReplicaSourceDBInstanceIdentifier !== undefined ||
+            (output.skipFinalSnapshot ?? true);
           const finalDBSnapshotIdentifier = skipFinalSnapshot
             ? undefined
             : (output.finalDBSnapshotIdentifier ??
