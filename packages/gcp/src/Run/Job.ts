@@ -18,6 +18,7 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -27,6 +28,7 @@ import {
 } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import {
+  collectHostBindings,
   retryActAs,
   serviceAccountUniqueId,
   type AppliedIamGrant,
@@ -40,6 +42,16 @@ import {
   resolveHostIdentity,
 } from "../HostRuntime.ts";
 import { inLookupProject } from "../internal/Lookup.ts";
+import {
+  deleteSecretEnv,
+  discardSecretEnv,
+  hasSecretEnv,
+  mergeSecretRefs,
+  pruneSecretEnv,
+  runningExecutionRefs,
+  sealSecretEnv,
+  secretRefsOf,
+} from "../internal/SecretEnv.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -58,8 +70,12 @@ const MAX_NAME_LENGTH = 49;
 export type JobEnvVar = {
   /** Environment variable name. */
   name: string;
-  /** Literal value. Mutually exclusive with `valueSource`. */
-  value?: string;
+  /**
+   * Literal value. Mutually exclusive with `valueSource`. A `Redacted`
+   * value is kept out of the job: it goes into a Secret Manager secret of
+   * the job's own, which the container reads through `secretKeyRef`.
+   */
+  value?: string | Redacted.Redacted<string>;
   /** Value sourced from Secret Manager. */
   valueSource?: {
     secretKeyRef?: {
@@ -199,6 +215,9 @@ export type JobProps = PlatformProps & {
   runtime?: ContainerRuntime;
   /**
    * Additional environment variables for the Effect-native container.
+   * A `Redacted` value (here, or bound by a capability) is kept out of the
+   * job: it goes into a Secret Manager secret of the job's own, which the
+   * container reads through `secretKeyRef`.
    */
   env?: Record<string, any>;
   /**
@@ -292,6 +311,11 @@ export type Job = Resource<
     iamGrants: AppliedIamGrant[];
     /** Hash of the bundled `main` program and its bootstrap (Effect-native only). */
     codeHash: string | undefined;
+    /**
+     * Secret Manager secrets holding the job's `Redacted` env values, which
+     * its tasks read through `secretKeyRef`.
+     */
+    secretEnv?: string[];
   },
   GcpHostBinding,
   Providers,
@@ -521,6 +545,7 @@ const toAttrs = (
     iamGrants?: AppliedIamGrant[];
     codeHash?: string;
     serviceAccountUniqueId?: string;
+    secretEnv?: string[];
   } = {},
 ): Job["Attributes"] => {
   const name = job.name ?? "";
@@ -575,7 +600,9 @@ const toApiContainers = (
     args: container.args,
     env: container.env?.map((item) => ({
       name: item.name,
-      value: item.value,
+      // A `Redacted` value never reaches the API: `sealSecretEnv` has moved
+      // it to Secret Manager already.
+      value: typeof item.value === "string" ? item.value : undefined,
       valueSource: item.valueSource
         ? {
             secretKeyRef: item.valueSource.secretKeyRef
@@ -633,7 +660,7 @@ const comparableContainers = (containers: JobContainer[] | undefined) =>
     image: container.image,
     command: container.command ?? [],
     args: container.args ?? [],
-    env: comparableEnv(container.env),
+    env: comparableEnv(toApiContainers([container])[0]?.env),
     workingDir: container.workingDir ?? "",
     limits: container.resources?.limits ? tagRecord(container.resources.limits) : {},
   }));
@@ -838,6 +865,7 @@ const makeJobProvider = () =>
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
         serviceAccountUniqueId: output?.serviceAccountUniqueId,
+        secretEnv: output?.secretEnv,
       });
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
@@ -873,51 +901,36 @@ const makeJobProvider = () =>
         ...(yield* createInternalLabels(id)),
       };
       const desiredAnnotations = userAnnotations(news.annotations);
-      const identity = yield* resolveHostIdentity({
-        project: env.project,
-        hostType: HOST_TYPE,
-        resourceName: name,
-        userServiceAccount: news.serviceAccount,
-        effectNative: news.main !== undefined,
-        bindings: bindings as ResourceBinding<GcpHostBinding>[],
-        output,
-      });
-      const serviceAccount = identity.serviceAccount;
+      const hostBindings = bindings as ResourceBinding<GcpHostBinding>[];
+      const bindingEnv = collectHostBindings(hostBindings).env;
       let containers = news.containers;
       let codeHash: string | undefined;
       if (news.main !== undefined) {
         const images = yield* makeCloudRunImageSource("job");
-        const image = yield* images
-          .resolve({
-            id,
-            source: {
-              main: news.main,
-              runtime: news.runtime,
-              handler: news.handler ?? "default",
-              build: news.build,
-            },
-            repositoryName: rfc1035(`${jobId}-src`),
-            location,
-            isExternal: news.isExternal,
-            session,
-          })
-          .pipe(Effect.onError(() => identity.cleanup));
+        const image = yield* images.resolve({
+          id,
+          source: {
+            main: news.main,
+            runtime: news.runtime,
+            handler: news.handler ?? "default",
+            build: news.build,
+          },
+          repositoryName: rfc1035(`${jobId}-src`),
+          location,
+          isExternal: news.isExternal,
+          session,
+        });
         codeHash = image.codeHash;
         const container = news.containers?.[0];
         containers = [
           {
             ...container,
             image: image.imageUri,
-            env: mergeContainerEnv(
-              container?.env,
-              identity.env,
-              yield* alchemyRuntimeEnv,
-              news.env,
-            ),
+            env: mergeContainerEnv(container?.env, bindingEnv, yield* alchemyRuntimeEnv, news.env),
           },
         ];
       } else {
-        const runtimeEnv = { ...identity.env, ...news.env };
+        const runtimeEnv = { ...bindingEnv, ...news.env };
         if (Object.keys(runtimeEnv).length > 0 && containers) {
           containers = containers.map((container, index) =>
             index === 0
@@ -929,6 +942,31 @@ const makeJobProvider = () =>
           );
         }
       }
+
+      // `Redacted` env values go to Secret Manager before the service
+      // account is granted to read them, and both before the job's template.
+      const secretHost = { project: env.project, hostType: HOST_TYPE, resourceName: name };
+      const secretEnv = yield* sealSecretEnv({
+        host: secretHost,
+        id,
+        containers: containers ?? [],
+        previous: output?.secretEnv,
+      });
+      if (containers !== undefined) {
+        containers = secretEnv.containers as JobContainer[];
+      }
+
+      const identity = yield* resolveHostIdentity({
+        project: env.project,
+        hostType: HOST_TYPE,
+        resourceName: name,
+        userServiceAccount: news.serviceAccount,
+        effectNative: news.main !== undefined,
+        bindings: hostBindings,
+        output,
+        grants: secretEnv.grants,
+      });
+      const serviceAccount = identity.serviceAccount;
       const effectiveNews: JobProps = { ...news, containers, serviceAccount };
 
       let current = yield* getByName(name);
@@ -952,7 +990,15 @@ const makeJobProvider = () =>
           .pipe(
             retryActAs,
             Effect.catchTag("Conflict", () => Effect.undefined),
-            Effect.onError(() => identity.cleanup),
+            Effect.onError(() =>
+              identity.cleanup.pipe(
+                Effect.andThen(
+                  output === undefined
+                    ? discardSecretEnv(secretHost, secretEnv.secrets)
+                    : Effect.void,
+                ),
+              ),
+            ),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -1045,10 +1091,25 @@ const makeJobProvider = () =>
         return yield* new JobNotResolved({ resourceName: name });
       }
 
+      // New executions start from the new template; drop the secret
+      // versions neither it nor an execution still running reads.
+      if (hasSecretEnv(secretEnv.secrets, output?.secretEnv)) {
+        yield* pruneSecretEnv({
+          host: secretHost,
+          secrets: secretEnv.secrets,
+          previous: output?.secretEnv,
+          inUse: mergeSecretRefs(
+            yield* runningExecutionRefs(name),
+            secretRefsOf(current.template?.template?.containers ?? []),
+          ),
+        });
+      }
+
       return toAttrs(current, env.project, env.region, {
         iamGrants: identity.grants,
         codeHash,
         serviceAccountUniqueId: identity.uniqueId,
+        secretEnv: [...secretEnv.secrets].sort(),
       });
     }),
 
@@ -1062,6 +1123,10 @@ const makeJobProvider = () =>
       yield* waitUntilGone(output.name);
       // Effect-native hosts build into a per-host repository on reconcile.
       yield* destroyHostImageRepository(id, output, rfc1035(`${output.jobId}-src`));
+      yield* deleteSecretEnv(
+        { project: output.project, hostType: HOST_TYPE, resourceName: output.name },
+        output.secretEnv,
+      );
       yield* releaseHostIdentity(output);
     }),
   });

@@ -19,6 +19,7 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -28,6 +29,7 @@ import {
 } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import {
+  collectHostBindings,
   retryActAs,
   serviceAccountUniqueId,
   type AppliedIamGrant,
@@ -41,6 +43,16 @@ import {
   resolveHostIdentity,
 } from "../HostRuntime.ts";
 import { inLookupProject } from "../internal/Lookup.ts";
+import {
+  deleteSecretEnv,
+  discardSecretEnv,
+  hasSecretEnv,
+  mergeSecretRefs,
+  pruneSecretEnv,
+  sealSecretEnv,
+  secretRefsOf,
+  servingRevisionRefs,
+} from "../internal/SecretEnv.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -60,8 +72,13 @@ const MAX_NAME_LENGTH = 49;
 export type WorkerPoolEnvVar = {
   /** Environment variable name. */
   name?: string;
-  /** Literal value. Mutually exclusive with `valueSource`. */
-  value?: string;
+  /**
+   * Literal value. Mutually exclusive with `valueSource`. A `Redacted`
+   * value is kept out of the revision: it goes into a Secret Manager secret
+   * of the worker pool's own, which the container reads through
+   * `secretKeyRef`.
+   */
+  value?: string | Redacted.Redacted<string>;
   /** Secret Manager source for the value. */
   valueSource?: {
     secretKeyRef?: {
@@ -230,6 +247,9 @@ export type WorkerPoolProps = PlatformProps & {
   runtime?: ContainerRuntime;
   /**
    * Additional environment variables for the Effect-native container.
+   * A `Redacted` value (here, or bound by a capability) is kept out of the
+   * revision: it goes into a Secret Manager secret of the worker pool's own,
+   * which the container reads through `secretKeyRef`.
    */
   env?: Record<string, any>;
   /**
@@ -318,6 +338,11 @@ export type WorkerPool = Resource<
     iamGrants: AppliedIamGrant[];
     /** Hash of the bundled `main` program and its bootstrap (Effect-native only). */
     codeHash: string | undefined;
+    /**
+     * Secret Manager secrets holding the worker pool's `Redacted` env
+     * values, which its revision reads through `secretKeyRef`.
+     */
+    secretEnv?: string[];
   },
   GcpHostBinding,
   Providers,
@@ -546,7 +571,10 @@ const desiredTemplate = (
   const template = news.template ?? {};
   return {
     ...template,
-    containers: template.containers ?? [{ image: DEFAULT_IMAGE }],
+    // Until `sealSecretEnv` runs, an env value may still be `Redacted`.
+    containers: (template.containers ?? [
+      { image: DEFAULT_IMAGE },
+    ]) as cloudrun.GoogleCloudRunV2Container[],
   };
 };
 
@@ -736,6 +764,7 @@ const toAttrs = (
     iamGrants?: AppliedIamGrant[];
     codeHash?: string;
     serviceAccountUniqueId?: string;
+    secretEnv?: string[];
   } = {},
 ): WorkerPool["Attributes"] => {
   const name = pool.name ?? "";
@@ -769,6 +798,7 @@ const toAttrs = (
     serviceAccountUniqueId: extras.serviceAccountUniqueId,
     iamGrants: extras.iamGrants ?? [],
     codeHash: extras.codeHash,
+    secretEnv: extras.secretEnv ?? [],
   };
 };
 
@@ -963,6 +993,7 @@ const makeWorkerPoolProvider = () =>
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
         serviceAccountUniqueId: output?.serviceAccountUniqueId,
+        secretEnv: output?.secretEnv,
       });
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
@@ -994,40 +1025,30 @@ const makeWorkerPoolProvider = () =>
       };
       const desiredAnnotations = news.annotations;
       const template = desiredTemplate(news);
-      const identity = yield* resolveHostIdentity({
-        project: env.project,
-        hostType: HOST_TYPE,
-        resourceName: name,
-        userServiceAccount: template.serviceAccount,
-        effectNative: news.main !== undefined,
-        bindings: bindings as ResourceBinding<GcpHostBinding>[],
-        output,
-      });
-      template.serviceAccount = identity.serviceAccount;
+      const hostBindings = bindings as ResourceBinding<GcpHostBinding>[];
+      const bindingEnv = collectHostBindings(hostBindings).env;
       let codeHash: string | undefined;
       if (news.main !== undefined || news.context !== undefined) {
         const images = yield* makeCloudRunImageSource("job");
-        const image = yield* images
-          .resolve({
-            id,
-            source: imageSourceOf(news, news.handler ?? "default"),
-            repositoryName: rfc1035(`${workerPoolId}-src`),
-            location,
-            isExternal: news.isExternal,
-            session,
-          })
-          .pipe(Effect.onError(() => identity.cleanup));
+        const image = yield* images.resolve({
+          id,
+          source: imageSourceOf(news, news.handler ?? "default"),
+          repositoryName: rfc1035(`${workerPoolId}-src`),
+          location,
+          isExternal: news.isExternal,
+          session,
+        });
         codeHash = image.codeHash;
         const container = template.containers?.[0] ?? {};
         template.containers = [
           {
             ...container,
             image: image.imageUri,
-            env: mergeContainerEnv(container.env, identity.env, yield* alchemyRuntimeEnv, news.env),
+            env: mergeContainerEnv(container.env, bindingEnv, yield* alchemyRuntimeEnv, news.env),
           },
         ];
       } else {
-        const runtimeEnv = { ...identity.env, ...news.env };
+        const runtimeEnv = { ...bindingEnv, ...news.env };
         if (Object.keys(runtimeEnv).length > 0 && template.containers) {
           template.containers = template.containers.map((container, index) =>
             index === 0
@@ -1039,6 +1060,29 @@ const makeWorkerPoolProvider = () =>
           );
         }
       }
+
+      // `Redacted` env values go to Secret Manager before the service
+      // account is granted to read them, and both before the revision.
+      const secretHost = { project: env.project, hostType: HOST_TYPE, resourceName: name };
+      const secretEnv = yield* sealSecretEnv({
+        host: secretHost,
+        id,
+        containers: template.containers ?? [],
+        previous: output?.secretEnv,
+      });
+      template.containers = secretEnv.containers as cloudrun.GoogleCloudRunV2Container[];
+
+      const identity = yield* resolveHostIdentity({
+        project: env.project,
+        hostType: HOST_TYPE,
+        resourceName: name,
+        userServiceAccount: template.serviceAccount,
+        effectNative: news.main !== undefined,
+        bindings: hostBindings,
+        output,
+        grants: secretEnv.grants,
+      });
+      template.serviceAccount = identity.serviceAccount;
 
       let current = yield* getByName(name);
       if (current?.deleteTime !== undefined) {
@@ -1056,7 +1100,15 @@ const makeWorkerPoolProvider = () =>
           .pipe(
             retryActAs,
             Effect.catchTag("Conflict", () => Effect.undefined),
-            Effect.onError(() => identity.cleanup),
+            Effect.onError(() =>
+              identity.cleanup.pipe(
+                Effect.andThen(
+                  output === undefined
+                    ? discardSecretEnv(secretHost, secretEnv.secrets)
+                    : Effect.void,
+                ),
+              ),
+            ),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -1087,8 +1139,15 @@ const makeWorkerPoolProvider = () =>
         news.instanceSplits !== undefined &&
         instanceSplitFingerprint(current.instanceSplits) !==
           instanceSplitFingerprint(news.instanceSplits);
+      // The template of a pool Alchemy builds (or that reads secrets Alchemy
+      // keeps) is desired state too, so a new image or secret version rolls
+      // out.
       const templateChanged =
-        news.template !== undefined && templateNeedsSync(template, current.template);
+        (news.template !== undefined ||
+          news.main !== undefined ||
+          news.context !== undefined ||
+          hasSecretEnv(secretEnv.secrets, output?.secretEnv)) &&
+        templateNeedsSync(template, current.template);
 
       if (
         labelsChanged ||
@@ -1131,10 +1190,28 @@ const makeWorkerPoolProvider = () =>
         return yield* new WorkerPoolNotResolved({ resourceName: name });
       }
 
+      // The rollout is done: drop the secret versions no revision that
+      // still runs instances reads any more.
+      if (hasSecretEnv(secretEnv.secrets, output?.secretEnv)) {
+        const serving = yield* servingRevisionRefs({
+          parent: name,
+          latestReadyRevision: current.latestReadyRevision,
+          revisions: (current.instanceSplitStatuses ?? []).map((status) => status.revision),
+          get: (revision) => cloudrun.getProjectsLocationsWorkerPoolsRevisions({ name: revision }),
+        });
+        yield* pruneSecretEnv({
+          host: secretHost,
+          secrets: secretEnv.secrets,
+          previous: output?.secretEnv,
+          inUse: mergeSecretRefs(serving, secretRefsOf(template.containers ?? [])),
+        });
+      }
+
       return toAttrs(current, env.project, env.region, {
         iamGrants: identity.grants,
         codeHash,
         serviceAccountUniqueId: identity.uniqueId,
+        secretEnv: [...secretEnv.secrets].sort(),
       });
     }),
 
@@ -1155,6 +1232,10 @@ const makeWorkerPoolProvider = () =>
       yield* waitUntilGone(output.name);
       // Effect-native hosts build into a per-host repository on reconcile.
       yield* destroyHostImageRepository(id, output, rfc1035(`${output.workerPoolId}-src`));
+      yield* deleteSecretEnv(
+        { project: output.project, hostType: HOST_TYPE, resourceName: output.name },
+        output.secretEnv,
+      );
       yield* releaseHostIdentity(output);
     }),
   });

@@ -1,7 +1,9 @@
 import type { HttpEffect } from "alchemy/Http";
 import * as Http from "alchemy/Http";
+import * as Output from "alchemy/Output";
 import { serveRpc } from "alchemy/Rpc";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
+import { packEnvValueKeepRedacted, sanitizeKey } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -81,6 +83,16 @@ export const createGcpHostRuntimeContext =
 
     return {
       ...base,
+      // `packEnvValueKeepRedacted` keeps a secret's `Redacted` on the
+      // outside, so a Cloud Run host's provider moves it to Secret Manager
+      // instead of its revision's plain env. The packed string inside still
+      // carries the marker the runtime `get` rebuilds the `Redacted` from.
+      set: (bindingId: string, output: Output.Output) =>
+        Effect.sync(() => {
+          const key = sanitizeKey(bindingId);
+          base.env[key] = output.pipe(Output.map(packEnvValueKeepRedacted));
+          return key;
+        }),
       listen: (listener) =>
         Effect.sync(() => {
           listeners.push(listener);
