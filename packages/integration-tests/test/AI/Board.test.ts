@@ -109,7 +109,7 @@ test(
   "a front end follows the session through the board's Api alone",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const issue = IssueId.make("slow-search-2");
+    const issue = IssueId.make("slow-search");
     yield* call(`issue/${issue}`);
     const api = yield* BoardApi.clientWebSocket(`${url}/api`);
 
@@ -146,6 +146,47 @@ test(
       }),
     );
     expect(status).toEqual({ status: "idle", queued: [] });
+  }).pipe(Effect.scoped, Effect.provide(Socket.layerWebSocketConstructorGlobal)),
+  { tags, timeout: 240_000 },
+);
+
+test(
+  "the board has the whole transcript though the session's object is reset mid-turn",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const issue = IssueId.make("lost-upload");
+    const api = yield* BoardApi.clientWebSocket(`${url}/api`);
+    yield* call(`report/${issue}`, { title: "My upload disappears after I refresh" });
+    // Reset it once the board shows it at work: what was recording in memory is gone.
+    yield* api.SessionStatus.get(issue).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("200 millis"),
+        until: (status) => status?.status === "working",
+        times: 150,
+      }),
+    );
+    yield* call(`crash/${issue}`);
+    yield* labeled(issue, "bug");
+
+    const recorded = yield* Effect.gen(function* () {
+      const status = yield* api.SessionStatus.get(issue);
+      const { entries } = yield* api.Transcript.list(issue);
+      const { messages } = (yield* call(`session/${issue}`)) as unknown as { messages: string };
+      return {
+        status: status?.status,
+        board: JSON.stringify(entries.map(({ event }) => ({ seq: event.seq, item: event.item }))),
+        harness: messages,
+      };
+    }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (seen) => seen.status === "idle" && seen.board === seen.harness,
+        times: 30,
+      }),
+    );
+    expect(recorded.status).toBe("idle");
+    expect(recorded.board).toBe(recorded.harness);
+    expect(recorded.board).toContain("LabelIssue");
   }).pipe(Effect.scoped, Effect.provide(Socket.layerWebSocketConstructorGlobal)),
   { tags, timeout: 240_000 },
 );

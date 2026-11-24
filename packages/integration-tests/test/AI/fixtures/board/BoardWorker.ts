@@ -61,6 +61,16 @@ export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
           ),
           Match.when("issue", () => Effect.map(details.get(Issue.ref(issueId)), Option.getOrNull)),
           // What the issue's session was told and did, as its harness stores it.
+          // The object is reset, so the call itself fails.
+          Match.when("crash", () =>
+            agents
+              .getByName(issueId)
+              .crash()
+              .pipe(
+                Effect.catchCause(() => Effect.void),
+                Effect.as({ ok: true as const }),
+              ),
+          ),
           Match.when("session", () =>
             Effect.map(agents.getByName(issueId).transcript(issueId), (messages) => ({ messages })),
           ),
