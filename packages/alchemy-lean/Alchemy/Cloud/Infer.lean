@@ -33,6 +33,14 @@ private partial def askedFor (stand : Expr) (e : Expr) (found : Array Expr) : Ar
   | .mdata _ b | .proj _ _ b => askedFor stand b found
   | _ => found
 
+/-- For each helper, the call in its body that asks for each of its grants, in order. -/
+initialize helperSites : SimplePersistentEnvExtension (Name × Array String) (NameMap (Array String)) ←
+  registerSimplePersistentEnvExtension {
+    addEntryFn := fun map (name, sites) => map.insert name sites
+    addImportedFn := fun imported =>
+      imported.foldl (fun map entries => entries.foldl (fun map (name, sites) => map.insert name sites) map) {}
+  }
+
 /-- A call, as it is written, with where it is. -/
 private def siteOf (stx : Syntax) : TermElabM String := do
   let text := (stx.reprint.getD "").trimAscii.toString
@@ -56,13 +64,27 @@ private def sitesOf (body : Syntax) (role blockType : Expr) : TermElabM (Array (
       let _ ← elabTermEnsuringType body blockType
       synthesizeSyntheticMVars (postpone := .yes)
       let mut found := #[]
-      for waiting in (← get).pendingMVars do
+      -- How many grants each call has asked for so far: a helper asks for several, in order.
+      let mut asked : Array (String.Pos.Raw × Nat) := #[]
+      for waiting in (← get).pendingMVars.reverse do
         let some decl ← getSyntheticMVarDecl? waiting | continue
         let type ← instantiateMVars (← waiting.getType)
         if type.isAppOf ``Alchemy.Cloud.Has && type.getAppNumArgs ≥ 2 && (type.getArg! (type.getAppNumArgs - 2)).isMVar then
           let need := type.getArg! (type.getAppNumArgs - 1)
+          let position := decl.stx.getPos?.getD 0
+          let index := ((asked.find? (·.1 == position)).map (·.2)).getD 0
+          asked := (asked.filter (·.1 != position)).push (position, index + 1)
           unless need.hasMVar do
-            found := found.push (need, ← siteOf decl.stx)
+            let here ← siteOf decl.stx
+            -- A call to a helper: point at the call inside it.
+            let head := if decl.stx.isIdent then decl.stx else decl.stx[0]
+            let inside ← try
+                let name ← realizeGlobalConstNoOverload head
+                pure (((helperSites.getState (← getEnv)).find? name).bind (·[index]?))
+              catch _ => pure none
+            match inside with
+            | some site => found := found.push (need, s!"{site}   (in {head.getId})")
+            | none => found := found.push (need, here)
       return found
   catch _ => return #[]
 
@@ -154,6 +176,7 @@ syntax (name := helperCommand) (docComment)? "helper " ident bracketedBinder* " 
       let some role := roleParam? | throwError "a helper takes its role as a parameter: {lit}role : Access K{rit}"
       let access ← inferType role
       let resultType ← Term.elabType type
+      let places ← sitesOf body role resultType
       let standType ← withLocalDeclD `need access fun need => do
         mkForallFVars #[need] (← mkAppM ``Alchemy.Cloud.Has #[role, need])
       let block ← withLocalDecl `granted .instImplicit standType fun stand => do
@@ -188,6 +211,14 @@ syntax (name := helperCommand) (docComment)? "helper " ident bracketedBinder* " 
           addAndCompile <| .defnDecl {
             name := declName, levelParams := [], type := declType, value
             hints := .abbrev, safety := .safe }
+          let mut sites : Array String := #[]
+          for need in needs do
+            let mut site := ""
+            for (asked, place) in places do
+              if site.isEmpty then
+                if ← withoutModifyingState (isDefEq asked need) then site := place
+            sites := sites.push site
+          modifyEnv fun env => helperSites.addEntry env (declName, sites)
           if let some doc := doc then addDocString declName (mkNullNode binders) doc
       go 0 #[]
 where
