@@ -257,6 +257,17 @@ theorem untouched {m m' : Memory} (same : ∀ key, m'.object bucket key = m.obje
   rintro ⟨held, length, present⟩
   exact ⟨held, by rw [counted]; exact length, fun i h => by rw [same]; exact present i h⟩
 
+/--
+Code that leaves a bucket's objects alone leaves a journal in it alone, and
+sound. This is what an outside call has to show to be used beside a journal.
+-/
+theorem quiet {access : Access Kind} {ε α : Type} (run : Run access ε α) (m : Memory)
+    (objects : ∀ key, (run.eval InMemory m).2.object bucket key = m.object bucket key)
+    (sound : Sound bucket under m) :
+    lines bucket under (run.eval InMemory m).2 = lines bucket under m ∧
+      Sound bucket under (run.eval InMemory m).2 :=
+  ⟨(untouched objects).1, (untouched objects).2 sound⟩
+
 /-- A journal in a bucket: a step of a host's block. -/
 def Journal {role : Access Kind} (bucket : AWS.Bucket) (under : Path := ["journal"]) :
     Host role (Cloud.Journal role) :=

@@ -143,6 +143,35 @@ theorem send_recorded (hosted : Hosted served role)
     rw [Run.eval_bind, ok]
     exact endSound
 
+/--
+A host answers what the model answers. The caller of a command is told the
+rejection the model, as the journal had it, gives; or the aggregate's reply
+from the state the journal has afterwards. And the journal is still sound.
+-/
+theorem ask_recorded (hosted : Hosted served role)
+    (lawful : hosted.journal.Lawful sim lines sound) (faithful : served.Faithful)
+    (quiet : ∀ c s, sound s →
+      lines ((hosted.call c).eval sim s).2 = lines s ∧ sound ((hosted.call c).eval sim s).2)
+    (input : served.Input) (s : sim.State) (sounds : sound s) :
+    ((hosted.ask input).eval sim s).1 =
+        .ok (answered (served.command input)
+          ((served.replay (lines s)).toRecorded.outcome (served.replay (lines s)).now
+            (served.command input))
+          (served.replay (lines ((hosted.ask input).eval sim s).2))) ∧
+      sound ((hosted.ask input).eval sim s).2 := by
+  obtain ⟨after, answer, recorded, stillSound⟩ :=
+    hosted.send_recorded lawful faithful quiet input s sounds
+  have evaluated : (hosted.ask input).eval sim s
+      = (.ok (answered (served.command input)
+          ((served.replay (lines s)).toRecorded.outcome (served.replay (lines s)).now
+            (served.command input)) after),
+        ((hosted.send input).eval sim s).2) := by
+    show Run.eval sim (Run.bind _ _) s = _
+    rw [Run.eval_bind, answer]
+    rfl
+  rw [evaluated]
+  exact ⟨by rw [← recorded], stillSound⟩
+
 end Hosted
 
 end Alchemy.Cloud

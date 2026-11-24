@@ -262,8 +262,8 @@ example : Shop.passes [
 def sandboxCharge (order : String) (amount : Nat) (limit : Nat := 1000) : Charge :=
   if amount ≤ limit then .approved s!"ch_{order}" else .refused "over the limit"
 
-def describe (order : Order.State) : Response :=
-  match order.status with
+/-- An order's status, as a response. -/
+def describe : Order.Status → Response
   | .new => { status := 404, body := "no such order" }
   | .awaitingPayment => { status := 202, body := "awaiting payment" }
   | .paid charge => { status := 200, body := s!"paid {charge}" }
@@ -274,21 +274,18 @@ def describe (order : Order.State) : Response :=
 section Routes
 variable {role : Access Kind} (shop : Hosted served role)
 
-/-- What the Api says about a command, given the shop's answer and the shop afterwards. -/
-def respond (command : Order.Command) (answer : Except Order.Rejection (List Order.Event))
-    (after : Alchemy.World Signature) : Response :=
-  match answer with
-  | .ok _ => describe (after.state .Order (Order.key command))
+/-- What the Api says about a command: its rejection, or the order's reply. -/
+def respond : Except Order.Rejection Order.Status → Response
+  | .ok status => describe status
   | .error rejection => { status := 409, body := reprStr rejection }
 
-/-- `POST /orders` -/
+/-- `POST /orders`: the command's reply is the response. -/
 def postOrder (command : Order.Command) : Run role Never Response := do
-  let (answer, after) ← shop.send (.Order command)
-  return respond command answer after
+  return respond (← shop.ask (.Order command))
 
 /-- `GET /orders/{id}` -/
 def getOrder (id : String) : Run role Never Response := do
-  return describe ((← shop.world).state .Order id)
+  return describe ((← shop.world).state .Order id).status
 
 /-- `GET /revenue` -/
 def getRevenue : Run role Never Response := do
@@ -383,7 +380,7 @@ as the journal has it, and changes nothing.
 -/
 theorem gettingAnOrder (id : String) (cloud : Memory) :
     (getOrder (theShop (role := role) orders shipments) id).eval InMemory cloud
-      = (.ok (describe ((shopIn orders cloud).state .Order id)), cloud) := by
+      = (.ok (describe ((shopIn orders cloud).state .Order id).status), cloud) := by
   show Run.eval InMemory (Run.bind _ _) cloud = _
   rw [Run.eval_bind, Hosted.world_eval _ (S3.journal_lawful orders ["journal"])]
   rfl
@@ -397,50 +394,56 @@ theorem gettingTheRevenue (cloud : Memory) :
   rw [Run.eval_bind, Hosted.world_eval _ (S3.journal_lawful orders ["journal"])]
   rfl
 
+/-- What a caller of an order command is told, in the order's own terms. -/
+theorem answered_order (command : Order.Command) (before after : Alchemy.World Signature) :
+    Hosted.answered (served.command (.Order command))
+        (before.toRecorded.outcome before.now (served.command (.Order command))) after
+      = (Order.decide (before.state .Order (Order.key command)) command).map
+          fun _ => Order.reply (after.state .Order (Order.key command)) command := rfl
+
 include faithful in
 /--
 Given a bucket whose journal is whole, when a command is posted, then the Api
 answers what the order, as the journal had it, decides: a refusal as a 409, and
-otherwise the order as the journal has it now. The journal is whole afterwards.
+otherwise the order's reply from the state the journal has now. The journal is
+whole afterwards.
 -/
 theorem postingACommand (command : Order.Command) (cloud : Memory) (whole : Whole orders cloud) :
-    let result := (postOrder (theShop (role := role) orders shipments) command).eval InMemory cloud
-    result.1 = .ok (respond command
-        (Order.decide ((shopIn orders cloud).state .Order (Order.key command)) command)
-        (shopIn orders result.2)) ∧
-      Whole orders result.2 := by
-  obtain ⟨after, answered, recorded, wholeAfter⟩ :=
-    Hosted.send_recorded (sim := InMemory) (lines := S3.lines orders ["journal"])
-      (sound := S3.Sound orders ["journal"]) (theShop (role := role) orders shipments)
-      (S3.journal_lawful orders ["journal"]) faithful
-      (by
-        intro call cloud whole
-        cases call with
-        | charge order amount => exact ⟨rfl, whole⟩
-        | ship order item =>
-          have sent : ((theShop (role := role) orders shipments).call (.ship order item)).eval InMemory cloud
-              = (.ok (), cloud.send shipments s!"{order}:{item}") := SQS.sendMessage_eval _ _ cloud
-          show S3.lines orders ["journal"]
-              (((theShop (role := role) orders shipments).call (.ship order item)).eval InMemory cloud).2 = _ ∧
-            S3.Sound orders ["journal"]
-              (((theShop (role := role) orders shipments).call (.ship order item)).eval InMemory cloud).2
-          rw [sent]
-          have same := S3.untouched (bucket := orders) (under := ["journal"]) (m := cloud)
-            (m' := cloud.send shipments s!"{order}:{item}") (fun _ => rfl)
-          exact ⟨same.1, same.2 whole⟩)
-      (.Order command) cloud whole
+    ((postOrder (theShop (role := role) orders shipments) command).eval InMemory cloud).1
+      = .ok (respond
+        ((Order.decide ((shopIn orders cloud).state .Order (Order.key command)) command).map
+          fun _ => Order.reply
+            ((shopIn orders
+              ((postOrder (theShop (role := role) orders shipments) command).eval InMemory cloud).2).state
+              .Order (Order.key command)) command)) ∧
+      Whole orders
+        ((postOrder (theShop (role := role) orders shipments) command).eval InMemory cloud).2 := by
+  have asked := Hosted.ask_recorded (sim := InMemory) (lines := S3.lines orders ["journal"])
+    (sound := S3.Sound orders ["journal"]) (theShop (role := role) orders shipments)
+    (S3.journal_lawful orders ["journal"]) faithful
+    (by
+      intro call cloud whole
+      cases call with
+      | charge order amount => exact ⟨rfl, whole⟩
+      | ship order item =>
+        refine S3.quiet _ cloud (fun key => ?_) whole
+        show ((SQS.sendMessage (role := role) shipments s!"{order}:{item}").eval InMemory cloud).2.object
+          orders key = _
+        rw [SQS.sendMessage_eval]
+        rfl)
+    (.Order command) cloud whole
   have evaluated : (postOrder (theShop (role := role) orders shipments) command).eval InMemory cloud
-      = (.ok (respond command
-          (Order.decide ((shopIn orders cloud).state .Order (Order.key command)) command) after),
-        ((Hosted.send (theShop (role := role) orders shipments) (.Order command)).eval InMemory cloud).2) := by
+      = (.ok (respond (Hosted.answered (served.command (.Order command))
+            ((shopIn orders cloud).toRecorded.outcome (shopIn orders cloud).now
+              (served.command (.Order command)))
+            (shopIn orders ((Hosted.ask (theShop (role := role) orders shipments)
+              (.Order command)).eval InMemory cloud).2))),
+        ((Hosted.ask (theShop (role := role) orders shipments) (.Order command)).eval InMemory cloud).2) := by
     show Run.eval InMemory (Run.bind _ _) cloud = _
-    rw [Run.eval_bind, answered]
+    rw [Run.eval_bind, asked.1]
     rfl
-  show ((postOrder (theShop (role := role) orders shipments) command).eval InMemory cloud).1 = .ok (respond command _
-      (shopIn orders ((postOrder (theShop (role := role) orders shipments) command).eval InMemory cloud).2)) ∧
-    Whole orders ((postOrder (theShop (role := role) orders shipments) command).eval InMemory cloud).2
   rw [evaluated]
-  exact ⟨by rw [← recorded], wholeAfter⟩
+  exact ⟨congrArg (fun told => Except.ok (respond told)) (answered_order command _ _), asked.2⟩
 
 include faithful in
 /--
@@ -454,7 +457,8 @@ theorem placingAnOrderTwiceIsRefused (id item : String) (amount : Nat) (cloud : 
       = .ok { status := 409, body := reprStr Order.Rejection.alreadyPlaced } := by
   have answered := (postingACommand (role := role) (shipments := shipments) faithful
     (.place id item amount) cloud whole).1
-  simp only [respond, Order.decide, Order.key, placed, ne_eq, not_false_eq_true, ite_true] at answered
+  simp only [respond, Order.decide, Order.key, placed, ne_eq, not_false_eq_true, ite_true,
+    Except.map] at answered
   exact answered
 
 /-- The routes are the requests: each request reaches the route its path names. -/

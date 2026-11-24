@@ -170,6 +170,27 @@ def send (hosted : Hosted served role) (input : served.Input) :
   let after ← hosted.answerCalls 100 (m.play Served.fuel before (.send command))
   return (before.toRecorded.outcome before.now command, after)
 
+/--
+What the caller of a command is told: the rejection, or the aggregate's reply
+from the state the command left.
+-/
+def answered (command : Send m.signature.aggregates)
+    (answer : Answer m.signature.aggregates command.to) (after : Alchemy.World m.signature) :
+    Except (m.signature.aggregates.of command.to).Rejection
+      (m.signature.aggregates.of command.to).Reply :=
+  answer.map fun _ =>
+    (m.signature.aggregates.of command.to).reply
+      (after.state command.to ((m.signature.aggregates.of command.to).keyOf command.command))
+      command.command
+
+/-- Send the model a command, and answer its caller: a rejection, or the aggregate's reply. -/
+def ask (hosted : Hosted served role) (input : served.Input) :
+    Run role Never
+      (Except (m.signature.aggregates.of (served.command input).to).Rejection
+        (m.signature.aggregates.of (served.command input).to).Reply) := do
+  let (answer, after) ← hosted.send input
+  return answered (served.command input) answer after
+
 end Hosted
 
 end Alchemy.Cloud
