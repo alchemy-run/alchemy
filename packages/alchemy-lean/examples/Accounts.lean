@@ -198,6 +198,13 @@ model Bank where
     | total, .withdrawn amount => total - amount
 
   -- A line for each movement of money, for the account's statement.
+  -- Each account's balance, as a reader sees it.
+  view Balances on Account by id : Int := 0
+    | balance, .deposited amount => balance + amount
+    | balance, .withdrawn amount => balance - amount
+    | balance, .transferredIn amount => balance + amount
+    | balance, .transferredOut amount => balance - amount
+
   projection Statement on Account : String × String × Nat
     | id, .deposited amount => [(id, "deposit", amount)]
     | id, .withdrawn amount => [(id, "withdrawal", amount)]
@@ -571,6 +578,7 @@ example : Bank.passes [
     .recorded .Account "a-1" [.opened "Sam", .deposited 500, .withdrawn 200, .transferredOut 100,
       .deposited 25000, .frozen "source of funds"],
     .recorded .Account "a-2" [.opened "Alex", .transferredIn 100],
+    .view Balances "a-2" 100,
     .when ⟨.Account, (), .withdraw "a-1" 100⟩,
     .rejected .Account (.frozen "source of funds")
   ] = true := by decide

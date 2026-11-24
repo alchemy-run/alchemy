@@ -214,6 +214,8 @@ syntax &"call " ident callBinder* " : " term : modelItem
 syntax &"policy " ident &" on " ident modelAlt+ : modelItem
 /-- A value folded over an aggregate's events: `| value, event => …`. -/
 syntax &"view " ident &" on " ident " : " term " := " term modelAlt+ : modelItem
+/-- A value for each instance of an aggregate, folded over that instance's events. -/
+syntax &"view " ident &" on " ident &" by " &"id" " : " term " := " term modelAlt+ : modelItem
 /-- Rows written for an aggregate's events: `| id, event => […]`. -/
 syntax &"projection " ident &" on " ident " : " term modelAlt+ : modelItem
 
@@ -323,6 +325,31 @@ macro_rules
           theorem $(under v `exact):ident (log : List (Alchemy.Emitted $aggregatesId)) :
               Alchemy.View.stateAt $v log () = log.foldl $step $initial :=
             Alchemy.View.fold_exact _ _ _ log))
+      | `(modelItem| view $v:ident on $a:ident by id : $type := $initial:term $alts:modelAlt*) =>
+        views := views.push v
+        let step := under v `step
+        let keyOf := under v `key
+        let alts ← withFallback alts (← `(Term.matchAltExpr| | state, _ => state))
+        later := later.push (← lenient <| ← `(command|
+          def $step:ident (state : $type) : Alchemy.Emitted $aggregatesId → $type
+            | ⟨$(under name a.getId), _, event, _, _⟩ =>
+              match state, (event : $(rooted a `Event)) with $alts:matchAlt*
+            | _ => state))
+        later := later.push (← lenient <| ← `(command|
+          /-- The instance an event is about, if it is one of this aggregate's. -/
+          def $keyOf:ident : Alchemy.Emitted $aggregatesId → Option String
+            | ⟨$(under name a.getId), id, _, _, _⟩ => some id
+            | _ => none))
+        later := later.push (← `(command|
+          abbrev $v:ident : Alchemy.View $aggregatesId :=
+            Alchemy.View.keyed $(text v) $initial $keyOf $step))
+        later := later.push (← `(command|
+          /-- The view at an instance is exactly its step folded over that instance's events. -/
+          theorem $(under v `exact):ident (log : List (Alchemy.Emitted $aggregatesId)) (id : String) :
+              Alchemy.View.stateAt $v log id
+                = log.foldl (fun state event => if $keyOf event = some id then $step state event
+                    else state) $initial :=
+            Alchemy.View.keyed_exact _ _ _ _ log id))
       | `(modelItem| projection $p:ident on $a:ident : $row:term $alts:modelAlt*) =>
         projections := projections.push p
         let rows := under p `rows

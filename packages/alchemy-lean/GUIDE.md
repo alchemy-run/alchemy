@@ -264,10 +264,17 @@ theorem theWarehouseReadsNothing :
 +     S3.putObject orders ["packed"] order item
 ```
 
-The call asks for a grant, the Warehouse's role gains "read Orders/journal", and the build stops at the rule that said it must not:
+The call asks for a grant, the Warehouse's role gains "read Orders/journal", and the build stops at `theWarehouseReadsNothing`, showing the role that broke it:
 
 ```
-Shop.lean: error: unsolved goals          ← theWarehouseReadsNothing
+Shop.lean:538: error: This rule does not hold of the stack. Some role allows what the rule
+forbids, or lacks what it requires. The roles, as the code gives them:
+  …
+  ("Warehouse",
+    ((Access.on { id := "Orders" } (BucketOp.get ["journal"])).and
+          (Access.on { id := "Orders" } (BucketOp.put ["packed"]))).and
+      (Access.on { id := "Shipments" } QueueOp.receive))]
+`graph --why` prints the call behind each permission.
 ```
 
 Nobody reviewed a policy. The change looked harmless and would have deployed; the build refused it because the rule about customer data was written down once. The first rule is what connects the two halves of this guide: it is the stack-side fact that the domain proofs rely on.

@@ -206,3 +206,57 @@ theorem Projection.each_exact {Row : Type} (name : String) (rows : Emitted g →
   Projection.each_go name rows [] log
 
 end Alchemy
+
+namespace Alchemy
+
+variable {g : Aggregates}
+
+/-- A view with a value for each key, folded over the events that are about that key. -/
+abbrev View.keyed {State : Type} [DecidableEq State] (name : String) (initial : State)
+    (key : Emitted g → Option String) (step : State → Emitted g → State) : View g where
+  name := name
+  Key := String
+  State := State
+  Event := Empty
+  Actor := Unit
+  Rejection := Empty
+  initial := initial
+  on := fun _ event =>
+    match key event with
+    | some k => [{ key := k, evolve := fun state => step state event }]
+    | none => []
+
+theorem View.keyed_go {State : Type} [DecidableEq State] (name : String) (initial : State)
+    (key : Emitted g → Option String) (step : State → Emitted g → State) (k : String)
+    (history log : List (Emitted g)) (state : State) :
+    (View.keyed name initial key step).go k history log state
+      = log.foldl (fun state event => if key event = some k then step state event else state) state := by
+  induction log generalizing history state with
+  | nil => rfl
+  | cons event rest ih =>
+    show (View.keyed name initial key step).go k (history ++ [event]) rest
+      ((View.keyed name initial key step).applyAt history event k state) = _
+    rw [ih, List.foldl_cons]
+    congr 1
+    show ((match key event with
+      | some k => [({ key := k, evolve := fun state => step state event } :
+          View.Update String State Empty)]
+      | none => []).foldl (fun s (u : View.Update String State Empty) =>
+        if u.key = k then u.evolve s else s) state) = _
+    cases found : key event with
+    | none => simp
+    | some k' =>
+      by_cases same : k' = k
+      · subst same; simp
+      · simp [same]
+
+/-- A keyed view at a key is exactly its step folded over the events about that key. -/
+theorem View.keyed_exact {State : Type} [DecidableEq State] (name : String) (initial : State)
+    (key : Emitted g → Option String) (step : State → Emitted g → State) (log : List (Emitted g))
+    (k : String) :
+    (View.keyed name initial key step).stateAt log k
+      = log.foldl (fun state event => if key event = some k then step state event else state)
+          initial :=
+  View.keyed_go name initial key step k [] log initial
+
+end Alchemy

@@ -131,6 +131,16 @@ A view folds a value over events. A projection writes rows for them.
     | id, .withdrawn amount => [(id, "withdrawal", amount)]
 ```
 
+A view can keep a value for each instance.
+
+```lean
+  view Balances on Account by id : Int := 0
+    | balance, .deposited amount => balance + amount
+    | balance, .withdrawn amount => balance - amount
+    | balance, .transferredIn amount => balance + amount
+    | balance, .transferredOut amount => balance - amount
+```
+
 ## Behaviour
 
 Given events, when a command, then a result. It holds for every id and amount.
@@ -539,6 +549,6 @@ In the editor, `#eval` shows any of it without running a program.
 
 - Stacks run against a cloud held in memory. Nothing deploys to a real account.
 - A host handles one request at a time, by design.
-- `model` takes one saga, string ids, and views of one value over one aggregate.
+- `model` takes one saga and string ids. Streams, queries and actors are written without it.
 - The request theorems assume JSON written to the journal reads back as written.
 - Cloudflare has no control-plane model, so no plan, and its operations have no laws.
