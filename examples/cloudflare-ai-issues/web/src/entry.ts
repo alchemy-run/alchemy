@@ -5,8 +5,9 @@ import * as Layer from "effect/Layer";
 import * as Socket from "effect/socket/Socket";
 import { Runtime } from "foldkit";
 import { WebApi } from "../../src/Board/WebApi.api.ts";
-import { Flags, init, Model, subscriptions, update, view } from "./Issue.ts";
-import { issueOf } from "./Location.ts";
+import { Flags, init, Model, subscriptions, update } from "./Board.ts";
+import { issueIn } from "./Location.ts";
+import { view } from "./View.ts";
 
 /**
  * The board's Api for the life of the app. Commands go over HTTP. Each live
@@ -29,15 +30,11 @@ Runtime.run(
     container: document.getElementById("root"),
   }),
   {
-    flags: Effect.sync(() => {
-      const { issueId, url } = issueOf(location.href, () => `web-${Date.now()}`);
-      // Keep the issue in the address bar: a refresh resumes it.
-      history.replaceState(null, "", url);
-      return {
-        issueId,
-        // Names this page's commands, so each is unique even across reloads.
-        page: crypto.randomUUID(),
-      };
-    }),
+    flags: Effect.sync(() => ({
+      // The issue the address names is opened: a refresh or a shared link resumes it.
+      issueId: issueIn(location.href),
+      // Names this page's commands and issues, so each is unique even across reloads.
+      page: crypto.randomUUID(),
+    })),
   },
 );

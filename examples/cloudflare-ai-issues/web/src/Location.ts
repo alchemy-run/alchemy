@@ -1,17 +1,18 @@
+import * as Option from "effect/Option";
 import { IssueId } from "../../src/Board/Issue.id.ts";
 
-/**
- * Which issue a URL shows, and the URL that shows it. A URL that names none
- * is given a new one, so that a refresh, or the link sent to someone else,
- * opens the same issue.
- */
-export const issueOf = (
-  url: string,
-  fresh: () => string,
-): { readonly issueId: IssueId; readonly url: string } => {
+/** The issue an address names with `?issue=`, if it names one. */
+export const issueIn = (url: string): Option.Option<IssueId> => {
+  const named = new URL(url).searchParams.get("issue");
+  return named === null || named === "" ? Option.none() : Option.some(IssueId.make(named));
+};
+
+/** The address that opens an issue, or the board with none open. */
+export const urlOf = (url: string, issueId: Option.Option<IssueId>): string => {
   const parsed = new URL(url);
-  const named = parsed.searchParams.get("issue");
-  const issueId = IssueId.make(named === null || named === "" ? fresh() : named);
-  parsed.searchParams.set("issue", issueId);
-  return { issueId, url: parsed.toString() };
+  Option.match(issueId, {
+    onNone: () => parsed.searchParams.delete("issue"),
+    onSome: (id) => parsed.searchParams.set("issue", id),
+  });
+  return parsed.toString();
 };

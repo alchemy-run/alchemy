@@ -15,9 +15,8 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
 import Stack from "../alchemy.run.ts";
-import { IssueId } from "../src/Board/Issue.id.ts";
 import { WebApi } from "../src/Board/WebApi.api.ts";
-import { Message } from "../web/src/Issue.ts";
+import { Message } from "../web/src/Board.ts";
 import { open } from "./App.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -52,9 +51,20 @@ test(
     expect(html).toContain('<div id="root">');
     const script = /src="(\/assets\/[^"]+\.js)"/.exec(html)?.[1];
     expect(script).toBeDefined();
+    const style = /href="(\/assets\/[^"]+\.css)"/.exec(html)?.[1];
+    expect(style).toBeDefined();
+    expect(yield* client.get(`${app}${style}`).pipe(Effect.flatMap((r) => r.text))).toContain(
+      ".sidebar",
+    );
     const code = yield* client.get(`${app}${script}`).pipe(Effect.flatMap((r) => r.text));
     // The build is the page: it names the reads and the commands it uses.
-    for (const name of ["SessionStatus", "Transcript", "ReportIssue", "CommentOnIssue"]) {
+    for (const name of [
+      "IssueList",
+      "SessionStatus",
+      "Transcript",
+      "ReportIssue",
+      "CommentOnIssue",
+    ]) {
       expect(code).toContain(name);
     }
   }).pipe(Effect.provide(FetchHttpClient.layer)),
@@ -62,45 +72,72 @@ test(
 );
 
 test(
-  "the page reports an issue and follows the real agent until it has labeled it",
+  "the page reports an issue, follows the real agent, replies, and resumes after a refresh",
   Effect.gen(function* () {
     const { app } = yield* stack;
-    const issueId = IssueId.make(`integ-${Date.now()}`);
     const seen = yield* Effect.gen(function* () {
-      const page = yield* open({ issueId, page: "integ" });
-      // The page has loaded: every read answered, and nothing is reported yet.
-      const empty = yield* page.until((model) => Option.isSome(model.cursor));
-      expect(empty.title).toEqual(Option.none());
+      const page = yield* open({ issueId: Option.none(), page: `integ-${Date.now()}` });
+      const empty = yield* page.until((model) => model.listed);
       expect(empty.error).toEqual(Option.none());
 
-      yield* page.dispatch(Message.ChangedDraft({ text: "The export button does nothing" }));
-      yield* page.dispatch(Message.ClickedReport());
+      yield* page.dispatch(Message.ChangedTitle({ text: "The export button does nothing" }));
+      yield* page.dispatch(Message.SubmittedIssue());
 
       const working = yield* page.until((model) => model.status === "working");
-      expect(working.title).toEqual(Option.some("The export button does nothing"));
+      const issueId = Option.getOrThrow(working.selected);
+      // The sidebar shows it, with its agent at work.
+      yield* page.until((model) =>
+        model.issues.some((issue) => issue.issueId === issueId && issue.working),
+      );
 
       const done = yield* page.until(
-        (model) => model.status === "idle" && Option.isSome(model.label) && model.items.length > 2,
+        (model) =>
+          model.status === "idle" &&
+          model.items.length > 2 &&
+          Option.exists(model.detail, (detail) => detail.label !== null),
       );
 
-      // A reply goes to the same session, and the page sees what it did with it.
+      // A reply goes to the same agent, and the page sees what it did with it.
       yield* page.dispatch(
-        Message.ChangedDraft({ text: "On reflection this is a question. Label it question." }),
+        Message.ChangedReply({ text: "On reflection this is a question. Label it question." }),
       );
-      yield* page.dispatch(Message.ClickedReply());
+      yield* page.dispatch(Message.SubmittedReply());
+      // The agent takes the reply up, then finishes with it.
+      yield* page.until((model) => model.status === "working");
       const replied = yield* page.until(
-        (model) => model.status === "idle" && Option.contains(model.label, "question"),
+        (model) =>
+          model.status === "idle" &&
+          Option.exists(model.detail, (detail) => detail.label === "question"),
       );
-      return { done, replied };
+
+      // A refresh: a new page load with the issue in its address reads it all back.
+      const refreshed = yield* open({ issueId: Option.some(issueId), page: "integ-refresh" });
+      const resumed = yield* refreshed.until(
+        (model) => model.caughtUp && model.listed && Option.isSome(model.detail),
+      );
+      // The status and the transcript are two reads: the first page may see
+      // `idle` a moment before the last item. Both pages end with the same items.
+      const settled = yield* page.until((model) => model.items.length >= resumed.items.length);
+      return { issueId, done, replied: settled, resumed };
     }).pipe(Effect.scoped, Effect.provide(connection(app)));
 
-    expect(seen.done.items[0]?.item).toEqual({ type: "user", text: `The issue is ${issueId}.` });
+    expect(seen.done.items[0]?.item).toEqual({
+      type: "user",
+      text: `The issue is ${seen.issueId}.`,
+    });
     expect(JSON.stringify(seen.done.items)).toContain("Board_LabelIssue_send");
     // Every item once, in order.
     const seqs = seen.replied.items.map((entry) => entry.seq);
     expect(seqs).toEqual([...new Set(seqs)].sort((a, b) => a - b));
     expect(seen.replied.items.length).toBeGreaterThan(seen.done.items.length);
     expect(seen.replied.error).toEqual(Option.none());
+    // The refreshed page has the same transcript and finds the issue in the list.
+    expect(seen.resumed.items).toEqual(seen.replied.items);
+    expect(seen.resumed.issues.find((issue) => issue.issueId === seen.issueId)).toMatchObject({
+      title: "The export button does nothing",
+      label: "question",
+      replies: 1,
+    });
   }),
   { timeout: 300_000 },
 );

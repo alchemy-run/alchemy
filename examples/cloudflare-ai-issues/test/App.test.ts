@@ -8,13 +8,13 @@ import * as Option from "effect/Option";
 import { Board } from "../src/Board/Board.model.ts";
 import { BoardHandlers } from "../src/Board/Handlers.ts";
 import { Issue } from "../src/Board/Issue.aggregate.ts";
-import { IssueId } from "../src/Board/Issue.id.ts";
+import type { IssueId } from "../src/Board/Issue.id.ts";
 import { IssueSession } from "../src/Board/IssueSession.aggregate.ts";
 import { LabelIssue } from "../src/Board/LabelIssue.command.ts";
 import { RecordActivity } from "../src/Board/RecordActivity.command.ts";
 import { Triager } from "../src/Board/Triager.external.ts";
 import { WebApi } from "../src/Board/WebApi.api.ts";
-import { Message } from "../web/src/Issue.ts";
+import { Message } from "../web/src/Board.ts";
 import { open } from "./App.ts";
 
 /**
@@ -61,72 +61,103 @@ const playing = Effect.gen(function* () {
     }).pipe(Effect.orDie, Effect.forkDetach, Effect.asVoid);
 });
 
+const report = (page: Effect.Success<ReturnType<typeof open>>, title: string) =>
+  Effect.gen(function* () {
+    yield* page.dispatch(Message.ClickedNewIssue());
+    yield* page.dispatch(Message.ChangedTitle({ text: title }));
+    yield* page.dispatch(Message.SubmittedIssue());
+    return yield* page.until(
+      (model) => model.items.length === 2 && model.status === "idle" && model.caughtUp,
+    );
+  });
+
 it.live("the page reports an issue and follows its agent to the end", () =>
   Effect.gen(function* () {
     yield* playing;
-    const page = yield* open({ issueId: IssueId.make("42"), page: "p" });
+    const page = yield* open({ issueId: Option.none(), page: "a" });
+    const empty = yield* page.until((model) => model.listed);
+    expect(empty.issues).toEqual([]);
 
-    // Nothing is reported yet: the page shows an empty issue and an idle agent.
-    const empty = yield* page.until((model) => Option.isSome(model.cursor));
-    expect(empty.title).toEqual(Option.none());
-    expect(empty.status).toBe("idle");
-    expect(empty.items).toEqual([]);
-
-    yield* page.dispatch(Message.ChangedDraft({ text: "Export does nothing" }));
-    yield* page.dispatch(Message.ClickedReport());
-
-    const done = yield* page.until(
-      (model) => model.items.length === 2 && model.status === "idle" && Option.isSome(model.label),
+    const done = yield* report(page, "Export does nothing");
+    expect(Option.map(done.detail, (detail) => detail.title)).toEqual(
+      Option.some("Export does nothing"),
     );
-    expect(done.title).toEqual(Option.some("Export does nothing"));
-    expect(done.label).toEqual(Option.some("bug"));
     expect(done.items.map((entry) => entry.item)).toEqual([
-      { type: "user", text: "The issue is 42." },
+      { type: "user", text: `The issue is ${Option.getOrThrow(done.selected)}.` },
       { type: "assistant", text: "Labeled bug.", toolCalls: [] },
     ]);
     expect(done.error).toEqual(Option.none());
+
+    // The sidebar lists it, labeled, with its agent idle again.
+    const listed = yield* page.until((model) => model.issues[0]?.label === "bug");
+    expect(listed.issues).toEqual([
+      {
+        issueId: Option.getOrThrow(done.selected),
+        title: "Export does nothing",
+        label: "bug",
+        replies: 0,
+        working: false,
+      },
+    ]);
   }).pipe(Effect.scoped, Effect.provide(Live), Effect.provide(RuntimeContext.phantom)),
 );
 
 it.live("a reply reaches the agent, and the page shows what it did with it", () =>
   Effect.gen(function* () {
     yield* playing;
-    const page = yield* open({ issueId: IssueId.make("43"), page: "p" });
-    yield* page.dispatch(Message.ChangedDraft({ text: "Dark mode" }));
-    yield* page.dispatch(Message.ClickedReport());
-    yield* page.until((model) => model.items.length === 2 && model.status === "idle");
+    const page = yield* open({ issueId: Option.none(), page: "b" });
+    yield* report(page, "Dark mode");
 
-    yield* page.dispatch(Message.ChangedDraft({ text: "It is only a question." }));
-    yield* page.dispatch(Message.ClickedReply());
+    yield* page.dispatch(Message.ChangedReply({ text: "It is only a question." }));
+    yield* page.dispatch(Message.SubmittedReply());
 
     const done = yield* page.until(
       (model) =>
         model.items.length === 4 &&
         model.status === "idle" &&
-        Option.contains(model.label, "question"),
+        Option.exists(model.detail, (detail) => detail.label === "question"),
     );
     expect(done.items.map((entry) => entry.seq)).toEqual([1, 2, 3, 4]);
-    expect(done.items.at(-1)?.item).toEqual({
-      type: "assistant",
-      text: "Labeled question.",
-      toolCalls: [],
-    });
+    const listed = yield* page.until((model) => model.issues[0]?.replies === 1);
+    expect(listed.issues[0]).toMatchObject({ label: "question", replies: 1 });
   }).pipe(Effect.scoped, Effect.provide(Live), Effect.provide(RuntimeContext.phantom)),
 );
 
-it.live("a refreshed page resumes: it reads the whole transcript again", () =>
+it.live("the board lists every issue, and clicking one opens its transcript", () =>
   Effect.gen(function* () {
     yield* playing;
-    const first = yield* open({ issueId: IssueId.make("44"), page: "a" });
-    yield* first.dispatch(Message.ChangedDraft({ text: "Crash on save" }));
-    yield* first.dispatch(Message.ClickedReport());
-    yield* first.until((model) => model.items.length === 2 && model.status === "idle");
+    const page = yield* open({ issueId: Option.none(), page: "c" });
+    const one = Option.getOrThrow((yield* report(page, "First")).selected);
+    const two = Option.getOrThrow((yield* report(page, "Second")).selected);
 
-    const second = yield* open({ issueId: IssueId.make("44"), page: "b" });
-    const seen = yield* second.until(
-      (model) => model.items.length === 2 && Option.isSome(model.label),
+    const both = yield* page.until((model) => model.issues.length === 2);
+    // Newest first.
+    expect(both.issues.map((issue) => issue.title)).toEqual(["Second", "First"]);
+
+    yield* page.dispatch(Message.ClickedIssue({ issueId: one }));
+    const opened = yield* page.until(
+      (model) => model.items.length === 2 && Option.isSome(model.detail),
     );
-    expect(seen.title).toEqual(Option.some("Crash on save"));
+    expect(opened.selected).toEqual(Option.some(one));
+    expect(Option.map(opened.detail, (detail) => detail.title)).toEqual(Option.some("First"));
+    expect(opened.items[0]?.item).toEqual({ type: "user", text: `The issue is ${one}.` });
+    expect(two).not.toBe(one);
+  }).pipe(Effect.scoped, Effect.provide(Live), Effect.provide(RuntimeContext.phantom)),
+);
+
+it.live("a refreshed page resumes: it opens the issue its address names", () =>
+  Effect.gen(function* () {
+    yield* playing;
+    const first = yield* open({ issueId: Option.none(), page: "d" });
+    const issueId = Option.getOrThrow((yield* report(first, "Crash on save")).selected);
+
+    // A new page load, with the issue in its address.
+    const second = yield* open({ issueId: Option.some(issueId), page: "e" });
+    const seen = yield* second.until(
+      (model) => model.items.length === 2 && Option.isSome(model.detail) && model.listed,
+    );
+    expect(Option.map(seen.detail, (detail) => detail.title)).toEqual(Option.some("Crash on save"));
     expect(seen.items.map((entry) => entry.seq)).toEqual([1, 2]);
+    expect(seen.issues.map((issue) => issue.title)).toContain("Crash on save");
   }).pipe(Effect.scoped, Effect.provide(Live), Effect.provide(RuntimeContext.phantom)),
 );

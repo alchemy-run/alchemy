@@ -1,6 +1,7 @@
 import * as Domain from "@alchemy.run/domain";
 import { Issue } from "./Issue.aggregate.ts";
 import { IssueDetail } from "./IssueDetail.view.ts";
+import { IssueList } from "./IssueList.view.ts";
 import { IssueSession } from "./IssueSession.aggregate.ts";
 import { IssueWork } from "./IssueWork.policy.ts";
 import { SessionStatus } from "./SessionStatus.view.ts";
@@ -10,7 +11,7 @@ import { Transcripts } from "./Transcripts.projection.ts";
 /** The issue board: every issue, how it shows, and what happens when one changes. */
 export class Board extends Domain.Model("Board", {
   aggregates: [Issue, IssueSession],
-  views: [IssueDetail, SessionStatus],
+  views: [IssueDetail, IssueList, SessionStatus],
   policies: [IssueWork],
   projections: [Transcripts],
   streams: [Transcript],

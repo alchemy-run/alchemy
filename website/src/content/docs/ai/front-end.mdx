@@ -296,47 +296,146 @@ The harness already resumes the session itself after an eviction. This job is wh
 
 A page does not call the session. It sends a command, and the model's policy passes it on through a port, as in [Processes and Domain models](/ai/domain#let-a-policy-ask-for-the-work). Here a reply on an issue is `CommentOnIssue`, and the policy tells the issue's session. A session that is working queues it.
 
+## List every issue
+
+The page's sidebar needs every issue at once, with whether its agent is working. That is one more view, over both aggregates and kept under a single key:
+
+```typescript title="src/Board/IssueList.view.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { Issue } from "./Issue.aggregate.ts";
+import { IssueId } from "./Issue.id.ts";
+import { IssueSession } from "./IssueSession.aggregate.ts";
+import { Label } from "./LabelIssue.command.ts";
+
+/** The one key the list is kept under. */
+export const ALL = "all";
+
+/**
+ * Every issue of the board, newest first, with whether its agent is working:
+ * what the page's sidebar shows. It is one entry, which suits a board of a
+ * few hundred issues.
+ */
+export class IssueList extends Domain.View("IssueList", {
+  from: [Issue, IssueSession],
+  key: Schema.String,
+  keyOf: {
+    IssueReported: () => ALL,
+    IssueLabeled: () => ALL,
+    IssueCommented: () => ALL,
+    ActivityRecorded: () => ALL,
+  },
+  state: Schema.Struct({
+    /** Newest first. */
+    order: Schema.Array(IssueId),
+    issues: Schema.Record(
+      IssueId,
+      Schema.Struct({ title: Schema.String, label: Schema.NullOr(Label), replies: Schema.Int }),
+    ),
+    /** The issues whose agent is working now. */
+    working: Schema.Array(IssueId),
+  }),
+  initial: { order: [], issues: {}, working: [] },
+  evolve: {
+    IssueReported: (list, event, { source }) => ({
+      ...list,
+      order: [source.id, ...list.order.filter((id) => id !== source.id)],
+      issues: { ...list.issues, [source.id]: { title: event.title, label: null, replies: 0 } },
+    }),
+    IssueLabeled: (list, event, { source }) => {
+      const issue = list.issues[source.id];
+      return issue === undefined
+        ? list
+        : { ...list, issues: { ...list.issues, [source.id]: { ...issue, label: event.label } } };
+    },
+    IssueCommented: (list, _, { source }) => {
+      const issue = list.issues[source.id];
+      return issue === undefined
+        ? list
+        : {
+            ...list,
+            issues: { ...list.issues, [source.id]: { ...issue, replies: issue.replies + 1 } },
+          };
+    },
+    ActivityRecorded: (list, event, { source }) => {
+      const others = list.working.filter((id) => id !== source.id);
+      return { ...list, working: event.status === "working" ? [...others, source.id] : others };
+    },
+  },
+}) {}
+```
+
+Views are stored, so the list and every transcript are still there after a refresh or a deploy.
+
 ## Read it in a Foldkit app
 
-`DomainFoldkit.make` gives a Command for each command of the Api, and `watch` and `events` for each view and stream. The page keeps the status, the queue and the transcript in its Model:
+`DomainFoldkit.make` gives a Command for each command of the Api, and `watch` and `events` for each view and stream. The page keeps the list, the open issue, its agent's status and its transcript in the Model. Opening another issue changes the key the reads follow:
 
-```typescript title="web/src/Issue.ts"
+```typescript title="web/src/Board.ts"
 import { QueuedMessage, SessionEntry } from "@alchemy.run/ai/Session";
 import type * as Domain from "@alchemy.run/domain";
 import * as DomainFoldkit from "@alchemy.run/domain/Foldkit";
+import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { Command, Subscription, type Update } from "foldkit";
-import type { Document, HtmlBuilder } from "foldkit/html";
 import { defineMessageUnion } from "foldkit/message";
 import { modifyFields } from "foldkit/struct";
 import { IssueId } from "../../src/Board/Issue.id.ts";
+import { ALL } from "../../src/Board/IssueList.view.ts";
 import { Label } from "../../src/Board/LabelIssue.command.ts";
 import { Status } from "../../src/Board/RecordActivity.command.ts";
 import { WebApi } from "../../src/Board/WebApi.api.ts";
+import { issueIn, urlOf } from "./Location.ts";
 
-type Board = Domain.Api.ClientKey<"WebApi">;
+export type Board = Domain.Api.ClientKey<"WebApi">;
 /** One Command per command of the Api, and a read namespace per view and stream. */
 export const BoardClient = DomainFoldkit.make(WebApi);
 
 // MODEL
 
-export const Flags = Schema.Struct({ issueId: IssueId, page: Schema.String });
+export const Flags = Schema.Struct({
+  /** The issue the address names, if it names one. */
+  issueId: Schema.Option(IssueId),
+  page: Schema.String,
+});
 export type Flags = typeof Flags.Type;
 
-export const Model = Schema.Struct({
+/** One issue as the sidebar lists it. */
+export const Listed = Schema.Struct({
   issueId: IssueId,
+  title: Schema.String,
+  label: Schema.NullOr(Label),
+  replies: Schema.Number,
+  working: Schema.Boolean,
+});
+export type Listed = typeof Listed.Type;
+
+export const Model = Schema.Struct({
   commandIds: DomainFoldkit.CommandIds,
-  draft: Schema.String,
-  /** The issue, once it is reported. */
-  title: Schema.Option(Schema.String),
-  label: Schema.Option(Label),
-  /** Whether the issue's session is working, and what is queued for it. */
+  /** Every issue of the board, newest first. */
+  issues: Schema.Array(Listed),
+  listed: Schema.Boolean,
+  /** The issue that is open. None shows the form for a new one. */
+  selected: Schema.Option(IssueId),
+  /** The new issue being written. */
+  title: Schema.String,
+  body: Schema.String,
+  /** The reply being written. */
+  reply: Schema.String,
+  /** The open issue, once the board has it. */
+  detail: Schema.Option(
+    Schema.Struct({ title: Schema.String, body: Schema.String, label: Schema.NullOr(Label) }),
+  ),
+  /** Whether its agent is working, and what is queued for it. */
   status: Status,
   queued: Schema.Array(QueuedMessage),
-  /** The session's transcript so far, and where to resume reading it. */
+  /** The agent's transcript so far, and where to resume reading it. */
   items: Schema.Array(SessionEntry),
   cursor: Schema.Option(Schema.Number),
+  /** The transcript has been read up to now: what arrives next is live. */
+  caughtUp: Schema.Boolean,
   error: Schema.Option(Schema.String),
 });
 export type Model = typeof Model.Type;
@@ -344,21 +443,60 @@ export type Model = typeof Model.Type;
 // MESSAGE
 
 export const Message = defineMessageUnion({
-  ChangedDraft: { text: Schema.String },
-  ClickedReport: {},
-  ClickedReply: {},
+  ClickedNewIssue: {},
+  ClickedIssue: { issueId: IssueId },
+  /** The browser's back or forward button moved to another address. */
+  ChangedAddress: { issueId: Schema.Option(IssueId) },
+  ChangedTitle: { text: Schema.String },
+  ChangedBody: { text: Schema.String },
+  ChangedReply: { text: Schema.String },
+  SubmittedIssue: {},
+  SubmittedReply: {},
+  CompletedShowAddress: {},
   ReceivedBoardResult: { result: BoardClient.Message },
-  ReceivedIssue: { title: Schema.Option(Schema.String), label: Schema.Option(Label) },
+  ReceivedIssues: { issues: Schema.Array(Listed) },
+  ReceivedIssue: { detail: Model.fields.detail },
   ReceivedStatus: { status: Status, queued: Schema.Array(QueuedMessage) },
-  ReceivedItem: { entry: SessionEntry, cursor: Schema.Number },
+  ReceivedItem: { issueId: IssueId, entry: SessionEntry, cursor: Schema.Number },
   CaughtUpTranscript: { cursor: Schema.Number },
   FailedRead: { reason: Schema.String },
 });
 export type Message = typeof Message.Type;
 
+// COMMAND
+
+/** Put the open issue in the address bar, so a refresh or a shared link opens it. */
+export const ShowAddress = Command.define("ShowAddress", {
+  args: { issueId: Schema.Option(IssueId) },
+  messages: [Message.CompletedShowAddress],
+  execute: ({ issueId }) =>
+    Effect.sync(() => {
+      if (typeof history !== "undefined") {
+        history.pushState(null, "", urlOf(location.href, issueId));
+      }
+      return Message.CompletedShowAddress();
+    }),
+});
+
 // UPDATE
 
 type Return = Update.Return<Model, Message, Board>;
+
+/** Open an issue, or none: what was read of the last one is dropped. */
+const show = (model: Model, selected: Option.Option<IssueId>): Model =>
+  Option.getOrNull(model.selected) === Option.getOrNull(selected)
+    ? model
+    : modifyFields(model, {
+        selected: () => selected,
+        detail: () => Option.none(),
+        status: () => "idle",
+        queued: () => [],
+        items: () => [],
+        cursor: () => Option.none(),
+        caughtUp: () => false,
+        reply: () => "",
+        error: () => Option.none(),
+      });
 
 /** Send one command of the Api, named so that a retry is not run twice. */
 const send = (
@@ -367,11 +505,7 @@ const send = (
 ): Return => {
   const { commandId, commandIds } = DomainFoldkit.next(model.commandIds);
   return {
-    model: modifyFields(model, {
-      commandIds: () => commandIds,
-      draft: () => "",
-      error: () => Option.none(),
-    }),
+    model: modifyFields(model, { commandIds: () => commandIds, error: () => Option.none() }),
     commands: [
       Command.mapMessage(command(commandId), (result) => Message.ReceivedBoardResult({ result })),
     ],
@@ -380,43 +514,86 @@ const send = (
 
 export const update = (model: Model, message: Message) =>
   Message.match<Return>(message, {
-    ChangedDraft: ({ text }) => ({ model: modifyFields(model, { draft: () => text }) }),
-    // Reporting the issue is what starts its session: the board's policy does that.
-    ClickedReport: () =>
-      send(model, (commandId) =>
+    ClickedNewIssue: () => ({
+      model: show(model, Option.none()),
+      commands: [ShowAddress({ issueId: Option.none() })],
+    }),
+    ClickedIssue: ({ issueId }) => ({
+      model: show(model, Option.some(issueId)),
+      commands: [ShowAddress({ issueId: Option.some(issueId) })],
+    }),
+    ChangedAddress: ({ issueId }) => ({ model: show(model, issueId) }),
+    ChangedTitle: ({ text }) => ({ model: modifyFields(model, { title: () => text }) }),
+    ChangedBody: ({ text }) => ({ model: modifyFields(model, { body: () => text }) }),
+    ChangedReply: ({ text }) => ({ model: modifyFields(model, { reply: () => text }) }),
+    // Reporting the issue is what starts its agent: the board's policy does that.
+    SubmittedIssue: () => {
+      if (model.title.trim() === "") return { model };
+      // The page names the issue, so it can open it before the board answers.
+      const issueId = IssueId.make(
+        `${model.commandIds.session}-${model.commandIds.sent}`.replace(/[^\w-]/g, "-"),
+      );
+      const sent = send(model, (commandId) =>
         BoardClient.ReportIssue({
-          input: { issueId: model.issueId, title: model.draft, body: "" },
+          input: { issueId, title: model.title.trim(), body: model.body.trim() },
           commandId,
         }),
-      ),
-    // A reply is passed to the session by the same policy. A working session queues it.
-    ClickedReply: () =>
-      send(model, (commandId) =>
-        BoardClient.CommentOnIssue({
-          input: { issueId: model.issueId, commentId: commandId, body: model.draft },
-          commandId,
+      );
+      return {
+        model: modifyFields(show(sent.model, Option.some(issueId)), {
+          title: () => "",
+          body: () => "",
         }),
-      ),
+        commands: [...(sent.commands ?? []), ShowAddress({ issueId: Option.some(issueId) })],
+      };
+    },
+    // A reply is passed to the agent by the same policy. A working agent queues it.
+    SubmittedReply: () =>
+      Option.match(model.selected, {
+        onNone: (): Return => ({ model }),
+        onSome: (issueId) => {
+          if (model.reply.trim() === "") return { model };
+          const sent = send(model, (commandId) =>
+            BoardClient.CommentOnIssue({
+              input: { issueId, commentId: commandId, body: model.reply.trim() },
+              commandId,
+            }),
+          );
+          return { ...sent, model: modifyFields(sent.model, { reply: () => "" }) };
+        },
+      }),
+    CompletedShowAddress: () => ({ model }),
     ReceivedBoardResult: ({ result }) => ({
       model:
         result._tag === "FailedReportIssue" || result._tag === "FailedCommentOnIssue"
-          ? modifyFields(model, { error: () => Option.some(result.failure._tag) })
+          ? modifyFields(model, {
+              error: () =>
+                Option.some(
+                  result.failure._tag === "Rejected"
+                    ? result.failure.rejection._tag
+                    : "The board did not answer. Try again.",
+                ),
+            })
           : model,
     }),
-    ReceivedIssue: ({ title, label }) => ({
-      model: modifyFields(model, { title: () => title, label: () => label }),
+    ReceivedIssues: ({ issues }) => ({
+      model: modifyFields(model, { issues: () => issues, listed: () => true }),
     }),
+    ReceivedIssue: ({ detail }) => ({ model: modifyFields(model, { detail: () => detail }) }),
     ReceivedStatus: ({ status, queued }) => ({
       model: modifyFields(model, { status: () => status, queued: () => queued }),
     }),
-    ReceivedItem: ({ entry, cursor }) => ({
-      model: modifyFields(model, {
-        items: (items) => [...items, entry],
-        cursor: () => Option.some(cursor),
-      }),
+    ReceivedItem: ({ issueId, entry, cursor }) => ({
+      // An entry of the issue that was open a moment ago is not this one's.
+      model: Option.contains(model.selected, issueId)
+        ? modifyFields(model, {
+            items: (items) => [...items, entry],
+            cursor: () => Option.some(cursor),
+          })
+        : model,
     }),
     CaughtUpTranscript: ({ cursor }) => ({
-      model: modifyFields(model, { cursor: () => Option.some(cursor) }),
+      model: modifyFields(model, { cursor: () => Option.some(cursor), caughtUp: () => true }),
     }),
     FailedRead: ({ reason }) => ({
       model: modifyFields(model, { error: () => Option.some(reason) }),
@@ -427,95 +604,120 @@ export const update = (model: Model, message: Message) =>
 
 export const init = (flags: Flags): Return => ({
   model: Model.make({
-    issueId: flags.issueId,
     commandIds: { session: flags.page, sent: 0 },
-    draft: "",
-    title: Option.none(),
-    label: Option.none(),
+    issues: [],
+    listed: false,
+    selected: flags.issueId,
+    title: "",
+    body: "",
+    reply: "",
+    detail: Option.none(),
     status: "idle",
     queued: [],
     items: [],
     cursor: Option.none(),
+    caughtUp: false,
     error: Option.none(),
   }),
 });
 
 // SUBSCRIPTION
 
-export const subscriptions = Subscription.make<Model, Message, Board>()(() => ({
+const open = (model: Model) => Option.getOrElse(model.selected, () => IssueId.make(""));
+const isOpen = (model: Model) => Option.isSome(model.selected);
+const failed = (error: { readonly _tag: string }): Message =>
+  Message.FailedRead({ reason: error._tag });
+const defect = (): Message => Message.FailedRead({ reason: "The board could not be read" });
+
+export const subscriptions = Subscription.make<Model, Message, Board>()((entry) => ({
+  // Back and forward open the issue their address names.
+  address: entry(
+    {},
+    {
+      modelToDependencies: () => ({}),
+      dependenciesToStream: () =>
+        typeof window === "undefined"
+          ? Stream.empty
+          : Stream.fromEventListener(window, "popstate").pipe(
+              Stream.map(() => Message.ChangedAddress({ issueId: issueIn(location.href) })),
+            ),
+    },
+  ),
+  issues: BoardClient.IssueList.watch({
+    key: () => ALL,
+    toMessage: ({ state }): Message =>
+      Message.ReceivedIssues({
+        issues: Option.match(state, {
+          onNone: () => [],
+          onSome: (list) =>
+            list.order.flatMap((issueId) => {
+              const issue = list.issues[issueId];
+              return issue === undefined
+                ? []
+                : [{ issueId, ...issue, working: list.working.includes(issueId) }];
+            }),
+        }),
+      }),
+    onFailure: failed,
+    onDefect: defect,
+  }),
   issue: BoardClient.IssueDetail.watch({
-    key: (model: Model) => model.issueId,
+    key: open,
+    isEnabled: isOpen,
     toMessage: ({ state }): Message =>
       Message.ReceivedIssue({
-        title: Option.map(state, (detail) => detail.title),
-        label: Option.flatMap(state, (detail) => Option.fromNullishOr(detail.label)),
+        detail: Option.map(state, ({ title, body, label }) => ({ title, body, label })),
       }),
-    onFailure: (error): Message => Message.FailedRead({ reason: error._tag }),
-    onDefect: (): Message => Message.FailedRead({ reason: "Read defect" }),
+    onFailure: failed,
+    onDefect: defect,
   }),
   status: BoardClient.SessionStatus.watch({
-    key: (model: Model) => model.issueId,
+    key: open,
+    isEnabled: isOpen,
     toMessage: ({ state }): Message =>
       Message.ReceivedStatus(
         Option.getOrElse(state, () => ({ status: "idle" as const, queued: [] })),
       ),
-    onFailure: (error): Message => Message.FailedRead({ reason: error._tag }),
-    onDefect: (): Message => Message.FailedRead({ reason: "Read defect" }),
+    onFailure: failed,
+    onDefect: defect,
   }),
   transcript: BoardClient.Transcript.events({
-    key: (model: Model) => model.issueId,
+    key: open,
+    isEnabled: isOpen,
     cursor: (model) => model.cursor,
     onEntry: ({ event, envelope }): Message =>
-      Message.ReceivedItem({ entry: { seq: event.seq, item: event.item }, cursor: envelope.seq }),
+      Message.ReceivedItem({
+        issueId: IssueId.make(envelope.id),
+        entry: { seq: event.seq, item: event.item },
+        cursor: envelope.seq,
+      }),
     onCaughtUp: (cursor): Message => Message.CaughtUpTranscript({ cursor }),
-    onFailure: (error): Message => Message.FailedRead({ reason: error._tag }),
-    onDefect: (): Message => Message.FailedRead({ reason: "Read defect" }),
+    onFailure: failed,
+    onDefect: defect,
   }),
 }));
+```
 
-// VIEW
+The open issue is kept in the address, so a refresh or a shared link opens it again:
 
-const itemView = ({ seq, item }: SessionEntry, h: HtmlBuilder<Message>) =>
-  h.keyed("li")(
-    String(seq),
-    [],
-    [
-      item.type === "user"
-        ? `You: ${item.text}`
-        : item.type === "tool"
-          ? `${item.name} answered: ${item.output}`
-          : item.toolCalls.length > 0
-            ? `Calls ${item.toolCalls.map((call) => call.name).join(", ")}`
-            : `Agent: ${item.text}`,
-    ],
-  );
+```typescript title="web/src/Location.ts"
+import * as Option from "effect/Option";
+import { IssueId } from "../../src/Board/Issue.id.ts";
 
-export const view = (model: Model, h: HtmlBuilder<Message>): Document => {
-  const reported = Option.isSome(model.title);
-  return {
-    title: Option.getOrElse(model.title, () => "New issue"),
-    body: h.div(
-      [],
-      [
-        h.h1([], [Option.getOrElse(model.title, () => `Issue ${model.issueId}`)]),
-        h.p([], [`Label: ${Option.getOrElse(model.label, () => "none yet")}`]),
-        h.p([], [model.status === "working" ? "The agent is working" : "The agent is idle"]),
-        h.ul(
-          [],
-          model.items.map((entry) => itemView(entry, h)),
-        ),
-        h.ul(
-          [],
-          model.queued.map((message) => h.keyed("li")(message.id, [], [`Queued: ${message.text}`])),
-        ),
-        h.input([h.Value(model.draft), h.OnInput((text) => Message.ChangedDraft({ text }))]),
-        reported
-          ? h.button([h.OnClick(Message.ClickedReply())], ["Reply"])
-          : h.button([h.OnClick(Message.ClickedReport())], ["Report this issue"]),
-        h.p([], [Option.getOrElse(model.error, () => "")]),
-      ],
-    ),
-  };
+/** The issue an address names with `?issue=`, if it names one. */
+export const issueIn = (url: string): Option.Option<IssueId> => {
+  const named = new URL(url).searchParams.get("issue");
+  return named === null || named === "" ? Option.none() : Option.some(IssueId.make(named));
+};
+
+/** The address that opens an issue, or the board with none open. */
+export const urlOf = (url: string, issueId: Option.Option<IssueId>): string => {
+  const parsed = new URL(url);
+  Option.match(issueId, {
+    onNone: () => parsed.searchParams.delete("issue"),
+    onSome: (id) => parsed.searchParams.set("issue", id),
+  });
+  return parsed.toString();
 };
 ```
 
@@ -529,8 +731,9 @@ import * as Layer from "effect/Layer";
 import * as Socket from "effect/socket/Socket";
 import { Runtime } from "foldkit";
 import { WebApi } from "../../src/Board/WebApi.api.ts";
-import { Flags, init, Model, subscriptions, update, view } from "./Issue.ts";
-import { issueOf } from "./Location.ts";
+import { Flags, init, Model, subscriptions, update } from "./Board.ts";
+import { issueIn } from "./Location.ts";
+import { view } from "./View.ts";
 
 /**
  * The board's Api for the life of the app. Commands go over HTTP. Each live
@@ -553,19 +756,95 @@ Runtime.run(
     container: document.getElementById("root"),
   }),
   {
-    flags: Effect.sync(() => {
-      const { issueId, url } = issueOf(location.href, () => `web-${Date.now()}`);
-      // Keep the issue in the address bar: a refresh resumes it.
-      history.replaceState(null, "", url);
-      return {
-        issueId,
-        // Names this page's commands, so each is unique even across reloads.
-        page: crypto.randomUUID(),
-      };
-    }),
+    flags: Effect.sync(() => ({
+      // The issue the address names is opened: a refresh or a shared link resumes it.
+      issueId: issueIn(location.href),
+      // Names this page's commands and issues, so each is unique even across reloads.
+      page: crypto.randomUUID(),
+    })),
   },
 );
 ```
+
+`web/src/View.ts` draws it: a list of issues, and the open one as a thread, with each tool call joined to its result.
+
+## Test the page with the board
+
+The page's `update` is tested with Foldkit stories. To test the page and the board together, run the page's own `init`, `update`, Commands and Subscriptions against the board in memory, with a stand-in for the agent:
+
+```typescript title="test/App.ts"
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
+import type { WebApi } from "../src/Board/WebApi.api.ts";
+import {
+  type Flags,
+  init,
+  type Message,
+  type Model,
+  subscriptions,
+  update,
+} from "../web/src/Board.ts";
+
+type Client = (typeof WebApi)["Client"]["Identifier"];
+
+/**
+ * Run the web page without a browser: its own `init`, `update`, Commands and
+ * Subscriptions, against whatever board the `WebApi` client reaches. Only
+ * the view is left out. It stops when the scope closes.
+ */
+export const open = Effect.fn(function* (flags: Flags) {
+  const started = init(flags);
+  let current: Model = started.model;
+  const models = yield* SubscriptionRef.make(current);
+
+  const dispatch = (message: Message): Effect.Effect<void, never, Client> =>
+    Effect.gen(function* () {
+      const next = update(current, message);
+      current = next.model;
+      yield* SubscriptionRef.set(models, current);
+      // Each Command runs in the background, and its Message is dispatched in turn.
+      for (const command of next.commands ?? []) {
+        yield* Effect.forkDetach(Effect.flatMap(command.effect, dispatch));
+      }
+    });
+
+  // Each Subscription follows its dependencies: when they change (another
+  // issue is opened), its Stream is restarted, as Foldkit's runtime does.
+  for (const entry of Object.values(subscriptions)) {
+    const read = () => entry.modelToDependencies(current) as unknown;
+    const same = (entry as { keepAliveEquivalence?: (a: unknown, b: unknown) => boolean })
+      .keepAliveEquivalence;
+    const key = (dependencies: unknown) => JSON.stringify(dependencies);
+    const run = entry.dependenciesToStream as unknown as (
+      dependencies: unknown,
+      read: () => unknown,
+    ) => Stream.Stream<Message, never, Client>;
+    const messages: Stream.Stream<Message, never, Client> = SubscriptionRef.changes(models).pipe(
+      Stream.map(read),
+      Stream.changesWith((a, b) => (same ? same(a, b) : key(a) === key(b))),
+      Stream.switchMap((dependencies) => run(dependencies, read)),
+    );
+    yield* Effect.forkScoped(Stream.runForEach(messages, dispatch));
+  }
+
+  return {
+    /** What a click or a keystroke does. */
+    dispatch,
+    /** The Model once it satisfies `predicate`. */
+    until: (predicate: (model: Model) => boolean) =>
+      SubscriptionRef.changes(models).pipe(
+        Stream.filter(predicate),
+        Stream.runHead,
+        Effect.map(() => current),
+        Effect.timeout("90 seconds"),
+        Effect.orDie,
+      ),
+  };
+});
+```
+
+The same runner drives a deployed stack in `test/integ.test.ts`, with the real agent.
 
 ## Deploy the page with the board
 

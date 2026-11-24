@@ -9,7 +9,7 @@ import {
   type Model,
   subscriptions,
   update,
-} from "../web/src/Issue.ts";
+} from "../web/src/Board.ts";
 
 type Client = (typeof WebApi)["Client"]["Identifier"];
 
@@ -34,14 +34,23 @@ export const open = Effect.fn(function* (flags: Flags) {
       }
     });
 
+  // Each Subscription follows its dependencies: when they change (another
+  // issue is opened), its Stream is restarted, as Foldkit's runtime does.
   for (const entry of Object.values(subscriptions)) {
-    const read = () => entry.modelToDependencies(current);
-    yield* (
-      entry.dependenciesToStream as (
-        dependencies: unknown,
-        read: () => unknown,
-      ) => Stream.Stream<Message, never, Client>
-    )(read(), read).pipe(Stream.runForEach(dispatch), Effect.forkScoped);
+    const read = () => entry.modelToDependencies(current) as unknown;
+    const same = (entry as { keepAliveEquivalence?: (a: unknown, b: unknown) => boolean })
+      .keepAliveEquivalence;
+    const key = (dependencies: unknown) => JSON.stringify(dependencies);
+    const run = entry.dependenciesToStream as unknown as (
+      dependencies: unknown,
+      read: () => unknown,
+    ) => Stream.Stream<Message, never, Client>;
+    const messages: Stream.Stream<Message, never, Client> = SubscriptionRef.changes(models).pipe(
+      Stream.map(read),
+      Stream.changesWith((a, b) => (same ? same(a, b) : key(a) === key(b))),
+      Stream.switchMap((dependencies) => run(dependencies, read)),
+    );
+    yield* Effect.forkScoped(Stream.runForEach(messages, dispatch));
   }
 
   return {
