@@ -281,6 +281,7 @@ def institution : Network Part part where
     | .compliance, call, _, _, _ => nomatch call
     | .wires, call, _, _, _ => nomatch call
   offered := by intro i c j s _; cases j <;> trivial
+  parts := [.bank, .compliance, .wires]
 
 /--
 In every world the three can reach together: every account is balanced, no
@@ -300,7 +301,7 @@ theorem allThreeAreSound (w : institution.Worlds) (reach : institution.Reachable
     Wires.everyWireSentOnce _ (institution.reachable_each reach .wires) payout⟩
 
 /-- A payout through all three: the bank takes the money out, and the wire desk sends it. -/
-def aPayout : institution.Worlds := institution.run [.bank, .compliance, .wires] [
+def aPayout : institution.Worlds := institution.run [
   ⟨.bank, .send ⟨.Account, (), .open "a-1" "Sam"⟩⟩,
   ⟨.bank, .send ⟨.Account, (), .deposit "a-1" 500⟩⟩,
   ⟨.bank, .send ⟨.Account, (), .requestPayout "a-1" "p-1" 200⟩⟩ ]
@@ -316,7 +317,7 @@ money back. The refund is itself a large deposit, so compliance screens it, and
 flags it: the account ends up frozen. Nobody wrote that down; it is what the
 three models do together.
 -/
-def aPayoutTooLarge : institution.Worlds := institution.run [.bank, .compliance, .wires] [
+def aPayoutTooLarge : institution.Worlds := institution.run [
   ⟨.bank, .send ⟨.Account, (), .open "a-1" "Sam"⟩⟩,
   ⟨.bank, .send ⟨.Account, (), .deposit "a-1" 40000⟩⟩,
   ⟨.bank, .send ⟨.Account, (), .deposit "a-1" 40000⟩⟩,
@@ -329,3 +330,20 @@ example : ((aPayoutTooLarge .bank).state .Account "a-1").balance = 120000 ∧
     (aPayoutTooLarge .compliance).state .Watch "a-1" = { assessed := 4, flagged := 1 } ∧
     (aPayoutTooLarge .wires).state .Transfer "p-1" = {} := by
   native_decide
+
+/--
+The run above is one the network can reach, so everything proved of every
+reachable world holds of it, in whatever order its calls were answered.
+-/
+theorem thePayoutRunIsSound :
+    Bank.Balanced ((aPayout .bank).state .Account "a-1") ∧
+      Bank.Conserved (aPayout .bank).toRecorded ∧
+      Compliance.FlagsAreAssessments ((aPayout .compliance).state .Watch "a-1") ∧
+      Wires.SentOnce ((aPayout .wires).state .Transfer "p-1") :=
+  allThreeAreSound _
+    (institution.run_reachable [
+        ⟨.bank, ⟨.Account, (), .open "a-1" "Sam"⟩⟩,
+        ⟨.bank, ⟨.Account, (), .deposit "a-1" 500⟩⟩,
+        ⟨.bank, ⟨.Account, (), .requestPayout "a-1" "p-1" 200⟩⟩]
+      (by intro command _; obtain ⟨part, _⟩ := command; cases part <;> trivial))
+    "a-1" "p-1"

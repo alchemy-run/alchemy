@@ -289,3 +289,38 @@ theorem onceSettled_of_invariant {I P : World m.signature → Prop}
 
 end Model
 end Alchemy
+
+namespace Alchemy
+namespace Model
+
+variable (m : Model)
+
+/-- From one world to another by steps the model can take. -/
+inductive Runs : World m.signature → World m.signature → Prop where
+  | refl (w) : Runs w w
+  | step {w w' w''} : Runs w w' → m.Step w' w'' → Runs w w''
+
+theorem Runs.trans {m : Model} {a b c : World m.signature} (ab : m.Runs a b) (bc : m.Runs b c) :
+    m.Runs a c := by
+  induction bc with
+  | refl => exact ab
+  | step _ step ih => exact .step ih step
+
+/-- The engine's settling is steps the model can take. -/
+theorem settle_runs (fuel : Nat) : ∀ w, m.Runs w (m.settle fuel w) := by
+  induction fuel with
+  | zero => intro w; exact .refl w
+  | succ fuel ih =>
+    intro w
+    unfold settle
+    cases one : m.stepOnce w with
+    | none => exact .refl w
+    | some w' => exact Runs.trans (.step (.refl w) (m.stepOnce_step w w' one)) (ih w')
+
+/-- Sending an offered command, and settling, is steps the model can take. -/
+theorem play_send_runs (fuel : Nat) (w : World m.signature) (s : Send m.signature.aggregates)
+    (offered : m.offered s) : m.Runs w (m.play fuel w (.send s)) :=
+  Runs.trans (.step (.refl w) (.send w s offered)) (m.settle_runs fuel _)
+
+end Model
+end Alchemy

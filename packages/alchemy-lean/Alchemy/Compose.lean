@@ -140,6 +140,11 @@ structure Network (ι : Type) [DecidableEq ι] (model : ι → Model) where
     (model i).signature.Reply c
   /-- A call only becomes a command the answering model offers. -/
   offered : ∀ i c j s, ask i c = some ⟨j, s⟩ → (model j).offered s := by intros; trivial
+  /--
+  The models, for running the network. A run looks for a waiting call among them
+  in this order. Proofs do not depend on it: `Step` lets any call be answered next.
+  -/
+  parts : List ι := []
 
 namespace Network
 
@@ -213,8 +218,8 @@ theorem all {P : (i : ι) → World (model i).signature → Prop}
 /-! ## Running a network -/
 
 /-- The first waiting call that another model answers is answered by it. -/
-def answerNext (nodes : List ι) (w : net.Worlds) : Option net.Worlds :=
-  nodes.findSome? fun i =>
+def answerNext (w : net.Worlds) : Option net.Worlds :=
+  net.parts.findSome? fun i =>
     ((model i).waiting (w i)).findSome? fun c =>
       match net.ask i c with
       | none => none
@@ -227,20 +232,122 @@ def answerNext (nodes : List ι) (w : net.Worlds) : Option net.Worlds :=
               ((model j).settle Link.fuel ((w j).dispatch s))
 
 /-- Answers calls between the models until none is waiting, or the fuel runs out. -/
-def settle (nodes : List ι) : Nat → net.Worlds → net.Worlds
+def settle : Nat → net.Worlds → net.Worlds
   | 0, w => w
   | calls + 1, w =>
-    match net.answerNext nodes w with
+    match net.answerNext w with
     | none => w
-    | some w' => settle nodes calls w'
+    | some w' => settle calls w'
 
 /-- A move of one model, then everything that follows in all of them. -/
-def play (nodes : List ι) (w : net.Worlds) (move : (i : ι) × Model.Move (model i)) : net.Worlds :=
-  net.settle nodes 100 (net.set w move.1 ((model move.1).play Link.fuel (w move.1) move.2))
+def play (w : net.Worlds) (move : (i : ι) × Model.Move (model i)) : net.Worlds :=
+  net.settle 100 (net.set w move.1 ((model move.1).play Link.fuel (w move.1) move.2))
 
-/-- Every model's world after every move, from the start. `nodes` lists the models. -/
-def run (nodes : List ι) (moves : List ((i : ι) × Model.Move (model i))) : net.Worlds :=
-  moves.foldl (net.play nodes) fun i => World.start (model i).signature
+/-- Every model's world after every move, from the start. -/
+def run (moves : List ((i : ι) × Model.Move (model i))) : net.Worlds :=
+  moves.foldl net.play fun i => World.start (model i).signature
+
+/-! ## A run is within what the network can reach
+
+The run picks one order in which to answer waiting calls. Whichever it picks,
+it only takes steps the network can take. So every theorem about the worlds a
+network can reach holds of every run, whatever the order.
+-/
+
+theorem set_set (w : net.Worlds) (i : ι) (a b : World (model i).signature) :
+    net.set (net.set w i a) i b = net.set w i b := by
+  funext k
+  by_cases same : i = k
+  · subst same; simp
+  · simp [set, same]
+
+theorem set_self (w : net.Worlds) (i : ι) : net.set w i (w i) = w := by
+  funext k
+  by_cases same : i = k
+  · subst same; simp
+  · simp [set, same]
+
+theorem set_comm (w : net.Worlds) (i j : ι) (a : World (model i).signature)
+    (b : World (model j).signature) (ne : i ≠ j) :
+    net.set (net.set w i a) j b = net.set (net.set w j b) i a := by
+  funext k
+  by_cases toI : i = k
+  · subst toI
+    have : ¬j = i := fun h => ne h.symm
+    simp [set, this]
+  · by_cases toJ : j = k
+    · subst toJ; simp [set, toI]
+    · simp [set, toI, toJ]
+
+/-- One model running on by its own steps keeps the network within what it can reach. -/
+theorem reachable_runs {w : net.Worlds} (reach : net.Reachable w) (i : ι)
+    {wi' : World (model i).signature} (runs : (model i).Runs (w i) wi') :
+    net.Reachable (net.set w i wi') := by
+  induction runs with
+  | refl => rw [set_self]; exact reach
+  | step _ step ih =>
+    have := Reachable.step ih (.own _ i _ (by rw [set_same]; exact step))
+    rwa [set_set] at this
+
+/-- Answering the next waiting call keeps the network within what it can reach. -/
+theorem answerNext_reachable {w w' : net.Worlds} (reach : net.Reachable w)
+    (next : net.answerNext w = some w') : net.Reachable w' := by
+  unfold answerNext at next
+  obtain ⟨i, _, next⟩ := List.exists_of_findSome?_eq_some next
+  obtain ⟨c, _, next⟩ := List.exists_of_findSome?_eq_some next
+  cases asked : net.ask i c with
+  | none => simp [asked] at next
+  | some target =>
+    obtain ⟨j, s⟩ := target
+    simp only [asked] at next
+    by_cases same : i = j
+    · simp [same] at next
+    · simp only [same, ite_false] at next
+      obtain ⟨wi, answered, rfl⟩ := Option.map_eq_some_iff.mp next
+      obtain ⟨fibers, found, rfl⟩ := Option.map_eq_some_iff.mp answered
+      obtain ⟨before, f, after, k, split, program, rfl⟩ :=
+        (model i).answerGo_split c _ _ _ found
+      have called := Reachable.step reach (.call w i f before after c k j s split program asked same)
+      -- then each of the two settles, by its own steps
+      have settledJ := net.reachable_runs called j
+        (wi' := (model j).settle Link.fuel ((w j).dispatch s))
+        (by rw [set_same]; exact (model j).settle_runs _ _)
+      rw [set_set, net.set_comm _ i j _ _ same] at settledJ
+      have settledI := net.reachable_runs settledJ i
+        (by rw [set_same]; exact (model i).settle_runs Link.fuel _)
+      rw [set_set, net.set_comm _ j i _ _ (fun h => same h.symm)] at settledI
+      exact settledI
+
+theorem settle_reachable (calls : Nat) : ∀ {w : net.Worlds}, net.Reachable w →
+    net.Reachable (net.settle calls w) := by
+  induction calls with
+  | zero => intro w reach; exact reach
+  | succ calls ih =>
+    intro w reach
+    unfold settle
+    cases next : net.answerNext w with
+    | none => exact reach
+    | some w' => exact ih (net.answerNext_reachable reach next)
+
+/--
+A run of offered commands is within what the network can reach. So whatever is
+proved of every reachable world holds of the run, in whatever order it answered.
+-/
+theorem run_reachable (commands : List ((i : ι) × Send (model i).signature.aggregates))
+    (offered : ∀ command ∈ commands, (model command.1).offered command.2) :
+    net.Reachable (net.run (commands.map fun command => ⟨command.1, .send command.2⟩)) := by
+  unfold run
+  suffices ∀ (w : net.Worlds), net.Reachable w →
+      net.Reachable ((commands.map fun command =>
+        (⟨command.1, .send command.2⟩ : (i : ι) × Model.Move (model i))).foldl net.play w) from
+    this _ .start
+  induction commands with
+  | nil => intro w reach; exact reach
+  | cons command rest ih =>
+    intro w reach
+    refine ih (fun c mem => offered c (List.mem_cons_of_mem _ mem)) _ ?_
+    exact net.settle_reachable _ (net.reachable_runs reach command.1
+      ((model command.1).play_send_runs _ _ _ (offered command List.mem_cons_self)))
 
 end Network
 
