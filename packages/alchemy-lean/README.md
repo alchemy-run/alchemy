@@ -107,7 +107,7 @@ A decision reads several instances and records on all of them or none.
         Account.record destination (.transferredIn amount)]
 ```
 
-A saga runs steps in order. `undoWith` says what to send if a later step fails.
+A saga runs steps in order. `undoWith` says what to send if a later step fails. A model can have several, each with its own failures.
 
 ```lean
   saga Payout (PayoutRequest) (Unit) : PayoutFailed
@@ -310,6 +310,44 @@ theorem aReportableDepositFreezesTheAccount (id owner : String) (amount : Nat)
       .send ⟨.Account, (), .deposit id amount⟩]
     (both.1.state .Account id).status = .frozen "over the reporting threshold" ∧
       both.2.state .Watch id = { assessed := 1, flagged := 1 }
+```
+
+Any number of models join in a `Network`. The same holds of all of them, and a run goes through each.
+
+```lean
+theorem allThreeAreSound (w : institution.Worlds) (reach : institution.Reachable w)
+    (account payout : String) :
+    Bank.Balanced ((w .bank).state .Account account) ∧
+      Bank.Conserved (w .bank).toRecorded ∧
+      Compliance.FlagsAreAssessments ((w .compliance).state .Watch account) ∧
+      Wires.SentOnce ((w .wires).state .Transfer payout) :=
+```
+
+## Eventually
+
+Left to run, a flow comes to rest with nothing in flight and the outcome it should have.
+
+```lean
+theorem anApprovedOrderEventuallyShips (id item charge : String) (amount : Nat)
+    (priced : amount ≠ 0) :
+    Shop.Eventually
+      (Shop.run [
+        .send ⟨.Order, (), .place id item amount⟩,
+        .answer (.charge id amount) (.approved charge),
+        .answer (.ship id item) ()])
+      fun shop => shop.Settled ∧ (shop.state .Order id).status = .paid charge ∧
+        (shop.state .Shipment id).item = some item := by
+  refine Shop.eventually_now _ ?_ ?_ <;> behaviour
+```
+
+That a model comes to rest from any world is proved with a measure every step lowers.
+
+```lean
+theorem comesToRest (w : Alchemy.World Signature) (idle : w.fibers = []) :
+    Wires.AtRest (Wires.settle w.inbox.length w) :=
+  Wires.comesToRestWithin (fun w => w.fibers = []) (fun w => w.inbox.length)
+    (fun _ _ idle step => (step_idle idle step).1) (fun _ _ idle step => (step_idle idle step).2)
+    _ w idle (Nat.le_refl _)
 ```
 
 ## A stack
@@ -578,4 +616,3 @@ In the editor, `#eval` shows any of it without running a program.
 - Stacks run against a cloud held in memory. Nothing deploys to a real account.
 - A host handles one request at a time, by design.
 - Ids are strings.
-- Cloudflare has no control-plane model, so its stacks have a graph but no plan.

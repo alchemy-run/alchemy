@@ -157,4 +157,23 @@ theorem aConsumedMessageIsStoredNext {role : Access Kind} [store.Needs role mail
   rw [R2.put_eval]
   exact Memory.object_written cloud mail _ message
 
+/-! ## Deploying it -/
+
+/-- The first deploy creates everything, each resource after what it needs. -/
+example : plan Control.providers prod (⟨.empty, {}⟩ : Cloud.World Kind Control.Service).state = [
+    ("Mail", .create), ("Incoming", .create), ("Inbox", .create), ("Web", .create)] := by
+  native_decide
+
+/--
+Deploying this stack to a fresh account leaks nothing, whatever fails: every
+resource in the account is one the engine's state knows about. It is the same
+guarantee an AWS stack has, from the same engine.
+-/
+theorem deployLeaksNothing :
+    Tracked Control.lawful
+      (apply Control.providers Control.Service prod (⟨.empty, {}⟩ : Cloud.World Kind Control.Service)).1 :=
+  apply_tracked Control.lawful prod _ (by
+    intro y present
+    simp [Control.lawful] at present)
+
 end Inbox

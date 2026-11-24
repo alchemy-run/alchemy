@@ -54,3 +54,8 @@ srcDir = "examples"
 name = "uploads"
 root = "UploadsMain"
 srcDir = "examples"
+
+[[lean_exe]]
+name = "inbox"
+root = "InboxMain"
+srcDir = "examples"
