@@ -77,7 +77,7 @@ def ChargedOnce (s : Order.State) : Prop :=
   (s.status = .new ∨ s.status = .awaitingPayment → s.charged = 0) ∧ s.charged ≤ s.amount
 
 theorem chargedOnce : Order.Keeps ChargedOnce := by
-  aggregate_rule [Order.decide, Order.evolve, ChargedOnce]
+  aggregate_rule
 ```
 
 **Reading it.** `Prop` is a statement that is true or false. `∨` is or, `∧` is and, `→` is implies. `theorem name : claim := by tactic` is a claim and how to prove it. `aggregate_rule` tries every command and every branch of `decide`.
@@ -101,7 +101,7 @@ General properties are stated the same way. Every order command is idempotent, s
 
 ```lean
 theorem everyOrderCommandIsIdempotent : Order.Idempotent := by
-  command_law [Order.decide, Order.evolve]
+  command_law
 ```
 
 ## 5. Connect things: the model

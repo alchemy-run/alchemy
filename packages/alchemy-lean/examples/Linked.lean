@@ -49,7 +49,7 @@ namespace Compliance
 def FlagsAreAssessments (s : Watch.State) : Prop := s.flagged ≤ s.assessed
 
 theorem flagsAreAssessments_kept : Watch.Keeps FlagsAreAssessments := by
-  aggregate_rule [Watch.decide, Watch.evolve, FlagsAreAssessments]
+  aggregate_rule
 
 theorem everyWatchIsSound (w : Alchemy.World Signature) (reach : Compliance.Reachable w)
     (account : String) : FlagsAreAssessments (w.state .Watch account) :=

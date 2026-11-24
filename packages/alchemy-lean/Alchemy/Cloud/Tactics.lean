@@ -153,4 +153,33 @@ macro_rules
           | (rename_i c _ _; cases c <;> simp [$params,*] <;> (repeat' split) <;> grind [$grinds,*])
           | (simp [$params,*] <;> (repeat' split) <;> grind [$grinds,*])))
 
+open Lean Elab Tactic Meta in
+/-- The names a rule about an aggregate is stated with: its `decide` and `evolve`, and the rule. -/
+private def namesIn (goal : Expr) : MetaM (Array Ident) := do
+  let goal ← instantiateMVars goal
+  let args := goal.getAppArgs
+  let some aggregate := args[0]? | throwError "this is not a rule about an aggregate"
+  let .const aggregateName _ := aggregate.getAppFn
+    | throwError "the aggregate must be named, as in {lit}Order.Keeps …{rit}"
+  let mut names := #[mkIdent (`_root_ ++ aggregateName ++ `decide),
+    mkIdent (`_root_ ++ aggregateName ++ `evolve)]
+  for arg in args.extract 1 args.size do
+    if let .const name _ := arg.getAppFn then names := names.push (mkIdent (`_root_ ++ name))
+  return names
+where
+  lit := "`"
+  rit := "`"
+
+open Lean Elab Tactic in
+/-- `aggregate_rule`, with the names read off the goal: `Order.Keeps ChargedOnce`. -/
+elab "aggregate_rule" : tactic => withMainContext do
+  let names ← namesIn (← getMainTarget)
+  evalTactic (← `(tactic| aggregate_rule [$names,*]))
+
+open Lean Elab Tactic in
+/-- `command_law`, with the names read off the goal: `Order.Idempotent`. -/
+elab "command_law" : tactic => withMainContext do
+  let names ← namesIn (← getMainTarget)
+  evalTactic (← `(tactic| command_law [$(names.extract 0 2),*]))
+
 end Alchemy

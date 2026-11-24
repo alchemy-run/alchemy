@@ -255,10 +255,10 @@ theorem aWithdrawalAnswersWhatIsLeft (id owner : String) (held amount : Nat) :
 
 /-- Freezing and closing are idempotent: doing either twice is doing it once. -/
 theorem freezingIsIdempotent (id reason : String) : Account.IdempotentAt (.freeze id reason) := by
-  command_law [Account.decide, Account.evolve]
+  command_law
 
 theorem closingIsIdempotent (id : String) : Account.IdempotentAt (.close id) := by
-  command_law [Account.decide, Account.evolve]
+  command_law
 
 /-- A deposit is not: sent twice, the money arrives twice. A caller must not retry it blindly. -/
 theorem aDepositIsNotIdempotent (id : String) : ¬Account.IdempotentAt (.deposit id 1) := by
@@ -269,7 +269,7 @@ theorem aDepositIsNotIdempotent (id : String) : ¬Account.IdempotentAt (.deposit
 /-- Two deposits commute: the order they arrive in does not matter. -/
 theorem depositsCommute (id other : String) (amount more : Nat) :
     Account.Commute (.deposit id amount) (.deposit other more) := by
-  command_law [Account.decide, Account.evolve]
+  command_law
 
 /-! ## 3. Invariants: what no command can break
 
@@ -285,10 +285,10 @@ def Balanced (s : Account.State) : Prop := s.balance + s.withdrawn = s.deposited
 def ClosedIsEmpty (s : Account.State) : Prop := s.status = .closed → s.balance = 0
 
 theorem balanced_kept : Account.Keeps Balanced := by
-  aggregate_rule [Account.decide, Account.evolve, Balanced]
+  aggregate_rule
 
 theorem closedIsEmpty_kept : Account.Keeps ClosedIsEmpty := by
-  aggregate_rule [Account.decide, Account.evolve, ClosedIsEmpty]
+  aggregate_rule
 
 /-- The two together, as named invariants: each holds at the start and is kept. -/
 def balanced : Aggregate.Invariant Account :=

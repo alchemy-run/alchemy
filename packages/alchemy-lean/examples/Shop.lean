@@ -171,10 +171,10 @@ Every order command is idempotent: sent twice in a row, it leaves what it
 leaves sent once. So a caller who is not sure a command arrived can send it again.
 -/
 theorem everyOrderCommandIsIdempotent : Order.Idempotent := by
-  command_law [Order.decide, Order.evolve]
+  command_law
 
 theorem schedulingIsIdempotent : Shipment.Idempotent := by
-  command_law [Shipment.decide, Shipment.evolve]
+  command_law
 
 /-! ## Behaviour across the model
 
@@ -218,7 +218,7 @@ def ChargedOnce (s : Order.State) : Prop :=
 
 /-- No command an order accepts breaks the rule. -/
 theorem chargedOnce : Order.Keeps ChargedOnce := by
-  aggregate_rule [Order.decide, Order.evolve, ChargedOnce]
+  aggregate_rule
 
 /--
 So it holds for every order in every world the shop can reach: whatever callers

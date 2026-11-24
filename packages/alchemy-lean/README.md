@@ -148,7 +148,7 @@ A fact about the state. `aggregate_rule` proves no accepted command breaks it.
 def Balanced (s : Account.State) : Prop := s.balance + s.withdrawn = s.deposited
 
 theorem balanced_kept : Account.Keeps Balanced := by
-  aggregate_rule [Account.decide, Account.evolve, Balanced]
+  aggregate_rule
 ```
 
 Other facts follow from an invariant by arithmetic, for every history.
