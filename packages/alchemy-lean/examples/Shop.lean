@@ -423,6 +423,32 @@ example (id : String) :
 
 end ApiBehaviour
 
+/-! ## Stories, told to the stack
+
+The same kind of story as the domain's, in the same words. Here each command
+goes in through the Api, the gateway and the queue answer the shop's calls, and
+what is recorded is read back from the journal in the bucket.
+-/
+
+/-- How the stack is told a story: commands are posted to the Api, and the shop is read from the bucket. -/
+def deployed : Telling Shop InMemory where
+  kind := .function
+  host := out.api
+  request
+    | ⟨.Order, _, command⟩ => (post out.api "/orders" command).request
+  world := shopIn out.orders
+
+example : prod.tells deployed [
+    .when ⟨.Order, (), .place "o-1" "kettle" 40⟩,
+    .recorded .Order "o-1" [.placed "kettle" 40, .paid "ch_o-1" "kettle" 40],
+    .view Revenue () 40,
+    .when ⟨.Order, (), .place "o-1" "kettle" 40⟩,
+    .rejected .Order .alreadyPlaced,
+    .when ⟨.Order, (), .place "o-2" "yacht" 5000⟩,
+    .recorded .Order "o-2" [.placed "yacht" 5000, .declined "over the limit"],
+    .view Revenue () 40
+  ] = true := by native_decide
+
 /-! ## Tests of the stack
 
 These are not stories: they speak HTTP and buckets, not the shop's language.

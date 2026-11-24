@@ -21,6 +21,7 @@ import Alchemy.Cloud.Sim
 import Alchemy.Cloud.Tactics
 import Alchemy.Cloud.AWS
 import Alchemy.Cloud.Hosted
+import Alchemy.Cloud.Tell
 import Alchemy.Cloud.Laws
 import Alchemy.Cloud.AWSLaws
 import Alchemy.Cloud.HostedLaws

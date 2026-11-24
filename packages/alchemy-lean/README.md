@@ -328,6 +328,30 @@ theorem shipmentsGoOneWay :
   constructor <;> stack_rule in prod using [out]
 ```
 
+## A story, told to the stack
+
+The same story, in the domain's words. Each command goes in through the Api, the bindings answer the model's calls, and what is recorded is read back from the bucket.
+
+```lean
+def deployed : Telling Shop InMemory where
+  kind := .function
+  host := out.api
+  request
+    | ⟨.Order, _, command⟩ => (post out.api "/orders" command).request
+  world := shopIn out.orders
+
+example : prod.tells deployed [
+    .when ⟨.Order, (), .place "o-1" "kettle" 40⟩,
+    .recorded .Order "o-1" [.placed "kettle" 40, .paid "ch_o-1" "kettle" 40],
+    .view Revenue () 40,
+    .when ⟨.Order, (), .place "o-1" "kettle" 40⟩,
+    .rejected .Order .alreadyPlaced,
+    .when ⟨.Order, (), .place "o-2" "yacht" 5000⟩,
+    .recorded .Order "o-2" [.placed "yacht" 5000, .declined "over the limit"],
+    .view Revenue () 40
+  ] = true := by native_decide
+```
+
 ## Testing a stack
 
 Requests and what they must answer, run against the whole stack in memory. These are tests of the wiring, in HTTP and buckets; stories stay in the domain's language.
