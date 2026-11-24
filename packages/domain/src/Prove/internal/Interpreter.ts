@@ -2396,7 +2396,12 @@ export const make = (given: Loader, run: Run): Interpreter => {
               first?._tag === "Host" &&
               isService(first.value) &&
               name !== "service" &&
-              !(name === "provideService" && given.length < 3)
+              name !== "serviceOption" &&
+              // Written to be given the effect by `pipe`, the service is what comes first.
+              !(
+                ["provideService", "updateService", "provideServiceEffect"].includes(name ?? "") &&
+                given.length < 3
+              )
               ? [
                   { _tag: "Effect", run: Effect.suspend(() => settle(first, at)) },
                   ...given.slice(1),

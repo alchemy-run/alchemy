@@ -2517,6 +2517,64 @@ Schema.encodeEffect(Ticket)({ n: 2, note: "n" });
 Schema.isSchemaError;
 ```
 
+```typescript title="More of effect/Effect"
+// What handles a cause: a failure, a defect or an interrupt, as data.
+Effect.catchCause((cause) => Effect.succeed(Cause.hasFails(cause)));
+Effect.catchCauseIf(Cause.hasFails, () => Effect.succeed(-1));
+Effect.tapCause((cause) => log(seen, Cause.hasFails(cause)));
+Effect.tapCauseIf(Cause.hasDies, () => log(seen, "died"));
+Effect.onError((cause) => log(seen, "error"));
+Effect.onErrorIf(Cause.hasFails, () => log(seen, "failed"));
+Effect.matchCause(even(a), { onFailure: (cause) => (Cause.hasFails(cause) ? -1 : -2), onSuccess: (n) => n + b });
+Effect.matchCauseEffect(even(a), { onFailure: () => Effect.succeed(-1), onSuccess: (n) => positive(n - b) });
+Effect.sandbox(even(a)); // the cause is what it fails with
+Effect.ignoreCause(Effect.die("d"));
+Effect.catchDefect((defect) => Effect.succeed(defect + 1));
+Effect.tapDefect((defect) => log(seen, defect));
+Effect.try(() => {
+  if (a > 2) throw new Error("big"); // what the function throws is what the effect fails with
+  return a;
+});
+Effect.try({ try: () => { throw a; }, catch: (thrown) => new Odd({ n: thrown }) });
+Effect.runSyncExit(even(a));
+Effect.isEffect(a);
+Effect.undefined;
+
+// What runs an effect again, or more than once.
+Effect.forever(Effect.flatMap(Ref.updateAndGet(turns, (n) => n + 1), (n) => (n > 2 ? Effect.fail("stop") : Effect.void))); // until it fails
+Effect.eventually(Effect.flatMap(Ref.updateAndGet(turns, (n) => n + 1), (n) => (n < 3 ? Effect.fail("again") : Effect.succeed(n + a)))); // until it succeeds
+Effect.replicate(Effect.succeed(a), 3);
+Effect.replicateEffect(Effect.succeed(b), 2);
+Effect.firstSuccessOf([even(a), Effect.succeed(-1)]);
+Effect.whileLoop({ while: () => n < 3, body: () => Effect.succeed(a), step: (x) => { total += x; n++; } });
+Effect.schedule(Ref.update(runs, (n) => n + 1), Schedule.recurs(2));
+Effect.retryOrElse(even(a), Schedule.recurs(1), (error) => Effect.succeed(-error.n));
+Effect.cached(Ref.updateAndGet(runs, (n) => n + 1)); // run the first time what it gives is run, and never again
+Effect.cachedWithTTL(Ref.updateAndGet(runs, (n) => n + 1), "1 second");
+Effect.forkIn(Effect.as(Effect.sleep(1), a), scope);
+Effect.scopedWith((scope) => Effect.as(Scope.addFinalizer(scope, log(seen, "closed")), a));
+
+// Other names for the same, and what only says how an effect is watched.
+Effect.mapEager(Effect.succeed(a), (n) => n + 1);
+Effect.flatMapEager((n) => Effect.succeed(n * b));
+Effect.mapErrorEager((error) => error.n);
+Effect.mapBothEager({ onFailure: (n) => n + 1, onSuccess: (n) => n - 1 });
+Effect.matchEager({ onFailure: (n) => ["no", n], onSuccess: (n) => ["yes", n] });
+Effect.catchEager(() => Effect.succeed(0));
+Effect.fnUntracedEager(function* (n) {
+  return (yield* Effect.succeed(n)) + 1;
+});
+Effect.withTracerEnabled(false);
+Effect.withTracerTiming(false);
+Effect.annotateLogsScoped({ kind: "test" });
+
+// A service, read or given another value.
+Effect.serviceOption(Rate);
+Effect.updateService(Rate, (rate) => ({ percent: rate.percent + 1 }));
+Effect.provideServiceEffect(Effect.map(Rate, (rate) => rate.percent), Rate, Effect.succeed({ percent: b }));
+Effect.provideContext(priced, Context.make(Rate, { percent: 1 }).pipe(Context.add(Fee, { flat: a })));
+```
+
 ```typescript title="effect/Layer, effect/Context and services"
 // A service is an effect that gives what the code around provides for it.
 Effect.provideService(Effect.map(Rate, (rate) => rate.percent + a), Rate, { percent: b });

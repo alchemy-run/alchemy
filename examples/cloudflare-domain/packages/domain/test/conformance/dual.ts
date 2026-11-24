@@ -41,6 +41,8 @@ const ONE_WAY: ReadonlySet<string> = new Set([
   ...["effect/Metric:counter", "effect/Metric:gauge"],
   // The service comes first either way: `Layer.succeed(Rate)(value)`.
   ...["effect/Layer:succeed", "effect/Layer:sync", "effect/Layer:effect"],
+  // A key and a value, or a record of them: neither is given by `pipe`.
+  "effect/Effect:annotateLogsScoped",
 ]);
 
 const declared = new Map<string, ReadonlySet<string>>();

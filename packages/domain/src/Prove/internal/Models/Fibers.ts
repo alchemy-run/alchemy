@@ -37,7 +37,17 @@ import * as TxSemaphore from "effect/TxSemaphore";
 import * as TxSubscriptionRef from "effect/TxSubscriptionRef";
 import * as Brands from "../Brands.ts";
 import type { Kit, Model, Models } from "../Kit.ts";
-import { arr, callable, dual, dualBy, lazy, native, tagOf, wrongArguments } from "../Kit.ts";
+import {
+  arr,
+  callable,
+  dual,
+  dualBy,
+  lazy,
+  native,
+  onEffect as onEffectPlain,
+  tagOf,
+  wrongArguments,
+} from "../Kit.ts";
 import * as Timeline from "../Timeline.ts";
 import type { Eval, Site, V } from "../Value.ts";
 import * as Value from "../Value.ts";
@@ -1391,6 +1401,7 @@ export const make = (
       drawn("Random.nextInt", site, () => Effect.succeed(Random.nextInt), num),
     "effect/Random:nextBoolean": (site) =>
       drawn("Random.nextBoolean", site, () => Effect.succeed(Random.nextBoolean), bool),
+    "effect/Effect:undefined": () => lazy(() => Effect.succeed(Value.undef)),
     "effect/Effect:yieldNow": () => lazy(() => Effect.as(Effect.yieldNow, Value.undef)),
     "effect/Effect:never": (site) =>
       timed(
@@ -4048,7 +4059,443 @@ export const make = (
     ),
   };
 
+  // ---- More of `Effect`: what handles a cause, what runs an effect again, and other names for the same.
+
+  /** A cause the library gives, as the code holds one. What stopped the prover is not a cause of the code's. */
+  const causeTo = (
+    timeline: Timeline.Timeline,
+    cause: Cause.Cause<unknown>,
+  ): Effect.Effect<V, Held> =>
+    Effect.map(Timeline.real(timeline, exitOf(timeline, Exit.failCause(cause))), (exit) =>
+      exit._tag === "Obj" ? (exit.fields.cause ?? Value.undef) : Value.undef,
+    );
+  /** Whether a function of the code holds of a value, as the library asks. */
+  const holding = (
+    timeline: Timeline.Timeline,
+    test: V | undefined,
+    value: V,
+    site: Site,
+  ): Effect.Effect<boolean, Held> =>
+    test
+      ? Timeline.real(timeline, kit.holds(test, [value], site))
+      : Timeline.real(timeline, wrongArguments(site, "a test"));
+  /** A function of the code that gives a value, where the library takes one that gives an effect. */
+  const plainly = (
+    timeline: Timeline.Timeline,
+    fn: V | undefined,
+    site: Site,
+  ): ((...args: ReadonlyArray<V>) => Effect.Effect<V, Held>) =>
+    fn && callable(fn)
+      ? (...args) => Timeline.real(timeline, host.call(fn, args, site))
+      : () => Timeline.real(timeline, wrongArguments(site, "a function"));
+  /** Another name of a function the prover reads: the same model. */
+  const alias =
+    (key: string): Model =>
+    (args, site) =>
+      lib(key, args, site);
+  /** A function of an effect that says how it is watched: the effect is what it was. */
+  const watched = (name: string): Model =>
+    dualBy(
+      name,
+      (v) => v._tag === "Effect",
+      ([self], site) => (self ? Effect.succeed(self) : wrongArguments(site, name)),
+    );
+  const field = (cases: V | undefined, key: string): V | undefined =>
+    cases?._tag === "Obj" ? cases.fields[key] : undefined;
+  /** An effect the library made, as one the code holds. */
+  const effectFrom = (timeline: Timeline.Timeline, made_: Effect.Effect<V, unknown>): V => ({
+    _tag: "Effect",
+    run: Timeline.back(timeline, made_, same),
+  });
+  const isOurDefect = (defect: unknown): defect is Timeline.Defect =>
+    typeof defect === "object" && defect !== null && "_tag" in defect && defect._tag === "Defect";
+
+  const more: Models = {
+    "effect/Effect:mapEager": alias("effect/Effect:map"),
+    "effect/Effect:flatMapEager": alias("effect/Effect:flatMap"),
+    "effect/Effect:mapErrorEager": alias("effect/Effect:mapError"),
+    "effect/Effect:mapBothEager": alias("effect/Effect:mapBoth"),
+    "effect/Effect:matchEager": alias("effect/Effect:match"),
+    "effect/Effect:catchEager": alias("effect/Effect:catch"),
+    "effect/Effect:fnUntracedEager": alias("effect/Effect:fnUntraced"),
+    "effect/Effect:provideContext": alias("effect/Effect:provide"),
+    "effect/Effect:catchCause": onEffect("Effect.catchCause", 1, (timeline, self, [f], site) =>
+      f
+        ? Timeline.back(
+            timeline,
+            Effect.catchCause(self, (cause) =>
+              Effect.flatMap(causeTo(timeline, cause), called(timeline, f, site)),
+            ),
+            same,
+          )
+        : wrongArguments(site, "Effect.catchCause"),
+    ),
+    "effect/Effect:catchCauseIf": onEffect(
+      "Effect.catchCauseIf",
+      2,
+      (timeline, self, [test, f], site) =>
+        f
+          ? Timeline.back(
+              timeline,
+              Effect.catchCause(self, (cause) =>
+                Effect.flatMap(causeTo(timeline, cause), (held) =>
+                  Effect.flatMap(holding(timeline, test, held, site), (holds) =>
+                    holds ? called(timeline, f, site)(held) : Effect.failCause(cause),
+                  ),
+                ),
+              ),
+              same,
+            )
+          : wrongArguments(site, "Effect.catchCauseIf"),
+    ),
+    "effect/Effect:tapCause": onEffect("Effect.tapCause", 1, (timeline, self, [f], site) =>
+      f
+        ? Timeline.back(
+            timeline,
+            Effect.tapCause(self, (cause) =>
+              Effect.flatMap(causeTo(timeline, cause), called(timeline, f, site)),
+            ),
+            same,
+          )
+        : wrongArguments(site, "Effect.tapCause"),
+    ),
+    "effect/Effect:tapCauseIf": onEffect(
+      "Effect.tapCauseIf",
+      2,
+      (timeline, self, [test, f], site) =>
+        f
+          ? Timeline.back(
+              timeline,
+              Effect.tapCause(self, (cause) =>
+                Effect.flatMap(causeTo(timeline, cause), (held) =>
+                  Effect.flatMap(holding(timeline, test, held, site), (holds) =>
+                    holds ? called(timeline, f, site)(held) : Effect.succeed(Value.undef),
+                  ),
+                ),
+              ),
+              same,
+            )
+          : wrongArguments(site, "Effect.tapCauseIf"),
+    ),
+    "effect/Effect:onError": onEffect("Effect.onError", 1, (timeline, self, [f], site) =>
+      f
+        ? Timeline.back(
+            timeline,
+            Effect.onError(self, (cause) =>
+              sure(Effect.flatMap(causeTo(timeline, cause), called(timeline, f, site))),
+            ),
+            same,
+          )
+        : wrongArguments(site, "Effect.onError"),
+    ),
+    "effect/Effect:onErrorIf": onEffect("Effect.onErrorIf", 2, (timeline, self, [test, f], site) =>
+      f
+        ? Timeline.back(
+            timeline,
+            Effect.onError(self, (cause) =>
+              sure(
+                Effect.flatMap(causeTo(timeline, cause), (held) =>
+                  Effect.flatMap(holding(timeline, test, held, site), (holds) =>
+                    holds ? called(timeline, f, site)(held) : Effect.succeed(Value.undef),
+                  ),
+                ),
+              ),
+            ),
+            same,
+          )
+        : wrongArguments(site, "Effect.onErrorIf"),
+    ),
+    "effect/Effect:matchCause": onEffect("Effect.matchCause", 1, (timeline, self, [cases], site) =>
+      Timeline.back(
+        timeline,
+        Effect.matchCauseEffect(self, {
+          onFailure: (cause) =>
+            Effect.flatMap(
+              causeTo(timeline, cause),
+              plainly(timeline, field(cases, "onFailure"), site),
+            ),
+          onSuccess: plainly(timeline, field(cases, "onSuccess"), site),
+        }),
+        same,
+      ),
+    ),
+    "effect/Effect:matchCauseEffect": onEffect(
+      "Effect.matchCauseEffect",
+      1,
+      (timeline, self, [cases], site) => {
+        const [onFailure, onSuccess] = [field(cases, "onFailure"), field(cases, "onSuccess")];
+        return onFailure && onSuccess
+          ? Timeline.back(
+              timeline,
+              Effect.matchCauseEffect(self, {
+                onFailure: (cause) =>
+                  Effect.flatMap(causeTo(timeline, cause), called(timeline, onFailure, site)),
+                onSuccess: called(timeline, onSuccess, site),
+              }),
+              same,
+            )
+          : wrongArguments(site, "Effect.matchCauseEffect");
+      },
+    ),
+    // The cause is what the effect fails with: nothing is a defect any more.
+    "effect/Effect:sandbox": onEffect("Effect.sandbox", 0, (timeline, self) =>
+      Timeline.back(
+        timeline,
+        Effect.catchCause(self, (cause) =>
+          Effect.flatMap(causeTo(timeline, cause), (held) =>
+            Effect.fail(new Value.Rejected({ rejection: held })),
+          ),
+        ),
+        same,
+      ),
+    ),
+    "effect/Effect:ignoreCause": onEffect("Effect.ignoreCause", 0, (timeline, self) =>
+      Timeline.back(
+        timeline,
+        Effect.catchCause(self, (cause) => Effect.as(causeTo(timeline, cause), Value.undef)),
+        () => Value.undef,
+      ),
+    ),
+    "effect/Effect:catchDefect": onEffect("Effect.catchDefect", 1, (timeline, self, [f], site) =>
+      f
+        ? Timeline.back(
+            timeline,
+            Effect.catchDefect(self, (defect) =>
+              isOurDefect(defect) ? called(timeline, f, site)(defect.defect) : Effect.die(defect),
+            ),
+            same,
+          )
+        : wrongArguments(site, "Effect.catchDefect"),
+    ),
+    "effect/Effect:tapDefect": onEffect("Effect.tapDefect", 1, (timeline, self, [f], site) =>
+      f
+        ? Timeline.back(
+            timeline,
+            Effect.tapDefect(self, (defect) =>
+              isOurDefect(defect)
+                ? called(timeline, f, site)(defect.defect)
+                : Effect.succeed(Value.undef),
+            ),
+            same,
+          )
+        : wrongArguments(site, "Effect.tapDefect"),
+    ),
+    // Run again with nothing to stop it: it ends when it fails.
+    "effect/Effect:forever": onEffect("Effect.forever", 0, (timeline, self, _, site) =>
+      Timeline.back(timeline, Effect.forever(turn("Effect.forever", timeline, self, site)), same),
+    ),
+    "effect/Effect:eventually": onEffect("Effect.eventually", 0, (timeline, self, _, site) =>
+      Timeline.back(
+        timeline,
+        Effect.eventually(turn("Effect.eventually", timeline, self, site)),
+        same,
+      ),
+    ),
+    "effect/Effect:replicate": dual("Effect.replicate", 2, ([self, n], site) =>
+      Effect.map(count("Effect.replicate", n, site), (times) =>
+        arr(Array.from({ length: times }, () => self ?? Value.undef)),
+      ),
+    ),
+    "effect/Effect:replicateEffect": onEffect(
+      "Effect.replicateEffect",
+      1,
+      (timeline, self, [n], site) =>
+        Effect.flatMap(count("Effect.replicateEffect", n, site), (times) =>
+          Timeline.back(timeline, Effect.replicateEffect(self, times), list),
+        ),
+    ),
+    "effect/Effect:firstSuccessOf": ([given], site) =>
+      Effect.succeed(
+        timed(
+          "Effect.firstSuccessOf",
+          (timeline) =>
+            Effect.flatMap(effects("Effect.firstSuccessOf", timeline, given, site), (all) =>
+              all.length === 0
+                ? wrongArguments(site, "Effect.firstSuccessOf")
+                : Timeline.back(timeline, Effect.firstSuccessOf(all), same),
+            ),
+          site,
+        ),
+      ),
+    "effect/Effect:whileLoop": ([given], site) => {
+      const [test, body, step] = [
+        field(given, "while"),
+        field(given, "body"),
+        field(given, "step"),
+      ];
+      if (!test || !body || !step) return wrongArguments(site, "Effect.whileLoop");
+      return Effect.succeed(
+        lazy(() =>
+          Effect.gen(function* () {
+            let turns = 0;
+            while (yield* kit.holds(test, [], site)) {
+              if (++turns > MAX_TURNS)
+                return yield* unseen(
+                  site,
+                  `runs an effect again more than ${MAX_TURNS} times, with Effect.whileLoop`,
+                );
+              yield* host.call(step, [yield* ran(body, [], site)], site);
+            }
+            return Value.undef;
+          }),
+        ),
+      );
+    },
+    "effect/Effect:try": ([given], site) => {
+      const attempt = given && callable(given) ? given : field(given, "try");
+      const mapped = given && callable(given) ? undefined : field(given, "catch");
+      if (!attempt) return wrongArguments(site, "Effect.try");
+      return Effect.succeed(
+        lazy(() =>
+          Effect.catchIf(
+            host.call(attempt, [], site),
+            // What the function throws: not a failure of an effect it yielded.
+            (stop): stop is Value.Rejected =>
+              stop._tag === "Rejected" && stop.defect === true && stop.yielded !== true,
+            (stop) =>
+              mapped
+                ? Effect.flatMap(host.call(mapped, [stop.rejection], site), (error) =>
+                    Effect.fail(new Value.Rejected({ rejection: error })),
+                  )
+                : Effect.fail(
+                    new Value.Rejected({
+                      rejection: Value.obj({
+                        _tag: Value.str("UnknownError"),
+                        cause: stop.rejection,
+                      }),
+                    }),
+                  ),
+          ),
+        ),
+      );
+    },
+    "effect/Effect:isEffect": ([value]) => Effect.succeed(bool(value?._tag === "Effect")),
+    "effect/Effect:runSyncExit": (args, site) =>
+      Effect.flatMap(lib("effect/Effect:exit", args, site), (made_) =>
+        made_._tag === "Effect" ? made_.run : wrongArguments(site, "Effect.runSyncExit"),
+      ),
+    "effect/Effect:forkIn": onEffect("Effect.forkIn", 1, (timeline, self, [scope], site) => {
+      const held = heldOf<Scope.Scope>("Scope", scope);
+      return held
+        ? Timeline.back(timeline, Effect.forkIn(self, held), (fiber) => wrap("Fiber", fiber))
+        : wrongArguments(site, "Effect.forkIn");
+    }),
+    "effect/Effect:scopedWith": ([f], site) =>
+      f
+        ? Effect.succeed(
+            timed(
+              "Effect.scopedWith",
+              (timeline) =>
+                Timeline.back(
+                  timeline,
+                  Effect.scopedWith((scope) => called(timeline, f, site)(wrap("Scope", scope))),
+                  same,
+                ),
+              site,
+            ),
+          )
+        : wrongArguments(site, "Effect.scopedWith"),
+    // The effect is run the first time what this gives is run, and never again.
+    "effect/Effect:cached": onEffect("Effect.cached", 0, (timeline, self) =>
+      Timeline.back(timeline, Effect.cached(self), (inner) => effectFrom(timeline, inner)),
+    ),
+    "effect/Effect:cachedWithTTL": onEffect(
+      "Effect.cachedWithTTL",
+      1,
+      (timeline, self, [ttl], site) =>
+        Effect.flatMap(written("Effect.cachedWithTTL", ttl, site), (time) =>
+          Timeline.back(timeline, Effect.cachedWithTTL(self, time), (inner) =>
+            effectFrom(timeline, inner),
+          ),
+        ),
+    ),
+    "effect/Effect:schedule": onEffect("Effect.schedule", 1, (timeline, self, [given], site) => {
+      const held = scheduleOf(given);
+      return held
+        ? Timeline.back(
+            timeline,
+            Effect.schedule(turn("Effect.schedule", timeline, self, site), held),
+            outputOf,
+          )
+        : wrongArguments(site, "Effect.schedule");
+    }),
+    "effect/Effect:retryOrElse": onEffect(
+      "Effect.retryOrElse",
+      2,
+      (timeline, self, [given, orElse], site) => {
+        const held = scheduleOf(given);
+        return held && orElse
+          ? Timeline.back(
+              timeline,
+              Effect.retryOrElse(
+                turn("Effect.retryOrElse", timeline, self, site),
+                held,
+                (error, out) => called(timeline, orElse, site)(error.rejection, outputOf(out)),
+              ),
+              same,
+            )
+          : wrongArguments(site, "Effect.retryOrElse");
+      },
+    ),
+    "effect/Effect:serviceOption": ([tag], site) =>
+      tag?._tag === "Host"
+        ? Effect.succeed(
+            lazy(() =>
+              Effect.sync(() => {
+                const given = host.provided.get(tag.value);
+                return given ? Value.some(given) : Value.none;
+              }),
+            ),
+          )
+        : wrongArguments(site, "Effect.serviceOption"),
+    "effect/Effect:updateService": onEffectPlain(
+      "Effect.updateService",
+      2,
+      (self, [tag, f], site) => {
+        if (tag?._tag !== "Host" || !f) return wrongArguments(site, "Effect.updateService");
+        const before = host.provided.get(tag.value);
+        if (!before)
+          return unseen(site, `calls Effect.updateService of ${tag.name}, which nothing provides`);
+        return Effect.flatMap(host.call(f, [before], site), (next) =>
+          Effect.suspend(() => {
+            host.provided.set(tag.value, next);
+            return Effect.ensuring(
+              self,
+              Effect.sync(() => void host.provided.set(tag.value, before)),
+            );
+          }),
+        );
+      },
+    ),
+    "effect/Effect:provideServiceEffect": onEffectPlain(
+      "Effect.provideServiceEffect",
+      2,
+      (self, [tag, made_], site) => {
+        if (tag?._tag !== "Host" || made_?._tag !== "Effect")
+          return wrongArguments(site, "Effect.provideServiceEffect");
+        return Effect.flatMap(made_.run, (value) =>
+          Effect.suspend(() => {
+            const before = host.provided.get(tag.value);
+            host.provided.set(tag.value, value);
+            return Effect.ensuring(
+              self,
+              Effect.sync(() => {
+                if (before) host.provided.set(tag.value, before);
+                else host.provided.delete(tag.value);
+              }),
+            );
+          }),
+        );
+      },
+    ),
+    "effect/Effect:withTracerEnabled": watched("Effect.withTracerEnabled"),
+    "effect/Effect:withTracerTiming": watched("Effect.withTracerTiming"),
+    "effect/Effect:annotateLogsScoped": () =>
+      Effect.succeed(lazy(() => Effect.succeed(Value.undef))),
+  };
+
   const models: Models = {
+    ...more,
     ...randoms,
     ...lifetimes,
     ...stores,
