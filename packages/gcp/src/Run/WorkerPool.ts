@@ -1,8 +1,5 @@
 import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
-import {
-  ContainerRuntime,
-  type ContainerRuntimeSettings,
-} from "@alchemy.run/docker/ContainerRuntime";
+import type { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
@@ -225,6 +222,13 @@ export type WorkerPoolProps = PlatformProps & {
    */
   handler?: string;
   /**
+   * Runtime the program runs on: `node` or `bun`, optionally with the
+   * version the base image is tagged with (`"node24"`, `"bun1.3.13"`).
+   * Only used with `main`.
+   * @default "node" (`node:26-slim`)
+   */
+  runtime?: ContainerRuntime;
+  /**
    * Additional environment variables for the Effect-native container.
    */
   env?: Record<string, any>;
@@ -253,6 +257,7 @@ const imageSourceOf = (props: WorkerPoolProps, handler = props.handler) =>
   props.main !== undefined
     ? {
         main: props.main,
+        runtime: props.runtime,
         handler,
         build: props.build,
         dockerfile: props.dockerfile,
@@ -897,7 +902,7 @@ const listAt = (project: string, location: string, region: string) =>
       Effect.map((chunk) => Array.from(chunk)),
     );
 
-const makeWorkerPoolProvider = (runtime: ContainerRuntimeSettings) =>
+const makeWorkerPoolProvider = () =>
   WorkerPool.Provider.of({
     stables: ["name", "workerPoolId", "project", "location", "uid", "createTime"],
 
@@ -916,7 +921,7 @@ const makeWorkerPoolProvider = (runtime: ContainerRuntimeSettings) =>
       // A code-only change leaves the props untouched; hash the bundled
       // program (and bootstrap) so it still surfaces as an update.
       if (output !== undefined && (news.main !== undefined || news.context !== undefined)) {
-        const images = yield* makeCloudRunImageSource("job", runtime);
+        const images = yield* makeCloudRunImageSource("job");
         const hash = yield* images.hash({
           source: imageSourceOf(news),
           isExternal: news.isExternal,
@@ -1001,7 +1006,7 @@ const makeWorkerPoolProvider = (runtime: ContainerRuntimeSettings) =>
       template.serviceAccount = identity.serviceAccount;
       let codeHash: string | undefined;
       if (news.main !== undefined || news.context !== undefined) {
-        const images = yield* makeCloudRunImageSource("job", runtime);
+        const images = yield* makeCloudRunImageSource("job");
         const image = yield* images
           .resolve({
             id,
@@ -1155,4 +1160,4 @@ const makeWorkerPoolProvider = (runtime: ContainerRuntimeSettings) =>
   });
 
 export const WorkerPoolProvider = () =>
-  Provider.effect(WorkerPool, Effect.map(ContainerRuntime, makeWorkerPoolProvider));
+  Provider.effect(WorkerPool, Effect.sync(makeWorkerPoolProvider));

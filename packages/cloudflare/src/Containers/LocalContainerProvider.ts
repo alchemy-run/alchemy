@@ -1,5 +1,4 @@
 import { hashDockerBuildInputs } from "@alchemy.run/docker/BuildHash";
-import { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import * as Artifacts from "alchemy/Artifacts";
 import { isResolved } from "alchemy/Diff";
@@ -56,7 +55,6 @@ export const LocalContainerProvider = () =>
     LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       const path = yield* Path.Path;
-      const containerRuntime = yield* ContainerRuntime;
 
       // Resolve the `dev` image plus a content hash for change detection.
       // Cached per run (`Artifacts.cached`, keyed by resource id) so repeated
@@ -78,10 +76,7 @@ export const LocalContainerProvider = () =>
           // point `dev` at both. The build-context materialization is shared
           // with the live provider (see `prepareContainerBuildContext`).
           if (news.main) {
-            const { context, dockerfile, hash } = yield* prepareContainerBuildContext(
-              id,
-              news,
-            ).pipe(Effect.provideService(ContainerRuntime, containerRuntime));
+            const { context, dockerfile, hash } = yield* prepareContainerBuildContext(id, news);
             return {
               dev: {
                 context: path.relative(process.cwd(), context),

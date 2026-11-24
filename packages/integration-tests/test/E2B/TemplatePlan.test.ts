@@ -1,5 +1,5 @@
 import * as zlib from "node:zlib";
-import { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
+import { resolveContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
 import { programReadyCmd } from "@alchemy.run/e2b/internal/Program";
 import { tarGzip } from "@alchemy.run/e2b/internal/Tar";
@@ -159,7 +159,7 @@ RUN apt-get install -y \$TOOL`,
         );
         expect(lowered.fromImage).toBe("node:26-slim");
         expect(lowered.startCmd).toBe("node /app/index.mjs");
-        const runtime = yield* ContainerRuntime;
+        const runtime = yield* resolveContainerRuntime(undefined);
         expect(programReadyCmd(8080, runtime.command)).toMatch(/^node -e /);
         expect(lowered.steps).toContainEqual(
           expect.objectContaining({ type: "COPY", args: ["__alchemy__/", "/app/", "", ""] }),

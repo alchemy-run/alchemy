@@ -25,12 +25,8 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * providers: Docker.providers({ bin: "podman" }),
  * ```
  *
- * Bundled services use Bun by default. Provide `Docker.ContainerRuntime.node`
- * to build and run them with Node.js.
- *
- * ```ts
- * providers: Docker.providers().pipe(Layer.provide(Docker.ContainerRuntime.node)),
- * ```
+ * Bundled services run on Node.js 26 unless they set `runtime`, for example
+ * `runtime: "bun1.3"`.
  */
 export const providers = (options: DockerOptions = {}) =>
   Layer.effect(

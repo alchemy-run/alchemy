@@ -1,4 +1,7 @@
-import type { ContainerRuntimeSettings } from "@alchemy.run/docker/ContainerRuntime";
+import type {
+  ContainerRuntime,
+  ContainerRuntimeSettings,
+} from "@alchemy.run/docker/ContainerRuntime";
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import type { DockerfileBuild } from "@alchemy.run/docker/ImageSource";
 import type * as Bundle from "alchemy/Bundle/Bundle";
@@ -171,6 +174,8 @@ export type WorkloadServices = WorkloadServicesRegistry[keyof WorkloadServicesRe
  */
 export interface WorkloadImageSource {
   main?: string;
+  /** Runtime of a bundled `main` (see `BundledImageSource.runtime`). */
+  runtime?: ContainerRuntime;
   handler?: string;
   /**
    * Bundler configuration for `main`, or Docker build args and secrets for

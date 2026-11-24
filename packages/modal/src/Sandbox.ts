@@ -1,4 +1,5 @@
 import * as BuildPlan from "@alchemy.run/docker/BuildPlan";
+import type { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import * as image from "@distilled.cloud/modal/image";
 import * as secret from "@distilled.cloud/modal/secret";
 import type * as Bundle from "alchemy/Bundle/Bundle";
@@ -47,11 +48,17 @@ export interface SandboxProps extends PlatformProps {
   /** The App sandboxes run in. */
   app: Ref<App>;
   /**
-   * Base image the bundle runs on. It needs the `ContainerRuntime`'s
-   * executable (`node` by default) on the `PATH`.
-   * @default "node:26-slim" (the `ContainerRuntime` base image)
+   * Base image the bundle runs on. It needs the {@link runtime}'s
+   * executable on the `PATH`.
+   * @default the {@link runtime}'s base image (`node:26-slim`)
    */
   image?: string;
+  /**
+   * Runtime the program runs on: `node` or `bun`, optionally with the
+   * version the base image is tagged with (`"node24"`, `"bun1.3.13"`).
+   * @default "node" (`node:26-slim`)
+   */
+  runtime?: ContainerRuntime;
   /** Dockerfile lines run on the base before the bundle is added. */
   commands?: string[];
   /**
@@ -302,6 +309,7 @@ export const SandboxProvider = () =>
           {
             main: news.main,
             image: news.image,
+            runtime: news.runtime,
             handler: news.handler,
             build: news.build,
           },

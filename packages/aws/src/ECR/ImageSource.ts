@@ -1,6 +1,6 @@
 import {
-  ContainerRuntime,
   makeContainerBootstrap,
+  resolveContainerRuntime,
   type ContainerRuntimeSettings,
 } from "@alchemy.run/docker/ContainerRuntime";
 import {
@@ -214,18 +214,17 @@ const onRoleHost = <S extends ImageSourceLike>(source: S): S =>
  * container image pipeline pushing into an auto-created ECR repository.
  */
 export const makeImageSource = Effect.gen(function* () {
-  const runtime = yield* ContainerRuntime;
   const images = yield* makeContainerImageSource;
 
   // EKS supplies its own bootstrap. ECS uses the matching process entry for
-  // the runtime selected when the image resolver is constructed.
-  const imageOptions = <S extends ImageSourceLike>(options: {
+  // the source's runtime.
+  const imageOptions = Effect.fnUntraced(function* <S extends ImageSourceLike>(options: {
     source: S;
     bootstrap?: (importPath: string) => string;
     runtime?: ContainerRuntimeSettings;
     terminals?: boolean;
-  }) => {
-    const selected = options.runtime ?? runtime;
+  }) {
+    const selected = options.runtime ?? (yield* resolveContainerRuntime(options.source.runtime));
     const handler = options.source.handler ?? "default";
     const bootstrap =
       options.bootstrap ??
@@ -248,7 +247,7 @@ export const makeImageSource = Effect.gen(function* () {
           }
         : options.source;
     return { source: onRoleHost(source), runtime: selected, bootstrap };
-  };
+  });
 
   /**
    * Ensure the target ECR repository exists. Idempotent: tolerates
@@ -446,7 +445,10 @@ export const makeImageSource = Effect.gen(function* () {
       hasTag: hasTag(options.repositoryName),
       credentials: getEcrRegistryCredentials,
     };
-    const resolved = yield* images.resolve({ ...options, ...imageOptions(options) }, target);
+    const resolved = yield* images.resolve(
+      { ...options, ...(yield* imageOptions(options)) },
+      target,
+    );
     return {
       imageUri: resolved.imageUri,
       repositoryName: options.repositoryName,
@@ -470,11 +472,15 @@ export const makeImageSource = Effect.gen(function* () {
   const hash = (
     options: Omit<Parameters<typeof images.hash>[0], "bootstrap"> &
       Pick<ResolveImageOptions, "bootstrap">,
-  ) => images.hash({ ...options, ...imageOptions(options) });
+  ) =>
+    Effect.flatMap(imageOptions(options), (selected) => images.hash({ ...options, ...selected }));
   const watchMain = (
     options: Omit<Parameters<typeof images.watchMain>[0], "bootstrap"> &
       Pick<ResolveImageOptions, "bootstrap">,
-  ) => images.watchMain({ ...options, ...imageOptions(options) });
+  ) =>
+    Effect.flatMap(imageOptions(options), (selected) =>
+      images.watchMain({ ...options, ...selected }),
+    );
 
   return { resolve, hash, watchMain };
 });

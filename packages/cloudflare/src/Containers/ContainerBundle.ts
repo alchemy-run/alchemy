@@ -1,7 +1,6 @@
 import {
-  containerPlatformModulePath,
-  ContainerRuntime,
   type ContainerRuntimeSettings,
+  resolveContainerRuntime,
 } from "@alchemy.run/docker/ContainerRuntime";
 import { Docker } from "@alchemy.run/docker/Docker";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
@@ -215,13 +214,6 @@ export const containerEnvPreamble = (
   return Effect.undefined;
 };
 
-/** An explicit preset takes precedence over the provider's runtime. */
-export const resolveContainerRuntime = Effect.fnUntraced(function* (preset?: "bun" | "node") {
-  return preset === undefined
-    ? yield* ContainerRuntime
-    : yield* ContainerRuntime.pipe(Effect.provide(ContainerRuntime[preset]));
-});
-
 /** Build the Dockerfile for a bundled program with Cloudflare's image layout. */
 export const buildFinalDockerfile = (
   envPreamble: string | undefined,
@@ -344,24 +336,20 @@ export const bundleContainerProgram = Effect.fn(function* ({
     );
   });
 
-  const platformModule =
-    runtime.preset === undefined ? containerPlatformModulePath(runtime.platformModule) : undefined;
   const bootstrapModule =
-    platformModule !== undefined
-      ? "@alchemy.run/cloudflare/Bootstrap/Container"
-      : runtime.preset === "node"
-        ? "@alchemy.run/cloudflare/Bootstrap/ContainerNode"
-        : "@alchemy.run/cloudflare/Bootstrap/ContainerBun";
+    runtime.preset === "node"
+      ? "@alchemy.run/cloudflare/Bootstrap/ContainerNode"
+      : "@alchemy.run/cloudflare/Bootstrap/ContainerBun";
   const bundleOutput = isExternal
     ? yield* buildBundle(realMain)
     : yield* buildBundle(
         realMain,
         virtualEntryPlugin(
           (importPath) => `
-import { ${platformModule === undefined ? "bootstrap" : "bootstrapContainer as bootstrap"} } from ${JSON.stringify(bootstrapModule)};
-${platformModule === undefined ? "" : `import * as platform from ${JSON.stringify(platformModule)};\n`}import ${handler === "default" ? "entrypoint" : `{ ${handler} as entrypoint }`} from ${JSON.stringify(importPath)};
+import { bootstrap } from ${JSON.stringify(bootstrapModule)};
+import ${handler === "default" ? "entrypoint" : `{ ${handler} as entrypoint }`} from ${JSON.stringify(importPath)};
 
-await bootstrap(${platformModule === undefined ? "" : "platform, "}entrypoint, ${JSON.stringify({
+await bootstrap(entrypoint, ${JSON.stringify({
             stack: { name: stack.name, stage: stack.stage },
           })});
 `,

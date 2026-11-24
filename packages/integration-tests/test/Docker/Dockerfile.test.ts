@@ -1,10 +1,10 @@
 import { imageSourceKind, validateImageSource } from "@alchemy.run/aws/ECR/ImageSource";
 import {
   buildFinalDockerfile,
-  resolveContainerRuntime,
   containerEnvPreamble,
   validateContainerImageProps,
 } from "@alchemy.run/cloudflare/Containers/ContainerBundle";
+import { resolveContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
 import { describe, expect, it, test } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
@@ -202,7 +202,7 @@ RUN apt-get install -y ffmpeg`,
 
     it.effect("containers run on Node.js by default, and an explicit runtime wins", () =>
       Effect.gen(function* () {
-        const inherited = yield* resolveContainerRuntime();
+        const inherited = yield* resolveContainerRuntime(undefined);
         const explicit = yield* resolveContainerRuntime("bun");
         const node = buildFinalDockerfile(undefined, inherited, ["example"]);
         const bun = buildFinalDockerfile(undefined, explicit, ["example"]);

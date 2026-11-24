@@ -26,12 +26,8 @@ export class Providers extends Provider.ProviderCollection<Providers>()("Kuberne
  * });
  * ```
  *
- * Bundled Deployments and Jobs use Bun by default. To use Node.js, provide
- * `ContainerRuntime.node` from `@alchemy.run/docker`.
- *
- * ```ts
- * Kubernetes.providers().pipe(Layer.provide(ContainerRuntime.node));
- * ```
+ * Bundled Deployments and Jobs run on Node.js 26 unless they set `runtime`,
+ * for example `runtime: "bun1.3"`.
  */
 export const providers = () =>
   Layer.effect(

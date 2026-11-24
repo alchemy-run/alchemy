@@ -1,5 +1,8 @@
 import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
-import { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
+import {
+  type ContainerRuntime,
+  resolveContainerRuntime,
+} from "@alchemy.run/docker/ContainerRuntime";
 import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
@@ -186,10 +189,16 @@ export interface BundledDeploymentProps extends DeploymentPropsBase {
   main: string;
   /**
    * Environment image used as the generated Dockerfile's `FROM`; must be
-   * able to run the selected container runtime.
-   * @default "node:26-slim" (the `ContainerRuntime` base image)
+   * able to run the {@link runtime}.
+   * @default the {@link runtime}'s base image (`node:26-slim`)
    */
   image?: string;
+  /**
+   * Runtime the program runs on: `node` or `bun`, optionally with the
+   * version the base image is tagged with (`"node24"`, `"bun1.3.13"`).
+   * @default "node" (`node:26-slim`)
+   */
+  runtime?: ContainerRuntime;
   /** Named export to load from `main`. @default "default" */
   handler?: string;
   /** Bundler configuration for the entrypoint, and the image build's layer `cache`. */
@@ -596,7 +605,6 @@ export const DeploymentProvider = () =>
     Effect.gen(function* () {
       const stack = yield* Stack;
       const connectionRegistry = yield* makeConnectionRegistry;
-      const runtime = yield* ContainerRuntime;
 
       const alchemyEnv = {
         ALCHEMY_STACK_NAME: stack.name,
@@ -684,7 +692,7 @@ export const DeploymentProvider = () =>
               port: news.port ?? 3000,
               isExternal: news.isExternal,
               mode: "server",
-              runtime,
+              runtime: yield* resolveContainerRuntime(source.runtime),
             });
             if (hash !== undefined && hash !== output.code.hash) {
               return { action: "update" } as const;
@@ -764,7 +772,7 @@ export const DeploymentProvider = () =>
             port,
             isExternal: news.isExternal,
             mode: "server",
-            runtime,
+            runtime: yield* resolveContainerRuntime(source.runtime),
             tags,
             state:
               (output?.registry as Record<string, unknown> | undefined) ??

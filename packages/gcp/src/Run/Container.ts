@@ -1,5 +1,5 @@
 import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
-import { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
+import type { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import type { PackageInstall } from "alchemy/Bundle/InstalledPackages";
@@ -69,6 +69,13 @@ export type ContainerProps = PlatformProps &
      * @default "default"
      */
     handler?: string;
+    /**
+     * Runtime the program runs on: `node` or `bun`, optionally with the
+     * version the base image is tagged with (`"node24"`, `"bun1.3.13"`).
+     * Only used with `main`.
+     * @default "node" (`node:26-slim`)
+     */
+    runtime?: ContainerRuntime;
     /**
      * Environment variables. Merged after binding-injected `env`.
      */
@@ -223,6 +230,7 @@ const withPort = (probe: Probe | undefined, port: number | undefined): Probe | u
 
 const sourceOf = (news: ContainerProps, main: string) => ({
   main,
+  runtime: news.runtime,
   handler: news.handler ?? "default",
   build: news.build,
   extraFiles: news.extraFiles,
@@ -278,7 +286,6 @@ export const ContainerProvider = () =>
   Provider.effect(
     Container,
     Effect.gen(function* () {
-      const runtime = yield* ContainerRuntime;
       return {
         stables: ["name", "project", "location", "repository"],
 
@@ -286,7 +293,7 @@ export const ContainerProvider = () =>
           if (!isResolved(news)) return undefined;
           // A code-only change leaves the props untouched; hash the bundle.
           if (output !== undefined && news.main !== undefined) {
-            const images = yield* makeCloudRunImageSource("server", runtime);
+            const images = yield* makeCloudRunImageSource("server");
             const hash = yield* images.hash({
               source: sourceOf(news, news.main),
               port: news.port ?? DEFAULT_PORT,
@@ -316,7 +323,7 @@ export const ContainerProvider = () =>
           const runtimeEnv: Record<string, unknown> = {};
           if (news.main !== undefined) {
             repository = output?.repository ?? (yield* repositoryFor(id));
-            const images = yield* makeCloudRunImageSource("server", runtime);
+            const images = yield* makeCloudRunImageSource("server");
             const resolved = yield* images.resolve({
               id,
               source: sourceOf(news, news.main),

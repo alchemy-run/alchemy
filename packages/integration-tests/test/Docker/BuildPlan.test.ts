@@ -1,5 +1,5 @@
 import * as BuildPlan from "@alchemy.run/docker/BuildPlan";
-import { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
+import type { ContainerRuntime as BundledRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import { DockerLive } from "@alchemy.run/docker/Docker";
 import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
 import * as DockerfileParser from "@alchemy.run/docker/DockerfileParser";
@@ -382,20 +382,46 @@ RUN apt-get update && apt-get install -y git`,
   );
 
   test.effect(
-    "a bundled main runs on Node.js 26 by default, and on Bun when ContainerRuntime.bun is provided",
+    "a bundled main runs on Node.js 26 by default, and on the runtime it names",
     () =>
       Effect.gen(function* () {
         const { root, path } = yield* makeContext({
           "package.json": '{"name":"runtime-test","type":"module"}',
           "main.ts": "export default 'hello';\n",
         });
-        const plan = BuildPlan.plan({ main: path.join(root, "main.ts") }, { capabilities: docker });
-        const node = yield* plan;
+        const main = path.join(root, "main.ts");
+        const plan = (runtime?: BundledRuntime) =>
+          BuildPlan.plan({ main, runtime }, { capabilities: docker });
+        const node = yield* plan(undefined);
         expect(node.base).toBe("node:26-slim");
         expect(BuildPlan.startCommand(node)).toEqual(["node", "/app/index.mjs"]);
-        const bun = yield* plan.pipe(Effect.provide(ContainerRuntime.bun));
+        const bun = yield* plan("bun");
         expect(bun.base).toBe("oven/bun:1");
         expect(BuildPlan.startCommand(bun)).toEqual(["bun", "/app/index.mjs"]);
+        // The version is the base image's tag, as precise as it is written.
+        expect((yield* plan("node24")).base).toBe("node:24-slim");
+        expect((yield* plan("node26.13.1")).base).toBe("node:26.13.1-slim");
+        expect((yield* plan("bun1.3")).base).toBe("oven/bun:1.3");
+        expect((yield* plan("bun1.3.13")).base).toBe("oven/bun:1.3.13");
+        // Each runtime is its own image.
+        expect((yield* plan("bun1.3.13")).hash).not.toBe((yield* plan("bun1.3.12")).hash);
+      }),
+    { tags },
+  );
+
+  test.effect(
+    "a runtime that isn't node or bun with a version fails the plan",
+    () =>
+      Effect.gen(function* () {
+        const { root, path } = yield* makeContext({
+          "package.json": '{"name":"runtime-test","type":"module"}',
+          "main.ts": "export default 'hello';\n",
+        });
+        const error = yield* BuildPlan.plan(
+          { main: path.join(root, "main.ts"), runtime: "deno2" as BundledRuntime },
+          { capabilities: docker },
+        ).pipe(Effect.flip);
+        expect(error._tag).toBe("InvalidContainerRuntime");
       }),
     { tags },
   );

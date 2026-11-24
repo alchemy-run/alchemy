@@ -244,7 +244,7 @@ const workloadBootstrap = Effect.fnUntraced(function* (options: {
     return yield* Effect.die(
       new ClusterAdapterMissingRuntimeBootstrap({
         message:
-          "This Kubernetes cluster adapter has its own bootstrap but no runtimeBootstrap module, so it can only run Bun. Provide ContainerRuntime.bun, or give the adapter a runtimeBootstrap.",
+          "This Kubernetes cluster adapter has its own bootstrap but no runtimeBootstrap module, so it can only run Bun. Set the workload's runtime to bun, or give the adapter a runtimeBootstrap.",
       }),
     );
   }

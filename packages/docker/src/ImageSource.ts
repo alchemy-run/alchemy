@@ -26,7 +26,12 @@ import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
 import { type BuildCacheOptions, imageBuildCacheOptions } from "./BuildCache.ts";
 import { hashDockerBuildInputs } from "./BuildHash.ts";
-import { ContainerRuntime, type ContainerRuntimeSettings } from "./ContainerRuntime.ts";
+import {
+  type ContainerRuntime,
+  type ContainerRuntimeSettings,
+  resolveContainerRuntime,
+  SANDBOX_AGENT_RUNTIME,
+} from "./ContainerRuntime.ts";
 import { Docker, type RegistryCredentials } from "./Docker.ts";
 import { isInlineDockerfile, type InlineDockerfile } from "./Dockerfile.ts";
 
@@ -72,6 +77,15 @@ export interface BundledImageSource {
    */
   main: string;
   /**
+   * Runtime the program runs on: `node` or `bun`, optionally with the
+   * version the base image is tagged with. `"node24"` runs on
+   * `node:24-slim`, `"bun1.3.13"` on `oven/bun:1.3.13`. An `image` beside it
+   * replaces the base, and must be able to run this runtime. See
+   * {@link ContainerRuntime}.
+   * @default "node" (`node:26-slim`)
+   */
+  runtime?: ContainerRuntime;
+  /**
    * @internal Dockerfile lines contributed by mount bindings (see
    * `alchemy/Mount`), inserted after the environment preamble so a
    * program change doesn't reinstall them. Hosts fold these in from their
@@ -83,7 +97,7 @@ export interface BundledImageSource {
    * registry ref works (private non-ECR registries require docker
    * credentials on the build machine); the image must be able to run the
    * selected container runtime. Exclusive with {@link dockerfile} / {@link context}.
-   * @default "node:26-slim" (the `ContainerRuntime` base image)
+   * @default the {@link runtime}'s base image (`node:26-slim`)
    */
   image?: string;
   /**
@@ -197,6 +211,8 @@ export type ImageSourceProps = BundledImageSource | DockerfileImageSource | Regi
 /** Loose bag shape used to sniff which source variant a props object is. */
 export interface ImageSourceLike {
   main?: string;
+  /** Runtime of a bundled `main` (see {@link BundledImageSource.runtime}). */
+  runtime?: ContainerRuntime;
   handler?: string;
   /** Bundler config for `main`; Docker build args and secrets for `context`. */
   build?: Bundle.BundleConfig & DockerfileBuild;
@@ -410,7 +426,7 @@ export interface ResolveContainerImageOptions {
  * {@link IMAGE_AGENT_DIR} and exits. A platform mounts a volume there, shares
  * it with the image's container, and starts that container with
  * {@link imageAgentEntryPoint}. The agent runs on Bun whatever
- * {@link ContainerRuntime} the image's programs use: it never shares a
+ * `runtime` the image's programs use: it never shares a
  * process with them, and its terminals need Bun.
  */
 export interface ImageAgent {
@@ -624,7 +640,7 @@ export const bundleMainProgram = Effect.fn(function* (options: {
   runtime?: ContainerRuntimeSettings;
 }) {
   const { source } = options;
-  const runtime = options.runtime ?? (yield* ContainerRuntime);
+  const runtime = options.runtime ?? (yield* resolveContainerRuntime(source.runtime));
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
   const realMain = yield* resolveMainPath(source.main);
   const cwd = yield* findCwdForBundle(realMain);
@@ -660,9 +676,6 @@ export const bundleMainProgram = Effect.fn(function* (options: {
 export const makeContainerImageSource = Effect.gen(function* () {
   const docker = yield* Docker;
   const { dotAlchemy } = yield* AlchemyContext;
-  const defaultRuntime = yield* ContainerRuntime;
-  // The sandbox agent always runs on Bun (see `ImageAgent`).
-  const agentRuntime = ContainerRuntime.pipe(Effect.provide(ContainerRuntime.bun));
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
   // Pinning `packages` reads the project's lockfile through the package
   // manager; capture the spawner once so `hash` and `resolve` don't need it.
@@ -733,7 +746,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
     port?: number;
     platform: string;
   }) {
-    const runtime = options.runtime ?? defaultRuntime;
+    const runtime = options.runtime ?? (yield* resolveContainerRuntime(options.source.runtime));
     const bundled = yield* bundleMainProgram({
       source: options.source,
       isExternal: options.isExternal,
@@ -829,7 +842,8 @@ export const makeContainerImageSource = Effect.gen(function* () {
       source: { main: agent.main },
       isExternal: false,
       bootstrap: agentEntry,
-      runtime: yield* agentRuntime,
+      // The sandbox agent always runs on Bun (see `ImageAgent`).
+      runtime: SANDBOX_AGENT_RUNTIME,
     });
     const hash = (yield* sha256Object({
       bundleHash: bundled.hash,
@@ -1273,7 +1287,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
       options.source,
       realMain,
       cwd,
-      options.runtime ?? defaultRuntime,
+      options.runtime ?? (yield* resolveContainerRuntime(options.source.runtime)),
       options.isExternal ? undefined : virtualEntryPlugin(options.bootstrap),
     );
     return { ...opts, extra: options.source.build };

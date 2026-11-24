@@ -1,7 +1,6 @@
 import * as crypto from "node:crypto";
 import { normalizeRelativePath, walkIgnoring, type WalkEntryType } from "alchemy/Util/Ignore";
 import { sha256Object } from "alchemy/Util/sha256";
-import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -10,7 +9,11 @@ import type * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { selectDockerBuildContext } from "./BuildHash.ts";
-import { ContainerRuntime, type ContainerRuntimeSettings } from "./ContainerRuntime.ts";
+import {
+  type ContainerRuntimeSettings,
+  DEFAULT_CONTAINER_BASE_IMAGE,
+  resolveContainerRuntime,
+} from "./ContainerRuntime.ts";
 import { Docker } from "./Docker.ts";
 import { isInlineDockerfile } from "./Dockerfile.ts";
 import * as DockerfileParser from "./DockerfileParser.ts";
@@ -137,7 +140,7 @@ export class BuildPlanError extends Data.TaggedError("BuildPlanError")<{
 export const BUNDLE_DIR = "__alchemy__";
 
 /** Base of a bundled program in the default configuration. */
-export const DEFAULT_MAIN_BASE = Context.get(Context.empty(), ContainerRuntime).baseImage;
+export const DEFAULT_MAIN_BASE = DEFAULT_CONTAINER_BASE_IMAGE;
 
 export interface PlanOptions {
   readonly capabilities: Capabilities;
@@ -150,7 +153,7 @@ export interface PlanOptions {
    * entry). Omit it to bundle `main` as-is.
    */
   readonly bootstrap?: (importPath: string) => string;
-  /** Runtime for bundled programs. Defaults to the provided ContainerRuntime. */
+  /** Runtime for bundled programs. Defaults to the source's `runtime`. */
   readonly runtime?: ContainerRuntimeSettings;
   /** Credentials for pulling a private base image. */
   readonly pull?: ImageRegistry;
@@ -520,8 +523,8 @@ export const plan = Effect.fn(function* (source: ImageSourceProps, options: Plan
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const platform = options.platform ?? "linux/amd64";
-  const runtime = options.runtime ?? (yield* ContainerRuntime);
   const main = "main" in source ? (source as BundledImageSource) : undefined;
+  const runtime = options.runtime ?? (yield* resolveContainerRuntime(main?.runtime));
   const image = "image" in source ? source.image : undefined;
   const dockerfileProp = "dockerfile" in source ? source.dockerfile : undefined;
   const contextProp = "context" in source ? source.context : undefined;

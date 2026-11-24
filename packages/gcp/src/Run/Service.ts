@@ -1,8 +1,5 @@
 import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
-import {
-  ContainerRuntime,
-  type ContainerRuntimeSettings,
-} from "@alchemy.run/docker/ContainerRuntime";
+import type { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { Unowned } from "alchemy/AdoptPolicy";
@@ -338,6 +335,13 @@ export type ServiceProps = PlatformProps & {
    * @default "default"
    */
   handler?: string;
+  /**
+   * Runtime the program runs on: `node` or `bun`, optionally with the
+   * version the base image is tagged with (`"node24"`, `"bun1.3.13"`).
+   * Only used with `main`.
+   * @default "node" (`node:26-slim`)
+   */
+  runtime?: ContainerRuntime;
   /**
    * HTTP port the Effect-native program listens on (Cloud Run injects
    * `PORT`). Only used with `main`.
@@ -1162,6 +1166,7 @@ const toAttrs = (
 
 const sourceOf = (news: ServiceProps, main: string) => ({
   main,
+  runtime: news.runtime,
   handler: news.handler ?? "default",
   build: news.build,
   extraFiles: news.extraFiles,
@@ -1282,7 +1287,7 @@ const toCreateBody = (
   template,
 });
 
-const makeServiceProvider = (runtime: ContainerRuntimeSettings) =>
+const makeServiceProvider = () =>
   Service.Provider.of({
     stables: ["name", "serviceId", "project", "location", "uid", "createTime"],
 
@@ -1301,7 +1306,7 @@ const makeServiceProvider = (runtime: ContainerRuntimeSettings) =>
       // A code-only change leaves the props untouched; hash the bundled
       // program (and bootstrap) so it still surfaces as an update.
       if (output !== undefined && news.main !== undefined) {
-        const images = yield* makeCloudRunImageSource("server", runtime);
+        const images = yield* makeCloudRunImageSource("server");
         const hash = yield* images.hash({
           source: sourceOf(news, news.main),
           port: news.port ?? 8080,
@@ -1413,7 +1418,7 @@ const makeServiceProvider = (runtime: ContainerRuntimeSettings) =>
       template.serviceAccount = identity.serviceAccount;
       let codeHash: string | undefined;
       if (news.main !== undefined) {
-        const images = yield* makeCloudRunImageSource("server", runtime);
+        const images = yield* makeCloudRunImageSource("server");
         const port = news.port ?? 8080;
         const image = yield* images
           .resolve({
@@ -1602,5 +1607,4 @@ const makeServiceProvider = (runtime: ContainerRuntimeSettings) =>
     }),
   });
 
-export const ServiceProvider = () =>
-  Provider.effect(Service, Effect.map(ContainerRuntime, makeServiceProvider));
+export const ServiceProvider = () => Provider.effect(Service, Effect.sync(makeServiceProvider));

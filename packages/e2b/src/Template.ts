@@ -1,7 +1,7 @@
 import {
-  ContainerRuntime,
+  type ContainerRuntime,
   makeContainerBootstrap,
-  type ContainerRuntimeSettings,
+  resolveContainerRuntime,
 } from "@alchemy.run/docker/ContainerRuntime";
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import type { DockerfileBuild } from "@alchemy.run/docker/ImageSource";
@@ -62,14 +62,21 @@ export interface TemplateProps extends Omit<TemplateSteps, "env">, PlatformProps
   /**
    * A program to run in every sandbox: a module entrypoint, typically
    * `import.meta.url` in the class form. Alchemy bundles it, copies it into
-   * the template under `/app`, and starts it with the `ContainerRuntime` as
-   * the template's start command, so every sandbox boots with it already
+   * the template under `/app`, and starts it on its {@link runtime} as the
+   * template's start command, so every sandbox boots with it already
    * serving on {@link port}. `image` / `dockerfile` are then the program's
    * environment, which must have that runtime: Node.js 26 on `node:26-slim`
    * by default.
    * @default no program
    */
   main?: string;
+  /**
+   * Runtime the program runs on: `node` or `bun`, optionally with the
+   * version the base image is tagged with (`"node24"`, `"bun1.3.13"`).
+   * Only used with `main`.
+   * @default "node" (`node:26-slim`)
+   */
+  runtime?: ContainerRuntime;
   /**
    * Named export to load from `main`.
    * @default "default"
@@ -246,8 +253,8 @@ export interface Template extends Resource<
  * Give the template a `main` and an Effect, and every sandbox from it boots
  * with the program already serving HTTP on `port`. Alchemy bundles `main`,
  * copies it into the template, and E2B snapshots the template once the
- * program answers. The program runs on the `ContainerRuntime` provided to
- * the providers: Node.js 26 on `node:26-slim` by default.
+ * program answers. The program runs on Node.js 26 (`node:26-slim`) unless
+ * the template sets `runtime`, for example `runtime: "bun1.3"`.
  *
  * **Example:** A program in every sandbox
  * ```typescript
@@ -410,9 +417,20 @@ const planOf = Effect.fn(function* (
   name: string,
   news: TemplateProps,
   bindings: ReadonlyArray<ResourceBinding<TemplateBinding>> | undefined,
-  runtime: ContainerRuntimeSettings,
 ) {
-  const { main, handler, port, build, env, dockerfile, context, image, ...steps } = news;
+  const {
+    main,
+    runtime: runtimeName,
+    handler,
+    port,
+    build,
+    env,
+    dockerfile,
+    context,
+    image,
+    ...steps
+  } = news;
+  const runtime = yield* resolveContainerRuntime(runtimeName);
   const programPort = port ?? DEFAULT_PORT;
   const { args, ...bundle } = build ?? {};
   let lowered: LoweredSource | undefined;
@@ -489,7 +507,6 @@ export const TemplateProvider = () =>
   Provider.effect(
     Template,
     Effect.gen(function* () {
-      const runtime = yield* ContainerRuntime;
       return {
         stables: ["templateId", "name"],
         diff: Effect.fn(function* ({ id, olds, news, output }) {
@@ -501,7 +518,7 @@ export const TemplateProvider = () =>
           // unchanged `context` path still rebuilds.
           // Bindings may be unresolved here; the engine reconciles when they
           // change. Diff compares the hash of everything else.
-          const { plan } = yield* planOf(name, news, undefined, runtime);
+          const { plan } = yield* planOf(name, news, undefined);
           if (plan.hash !== output.sourceHash || news.force) return { action: "update" } as const;
           if ((news.public ?? false) !== output.public) return { action: "update" } as const;
           return undefined;
@@ -551,14 +568,14 @@ export const TemplateProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
           const name = output?.name ?? (yield* e2bName(id, news.name));
-          const { spec, plan } = yield* planOf(name, news, bindings, runtime);
+          const { spec, plan } = yield* planOf(name, news, bindings);
 
           // Observe
           const observed = yield* observeTemplate(output?.templateId, name);
           const sourceHash =
             bindings === undefined || bindings.length === 0
               ? plan.hash
-              : (yield* planOf(name, news, undefined, runtime)).plan.hash;
+              : (yield* planOf(name, news, undefined)).plan.hash;
 
           // Ensure — build when there is no ready build of these exact inputs.
           let attrs: TemplateAttributes;

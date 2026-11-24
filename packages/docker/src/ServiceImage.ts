@@ -3,7 +3,12 @@ import type * as Bundle from "alchemy/Bundle/Bundle";
 import { getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Effect from "effect/Effect";
-import { ContainerRuntime, makeContainerBootstrap } from "./ContainerRuntime.ts";
+import {
+  type ContainerRuntime,
+  type ContainerRuntimeSettings,
+  makeContainerBootstrap,
+  resolveContainerRuntime,
+} from "./ContainerRuntime.ts";
 import { Docker } from "./Docker.ts";
 import { bundleMainProgram, containerBundleLayout } from "./ImageSource.ts";
 
@@ -25,6 +30,8 @@ import { bundleMainProgram, containerBundleLayout } from "./ImageSource.ts";
 export interface BundledServiceSource {
   main: string;
   image?: string;
+  /** See `BundledImageSource.runtime`. */
+  runtime?: ContainerRuntime;
   handler?: string;
   port?: number;
   /**
@@ -62,20 +69,19 @@ await bootstrap(entrypoint);
 /**
  * Init-time constructor for the service-image resolver. Resolves the services
  * that are only available at provider-layer construction (Docker, the
- * `.alchemy` directory, the optional container runtime) and returns
+ * `.alchemy` directory) and returns
  * `resolve` (build the image if its content hash isn't present in the target
  * engine) and `hash` (content hash only, for `diff`).
  */
 export const makeServiceImage = Effect.gen(function* () {
   const docker = yield* Docker;
-  const runtime = yield* ContainerRuntime;
   const { dotAlchemy } = yield* AlchemyContext;
   /**
    * Generated Dockerfile for a bundled `main` program. The environment
    * preamble is the `image` ref or the default bun base (`oven/bun` is
    * Docker-Hub only).
    */
-  const generateDockerfile = (source: BundledServiceSource) => {
+  const generateDockerfile = (source: BundledServiceSource, runtime: ContainerRuntimeSettings) => {
     const layout = containerBundleLayout(runtime);
     const lines = [`FROM ${source.image ?? runtime.baseImage}`, `WORKDIR /app`, ...layout.copy];
     if (source.port !== undefined) {
@@ -96,6 +102,7 @@ export const makeServiceImage = Effect.gen(function* () {
     isExternal?: boolean;
   }) {
     const handler = options.source.handler ?? "default";
+    const runtime = yield* resolveContainerRuntime(options.source.runtime);
     const bootstrap =
       runtime.preset === "bun"
         ? makeServiceBunBootstrap(handler)
@@ -106,7 +113,7 @@ export const makeServiceImage = Effect.gen(function* () {
             "server",
           );
     const bundled = yield* bundleMainProgram({ ...options, bootstrap, runtime });
-    const dockerfile = generateDockerfile(options.source);
+    const dockerfile = generateDockerfile(options.source, runtime);
     const codeHash = (yield* sha256Object({
       bundleHash: bundled.hash,
       dockerfile,

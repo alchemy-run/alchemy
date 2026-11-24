@@ -1,8 +1,5 @@
 import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
-import {
-  ContainerRuntime,
-  type ContainerRuntimeSettings,
-} from "@alchemy.run/docker/ContainerRuntime";
+import type { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { Unowned } from "alchemy/AdoptPolicy";
@@ -193,6 +190,13 @@ export type JobProps = PlatformProps & {
    * @default "default"
    */
   handler?: string;
+  /**
+   * Runtime the program runs on: `node` or `bun`, optionally with the
+   * version the base image is tagged with (`"node24"`, `"bun1.3.13"`).
+   * Only used with `main`.
+   * @default "node" (`node:26-slim`)
+   */
+  runtime?: ContainerRuntime;
   /**
    * Additional environment variables for the Effect-native container.
    */
@@ -766,7 +770,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const makeJobProvider = (runtime: ContainerRuntimeSettings) =>
+const makeJobProvider = () =>
   Job.Provider.of({
     stables: ["name", "jobId", "project", "location", "uid", "createTime"],
 
@@ -787,9 +791,14 @@ const makeJobProvider = (runtime: ContainerRuntimeSettings) =>
       // A code-only change leaves the props untouched; hash the bundled
       // program (and bootstrap) so it still surfaces as an update.
       if (output !== undefined && news.main !== undefined) {
-        const images = yield* makeCloudRunImageSource("job", runtime);
+        const images = yield* makeCloudRunImageSource("job");
         const hash = yield* images.hash({
-          source: { main: news.main, handler: news.handler, build: news.build },
+          source: {
+            main: news.main,
+            runtime: news.runtime,
+            handler: news.handler,
+            build: news.build,
+          },
           isExternal: news.isExternal,
         });
         if (hash !== undefined && hash !== output.codeHash) {
@@ -877,12 +886,13 @@ const makeJobProvider = (runtime: ContainerRuntimeSettings) =>
       let containers = news.containers;
       let codeHash: string | undefined;
       if (news.main !== undefined) {
-        const images = yield* makeCloudRunImageSource("job", runtime);
+        const images = yield* makeCloudRunImageSource("job");
         const image = yield* images
           .resolve({
             id,
             source: {
               main: news.main,
+              runtime: news.runtime,
               handler: news.handler ?? "default",
               build: news.build,
             },
@@ -1056,5 +1066,4 @@ const makeJobProvider = (runtime: ContainerRuntimeSettings) =>
     }),
   });
 
-export const JobProvider = () =>
-  Provider.effect(Job, Effect.map(ContainerRuntime, makeJobProvider));
+export const JobProvider = () => Provider.effect(Job, Effect.sync(makeJobProvider));

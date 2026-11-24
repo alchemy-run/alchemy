@@ -1,7 +1,8 @@
 import { type BuildCacheOptions, imageBuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import {
-  ContainerRuntime,
   makeContainerBootstrap,
+  resolveContainerRuntime,
+  type ContainerRuntime,
   type ContainerRuntimeSettings,
 } from "@alchemy.run/docker/ContainerRuntime";
 import { Docker } from "@alchemy.run/docker/Docker";
@@ -55,6 +56,8 @@ import { waitForDeleteOperation, waitForOperation } from "./internal.ts";
 
 export interface BundledImageSource {
   main: string;
+  /** Runtime the program runs on (see `@alchemy.run/docker` `BundledImageSource.runtime`). */
+  runtime?: ContainerRuntime;
   image?: string;
   dockerfile?: string | InlineDockerfile;
   context?: string;
@@ -78,6 +81,8 @@ export interface RegistryImageSource {
 
 export interface ImageSourceLike {
   main?: string;
+  /** Runtime of a bundled `main` (see `BundledImageSource.runtime`). */
+  runtime?: ContainerRuntime;
   handler?: string;
   /** Bundler config for `main`; Docker build args and secrets for `context`. */
   build?: Bundle.BundleConfig & DockerfileBuild;
@@ -339,7 +344,6 @@ export const destroyHostImageRepository = Effect.fn(function* (
 export const makeImageSource = Effect.gen(function* () {
   const docker = yield* Docker;
   const { dotAlchemy } = yield* AlchemyContext;
-  const defaultRuntime = yield* ContainerRuntime;
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
 
   const bundleProgram = Effect.fn(function* (options: {
@@ -416,7 +420,7 @@ export const makeImageSource = Effect.gen(function* () {
     port?: number;
     platform: string;
   }) {
-    const runtime = options.runtime ?? defaultRuntime;
+    const runtime = options.runtime ?? (yield* resolveContainerRuntime(options.source.runtime));
     const bundled = yield* bundleProgram({
       source: options.source,
       isExternal: options.isExternal,
@@ -840,13 +844,10 @@ export const makeImageSource = Effect.gen(function* () {
   };
 });
 
-/** Pair Cloud Run's process entry with the same runtime used to build the image. */
-export const makeCloudRunImageSource = Effect.fnUntraced(function* (
-  mode: "server" | "job",
-  runtime: ContainerRuntimeSettings,
-) {
+/** Pair Cloud Run's process entry with the runtime each source builds its image for. */
+export const makeCloudRunImageSource = Effect.fnUntraced(function* (mode: "server" | "job") {
   const images = yield* makeImageSource;
-  const bootstrap = (source: ImageSourceLike) => {
+  const bootstrap = (source: ImageSourceLike, runtime: ContainerRuntimeSettings) => {
     const handler = source.handler ?? "default";
     return runtime.preset === "bun"
       ? makeGcpBootstrap(mode === "server" ? "CloudRun" : "CloudRunJob", handler)
@@ -860,10 +861,26 @@ export const makeCloudRunImageSource = Effect.fnUntraced(function* (
   };
   return {
     ...images,
-    resolve: (options: Omit<ArtifactRegistryResolveOptions, "bootstrap" | "runtime">) =>
-      images.resolve({ ...options, runtime, bootstrap: bootstrap(options.source) }),
-    hash: (options: Omit<Parameters<typeof images.hash>[0], "bootstrap" | "runtime">) =>
-      images.hash({ ...options, runtime, bootstrap: bootstrap(options.source) }),
+    resolve: Effect.fnUntraced(function* (
+      options: Omit<ArtifactRegistryResolveOptions, "bootstrap" | "runtime">,
+    ) {
+      const runtime = yield* resolveContainerRuntime(options.source.runtime);
+      return yield* images.resolve({
+        ...options,
+        runtime,
+        bootstrap: bootstrap(options.source, runtime),
+      });
+    }),
+    hash: Effect.fnUntraced(function* (
+      options: Omit<Parameters<typeof images.hash>[0], "bootstrap" | "runtime">,
+    ) {
+      const runtime = yield* resolveContainerRuntime(options.source.runtime);
+      return yield* images.hash({
+        ...options,
+        runtime,
+        bootstrap: bootstrap(options.source, runtime),
+      });
+    }),
   };
 });
 
