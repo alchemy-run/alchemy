@@ -60,6 +60,7 @@ import {
   type ViewSnapshot,
   RunWait,
 } from "./Platform.ts";
+import { memoryKeys } from "./Vault.ts";
 import { serveSocket } from "./Watch.ts";
 
 /**
@@ -2071,8 +2072,10 @@ export const make = (
     };
   });
   const claim = hostedModels({ release: true });
+  const keys = memoryKeys();
   const platform = Platform.of({
     model: ({ modelName, id }) => Effect.as(claim(modelName, id), hostFor(modelName)),
+    keys: Effect.succeed(keys),
   });
 
   return {

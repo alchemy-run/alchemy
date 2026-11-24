@@ -10,8 +10,10 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import { simHost } from "./sim-host.ts";
+import { caseNames, runCases } from "./vault/cases.ts";
 
 // ---------------------------------------------------------------- customers with a sealed name
 
@@ -96,7 +98,9 @@ const platforms = {
     ),
 } as const;
 
-const Sealing = Domain.VaultLive.pipe(Layer.provideMerge(Domain.VaultKeysMemory));
+const Sealing = Domain.VaultLive.pipe(
+  Layer.provide(Layer.merge(Domain.MemoryKeyStore, Domain.NoKeyWrap)),
+);
 
 const peopleOn = (platform: keyof typeof platforms) =>
   People.layer(WhoIsLive).pipe(
@@ -181,6 +185,70 @@ describe("Domain Vault", { tags: ["unit", "local"] }, () => {
       );
     });
   }
+
+  // Every pairing of where keys are kept and what wraps them passes the same cases.
+  const RootKey = Domain.RootKeyWrap(Redacted.make("0f".repeat(32)));
+  const vaults = {
+    "memory, unwrapped": Layer.merge(Domain.MemoryKeyStore, Domain.NoKeyWrap),
+    "memory, under a root key": Layer.merge(Domain.MemoryKeyStore, RootKey),
+    "the in-memory host, under a root key": Layer.merge(
+      Domain.HostKeyStore.pipe(Layer.provide(InMemory)),
+      RootKey,
+    ),
+    "Durable Objects, unwrapped": Layer.merge(
+      Domain.HostKeyStore.pipe(Layer.provide(platforms["Durable Objects"]())),
+      Domain.NoKeyWrap,
+    ),
+    "Durable Objects, under a root key": Layer.merge(
+      Domain.HostKeyStore.pipe(Layer.provide(platforms["Durable Objects"]())),
+      RootKey,
+    ),
+  } as const;
+  for (const [name, keys] of Object.entries(vaults)) {
+    it.live(`keys in ${name}`, () =>
+      Effect.gen(function* () {
+        const results = yield* runCases("vault");
+        expect(results).toEqual(Object.fromEntries(caseNames.map((name) => [name, true])));
+      }).pipe(Effect.provide(Domain.VaultLive.pipe(Layer.provide(keys)))),
+    );
+  }
+
+  it.live("a key store under a root key holds nothing that opens a value on its own", () =>
+    Effect.gen(function* () {
+      const store = yield* Domain.KeyStore;
+      const seal = (root: string) =>
+        Effect.gen(function* () {
+          const vault = yield* Domain.Vault;
+          return yield* vault.seal(Name, "c-1", "Sam");
+        }).pipe(
+          Effect.provide(
+            Domain.VaultLive.pipe(
+              Layer.provide(Domain.RootKeyWrap(Redacted.make(root))),
+              Layer.provide(Layer.succeed(Domain.KeyStore, store)),
+            ),
+          ),
+        );
+      const sealed = yield* seal("a".repeat(64));
+      // What is stored is not the key: it is the key under the root key.
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the in-memory store needs no runtime
+      const read = store.get("c-1") as Effect.Effect<Option.Option<string>, Domain.VaultError>;
+      const stored = Option.getOrThrow(yield* read);
+      expect(stored.startsWith("r1.")).toBe(true);
+      // Under another root key the stored key does not unwrap, and nothing is sealed or opened.
+      const other = yield* Effect.gen(function* () {
+        const vault = yield* Domain.Vault;
+        return yield* vault.open(Name, sealed).pipe(Effect.flip);
+      }).pipe(
+        Effect.provide(
+          Domain.VaultLive.pipe(
+            Layer.provide(Domain.RootKeyWrap(Redacted.make("b".repeat(64)))),
+            Layer.provide(Layer.succeed(Domain.KeyStore, store)),
+          ),
+        ),
+      );
+      expect(other.reason).toContain("does not unwrap under this root key");
+    }).pipe(Effect.provide(Domain.MemoryKeyStore)),
+  );
 
   it.live("a value sealed in server code opens, and not under another subject or a later key", () =>
     Effect.gen(function* () {

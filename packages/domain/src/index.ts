@@ -371,13 +371,22 @@ export const Sealed = VaultModule.make;
 /** Seals, opens and shreds. See {@link VaultModule.Vault}. */
 export const Vault = VaultModule.Vault;
 export type Vault = VaultModule.Vault;
-/** Where a Vault keeps its keys. See {@link VaultModule.VaultKeys}. */
-export const VaultKeys = VaultModule.VaultKeys;
-export type VaultKeys = VaultModule.VaultKeys;
+/** Where a Vault keeps one key per subject. See {@link VaultModule.KeyStore}. */
+export const KeyStore = VaultModule.KeyStore;
+export type KeyStore = VaultModule.KeyStore;
+/** Makes each subject's key and what is stored of it. See {@link VaultModule.KeyWrap}. */
+export const KeyWrap = VaultModule.KeyWrap;
+export type KeyWrap = VaultModule.KeyWrap;
 /** A Vault that encrypts with AES-256-GCM. See {@link VaultModule.VaultLive}. */
 export const VaultLive = VaultModule.VaultLive;
-/** Keys kept in memory. See {@link VaultModule.VaultKeysMemory}. */
-export const VaultKeysMemory = VaultModule.VaultKeysMemory;
+/** Keys kept in memory. See {@link VaultModule.MemoryKeyStore}. */
+export const MemoryKeyStore = VaultModule.MemoryKeyStore;
+/** Keys kept on the model's own host. See {@link VaultModule.HostKeyStore}. */
+export const HostKeyStore = VaultModule.HostKeyStore;
+/** Keys stored as they are. See {@link VaultModule.NoKeyWrap}. */
+export const NoKeyWrap = VaultModule.NoKeyWrap;
+/** Keys wrapped under a root key you supply. See {@link VaultModule.RootKeyWrap}. */
+export const RootKeyWrap = VaultModule.RootKeyWrap;
 /** A Vault for stories. See {@link VaultModule.VaultTest}. */
 export const VaultTest = VaultModule.VaultTest;
 /** A sealed value as the test Vault seals it. See {@link VaultModule.sealedInTest}. */

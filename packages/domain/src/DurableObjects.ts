@@ -102,6 +102,7 @@ import {
   withoutRevision,
 } from "./Platform.ts";
 import * as TwoPhase from "./TwoPhase.ts";
+import type { KeyStore } from "./Vault.ts";
 
 // ---------------------------------------------------------------- the host
 
@@ -3160,6 +3161,39 @@ const bindState = (impl: ObjectImpl): ObjectImpl =>
     return bound;
   });
 
+/** Where a host keeps a Vault's keys: the class `Vault.Keys`, one object per subject. */
+const VAULT: HostedModel = { modelName: "Vault", id: {}, sagas: [], legacyData: false };
+
+/**
+ * One subject's key, in its object's own storage. The first key stored
+ * wins, as `KeyStore.create` says.
+ */
+const keyObject: ObjectImpl = Effect.succeed({
+  keyGet: () =>
+    reportDefects(
+      Effect.flatMap(ObjectState, ({ storage }) =>
+        Effect.map(storage.get<string>("key"), (key) => key ?? null),
+      ),
+    ),
+  keyCreate: (key: string) =>
+    reportDefects(
+      Effect.flatMap(ObjectState, ({ storage }) =>
+        storage.transaction(
+          Effect.gen(function* () {
+            const existing = yield* storage.get<string>("key");
+            if (existing !== undefined) return existing;
+            yield* storage.put("key", key);
+            return key;
+          }),
+        ),
+      ),
+    ),
+  keyDelete: () =>
+    reportDefects(
+      Effect.flatMap(ObjectState, ({ storage }) => Effect.as(storage.delete("key"), null)),
+    ),
+});
+
 /** Every runtime's claims, by host name; a process outside any runtime has one of its own. */
 const runtimeClaims = new WeakMap<object, Map<string, object>>();
 const noRuntime = {};
@@ -3827,6 +3861,19 @@ export const makePlatform = <R>(
         });
 
       return Platform.of({
+        keys: Effect.map(
+          inInit(host.declare(VAULT, "Keys", bindState(keyObject))),
+          (namespace): KeyStore["Service"] => ({
+            get: (subject) =>
+              Effect.map(
+                unwrapDefects<string | null>(namespace.getByName(subject).keyGet()),
+                Option.fromNullishOr,
+              ),
+            create: (subject, key) =>
+              unwrapDefects<string>(namespace.getByName(subject).keyCreate(key)),
+            delete: (subject) => unwrapDefects<void>(namespace.getByName(subject).keyDelete()),
+          }),
+        ),
         model: (model) =>
           Effect.gen(function* () {
             yield* claim(model.modelName, model.id);

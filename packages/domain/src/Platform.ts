@@ -14,6 +14,7 @@ import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
 import type * as DomainStream from "./Stream.ts";
 import { TraceJson } from "./Telemetry.ts";
+import type { KeyStore } from "./Vault.ts";
 import type * as View from "./View.ts";
 
 /**
@@ -1607,6 +1608,11 @@ export class Platform extends Context.Service<
   Platform,
   {
     readonly model: (model: HostedModel) => Effect.Effect<ModelHost, never, Scope>;
+    /**
+     * A Vault's keys on this host, one object per subject, apart from every
+     * model's storage. Called while a Layer is built. See `Domain.HostKeyStore`.
+     */
+    readonly keys: Effect.Effect<KeyStore["Service"]>;
   }
 >()("alchemy/Domain/Platform") {}
 

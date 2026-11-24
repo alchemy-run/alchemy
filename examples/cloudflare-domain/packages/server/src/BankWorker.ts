@@ -18,11 +18,11 @@ import { Observability } from "./Observability.ts";
 import { actorOf, SessionKey, SessionKeyLive, SessionLive, sessionRoute } from "./Session.ts";
 import { StripePayments } from "./Settlement/StripePayments.ts";
 import { StripeSettlements } from "./Settlement/StripeSettlements.ts";
-import { D1VaultKeys } from "./Vault/D1VaultKeys.ts";
+import { RootKey } from "./Vault/RootKey.ts";
 
 /**
  * Everything the Worker serves: the middleware both Apis declare, and the
- * Bank hosted on Durable Objects, with the ledger and the Vault's keys in D1. Swap
+ * Bank hosted on Durable Objects, with the ledger in D1. Swap
  * `DomainCloudflare.layerDurableObjects()` for `Domain.InMemory` and nothing else changes.
  */
 const BankLive = Layer.mergeAll(
@@ -34,14 +34,20 @@ const BankLive = Layer.mergeAll(
   Layer.provideMerge(SessionKeyLive),
   Layer.provideMerge(Bank.layer(BankHandlers)),
   Layer.provideMerge(D1LedgerStore),
-  // What identifies a customer is sealed under a key kept in its own database.
-  Layer.provideMerge(Domain.VaultLive.pipe(Layer.provide(D1VaultKeys))),
+  // What identifies a customer is sealed under a key of their own: each key lives in
+  // a Durable Object, wrapped under a root key in Secrets Store.
+  Layer.provideMerge(
+    Domain.VaultLive.pipe(
+      Layer.provide(Layer.merge(Domain.HostKeyStore, DomainCloudflare.SecretKeyWrap(RootKey))),
+    ),
+  ),
   Layer.provide(
     Layer.mergeAll(
       DomainCloudflare.layerDurableObjects(),
       SiftFraudCheck,
       StripePayments,
       Cloudflare.D1.QueryDatabaseBinding,
+      Cloudflare.SecretsStore.ReadSecretBinding,
     ),
   ),
 );

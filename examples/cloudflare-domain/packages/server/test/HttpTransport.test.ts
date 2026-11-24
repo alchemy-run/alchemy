@@ -24,7 +24,7 @@ const Ports = Layer.mergeAll(
   SiftFraudCheck,
   StripePayments,
   MemoryLedgerStore,
-  Domain.VaultLive.pipe(Layer.provide(Domain.VaultKeysMemory)),
+  Domain.VaultLive.pipe(Layer.provide(Layer.merge(Domain.MemoryKeyStore, Domain.NoKeyWrap))),
 );
 const World = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
   Layer.provideMerge(

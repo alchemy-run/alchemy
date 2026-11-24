@@ -27,7 +27,9 @@ import { SessionKeyTest, signedInAs } from "./session.ts";
 // The whole bank in one process: the same Layers the Worker uses, on the in-memory platform.
 const Ports = Layer.mergeAll(SiftFraudCheck, StripePayments, MemoryLedgerStore);
 // The Vault the Worker uses, with its keys in memory.
-const Sealing = Domain.VaultLive.pipe(Layer.provide(Domain.VaultKeysMemory));
+const Sealing = Domain.VaultLive.pipe(
+  Layer.provide(Layer.merge(Domain.MemoryKeyStore, Domain.NoKeyWrap)),
+);
 const BankInMemory = Bank.layer(BankHandlers).pipe(
   Layer.provide(Layer.mergeAll(Ports, Domain.InMemory)),
   Layer.provideMerge(Sealing),
