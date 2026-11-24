@@ -137,7 +137,12 @@ ENTRYPOINT ["node", "/app/runner.mjs"]
  * `gateway` names where callers reach the pool; `nodes` declares the
  * service that runs them.
  */
-export const makePoolLayer = <Network, Req, Gateway extends PoolGateway = PoolGateway>(options: {
+export const makePoolLayer = <
+  Network,
+  Req,
+  Gateway extends PoolGateway = PoolGateway,
+  OwnReq = never,
+>(options: {
   readonly label: string;
   readonly id: string;
   readonly settings: PoolSettings;
@@ -146,7 +151,7 @@ export const makePoolLayer = <Network, Req, Gateway extends PoolGateway = PoolGa
    * The network runners join when the database is on none: one the user
    * passed, or one the pool declares. Without it, such a database is refused.
    */
-  readonly ownNetwork?: Effect.Effect<Network | undefined, never, Req | Stack>;
+  readonly ownNetwork?: Effect.Effect<Network | undefined, never, OwnReq | Stack>;
   readonly expected: string;
   /** The longest runner name the host accepts. @default 63 */
   readonly nameLength?: number;
@@ -155,7 +160,7 @@ export const makePoolLayer = <Network, Req, Gateway extends PoolGateway = PoolGa
   /** Where callers reach the gateway, declaring what it needs; before the pool's service. */
   readonly gateway: (name: string, network: Network) => Effect.Effect<Gateway, never, Req>;
   readonly nodes: (nodes: PoolNodes<Network, Gateway>) => Effect.Effect<void, never, Req>;
-}): Layer.Layer<PoolHost, never, Database | Stack | Providers | Req> =>
+}): Layer.Layer<PoolHost, never, Database | Stack | Providers | Req | OwnReq> =>
   Layer.effect(
     PoolHost,
     Effect.gen(function* () {
