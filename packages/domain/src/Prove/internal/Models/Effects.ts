@@ -522,7 +522,14 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
     // What the effect gives. One that fails throws, which nothing that handles a failure handles.
     "effect/Effect:runSync": ([self], site) =>
       self?._tag === "Effect"
-        ? onFailure(self.run, (error) => rejected(error, true))
+        ? onFailure(self.run, (error) => rejected(error, true)).pipe(
+            // It throws here, whatever was yielded inside: a `try` around the call catches it.
+            Effect.mapError((stop) =>
+              stop._tag === "Rejected" && stop.yielded === true
+                ? new Value.Rejected({ rejection: stop.rejection, defect: true })
+                : stop,
+            ),
+          )
         : wrongArguments(site, "Effect.runSync"),
     "effect/Effect:withSpan": transparent("Effect.withSpan"),
     "effect/Effect:annotateSpans": transparent("Effect.annotateSpans"),

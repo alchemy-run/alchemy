@@ -2165,12 +2165,34 @@ const syntax: ReadonlyArray<Group> = [
       body(`a; "use strict"; return a;`),
       body(`return;`) + ` ?? "nothing"`,
       body(``) + ` ?? "nothing"`,
+      // try, catch, finally and throw.
+      body(`try { if (a > 2) throw "big"; return a; } catch (thrown) { return thrown; }`),
+      body(
+        `let seen = 0; try { seen = a; throw { code: a }; } catch (thrown) { seen = thrown.code + 1; } finally { seen = seen * 2; } return seen;`,
+      ),
+      body(`const out = []; try { out.push(a); } finally { out.push("done"); } return out;`),
+      body(
+        `try { return Option.getOrThrow(a > 0 ? Option.some(a) : Option.none()); } catch { return -1; }`,
+      ),
+      body(
+        `const half = (n) => { if (n % 2 !== 0) throw new Odd({ n }); return n / 2; }; try { return half(a); } catch (thrown) { return thrown._tag; }`,
+      ),
+      body(
+        `try { try { throw a; } finally { if (a > 3) return "left"; } } catch (thrown) { return thrown + 1; }`,
+      ),
+      body(
+        `let total = 0; for (const n of items) { try { if (n < 0) throw n; total += n; } catch { continue; } finally { total += 1; } } return total;`,
+      ),
+      body(`try { throw new Error("no " + a); } catch (thrown) { return thrown.message; }`),
+      body(
+        `try { return Effect.runSync(a > 0 ? Effect.succeed(a) : Effect.fail("none")); } catch { return 0; }`,
+      ),
+      body(
+        `try { return Effect.runSync(Effect.gen(function* () { if (a > 1) yield* Effect.die("gone"); return yield* Effect.succeed(a); })); } catch { return -1; }`,
+      ),
     ],
     known: [body(`let x = a; x /= 4; return x;`), body(`let x = 9; x /= 2; x += a; return x;`)],
     unread: [
-      [body(`try { return a; } catch { return 0; }`), reported],
-      [body(`try { return a; } finally { }`), reported],
-      [body(`throw new Error("no" + a);`), reported],
       [body(`outer: for (const n of items) { break outer; } return a;`), reported],
       [body(`class Local { n = a; } return new Local().n;`), reported],
       [body(`let i = 0; while (i < a) i++; return i;`), reported],
@@ -2215,6 +2237,10 @@ const syntax: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const x = yield* Effect.succeed(a); return x + b; })`,
       `Effect.gen(function* () { let total = 0; for (const n of [a, b]) total += yield* Effect.succeed(n); return total; })`,
       `Effect.gen(function* () { if (flag) return yield* Effect.succeed(a); return b; })`,
+      // A throw is caught; an effect that fails leaves the generator, past its catch and its finally.
+      `Effect.gen(function* () { try { if (flag) throw a; return yield* Effect.succeed(b); } catch (thrown) { return thrown + 1; } })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const ended = yield* Effect.result(Effect.gen(function* () { try { yield* even(a); return "even"; } catch { return "caught"; } finally { yield* Ref.update(seen, (all) => [...all, "finally"]); } })); return [Result.isSuccess(ended), yield* Ref.get(seen)]; })`,
+      `Effect.gen(function* () { const ended = yield* Effect.exit(Effect.gen(function* () { try { return yield* Effect.die("gone"); } catch { return "caught"; } })); return Exit.hasDies(ended); })`,
       `Effect.gen(function* () { const [x, y] = yield* Effect.all([Effect.succeed(a), Effect.succeed(b)]); return x - y; })`,
       `Effect.gen(function* () { const { x } = yield* Effect.succeed({ x: a }); return x; })`,
       `Effect.gen(function* () { return (yield* Effect.succeed(a)) + (yield* Effect.succeed(b)); })`,

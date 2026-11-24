@@ -324,9 +324,9 @@ export const FORMS: ReadonlyArray<Form> = [
   form("ForStatement: without a step", (n) => n.type === "ForStatement" && !n.update),
   form("WhileStatement", kind("WhileStatement")),
   form("DoWhileStatement", kind("DoWhileStatement")),
-  form("TryStatement", kind("TryStatement"), false),
-  form("CatchClause", kind("CatchClause"), false),
-  form("ThrowStatement", kind("ThrowStatement"), false),
+  form("TryStatement", kind("TryStatement")),
+  form("CatchClause", kind("CatchClause")),
+  form("ThrowStatement", kind("ThrowStatement")),
   form("DebuggerStatement", kind("DebuggerStatement"), false),
   form("ClassExpression", kind("ClassExpression"), false),
   form(

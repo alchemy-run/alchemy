@@ -232,7 +232,7 @@ it.effect(
         Walk: "reads the 5 items of a HashSet in order, which is the order of their hashes: the prover reads up to 4 in every order",
         Rank: "orders strings an input holds, which the prover does not translate",
         Unwrap: "yields a value the prover has no model for",
-        Roll: "calls Random.nextIntBetween, which the prover has no model for",
+        Roll: "draws a random number with no seed: no two runs draw the same",
         Spin: "runs a stream that has not ended after 10000 items",
         Turn: "calls Array.rotate, which the prover has no model for",
         // Each of these was checked against the package: none is a function of the command alone.

@@ -350,6 +350,11 @@ export class Rejected extends Data.TaggedError("Rejected")<{
   readonly rejection: V;
   /** The effect died: nothing that handles a failure handles it. */
   readonly defect?: boolean;
+  /**
+   * It came out of a `yield*`. The generator it was yielded in is left where
+   * it stands, so no `catch` and no `finally` of that generator sees it.
+   */
+  readonly yielded?: boolean;
 }> {}
 
 /** The prover met code it cannot turn into a formula. */

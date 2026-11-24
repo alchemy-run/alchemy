@@ -235,6 +235,23 @@ const PURE: ReadonlySet<string> = new Set([
 ]);
 
 /** Leaves the `switch` or the loop it is in. */
+/**
+ * The errors the language has: `new Error("no")`. One is what it says, its
+ * `message` and its `name`. A stack and a cause are not read.
+ */
+const ERRORS: ReadonlyMap<string, V> = new Map(
+  ["Error", "TypeError", "RangeError"].map((name) => [
+    name,
+    {
+      _tag: "Native",
+      name,
+      call: ([message]) =>
+        Effect.succeed(Value.obj({ name: Value.str(name), message: message ?? Value.str("") })),
+    } satisfies V,
+  ]),
+);
+const ERROR_CLASSES: ReadonlySet<V> = new Set(ERRORS.values());
+
 const BREAK: V = { _tag: "Opaque", what: "break" };
 /** Goes on to the next turn of the loop it is in. */
 const CONTINUE: V = { _tag: "Opaque", what: "continue" };
@@ -644,6 +661,8 @@ export const make = (given: Loader, run: Run): Interpreter => {
     if (found) return found;
     if (name === "undefined") return Value.undef;
     if (name === "Math" || name === "Object") return { _tag: "Lib", module: name, path: [] } as V;
+    const error = ERRORS.get(name);
+    if (error) return error;
     if (name === "BigInt")
       return {
         _tag: "Native",
@@ -1544,7 +1563,8 @@ export const make = (given: Loader, run: Run): Interpreter => {
     function* (cls: V, args: ReadonlyArray<V>, site: Site) {
       if (cls._tag === "Host" && !isDomainClass(cls.value) && isDataClass(cls.value))
         return yield* constructData(cls, args, site);
-      if (cls._tag === "Native" && library.isClass(cls)) return yield* cls.call(args, site);
+      if (cls._tag === "Native" && (library.isClass(cls) || ERROR_CLASSES.has(cls)))
+        return yield* cls.call(args, site);
       const made = cls._tag === "Host" ? library.constructHost(cls.value, args, site) : undefined;
       if (made) return yield* made;
       if (cls._tag !== "Host" || !isDomainClass(cls.value))
@@ -1848,7 +1868,18 @@ export const make = (given: Loader, run: Run): Interpreter => {
       }
       case "YieldExpression":
         return node.delegate && node.argument
-          ? yield* settle(yield* evaluate(node.argument, env), site)
+          ? yield* settle(yield* evaluate(node.argument, env), site).pipe(
+              // An effect that fails leaves the generator: its `try` does not see the failure.
+              Effect.mapError((stop) =>
+                stop._tag === "Rejected" && stop.yielded !== true
+                  ? new Value.Rejected({
+                      rejection: stop.rejection,
+                      ...(stop.defect === true ? { defect: true } : {}),
+                      yielded: true,
+                    })
+                  : stop,
+              ),
+            )
           : yield* fail(site, "yields without a star");
       case "ConditionalExpression":
         return (yield* decide(yield* evaluate(node.test, env), site))
@@ -2117,6 +2148,42 @@ export const make = (given: Loader, run: Run): Interpreter => {
               .flatMap((entry) => entry.consequent as ReadonlyArray<Node>);
             const returned = yield* execute(body, { ...env, scope: child(env.scope) });
             if (returned && returned !== BREAK) return returned;
+            break;
+          }
+          case "ThrowStatement":
+            return yield* new Value.Rejected({
+              rejection: yield* evaluate(statement.argument, env),
+              defect: true,
+            });
+          case "TryStatement": {
+            const handler: Node | null = statement.handler;
+            const finalizer: Node | null = statement.finalizer;
+            /** What is thrown, as code throws: not a failure of an effect the generator yielded. */
+            const thrown = (stop: Value.Stop): stop is Value.Rejected =>
+              stop._tag === "Rejected" && stop.defect === true && stop.yielded !== true;
+            const attempt = execute(statement.block.body, { ...env, scope: child(env.scope) });
+            const handled = handler
+              ? Effect.catchIf(attempt, thrown, (stop) =>
+                  Effect.gen(function* () {
+                    const scope = child(env.scope);
+                    if (handler.param) yield* bind(handler.param, stop.rejection, scope, env);
+                    return yield* execute(handler.body.body, { ...env, scope });
+                  }),
+                )
+              : attempt;
+            const ended = yield* handled.pipe(
+              Effect.map((returned) => ({ returned, thrown: undefined })),
+              Effect.catchIf(thrown, (stop) =>
+                Effect.succeed({ returned: undefined, thrown: stop }),
+              ),
+            );
+            if (finalizer) {
+              // What `finally` returns is what the statement returns, whatever came before.
+              const last = yield* execute(finalizer.body, { ...env, scope: child(env.scope) });
+              if (last) return last;
+            }
+            if (ended.thrown) return yield* ended.thrown;
+            if (ended.returned) return ended.returned;
             break;
           }
           case "BreakStatement":

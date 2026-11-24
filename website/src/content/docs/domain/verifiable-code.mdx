@@ -77,19 +77,24 @@ function countdown(n: number): number {
   return n <= 0 ? 0 : 1 + countdown(n - 1); // a function that calls itself, on a number the code writes
 }
 
+try {
+  if (a > 2) throw new Error("too many"); // caught by the try around it
+  total += a;
+} catch (thrown) {
+  total = 0;
+} finally {
+  count++;
+}
+
 type Amount = number; // types and interfaces
 interface Line {
   readonly amount: Amount;
 }
 ```
 
+A `try` catches what code throws. An effect that fails where it is yielded leaves the generator: neither the `catch` nor the `finally` around the `yield*` runs, as in the deployed handler. Handle a failure with `Effect.catch`.
+
 ```typescript title="Not supported"
-try {
-  total = twice(a);
-} catch {
-  total = 0;
-} // try, catch and finally
-throw new Error("no");
 await saved; // async, await and for await
 outer: for (const n of items) break outer; // labels
 function* each() {
