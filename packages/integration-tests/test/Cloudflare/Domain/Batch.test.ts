@@ -225,27 +225,4 @@ describe.concurrent.each([
     }),
     { tags, timeout: 180_000 },
   );
-
-  test(
-    "a reaction that runs longer than its lease runs once",
-    Effect.gen(function* () {
-      const { ping, pongs } = yield* group;
-      // The reaction takes 70 seconds, past the 60-second lease. The inbox's
-      // backstop and every wake-up during it find the lease still held.
-      yield* ping("slow-policy", { answer: "slowly" });
-      yield* pongs.pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
-          until: (entries) => answersTo(entries, "slow-policy").length > 0,
-          times: 80,
-        }),
-      );
-      // A second run beside the first starts when the lease would end, 60
-      // seconds after the first, and answers 70 seconds later: about 60
-      // seconds after the first answer.
-      yield* Effect.sleep("75 seconds");
-      expect(answersTo(yield* pongs, "slow-policy")).toHaveLength(1);
-    }),
-    { tags, timeout: 300_000 },
-  );
 });

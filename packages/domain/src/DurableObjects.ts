@@ -609,10 +609,7 @@ const makeAging = (retention: Retention | false): Aging => {
   };
 };
 
-/**
- * How long a drain's lease lasts unless the drain renews it. A running drain
- * renews it every third of that, so only a drain that stopped lets it end.
- */
+/** How long a queue drain may hold its lease before another drain may take over. */
 const LEASE_MS = 60_000;
 
 /**
@@ -674,32 +671,15 @@ const releaseLease = (state: ObjectStateShape, lease: string, run: string) =>
     .pipe(Effect.ignore);
 
 /**
- * Run `work` holding the lease `run` took: it is renewed while `work` runs,
- * so a drain slower than {@link LEASE_MS} keeps it, and is let go once
- * `work` ends however it ends.
+ * Run `work` holding the lease `run` took, and let it go once `work` ends
+ * however it ends.
  */
 const holdingLease = <A, E, R>(
   state: ObjectStateShape,
   lease: string,
   run: string,
   work: Effect.Effect<A, E, R>,
-) => {
-  const renew = exclusively(
-    state.storage.transaction(
-      Effect.gen(function* () {
-        const held = leaseOf(yield* state.storage.get<Lease | number>(lease));
-        if (held?.run !== run) return;
-        yield* state.storage.put<Lease>(lease, {
-          ...held,
-          expires: (yield* Clock.currentTimeMillis) + LEASE_MS,
-        });
-      }),
-    ),
-  ).pipe(Effect.ignore, Effect.delay(LEASE_MS / 3), Effect.forever);
-  return Effect.raceFirst(work, renew as Effect.Effect<never>).pipe(
-    Effect.ensuring(exclusively(releaseLease(state, lease, run))),
-  );
-};
+) => work.pipe(Effect.ensuring(exclusively(releaseLease(state, lease, run))));
 
 /**
  * A durable, ordered work queue in the instance's storage. Rows are written
@@ -730,10 +710,9 @@ const queue = <Row>(
       if ((yield* state.storage.list({ prefix, limit: 1 })).size === 0) return;
       const taken = yield* acquire;
       if ("held" in taken) {
-        // Another drain of this activation holds the lease, and finds rows
-        // staged since once it ends; or one whose activation ended without a
-        // name, so its lease ends by the clock. Look again then: nothing
-        // else may, if no more rows are staged.
+        // Another drain of this activation holds the lease, or one whose
+        // instance ended on a host that names none, so its lease ends by the
+        // clock. Look again then: nothing else may, if no more rows are staged.
         yield* callback.schedule("drain", { at: taken.held, payload: {} }).pipe(Effect.orDie);
         return;
       }
@@ -3134,8 +3113,6 @@ const projectionObject = (
     const waitMillis = kit.options.batch?.waitMillis ?? 0;
     const lease = "drain-lease";
     const acquire = exclusively(acquireLease(state, lease));
-    /** When a short batch is due: run once its wait is up, after the lease is let go. */
-    const due = (at: number) => ({ due: at }) as const;
     // Re-run the drain later: when a short batch has waited long enough, or after a failure.
     let wake: (at: number) => Effect.Effect<void> = () => Effect.void;
     // Each input's backstop advances this cursor: once an input arrives, a
@@ -3157,23 +3134,23 @@ const projectionObject = (
           state,
           lease,
           taken.run,
-          Effect.gen(function* (): Generator<any, ReturnType<typeof due> | undefined> {
+          Effect.gen(function* () {
             while (true) {
               const meta = yield* readMeta;
-              if (meta.key === null || meta.processed >= meta.accepted) return undefined;
+              if (meta.key === null || meta.processed >= meta.accepted) return;
               const rows = yield* state.storage.list<Accepted>({
                 prefix: "in:",
                 start: `in:${pad(meta.processed + 1)}`,
                 limit: size,
               });
               const run = [...rows.values()];
-              if (run.length === 0) return undefined;
+              if (run.length === 0) return;
               if (
                 run.length < size &&
                 waitMillis > 0 &&
                 (yield* Clock.currentTimeMillis) - run[0]!.at < waitMillis
               ) {
-                return due(run[0]!.at + waitMillis);
+                return yield* wake(run[0]!.at + waitMillis);
               }
               yield* kit.run(meta.key, run);
               // Read and written in one transaction: another copy of the instance
@@ -3231,10 +3208,6 @@ const projectionObject = (
       if (exit._tag === "Failure") {
         yield* Effect.logError(`projection ${kit.name} failed; retrying`, exit.cause);
         yield* wake((yield* Clock.currentTimeMillis) + PROJECTION_RETRY_MS);
-      } else if (exit.value !== undefined) {
-        // Scheduled once the lease is let go: a wake-up that came first would
-        // find it held, and wait the lease out.
-        yield* wake(exit.value.due);
       }
     }) as Effect.Effect<void>;
     const callback = yield* makeCallback("domain:projection", () => drain);
