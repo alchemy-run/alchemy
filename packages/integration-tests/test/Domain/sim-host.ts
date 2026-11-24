@@ -163,8 +163,12 @@ export const simHost = (
         const set = (at: number) =>
           Effect.gen(function* () {
             const previous = timer;
-            const now = yield* Clock.currentTimeMillis;
-            const fiber = yield* Effect.sleep(Math.max(0, at - now)).pipe(
+            // Due at `at` on the instance's clock, also when a test moves that clock on.
+            const due: Effect.Effect<void> = Effect.gen(function* () {
+              const now = yield* Clock.currentTimeMillis;
+              if (now < at) yield* Effect.andThen(Effect.sleep(Math.min(at - now, 50)), due);
+            });
+            const fiber = yield* due.pipe(
               Effect.andThen(
                 Effect.suspend(() => {
                   timer = undefined;
