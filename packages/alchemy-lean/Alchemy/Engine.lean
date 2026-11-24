@@ -90,12 +90,45 @@ def answer (w : World m.signature) (c : m.signature.Call) (reply : m.signature.R
     Option (World m.signature) :=
   (m.answerGo c reply w.fibers).map fun fibers => { w with fibers }
 
+/-- The first scheduled command that is due, with what is scheduled before and after it. -/
+def nextDue (now : Time) : List (Time × Send m.signature.aggregates) →
+    Option (List (Time × Send m.signature.aggregates) × (Time × Send m.signature.aggregates) ×
+      List (Time × Send m.signature.aggregates))
+  | [] => none
+  | x :: rest =>
+    if x.1 ≤ now then some ([], x, rest)
+    else (nextDue now rest).map fun found => (x :: found.1, found.2.1, found.2.2)
+
+theorem nextDue_spec (now : Time) : ∀ (schedule before : List (Time × Send m.signature.aggregates))
+    (x : Time × Send m.signature.aggregates) (after : List (Time × Send m.signature.aggregates)),
+    m.nextDue now schedule = some (before, x, after) →
+      schedule = before ++ x :: after ∧ x.1 ≤ now := by
+  intro schedule
+  induction schedule with
+  | nil => intro _ _ _ h; simp [nextDue] at h
+  | cons y rest ih =>
+    intro before x after h
+    unfold nextDue at h
+    split at h
+    · next due => cases h; exact ⟨rfl, due⟩
+    · obtain ⟨found, inner, eq⟩ := Option.map_eq_some_iff.mp h
+      obtain ⟨b, z, a⟩ := found
+      cases eq
+      obtain ⟨rfl, due⟩ := ih b z a inner
+      exact ⟨rfl, due⟩
+
+/-- Sends the scheduled commands that are due, one at a time, letting each settle. -/
+def fireDue (fuel : Nat) : Nat → World m.signature → World m.signature
+  | 0, w => w
+  | count + 1, w =>
+    match m.nextDue w.now w.schedule with
+    | none => w
+    | some (before, x, after) =>
+      fireDue fuel count (m.settle fuel ({ w with schedule := before ++ after }.dispatch x.2))
+
 /-- Moves the clock on, and sends every scheduled command that is now due. -/
 def pass (fuel : Nat) (w : World m.signature) (duration : Time) : World m.signature :=
-  let now := w.now + duration
-  let due := w.schedule.filter fun x => x.1 ≤ now
-  let later := w.schedule.filter fun x => ¬ x.1 ≤ now
-  due.foldl (fun w x => m.settle fuel (w.dispatch x.2)) { w with now := now, schedule := later }
+  m.fireDue fuel fuel { w with now := w.now + duration }
 
 /-- What a caller, an outside system or the clock does to a model. -/
 inductive Move (m : Model) where
@@ -321,6 +354,75 @@ theorem settle_runs (fuel : Nat) : ∀ w, m.Runs w (m.settle fuel w) := by
 theorem play_send_runs (fuel : Nat) (w : World m.signature) (s : Send m.signature.aggregates)
     (offered : m.offered s) : m.Runs w (m.play fuel w (.send s)) :=
   Runs.trans (.step (.refl w) (.send w s offered)) (m.settle_runs fuel _)
+
+/-- Firing what is due is steps the model can take. -/
+theorem fireDue_runs (fuel : Nat) : ∀ count w, m.Runs w (m.fireDue fuel count w) := by
+  intro count
+  induction count with
+  | zero => intro w; exact .refl w
+  | succ count ih =>
+    intro w
+    unfold fireDue
+    cases found : m.nextDue w.now w.schedule with
+    | none => exact .refl w
+    | some next =>
+      obtain ⟨before, x, after⟩ := next
+      obtain ⟨split, due⟩ := m.nextDue_spec w.now _ _ _ _ found
+      exact Runs.trans
+        (Runs.trans (.step (.refl w) (.fire w x.1 x.2 before after split due)) (m.settle_runs fuel _))
+        (ih _)
+
+/-- What a move needs, to be one the model allows: an offered command, or one of its decisions. -/
+def Move.Allowed {m : Model} : Move m → Prop
+  | .send s => m.offered s
+  | .decide d _ _ => d ∈ m.decisions
+  | _ => True
+
+/-- Any allowed move, and everything that follows from it, is steps the model can take. -/
+theorem play_runs (fuel : Nat) (w : World m.signature) (move : Move m) (allowed : move.Allowed) :
+    m.Runs w (m.play fuel w move) := by
+  cases move with
+  | send s => exact m.play_send_runs fuel w s allowed
+  | decide d actor c =>
+    exact Runs.trans (.step (.refl w) (.decide w d actor c allowed)) (m.settle_runs fuel _)
+  | answer c reply =>
+    show m.Runs w (match m.answer w c reply with
+      | some w' => m.settle fuel w'
+      | none => w)
+    cases answered : m.answer w c reply with
+    | none => exact .refl w
+    | some w' =>
+      exact Runs.trans (.step (.refl w) (m.answer_step w w' c reply answered)) (m.settle_runs fuel _)
+  | pass duration =>
+    exact Runs.trans (.step (.refl w) (.tick w (w.now + duration) (Nat.le_add_right _ _)))
+      (m.fireDue_runs fuel fuel _)
+  | redeliver seq =>
+    show m.Runs w (match w.log[seq]? with
+      | some e => m.settle fuel (m.react w e)
+      | none => w)
+    cases found : w.log[seq]? with
+    | none => exact .refl w
+    | some e =>
+      exact Runs.trans (.step (.refl w) (.redeliver w e (List.mem_of_getElem? found)))
+        (m.settle_runs fuel _)
+
+theorem Runs.reachable {m : Model} {w w' : World m.signature} (runs : m.Runs w w')
+    (reach : m.Reachable w) : m.Reachable w' := by
+  induction runs with
+  | refl => exact reach
+  | step _ step ih => exact .step ih step
+
+/-- A run of allowed moves is within what the model can reach. -/
+theorem run_reachable (moves : List (Move m)) (allowed : ∀ move ∈ moves, move.Allowed)
+    (fuel : Nat := 1000) : m.Reachable (m.run moves fuel) := by
+  unfold run
+  suffices ∀ w, m.Reachable w → m.Reachable (moves.foldl (m.play fuel) w) from this _ .start
+  induction moves with
+  | nil => intro w reach; exact reach
+  | cons move rest ih =>
+    intro w reach
+    exact ih (fun x mem => allowed x (List.mem_cons_of_mem _ mem)) _
+      ((m.play_runs fuel w move (allowed move List.mem_cons_self)).reachable reach)
 
 end Model
 end Alchemy

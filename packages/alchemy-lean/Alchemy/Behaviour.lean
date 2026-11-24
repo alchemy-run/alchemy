@@ -26,6 +26,16 @@ theorem settle_succ (fuel : Nat) (w : World m.signature) :
 
 theorem settle_zero (w : World m.signature) : m.settle 0 w = w := rfl
 
+theorem fireDue_zero (fuel : Nat) (w : World m.signature) : m.fireDue fuel 0 w = w := rfl
+
+theorem fireDue_succ (fuel count : Nat) (w : World m.signature) :
+    m.fireDue fuel (count + 1) w =
+      match m.nextDue w.now w.schedule with
+      | none => w
+      | some (before, x, after) =>
+        m.fireDue fuel count (m.settle fuel ({ w with schedule := before ++ after }.dispatch x.2)) :=
+  rfl
+
 end Model
 
 theorem Program.pure_eq {σ : Signature} {α : Type} (a : α) :
@@ -52,6 +62,7 @@ end Link
 attribute [behaviour]
   Model.run Model.play Model.settle_succ Model.settle_zero Model.stepOnce Model.tryFibers
   Model.advance Model.react Model.waiting Model.answer Model.answerGo Model.pass
+  Model.fireDue_zero Model.fireDue_succ Model.nextDue
   World.dispatch World.decide World.lift World.start World.finish
   Recorded.dispatch Recorded.decide Recorded.records Recorded.outcome Recorded.record Recorded.start
   States.set update Aggregate.apply Aggregate.after

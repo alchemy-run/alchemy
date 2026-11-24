@@ -330,24 +330,23 @@ theorem settle_reachable (calls : Nat) : ∀ {w : net.Worlds}, net.Reachable w �
     | some w' => exact ih (net.answerNext_reachable reach next)
 
 /--
-A run of offered commands is within what the network can reach. So whatever is
-proved of every reachable world holds of the run, in whatever order it answered.
+A run of allowed moves is within what the network can reach: commands,
+decisions, outside answers, redeliveries and time passing, at any of the models.
+So whatever is proved of every reachable world holds of the run, in whatever
+order it answered.
 -/
-theorem run_reachable (commands : List ((i : ι) × Send (model i).signature.aggregates))
-    (offered : ∀ command ∈ commands, (model command.1).offered command.2) :
-    net.Reachable (net.run (commands.map fun command => ⟨command.1, .send command.2⟩)) := by
+theorem run_reachable (moves : List ((i : ι) × Model.Move (model i)))
+    (allowed : ∀ move ∈ moves, move.2.Allowed) : net.Reachable (net.run moves) := by
   unfold run
-  suffices ∀ (w : net.Worlds), net.Reachable w →
-      net.Reachable ((commands.map fun command =>
-        (⟨command.1, .send command.2⟩ : (i : ι) × Model.Move (model i))).foldl net.play w) from
+  suffices ∀ (w : net.Worlds), net.Reachable w → net.Reachable (moves.foldl net.play w) from
     this _ .start
-  induction commands with
+  induction moves with
   | nil => intro w reach; exact reach
-  | cons command rest ih =>
+  | cons move rest ih =>
     intro w reach
-    refine ih (fun c mem => offered c (List.mem_cons_of_mem _ mem)) _ ?_
-    exact net.settle_reachable _ (net.reachable_runs reach command.1
-      ((model command.1).play_send_runs _ _ _ (offered command List.mem_cons_self)))
+    refine ih (fun x mem => allowed x (List.mem_cons_of_mem _ mem)) _ ?_
+    exact net.settle_reachable _ (net.reachable_runs reach move.1
+      ((model move.1).play_runs _ _ _ (allowed move List.mem_cons_self)))
 
 end Network
 

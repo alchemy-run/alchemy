@@ -350,9 +350,8 @@ theorem thePayoutRunIsSound :
       Compliance.FlagsAreAssessments ((aPayout .compliance).state .Watch "a-1") ∧
       Wires.SentOnce ((aPayout .wires).state .Transfer ⟨"p-1"⟩) :=
   allThreeAreSound _
-    (institution.run_reachable [
-        ⟨.bank, ⟨.Account, (), .open "a-1" "Sam"⟩⟩,
-        ⟨.bank, ⟨.Account, (), .deposit "a-1" 500⟩⟩,
-        ⟨.bank, ⟨.Account, (), .requestPayout "a-1" "p-1" 200⟩⟩]
-      (by intro command _; obtain ⟨part, _⟩ := command; cases part <;> trivial))
+    (institution.run_reachable _ (by
+      intro move mem
+      simp only [List.mem_cons, List.mem_nil_iff, or_false] at mem
+      rcases mem with rfl | rfl | rfl <;> trivial))
     "a-1" ⟨"p-1"⟩
