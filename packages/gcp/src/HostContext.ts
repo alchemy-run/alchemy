@@ -84,8 +84,8 @@ export const createGcpHostRuntimeContext =
     return {
       ...base,
       // `packEnvValueKeepRedacted` keeps a secret's `Redacted` on the
-      // outside, so a Cloud Run host's provider moves it to Secret Manager
-      // instead of its revision's plain env. The packed string inside still
+      // outside, so the host's provider (Cloud Run, Cloud Functions) moves
+      // it to Secret Manager instead of its plain env. The packed string inside still
       // carries the marker the runtime `get` rebuilds the `Redacted` from.
       set: (bindingId: string, output: Output.Output) =>
         Effect.sync(() => {

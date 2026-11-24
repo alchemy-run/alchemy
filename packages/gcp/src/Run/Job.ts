@@ -582,6 +582,7 @@ const toAttrs = (
     serviceAccountUniqueId: extras.serviceAccountUniqueId,
     iamGrants: extras.iamGrants ?? [],
     codeHash: extras.codeHash,
+    secretEnv: extras.secretEnv ?? [],
   };
 };
 

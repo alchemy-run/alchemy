@@ -13,6 +13,9 @@
  * value is a new version, so it rolls out as a new revision; once the
  * rollout is done, versions no serving revision reads are destroyed.
  *
+ * `GCP.CloudFunctions.Function` keeps its secret env the same way, as one
+ * unnamed container whose references become `secretEnvironmentVariables`.
+ *
  * @internal
  */
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";

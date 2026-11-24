@@ -170,8 +170,10 @@ The deploy puts each one, from `env` or from a binding, in a Secret
 Manager secret of the service's own, grants the service account
 `roles/secretmanager.secretAccessor` on it, and the container reads it
 through `secretKeyRef`. `process.env` and `Config.Redacted` read the
-same string as before. The same holds for worker pools, jobs, and
-sidecar containers.
+same string as before. The same holds for worker pools, jobs, sidecar
+containers, the websites under [Frontend](/gcp/frontend), and
+[Cloud Functions](/gcp/compute/cloud-functions), which read them as
+secret environment variables.
 
 ## Choose the region
 

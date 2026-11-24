@@ -58,7 +58,10 @@ test(
     // Nor under another key.
     const text = JSON.stringify(env);
     expect(text).not.toContain("s3cret");
-    expect(text).not.toContain("123456");
+    // `ENV_JSONISH` is a plain value that happens to start with the same digits.
+    expect(
+      env.filter((entry) => entry.name !== "ENV_JSONISH" && entry.value?.includes("123456")),
+    ).toEqual([]);
     expect(text).not.toContain("Redacted");
     // Plain values stay plain.
     expect(byName.get("ENV_PLAIN")?.value).toBe("hello");

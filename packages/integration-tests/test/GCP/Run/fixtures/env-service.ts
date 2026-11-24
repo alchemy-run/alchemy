@@ -1,5 +1,4 @@
 import * as GCP from "@alchemy.run/gcp";
-import { Random } from "alchemy/Random";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { bindEnvOutputs, echoEnv, envValues } from "../../../EnvValues.ts";
@@ -20,8 +19,9 @@ export default class EnvService extends GCP.Function<EnvService>()(
     env: envValues,
   },
   Effect.gen(function* () {
-    const random = yield* Random("EnvBoundRandom", { bytes: 4 });
-    const bound = yield* bindEnvOutputs(random.text);
+    // Any upstream resource does: the bound Outputs only need to resolve at deploy.
+    const topic = yield* GCP.PubSub.Topic("EnvBoundTopic", {});
+    const bound = yield* bindEnvOutputs(topic.name);
     return {
       fetch: Effect.gen(function* () {
         return yield* HttpServerResponse.json({
