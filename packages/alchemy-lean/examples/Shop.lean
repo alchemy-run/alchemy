@@ -107,8 +107,12 @@ inductive Name where
   | order
 deriving DecidableEq, Repr
 
+abbrev ShopAggregates : Aggregates where
+  Name := Name
+  of | .order => Order
+
 abbrev ShopSignature : Signature where
-  aggregates := { Name := Name, of := fun | .order => Order }
+  aggregates := ShopAggregates
   Call := Call
   Reply := Reply
   Saga := Unit
@@ -133,14 +137,47 @@ def Fulfilment : Policy ShopSignature :=
     | .paid _ item _ => Program.request (σ := ShopSignature) (Call.ship id item)
     | _ => pure ()
 
+/-! ## What is read from it -/
+
+/-- What one recorded event took in payment. -/
+def taken : Emitted ShopAggregates → Nat
+  | ⟨.order, _, .paid _ _ amount, _, _⟩ => amount
+  | _ => 0
+
+/-- A view: what the shop has taken, in total. -/
+abbrev Revenue : View ShopAggregates where
+  name := "Revenue"
+  Key := Unit
+  State := Nat
+  Event := Empty
+  Actor := Unit
+  Rejection := Empty
+  initial := 0
+  on := fun _ event => [{ key := (), evolve := (· + taken event) }]
+
+structure PackingRow where
+  order : String
+  item : String
+deriving DecidableEq, Repr
+
+/-- A projection: a row for the packers, written for each paid order. -/
+def Packing : Projection ShopAggregates where
+  name := "Packing"
+  Row := PackingRow
+  write
+    | _, ⟨.order, id, .paid _ item _, _, _⟩ => [⟨id, item⟩]
+    | _, _ => []
+
 end Shop
 
 open Shop in
-/-- The shop: its aggregate and its policies. -/
+/-- The shop: its aggregate, its policies and its reads. -/
 abbrev Shop : Model where
   name := "Shop"
   signature := ShopSignature
   policies := [Payment, Fulfilment]
+  views := [Revenue]
+  projections := [Packing]
 
 namespace Shop
 
@@ -168,6 +205,41 @@ theorem everyOrderChargedOnce (w : Alchemy.World ShopSignature) (reach : Shop.Re
     (by intro n; cases n; exact chargedOnce_kept)
     (by intro d mem; cases mem) w reach .order id
 
+/-! ## What is proved about the reads -/
+
+theorem revenue_go (history log : List (Emitted ShopAggregates)) (total : Nat) :
+    Revenue.go () history log total = total + (log.map taken).sum := by
+  induction log generalizing history total with
+  | nil => rfl
+  | cons event rest ih =>
+    show Revenue.go () (history ++ [event]) rest (Revenue.applyAt history event () total) = _
+    rw [ih]
+    simp [View.applyAt]
+    omega
+
+/-- The Revenue view is exactly the sum of what was paid, whatever was recorded. -/
+theorem revenueIsWhatWasPaid (log : List (Emitted ShopAggregates)) :
+    Revenue.stateAt log () = (log.map taken).sum := by
+  simpa [View.stateAt] using revenue_go [] log 0
+
+def isPaid : Emitted ShopAggregates → Bool
+  | ⟨.order, _, .paid .., _, _⟩ => true
+  | _ => false
+
+theorem packing_go (history log : List (Emitted ShopAggregates)) :
+    (Packing.go history log).length = (log.filter isPaid).length := by
+  induction log generalizing history with
+  | nil => rfl
+  | cons event rest ih =>
+    obtain ⟨source, id, event, seq, time⟩ := event
+    rw [Projection.go, List.length_append, ih]
+    cases source; cases event <;> simp [Packing, isPaid, List.filter_cons] <;> omega
+
+/-- The packers get one row for each paid order: none missed, none twice. -/
+theorem everyPaidOrderIsPackedOnce (log : List (Emitted ShopAggregates)) :
+    (Packing.table log).length = (log.filter isPaid).length :=
+  packing_go [] log
+
 /-- The domain by itself, with the outside systems played by the story. -/
 example : Shop.passes [
     .when ⟨.order, (), .place "o-1" "kettle" 40⟩,
@@ -176,6 +248,7 @@ example : Shop.passes [
     .recorded .order "o-1" [.placed "kettle" 40, .paid "ch_1" "kettle" 40],
     .call (.ship "o-1" "kettle"),
     .answer (.ship "o-1" "kettle") (),
+    .view Revenue () 40,
     .when ⟨.order, (), .settle "o-1" "ch_2"⟩,
     .rejected .order .notAwaitingPayment
   ] = true := by decide
@@ -239,6 +312,9 @@ def orders [Uses R Journal] [Uses R Payments] [Uses R Warehouse] (request : Requ
   | .get, ["orders", id], _ =>
     let shop ← hosted.world
     return describe (shop.state .order id)
+  | .get, ["revenue"], _ =>
+    let shop ← hosted.world
+    return { status := 200, body := toString (Revenue.stateAt shop.log ()) }
   | _, _, _ => return { status := 404, body := "not found" }
 
 /-! ## The stack -/
@@ -310,6 +386,7 @@ def anOrder : Story := [
   .request api { path := ["orders", "o-1"] } (responds { status := 200, body := "paid ch_o-1" }),
   .request api { method := .post, path := ["orders", "o-1"], body := "kettle:40" }
     (responds { status := 409, body := "Shop.Rejection.alreadyPlaced" }),
+  .request api { path := ["revenue"] } (responds { status := 200, body := "40" }),
   .request packer {} (responds { status := 200, body := "o-1:kettle" }),
   .request packer {} (responds { status := 204 }) ]
 
