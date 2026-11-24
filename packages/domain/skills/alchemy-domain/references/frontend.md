@@ -118,6 +118,18 @@ Decode snapshot Flags with `BankClient.AccountSummary.decodeSnapshotFlags`. Use 
 
 More: [Integrate with Foldkit: Follow a View's state](https://alchemy.run/domain/foldkit#follow-a-views-state), [Seed the first paint](https://alchemy.run/domain/foldkit#seed-the-first-paint), [Optimistic updates: Resume the feed](https://alchemy.run/domain/optimistic-updates#resume-the-feed).
 
+## Several keys in one page
+
+`toMessage` and `onCaughtUp` receive the key they are for as a second argument. A page that keeps what it read of several keys (a list on the left, the open one on the right) files each snapshot under its key, so a snapshot that arrives after the person opened another is not shown as that one's. An entry of `events` carries its key in `envelope.id`.
+
+```ts
+toMessage: ({ state }, issueId): Message => Message.ReceivedIssue({ issueId, detail: state }),
+```
+
+An app whose pages show AI agent sessions records them into the model first: see the `alchemy-ai` skill's `references/front-end.md`.
+
+More: [Integrate with Foldkit: Follow a View's state](https://alchemy.run/domain/foldkit#follow-a-views-state), [Connect a front end](https://alchemy.run/ai/front-end).
+
 ## Tracing from the browser
 
 Foldkit wraps every Command in a span, and Api calls carry the trace to the server (live reads too). Put a tracer in `resources` that exports to the app's own origin, and collect it in the server Worker with `Telemetry.relay`, which forwards it with the server's credentials:

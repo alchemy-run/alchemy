@@ -9,7 +9,7 @@ An MCP server offers tools over the [Model Context Protocol](https://modelcontex
 
 A server is a class with a name. Its Layer is the client: here a server reached over HTTP.
 
-```typescript title="src/mcp.ts"
+```typescript title="src/Docs.mcp.ts"
 import * as AI from "@alchemy.run/ai";
 import { McpClient, McpProtocol } from "effect/ai";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -29,23 +29,22 @@ export const DocsLive = Docs.layer(
 
 The harness builds the client where it runs, so the client can use a Worker's service binding or any other transport Effect AI has.
 
-## List it on a harness
+## Mention it in a process
 
-List the server beside the harness's tools and provide its Layer:
+A [process](/ai/processes) that mentions the server may call every tool the server offers:
 
-```typescript
-const harness = yield* Pi.Harness({ models: [Fast], tools: [Add, Docs] });
+```typescript title="src/Support.process.ts"
+import * as AI from "@alchemy.run/ai";
+import { Docs } from "./Docs.mcp.ts";
+
+export class Support extends AI.Process<Support>()("Support", {
+  description: "Answer a question about the product from its documentation.",
+})`
+  Answer the question you are asked. Look everything up in ${Docs} first.
+` {}
 ```
 
 The harness asks the server for its tools when an instance opens, so the tools the model sees are the ones the server has then.
-
-## Select a server's tools
-
-In a conversation's or a prompt's tools, the server stands for all of its tools:
-
-```typescript
-yield* harness.configure("pr-142", { tools: { remove: [Docs] } });
-```
 
 ## How its tools are named
 

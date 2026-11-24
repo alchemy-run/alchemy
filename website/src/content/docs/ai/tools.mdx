@@ -9,7 +9,7 @@ A tool is a function the model can call. The model sees its name, its descriptio
 
 A tool's declaration is its contract: a description for the model, `parameters` it takes and the `success` value it returns.
 
-```typescript title="src/tools.ts"
+```typescript title="src/Add.tool.ts"
 import * as AI from "@alchemy.run/ai";
 import * as Schema from "effect/Schema";
 
@@ -45,7 +45,7 @@ export const AddLive = Add.make(
 
 A handler that needs a binding is built by an Effect. That Effect runs where the harness is yielded, so the binding is declared at deploy like any other, and it returns the handler:
 
-```typescript title="src/tools.ts"
+```typescript title="src/Deploy.tool.ts"
 import * as AI from "@alchemy.run/ai";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
@@ -73,19 +73,29 @@ export const DeployLive = Deploy.make(
 ).pipe(Layer.provide(Cloudflare.R2.WriteBucketBinding));
 ```
 
-## List it on a harness
+## Mention it in a process
 
-A harness lists the tools its conversations may use. Each listed tool's Layer is a requirement of the harness, so a harness with a Layer missing does not compile:
+A [process](/ai/processes) that mentions a tool may call it. The tool's Layer becomes a requirement of the process, so a program with a Layer missing does not compile:
 
-```typescript
-const harness = yield* Pi.Harness({ models: [Fast], tools: [Add, Deploy] });
+```typescript title="src/Release.process.ts"
+import * as AI from "@alchemy.run/ai";
+import { Add } from "./Add.tool.ts";
+import { Deploy } from "./Deploy.tool.ts";
+
+export class Release extends AI.Process<Release>()("Release", {
+  description: "Work out the next version and upload a release.",
+})`
+  Work out the next version number with ${Add}, then upload the build with ${Deploy}.
+` {}
 ```
+
+A harness can also be given tools directly, without a process. See [Tools on Pi](/pi/tools) and [Tools on OpenCode](/opencode/tools).
 
 ## Work in the sandbox
 
 `AI.Sandbox` is the sandbox of the conversation a call belongs to. The harness has already picked it, so a tool never names a sandbox or a platform:
 
-```typescript title="src/RunTests.ts"
+```typescript title="src/RunTests.tool.ts"
 import * as AI from "@alchemy.run/ai";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -113,7 +123,7 @@ A handler that uses `AI.Sandbox` makes its Layer require `AI.Sandboxes`, so a ha
 
 A handler can only fail with what the tool declares as `failure`: one `Schema.TaggedError` class, or a union of several.
 
-```typescript title="src/Withdraw.ts"
+```typescript title="src/Withdraw.tool.ts"
 import * as AI from "@alchemy.run/ai";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -168,11 +178,9 @@ const SaveNote = AI.Tool(
     yield* notes.put(key, text).pipe(Effect.orDie);
   }),
 );
-
-const harness = yield* Pi.Harness({ models: [Fast], tools: [SaveNote] });
 ```
 
-An inline tool has no Layer to provide.
+An inline tool has no Layer to provide. Mention it, or list it on a harness, like any other.
 
 ## Know which call is running
 

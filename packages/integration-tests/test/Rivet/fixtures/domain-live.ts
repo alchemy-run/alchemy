@@ -1,7 +1,11 @@
 /** The conformance model, hosted on Rivet Durable Objects. */
 import * as DomainRivet from "@alchemy.run/domain/Rivet";
 import * as Layer from "effect/Layer";
-import { ConformanceLive, ConformanceLiveV1 } from "../../Domain/conformance/model.ts";
+import {
+  ConformanceLive,
+  ConformanceLiveV1,
+  RECEIPT_RETENTION,
+} from "../../Domain/conformance/model.ts";
 import { DomainPool } from "./domain-cluster.ts";
 
 export const ConformanceRivetLive = ConformanceLive.pipe(
@@ -11,6 +15,7 @@ export const ConformanceRivetLive = ConformanceLive.pipe(
       main: import.meta.url,
       handler: "ConformanceRivetLive",
       pool: DomainPool,
+      retention: { receipts: RECEIPT_RETENTION },
     }),
   ),
 );
@@ -23,6 +28,7 @@ export const ConformanceRivetLiveV1 = ConformanceLiveV1.pipe(
       main: import.meta.url,
       handler: "ConformanceRivetLiveV1",
       pool: DomainPool,
+      retention: { receipts: RECEIPT_RETENTION },
     }),
   ),
 );

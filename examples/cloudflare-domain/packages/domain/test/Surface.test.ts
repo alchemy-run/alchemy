@@ -1,10 +1,11 @@
-import { kinds, surface } from "@alchemy.run/domain/Prove/Surface";
+import { forms, surface } from "@alchemy.run/domain/Prove/Surface";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { groups } from "./conformance/cases.ts";
+import * as Modules from "./conformance/modules.ts";
 import { chunksOf, sourceOf } from "./conformance/run.ts";
 
 // What the prover reads is a list it can give: every library function it has
@@ -64,65 +65,67 @@ it("every module whose functions are run as they are is called in a conformance 
   expect(missing).toEqual([]);
 });
 
-// The operators the prover reads. Any other is in a table's list of what is not read.
-const OPERATORS = [
-  ...["+", "-", "*", "/", "%", "<", "<=", ">", ">=", "===", "!==", "==", "!=", "in"].map(
-    (operator) => `BinaryExpression ${operator}`,
-  ),
-  ...["&&", "||", "??"].map((operator) => `LogicalExpression ${operator}`),
-  ...["!", "-", "+", "void", "typeof"].map((operator) => `UnaryExpression ${operator}`),
-  ...["=", "+=", "-=", "*=", "/=", "%=", "??=", "||=", "&&="].map(
-    (operator) => `AssignmentExpression ${operator}`,
-  ),
-  ...["++", "--"].map((operator) => `UpdateExpression ${operator}`),
-  ...["const", "let", "var"].map((kind) => `VariableDeclaration ${kind}`),
-];
+// The language is a list too: every form of it, read or not. Each form the prover reads is
+// written in a table that is compared with the real code, and each form it does not read is
+// written where a table says what the report has to give.
 
-// The rest of the language: each is in a table's list of what the prover does not read,
-// with the report it has to give. None is passed over, or read as something else.
-const UNREAD = [
-  ...["**", "&", "|", "^", "<<", ">>", ">>>", "instanceof"].map(
-    (operator) => `BinaryExpression ${operator}`,
-  ),
-  ...["~", "delete"].map((operator) => `UnaryExpression ${operator}`),
-  ...["**=", "<<=", ">>=", ">>>=", "&=", "|=", "^="].map(
-    (operator) => `AssignmentExpression ${operator}`,
-  ),
-  ...["TryStatement", "ThrowStatement", "LabeledStatement", "DebuggerStatement"],
-  ...["ClassExpression", "TaggedTemplateExpression", "SequenceExpression", "AwaitExpression"],
-  ...["ThisExpression", "MetaProperty", "ImportExpression", "TSEnumDeclaration"],
-];
+/** An expression of a table, as a file that parses. */
+const wrapped = (expression: string): string => `(async function* () { (${expression}); });`;
 
-it.effect(
-  "every kind of syntax the interpreter handles, and every operator, is in a conformance table",
-  () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const here = yield* path.fromFileUrl(new URL("./", import.meta.url));
-      const interpreter = yield* fs.readFileString(
-        path.join(here, "../../../../../packages/domain/src/Prove/internal/Interpreter.ts"),
-      );
-      // The kinds of node the interpreter has a case for: what it evaluates, runs and binds.
-      const handled = [
-        ...new Set(
-          [
-            ...interpreter.matchAll(
-              /case "([A-Z]\w*(?:Expression|Statement|Declaration|Pattern|Literal|Element)|Identifier)"/g,
-            ),
-          ].map((match) => match[1]!),
-        ),
-      ].sort();
-      expect(handled.length).toBeGreaterThan(40);
-      const found = new Set<string>();
-      for (const source of sources)
-        for (const kind of yield* Effect.promise(() => kinds(source))) found.add(kind);
-      expect(handled.filter((kind) => !found.has(kind))).toEqual([]);
-      expect(OPERATORS.filter((operator) => !found.has(operator))).toEqual([]);
-      expect(UNREAD.filter((kind) => !found.has(kind))).toEqual([]);
-      // Nothing is on both lists: what is read is not also what is reported.
-      expect(UNREAD.filter((kind) => handled.includes(kind) || OPERATORS.includes(kind))).toEqual(
-        [],
-      );
-    }).pipe(Effect.provide(NodeServices.layer)),
+it.effect("every form of the language is in a table: read and compared, or reported", () =>
+  Effect.gen(function* () {
+    const { syntax } = surface();
+    const formsOf = (source: string) => Effect.promise(() => forms(source));
+    const read = new Set<string>();
+    const stopped = new Set<string>();
+    for (const group of groups) {
+      for (const expression of [...group.both, ...(group.known ?? [])])
+        for (const form of yield* formsOf(wrapped(expression))) read.add(form);
+      for (const [expression] of group.unread ?? [])
+        for (const form of yield* formsOf(wrapped(expression))) stopped.add(form);
+    }
+    // The files of the module table: what is imported, exported and declared at the top of a file.
+    const files = new Set<string>();
+    for (const source of Object.values(Modules.sources()))
+      for (const form of yield* formsOf(source.replace("// @ts-nocheck", ""))) files.add(form);
+    const written = new Set([...read, ...stopped, ...files]);
+    // Nothing a table is written with is missing from the list.
+    expect([...written].filter((form) => form.startsWith("undeclared"))).toEqual([]);
+    // What `wrapped` adds is not what a table tests.
+    const wrapper = new Set(yield* formsOf(wrapped("0")));
+    const tested = (forms: ReadonlySet<string>) => (form: string) =>
+      forms.has(form) && !(wrapper.has(form) && !form.startsWith("Literal"));
+    expect(syntax.read.filter((form) => !read.has(form) && !files.has(form))).toEqual([]);
+    expect(syntax.unread.filter((form) => !stopped.has(form) && !files.has(form))).toEqual([]);
+    // No form the prover does not read is in what a table compares with the real code.
+    expect(syntax.unread.filter(tested(read))).toEqual([]);
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+it.effect("every kind of node the interpreter and the loader name is a form on the list", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const here = yield* path.fromFileUrl(new URL("./", import.meta.url));
+    const internal = path.join(here, "../../../../../packages/domain/src/Prove/internal");
+    const { syntax } = surface();
+    const listed = [...syntax.read, ...syntax.unread];
+    const named = new Set<string>();
+    for (const file of ["Interpreter.ts", "Source.ts"]) {
+      const source = yield* fs.readFileString(path.join(internal, file));
+      for (const match of source.matchAll(
+        /(?:case |type (?:===|!==) )"([A-Z]\w*(?:Expression|Statement|Declaration|Declarator|Pattern|Literal|Element|Specifier|Property|Case)|Identifier|Property)"/g,
+      ))
+        named.add(match[1]!);
+    }
+    expect(named.size).toBeGreaterThan(45);
+    expect(
+      [...named].filter(
+        (kind) =>
+          !listed.some(
+            (form) => form === kind || form.startsWith(`${kind}:`) || form.startsWith(`${kind} `),
+          ),
+      ),
+    ).toEqual([]);
+  }).pipe(Effect.provide(NodeServices.layer)),
 );

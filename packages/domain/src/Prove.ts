@@ -17,6 +17,7 @@ import type * as Aggregate from "./Aggregate.ts";
 import type * as Compaction from "./Compaction.ts";
 import type * as Decision from "./Decision.ts";
 import type { Verdict } from "./Prove/internal/Check.ts";
+import * as Check from "./Prove/internal/Check.ts";
 import * as History from "./Prove/internal/History.ts";
 import * as Induction from "./Prove/internal/Induction.ts";
 import * as Interpreter from "./Prove/internal/Interpreter.ts";
@@ -182,6 +183,12 @@ export interface Report {
     readonly compared: number;
     /** The paths inputs take that could not be run on the real code. */
     readonly uncompared: number;
+    /**
+     * How many of those take the items of a hash set or a hash map in an
+     * order the real one did not give for the items picked. The prover reads
+     * every order, and the order the real one gives is compared on its own path.
+     */
+    readonly unordered: number;
     readonly differs: ReadonlyArray<string>;
   };
   /** What the proof takes for granted. */
@@ -231,6 +238,7 @@ export const report = (
     >;
     const solver = yield* Smt.solver;
     const interpreter = Interpreter.make(loader, new Value.Run([]));
+    interpreter.current.feasible = Check.feasible(solver);
 
     const own = yield* Induction.rows(solver, interpreter, aggregate, definition);
     // Each decision that records on the aggregate is one more command its rules must survive.
@@ -320,6 +328,7 @@ export const report = (
       agreement: {
         compared: own.reduce((sum, row) => sum + row.compared, 0),
         uncompared: own.reduce((sum, row) => sum + row.uncompared, 0),
+        unordered: own.reduce((sum, row) => sum + row.unordered, 0),
         differs: own.flatMap((row) => row.differs),
       },
       assumptions: [...ASSUMPTIONS, ...pure(loader.opaques())],
@@ -406,7 +415,7 @@ const LABEL = {
   Bounded: "proved for short lists only",
   Violated: "violated",
   Unconfirmed: "not proved",
-  NotTranslated: "not read",
+  NotTranslated: "not supported",
   Unknown: "not decided",
   Misread: "read wrongly",
 } as const;
@@ -488,19 +497,33 @@ export const suggestion = (
   `${indent}  ${suggested.name}: ${suggested.source},`,
 ];
 
+/** The paths that were not run on the real code, and why, as the end of a line. */
+const unrun = (uncompared: number, unordered: number): string => {
+  const unbuilt = uncompared - unordered;
+  const why = [
+    ...(unbuilt > 0 ? [`the prover cannot build the inputs of ${unbuilt}`] : []),
+    ...(unordered > 0
+      ? [
+          `${unordered} take the items of a hash set or a hash map in an order the real one does not give`,
+        ]
+      : []),
+  ];
+  return uncompared > 0 ? ` (${uncompared} more could not be run: ${why.join(", and ")})` : "";
+};
+
 /** How far a report's reading was held against the real code, as a line. */
 export const agreed = (agreement: {
   readonly compared: number;
   readonly uncompared: number;
+  readonly unordered?: number;
   readonly differs: ReadonlyArray<string>;
 }): string =>
   agreement.differs.length > 0
     ? `✗ The real code does something else on ${agreement.differs.length} of the ${agreement.compared} paths compared`
-    : `Agreed with the real code: inputs picked for each of ${agreement.compared} paths through the commands did what the prover read${
-        agreement.uncompared > 0
-          ? ` (${agreement.uncompared} more could not be run: the prover cannot build their inputs)`
-          : ""
-      }`;
+    : `Agreed with the real code: inputs picked for each of ${agreement.compared} paths through the commands did what the prover read${unrun(
+        agreement.uncompared,
+        agreement.unordered ?? 0,
+      )}`;
 
 /** The schema checks a report could not read or prove kept, then what it takes for granted. */
 const notes = (report: {
@@ -510,7 +533,7 @@ const notes = (report: {
 }): ReadonlyArray<string> => [
   ...(report.unread.length > 0
     ? [
-        "Schema checks not read: a value one refuses may be tried",
+        "Schema checks not supported: a value one refuses may be tried",
         ...report.unread.map((check) => `  - ${check}`),
         "",
       ]
@@ -573,6 +596,7 @@ export const decisionReport = (
     loader.adopt(decision);
     const solver = yield* Smt.solver;
     const interpreter = Interpreter.make(loader, new Value.Run([]));
+    interpreter.current.feasible = Check.feasible(solver);
     const impl = yield* decisionAt(loader, interpreter, decision, options.source);
     const row = yield* Induction.decisionRow(solver, interpreter, impl);
     const aggregates = [...new Set(Object.values(impl.reads))].filter(
@@ -773,6 +797,7 @@ export const compactionReport = (
     loader.adopt(compaction);
     const solver = yield* Smt.solver;
     const interpreter = Interpreter.make(loader, new Value.Run([]));
+    interpreter.current.feasible = Check.feasible(solver);
     const file = yield* fileOf(options.source);
     const modules = yield* Paths.reach(loader, file);
     const written = History.compactionIn(modules, compaction);
@@ -942,6 +967,7 @@ export const rewriteReport = (
     loader.adopt(rewrite);
     const solver = yield* Smt.solver;
     const interpreter = Interpreter.make(loader, new Value.Run([]));
+    interpreter.current.feasible = Check.feasible(solver);
     const file = yield* fileOf(options.source);
     const modules = yield* Paths.reach(loader, file);
     const written = History.rewriteIn(modules, rewrite);

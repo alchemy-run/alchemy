@@ -19,9 +19,6 @@ export default SourceChangeService.make(
     return {
       cluster,
       main: import.meta.filename,
-      // Docker Hub's `oven/bun`; the public.ecr.aws default mirror
-      // rate-limits anonymous pulls during local builds (see fixtures/task.ts).
-      image: "oven/bun:1",
       port: 3000,
       cpu: 256,
       memory: 512,

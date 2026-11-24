@@ -21,6 +21,7 @@ import {
 } from "effect/cluster/ClusterError";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Headers from "effect/http/Headers";
 import * as HttpClient from "effect/http/HttpClient";
@@ -458,6 +459,61 @@ export const authorized =
         : HttpServerResponse.empty({ status: 401 });
     });
 
+/**
+ * How often the gateway writes a keep-alive line while a call is open and
+ * silent. Proxies cut connections that send nothing for a while (CloudFront
+ * after its origin read timeout, 30 seconds by default); the RPC client's
+ * NDJSON reader skips empty lines.
+ */
+export const KEEP_ALIVE_INTERVAL = "15 seconds";
+
+const KEEP_ALIVE_LINE = new TextEncoder().encode("\n");
+
+const keepAliveLines = Stream.fromSchedule(Schedule.spaced(KEEP_ALIVE_INTERVAL)).pipe(
+  Stream.map(() => KEEP_ALIVE_LINE),
+);
+
+/** A streamed body, with a keep-alive line in every silence. */
+const withKeepAlive = <E>(body: Stream.Stream<Uint8Array, E>) =>
+  Stream.merge(body, keepAliveLines, { haltStrategy: "left" });
+
+/**
+ * Keep a gateway call's connection busy while it waits: a call that has not
+ * answered within {@link KEEP_ALIVE_INTERVAL} starts its NDJSON response
+ * and writes a keep-alive line every interval until its messages follow;
+ * a streamed response gets one in every silence.
+ */
+export const keepAlive = HttpRouter.middleware((app) =>
+  Effect.gen(function* () {
+    const call = yield* Effect.forkIn(app, yield* Effect.scope);
+    const early = yield* Fiber.await(call).pipe(Effect.timeoutOption(KEEP_ALIVE_INTERVAL));
+    if (Option.isSome(early)) {
+      const response = yield* early.value;
+      return response.body._tag === "Stream"
+        ? HttpServerResponse.stream(withKeepAlive(response.body.stream), {
+            status: response.status,
+            headers: response.headers,
+            contentType: response.body.contentType,
+          })
+        : response;
+    }
+    // Commit to a 200 now: an RPC's failures travel in its messages.
+    const body = Fiber.join(call).pipe(
+      Effect.map((response) =>
+        response.body._tag === "Stream"
+          ? response.body.stream
+          : response.body._tag === "Uint8Array"
+            ? Stream.make(response.body.body)
+            : Stream.empty,
+      ),
+      Stream.unwrap,
+    );
+    return HttpServerResponse.stream(withKeepAlive(body), {
+      contentType: RpcSerialization.ndjson.contentType,
+    });
+  }),
+).layer;
+
 /** The gateway a runner serves: every hosted entity's RPCs, behind the token. */
 export function gatewayLayer(
   entities: ReadonlyArray<AnyEntity>,
@@ -479,6 +535,7 @@ export function gatewayLayer(
     RpcServer.layerHttp({ group, path: GATEWAY_PATH, protocol: "http" }).pipe(
       Layer.provide(handlers),
       Layer.provide(RpcSerialization.layerNdjson),
+      Layer.provide(keepAlive),
     ),
     { disableListenLog: true, middleware: authorized(token) },
   );

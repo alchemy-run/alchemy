@@ -10,6 +10,7 @@ import type { ReplayInput, ReplayResult } from "./CatchUp.ts";
 import type * as Decision from "./Decision.ts";
 import { ModelHostedTwice } from "./DefinitionError.ts";
 import { DefinitionError } from "./internal.ts";
+import type { KeyStore } from "./KeyStore.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -1366,8 +1367,14 @@ export interface ProjectionStore {
    * accepted, by source and `seq`), then process the log in order, in batches.
    */
   readonly receive: (delivery: Delivery) => Effect.Effect<void>;
-  /** The last processed `seq` per source stream, for one key. */
-  readonly checkpoints: (key: string) => Effect.Effect<Readonly<Record<string, number>>>;
+  /**
+   * The last processed `seq` per source stream, for one key. Given `sources`,
+   * a host may read only theirs: a key can hear from millions of sources.
+   */
+  readonly checkpoints: (
+    key: string,
+    sources?: ReadonlyArray<string>,
+  ) => Effect.Effect<Readonly<Record<string, number>>>;
   /** Whether a key has handled every revision of the rewrite `root` from `source` (a stream). */
   readonly revised?: (key: string, root: string, source: string) => Effect.Effect<boolean>;
 }
@@ -1607,6 +1614,11 @@ export class Platform extends Context.Service<
   Platform,
   {
     readonly model: (model: HostedModel) => Effect.Effect<ModelHost, never, Scope>;
+    /**
+     * A Vault's keys on this host, one object per subject, apart from every
+     * model's storage. Called while a Layer is built. See `Domain.HostKeyStore`.
+     */
+    readonly keys: Effect.Effect<KeyStore["Service"]>;
   }
 >()("alchemy/Domain/Platform") {}
 

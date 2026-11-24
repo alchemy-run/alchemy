@@ -1,4 +1,5 @@
 import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
+import type { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
@@ -21,7 +22,10 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { destroyHostImageRepository, makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
+import {
+  destroyHostImageRepository,
+  makeCloudRunImageSource,
+} from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import {
   retryActAs,
@@ -32,7 +36,6 @@ import {
 import {
   alchemyRuntimeEnv,
   isManagedServiceAccount,
-  makeGcpBootstrap,
   mergeContainerEnv,
   releaseHostIdentity,
   resolveHostIdentity,
@@ -219,6 +222,13 @@ export type WorkerPoolProps = PlatformProps & {
    */
   handler?: string;
   /**
+   * Runtime the program runs on: `node` or `bun`, optionally with the
+   * version the base image is tagged with (`"node24"`, `"bun1.3.13"`).
+   * Only used with `main`.
+   * @default "node" (`node:26-slim`)
+   */
+  runtime?: ContainerRuntime;
+  /**
    * Additional environment variables for the Effect-native container.
    */
   env?: Record<string, any>;
@@ -247,6 +257,7 @@ const imageSourceOf = (props: WorkerPoolProps, handler = props.handler) =>
   props.main !== undefined
     ? {
         main: props.main,
+        runtime: props.runtime,
         handler,
         build: props.build,
         dockerfile: props.dockerfile,
@@ -716,8 +727,6 @@ const HOST_TYPE = "GCP.Run.WorkerPool";
 
 // Worker pools have no ingress, so they run the one-shot/loop bootstrap
 // (no HTTP server); a long-running `run` keeps the instance alive.
-const bootstrapFor = (news: WorkerPoolProps) =>
-  makeGcpBootstrap("CloudRunJob", news.handler ?? "default");
 
 const toAttrs = (
   pool: cloudrun.GoogleCloudRunV2WorkerPool,
@@ -893,8 +902,8 @@ const listAt = (project: string, location: string, region: string) =>
       Effect.map((chunk) => Array.from(chunk)),
     );
 
-export const WorkerPoolProvider = () =>
-  Provider.succeed(WorkerPool, {
+const makeWorkerPoolProvider = () =>
+  WorkerPool.Provider.of({
     stables: ["name", "workerPoolId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
@@ -912,11 +921,10 @@ export const WorkerPoolProvider = () =>
       // A code-only change leaves the props untouched; hash the bundled
       // program (and bootstrap) so it still surfaces as an update.
       if (output !== undefined && (news.main !== undefined || news.context !== undefined)) {
-        const images = yield* makeImageSource;
+        const images = yield* makeCloudRunImageSource("job");
         const hash = yield* images.hash({
           source: imageSourceOf(news),
           isExternal: news.isExternal,
-          bootstrap: bootstrapFor(news),
         });
         if (hash !== undefined && hash !== output.codeHash) {
           return { action: "update" as const };
@@ -998,7 +1006,7 @@ export const WorkerPoolProvider = () =>
       template.serviceAccount = identity.serviceAccount;
       let codeHash: string | undefined;
       if (news.main !== undefined || news.context !== undefined) {
-        const images = yield* makeImageSource;
+        const images = yield* makeCloudRunImageSource("job");
         const image = yield* images
           .resolve({
             id,
@@ -1006,7 +1014,6 @@ export const WorkerPoolProvider = () =>
             repositoryName: rfc1035(`${workerPoolId}-src`),
             location,
             isExternal: news.isExternal,
-            bootstrap: bootstrapFor(news),
             session,
           })
           .pipe(Effect.onError(() => identity.cleanup));
@@ -1151,3 +1158,6 @@ export const WorkerPoolProvider = () =>
       yield* releaseHostIdentity(output);
     }),
   });
+
+export const WorkerPoolProvider = () =>
+  Provider.effect(WorkerPool, Effect.sync(makeWorkerPoolProvider));

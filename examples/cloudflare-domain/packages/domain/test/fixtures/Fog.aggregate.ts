@@ -124,10 +124,10 @@ export class Fog extends Domain.Aggregate("Fog", {
       const pool = yield* Pool.make({ acquire: Effect.succeed(command.n), size: 1 });
       return [new Seen({ n: yield* Pool.get(pool) })];
     }, Effect.scoped),
-    // A semaphore is for things running together, and nothing in a handler does.
+    // A semaphore with too few permits free waits for another fiber, and a handler is one fiber.
     Guard: Effect.fn(function* (_fog, command) {
       const permits = yield* Semaphore.make(1);
-      return [new Seen({ n: yield* Semaphore.withPermit(permits)(Effect.succeed(command.n)) })];
+      return [new Seen({ n: yield* Semaphore.withPermits(permits, 2)(Effect.succeed(command.n)) })];
     }),
     // A config is read from the environment.
     Configure: Effect.fn(function* () {

@@ -163,7 +163,7 @@ it.effect(
       // Writes a field over the one the item had: the store's rule reads what was written.
       const label = yield* Prove.decisionReport(Label, store);
       expect(label.rules.map((rule) => rule.verdict)).toMatchObject([bounded]);
-      // A field read is chosen: an item whose `b` is empty is found, and the real code agrees.
+      // The field is read for a default: an item whose `b` is empty, or left out, is found, and the real code agrees.
       const relabel = yield* Prove.decisionReport(Relabel, store);
       const verdict = relabel.rules[0]?.verdict;
       expect(verdict).toMatchObject({ _tag: "Violated" });
@@ -172,7 +172,7 @@ it.effect(
         events: ReadonlyArray<{ item: { a?: string; b?: string } }>;
       };
       expect(events[0]?.item.a).toBe("");
-      expect(events[0]?.item.b).toBe("");
+      expect(events[0]?.item.b ?? "").toBe("");
     }).pipe(Effect.provide(NodeServices.layer)),
   120_000,
 );

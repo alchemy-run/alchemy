@@ -16,7 +16,7 @@ import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Fast, FastLive } from "./models.ts";
-import { Add, AddLive } from "./tools.ts";
+import { Add, AddLive } from "./Add.tool.ts";
 
 const HarnessLive = Layer.mergeAll(FastLive, AddLive, PiCloudflare.DurableObjectStorage);
 

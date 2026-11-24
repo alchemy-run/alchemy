@@ -57,6 +57,7 @@ import type { HostedSingleton } from "../Singleton.ts";
 import type { HostedWorkflow } from "../Workflow.ts";
 import { GATEWAY_PORT, RUNNER_PORT, gatewayLayer } from "./Gateway.ts";
 import { HasNoPool, type HostedRuntimeContext } from "./HostedRuntime.ts";
+import { loadSecretEnv } from "./SecretEnv.ts";
 
 const env = (name: string) => process.env[name];
 
@@ -147,6 +148,7 @@ export const runExternal = (
   runProcess(
     "Effect Cluster runner",
     Effect.gen(function* () {
+      yield* Effect.sync(loadSecretEnv);
       const host = yield* runnerHost;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -483,5 +485,8 @@ export const bootstrap = (
     );
   }).pipe(Effect.provide(platform), Effect.scoped);
 
-  return runProcess("Effect Cluster runner", program as Effect.Effect<never, unknown, never>);
+  return runProcess(
+    "Effect Cluster runner",
+    Effect.andThen(Effect.sync(loadSecretEnv), program) as Effect.Effect<never, unknown, never>,
+  );
 };

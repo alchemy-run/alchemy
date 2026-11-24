@@ -1,3 +1,4 @@
+import type { ContainerRuntimeSettings } from "@alchemy.run/docker/ContainerRuntime";
 import type { RegistryCredentials } from "@alchemy.run/docker/Docker";
 import { makeContainerImageSource } from "@alchemy.run/docker/ImageSource";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -36,6 +37,7 @@ export const makeConnectionRegistry = Effect.gen(function* () {
     port?: number | undefined;
     isExternal?: boolean | undefined;
     bootstrap: (importPath: string) => string;
+    runtime?: ContainerRuntimeSettings;
     state: Record<string, unknown> | undefined;
     session: { note: (message: string) => Effect.Effect<void> };
   }) {
@@ -68,6 +70,7 @@ export const makeConnectionRegistry = Effect.gen(function* () {
         port: options.port,
         isExternal: options.isExternal,
         bootstrap: options.bootstrap,
+        runtime: options.runtime,
         session: options.session,
       },
       target,
@@ -89,6 +92,7 @@ export const makeConnectionRegistry = Effect.gen(function* () {
     port?: number | undefined;
     isExternal?: boolean | undefined;
     bootstrap: (importPath: string) => string;
+    runtime?: ContainerRuntimeSettings;
   }) =>
     images.hash({
       source: options.source,
@@ -96,6 +100,7 @@ export const makeConnectionRegistry = Effect.gen(function* () {
       port: options.port,
       isExternal: options.isExternal,
       bootstrap: options.bootstrap,
+      runtime: options.runtime,
     });
 
   return { resolve, hash };

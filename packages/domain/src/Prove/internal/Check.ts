@@ -63,6 +63,49 @@ const functionOf = (application: { readonly term: string; readonly argument: str
   application.term.slice(1, application.term.length - application.argument.length - 2);
 
 /**
+ * Whether some inputs take this path and make `condition` true. The prover
+ * asks before it takes a side of a test: a side no inputs reach is not a
+ * path. A question the solver cannot answer counts as one they reach, so a
+ * path is only ever left out when it cannot occur.
+ */
+export const feasible = (solver: Smt.Solver) => {
+  // A path is run again for each path that starts as it does: each question is asked once.
+  // Paths share how they start, so a question is known by a number for the one before it and its last line.
+  const lines = new Map<string, number>();
+  const questions = new Map<string, number>();
+  const numbered = (known: Map<string, number>, text: string): number => {
+    const found = known.get(text);
+    if (found !== undefined) return found;
+    known.set(text, known.size + 1);
+    return known.size;
+  };
+  const answers = new Map<number, boolean>();
+  return (run: Run, condition: string): Effect.Effect<boolean> => {
+    const declarations = [...run.declarations.values()];
+    const assertions = [...run.conditions, condition, ...safe(run, declarations)];
+    const question = [...declarations, "", ...assertions].reduce(
+      (before, line) => numbered(questions, `${before} ${numbered(lines, line)}`),
+      0,
+    );
+    const known = answers.get(question);
+    if (known !== undefined) return Effect.succeed(known);
+    return solver.check({ declarations, assertions, values: [] }).pipe(
+      Effect.map((answer) => answer._tag !== "Unsat"),
+      // The checks of the path say what went wrong with the solver.
+      Effect.orElseSucceed(() => true),
+      Effect.tap((answer) => Effect.sync(() => answers.set(question, answer))),
+    );
+  };
+};
+
+/** A number in JavaScript is exact only this far: what holds of each whole number an input holds. */
+const safe = (run: Run, declarations: ReadonlyArray<string>): ReadonlyArray<string> =>
+  declarations.flatMap((declaration) => {
+    const match = /^\(declare-const (.+) Int\)$/.exec(declaration);
+    return match && !run.bigs.has(match[1]!) ? [`(<= (- ${SAFE}) ${match[1]} ${SAFE})`] : [];
+  });
+
+/**
  * Ask the solver for inputs on this path that make `condition` false: with an
  * invariant, inputs that break it; with `"false"`, any inputs that take the path. A function
  * the prover knows only by its implementation starts free; each answer that
@@ -98,11 +141,7 @@ export const solve = Effect.fn(function* (
   const base = [
     ...run.conditions,
     Smt.not(condition),
-    // A number in JavaScript is exact only this far.
-    ...declarations.flatMap((declaration) => {
-      const match = /^\(declare-const (.+) Int\)$/.exec(declaration);
-      return match && !run.bigs.has(match[1]!) ? [`(<= (- ${SAFE}) ${match[1]} ${SAFE})`] : [];
-    }),
+    ...safe(run, declarations),
     ...named.map((read) => `(= ${read.name} ${read.term.text})`),
   ];
   // Equal results of a function that never repeats one mean equal arguments.
@@ -459,6 +498,11 @@ const computed = (
     case "Pending": {
       const chosen = lists?.get(`?${value.name}`);
       if (chosen) computed(chosen, into, lists);
+      const held = chosen ? undefined : Symbolic.keptOf(value, lists);
+      if (held) {
+        into.set(held.present.text, held.present);
+        computed(held.value, into, lists);
+      }
       return;
     }
     case "Term":
@@ -498,9 +542,11 @@ export type Agreement =
   | { readonly _tag: "Agreed" }
   /**
    * Nothing was compared. No inputs take the path, or with `taken`, the ones
-   * the solver found cannot be built as real values or run.
+   * the solver found cannot be built as real values or run. With `order`,
+   * the path takes the items of a hash set or a hash map in an order the real
+   * one does not give for the items the solver found.
    */
-  | { readonly _tag: "Skipped"; readonly taken: boolean }
+  | { readonly _tag: "Skipped"; readonly taken: boolean; readonly order?: boolean }
   | { readonly _tag: "Differs"; readonly reason: string };
 
 /** What the prover read a command to do on one path. */
@@ -637,7 +683,9 @@ export const agree = Effect.fn(function* (
   });
   const agreement = yield* tried.pipe(Effect.catch((agreement) => Effect.succeed(agreement)));
   if (agreement._tag !== "Differs") return agreement;
-  return (yield* ordered.pipe(Effect.orElseSucceed(() => true))) ? agreement : skipped;
+  return (yield* ordered.pipe(Effect.orElseSucceed(() => true)))
+    ? agreement
+    : ({ _tag: "Skipped", taken: true, order: true } as const);
 });
 
 /**

@@ -6,7 +6,7 @@ import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import { Guard, Greeting } from "./extensions.ts";
+import { Guard } from "./extensions.ts";
 import { Gateway, Notes } from "./infra.ts";
 import { Fast } from "./models.ts";
 import { Add, AddLive, codemodeSection, GlobLive, Withdraw, WithdrawLive } from "./tools.ts";
@@ -53,7 +53,7 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
       models: [Fast],
       // `add` and `withdraw` are offered both ways: as direct calls, and from programs.
       tools: [Add, SaveNote, Withdraw, AI.Glob, Programs],
-      extensions: [Guard, Greeting],
+      extensions: [Guard],
     });
 
     return Effect.gen(function* () {
@@ -131,10 +131,6 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
         section: Effect.fn(function* (name: string) {
           const conversation = yield* harness.conversationByName(name);
           return codemodeSection((yield* conversation.context).messages) ?? null;
-        }),
-        addSkill: Effect.fn(function* (name: string) {
-          const conversation = yield* harness.conversationByName(name);
-          yield* conversation.configure({ extensions: { add: [Greeting] } });
         }),
         toolResults: Effect.fn(function* (name: string) {
           const conversation = yield* harness.conversationByName(name);

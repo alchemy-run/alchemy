@@ -35,7 +35,8 @@ import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "./Aggregate.ts"
 import * as Backfill from "./Backfill.ts";
 import { type Routed, targetId } from "./CatchUp.ts";
 import { DecisionsUnsupported, DefinitionError } from "./DefinitionError.ts";
-import { admitStreamWrite, advanceStreamMeta, mergeCheckpoints } from "./InMemory.ts";
+import { admitStreamWrite, advanceStreamMeta } from "./InMemory.ts";
+import type { KeyStore } from "./KeyStore.ts";
 import {
   type Accepted,
   type AggregateKit,
@@ -265,6 +266,22 @@ const putRows = <T>(storage: ObjectStorage, rows: ReadonlyArray<readonly [string
     { discard: true },
   );
 
+/** Every row under a prefix, in key order, read a page at a time. */
+const allRows = Effect.fn(function* <T>(storage: ObjectStorage, prefix: string) {
+  const out: Array<readonly [string, T]> = [];
+  let after: string | undefined;
+  while (true) {
+    const page = yield* storage.list<T>({
+      prefix,
+      limit: 512,
+      ...(after === undefined ? {} : { startAfter: after }),
+    });
+    out.push(...page.entries());
+    if (page.size < 512) return out;
+    after = out[out.length - 1]![0];
+  }
+});
+
 /** The storage list that reads exactly the `entry:` rows in `range`. */
 const entryRange = (range: ListRange | undefined): ListOptions => {
   const limit = range?.limit === undefined ? {} : { limit: Math.max(0, range.limit) };
@@ -385,6 +402,205 @@ interface Armed {
   readonly at: number;
 }
 
+// ---------------------------------------------------------------- retention
+
+/**
+ * How long a model's objects keep the rows that only dedupe needs.
+ * `"forever"` keeps that kind of row.
+ */
+export interface Retention {
+  /**
+   * Receipts of accepted commands and committed decisions. A command or
+   * decision sent again after this time is decided again.
+   * @default "30 days"
+   */
+  readonly receipts?: Duration.Input | "forever";
+  /**
+   * The marks that a policy instance ran a delivery. A delivery that arrives
+   * again after this time runs again.
+   * @default "7 days"
+   */
+  readonly deliveries?: Duration.Input | "forever";
+  /**
+   * Cancelled scheduled commands. After this time, `unschedule` answers
+   * `NotScheduled` instead of `AlreadyCancelled`.
+   * @default "7 days"
+   */
+  readonly cancelled?: Duration.Input | "forever";
+}
+
+/** A retention window in milliseconds; `undefined` keeps rows forever. */
+export const retentionMillis = (
+  value: Duration.Input | "forever" | undefined,
+  fallback: Duration.Input,
+) => {
+  if (value === "forever") return undefined;
+  const duration = Duration.fromInputUnsafe(value ?? fallback);
+  return Duration.isFinite(duration) ? Duration.toMillis(duration) : undefined;
+};
+
+/** The windows `retention` sets, in milliseconds; `undefined` keeps rows forever. */
+export const retentionWindows = (retention: Retention = {}) => ({
+  receipts: retentionMillis(retention.receipts, "30 days"),
+  deliveries: retentionMillis(retention.deliveries, "7 days"),
+  cancelled: retentionMillis(retention.cancelled, "7 days"),
+});
+
+/** Options for {@link makePlatform}. */
+export interface PlatformOptions {
+  /**
+   * How long each object keeps the rows that only dedupe needs. `false`
+   * when the host's storage removes them itself, as Effect Cluster's sweep
+   * does in Postgres.
+   * @default { receipts: "30 days", deliveries: "7 days", cancelled: "7 days" }
+   */
+  readonly retention?: Retention | false;
+}
+
+type AgedKind = keyof Retention;
+
+/** The rows of each kind, by prefix. */
+const AGED_PREFIXES: Readonly<Record<AgedKind, ReadonlyArray<string>>> = {
+  receipts: ["receipt:", "decided:"],
+  deliveries: ["seen:"],
+  cancelled: ["scheduled:"],
+};
+
+/** Rows of a kind one call deletes at most: pruning never makes a call slow. */
+const PRUNE_BATCH = 16;
+/** Rows of a kind one call stamps at most, on an instance from before stamps. */
+const SCAN_BATCH = 128;
+
+/**
+ * How far an instance has stamped the rows it kept before stamps: the
+ * prefix it is on and the last key it stamped, or `"done"`.
+ */
+type AgedScan = { readonly prefix: number; readonly after?: string } | "done";
+
+/**
+ * What each object keeps of when its dedupe rows were written, and the
+ * pruning of those past their window. Every such row has an index row,
+ * `aged:<kind>:<when>:<key>`, written with it, so a call lists only the
+ * oldest few. A cancelled name can be armed and cancelled again, so its
+ * latest stamp is also kept under `aged-at:<key>`, and an older index row
+ * leaves the name alone.
+ *
+ * Rows written before stamps (an older instance) are stamped, in key
+ * order, by the first prunes after the upgrade: their window starts then.
+ */
+interface Aging {
+  /** Index a row written now. Call in the transaction that writes it. */
+  readonly stamp: (kind: AgedKind, key: string) => Effect.Effect<void, never, ObjectState>;
+  /** Delete a few rows of these kinds that are past their window. */
+  readonly prune: (kinds: ReadonlyArray<AgedKind>) => Effect.Effect<void, never, ObjectState>;
+}
+
+const agedStamp = (at: number) => at.toString().padStart(16, "0");
+const agedIndex = (kind: AgedKind, at: number, key: string) =>
+  `aged:${kind}:${agedStamp(at)}:${key}`;
+const agedScanKey = (kind: AgedKind) => `aged-scan:${kind}`;
+const agedAtKey = (key: string) => `aged-at:${key}`;
+
+/** Whether the scan of an older instance's rows has yet to reach `key`. */
+const scanAhead = (kind: AgedKind, scan: AgedScan | undefined, key: string) => {
+  if (scan === "done") return false;
+  if (scan === undefined) return true;
+  const prefix = AGED_PREFIXES[kind].findIndex((p) => key.startsWith(p));
+  return prefix > scan.prefix || (prefix === scan.prefix && (scan.after ?? "") < key);
+};
+
+const makeAging = (retention: Retention | false): Aging => {
+  if (retention === false) return { stamp: () => Effect.void, prune: () => Effect.void };
+  const windows = retentionWindows(retention);
+  const stampRows = (kind: AgedKind, at: number, key: string): Array<[string, unknown]> =>
+    kind === "cancelled"
+      ? [
+          [agedIndex(kind, at, key), true],
+          [agedAtKey(key), at],
+        ]
+      : [[agedIndex(kind, at, key), true]];
+  const stamp = (kind: AgedKind, key: string) =>
+    Effect.gen(function* () {
+      const state = yield* ObjectState;
+      // A row the scan has yet to reach gets its stamp from the scan.
+      if (scanAhead(kind, yield* state.storage.get<AgedScan>(agedScanKey(kind)), key)) return;
+      const at = yield* Clock.currentTimeMillis;
+      yield* state.storage.put(Object.fromEntries(stampRows(kind, at, key)));
+    });
+  /** Stamp a batch of the rows an older instance kept before stamps. */
+  const scan = (kind: AgedKind) =>
+    Effect.gen(function* () {
+      const state = yield* ObjectState;
+      const stored = yield* state.storage.get<AgedScan>(agedScanKey(kind));
+      if (stored === "done") return;
+      const prefixes = AGED_PREFIXES[kind];
+      let prefix = stored?.prefix ?? 0;
+      let after = stored?.after;
+      let budget = SCAN_BATCH;
+      const at = yield* Clock.currentTimeMillis;
+      while (budget > 0 && prefix < prefixes.length) {
+        const rows = yield* state.storage.list({
+          prefix: prefixes[prefix]!,
+          ...(after === undefined ? {} : { startAfter: after }),
+          limit: budget,
+        });
+        const stamps: Array<[string, unknown]> = [];
+        for (const [key, value] of rows) {
+          if (kind !== "cancelled" || value === CANCELLED) stamps.push(...stampRows(kind, at, key));
+          after = key;
+        }
+        yield* putRows(state.storage, stamps);
+        if (rows.size < budget) {
+          prefix += 1;
+          after = undefined;
+        }
+        budget -= rows.size;
+      }
+      yield* state.storage.put<AgedScan>(
+        agedScanKey(kind),
+        prefix >= prefixes.length ? "done" : { prefix, ...(after === undefined ? {} : { after }) },
+      );
+    });
+  const expire = (kind: AgedKind) =>
+    Effect.gen(function* () {
+      const window = windows[kind];
+      if (window === undefined) return;
+      const state = yield* ObjectState;
+      const now = yield* Clock.currentTimeMillis;
+      const prefix = `aged:${kind}:`;
+      const rows = yield* state.storage.list({
+        prefix,
+        end: `${prefix}${agedStamp(now - window)}`,
+        limit: PRUNE_BATCH,
+      });
+      if (rows.size === 0) return;
+      const deletes: Array<string> = [];
+      for (const index of rows.keys()) {
+        deletes.push(index);
+        const stamped = index.slice(prefix.length);
+        const key = stamped.slice(17);
+        if (kind !== "cancelled") {
+          deletes.push(key);
+          continue;
+        }
+        // Cancelled again since: the later stamp decides.
+        const at = Number(stamped.slice(0, 16));
+        if ((yield* state.storage.get<number>(agedAtKey(key))) !== at) continue;
+        deletes.push(agedAtKey(key));
+        // Armed again since: the name has a job now.
+        if ((yield* state.storage.get(key)) === CANCELLED) deletes.push(key);
+      }
+      yield* state.storage.delete(deletes);
+    });
+  return {
+    stamp,
+    prune: (kinds) =>
+      Effect.forEach(kinds, (kind) => Effect.andThen(scan(kind), expire(kind)), {
+        discard: true,
+      }),
+  };
+};
+
 /** How long a queue drain may hold its lease before another drain may take over. */
 const LEASE_MS = 60_000;
 
@@ -395,13 +611,16 @@ const LEASE_MS = 60_000;
  * Run it exclusively.
  */
 const acquireLease = (state: ObjectStateShape, lease: string) =>
-  Effect.gen(function* () {
-    const now = yield* Clock.currentTimeMillis;
-    const held = yield* state.storage.get<number>(lease);
-    if (held !== undefined && held > now) return held;
-    yield* state.storage.put(lease, now + LEASE_MS);
-    return undefined;
-  });
+  // One transaction: two copies of an instance never both take it.
+  state.storage.transaction(
+    Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      const held = yield* state.storage.get<number>(lease);
+      if (held !== undefined && held > now) return held;
+      yield* state.storage.put(lease, now + LEASE_MS);
+      return undefined;
+    }),
+  );
 
 /**
  * A durable, ordered work queue in the instance's storage. Rows are written
@@ -896,6 +1115,7 @@ const runRpc = (relay: Backfill.Relay, run: () => Backfill.Run) => ({
   ) => reportDefects(relay.run(name, relayRun, items)),
   bfRunBegin: (target: string, plan: Backfill.Plan) => reportDefects(run().begin(target, plan)),
   bfRunPhase: (target: string) => reportDefects(run().phase(target)),
+  bfRunWhenReady: (target: string, key: string) => reportDefects(run().whenReady(target, key)),
   bfRunProgress: (target: string) => reportDefects(run().progress(target)),
 });
 
@@ -1030,6 +1250,22 @@ class InstanceHeld extends Data.TaggedError("InstanceHeld")<{}> {
   }
 }
 
+/**
+ * What a write's transaction returns when another copy of the instance
+ * committed since the write read its state: it wrote nothing.
+ */
+const STALE = "~stale" as const;
+
+/** How many times a write is decided again after another copy committed first. */
+const STALE_RETRIES = 20;
+
+/** A write lost to another copy of the instance every time it was decided again. */
+class StaleWrite extends Data.TaggedError("StaleWrite")<{}> {
+  override get message() {
+    return "another copy of the instance kept committing first; the write was decided again until it gave up";
+  }
+}
+
 /** How long a command waits for an instance a decision holds: about 13 seconds. */
 const HELD = {
   schedule: Schedule.min([Schedule.exponential("10 millis"), Schedule.spaced("250 millis")]),
@@ -1061,10 +1297,14 @@ const aggregateObject = (
   random: Random,
   peer: Peer,
   decisionOf: DecisionOf,
+  aging: Aging,
 ) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
     const outbox = yield* queue<Delivery>("outbox", kit.deliver);
+    /** Index a receipt, and delete a few receipts and cancelled names past their window. */
+    const receiptKept = (key: string) =>
+      Effect.andThen(aging.stamp("receipts", key), aging.prune(["receipts", "cancelled"]));
     // `held` marks an instance a decision's intent holds, so a command learns
     // it from the row it reads anyway.
     const storedMeta = state.storage
@@ -1126,8 +1366,27 @@ const aggregateObject = (
           ),
       }));
 
+    /**
+     * Whether the instance is still at the version a write was decided from.
+     * Read first in the write's transaction: it is the write's fencing token.
+     * A host can run two copies of one instance for a while (an Effect
+     * Cluster runner that stalled past its shard lock, then resumed), and
+     * each copy decides from what it read before its transaction. The host
+     * runs one instance's transactions one at a time, so only the first of
+     * two writes from one version commits; the other writes nothing and is
+     * decided again from the version that won.
+     */
+    const stillAt = (version: number) =>
+      Effect.map(storedMeta, (now) => now.version === version && !now.held);
     // Callers run it `exclusively`.
     const commit = (id: string, command: Json, meta: Aggregate.SendMeta) =>
+      Effect.suspend(() => commitOnce(id, command, meta)).pipe(
+        Effect.repeat({ until: (done) => done !== STALE, times: STALE_RETRIES }),
+        Effect.flatMap((done) =>
+          done === STALE ? Effect.die(new StaleWrite()) : Effect.succeed(done),
+        ),
+      );
+    const commitOnce = (id: string, command: Json, meta: Aggregate.SendMeta) =>
       Effect.gen(function* () {
         const duplicate = yield* state.storage.get<StoredResult>(`receipt:${meta.commandId}`);
         // A resend may follow an instance that died before delivering what the
@@ -1160,13 +1419,16 @@ const aggregateObject = (
         };
         const kick = yield* state.storage.transaction(
           Effect.gen(function* () {
+            if (!(yield* stillAt(current.version))) return STALE;
             yield* state.storage.put<StoredResult>(
               `receipt:${meta.commandId}`,
               storedResult(result.version, result.events.length, result.reply),
             );
+            yield* receiptKept(`receipt:${meta.commandId}`);
             return yield* persist(id, current.version, result);
           }),
         );
+        if (kick === STALE) return STALE;
         return { sent, kick };
       });
     /** A stored result as `send` answers it: its events are read back from the log. */
@@ -1188,6 +1450,13 @@ const aggregateObject = (
       });
     // Callers run it through `whenFree`: an import never lands under a decision's intent.
     const importEvents = (id: string, events: ReadonlyArray<Json>, meta: ImportMeta) =>
+      Effect.suspend(() => importOnce(id, events, meta)).pipe(
+        Effect.repeat({ until: (done) => done !== STALE, times: STALE_RETRIES }),
+        Effect.flatMap((done) =>
+          done === STALE ? Effect.die(new StaleWrite()) : Effect.succeed(done),
+        ),
+      );
+    const importOnce = (id: string, events: ReadonlyArray<Json>, meta: ImportMeta) =>
       Effect.gen(function* () {
         const duplicate = yield* state.storage.get<StoredResult>(`receipt:${meta.commandId}`);
         if (duplicate?._tag === "Accepted") {
@@ -1229,13 +1498,16 @@ const aggregateObject = (
         };
         const kick = yield* state.storage.transaction(
           Effect.gen(function* () {
+            if (!(yield* stillAt(current.version))) return STALE;
             yield* state.storage.put<StoredResult>(
               `receipt:${meta.commandId}`,
               storedResult(receipt.version, receipt.events.length, null),
             );
+            yield* receiptKept(`receipt:${meta.commandId}`);
             return yield* persist(id, current.version, result);
           }),
         );
+        if (kick === STALE) return STALE;
         const imported: ImportResult = { _tag: "Imported", receipt };
         return { imported, kick };
       });
@@ -1359,7 +1631,14 @@ const aggregateObject = (
               for (const name of (yield* state.storage.list({ prefix: "armed:" })).keys()) {
                 yield* timers.cancel(name.slice("armed:".length)).pipe(Effect.ignore);
               }
-              yield* clearPrefixes(["receipt:", "decided:", "armed:", "scheduled:"]);
+              yield* clearPrefixes([
+                "receipt:",
+                "decided:",
+                "armed:",
+                "scheduled:",
+                "aged:",
+                "aged-at:",
+              ]);
               yield* state.storage.delete("reached");
             } else {
               // A decision's receipt stored with a copy of its events keeps none of them.
@@ -1647,6 +1926,13 @@ const aggregateObject = (
      * Callers run it `exclusively`.
      */
     const applyIntent = (id: string, txId: string) =>
+      Effect.suspend(() => applyIntentOnce(id, txId)).pipe(
+        Effect.repeat({ until: (done) => done !== STALE, times: STALE_RETRIES }),
+        Effect.flatMap((done) =>
+          done === STALE ? Effect.die(new StaleWrite()) : Effect.succeed(done),
+        ),
+      );
+    const applyIntentOnce = (id: string, txId: string) =>
       Effect.gen(function* () {
         const intent = yield* intentOf;
         if (intent === undefined || intent.txId !== txId) return { applied: false, kick: false };
@@ -1666,12 +1952,20 @@ const aggregateObject = (
               });
         const kick = yield* state.storage.transaction(
           Effect.gen(function* () {
+            // Another copy applied it first (see `stillAt`).
+            if (
+              (yield* intentOf)?.txId !== txId ||
+              (yield* currentMeta).version !== current.version
+            ) {
+              return STALE;
+            }
             yield* release;
             if (isPlan(intent)) {
               yield* state.storage.put(
                 `decided:${intent.commandId}`,
                 storedDecisionReceipt(intent.receipt),
               );
+              yield* receiptKept(`decided:${intent.commandId}`);
               if (intent.others.length > 0) {
                 yield* state.storage.put<Recorded>(outcomeKey(txId), {
                   outcome: "Committed",
@@ -1682,16 +1976,21 @@ const aggregateObject = (
             return result === undefined ? false : yield* persist(id, current.version, result);
           }),
         );
+        if (kick === STALE) return STALE;
         yield* Effect.suspend(() => rest);
         return { applied: true, kick };
       }).pipe(Effect.orDie);
     /** Drop the intent, as an instance told its attempt aborted. Callers run it `exclusively`. */
     const dropIntent = (txId: string) =>
       Effect.gen(function* () {
-        const intent = yield* intentOf;
-        if (intent?.txId !== txId) return;
-        yield* state.storage.transaction(release);
-        yield* Effect.suspend(() => rest);
+        const dropped = yield* state.storage.transaction(
+          Effect.gen(function* () {
+            if ((yield* intentOf)?.txId !== txId) return false;
+            yield* release;
+            return true;
+          }),
+        );
+        if (dropped) yield* Effect.suspend(() => rest);
       });
     /** Another instance, as the primary calls it. A call that fails is `Unreachable`. */
     const participant = (address: TwoPhase.Address): TwoPhase.Participant => {
@@ -1728,20 +2027,25 @@ const aggregateObject = (
       hold: (plan) =>
         exclusively(
           Effect.gen(function* () {
-            const receipt = yield* decidedOf(plan.commandId);
-            if (receipt !== undefined) return { _tag: "Decided", receipt } as const;
-            if ((yield* intentOf) !== undefined) return { _tag: "Busy" } as const;
-            if ((yield* rewriteJob) !== undefined) return { _tag: "Busy" } as const;
-            if ((yield* currentMeta).version !== plan.version) return { _tag: "Conflict" } as const;
-            yield* state.storage.transaction(
+            // Checked in the transaction that holds it, so another copy of the
+            // instance can't commit in between (see `stillAt`).
+            const checked = yield* state.storage.transaction(
               Effect.gen(function* () {
+                const receipt = yield* decidedOf(plan.commandId);
+                if (receipt !== undefined) return { _tag: "Decided", receipt } as const;
+                if ((yield* intentOf) !== undefined) return { _tag: "Busy" } as const;
+                if ((yield* rewriteJob) !== undefined) return { _tag: "Busy" } as const;
+                const current = yield* currentMeta;
+                if (current.version !== plan.version) return { _tag: "Conflict" } as const;
                 yield* state.storage.put<Intent>("intent", {
                   ...plan,
                   at: yield* Clock.currentTimeMillis,
                 });
-                yield* state.storage.put("meta", { ...(yield* currentMeta), held: true });
+                yield* state.storage.put("meta", { ...current, held: true });
+                return undefined;
               }),
             );
+            if (checked !== undefined) return checked;
             // Should this call die, the wake-up finishes the plan from storage.
             yield* wake(id);
             return { _tag: "Held" } as const;
@@ -1758,14 +2062,17 @@ const aggregateObject = (
       abort: (txId) =>
         exclusively(
           Effect.gen(function* () {
-            const intent = yield* intentOf;
-            if (intent?.txId !== txId || !isPlan(intent)) {
-              // Not held: it ended already. An attempt nobody remembers aborted,
-              // or every instance has its outcome, so whoever asks holds a stray copy.
-              return (yield* state.storage.get<Recorded>(outcomeKey(txId)))?.outcome ?? "Aborted";
-            }
-            yield* state.storage.transaction(
+            // Checked in the transaction that releases it (see `stillAt`).
+            const ended = yield* state.storage.transaction(
               Effect.gen(function* () {
+                const intent = yield* intentOf;
+                if (intent?.txId !== txId || !isPlan(intent)) {
+                  // Not held: it ended already. An attempt nobody remembers aborted,
+                  // or every instance has its outcome, so whoever asks holds a stray copy.
+                  return (
+                    (yield* state.storage.get<Recorded>(outcomeKey(txId)))?.outcome ?? "Aborted"
+                  );
+                }
                 yield* release;
                 if (intent.others.length > 0) {
                   yield* state.storage.put<Recorded>(outcomeKey(txId), {
@@ -1773,8 +2080,10 @@ const aggregateObject = (
                     waiting: intent.others.map(({ aggregate, id }) => ({ aggregate, id })),
                   });
                 }
+                return undefined;
               }),
             );
+            if (ended !== undefined) return ended;
             yield* Effect.suspend(() => rest);
             return "Aborted" as const;
           }),
@@ -1995,7 +2304,13 @@ const aggregateObject = (
           // A job scheduled before tokens existed has a job but no token.
           if (token === undefined && (yield* timers.getStatus(name)) === undefined)
             return "NotScheduled" as const;
-          yield* state.storage.put(key, CANCELLED);
+          yield* state.storage.transaction(
+            Effect.gen(function* () {
+              yield* state.storage.put(key, CANCELLED);
+              yield* aging.stamp("cancelled", key);
+              yield* aging.prune(["receipts", "cancelled"]);
+            }),
+          );
           yield* timers.cancel(name);
           return "Cancelled" as const;
         }).pipe(exclusively, reportDefects),
@@ -2047,21 +2362,25 @@ const aggregateObject = (
           yield* settle(id);
           return yield* exclusively(
             Effect.gen(function* (): Generator<any, TwoPhase.PrepareResult> {
-              const held = yield* intentOf;
-              if (held !== undefined) {
-                return held.txId === prepare.txId ? { _tag: "Prepared" } : { _tag: "Busy" };
-              }
-              if ((yield* rewriteJob) !== undefined) return { _tag: "Busy" };
-              if ((yield* currentMeta).version !== prepare.version) return { _tag: "Conflict" };
-              yield* state.storage.transaction(
-                Effect.gen(function* () {
+              // Checked in the transaction that holds it (see `stillAt`).
+              const checked = yield* state.storage.transaction(
+                Effect.gen(function* (): Generator<any, TwoPhase.PrepareResult | undefined> {
+                  const held = yield* intentOf;
+                  if (held !== undefined) {
+                    return held.txId === prepare.txId ? { _tag: "Prepared" } : { _tag: "Busy" };
+                  }
+                  if ((yield* rewriteJob) !== undefined) return { _tag: "Busy" };
+                  const current = yield* currentMeta;
+                  if (current.version !== prepare.version) return { _tag: "Conflict" };
                   yield* state.storage.put<Intent>("intent", {
                     ...prepare,
                     at: yield* Clock.currentTimeMillis,
                   });
-                  yield* state.storage.put("meta", { ...(yield* currentMeta), held: true });
+                  yield* state.storage.put("meta", { ...current, held: true });
+                  return undefined;
                 }),
               );
+              if (checked !== undefined) return checked;
               // Should the outcome never arrive, it wakes and asks the primary.
               yield* wake(id);
               return { _tag: "Prepared" };
@@ -2120,22 +2439,6 @@ const viewObject = (
       Effect.map(state.storage.list<Delivery>({ prefix: `rev:${source}|` }), (rows) =>
         awaitsRevision(rows.values(), root, source),
       );
-    /** Every row under a prefix, read a page at a time. */
-    const allRows = <T>(prefix: string) =>
-      Effect.gen(function* () {
-        const out: Array<readonly [string, T]> = [];
-        let after: string | undefined;
-        while (true) {
-          const page = yield* state.storage.list<T>({
-            prefix,
-            limit: 512,
-            ...(after === undefined ? {} : { startAfter: after }),
-          });
-          out.push(...page.entries());
-          if (page.size < 512) return out;
-          after = out[out.length - 1]![0];
-        }
-      });
     const entriesAfter = (after: number) =>
       stored.pipe(
         Effect.flatMap((snapshot) =>
@@ -2265,7 +2568,7 @@ const viewObject = (
         const before = yield* read;
         const held = yield* revs;
         const pending = new Map(
-          (yield* allRows<Delivery>("rev:")).map(
+          (yield* allRows<Delivery>(state.storage, "rev:")).map(
             ([, revised]) => [revisionKey(revised.source, revised.seq), revised] as const,
           ),
         );
@@ -2286,9 +2589,10 @@ const viewObject = (
             yield* state.storage.delete(waiting);
             yield* state.storage.put(row, all);
           });
-        let inputs: ReadonlyArray<StoredViewInput> = (yield* allRows<StoredViewInput>("in:")).map(
-          ([, row]) => row,
-        );
+        let inputs: ReadonlyArray<StoredViewInput> = (yield* allRows<StoredViewInput>(
+          state.storage,
+          "in:",
+        )).map(([, row]) => row);
         // Rows stored before entries were tracked: fold them as they are, to learn each one's entries.
         if (inputs.some((row) => !("delivery" in row))) {
           inputs = (yield* kit.refold(key, { snapshot: emptySnapshot, top: 0 }, inputs)).inputs;
@@ -2318,7 +2622,9 @@ const viewObject = (
           return yield* note([]);
         }
         const folded = yield* kit.refold(key, { snapshot: emptySnapshot, top: 0 }, taken.rows);
-        const entries = (yield* allRows<ViewEntry>("entry:")).map(([, entry]) => entry);
+        const entries = (yield* allRows<ViewEntry>(state.storage, "entry:")).map(
+          ([, entry]) => entry,
+        );
         const changes = entryChanges(entries, folded.entries);
         const snapshot = refolded(before, folded.snapshot, folded.top);
         yield* clearPrefixes(["in:"]);
@@ -2596,7 +2902,7 @@ interface ViewRevisions {
   readonly recalls?: ReadonlyArray<Delivery>;
 }
 
-const policyObject = (kit: PolicyKit) =>
+const policyObject = (kit: PolicyKit, aging: Aging) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
     // Detached: a delivery arrives inside the sender's drain, so draining it
@@ -2612,8 +2918,11 @@ const policyObject = (kit: PolicyKit) =>
             const accepted = yield* exclusively(
               state.storage.transaction(
                 Effect.gen(function* () {
+                  // A mark past its window goes first: that delivery runs again.
+                  yield* aging.prune(["deliveries"]);
                   if (yield* state.storage.get(`seen:${id}`)) return false;
                   yield* state.storage.put(`seen:${id}`, true);
+                  yield* aging.stamp("deliveries", `seen:${id}`);
                   yield* inbox.stage([delivery]);
                   return true;
                 }),
@@ -2625,22 +2934,25 @@ const policyObject = (kit: PolicyKit) =>
     };
   });
 
-/** The stored progress of one projection key. */
+/**
+ * The stored progress of one projection key: scalars only, so writing it
+ * costs the same however many sources the key hears from. Per-source cursors
+ * are rows of their own, under {@link INTAKE}, {@link CHECKPOINT} and
+ * {@link TAKEN}.
+ */
 interface ProjectionMeta {
   readonly key: string | null;
   /** Inputs accepted into the log. */
   readonly accepted: number;
   /** Inputs handled. */
   readonly processed: number;
-  /** The last accepted `seq` per source: duplicates are dropped on arrival. */
-  readonly intake: Readonly<Record<string, number>>;
-  /** The last handled `seq` per source. */
-  readonly checkpoints: Readonly<Record<string, number>>;
   /** The projection's generation the log was built by: an earlier one starts over. */
   readonly generation?: number;
   /** How many revisions it holds (`rev:` rows) of events it has not been given yet. */
   readonly pending?: number;
-  /** The last revision it took from each source. */
+  /** Written by earlier code: the per-source maps, moved to rows on the next write. */
+  readonly intake?: Readonly<Record<string, number>>;
+  readonly checkpoints?: Readonly<Record<string, number>>;
   readonly taken?: Readonly<Record<string, number>>;
 }
 
@@ -2648,9 +2960,14 @@ const emptyProjectionMeta: ProjectionMeta = {
   key: null,
   accepted: 0,
   processed: 0,
-  intake: {},
-  checkpoints: {},
 };
+
+/** `intake:<source>`: the last accepted `seq` of a source. Duplicates are dropped on arrival. */
+const INTAKE = "intake:";
+/** `ckpt:<source>`: the last handled `seq` of a source. */
+const CHECKPOINT = "ckpt:";
+/** `taken:<source>`: the last revision taken from a source. */
+const TAKEN = "taken:";
 
 /** How long a failed or interrupted run waits before it is retried. */
 const PROJECTION_RETRY_MS = 10_000;
@@ -2677,8 +2994,56 @@ const projectionObject = (
     const reset = Effect.gen(function* () {
       const meta = yield* state.storage.get<ProjectionMeta>("meta");
       if (meta === undefined || (meta.generation ?? 0) >= kit.generation) return;
-      yield* clearPrefixes(["in:", "rev:", "rev-wait:", "settled:"]);
+      yield* clearPrefixes(["in:", "rev:", "rev-wait:", "settled:", INTAKE, CHECKPOINT, TAKEN]);
       yield* state.storage.delete("meta");
+    });
+    /**
+     * Move the per-source maps an earlier version kept in `meta` to rows,
+     * once. Callers hold the exclusive section and its transaction.
+     */
+    const upgrade = Effect.fn(function* (meta: ProjectionMeta) {
+      const { intake, checkpoints, taken, ...scalars } = meta;
+      if (intake === undefined && checkpoints === undefined && taken === undefined) return meta;
+      const maps = [
+        [INTAKE, intake],
+        [CHECKPOINT, checkpoints],
+        [TAKEN, taken],
+      ] as const;
+      yield* putRows(
+        state.storage,
+        maps.flatMap(([prefix, map]) =>
+          Object.entries(map ?? {}).map(([source, n]) => [prefix + source, n] as const),
+        ),
+      );
+      yield* state.storage.put("meta", scalars);
+      return scalars;
+    });
+    /** A per-source cursor, or 0. Read after `upgrade`, so the rows are all there is. */
+    const cursor = (prefix: string, source: string) =>
+      Effect.map(state.storage.get<number>(prefix + source), (n) => n ?? 0);
+    /**
+     * The last handled `seq` per source: every source's, or only `sources`'.
+     * A key not yet upgraded still keeps them in `meta`, and its rows win.
+     */
+    const checkpointsOf = Effect.fn(function* (sources?: ReadonlyArray<string>) {
+      const meta = yield* readMeta;
+      // Nothing accepted in this generation (an earlier one's rows read as empty).
+      if (meta.key === null) return {};
+      const legacy = meta.checkpoints ?? {};
+      if (sources === undefined) {
+        const rows = yield* allRows<number>(state.storage, CHECKPOINT);
+        return {
+          ...legacy,
+          ...Object.fromEntries(rows.map(([row, seq]) => [row.slice(CHECKPOINT.length), seq])),
+        };
+      }
+      const found = yield* Effect.forEach(sources, (source) =>
+        Effect.map(
+          state.storage.get<number>(CHECKPOINT + source),
+          (seq) => [source, seq ?? legacy[source]] as const,
+        ),
+      );
+      return Object.fromEntries(found.filter(([, seq]) => seq !== undefined));
     });
     const size = kit.options.batch?.size ?? 1;
     const waitMillis = kit.options.batch?.waitMillis ?? 0;
@@ -2719,10 +3084,12 @@ const projectionObject = (
               return yield* wake(run[0]!.at + waitMillis);
             }
             yield* kit.run(meta.key, run);
+            // Read and written in one transaction: another copy of the instance
+            // may have accepted more inputs since (see `stillAt`).
             yield* exclusively(
               state.storage.transaction(
                 Effect.gen(function* () {
-                  const current = yield* readMeta;
+                  const current = yield* upgrade(yield* readMeta);
                   const handled: Record<string, number> = {};
                   for (const { delivery } of run) {
                     handled[delivery.source] = Math.max(
@@ -2737,13 +3104,31 @@ const projectionObject = (
                       );
                     }
                   }
+                  // A source's row moves forward only: a rewrite's revisions
+                  // carry the `seq` of events handled before, and its `done` 0.
+                  const ahead: Array<readonly [string, number]> = [];
+                  for (const [source, seq] of Object.entries(handled)) {
+                    if (seq > (yield* cursor(CHECKPOINT, source))) {
+                      ahead.push([CHECKPOINT + source, seq]);
+                    }
+                  }
+                  yield* putRows(state.storage, ahead);
                   yield* state.storage.put("meta", {
                     ...current,
-                    processed: run[run.length - 1]!.position,
-                    checkpoints: mergeCheckpoints(current.checkpoints, handled),
+                    processed: Math.max(current.processed, run[run.length - 1]!.position),
                   } satisfies ProjectionMeta);
                   // A handled input is not kept: the store the handler wrote has it.
                   yield* state.storage.delete(rows.size === 0 ? [] : [...rows.keys()]);
+                  // Inputs handled on 2.0.0-beta.87 and earlier stayed: a batch of them goes each run.
+                  if (!(yield* state.storage.get<boolean>("in-pruned"))) {
+                    const handled = yield* state.storage.list({
+                      prefix: "in:",
+                      end: `in:${pad(current.processed + 1)}`,
+                      limit: 128,
+                    });
+                    if (handled.size > 0) yield* state.storage.delete([...handled.keys()]);
+                    if (handled.size < 128) yield* state.storage.put("in-pruned", true);
+                  }
                 }),
               ),
             );
@@ -2770,22 +3155,21 @@ const projectionObject = (
         awaitsRevision(rows.values(), root, source),
       );
     /** Append a row to the key's log. Callers hold the exclusive section and its transaction. */
-    const append = (key: string, meta: ProjectionMeta, delivery: Delivery) =>
-      Effect.gen(function* () {
-        const position = meta.accepted + 1;
-        yield* state.storage.put(`in:${pad(position)}`, {
-          position,
-          delivery,
-          at: yield* Clock.currentTimeMillis,
-        } satisfies Accepted);
-        // The backstop: handled even if this instance dies before the drain runs.
-        yield* callback.schedule("drain", {
-          after: `${Math.max(waitMillis, PROJECTION_RETRY_MS)} millis`,
-          payload: {},
-          progress: yield* advance,
-        });
-        return { ...meta, key, accepted: position } satisfies ProjectionMeta;
+    const append = Effect.fn(function* (key: string, meta: ProjectionMeta, delivery: Delivery) {
+      const position = meta.accepted + 1;
+      yield* state.storage.put(`in:${pad(position)}`, {
+        position,
+        delivery,
+        at: yield* Clock.currentTimeMillis,
+      } satisfies Accepted);
+      // The backstop: handled even if this instance dies before the drain runs.
+      yield* callback.schedule("drain", {
+        after: `${Math.max(waitMillis, PROJECTION_RETRY_MS)} millis`,
+        payload: {},
+        progress: yield* advance,
       });
+      return { ...meta, key, accepted: position } satisfies ProjectionMeta;
+    });
     /**
      * Take a rewrite's revision of an event. One the key has not been given
      * yet is held until it arrives; one still waiting in the log is swapped
@@ -2793,117 +3177,115 @@ const projectionObject = (
      * into the log as a revision, for the `rewrite` handler. Callers hold the
      * exclusive section and its transaction; `true` when the log grew.
      */
-    const reviseIntake = (key: string, delivery: Delivery) =>
-      Effect.gen(function* () {
-        if ((delivery.target.generation ?? 0) < kit.generation) return false;
-        yield* reset;
-        const revision = delivery.revision!;
-        const meta = yield* readMeta;
-        if (revision.n <= (meta.taken?.[delivery.source] ?? 0)) return false;
-        const taken = { ...meta.taken, [delivery.source]: revision.n };
-        if (revision.done) {
-          // Held while a revision of it waits for its event: handled after that.
-          if (yield* awaits(revision.root, delivery.source)) {
-            yield* state.storage.put(`rev-wait:${revision.root}|${delivery.source}`, delivery);
-            yield* state.storage.put("meta", { ...meta, key, taken } satisfies ProjectionMeta);
-            return false;
-          }
-          yield* state.storage.put("meta", yield* append(key, { ...meta, taken }, delivery));
-          return true;
-        }
-        // Newly given to this key: an ordinary input, late.
-        if (revision.before === undefined) {
-          const intake = {
-            ...meta.intake,
-            [delivery.source]: Math.max(meta.intake[delivery.source] ?? 0, delivery.seq),
-          };
-          yield* state.storage.put(
-            "meta",
-            yield* append(key, { ...meta, taken, intake }, withoutRevision(delivery)),
-          );
-          return true;
-        }
-        // Given to the key, and yet to arrive: taken when it does.
-        if (delivery.seq > (meta.intake[delivery.source] ?? 0)) {
-          yield* state.storage.put(revisionRow(delivery.source, delivery.seq), delivery);
-          yield* state.storage.put("meta", {
-            ...meta,
-            key,
-            taken,
-            pending: (meta.pending ?? 0) + 1,
-          } satisfies ProjectionMeta);
+    const reviseIntake = Effect.fn(function* (key: string, delivery: Delivery) {
+      if ((delivery.target.generation ?? 0) < kit.generation) return false;
+      yield* reset;
+      const revision = delivery.revision!;
+      const meta = yield* upgrade(yield* readMeta);
+      if (revision.n <= (yield* cursor(TAKEN, delivery.source))) return false;
+      /** Write `meta` with the source's taken revision (and any other rows) in one put. */
+      const save = (next: ProjectionMeta, rows: Record<string, number> = {}) =>
+        state.storage.put({ meta: next, [TAKEN + delivery.source]: revision.n, ...rows });
+      if (revision.done) {
+        // Held while a revision of it waits for its event: handled after that.
+        if (yield* awaits(revision.root, delivery.source)) {
+          yield* state.storage.put(`rev-wait:${revision.root}|${delivery.source}`, delivery);
+          yield* save({ ...meta, key } satisfies ProjectionMeta);
           return false;
         }
-        // A drain under way may be handling a waiting input: it is then left as it is.
-        const leased = yield* state.storage.get<number>(lease);
-        const idle = leased === undefined || leased <= (yield* Clock.currentTimeMillis);
-        if (idle) {
-          const waiting = yield* state.storage.list<Accepted>({
-            prefix: "in:",
-            start: `in:${pad(meta.processed + 1)}`,
-          });
-          for (const [row, accepted] of waiting) {
-            const input = accepted.delivery;
-            if (
-              input.revision !== undefined ||
-              input.source !== delivery.source ||
-              input.seq !== delivery.seq
-            ) {
-              continue;
-            }
-            yield* state.storage.put(row, {
-              ...accepted,
-              delivery: revision.gone
-                ? { ...delivery, revision: { root: revision.root, n: revision.n, gone: true } }
-                : withoutRevision(delivery),
-            } satisfies Accepted);
-            yield* state.storage.put("meta", { ...meta, key, taken } satisfies ProjectionMeta);
-            return false;
-          }
-        }
-        yield* state.storage.put("meta", yield* append(key, { ...meta, taken }, delivery));
+        yield* save(yield* append(key, meta, delivery));
         return true;
-      });
-    const intake = (key: string, arrived: Delivery) =>
-      Effect.gen(function* () {
-        if (arrived.revision !== undefined) return yield* reviseIntake(key, arrived);
-        let delivery = arrived;
-        const sent = delivery.target.generation ?? 0;
-        // For an earlier generation: sent by an instance still on older code.
-        if (sent < kit.generation) return false;
-        // Sent by newer code: fail, so the sender retries once this instance runs it.
-        if (sent > kit.generation) {
-          return yield* Effect.die(
-            new Error(`${kit.name} received generation ${sent} but runs ${kit.generation}`),
-          );
-        }
-        yield* reset;
-        let meta = yield* readMeta;
-        if ((meta.intake[delivery.source] ?? 0) >= delivery.seq) return false;
-        meta = { ...meta, key, intake: { ...meta.intake, [delivery.source]: delivery.seq } };
-        // An event a rewrite changed before it got here arrives as it is now.
-        if ((meta.pending ?? 0) > 0) {
-          const row = revisionRow(delivery.source, delivery.seq);
-          const revised = yield* state.storage.get<Delivery>(row);
-          if (revised !== undefined) {
-            yield* state.storage.delete(row);
-            meta = { ...meta, pending: (meta.pending ?? 1) - 1 };
-            if (!revised.revision?.gone) meta = yield* append(key, meta, withoutRevision(revised));
-            // The last event a rewrite was waiting for: its `done` follows it in the log.
-            const root = revised.revision!.root;
-            const waiting = `rev-wait:${root}|${delivery.source}`;
-            const done = yield* state.storage.get<Delivery>(waiting);
-            if (done !== undefined && !(yield* awaits(root, delivery.source))) {
-              yield* state.storage.delete(waiting);
-              meta = yield* append(key, meta, done);
-            }
-            yield* state.storage.put("meta", meta);
-            return true;
-          }
-        }
-        yield* state.storage.put("meta", yield* append(key, meta, delivery));
+      }
+      const accepted = yield* cursor(INTAKE, delivery.source);
+      // Newly given to this key: an ordinary input, late.
+      if (revision.before === undefined) {
+        yield* save(yield* append(key, meta, withoutRevision(delivery)), {
+          [INTAKE + delivery.source]: Math.max(accepted, delivery.seq),
+        });
         return true;
-      });
+      }
+      // Given to the key, and yet to arrive: taken when it does.
+      if (delivery.seq > accepted) {
+        yield* state.storage.put(revisionRow(delivery.source, delivery.seq), delivery);
+        yield* save({
+          ...meta,
+          key,
+          pending: (meta.pending ?? 0) + 1,
+        } satisfies ProjectionMeta);
+        return false;
+      }
+      // A drain under way may be handling a waiting input: it is then left as it is.
+      const leased = yield* state.storage.get<number>(lease);
+      const idle = leased === undefined || leased <= (yield* Clock.currentTimeMillis);
+      if (idle) {
+        const waiting = yield* state.storage.list<Accepted>({
+          prefix: "in:",
+          start: `in:${pad(meta.processed + 1)}`,
+        });
+        for (const [row, accepted] of waiting) {
+          const input = accepted.delivery;
+          if (
+            input.revision !== undefined ||
+            input.source !== delivery.source ||
+            input.seq !== delivery.seq
+          ) {
+            continue;
+          }
+          yield* state.storage.put(row, {
+            ...accepted,
+            delivery: revision.gone
+              ? { ...delivery, revision: { root: revision.root, n: revision.n, gone: true } }
+              : withoutRevision(delivery),
+          } satisfies Accepted);
+          yield* save({ ...meta, key } satisfies ProjectionMeta);
+          return false;
+        }
+      }
+      yield* save(yield* append(key, meta, delivery));
+      return true;
+    });
+    const intake = Effect.fn(function* (key: string, arrived: Delivery) {
+      if (arrived.revision !== undefined) return yield* reviseIntake(key, arrived);
+      let delivery = arrived;
+      const sent = delivery.target.generation ?? 0;
+      // For an earlier generation: sent by an instance still on older code.
+      if (sent < kit.generation) return false;
+      // Sent by newer code: fail, so the sender retries once this instance runs it.
+      if (sent > kit.generation) {
+        return yield* Effect.die(
+          new Error(`${kit.name} received generation ${sent} but runs ${kit.generation}`),
+        );
+      }
+      yield* reset;
+      let meta = yield* upgrade(yield* readMeta);
+      if ((yield* cursor(INTAKE, delivery.source)) >= delivery.seq) return false;
+      meta = { ...meta, key };
+      /** Write `meta` with the source's intake row in one put. */
+      const save = (next: ProjectionMeta) =>
+        state.storage.put({ meta: next, [INTAKE + delivery.source]: delivery.seq });
+      // An event a rewrite changed before it got here arrives as it is now.
+      if ((meta.pending ?? 0) > 0) {
+        const row = revisionRow(delivery.source, delivery.seq);
+        const revised = yield* state.storage.get<Delivery>(row);
+        if (revised !== undefined) {
+          yield* state.storage.delete(row);
+          meta = { ...meta, pending: (meta.pending ?? 1) - 1 };
+          if (!revised.revision?.gone) meta = yield* append(key, meta, withoutRevision(revised));
+          // The last event a rewrite was waiting for: its `done` follows it in the log.
+          const root = revised.revision!.root;
+          const waiting = `rev-wait:${root}|${delivery.source}`;
+          const done = yield* state.storage.get<Delivery>(waiting);
+          if (done !== undefined && !(yield* awaits(root, delivery.source))) {
+            yield* state.storage.delete(waiting);
+            meta = yield* append(key, meta, done);
+          }
+          yield* save(meta);
+          return true;
+        }
+      }
+      yield* save(yield* append(key, meta, delivery));
+      return true;
+    });
     const target = targetId({
       kind: "projection",
       name: kit.name,
@@ -2966,7 +3348,7 @@ const projectionObject = (
             if (accepted) yield* state.waitUntil(drain.pipe(Effect.ignoreCause));
           }),
         ),
-      checkpoints: () => reportDefects(readMeta.pipe(Effect.map((meta) => meta.checkpoints))),
+      checkpoints: (sources?: ReadonlyArray<string>) => reportDefects(checkpointsOf(sources)),
       revised: (root: string, source: string) =>
         reportDefects(
           state.storage
@@ -3160,6 +3542,39 @@ const bindState = (impl: ObjectImpl): ObjectImpl =>
     return bound;
   });
 
+/** Where a host keeps a Vault's keys: the class `Domain.VaultKeys`, one object per subject. */
+const VAULT: HostedModel = { modelName: "Domain", id: {}, sagas: [], legacyData: false };
+
+/**
+ * One subject's key, in its object's own storage. The first key stored
+ * wins, as `KeyStore.create` says.
+ */
+const keyObject: ObjectImpl = Effect.succeed({
+  keyGet: () =>
+    reportDefects(
+      Effect.flatMap(ObjectState, ({ storage }) =>
+        Effect.map(storage.get<string>("key"), (key) => key ?? null),
+      ),
+    ),
+  keyCreate: (key: string) =>
+    reportDefects(
+      Effect.flatMap(ObjectState, ({ storage }) =>
+        storage.transaction(
+          Effect.gen(function* () {
+            const existing = yield* storage.get<string>("key");
+            if (existing !== undefined) return existing;
+            yield* storage.put("key", key);
+            return key;
+          }),
+        ),
+      ),
+    ),
+  keyDelete: () =>
+    reportDefects(
+      Effect.flatMap(ObjectState, ({ storage }) => Effect.as(storage.delete("key"), null)),
+    ),
+});
+
 /** Every runtime's claims, by host name; a process outside any runtime has one of its own. */
 const runtimeClaims = new WeakMap<object, Map<string, object>>();
 const noRuntime = {};
@@ -3208,10 +3623,12 @@ const claimsOf = (key: object) => {
  */
 export const makePlatform = <R>(
   host: Host<R>,
+  options: PlatformOptions = {},
 ): Layer.Layer<Platform, never, R | SecureRandom.SecureRandom> =>
   Layer.effect(
     Platform,
     Effect.gen(function* () {
+      const aging = makeAging(options.retention ?? {});
       // Factories run while the Domain's Layer is built, inside the host's
       // construction phase; declaring a class needs that context.
       const init = yield* captureContext<R>();
@@ -3378,6 +3795,18 @@ export const makePlatform = <R>(
                         }),
                       ),
                     ),
+              whenReady: (target, key) =>
+                complete.has(target)
+                  ? Effect.succeed("complete" as const)
+                  : Effect.flatMap(consumerOf(target, RUN_ROOT, "run"), (stub) =>
+                      callOnce<Backfill.Phase>(stub.bfRunWhenReady(target, key)),
+                    ).pipe(
+                      Effect.tap((phase) =>
+                        Effect.sync(() => {
+                          if (phase === "complete") complete.add(target);
+                        }),
+                      ),
+                    ),
               progress: (target) =>
                 Effect.flatMap(consumerOf(target, RUN_ROOT, "run"), (stub) =>
                   callOnce<Backfill.Progress>(stub.bfRunProgress(target)),
@@ -3450,6 +3879,7 @@ export const makePlatform = <R>(
                           bound(`${address.aggregate}Aggregate`)
                         )?.getByName(address.id),
                       (name) => decisions.get(name),
+                      aging,
                     ),
                   );
                   sources.set(name, namespace);
@@ -3727,9 +4157,9 @@ export const makePlatform = <R>(
                       unwrapDefects(
                         namespace.getByName(delivery.key).receive(delivery.key, delivery),
                       ),
-                    checkpoints: (key) =>
+                    checkpoints: (key, sources) =>
                       unwrapDefects<Readonly<Record<string, number>>>(
-                        namespace.getByName(key).checkpoints(),
+                        namespace.getByName(key).checkpoints(sources),
                       ),
                     revised: (key, root, source) =>
                       unwrapDefects<boolean>(namespace.getByName(key).revised(root, source)),
@@ -3815,7 +4245,10 @@ export const makePlatform = <R>(
             policy: (policy, kit) =>
               inInit(
                 Effect.gen(function* () {
-                  const namespace = yield* object(`${policy.policyName}Policy`, policyObject(kit));
+                  const namespace = yield* object(
+                    `${policy.policyName}Policy`,
+                    policyObject(kit, aging),
+                  );
                   return {
                     receive: (delivery) =>
                       unwrapDefects(namespace.getByName(delivery.key).receive(delivery)),
@@ -3827,6 +4260,19 @@ export const makePlatform = <R>(
         });
 
       return Platform.of({
+        keys: Effect.map(
+          inInit(host.declare(VAULT, "VaultKeys", bindState(keyObject))),
+          (namespace): KeyStore["Service"] => ({
+            get: (subject) =>
+              Effect.map(
+                unwrapDefects<string | null>(namespace.getByName(subject).keyGet()),
+                Option.fromNullishOr,
+              ),
+            create: (subject, key) =>
+              unwrapDefects<string>(namespace.getByName(subject).keyCreate(key)),
+            delete: (subject) => unwrapDefects<void>(namespace.getByName(subject).keyDelete()),
+          }),
+        ),
         model: (model) =>
           Effect.gen(function* () {
             yield* claim(model.modelName, model.id);
