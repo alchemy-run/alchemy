@@ -1101,6 +1101,7 @@ const runRpc = (relay: Backfill.Relay, run: () => Backfill.Run) => ({
   ) => reportDefects(relay.run(name, relayRun, items)),
   bfRunBegin: (target: string, plan: Backfill.Plan) => reportDefects(run().begin(target, plan)),
   bfRunPhase: (target: string) => reportDefects(run().phase(target)),
+  bfRunWhenReady: (target: string, key: string) => reportDefects(run().whenReady(target, key)),
   bfRunProgress: (target: string) => reportDefects(run().progress(target)),
 });
 
@@ -3660,6 +3661,18 @@ export const makePlatform = <R>(
                 ? Effect.succeed("complete" as const)
                 : Effect.flatMap(consumerOf(target, RUN_ROOT, "run"), (stub) =>
                     callOnce<Backfill.Phase>(stub.bfRunPhase(target)),
+                  ).pipe(
+                    Effect.tap((phase) =>
+                      Effect.sync(() => {
+                        if (phase === "complete") complete.add(target);
+                      }),
+                    ),
+                  ),
+            whenReady: (target, key) =>
+              complete.has(target)
+                ? Effect.succeed("complete" as const)
+                : Effect.flatMap(consumerOf(target, RUN_ROOT, "run"), (stub) =>
+                    callOnce<Backfill.Phase>(stub.bfRunWhenReady(target, key)),
                   ).pipe(
                     Effect.tap((phase) =>
                       Effect.sync(() => {

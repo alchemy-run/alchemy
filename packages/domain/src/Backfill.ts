@@ -281,6 +281,12 @@ export interface RunRpc {
    */
   readonly begin: (target: string, plan: Plan) => Effect.Effect<Begin>;
   readonly phase: (target: string) => Effect.Effect<Phase>;
+  /**
+   * The run's phase, for a key holding live deliveries that no scanner pushed
+   * history to. Before `ready`, the run notes the key and tells it
+   * (`ConsumerRpc.ready`) once every source's history is in.
+   */
+  readonly whenReady: (target: string, key: string) => Effect.Effect<Phase>;
   readonly progress: (target: string) => Effect.Effect<Progress>;
 }
 
@@ -368,8 +374,6 @@ export interface Limits {
    * right after a deploy its new code may not have reached the object yet.
    */
   readonly firstRetryMillis: number;
-  /** How long a key without sources waits before asking whether discovery is complete again. */
-  readonly pollMillis: number;
   /**
    * Instances a directory node lists before it splits into 16 children, so every
    * node's share of a listing stays bounded and the tree grows as log16 of the instances.
@@ -394,7 +398,6 @@ export const defaultLimits: Limits = {
   apply: 200,
   staleRetryMillis: 30_000,
   firstRetryMillis: 1_000,
-  pollMillis: 5_000,
   leafSize: 256,
   depth: DEPTH,
 };
@@ -1386,14 +1389,15 @@ export const makeConsumer = (
       if (!backfill) return false;
       if (!backfill.ready) {
         // A key with history is told it is ready by the scanners that pushed it. One
-        // fed only live (no history) has no one to tell it: it asks the run.
+        // fed only live (no history) asks the run, which tells it if it isn't there yet.
         if (backfill.pushed) return false;
-        const phase = yield* net.run.phase(target).pipe(Effect.catchCause(() => Effect.void));
+        const phase = yield* net.run
+          .whenReady(target, host.key)
+          .pipe(Effect.catchCause(() => Effect.void));
         if (phase === undefined)
           return yield* Effect.as(retry.later(jobId(target), RETRY_MS), true);
         yield* trace("waiting", { key: host.key, target, phase });
-        if (phase !== "ready" && phase !== "complete")
-          return yield* Effect.as(jobs.schedule(jobId(target), limits.pollMillis), false);
+        if (phase !== "ready" && phase !== "complete") return false;
         yield* storage.exclusive(
           Effect.gen(function* () {
             const current = yield* storage.get<Backfill>(backfillKey(target));
@@ -2014,10 +2018,44 @@ export const makeRun = (
   const doneKey = (target: string, phase: string, item: RelayItem) =>
     `rd:${enc(target)}:${phase}:${"path" in item ? `p:${item.path}` : `i:${refKey(item.ref)}`}`;
 
+  /** `rw:<target>:<key>`: a key that asked before the barrier, to tell once the run is past it. */
+  const waitingPrefix = (target: string) => `rw:${enc(target)}:`;
+
+  /** Tell the keys that asked before the barrier that the run is past it: `false` if one couldn't be told. */
+  const tellWaiting = Effect.fn(function* (target: string) {
+    const prefix = waitingPrefix(target);
+    let after: string | undefined;
+    let all = true;
+    while (true) {
+      const rows = yield* storage.list({
+        prefix,
+        ...(after === undefined ? {} : { startAfter: after }),
+        limit: 128,
+      });
+      if (rows.length === 0) return all;
+      const told = yield* Effect.forEach(
+        rows,
+        ([row]) =>
+          bounded(net.consumer.ready(target, decodeURIComponent(row.slice(prefix.length)), 0)).pipe(
+            Effect.as([row]),
+            Effect.catchCause(() => Effect.succeed([])),
+          ),
+        { concurrency: RUN_CALLS },
+      );
+      yield* storage.delete(told.flat());
+      all = all && told.flat().length === rows.length;
+      after = rows[rows.length - 1]![0];
+    }
+  });
+
   const drive = (target: string): Effect.Effect<void> =>
     Effect.gen(function* () {
       const state = yield* getState(target);
-      if (state === undefined || state.phase === "complete") return;
+      if (state === undefined) return;
+      // Past the barrier: the keys that asked before it are told first.
+      if (state.phase !== "discover" && !(yield* tellWaiting(target)))
+        yield* jobs.schedule(`drive:${target}`, options.againMillis);
+      if (state.phase === "complete") return;
       const started = yield* Clock.currentTimeMillis;
       const deadline = started + options.waitMillis;
       // One try at everything: every round runs in this pass, whatever the clock says.
@@ -2134,16 +2172,17 @@ export const makeRun = (
       }
       const phase =
         state.plan.singleSource || state.phase === "ready" ? "complete" : ("ready" as const);
-      yield* storage.put({
-        [stateKey(target)]: { plan: state.plan, phase, window },
-        [progressKey(target)]: {
-          ...progress,
-          phase,
-          updatedAt: yield* Clock.currentTimeMillis,
-        } satisfies Progress,
-      });
-      if (phase !== "complete") yield* jobs.schedule(`drive:${target}`, 0);
-      else yield* clearPrefix(`rd:${enc(target)}:`);
+      const updatedAt = yield* Clock.currentTimeMillis;
+      // With `whenReady`: a key is noted before this, or reads the new phase after it.
+      yield* storage.exclusive(
+        storage.put({
+          [stateKey(target)]: { plan: state.plan, phase, window },
+          [progressKey(target)]: { ...progress, phase, updatedAt } satisfies Progress,
+        }),
+      );
+      if (phase === "complete") yield* clearPrefix(`rd:${enc(target)}:`);
+      // The next pass, or (complete) only the keys still to tell.
+      yield* jobs.schedule(`drive:${target}`, 0);
     });
 
   const clearPrefix = (prefix: string) =>
@@ -2175,6 +2214,15 @@ export const makeRun = (
       ),
     phase: (target: string) =>
       Effect.map(getState(target), (state): Phase => state?.phase ?? "unknown"),
+    whenReady: (target: string, key: string) =>
+      storage.exclusive(
+        Effect.gen(function* () {
+          const phase: Phase = (yield* getState(target))?.phase ?? "unknown";
+          if (phase !== "ready" && phase !== "complete")
+            yield* storage.put({ [`${waitingPrefix(target)}${enc(key)}`]: true });
+          return phase;
+        }),
+      ),
     /** How far the run has got; its phase is the run's own, so it never reads ahead of it. */
     progress: (target: string) =>
       Effect.gen(function* () {
