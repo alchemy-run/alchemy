@@ -75,6 +75,7 @@ import {
   toDurationMillis,
   withInvocationDeadline,
 } from "./InvocationDeadline.ts";
+import type { RuntimeAlias } from "./RuntimeAlias.ts";
 
 export class LambdaFunctionInvalidProps extends Data.TaggedError("LambdaFunctionInvalidProps")<{
   readonly message: string;
@@ -496,8 +497,17 @@ export interface FunctionZipProps extends FunctionCommonProps {
    * @default "default"
    */
   handler?: string;
+  /**
+   * The runtime the function runs on: a Lambda-managed Node.js runtime, or
+   * an {@link RuntimeAlias} of a customer-managed runtime. A customer-managed
+   * runtime runs the same bundle, so its image must provide Node.js and the
+   * Node.js runtime interface client (as `public.ecr.aws/lambda/nodejs`
+   * images do). The function's {@link architecture} must be one the alias
+   * supports.
+   * @default "nodejs24.x"
+   */
   // TODO(sam): use a Layer instead so we can manage Effect platform?
-  runtime?: "nodejs22.x" | "nodejs24.x";
+  runtime?: "nodejs22.x" | "nodejs24.x" | RuntimeAlias;
   /**
    * Lambda layers to attach — pass an `AWS.Lambda.LayerVersion` resource
    * directly, or a raw layer version ARN (e.g. an AWS-managed layer). Layers
@@ -560,6 +570,25 @@ export interface FunctionImageProps extends FunctionCommonProps {
 }
 
 export type FunctionProps = FunctionZipProps | FunctionImageProps;
+
+/**
+ * The `Runtime` and `RuntimeConfig` fields for a ZIP function: a managed
+ * runtime by identifier, or `custom` plus the customer-managed runtime's
+ * ARN and alias.
+ */
+const runtimeRequestOf = (
+  runtime: FunctionZipProps["runtime"],
+): Pick<CreateFunctionRequest, "Runtime" | "RuntimeConfig"> => {
+  if (runtime === undefined || typeof runtime === "string") {
+    return { Runtime: runtime ?? "nodejs24.x" };
+  }
+  // Resolved by the engine to the alias's Attributes.
+  const alias = runtime as unknown as RuntimeAlias["Attributes"];
+  return {
+    Runtime: "custom",
+    RuntimeConfig: { RuntimeArn: alias.runtimeArn, RuntimeAlias: alias.aliasName },
+  };
+};
 
 const isFunctionImageProps = (props: FunctionProps): props is FunctionImageProps =>
   props.image !== undefined;
@@ -2572,7 +2601,7 @@ export const FunctionProvider = () =>
                 // deploys a Lambda that dies at init with
                 // Runtime.HandlerNotFound.
                 Handler: handlerStringOf(news),
-                Runtime: news.runtime ?? "nodejs24.x",
+                ...runtimeRequestOf(news.runtime),
                 PackageType: "Zip" as const,
               }),
           Architectures: [news.architecture ?? "x86_64"],
@@ -2665,6 +2694,7 @@ export const FunctionProvider = () =>
             // RevisionId: "???"
             Role: createFunctionRequest.Role,
             Runtime: createFunctionRequest.Runtime,
+            RuntimeConfig: createFunctionRequest.RuntimeConfig,
             SnapStart: createFunctionRequest.SnapStart,
             Timeout: createFunctionRequest.Timeout,
             TracingConfig: createFunctionRequest.TracingConfig,
