@@ -2184,12 +2184,15 @@ TxChunk.update(held, (chunk) => Chunk.append(chunk, a));
 TxChunk.modify(held, (chunk) => [Chunk.size(chunk), Chunk.drop(chunk, 1)]);
 TxChunk.size(held);
 TxChunk.isEmpty(held);
+TxChunk.isTxChunk(chunk);
 TxChunk.isNonEmpty(held);
 const done = yield* TxDeferred.make();
 TxDeferred.succeed(done, a);
 TxDeferred.fail(done, new Odd({ n: a }));
 TxDeferred.await(done);
 TxDeferred.poll(done);
+TxDeferred.done(done, a > 1 ? Result.succeed(a) : Result.fail(new Odd({ n: a }))); // ends it as the Result says
+TxDeferred.isTxDeferred(done);
 const permits = yield* TxSemaphore.make(3);
 TxSemaphore.acquire(permits);
 TxSemaphore.acquireN(permits, 2);
@@ -2198,6 +2201,7 @@ TxSemaphore.tryAcquireN(permits, 2);
 TxSemaphore.release(permits);
 TxSemaphore.releaseN(permits, 2);
 TxSemaphore.available(permits);
+TxSemaphore.isTxSemaphore(permits);
 TxSemaphore.capacity(permits);
 TxSemaphore.withPermit(permits)(Effect.succeed(a));
 TxSemaphore.withPermits(permits, 1, Effect.succeed(b));
@@ -2225,6 +2229,8 @@ TxSubscriptionRef.getAndSet(cell, 1);
 TxSubscriptionRef.update(cell, (n) => n + a);
 TxSubscriptionRef.updateAndGet(cell, (n) => n * 2);
 TxSubscriptionRef.getAndUpdate(cell, (n) => n - 1);
+TxSubscriptionRef.modify(cell, (n) => [n + 1, n * b]); // what to give back, and the value after
+TxSubscriptionRef.isTxSubscriptionRef(cell);
 const lock = yield* TxReentrantLock.make();
 TxReentrantLock.acquireRead(lock);
 TxReentrantLock.acquireWrite(lock);
@@ -2234,6 +2240,7 @@ TxReentrantLock.readLocks(lock);
 TxReentrantLock.writeLocks(lock);
 TxReentrantLock.locked(lock);
 TxReentrantLock.readLocked(lock);
+TxReentrantLock.isTxReentrantLock(lock);
 TxReentrantLock.writeLocked(lock);
 TxReentrantLock.withLock(lock, log(seen, "locked"));
 TxReentrantLock.withReadLock(lock, Effect.andThen(log(seen, name + " reads"), Effect.sleep(millis)));
@@ -2324,6 +2331,8 @@ TxHashMap.hasBy(stock, (n, name) => name === "tea" && n === a);
 TxHashMap.findFirst(stock, (n) => n === a);
 const seen = yield* TxHashSet.make(a, b);
 TxHashSet.empty();
+TxHashSet.isTxHashSet(set);
+TxPriorityQueue.isTxPriorityQueue(set);
 TxHashSet.fromIterable([1, 2, a]);
 TxHashSet.fromHashSet(HashSet.make(2, 3));
 TxHashSet.add(seen, 99);
@@ -3162,6 +3171,7 @@ PubSub.shutdown(hub);
 ```
 
 ```typescript title="effect/MutableRef"
+MutableRef.compareAndSet(cell, a, b); // set where it holds what is expected
 (() => {
   const count = MutableRef.make(a);
   MutableRef.set(count, a + b);

@@ -317,6 +317,19 @@ export const make = (
     "effect/MutableRef:setAndGet": reading("MutableRef.setAndGet", 2, (_, [value]) =>
       Effect.succeed({ after: value ?? Value.undef, gives: value ?? Value.undef }),
     ),
+    // Set where it holds what the code expects: whether it was.
+    "effect/MutableRef:compareAndSet": reading(
+      "MutableRef.compareAndSet",
+      3,
+      (before, [expected, value], site) =>
+        Effect.flatMap(host.equal(before, expected ?? Value.undef, site), (equal) =>
+          Effect.map(host.decide(equal, site), (same) =>
+            same
+              ? { after: value ?? Value.undef, gives: Value.bool(true) }
+              : { gives: Value.bool(false) },
+          ),
+        ),
+    ),
     "effect/MutableRef:getAndSet": reading("MutableRef.getAndSet", 2, (before, [value]) =>
       Effect.succeed({ after: value ?? Value.undef, gives: before }),
     ),

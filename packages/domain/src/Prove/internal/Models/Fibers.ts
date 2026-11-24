@@ -5218,6 +5218,67 @@ export const make = (
     "effect/TxQueue:isTxEnqueue": isKind("TxQueue"),
     "effect/TxQueue:isTxDequeue": isKind("TxQueue"),
     "effect/TxPubSub:isTxPubSub": isKind("TxPubSub"),
+    "effect/TxChunk:isTxChunk": isKind("TxChunk"),
+    "effect/TxDeferred:isTxDeferred": isKind("TxDeferred"),
+    "effect/TxHashSet:isTxHashSet": isKind("TxHashSet"),
+    "effect/TxPriorityQueue:isTxPriorityQueue": isKind("TxPriorityQueue"),
+    "effect/TxReentrantLock:isTxReentrantLock": isKind("TxReentrantLock"),
+    "effect/TxSemaphore:isTxSemaphore": isKind("TxSemaphore"),
+    "effect/TxSubscriptionRef:isTxSubscriptionRef": isKind("TxSubscriptionRef"),
+    // Ends the TxDeferred as the `Result` says.
+    "effect/TxDeferred:done": later<TD, boolean>(
+      "TxDeferred",
+      "done",
+      2,
+      (held, [result], site) => {
+        const read = Brands.resultOf(result);
+        if (!read) return wrongArguments(site, "TxDeferred.done");
+        return Effect.succeed(
+          TxDeferred.done(
+            held,
+            read._tag === "Success"
+              ? Result.succeed(read.success)
+              : Result.fail(new Value.Rejected({ rejection: read.failure })),
+          ),
+        );
+      },
+      bool,
+    ),
+    // What to give back, and the value the cell holds after.
+    "effect/TxSubscriptionRef:modify": dual("TxSubscriptionRef.modify", 2, ([self, f], site) => {
+      const held = heldOf<TSR>("TxSubscriptionRef", self);
+      return held && f
+        ? Effect.succeed(
+            timed(
+              "TxSubscriptionRef.modify",
+              (timeline) =>
+                Timeline.back(
+                  timeline,
+                  held.pipe(
+                    TxSubscriptionRef.get,
+                    Effect.flatMap((before) =>
+                      Timeline.real(
+                        timeline,
+                        Effect.flatMap(host.call(f, [before], site), (pair) =>
+                          items("TxSubscriptionRef.modify", pair, site),
+                        ),
+                      ),
+                    ),
+                    Effect.flatMap(([gives, after]) =>
+                      Effect.as(
+                        TxSubscriptionRef.set(held, after ?? Value.undef),
+                        gives ?? Value.undef,
+                      ),
+                    ),
+                    Effect.tx,
+                  ),
+                  same,
+                ),
+              site,
+            ),
+          )
+        : wrongArguments(site, "TxSubscriptionRef.modify");
+    }),
     "effect/FiberHandle:set": later<FH, void>(
       "FiberHandle",
       "set",
