@@ -152,7 +152,11 @@ export interface WebFunctionProps extends PlatformProps {
   runtime?: "nodejs24.x";
   /**
    * Environment variables available to the server. Each change creates a
-   * new revision.
+   * new revision. In the Effect form, a `Redacted` value (here, or bound by
+   * a capability) is kept out of the revision: it goes into an SSM
+   * SecureString parameter of the function's own, which the server reads
+   * into its environment as it starts. An async server ships as is, so its
+   * env is set as given.
    */
   env?: Record<string, any>;
   /**
