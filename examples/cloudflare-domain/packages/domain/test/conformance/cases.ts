@@ -2699,6 +2699,9 @@ const rest: ReadonlyArray<Group> = [
       `paced(2, a, b, 1).pipe(Stream.buffer({ capacity: "unbounded" }), Stream.runCollect)`,
       `paced(2, a, b, 1).pipe(Stream.buffer({ capacity: 2 }), Stream.runCollect)`,
       `Effect.gen(function* () { const ran = yield* Ref.make(0); const made = yield* Stream.fromEffect(Effect.flatMap(Ref.updateAndGet(ran, (n) => n + 1), (n) => (n < 3 ? Effect.fail(n) : Effect.succeed(n + a)))).pipe(Stream.retry(Schedule.spaced("1 second")), Stream.runCollect); return [made, yield* Ref.get(ran)]; })`,
+      // One stream read by many.
+      `Effect.scoped(Effect.gen(function* () { const shared = yield* Stream.broadcast(paced(2, a, b, 1), { capacity: "unbounded", replay: 3 }); const first = yield* Effect.forkChild(Stream.runCollect(shared)); const second = yield* Effect.forkChild(Stream.runCollect(Stream.take(shared, 2))); return [yield* Fiber.join(first), yield* Fiber.join(second)]; }))`,
+      `Effect.scoped(Effect.gen(function* () { const shared = yield* paced(2, a, b, 1).pipe(Stream.share({ capacity: "unbounded", replay: 3 })); const first = yield* Effect.forkChild(Stream.runCollect(shared)); const second = yield* Effect.forkChild(Stream.runCollect(Stream.take(shared, 2))); return [yield* Fiber.join(first), yield* Fiber.join(second)]; }))`,
       // A stream that stops early stops what it began.
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const made = yield* Stream.make(1, 9).pipe(Stream.mapEffect((n) => Effect.as(Effect.onInterrupt(Effect.sleep(n), () => log(seen, "stopped " + n)), n), { concurrency: 2, unordered: true }), Stream.take(1), Stream.runCollect); return [made, yield* Ref.get(seen)]; })`,
     ],

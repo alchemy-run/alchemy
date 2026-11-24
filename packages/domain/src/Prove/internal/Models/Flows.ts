@@ -176,7 +176,7 @@ export const make = (kit: Kit, base: Models, tools: Tools) => {
       ? wrongArguments(site, name)
       : tools.together(name, options, site);
 
-  const models: Models = {
+  const models: Record<string, Model> = {
     "effect/Stream:tick": ([duration], site) =>
       Effect.map(tools.written("Stream.tick", duration, site), (time) =>
         timed("Stream.tick", site, (timeline) =>
@@ -389,6 +389,45 @@ export const make = (kit: Kit, base: Models, tools: Tools) => {
       );
     }),
   };
+
+  /** A stream many may read, made in a scope: `Stream.broadcast` and `Stream.share`. */
+  const shared = (
+    name: string,
+    make_: (
+      self: Real,
+      options: never,
+    ) => Effect.Effect<Stream.Stream<V, unknown>, never, Scope.Scope>,
+  ): Model =>
+    dualBy(name, isFlow, ([self, options], site) => {
+      const read = tools.plainOf(options);
+      if (!isFlow(self) || read === undefined) return wrongArguments(site, name);
+      return Effect.succeed<V>({
+        _tag: "Effect",
+        run: Effect.gen(function* () {
+          const timeline = yield* Timeline.current(site, `calls ${name}`);
+          const scope = yield* Effect.serviceOption(Scope.Scope);
+          if (Option.isNone(scope))
+            return yield* Value.notTranslated(site, `calls ${name} outside Effect.scoped`);
+          const made = yield* Timeline.back(
+            timeline,
+            Effect.provideService(
+              make_(real(timeline, self), read as never),
+              Scope.Scope,
+              scope.value,
+            ),
+            (stream) => stream,
+          );
+          return flow(timeline, made, site, same);
+        }),
+      });
+    });
+
+  Object.assign(models, {
+    "effect/Stream:broadcast": shared("Stream.broadcast", (self, options) =>
+      Stream.broadcast(self, options),
+    ),
+    "effect/Stream:share": shared("Stream.share", (self, options) => Stream.share(self, options)),
+  });
 
   const sited: Readonly<Record<string, (site: Site) => V>> = {
     "effect/Stream:never": (site) =>
