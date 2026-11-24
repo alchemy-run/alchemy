@@ -280,9 +280,17 @@ const result = yield* sandbox.exec(["npm", "test"]);
 
 See [Sandboxes](/ai/sandboxes).
 
-## A Durable Object: where a session lives
+## Hosts: where a session lives
 
-A session needs storage for its conversation and a way to wake up after an eviction. On Cloudflare that is a Durable Object you write: it yields the process, and its methods are what the rest of your app may ask of a session.
+A session needs two things from where it runs: storage that only it owns, for its conversation, and a way to carry on after a restart. Both are Layers, like everything else, so the host is a choice and not part of a process.
+
+On a long-lived machine, such as a container or a Fly Machine, the storage is a SQLite file:
+
+```typescript
+const StorageLive = Pi.SqliteFile("/data/pi.sqlite");
+```
+
+On Cloudflare it is a Durable Object you write. It yields the process, and its methods are what the rest of your app may ask of a session:
 
 ```typescript title="src/Agents.ts"
 export default class Agents extends Cloudflare.DurableObject<Agents>()(
@@ -301,7 +309,7 @@ export default class Agents extends Cloudflare.DurableObject<Agents>()(
 ) {}
 ```
 
-See [Where sessions run](/ai/hosting).
+See [Where sessions run](/ai/hosting) and [Pi on other hosts](/pi/other-hosts).
 
 ## One program, down to the infrastructure
 
