@@ -12,6 +12,7 @@
  * - `/totals/:id?order=&take=&after=` lists a page of the view's entries
  * - `/hidden/:id?version=n` waits, server-side, until the view no client may read has folded `n` commits
  * - `/record/:id?by=n` sends `Increment`, waits for `TotalWriter.caughtUp`, then lists what it recorded
+ * - `/drained/:run` lists the counters of a backlog run its key has handled
  * - `/tally/:id?by=n` sends `Increment` to a counter of the rebuild case, waits for the tallies
  *   to catch up, then lists its run's; `/generation` answers `TallyWriter`'s generation
  * - `/replay/:id` reads `CounterReplay`, the view the model's next version adds; 404 before it
@@ -65,6 +66,7 @@ import {
   Recorded,
   Redact,
   ReleaseHold,
+  Drained,
   Tallies,
   tallyKey,
   TicketLive,
@@ -87,6 +89,7 @@ export const app = Effect.gen(function* () {
   const api = yield* ConformanceApi.pipe(Effect.provide(TicketLive));
   const recorded = yield* Recorded;
   const tallies = yield* Tallies;
+  const drained = yield* Drained;
   const progress = yield* TotalWriter.Progress;
   const internals = yield* Model.Internals;
   const ones = yield* OneView;
@@ -280,6 +283,10 @@ export const app = Effect.gen(function* () {
         );
         const { entries } = yield* tallies.list(tallyKey(id) ?? id);
         return yield* HttpServerResponse.json(entries.map((entry) => entry.event.by));
+      }
+      case "drained": {
+        const { entries } = yield* drained.list(id, { take: 1_000 });
+        return yield* HttpServerResponse.json(entries.map((entry) => entry.event.counter));
       }
       case "generation":
         return yield* HttpServerResponse.json(
