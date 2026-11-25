@@ -308,6 +308,57 @@ export const make = (kit: Kit, tools: Tools) => {
     });
   };
 
+  /** The size of each array of an iterator's values, as the library reads the one it is given. */
+  const sizeOf = (given: V | undefined): number | undefined => {
+    if (given === undefined || given._tag === "Undef") return Channel.DefaultChunkSize;
+    if (given._tag !== "Num") return undefined;
+    const n = given.value;
+    return Number.isNaN(n) || n <= 0 ? 1 : Number.isFinite(n) ? Math.floor(n) : n;
+  };
+  /**
+   * The values of an iterator the code gives, a step of it each time one is
+   * pulled, as the library pulls one: in arrays of up to `size`, when it is given
+   * a size. It ends with what the iterator ends with.
+   */
+  const iterated = <A>(
+    to: Given,
+    iterator: Effect.Effect<V, Held>,
+    size: number | undefined,
+    each: (items: ReadonlyArray<V>) => A,
+  ): Channel.Channel<A, unknown, V> =>
+    Channel.fromPull(
+      Effect.flatMap(iterator, (made_) => {
+        const next = host.stepper(made_);
+        if (!next) return to.read(wrongArguments(to.site, to.name));
+        const step = Effect.suspend(() => to.read(next()));
+        if (size === undefined)
+          return Effect.succeed(
+            Effect.flatMap(step, (got) =>
+              got.done ? Cause.done(got.value) : Effect.succeed(each([got.value])),
+            ),
+          );
+        let ended: V | undefined;
+        return Effect.succeed(
+          Effect.suspend(() => {
+            if (ended !== undefined) return Cause.done(ended);
+            return Effect.gen(function* () {
+              const buffer: Array<V> = [];
+              while (buffer.length < size) {
+                const got = yield* step;
+                if (got.done) {
+                  if (buffer.length === 0) return yield* Cause.done(got.value);
+                  ended = got.value;
+                  break;
+                }
+                buffer.push(got.value);
+              }
+              return each(buffer);
+            });
+          }),
+        );
+      }),
+    );
+
   /** A pull the library made, as an effect of the code. */
   const pull = (timeline: Timeline.Timeline, site: Site, self: Effect.Effect<V, unknown>): V => ({
     _tag: "Effect",
@@ -540,6 +591,22 @@ export const make = (kit: Kit, tools: Tools) => {
             Channel.unwrap,
           )
         : to.bad;
+    }),
+    "effect/Channel:fromIterator": from("Channel.fromIterator", (to, [lazy]) =>
+      iterated(
+        to,
+        to.read(host.call(lazy ?? Value.undef, [], to.site)),
+        undefined,
+        ([item]) => item ?? Value.undef,
+      ),
+    ),
+    "effect/Channel:fromIteratorArray": from("Channel.fromIteratorArray", (to, [lazy, size]) => {
+      const n = sizeOf(size);
+      return n === undefined
+        ? to.bad
+        : iterated(to, to.read(host.call(lazy ?? Value.undef, [], to.site)), n, (items) =>
+            arr(items),
+          );
     }),
     "effect/Channel:fromPull": from("Channel.fromPull", (to, [effect]) =>
       to.eff(effect).pipe(
@@ -1942,6 +2009,23 @@ export const make = (kit: Kit, tools: Tools) => {
             ),
           )
         : wrongArguments(site, "Stream.flattenTake"),
+    "effect/Stream:fromIteratorSucceed": ([iterator, size]: ReadonlyArray<V>, site: Site) => {
+      const n = sizeOf(size);
+      return iterator && n !== undefined
+        ? Effect.succeed(
+            streaming("Stream.fromIteratorSucceed", site, (to) =>
+              Stream.fromChannel(
+                iterated(
+                  to,
+                  Effect.succeed(iterator),
+                  n,
+                  (items) => items as readonly [V, ...Array<V>],
+                ),
+              ),
+            ),
+          )
+        : wrongArguments(site, "Stream.fromIteratorSucceed");
+    },
     "effect/Stream:fromPubSubTake": ([pubsub]: ReadonlyArray<V>, site: Site) => {
       const held = tools.heldOf<PubSub.PubSub<V>>("PubSub", pubsub);
       return held

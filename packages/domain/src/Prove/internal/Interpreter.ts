@@ -1,6 +1,8 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
+import * as Queue from "effect/Queue";
 import * as Brands from "./Brands.ts";
 import * as Compare from "./Compare.ts";
 import { fromTruth, isQuotient, same, textual, truth } from "./Compare.ts";
@@ -466,6 +468,8 @@ export const make = (given: Loader, run: Run): Interpreter => {
         Timeline.outside,
       );
     });
+  /** The services the code has read, by key: what a context of the library finds by its key. */
+  const services = new Map<string, unknown>();
   const hooks: Hooks = {
     service: undefined,
     host: undefined,
@@ -887,8 +891,68 @@ export const make = (given: Loader, run: Run): Interpreter => {
       kept.set(self, { kind: "Set", entries: items.map((item): [V, V] => [item, item]) });
       return self;
     },
+    keptOf: (value) => (typeof value === "object" ? kept.get(value) : undefined),
+    services,
+    stepper: (value) => stepper(value),
     array: (name, items, fn, initial, site) => arrayMethods[name]!(items, fn, initial, site),
   });
+
+  /**
+   * A generator the code called, gone over one value at a time as an iterator's
+   * `next` gives them: its body runs up to the next `yield` each time, and no
+   * further. One that is not gone over to its end is left where it stands.
+   */
+  const stepper = (value: V): (() => Eval<Library.Step>) | undefined => {
+    const generator = generators.get(value);
+    if (!generator) return undefined;
+    let channels:
+      | {
+          readonly asks: Queue.Queue<void>;
+          readonly gives: Queue.Queue<Exit.Exit<Library.Step, Value.Stop>>;
+        }
+      | undefined;
+    let ended = false;
+    const start = Effect.gen(function* () {
+      const asks = yield* Queue.unbounded<void>();
+      const gives = yield* Queue.unbounded<Exit.Exit<Library.Step, Value.Stop>>();
+      const sink: V = {
+        _tag: "Native",
+        name: "yield",
+        call: ([given]) =>
+          Queue.offer(gives, Exit.succeed({ done: false, value: given ?? Value.undef })).pipe(
+            Effect.andThen(Queue.take(asks)),
+            Effect.as(Value.undef),
+          ),
+      };
+      yield* Queue.take(asks).pipe(
+        Effect.andThen(invoke(yielding(generator.fn, sink), generator.args)),
+        Effect.exit,
+        Effect.flatMap((exit) => {
+          ended = true;
+          return Queue.offer(
+            gives,
+            Exit.isSuccess(exit)
+              ? Exit.succeed({ done: true, value: exit.value })
+              : Exit.failCause(exit.cause),
+          );
+        }),
+        Effect.forkDetach,
+      );
+      return { asks, gives };
+    });
+    return () =>
+      Effect.suspend(() => {
+        if (ended && channels === undefined)
+          return Effect.succeed<Library.Step>({ done: true, value: Value.undef });
+        return Effect.gen(function* () {
+          if (ended) return { done: true, value: Value.undef } satisfies Library.Step;
+          channels ??= yield* start;
+          yield* Queue.offer(channels.asks, undefined);
+          const exit = yield* Queue.take(channels.gives);
+          return yield* exit;
+        });
+      });
+  };
 
   /** The array methods that take a function. The items are known; what the function gives may not be. */
   const arrayMethods: Record<
@@ -1839,6 +1903,7 @@ export const make = (given: Loader, run: Run): Interpreter => {
         return found ?? fromHost(value.module.exports[key], key);
       }
       case "Host": {
+        if (isService(value.value)) services.set(value.value.key, value.value);
         const pattern = Strings.patternOf(value);
         const asked = pattern ? patternMember(pattern, key) : undefined;
         if (asked) return asked;

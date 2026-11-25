@@ -7,6 +7,12 @@ import type { Eval, Run, Site, V } from "./Value.ts";
 import * as Value from "./Value.ts";
 
 /** What the library models need from the interpreter. */
+/** What an iterator's `next` gives: a value, or the end and what it ends with. */
+export interface Step {
+  readonly done: boolean;
+  readonly value: V;
+}
+
 export interface Host {
   readonly current: { run: Run };
   /** Take one side of a condition of the inputs: only a side some inputs reach. */
@@ -38,6 +44,16 @@ export interface Host {
   readonly instanceOf: (value: V, cls: V, site: Site) => Eval<V>;
   /** A `Set` of the language, of these items, as the code reads one. */
   readonly setOf: (items: ReadonlyArray<V>) => V;
+  /** What a `Map` or a `Set` the code made holds, in the order it was put in. */
+  readonly keptOf: (
+    value: V,
+  ) =>
+    | { readonly kind: "Map" | "Set"; readonly entries: ReadonlyArray<readonly [V, V]> }
+    | undefined;
+  /** The services the code has read, by key. */
+  readonly services: ReadonlyMap<string, unknown>;
+  /** A generator the code called, one value at a time: none for a value that is not one. */
+  readonly stepper: (value: V) => (() => Eval<Step>) | undefined;
   /** A value the code being read has just made: it may change it, as it may what it wrote itself. */
   readonly fresh: <A extends V>(value: A) => A;
   /** An array's method that takes a function, such as `map`. */

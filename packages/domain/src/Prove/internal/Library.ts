@@ -55,7 +55,7 @@ import * as Smt from "./Smt.ts";
 import * as Symbolic from "./Symbolic.ts";
 import type { Eval, Site, V } from "./Value.ts";
 
-export type { Host, Model } from "./Kit.ts";
+export type { Host, Model, Step } from "./Kit.ts";
 import * as Value from "./Value.ts";
 
 /** Milliseconds in a day. */
@@ -1773,6 +1773,13 @@ export const make = (host: Host) => {
   };
   const serviceOf = (name: string, tag: V | undefined, site: Site): Eval<unknown> =>
     tag?._tag === "Host" ? Effect.succeed(tag.value) : wrongArguments(site, name);
+  /** The service the code has read under a key the code gives. */
+  const keyedService = (key: V | undefined): unknown =>
+    key?._tag === "Str" ? host.services.get(key.value) : undefined;
+  const unkeyed = (site: Site, name: string): Eval<never> =>
+    Effect.fail(
+      Value.notTranslated(site, `calls ${name} with a key of no service the code has read`),
+    );
   /** An effect with services provided around it: it reads them, and nothing after it does. */
   const providing = <A>(provided: Provided, self: Eval<A>): Eval<A> =>
     Effect.suspend(() => {
@@ -1962,6 +1969,33 @@ export const make = (host: Host) => {
       Effect.map(serviceOf("Context.make", tag, site), (service) =>
         contextOf([[service, value ?? Value.undef]]),
       ),
+    // A context of keys, as the library keys one: each key is the key of a service the code has read.
+    "effect/Context:addUnsafe": ([self, key, value], site) => {
+      const held = self ? contexts.get(self) : undefined;
+      const service = keyedService(key);
+      if (!held || key?._tag !== "Str") return wrongArguments(site, "Context.addUnsafe");
+      if (service === undefined) return unkeyed(site, "Context.addUnsafe");
+      return Effect.succeed(
+        contextOf([...held.filter(([each]) => each !== service), [service, value ?? Value.undef]]),
+      );
+    },
+    "effect/Context:makeUnsafe": ([map, options], site) => {
+      const found = map ? host.keptOf(map) : undefined;
+      if (
+        !found ||
+        found.kind !== "Map" ||
+        (options !== undefined && options._tag !== "Undef" && options._tag !== "Obj")
+      )
+        return wrongArguments(site, "Context.makeUnsafe");
+      const provided: Array<readonly [unknown, V]> = [];
+      for (const [key, value] of found.entries) {
+        const service = keyedService(key);
+        if (key._tag !== "Str") return wrongArguments(site, "Context.makeUnsafe");
+        if (service === undefined) return unkeyed(site, "Context.makeUnsafe");
+        provided.push([service, value]);
+      }
+      return Effect.succeed(contextOf(provided));
+    },
     "effect/Context:add": dual("Context.add", 3, ([self, tag, value], site) => {
       const held = self ? contexts.get(self) : undefined;
       return held
