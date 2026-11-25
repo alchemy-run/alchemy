@@ -103,10 +103,10 @@ const capabilityLines = (fqn: string, terms: ReadonlyArray<Term>): string[] =>
           return `${at}${dim("·")} ${cyan(row.label)}${detail}`;
         case "Reference":
           return `${at}${dim("→")} ${row.label}${detail}`;
-        case "Unused":
-          return `${at}${dim(`no process uses: ${row.label}`)}`;
-        default:
-          return `${at}${dim(row.kind)} ${bold(row.label)}`;
+        case "Reaches":
+          return `${at}${dim("reaches")} ${cyan(row.label)}`;
+        case "Term":
+          return `${at}${dim(row.detail ?? "")} ${bold(row.label)}`;
       }
     }),
   );

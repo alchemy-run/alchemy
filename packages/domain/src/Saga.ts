@@ -1,3 +1,4 @@
+import { framed } from "alchemy/CapabilityGraph";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeRun, StorageName } from "alchemy/Workflows";
 import * as EffectCause from "effect/Cause";
@@ -306,7 +307,8 @@ export const make = <
     static readonly withCompensation = workflow.withCompensation;
     static toLayer<E, Req>(build: Effect.Effect<Handler<any, any, any, any>, E, Req>) {
       const register = Layer.unwrap(
-        Effect.map(build, (handle) =>
+        // Built as a term of its own: a plan lists what the saga binds.
+        Effect.map(build.pipe(framed("Saga", name, { hosted: false })), (handle) =>
           workflow.toLayer((payload, executionId) => {
             const { [CAUSE]: cause, ...rest } = payload as Record<string, unknown> & {
               readonly [CAUSE]?: typeof RunCause.Type;

@@ -327,23 +327,21 @@ function PlanRowView(props: {
   }
 
   if (row.type === "capability") {
+    // A term's head row: its kind, then its name.
+    if (row.kind === "Term") {
+      return (
+        <Row gap={1} paddingLeft={row.depth * 2}>
+          <Text tone="muted">{row.detail ?? ""}</Text>
+          <Text>{row.id}</Text>
+        </Row>
+      );
+    }
     const lead =
-      row.kind === "Binding"
-        ? glyphs.bullet
-        : row.kind === "Reference"
-          ? "→"
-          : row.kind === "Unused"
-            ? "no process uses:"
-            : row.kind;
+      row.kind === "Binding" ? glyphs.bullet : row.kind === "Reference" ? "→" : "reaches";
     return (
       <Row gap={1} paddingLeft={row.depth * 2}>
         <Text tone="muted">{lead}</Text>
-        <Text
-          color={row.kind === "Binding" ? theme.color.info : undefined}
-          tone={row.kind === "Unused" ? "muted" : undefined}
-        >
-          {row.id}
-        </Text>
+        <Text color={row.kind === "Reference" ? undefined : theme.color.info}>{row.id}</Text>
         {row.detail === undefined ? null : <Text tone="muted">{row.detail}</Text>}
       </Row>
     );

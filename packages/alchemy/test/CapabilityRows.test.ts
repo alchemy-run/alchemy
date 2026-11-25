@@ -28,9 +28,13 @@ const draw = (terms: ReadonlyArray<Term>) =>
   ]);
 
 describe("the rows a plan draws for a runtime's terms", { tags: ["unit"] }, () => {
-  it("a process heads a tree, under what hosts it", () => {
+  it("every term is drawn once: a process with what it reaches and refers to, then the rest", () => {
     const terms = [
-      term("Domain:Board.IssueDetail", { host: "Agents" }),
+      term("Domain:Board.IssueDetail"),
+      term("Policy:IssueWork", {
+        bindings: [{ binding: "AWS.SQS.SendMessage", targets: ["AWS.SQS.Queue(jobs)"], via: [] }],
+        references: [{ relation: "uses", to: "Process:Triage" }],
+      }),
       term("Process:Answering", { host: "Agents" }),
       term("Process:Triage", {
         host: "Agents",
@@ -47,37 +51,38 @@ describe("the rows a plan draws for a runtime's terms", { tags: ["unit"] }, () =
       [
         "Agents",
         [
-          "Process Triage",
+          "Term Answering (Process)",
+          "Term Triage (Process)",
+          "  Reaches Boat.CreateSandbox",
           "  Reference Board.IssueDetail (get)",
-          "  Process Answering",
-          "  Tool grep",
-          "    Binding Boat.CreateSandbox (Boat.Snapshot(Checkout) via AI.Sandboxes)",
-          "Unused bash",
+          "  Reference Process Answering",
+          "  Reference Tool grep",
+          "Term bash (Tool)",
+          "  Binding Boat.CreateSandbox (Boat.Snapshot(Checkout) via AI.Sandboxes)",
+          "Term grep (Tool)",
+          "  Binding Boat.CreateSandbox (Boat.Snapshot(Checkout) via AI.Sandboxes)",
+        ],
+      ],
+      [
+        undefined,
+        [
+          "Term IssueWork (Policy)",
+          "  Reference Process Triage",
+          "  Binding AWS.SQS.SendMessage (AWS.SQS.Queue(jobs))",
         ],
       ],
     ]);
   });
 
-  it("a process that uses itself, or one above it, is a reference there", () => {
+  it("processes that use each other are each drawn once", () => {
     const terms = [
       term("Process:A", { references: [{ relation: "uses", to: "Process:B" }] }),
       term("Process:B", { references: [{ relation: "uses", to: "Process:A" }] }),
-      term("Process:Top", { references: [{ relation: "uses", to: "Process:A" }] }),
     ];
     expect(draw(terms)).toEqual([
-      [undefined, ["Process Top", "  Process A", "    Process B", "      Reference Process A"]],
-    ]);
-  });
-
-  it("with no process, the tools are drawn", () => {
-    expect(draw([term("Tool:leak"), term("Tool:save", { bindings: [sandbox] })])).toEqual([
       [
         undefined,
-        [
-          "Tool leak",
-          "Tool save",
-          "  Binding Boat.CreateSandbox (Boat.Snapshot(Checkout) via AI.Sandboxes)",
-        ],
+        ["Term A (Process)", "  Reference Process B", "Term B (Process)", "  Reference Process A"],
       ],
     ]);
   });

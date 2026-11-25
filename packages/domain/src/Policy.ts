@@ -1,3 +1,4 @@
+import { framed } from "alchemy/CapabilityGraph";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -225,9 +226,10 @@ export const make = <
       const retry = options.retry;
       return Layer.effect(
         this as unknown as Context.Key<Identifier<Self>, Handler<TriggerOf<Self>>>,
+        // Built as a term of its own: a plan lists what the policy binds.
         retry
           ? Effect.map(
-              build,
+              framed("Policy", name, { hosted: false })(build),
               (handle): Handler<TriggerOf<Self>> =>
                 (trigger) =>
                   handle(trigger).pipe(
@@ -236,7 +238,7 @@ export const make = <
                     Effect.orDie,
                   ),
             )
-          : build,
+          : framed("Policy", name, { hosted: false })(build),
       );
     }
   } as unknown as PolicyClass<

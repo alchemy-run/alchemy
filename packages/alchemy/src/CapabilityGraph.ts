@@ -122,6 +122,8 @@ export interface CapabilityGraphShape {
   readonly label: (frame: Frame, name: string) => void;
   /** Every permission reachable from the frames of a named term. */
   readonly ofFrame: (kind: NamedFrameKind, name: string) => ReadonlyArray<Permission>;
+  /** Mark a frame's term as having no host. */
+  readonly unhosted: (frame: Frame) => void;
   /** Record that a frame's term uses another term. */
   readonly refers: (frame: Frame, relation: string, kind: string, name: string) => void;
   /** The runtime's terms, sorted by id. */
@@ -165,6 +167,7 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
   const uses = new Map<Frame, Map<string, unknown>>();
   const acquisitions = new Map<Frame, Map<string, Acquisition>>();
   const references = new Map<Frame, Map<string, Reference>>();
+  const loose = new Set<Frame>();
   /** key → frames whose build produced it (several when two Layers
    *  provide one tag). */
   const providersByKey = new Map<string, Set<Frame>>();
@@ -281,6 +284,9 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
       (frame as { name: string | undefined }).name = name;
     },
     ofFrame: (kind, name) => closure(frames.filter((f) => f.kind === kind && f.name === name)),
+    unhosted: (frame) => {
+      loose.add(frame);
+    },
     refers: (frame, relation, kind, name) => {
       const reference = { relation, to: `${kind}:${name}` };
       const map = references.get(frame);
@@ -341,7 +347,9 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
         for (const to of group.flatMap(reached)) {
           if (!named.has(to)) refs.set(`uses|${to}`, { relation: "uses", to });
         }
-        const host = group.map(hostOf).find((each) => each !== undefined);
+        const host = group.some((frame) => loose.has(frame))
+          ? undefined
+          : group.map(hostOf).find((each) => each !== undefined);
         terms.set(id, {
           id,
           kind: group[0]!.kind,
@@ -380,6 +388,7 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
       uses.clear();
       acquisitions.clear();
       references.clear();
+      loose.clear();
       providersByKey.clear();
     },
   };
@@ -390,13 +399,26 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
  * `framed("Tool", name)(build)`. Without a graph in context it is `effect`.
  */
 export const framed =
-  (kind: NamedFrameKind, name: string) =>
+  (
+    kind: NamedFrameKind,
+    name: string,
+    options?: {
+      /**
+       * `false` for a term that belongs to the runtime wherever its Layer
+       * happens to be built first (a Domain model's policy): it has no host.
+       */
+      readonly hosted?: boolean;
+    },
+  ) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     Effect.flatMap(
       Effect.all([Effect.serviceOption(CapabilityGraph), CurrentFrame]),
       ([graph, parent]) => {
         if (Option.isNone(graph)) return effect;
-        const frame = graph.value.frame(kind, name, parent);
+        // A host is built where it is first yielded, which says nothing of
+        // what it belongs to: it starts a tree of its own.
+        const frame = graph.value.frame(kind, name, kind === HOST ? undefined : parent);
+        if (options?.hosted === false) graph.value.unhosted(frame);
         // What the term's build gives is the term: a lookup that receives it
         // (a tool's handler, through the Layer around it) reaches this frame.
         return Effect.tap(Effect.provideService(effect, CurrentFrame, frame), (made) =>

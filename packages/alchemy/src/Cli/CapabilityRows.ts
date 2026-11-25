@@ -1,16 +1,17 @@
-import type { Permission, Term } from "../CapabilityGraph.ts";
+import { reach, type Permission, type Term } from "../CapabilityGraph.ts";
 
 /** One line of a runtime's terms, as a plan draws them. */
 export interface CapabilityRow {
   /**
-   * `Process` and `Tool` head a term. `Reference` points at a term drawn
-   * elsewhere or not at all (a piece of a Domain model). `Binding` is a
-   * binding the term above may use. `Unused` names the tools no process uses.
+   * `Term` heads a term: a process, a tool, a policy. Under it, `Reaches`
+   * sums up every binding a process reaches, `Reference` points at a term
+   * defined elsewhere, and `Binding` is a binding the term may use itself.
    */
-  readonly kind: "Process" | "Tool" | "Reference" | "Binding" | "Unused";
+  readonly kind: "Term" | "Reaches" | "Reference" | "Binding";
   /** Indentation below the first row of its group. */
   readonly depth: number;
   readonly label: string;
+  /** A term's kind, a reference's relation, or what a binding is bound to and reached through. */
   readonly detail?: string;
   /** Unique within the runtime. */
   readonly key: string;
@@ -24,65 +25,52 @@ export interface CapabilityGroup {
 
 const rowOf = (permission: Permission) => `${permission.binding}|${permission.targets.join(",")}`;
 
+/** Terms that are defined by the model they belong to, and only pointed at here. */
+const isPiece = (term: Term) => term.kind === "Domain";
+
 /**
- * A runtime's terms as the tree a plan draws, by what hosts them. A process
- * heads a tree: under it, what it refers to of a Domain model, the processes
- * it uses, and its tools with the bindings each may use. A term is drawn
- * under every process that uses it. Tools no process uses are named on one line.
+ * A runtime's terms as a plan draws them, by what hosts them. Every term is
+ * drawn once: a process first, with the bindings it reaches and a reference
+ * to each term it uses, then the tools, policies and other terms, each with
+ * the bindings it may use itself.
  */
 export const capabilityGroups = (terms: ReadonlyArray<Term>): ReadonlyArray<CapabilityGroup> => {
   const byId = new Map(terms.map((term) => [term.id, term]));
-  const usedBy = (kinds: ReadonlyArray<string> | undefined) =>
-    new Set(
-      terms
-        .filter((term) => kinds === undefined || kinds.includes(term.kind))
-        .flatMap((term) => term.references.map((reference) => reference.to)),
-    );
-  const processes = terms.filter((term) => term.kind === "Process");
-  const used = usedBy(undefined);
-  const loose = terms.filter((term) => term.kind === "Tool" && !used.has(term.id));
-  // With no process, the tools are what there is to draw.
-  const roots =
-    processes.length === 0 ? loose : processes.filter((term) => !usedBy(["Process"]).has(term.id));
-  const unused = processes.length === 0 ? [] : loose;
-
-  const draw = (
-    term: Term,
-    depth: number,
-    path: ReadonlyArray<string>,
-    out: Array<CapabilityRow>,
-  ): void => {
-    const here = [...path, term.id];
-    const key = here.join(">");
-    out.push({ kind: term.kind === "Process" ? "Process" : "Tool", depth, label: term.name, key });
-    const targets = term.references.flatMap((reference) => {
-      const to = byId.get(reference.to);
-      return to === undefined ? [] : [{ reference, to }];
-    });
-    const drawn = (kind: string) =>
-      targets.filter(({ to }) => to.kind === kind && !here.includes(to.id));
-    // A reference: the term is defined elsewhere, or was drawn on the way here.
-    for (const { reference, to } of targets) {
-      if (to.kind === "Process" || to.kind === "Tool") {
-        if (!here.includes(to.id)) continue;
+  const groups = new Map<string | undefined, Array<CapabilityRow>>();
+  const drawn = [
+    ...terms.filter((term) => term.kind === "Process"),
+    ...terms.filter((term) => term.kind !== "Process" && !isPiece(term)),
+  ];
+  for (const term of drawn) {
+    let rows = groups.get(term.host);
+    if (rows === undefined) groups.set(term.host, (rows = []));
+    rows.push({ kind: "Term", depth: 0, label: term.name, detail: term.kind, key: term.id });
+    if (term.kind === "Process") {
+      const reached = [...new Set(reach(terms, term.id).map((each) => each.binding))].sort();
+      if (reached.length > 0) {
+        rows.push({
+          kind: "Reaches",
+          depth: 1,
+          label: reached.join(", "),
+          key: `${term.id}>reaches`,
+        });
       }
-      out.push({
+    }
+    for (const reference of term.references) {
+      const to = byId.get(reference.to);
+      if (to === undefined) continue;
+      rows.push({
         kind: "Reference",
-        depth: depth + 1,
-        label: to.kind === "Process" || to.kind === "Tool" ? `${to.kind} ${to.name}` : to.name,
+        depth: 1,
+        label: isPiece(to) ? to.name : `${to.kind} ${to.name}`,
         ...(reference.relation === "uses" ? {} : { detail: reference.relation }),
-        key: `${key}>${reference.relation}|${to.id}`,
+        key: `${term.id}>${reference.relation}|${to.id}`,
       });
     }
-    // A binding one of the terms below may use is shown there.
-    const below = new Set(
-      [...drawn("Process"), ...drawn("Tool")].flatMap(({ to }) => to.bindings.map(rowOf)),
-    );
     for (const permission of term.bindings) {
-      if (below.has(rowOf(permission))) continue;
-      out.push({
+      rows.push({
         kind: "Binding",
-        depth: depth + 1,
+        depth: 1,
         label: permission.binding,
         detail: [
           permission.targets.join(", "),
@@ -90,28 +78,9 @@ export const capabilityGroups = (terms: ReadonlyArray<Term>): ReadonlyArray<Capa
         ]
           .filter((part) => part !== "")
           .join(" "),
-        key: `${key}>${rowOf(permission)}`,
+        key: `${term.id}>${rowOf(permission)}`,
       });
     }
-    for (const { to } of [...drawn("Process"), ...drawn("Tool")]) draw(to, depth + 1, here, out);
-  };
-
-  const groups = new Map<string | undefined, Array<CapabilityRow>>();
-  const rowsOf = (host: string | undefined) => {
-    let rows = groups.get(host);
-    if (rows === undefined) groups.set(host, (rows = []));
-    return rows;
-  };
-  for (const root of roots) draw(root, 0, [], rowsOf(root.host));
-  const idle = new Map<string | undefined, Array<string>>();
-  for (const term of unused) idle.set(term.host, [...(idle.get(term.host) ?? []), term.name]);
-  for (const [host, names] of idle) {
-    rowsOf(host).push({
-      kind: "Unused",
-      depth: 0,
-      label: names.join(", "),
-      key: `unused>${host ?? ""}`,
-    });
   }
   return [...groups].map(([host, rows]) => ({ host, rows }));
 };

@@ -1,4 +1,5 @@
 import * as AI from "@alchemy.run/ai";
+import * as Domain from "@alchemy.run/domain";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Binding from "alchemy/Binding";
 import {
@@ -118,7 +119,51 @@ const build = Effect.gen(function* () {
   ),
 );
 
+// A Domain policy that binds where its handler is built.
+class Deposited extends Domain.Event("Deposited", { amount: Schema.Number }) {}
+class Deposit extends Domain.Command("Deposit", {
+  input: { id: Schema.String, amount: Schema.Number },
+  events: [Deposited],
+}) {}
+class Wallet extends Domain.Aggregate("Wallet", {
+  id: Schema.String,
+  state: Schema.Struct({ balance: Schema.Number }),
+  initial: { balance: 0 },
+  commands: [Deposit],
+  keyOf: (command) => command.id,
+  decide: { Deposit: (_, { amount }) => [new Deposited({ amount })] },
+  evolve: { Deposited: (s, e) => ({ balance: s.balance + e.amount }) },
+}) {}
+class Notify extends Domain.Policy("Notify", { from: Wallet, on: [Deposited] }) {}
+const NotifyLive = Notify.toLayer(
+  Effect.map(Store("receipts"), (store) => () => Effect.asVoid(store.put("deposited"))),
+);
+
 describe("a tool and its bindings", { tags: ["unit"] }, () => {
+  it.effect("a Domain policy is a term, with what its Layer binds", () =>
+    Effect.gen(function* () {
+      const graph = makeCapabilityGraph();
+      yield* observeLookups(graph)(
+        Effect.asVoid(Notify).pipe(Effect.provide(NotifyLive.pipe(Layer.provide(StoreLive)))),
+      ).pipe(
+        Effect.provideService(
+          Layer.CurrentMemoMap,
+          observeLayerBuilds(Layer.makeMemoMapUnsafe(), graph),
+        ),
+        Effect.provideService(CapabilityGraph, graph),
+      );
+      expect(graph.describe()).toEqual([
+        {
+          id: "Policy:Notify",
+          kind: "Policy",
+          name: "Notify",
+          bindings: [{ binding: "Test.Store", targets: [], via: [] }],
+          references: [],
+        },
+      ]);
+    }),
+  );
+
   it.effect("every form of tool is listed with what it binds, and held to it", () =>
     Effect.gen(function* () {
       // The plan.
