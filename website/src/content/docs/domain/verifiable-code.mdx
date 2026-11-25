@@ -2979,6 +2979,11 @@ Stream.splitLines; // of text the code can see
 Stream.groupBy((n) => Effect.succeed([n % 2 === 0 ? 0 : 1, n * 10])); // a key and a value of each item
 Stream.partitionQueue(Stream.make([a, true], [b, false]), ([n, keep]) => (keep ? Result.succeed(n) : Result.fail(-n))); // in a scope: a queue of each
 Stream.pipeThrough(Sink.take(1)); // what the sink leaves over
+Stream.combine(Stream.make(a, b), Stream.make(10, 20, 30), () => true, (left, pullLeft, pullRight) => Effect.map(left ? pullLeft : pullRight, (n) => [n, !left])); // pulled as the function says
+Stream.combineArray(Stream.make(10, 20), () => 0, (turn, pullLeft, pullRight) => Effect.map(turn % 2 === 0 ? pullLeft : pullRight, (items) => [items, turn + 1]));
+Stream.zipWithArray(Stream.make(a, b, 3), Stream.make(10, 20), (l, r) => [[l[0] + r[0]], l.slice(1), r.slice(1)]);
+Stream.flattenTake; // a stream of Takes, as the items they hold
+Stream.fromPubSubTake(hub);
 Stream.groupByKey((n) => (n % 2 === 0 ? 0 : 1)); // by a key the code can see
 Stream.filterMapEffect((n) => Effect.succeed(n > 2 ? Result.succeed(n * 2) : Result.fail(n)));
 Stream.takeWhileFilter((n) => (n > 2 ? Result.succeed(n + 1) : Result.fail(n)));

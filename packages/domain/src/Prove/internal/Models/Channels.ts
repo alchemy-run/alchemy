@@ -1232,6 +1232,206 @@ export const make = (kit: Kit, tools: Tools) => {
       ),
   });
 
+  // ---- Streams that pull two others as a function of the code says, and streams of `Take`s.
+
+  /** A stream the library makes, for the handler that opens it. */
+  const streaming = (
+    name: string,
+    site: Site,
+    build: (to: Given) => Stream.Stream<V, unknown>,
+  ): V => ({
+    _tag: "Stream",
+    open: Effect.flatMap(
+      Timeline.current(site, `runs ${name}`),
+      (timeline) =>
+        tools.flow(timeline, build(given(timeline, name, site)), site, (item) => item).open,
+    ),
+  });
+  /** An effect of the code that ends a pull: a failure with `Cause.Done` is the library's own. */
+  const ending_ = <A>(self: Effect.Effect<A, Held>): Effect.Effect<A, Held | Cause.Done> =>
+    Effect.catchIf(
+      self,
+      (failed) => failed.defect !== true && isDone(failed.rejection),
+      () => Cause.done(),
+    );
+  /** The value and the state of the pair a function of the code gives. */
+  const stepOf = (to: Given, pair: V): Effect.Effect<readonly [V, V], Held> =>
+    Effect.map(to.read(tools.items(to.name, pair, to.site)), ([value, state]) => [
+      value ?? Value.undef,
+      state ?? Value.undef,
+    ]);
+  const combining =
+    (name: string, arrays: boolean): Model =>
+    (args, site) => {
+      const build = (
+        self: V,
+        that: V,
+        initial: V | undefined,
+        f: V | undefined,
+        at: Site,
+      ): Eval<V> =>
+        isFlow(self) && isFlow(that) && initial && f
+          ? Effect.succeed(
+              streaming(name, at, (to) => {
+                const [left, right] = [
+                  tools.real(to.timeline, self),
+                  tools.real(to.timeline, that),
+                ];
+                const first = Effect.suspend(() => to.read(host.call(initial, [], at)));
+                return arrays
+                  ? Stream.unwrap(
+                      Effect.map(first, (state) =>
+                        Stream.combineArray(
+                          left,
+                          right,
+                          () => state,
+                          (s, pullLeft, pullRight) =>
+                            ending_(
+                              Effect.flatMap(
+                                to.fn(f)(
+                                  s,
+                                  pull(
+                                    to.timeline,
+                                    at,
+                                    Effect.map(pullLeft, (items): V => arr(items)),
+                                  ),
+                                  pull(
+                                    to.timeline,
+                                    at,
+                                    Effect.map(pullRight, (items): V => arr(items)),
+                                  ),
+                                ),
+                                (pair) =>
+                                  Effect.flatMap(stepOf(to, pair), ([out, next]) =>
+                                    Effect.flatMap(to.read(tools.items(name, out, at)), (items) =>
+                                      items.length > 0
+                                        ? Effect.succeed([
+                                            items as readonly [V, ...Array<V>],
+                                            next,
+                                          ] as const)
+                                        : to.read(wrongArguments(at, name)),
+                                    ),
+                                  ),
+                              ),
+                            ),
+                        ),
+                      ),
+                    )
+                  : Stream.unwrap(
+                      Effect.map(first, (state) =>
+                        Stream.combine(
+                          left,
+                          right,
+                          () => state,
+                          (s, pullLeft, pullRight) =>
+                            ending_(
+                              Effect.flatMap(
+                                to.fn(f)(
+                                  s,
+                                  pull(to.timeline, at, pullLeft),
+                                  pull(to.timeline, at, pullRight),
+                                ),
+                                (pair) => stepOf(to, pair),
+                              ),
+                            ),
+                        ),
+                      ),
+                    );
+              }),
+            )
+          : wrongArguments(at, name);
+      const [a, b, c, d] = args;
+      if (args.length === 4 && a && b) return build(a, b, c, d, site);
+      return a
+        ? Effect.succeed(
+            native(name, ([self], at) =>
+              self ? build(self, a, b, c, at) : wrongArguments(at, name),
+            ),
+          )
+        : wrongArguments(site, name);
+    };
+
+  Object.assign(models, {
+    "effect/Stream:combine": combining("Stream.combine", false),
+    "effect/Stream:combineArray": combining("Stream.combineArray", true),
+    // The function is given the chunks of each, and gives what to emit and what is left of each.
+    "effect/Stream:zipWithArray": (args: ReadonlyArray<V>, site: Site) => {
+      const build = (left: V, right: V, f: V | undefined, at: Site): Eval<V> =>
+        isFlow(left) && isFlow(right) && f
+          ? Effect.succeed(
+              streaming("Stream.zipWithArray", at, (to) =>
+                Stream.zipWithArray(
+                  tools.real(to.timeline, left),
+                  tools.real(to.timeline, right),
+                  (l, r) => {
+                    let made_: V | undefined;
+                    try {
+                      made_ = host.atOnce(f, [arr(l), arr(r)], at);
+                    } catch {
+                      made_ = undefined;
+                    }
+                    const [out, restL, restR] = (made_ && kit.itemsOf(made_)) ?? [];
+                    const items = out ? kit.itemsOf(out) : undefined;
+                    if (!items || items.length === 0) {
+                      to.timeline.fatal ??= Value.notTranslated(
+                        at,
+                        "calls Stream.zipWithArray with a function the prover cannot run at once",
+                      );
+                      return [[...l] as unknown as readonly [V, ...Array<V>], [], []] as const;
+                    }
+                    return [
+                      items as readonly [V, ...Array<V>],
+                      (restL && kit.itemsOf(restL)) ?? [],
+                      (restR && kit.itemsOf(restR)) ?? [],
+                    ] as const;
+                  },
+                ),
+              ),
+            )
+          : wrongArguments(at, "Stream.zipWithArray");
+      const [a, b, c] = args;
+      if (args.length === 3 && a && b) return build(a, b, c, site);
+      return a
+        ? Effect.succeed(
+            native("Stream.zipWithArray", ([self], at) =>
+              self ? build(self, a, b, at) : wrongArguments(at, "Stream.zipWithArray"),
+            ),
+          )
+        : wrongArguments(site, "Stream.zipWithArray");
+    },
+    // A stream of the code's `Take`s, as the items they hold: an `Exit` ends it.
+    "effect/Stream:flattenTake": ([self]: ReadonlyArray<V>, site: Site) =>
+      isFlow(self)
+        ? Effect.succeed(
+            streaming(
+              "Stream.flattenTake",
+              site,
+              (to) =>
+                Stream.flattenTake(
+                  Stream.mapEffect(tools.real(to.timeline, self), (item) =>
+                    take(to, item),
+                  ) as never,
+                ) as Stream.Stream<V, unknown>,
+            ),
+          )
+        : wrongArguments(site, "Stream.flattenTake"),
+    "effect/Stream:fromPubSubTake": ([pubsub]: ReadonlyArray<V>, site: Site) => {
+      const held = tools.heldOf<PubSub.PubSub<V>>("PubSub", pubsub);
+      return held
+        ? Effect.succeed(
+            streaming(
+              "Stream.fromPubSubTake",
+              site,
+              (to) =>
+                Stream.flattenTake(
+                  Stream.mapEffect(Stream.fromPubSub(held), (item) => take(to, item)) as never,
+                ) as Stream.Stream<V, unknown>,
+            ),
+          )
+        : wrongArguments(site, "Stream.fromPubSubTake");
+    },
+  });
+
   const sited: Readonly<Record<string, (site: Site) => V>> = {
     "effect/Channel:DefaultChunkSize": () => Value.num(Channel.DefaultChunkSize),
     "effect/Channel:empty": (site) => made("Channel.empty", site, () => ours(Channel.empty)),
