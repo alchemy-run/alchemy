@@ -2361,7 +2361,7 @@ export const make = (host: Host) => {
         context: context as Context.Context<never>,
         uninterruptible: uninterruptible.value,
         completeUnsafe: (exit) => {
-          const held = Effect.runSync(Effect.exit(fibers.tools.exitOf(timeline, exit)));
+          const held = fibers.tools.exitOf(timeline, exit).pipe(Effect.exit, Effect.runSync);
           try {
             if (Exit.isSuccess(held)) host.atOnce(complete, [held.value], site);
             else throw held;

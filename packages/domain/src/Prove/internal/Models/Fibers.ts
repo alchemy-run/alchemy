@@ -330,6 +330,113 @@ export const make = (
   const scheduleOf = (v: V | undefined): Schedule.Schedule<unknown, unknown> | undefined =>
     heldOf("Schedule", v);
 
+  /** What a schedule's step is told of the turn it is on, as the code reads it. */
+  const metadataOf = (meta: Schedule.InputMetadata<unknown>): Record<string, V> => ({
+    input: isValue(meta.input) ? meta.input : Value.undef,
+    attempt: Value.num(meta.attempt),
+    start: Value.num(meta.start),
+    now: Value.num(meta.now),
+    elapsed: Value.num(meta.elapsed),
+    elapsedSincePrevious: Value.num(meta.elapsedSincePrevious),
+  });
+  /**
+   * A function of a schedule that gives an effect of a step: the step is the
+   * library's, run on the handler's timeline, and what it gives is the code's.
+   */
+  const stepping =
+    (
+      name: string,
+      made: (
+        held: Schedule.Schedule<unknown, unknown>,
+      ) => Effect.Effect<
+        (args: ReadonlyArray<V>, site: Site) => Eval<Effect.Effect<V, unknown>>,
+        unknown
+      >,
+    ): Model =>
+    ([self], site) => {
+      const held = scheduleOf(self);
+      if (!held) return wrongArguments(site, name);
+      return Effect.succeed(
+        timed(
+          name,
+          (timeline) =>
+            Timeline.back(timeline, made(held), (step) =>
+              native(`${name} step`, (args, at) =>
+                Effect.map(step(args, at), (pulled) =>
+                  timed(
+                    `${name} step`,
+                    (inner) =>
+                      Timeline.back(
+                        inner,
+                        Effect.catchIf(pulled, Cause.isDone, (ended) =>
+                          Cause.done(outputOf(ended.value)),
+                        ),
+                        same,
+                      ),
+                    at,
+                  ),
+                ),
+              ),
+            ),
+          site,
+        ),
+      );
+    };
+  /** A schedule whose step is the code's: what it gives, how long to wait, and when it is done. */
+  const fromStep =
+    (
+      name: string,
+      calling: (fn: V, site: Site) => (now: number, input: unknown) => Eval<V>,
+      withMetadata = false,
+    ): Model =>
+    ([given_], site) => {
+      if (given_?._tag !== "Effect") return wrongArguments(site, name);
+      const pairOf = (pair: V): Effect.Effect<[V, Duration.Duration], unknown> => {
+        const [output, delay] = kit.itemsOf(host.force(pair)) ?? [];
+        return delay === undefined
+          ? wrongArguments(site, name)
+          : Effect.map(written(name, delay, site), (duration): [V, Duration.Duration] => [
+              output ?? Value.undef,
+              duration,
+            ]);
+      };
+      const ending = (stop: unknown): stop is Value.Rejected =>
+        stop instanceof Value.Rejected &&
+        stop.defect !== true &&
+        stop.rejection._tag === "Obj" &&
+        stop.rejection.fields[Timeline.DONE] !== undefined;
+      const stepOf =
+        (fn: V) =>
+        (now: number, input: unknown): Effect.Effect<[V, Duration.Duration], unknown> =>
+          calling(fn, site)(now, input).pipe(
+            Effect.flatMap((made_) =>
+              made_._tag === "Effect" ? made_.run : Effect.succeed(made_),
+            ),
+            Effect.flatMap(pairOf),
+            Effect.catchIf(ending, (stop) =>
+              Cause.done(
+                stop.rejection._tag === "Obj"
+                  ? (stop.rejection.fields.value ?? Value.undef)
+                  : Value.undef,
+              ),
+            ),
+          );
+      const step = Effect.map(given_.run, stepOf);
+      return Effect.succeed(
+        wrap(
+          "Schedule",
+          withMetadata
+            ? Schedule.fromStepWithMetadata(
+                Effect.map(
+                  step,
+                  (f) => (meta: Schedule.InputMetadata<unknown>) => f(meta.now, meta),
+                ),
+              )
+            : Schedule.fromStep(step),
+        ),
+      );
+    };
+
   /** A schedule made from numbers and durations the code writes. */
   const schedule =
     (
@@ -5449,6 +5556,55 @@ export const make = (
         native("Schedule.setInputType", ([self]) => Effect.succeed(self ?? Value.undef)),
       ),
     // What the schedule gives each turn, as the function makes it.
+    // The step of a schedule, as the library makes it, and a schedule made of a step of the code.
+    "effect/Schedule:toStep": stepping("Schedule.toStep", (held) =>
+      Effect.map(
+        Schedule.toStep(held),
+        (step) =>
+          ([now, input]: ReadonlyArray<V>, at: Site) =>
+            now?._tag === "Num"
+              ? Effect.succeed(
+                  Effect.map(step(now.value, input ?? Value.undef), ([output, duration]) =>
+                    arr([outputOf(output), durationOf(duration)]),
+                  ),
+                )
+              : unseen(at, "steps a schedule at a time the prover cannot see"),
+      ),
+    ),
+    "effect/Schedule:toStepWithSleep": stepping("Schedule.toStepWithSleep", (held) =>
+      Effect.map(
+        Schedule.toStepWithSleep(held),
+        (step) =>
+          ([input]: ReadonlyArray<V>) =>
+            Effect.succeed(Effect.map(step(input ?? Value.undef), outputOf)),
+      ),
+    ),
+    "effect/Schedule:toStepWithMetadata": stepping("Schedule.toStepWithMetadata", (held) =>
+      Effect.map(
+        Schedule.toStepWithMetadata(held),
+        (step) =>
+          ([input]: ReadonlyArray<V>) =>
+            Effect.succeed(
+              Effect.map(step(input ?? Value.undef), (meta) =>
+                Value.obj({
+                  ...metadataOf(meta),
+                  output: outputOf(meta.output),
+                  duration: durationOf(meta.duration),
+                }),
+              ),
+            ),
+      ),
+    ),
+    "effect/Schedule:fromStep": fromStep(
+      "Schedule.fromStep",
+      (fn, site) => (now, input) => host.call(fn, [Value.num(now), input as V], site),
+    ),
+    "effect/Schedule:fromStepWithMetadata": fromStep(
+      "Schedule.fromStepWithMetadata",
+      (fn, site) => (_now, meta) =>
+        host.call(fn, [Value.obj(metadataOf(meta as Schedule.InputMetadata<unknown>))], site),
+      true,
+    ),
     "effect/Schedule:map": onTurns("Schedule.map", 2, (self, [f], site) =>
       f
         ? Effect.sync(() =>
