@@ -164,6 +164,17 @@ and nothing else. See [How bindings grant IAM](/gcp/security/iam).
 Values can be Outputs from other resources. For credentials, use
 [Secret Manager](/gcp/security/secrets-kms) instead.
 
+A revision's plain env values are readable by anyone who can view the
+service (`run.services.get`), so a `Redacted` value never goes there.
+The deploy puts each one, from `env` or from a binding, in a Secret
+Manager secret of the service's own, grants the service account
+`roles/secretmanager.secretAccessor` on it, and the container reads it
+through `secretKeyRef`. `process.env` and `Config.Redacted` read the
+same string as before. The same holds for worker pools, jobs, sidecar
+containers, the websites under [Frontend](/gcp/frontend), and
+[Cloud Functions](/gcp/compute/cloud-functions), which read them as
+secret environment variables.
+
 ## Choose the region
 
 A service deploys to the Stack's region (your profile's region, else
