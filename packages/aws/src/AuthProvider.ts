@@ -1,5 +1,6 @@
 import * as NodeCrypto from "node:crypto";
 import * as NodeOs from "node:os";
+import { Endpoint as DistilledEndpoint } from "@distilled.cloud/aws";
 import * as DistilledAuth from "@distilled.cloud/aws/Auth";
 import type { CredentialsError } from "@distilled.cloud/aws/Credentials";
 import {
@@ -965,14 +966,22 @@ const loadLoginProfile = (loginProfile: string) =>
  * prompt is wired in.
  */
 const awsProfileCredentials = (awsProfile: string, region: string) =>
-  Effect.service(Credentials).pipe(
-    Effect.provide(fromIni({ profile: awsProfile })),
-    // An assumed-role or web-identity profile calls STS while resolving, and
-    // may run while AWSEnvironment is still being built (the account
-    // backfill). Provide Region and Endpoint directly, as `getAccountId`
-    // does: the ambient providers read AWSEnvironment and would deadlock.
-    Effect.map(Effect.provide(Layer.mergeAll(Region.of(region), Endpoint.none))),
-  );
+  Effect.gen(function* () {
+    const files = yield* sharedConfigFiles;
+    // The STS calls that resolve the profile (AssumeRole, web identity) use
+    // the profile's own region first, as the AWS SDK does; `region` (where
+    // AWS_REGION wins) is only the fallback. Provided directly, with no
+    // custom endpoint: during the account backfill the ambient Region and
+    // Endpoint read AWSEnvironment, which is still being built, and deadlock.
+    const stsRegion = files.configFile[awsProfile]?.region ?? region;
+    const credentials = yield* Effect.service(Credentials).pipe(
+      Effect.provide(fromIni({ profile: awsProfile })),
+    );
+    return credentials.pipe(
+      Effect.provideService(Region.Region, Effect.succeed(stsRegion)),
+      Effect.provideService(DistilledEndpoint.Endpoint, Effect.undefined),
+    );
+  });
 
 const sharedConfigFiles = loadSharedConfigFiles.pipe(
   Effect.mapError((cause) =>

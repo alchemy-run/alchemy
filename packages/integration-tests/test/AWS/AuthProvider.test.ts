@@ -94,45 +94,52 @@ describe("aws-profile", { tags: ["unit", "provider:aws", "local"] }, () => {
     );
   }
 
-  it.effect("uses the profile region while acquiring web identity credentials", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-aws-profile-" });
-      const config = path.join(dir, "config");
-      const credentials = path.join(dir, "credentials");
-      const token = path.join(dir, "token");
-      yield* fs.writeFileString(token, "local-test-token");
-      yield* fs.writeFileString(credentials, "");
-      yield* fs.writeFileString(
-        config,
-        `[profile sandbox]\nregion = cn-north-1\nrole_arn = arn:aws-cn:iam::123456789012:role/review\nweb_identity_token_file = ${token}\n`,
-      );
-      const executable = yield* Effect.sync(() => process.execPath);
-      const result = yield* exec(
-        ChildProcess.make(
-          executable,
-          [path.join(import.meta.dirname, "fixtures", "aws-profile.ts")],
-          {
-            extendEnv: false,
-            env: {
-              HOME: dir,
-              ALCHEMY_HOME: dir,
-              AWS_CONFIG_FILE: config,
-              AWS_SHARED_CREDENTIALS_FILE: credentials,
-              AWS_DEFAULT_REGION: "us-east-1",
-              AWS_PROFILE_TEST_ACTION: "refresh",
+  for (const { name, env } of [
+    { name: "over AWS_DEFAULT_REGION", env: { AWS_DEFAULT_REGION: "us-east-1" } },
+    // AWS_REGION is the deploy region, but the role is assumed where the
+    // profile lives, as the AWS SDK does: here, another partition.
+    { name: "over AWS_REGION", env: { AWS_REGION: "us-east-1" } },
+  ]) {
+    it.effect(`uses the profile region while acquiring web identity credentials ${name}`, () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-aws-profile-" });
+        const config = path.join(dir, "config");
+        const credentials = path.join(dir, "credentials");
+        const token = path.join(dir, "token");
+        yield* fs.writeFileString(token, "local-test-token");
+        yield* fs.writeFileString(credentials, "");
+        yield* fs.writeFileString(
+          config,
+          `[profile sandbox]\nregion = cn-north-1\nrole_arn = arn:aws-cn:iam::123456789012:role/review\nweb_identity_token_file = ${token}\n`,
+        );
+        const executable = yield* Effect.sync(() => process.execPath);
+        const result = yield* exec(
+          ChildProcess.make(
+            executable,
+            [path.join(import.meta.dirname, "fixtures", "aws-profile.ts")],
+            {
+              extendEnv: false,
+              env: {
+                HOME: dir,
+                ALCHEMY_HOME: dir,
+                AWS_CONFIG_FILE: config,
+                AWS_SHARED_CREDENTIALS_FILE: credentials,
+                ...env,
+                AWS_PROFILE_TEST_ACTION: "refresh",
+              },
             },
-          },
-        ),
-      );
-      expect(result.stderr).toBe("");
-      expect(result.exitCode).toBe(0);
-      expect(JSON.parse(result.stdout)).toEqual({
-        hostname: "sts.cn-north-1.amazonaws.com.cn",
-      });
-    }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
-  );
+          ),
+        );
+        expect(result.stderr).toBe("");
+        expect(result.exitCode).toBe(0);
+        expect(JSON.parse(result.stdout)).toEqual({
+          hostname: "sts.cn-north-1.amazonaws.com.cn",
+        });
+      }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
+    );
+  }
 });
 
 /**
