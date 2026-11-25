@@ -17,6 +17,7 @@ import { decidedAt, judge, settle, targetId as internalTargetId } from "./intern
 import * as RequestContext from "./RequestContext.ts";
 import type * as Rewrite from "./Rewrite.ts";
 import type * as Telemetry from "./Telemetry.ts";
+import { memo, type Thunk } from "./Thunk.ts";
 import type { ConsistencyTimeout } from "./View.ts";
 
 /**
@@ -940,37 +941,41 @@ export const make = <
   const X extends ReadonlyArray<Event.Any> = readonly [],
 >(
   name: Name,
-  definition: Definition<Id, S, C, X> & Decides<C>,
+  definition: Thunk<Definition<Id, S, C, X> & Decides<C>>,
   annotations: Annotations = {},
 ): AggregateClass<Name, Resolved<Id, S, C, X>> => {
   const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, X>>>()(
     `alchemy/Domain/Aggregate/${name}`,
   );
-  // oxlint-disable-next-line effecttsgo/schema-sync -- ids decode synchronously when building refs
-  const decodeId = Schema.decodeUnknownSync(
-    definition.id as unknown as Schema.Codec<unknown, unknown>,
+  const given = memo(definition);
+  const decodeId = memo(() =>
+    // oxlint-disable-next-line effecttsgo/schema-sync -- ids decode synchronously when building refs
+    Schema.decodeUnknownSync(given().id as unknown as Schema.Codec<unknown, unknown>),
   );
-  const commands: ReadonlyArray<Command.Any> = definition.commands ?? [];
+  const resolved = memo(() => {
+    const read = given();
+    const commands: ReadonlyArray<Command.Any> = read.commands ?? [];
+    return {
+      ...read,
+      commands,
+      keyOf: read.keyOf,
+      decide: read.decide ?? {},
+      // What its commands record, then what decisions record on it.
+      events: [
+        ...new Set([...commands.flatMap((command) => command.events), ...(read.events ?? [])]),
+      ],
+    } as unknown as Resolved<Id, S, C, X>;
+  });
   return class extends Tag {
     static readonly kind = "Aggregate" as const;
     static readonly annotations: Annotations = annotations;
     static readonly aggregateName: Name = name;
-    static readonly definition = {
-      ...definition,
-      commands,
-      keyOf: definition.keyOf,
-      decide: definition.decide ?? {},
-      // What its commands record, then what decisions record on it.
-      events: [
-        ...new Set([
-          ...commands.flatMap((command) => command.events),
-          ...(definition.events ?? []),
-        ]),
-      ],
-    } as unknown as Resolved<Id, S, C, X>;
+    static get definition(): Resolved<Id, S, C, X> {
+      return resolved();
+    }
     /** Address one instance of this aggregate. */
     static ref<Self extends Any>(this: Self, id: Self["definition"]["id"]["Encoded"]): Ref<Self> {
-      return makeRef(this, decodeId(id) as IdOf<Self>);
+      return makeRef(this, decodeId()(id) as IdOf<Self>);
     }
     /** Decide a command locally. See {@link predict}. */
     static predict(

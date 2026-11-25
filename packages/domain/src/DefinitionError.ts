@@ -223,6 +223,15 @@ export class DecisionsUnsupported extends Data.TaggedError("DecisionsUnsupported
   }
 }
 
+/** The platform a model is hosted on can't host processes. */
+export class ProcessesUnsupported extends Data.TaggedError("ProcessesUnsupported")<{
+  readonly processes: ReadonlyArray<string>;
+}> {
+  override get message() {
+    return `the platform does not host processes (${this.processes.join(", ")})`;
+  }
+}
+
 /** `decide` returns an event or rejection its command does not declare. */
 export class UndeclaredDecision extends Data.TaggedError("UndeclaredDecision")<{
   readonly aggregate: string;
@@ -509,6 +518,7 @@ export type Reason =
   | UnknownRead
   | UnreadRecord
   | DecisionsUnsupported
+  | ProcessesUnsupported
   | UndeclaredDecision
   | UndeclaredEvent
   | UndeclaredEmit

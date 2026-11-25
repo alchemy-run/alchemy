@@ -578,4 +578,6 @@ export const BankHandlers = Layer.mergeAll(
 
 `Bank.layer(BankHandlers)` hosts the model on whatever platform is provided: `Domain.InMemory` or `DomainCloudflare.layerDurableObjects()`.
 
-More: [Domain Model: Declare the model](https://alchemy.run/domain/model#declare-the-model).
+An AI process is a member too: list its name in `processes`, give its prose Layer to `layer` with the other handlers, and the platform hosts each of its sessions. The model records each process as a view named after it. Its prose mentions the model, so the model takes its members as a thunk, `Domain.Model("Bank", () => ({ ... }))`. See the `alchemy-ai` skill's `references/domain.md`.
+
+More: [Domain Model: Declare the model](https://alchemy.run/domain/model#declare-the-model), [Processes and Domain models](https://alchemy.run/ai/domain).

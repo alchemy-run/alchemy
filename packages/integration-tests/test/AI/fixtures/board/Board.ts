@@ -1,17 +1,13 @@
 import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import { IssueId } from "./Issue.id.ts";
-import {
-  IssueSession,
-  SessionStatus,
-  Transcript,
-  Transcripts,
-  TranscriptsLive,
-} from "./Session.ts";
+import { Labeler } from "./Labeler.ts";
+import { Triage } from "./Triage.ts";
+
+export { Labeler };
 
 export const Label = Schema.Literals(["bug", "feature", "question"]);
 
@@ -20,12 +16,6 @@ export class IssueLabeled extends Domain.Event("IssueLabeled", {
   label: Label,
   by: Schema.String,
 }) {}
-
-/** Who a command is sent as. */
-export class Labeler extends Domain.RequestContext<Labeler>()(
-  "Board/Labeler",
-  Schema.Struct({ name: Schema.String }),
-) {}
 
 export class Unsigned extends Domain.Rejection("Unsigned") {}
 
@@ -112,16 +102,7 @@ export class IssueDetail extends Domain.View(
   { description: "An issue's title, its label and the comments on it." },
 ) {}
 
-/**
- * Whatever looks after issues, as the board asks it: start on an issue, and
- * pass on what was said about it. The board does not know it is a model.
- */
-export class Triager extends Domain.ExternalSystem("Triager", {
-  start: { args: { issue: IssueId } },
-  tell: { args: { issue: IssueId, text: Schema.String, id: Schema.String } },
-}) {}
-
-/** A reported issue is handed to the triager; a comment on it is passed on. */
+/** A reported issue is handed to its Triage session; a comment on it is passed on. */
 export class IssueWork extends Domain.Policy("IssueWork", {
   from: Issue,
   on: [IssueReported, IssueCommented],
@@ -129,34 +110,35 @@ export class IssueWork extends Domain.Policy("IssueWork", {
 
 export const IssueWorkLive = IssueWork.toLayer(
   Effect.gen(function* () {
-    const triager = yield* Triager;
+    const triage = yield* Triage;
     return Effect.fn(function* ({ source, event }) {
+      const session = triage.get(source.id);
       yield* Match.valueTags(event, {
-        IssueReported: () => triager.start({ issue: source.id }),
+        // Every command the session sends is sent as this labeler.
+        IssueReported: () =>
+          Effect.andThen(
+            triage.start(source.id, { as: Labeler.context({ name: "triage-bot" }) }),
+            session.send(`The issue is ${source.id}.`, { requestId: "start" }),
+          ),
         IssueCommented: ({ body, commentId }) =>
-          triager.tell({
-            issue: source.id,
-            text: `A comment on the issue: ${body}`,
-            id: commentId,
-          }),
-      });
+          session.send(`A comment on the issue: ${body}`, { requestId: commentId }).pipe(
+            // A comment on an issue that was never reported has no session.
+            Effect.catchTag("NotStarted", () => Effect.void),
+          ),
+      }).pipe(Effect.orDie);
     });
   }),
 );
 
 export class Board extends Domain.Model("Board", {
-  aggregates: [Issue, IssueSession],
-  views: [IssueDetail, SessionStatus],
+  aggregates: [Issue],
+  views: [IssueDetail],
   policies: [IssueWork],
-  projections: [Transcripts],
-  streams: [Transcript],
+  processes: [Triage],
 }) {}
 
-/** What a front end may do and read. Labeling and recording belong to the session's object. */
+/** What a front end may do and read, the Triage view among it. Labeling belongs to the session. */
 export class BoardApi extends Domain.Api("BoardApi", {
   model: Board,
   commands: ["ReportIssue", "CommentOnIssue"],
 }) {}
-
-/** Every handler the board needs. */
-export const BoardHandlers = Layer.mergeAll(IssueWorkLive, TranscriptsLive);

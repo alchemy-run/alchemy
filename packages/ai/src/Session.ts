@@ -45,6 +45,11 @@ export const SessionEntry = Schema.Struct({ seq: Schema.Number, item: SessionIte
 /** A transcript item and where it sits. `seq` grows with every item of the session. */
 export type SessionEntry = typeof SessionEntry.Type;
 
+/** Whether a session is working on a turn. */
+export const SessionStatus = Schema.Literals(["idle", "working"]);
+/** Whether a session is working on a turn. */
+export type SessionStatus = typeof SessionStatus.Type;
+
 /**
  * What a session reports. `status` says whether it is working and what is
  * queued: it is the first event of every `events` stream, and is sent again
@@ -53,7 +58,7 @@ export type SessionEntry = typeof SessionEntry.Type;
 export const SessionEvent = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("status"),
-    status: Schema.Literals(["idle", "working"]),
+    status: SessionStatus,
     queued: Schema.Array(QueuedMessage),
   }),
   Schema.Struct({ type: Schema.Literal("item"), seq: Schema.Number, item: SessionItem }),

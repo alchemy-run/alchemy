@@ -228,6 +228,8 @@ A [projection](/domain/projection) writes events into a store you own, such as a
 
 A [policy](/domain/policy) is a business rule. It acts on each new event once, through commands and external systems, and never replays.
 
+An [AI process](/ai/domain) is a member too, listed in `processes`. A policy or a saga hands one of its sessions work by key, the model's platform hosts each session, and the model records each process as a view named after it, whose events carry what its sessions do.
+
 A [query](/domain/query) is not a consumer: it serves what a projection wrote to clients, across keys, guarded by middleware and rejections like the model's other reads, with a handler that checks the caller.
 
 ## Declare the model
@@ -295,6 +297,29 @@ export class Bank extends Domain.Model("Bank", {
 
 export const BankHandlers = MainAccountProvisioningLive;
 ```
+
+## Break an import cycle
+
+Two files can need each other. An AI process's prose mentions the model's commands, and the model lists the process. Whichever file loads first reads the other's class before it exists, and fails with `Cannot access 'Bank' before initialization`.
+
+Give the props as a thunk to break the cycle. The thunk is read the first time the declaration is used, when both files have loaded:
+
+```typescript
+// src/Bank.model.ts
+export class Bank extends Domain.Model("Bank", () => ({
+  aggregates: [Account],
+  views: [AccountSummary],
+  processes: [Assistant],
+})) {}
+```
+
+Its type is the same as with the props given directly. What the thunk returns is checked as an object would be, though a mistake in it is reported on the whole thunk rather than on its line.
+
+A thunk is for a cycle only. Props given directly are checked as the file loads, so a mistake is reported at once. A thunk's mistake shows up the first time the declaration is used.
+
+Every declaration that lists other declarations takes a thunk: `Domain.Model`, `Domain.Aggregate`, `Domain.View`, `Domain.Projection`, `Domain.Stream`, `Domain.Policy`, `Domain.Saga`, `Domain.Query`, `Domain.Decision` and `Domain.Api`. Events, commands, rejections and rewrites do not, because each of those classes is its schema, made from its fields when it is declared. A field that refers back to its own class is a `Schema.suspend`.
+
+Break each cycle where it is read. A cycle runs through every file that reads a class as it loads. For a process whose prose mentions the model, that is the prose (`${() => Bank.DepositMoney}`), the model, and any view that lists the process in its `from`.
 
 ## Describe it
 

@@ -106,6 +106,18 @@ test(
 );
 
 test(
+  "a Worker asks a session and waits for its answer",
+  Effect.gen(function* () {
+    // The Worker holds a client: the session runs in an object of its own.
+    const asked = (yield* call("ask/greeting", {
+      body: "Do not label anything. Reply with the single word ready.",
+    })) as unknown as { readonly answer: string };
+    expect(asked.answer.toLowerCase()).toContain("ready");
+  }),
+  { tags, timeout: 180_000 },
+);
+
+test(
   "a front end follows the session through the board's Api alone",
   Effect.gen(function* () {
     const { url } = yield* stack;
@@ -114,11 +126,10 @@ test(
     const api = yield* BoardApi.clientWebSocket(`${url}/api`);
 
     // Following first: the transcript is empty, and every item arrives as it is recorded.
-    const following = yield* api.Transcript.events(issue).pipe(
+    const following = yield* api.Triage.events(issue).pipe(
       Stream.filter(Read.isEvent),
-      Stream.takeUntil(
-        ({ event }) => event.item.type === "assistant" && event.item.toolCalls.length === 0,
-      ),
+      Stream.flatMap(({ event }) => Stream.fromIterable(event.items)),
+      Stream.takeUntil(({ item }) => item.type === "assistant" && item.toolCalls.length === 0),
       Stream.runCollect,
       Effect.forkChild,
     );
@@ -126,10 +137,7 @@ test(
       { issueId: issue, title: "Search takes ten seconds to answer" },
       { commandId: `report:${issue}` },
     );
-    const items = Array.from(yield* Fiber.join(following)).map(({ event }) => ({
-      seq: event.seq,
-      item: event.item,
-    }));
+    const items = Array.from(yield* Fiber.join(following));
 
     expect(items[0]?.item).toEqual({ type: "user", text: `The issue is ${issue}.` });
     expect(JSON.stringify(items)).toContain("LabelIssue");
@@ -137,8 +145,8 @@ test(
     const { messages } = (yield* call(`session/${issue}`)) as unknown as { messages: string };
     expect(items).toEqual(JSON.parse(messages));
 
-    // Its status is a view, and settles on idle.
-    const status = yield* api.SessionStatus.get(issue).pipe(
+    // Where it stands is the view's state, and settles on idle.
+    const status = yield* api.Triage.get(issue).pipe(
       Effect.repeat({
         schedule: Schedule.spaced("1 second"),
         until: (status) => status?.status === "idle",
@@ -158,7 +166,7 @@ test(
     const api = yield* BoardApi.clientWebSocket(`${url}/api`);
     yield* call(`report/${issue}`, { title: "My upload disappears after I refresh" });
     // Reset it once the board shows it at work: what was recording in memory is gone.
-    yield* api.SessionStatus.get(issue).pipe(
+    yield* api.Triage.get(issue).pipe(
       Effect.repeat({
         schedule: Schedule.spaced("200 millis"),
         until: (status) => status?.status === "working",
@@ -169,12 +177,12 @@ test(
     yield* labeled(issue, "bug");
 
     const recorded = yield* Effect.gen(function* () {
-      const status = yield* api.SessionStatus.get(issue);
-      const { entries } = yield* api.Transcript.list(issue);
+      const status = yield* api.Triage.get(issue);
+      const { entries } = yield* api.Triage.list(issue, { take: 1000 });
       const { messages } = (yield* call(`session/${issue}`)) as unknown as { messages: string };
       return {
         status: status?.status,
-        board: JSON.stringify(entries.map(({ event }) => ({ seq: event.seq, item: event.item }))),
+        board: JSON.stringify(entries.flatMap(({ event }) => event.items)),
         harness: messages,
       };
     }).pipe(

@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import type * as Aggregate from "./Aggregate.ts";
 import type { Annotations } from "./Annotations.ts";
+import { memo, type Thunk } from "./Thunk.ts";
 
 /** The pure definition of a compaction. */
 export interface Definition<A extends Aggregate.Any> {
@@ -168,9 +169,10 @@ export class CompactionLossy extends Schema.TaggedError<CompactionLossy>()("Comp
  */
 export const make = <const Name extends string, A extends Aggregate.Any>(
   name: Name,
-  definition: Definition<A>,
+  definition: Thunk<Definition<A>>,
   annotations: Annotations = {},
 ): CompactionClass<Name, A> => {
+  const given = memo(definition);
   const Tag = Context.Service<CompactionKey<Name>, Implementation<A>>()(
     `alchemy/Domain/Compaction/${name}`,
   );
@@ -178,7 +180,9 @@ export const make = <const Name extends string, A extends Aggregate.Any>(
     static readonly kind = "Compaction" as const;
     static readonly annotations: Annotations = annotations;
     static readonly compactionName: Name = name;
-    static readonly definition = definition;
+    static get definition() {
+      return given();
+    }
     static toLayer<E, R>(build: Effect.Effect<Handler<A>, E, R>, options: Options = {}) {
       return Layer.effect(
         Tag,

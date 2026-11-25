@@ -1,18 +1,75 @@
+import * as AI from "@alchemy.run/ai";
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Option from "effect/Option";
-import BoardAgents, { BoardLive } from "./Agents.ts";
-import { BoardApi, CommentOnIssue, Issue, IssueDetail, ReportIssue } from "./Board.ts";
+import { Fast, FastLlama } from "../Processes.ts";
+import {
+  Board,
+  BoardApi,
+  CommentOnIssue,
+  Issue,
+  IssueDetail,
+  IssueWorkLive,
+  Labeler,
+  ReportIssue,
+} from "./Board.ts";
 import { IssueId } from "./Issue.id.ts";
+import { Triage } from "./Triage.ts";
+import { TriageLive } from "./TriageProse.ts";
+
+/** What a Triage session runs with: Pi, in its object's own storage, and a model. */
+const Agents = Layer.mergeAll(Pi.HarnessLive, AI.DefaultModel(Fast)).pipe(
+  Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, FastLlama)),
+);
+
+/** What `withdraw` is given to reset a session's object: see {@link Resettable}. */
+const RESET = "reset-this-object";
+
+/**
+ * Lets a test reset a session's object, as an eviction in the middle of its
+ * work does. Nothing outside an object can reset it, so the process is
+ * wrapped where it is built, inside the object: withdrawing {@link RESET}
+ * aborts it.
+ */
+const Resettable = Layer.effect(
+  Triage,
+  Effect.gen(function* () {
+    const triage = yield* Triage;
+    const state = yield* Effect.serviceOption(Cloudflare.DurableObjectState);
+    return {
+      ...triage,
+      get: (key: string) => {
+        const session = triage.get(key);
+        return {
+          ...session,
+          withdraw: (id: string) =>
+            id === RESET && Option.isSome(state)
+              ? state.value.abort("reset by a test")
+              : session.withdraw(id),
+        };
+      },
+    };
+  }),
+).pipe(Layer.provide(TriageLive.pipe(Layer.provide(Agents))));
+
+/** The board on Durable Objects: every member, and each Triage session, an object of this Worker. */
+const BoardLive = Board.layer(Layer.mergeAll(IssueWorkLive, Resettable)).pipe(
+  Layer.provide(DomainCloudflare.layerDurableObjects()),
+);
 
 /**
  * Stands in for a webhook: `POST /report/<issue>` and `POST /comment/<issue>`
- * become commands on the board, `POST /issue/<issue>` reads it, and
- * `POST /session/<issue>` reads the transcript of the issue's session.
+ * become commands on the board, `POST /issue/<issue>` reads it,
+ * `POST /session/<issue>` reads the transcript of the issue's session, and
+ * `POST /ask/<issue>` sends its session a message and waits for the answer.
  */
 export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
   "BoardWorker",
@@ -20,7 +77,7 @@ export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
   Effect.gen(function* () {
     const issues = yield* Issue;
     const details = yield* IssueDetail;
-    const agents = yield* BoardAgents;
+    const triage = yield* Triage;
     const api = yield* BoardApi;
 
     return {
@@ -60,19 +117,29 @@ export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
             ),
           ),
           Match.when("issue", () => Effect.map(details.get(Issue.ref(issueId)), Option.getOrNull)),
-          // What the issue's session was told and did, as its harness stores it.
+          // Ask a session and wait for its answer, from outside its object.
+          Match.when("ask", () =>
+            Effect.gen(function* () {
+              yield* triage.start(issueId, { as: Labeler.context({ name: "asker" }) });
+              const reply = yield* triage.get(issueId).prompt(body.body ?? "");
+              return { answer: reply.text };
+            }),
+          ),
           // The object is reset, so the call itself fails.
           Match.when("crash", () =>
-            agents
-              .getByName(issueId)
-              .crash()
+            triage
+              .get(issueId)
+              .withdraw(RESET)
               .pipe(
                 Effect.catchCause(() => Effect.void),
                 Effect.as({ ok: true as const }),
               ),
           ),
+          // What the issue's session was told and did, as its harness stores it.
           Match.when("session", () =>
-            Effect.map(agents.getByName(issueId).transcript(issueId), (messages) => ({ messages })),
+            Effect.map(triage.get(issueId).history({ take: 200 }), (page) => ({
+              messages: JSON.stringify(page.items),
+            })),
           ),
           Match.orElse(() => Effect.succeed(undefined)),
         );

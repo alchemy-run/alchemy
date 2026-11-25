@@ -1,3 +1,4 @@
+import * as AI from "@alchemy.run/ai";
 import * as Domain from "@alchemy.run/domain";
 import { expect, it } from "@effect/vitest";
 import { RuntimeContext } from "alchemy/RuntimeContext";
@@ -6,61 +7,40 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { Board } from "../src/Board/Board.model.ts";
-import { BoardHandlers } from "../src/Board/Handlers.ts";
 import { Issue } from "../src/Board/Issue.aggregate.ts";
-import type { IssueId } from "../src/Board/Issue.id.ts";
-import { IssueSession } from "../src/Board/IssueSession.aggregate.ts";
+import { IssueId } from "../src/Board/Issue.id.ts";
+import { IssueWorkLive } from "../src/Board/IssueWork.policy.ts";
 import { LabelIssue } from "../src/Board/LabelIssue.command.ts";
-import { RecordActivity } from "../src/Board/RecordActivity.command.ts";
 import { started } from "../src/Board/Said.ts";
-import { Triager } from "../src/Board/Triager.external.ts";
+import { Triage } from "../src/Board/Triage.process.ts";
 import { WebApi } from "../src/Board/WebApi.api.ts";
 import { listOf, Message, threadOf } from "../web/src/Board.ts";
 import { open } from "./App.ts";
 
 /**
- * Stands in for the issue's Durable Object and its agent: what the board
- * asks of the triager is played as a session that reads the message, labels
- * the issue and reports each step, the way `src/Agents.ts` records one.
+ * Triage, played by code in place of a model: a session reads its message,
+ * labels the issue and answers. The board hosts it as it hosts the real one,
+ * and records what it does the same way.
  */
-const agent: { play: (issue: IssueId, text: string) => Effect.Effect<void> } = {
-  play: () => Effect.void,
-};
+const TriagePlayed = AI.scripted(
+  Triage,
+  Effect.gen(function* () {
+    const issues = yield* Issue;
+    return Effect.fn(function* ({ key, text }: AI.Turn) {
+      const label = text.includes("question") ? "question" : "bug";
+      yield* issues.send(new LabelIssue({ issueId: IssueId.make(key), label }));
+      return `Labeled ${label}.`;
+    }, Effect.orDie);
+  }),
+);
 
-const Hosted = Board.layer(BoardHandlers).pipe(
-  Layer.provideMerge(
-    Triager.toLayer(
-      Effect.succeed({
-        start: ({ issue }) => Effect.suspend(() => agent.play(issue, started(issue))),
-        tell: ({ issue, text }) => Effect.suspend(() => agent.play(issue, text)),
-      }),
-    ),
-  ),
+const Hosted = Board.layer(Layer.mergeAll(IssueWorkLive, TriagePlayed)).pipe(
   Layer.provideMerge(Domain.InMemory),
   Layer.provideMerge(SecureRandom.layerWebCrypto),
 );
 
 /** The page's client, with the board in this process instead of over a network. */
 const Live = WebApi.layerClientInProcess.pipe(Layer.provideMerge(Hosted));
-
-const playing = Effect.gen(function* () {
-  const sessions = yield* IssueSession;
-  const issues = yield* Issue;
-  const seqs = new Map<string, number>();
-  agent.play = (issue, text) =>
-    Effect.gen(function* () {
-      const seq = seqs.get(issue) ?? 0;
-      seqs.set(issue, seq + 2);
-      const record = (status: "idle" | "working", items: RecordActivity["items"]) =>
-        sessions.send(new RecordActivity({ issueId: issue, status, queued: [], items }));
-      yield* record("working", [{ seq: seq + 1, item: { type: "user", text } }]);
-      const label = text.includes("question") ? "question" : "bug";
-      yield* issues.send(new LabelIssue({ issueId: issue, label }));
-      yield* record("idle", [
-        { seq: seq + 2, item: { type: "assistant", text: `Labeled ${label}.`, toolCalls: [] } },
-      ]);
-    }).pipe(Effect.orDie, Effect.forkDetach, Effect.asVoid);
-});
 
 const report = (page: Effect.Success<ReturnType<typeof open>>, title: string) =>
   Effect.gen(function* () {
@@ -77,7 +57,6 @@ const report = (page: Effect.Success<ReturnType<typeof open>>, title: string) =>
 
 it.live("the page reports an issue and follows its agent to the end", () =>
   Effect.gen(function* () {
-    yield* playing;
     const page = yield* open({ issues: [], issueId: Option.none(), page: "a" });
     const empty = yield* page.until((model) => model.listed);
     expect(empty.issues).toEqual([]);
@@ -120,7 +99,6 @@ it.live("the page reports an issue and follows its agent to the end", () =>
 
 it.live("a reply reaches the agent, and the page shows what it did with it", () =>
   Effect.gen(function* () {
-    yield* playing;
     const page = yield* open({ issues: [], issueId: Option.none(), page: "b" });
     yield* report(page, "Dark mode");
 
@@ -141,7 +119,6 @@ it.live("a reply reaches the agent, and the page shows what it did with it", () 
 
 it.live("the board lists every issue, and clicking one opens its transcript", () =>
   Effect.gen(function* () {
-    yield* playing;
     const page = yield* open({ issues: [], issueId: Option.none(), page: "c" });
     const one = Option.getOrThrow((yield* report(page, "First")).selected);
     const two = Option.getOrThrow((yield* report(page, "Second")).selected);
@@ -165,7 +142,6 @@ it.live("the board lists every issue, and clicking one opens its transcript", ()
 
 it.live("a refreshed page resumes: it opens the issue its address names", () =>
   Effect.gen(function* () {
-    yield* playing;
     const first = yield* open({ issues: [], issueId: Option.none(), page: "d" });
     const issueId = Option.getOrThrow((yield* report(first, "Crash on save")).selected);
 

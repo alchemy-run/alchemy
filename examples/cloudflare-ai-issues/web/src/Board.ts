@@ -1,4 +1,4 @@
-import { QueuedMessage, SessionEntry } from "@alchemy.run/ai/Session";
+import { QueuedMessage, SessionEntry, SessionStatus } from "@alchemy.run/ai/Session";
 import type * as Domain from "@alchemy.run/domain";
 import * as DomainFoldkit from "@alchemy.run/domain/Foldkit";
 import * as Effect from "effect/Effect";
@@ -11,7 +11,6 @@ import { modifyFields } from "foldkit/struct";
 import { IssueId } from "../../src/Board/Issue.id.ts";
 import { ALL } from "../../src/Board/IssueList.view.ts";
 import { Label } from "../../src/Board/LabelIssue.command.ts";
-import { Status } from "../../src/Board/RecordActivity.command.ts";
 import { replied } from "../../src/Board/Said.ts";
 import { WebApi } from "../../src/Board/WebApi.api.ts";
 import { issueIn, urlOf } from "./Location.ts";
@@ -48,7 +47,7 @@ export const Thread = Schema.Struct({
     Schema.Struct({ title: Schema.String, body: Schema.String, label: Schema.NullOr(Label) }),
   ),
   /** Whether its agent is working, and what is queued for it. */
-  status: Status,
+  status: SessionStatus,
   queued: Schema.Array(QueuedMessage),
   /** The agent's transcript so far, and where to resume reading it. */
   items: Schema.Array(SessionEntry),
@@ -181,8 +180,8 @@ export const Message = defineMessageUnion({
   ReceivedBoardResult: { result: BoardClient.Message },
   ReceivedIssues: { issues: Schema.Array(Listed) },
   ReceivedIssue: { issueId: IssueId, detail: Thread.fields.detail },
-  ReceivedStatus: { issueId: IssueId, status: Status, queued: Schema.Array(QueuedMessage) },
-  ReceivedItem: { issueId: IssueId, entry: SessionEntry, cursor: Schema.Number },
+  ReceivedStatus: { issueId: IssueId, status: SessionStatus, queued: Schema.Array(QueuedMessage) },
+  ReceivedItems: { issueId: IssueId, entries: Schema.Array(SessionEntry), cursor: Schema.Number },
   CaughtUpTranscript: { issueId: IssueId, cursor: Schema.Number },
   FailedRead: { reason: Schema.String },
 });
@@ -393,18 +392,21 @@ export const update = (model: Model, message: Message) =>
         status,
       })),
     }),
-    ReceivedItem: ({ issueId, entry, cursor }) => {
-      const read = thread(model, issueId, (known) =>
-        known.items.some((item) => item.seq === entry.seq)
-          ? known
-          : { ...known, items: [...known.items, entry], cursor: Option.some(cursor) },
-      );
+    ReceivedItems: ({ issueId, entries, cursor }) => {
+      const read = thread(model, issueId, (known) => ({
+        ...known,
+        items: [
+          ...known.items,
+          ...entries.filter((entry) => !known.items.some((item) => item.seq === entry.seq)),
+        ],
+        cursor: Option.some(cursor),
+      }));
       // The agent has it: the page's own copy of the reply, or of the issue, is done.
-      const text = entry.item.type === "user" ? entry.item.text : undefined;
+      const texts = entries.flatMap(({ item }) => (item.type === "user" ? [item.text] : []));
       const arrived = read.pending.find(
         (pending) =>
           pending.issueId === issueId &&
-          (pending.kind === "issue" ? text !== undefined : text === replied(pending.text)),
+          (pending.kind === "issue" ? texts.length > 0 : texts.includes(replied(pending.text))),
       );
       return {
         model:
@@ -498,28 +500,31 @@ export const subscriptions = Subscription.make<Model, Message, Board>()((entry) 
     onFailure: failed,
     onDefect: defect,
   }),
-  status: BoardClient.SessionStatus.watch({
+  // The board's Triage view: its state is where the session stands, and its
+  // events carry the transcript.
+  status: BoardClient.Triage.watch({
     key: open,
     isEnabled: isOpen,
     toMessage: ({ state }, issueId): Message =>
       Message.ReceivedStatus({
-        issueId,
+        issueId: IssueId.make(issueId),
         ...Option.getOrElse(state, () => ({ status: "idle" as const, queued: [] })),
       }),
     onFailure: failed,
     onDefect: defect,
   }),
-  transcript: BoardClient.Transcript.events({
+  transcript: BoardClient.Triage.events({
     key: open,
     isEnabled: isOpen,
     cursor: (model) => threadOf(model).cursor,
     onEntry: ({ event, envelope }): Message =>
-      Message.ReceivedItem({
+      Message.ReceivedItems({
         issueId: IssueId.make(envelope.id),
-        entry: { seq: event.seq, item: event.item },
+        entries: event.items,
         cursor: envelope.seq,
       }),
-    onCaughtUp: (cursor, issueId): Message => Message.CaughtUpTranscript({ issueId, cursor }),
+    onCaughtUp: (cursor, issueId): Message =>
+      Message.CaughtUpTranscript({ issueId: IssueId.make(issueId), cursor }),
     onFailure: failed,
     onDefect: defect,
   }),

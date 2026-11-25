@@ -1,66 +1,27 @@
 # Serving agents to a front end
 
-A page talks to one thing: an Api over the Domain model. So a session's status and transcript have to be in the model. The Durable Object that runs the session records them there, and the page reads them like any view or stream.
+A page talks to one thing: an Api over the Domain model. The model records each process it lists as a view named after it, so a session's status and transcript are already in the model, and the page reads them like any view.
 
 For the model's blocks (aggregate, view, stream, projection, Api), use the `alchemy-domain` skill's `references/building-blocks.md`. For the page (client, Commands, Subscriptions, stories, hosting), use its `references/frontend.md`. This file covers only what is specific to sessions.
 
-## Record a session as a command
+## Follow a session through the process's view
 
-One command carries a batch: the session's status, its queue and the items it stored. The Schemas are in `@alchemy.run/ai/Session`, which a browser can bundle.
+Listing `Triage` in `processes` is all the recording there is. The model keeps a view named `Triage`, keyed by the session, so key sessions like the thing they work on. Its state is `{ status, queued }`; each event, `TriageActivity`, is a batch: the status, the queue and the items stored since the last one. The session's object sends each batch, the model drops items it already has, and a job on the object's alarm keeps it recording through an eviction.
 
-```typescript
-// src/Board/RecordActivity.command.ts
-export class ActivityRecorded extends Domain.Event("ActivityRecorded", {
-  status: Status,
-  queued: Schema.Array(QueuedMessage),
-  items: Schema.Array(SessionEntry),
-}) {}
+A page reads it with `BoardClient.Triage.watch` (the status) and `BoardClient.Triage.events` (the transcript, resumed from a cursor). The value Schemas (`SessionEntry`, `QueuedMessage`, `SessionStatus`) are in `@alchemy.run/ai/Session`; a browser can bundle them.
 
-export class RecordActivity extends Domain.Command("RecordActivity", {
-  input: { issueId: IssueId, status: Status, queued: Schema.Array(QueuedMessage), items: Schema.Array(SessionEntry) },
-  events: [ActivityRecorded],
-  rejects: [],
-}) {}
-```
-
-Its aggregate keeps the last `seq` recorded and drops items at or below it, so a batch sent twice records nothing twice. Key it like the thing the session works on.
-
-More: [Record what the session does](https://alchemy.run/ai/front-end#record-what-the-session-does).
-
-## Read it as a view and a stream
-
-- The status and the queue are a **view** over `ActivityRecorded`.
-- The transcript is a **stream** with one entry per item, appended by a **projection**.
-- A list of everything with an agent (the page's sidebar) is a view over both aggregates, kept under one key.
+A list of everything with an agent (the page's sidebar) is a view that lists the process in `from` beside the aggregates, kept under one key. It is a thunk, `Domain.View("IssueList", () => ({ from: [Issue, Triage], ... }))`, because the process's prose mentions the model that lists the view.
 
 Whole items only: a session reports no token deltas.
 
-More: [Show the status as a view](https://alchemy.run/ai/front-end#show-the-status-as-a-view), [Keep the transcript as a stream](https://alchemy.run/ai/front-end#keep-the-transcript-as-a-stream), [List every issue](https://alchemy.run/ai/front-end#list-every-issue).
-
-## Record from the Durable Object, durably
-
-Read `session.events({ after })` from the last recorded `seq`, batch for 100 ms, and send the command. That loop is in memory and ends when the object is evicted, so pair it with a job on the object's alarm that records what is missing and comes back until the session is idle.
-
-```typescript
-const onRecord: Alchemy.Callback<IssueId> = yield* Alchemy.makeCallback(
-  "record",
-  Effect.fn(function* (issue: IssueId) {
-    yield* follow(issue);                              // the live loop, once per instance
-    if (!(yield* catchUp(issue))) yield* again(issue); // history after the last seq, then reschedule
-  }, Effect.orDie),
-);
-```
-
-Provide `Cloudflare.DurableObjectCallbacks` to the object's inner Effect. Start recording wherever the object gives the session a message.
-
-More: [Record from the session's object](https://alchemy.run/ai/front-end#record-from-the-sessions-object), [Keep recording through an eviction](https://alchemy.run/ai/front-end#keep-recording-through-an-eviction).
+More: [Follow the session through the model](https://alchemy.run/ai/front-end#follow-the-session-through-the-model), [List every issue](https://alchemy.run/ai/front-end#list-every-issue).
 
 ## Two Apis: one verified, one for the page
 
-- The page's Api lists only the commands a person may send (`ReportIssue`, `CommentOnIssue`) and serves every view and stream. Leave out the recording command and the commands only an agent sends.
-- Keep the Api you pass to `Verify` to the commands that change the business. Recording is not a business rule, and including it only widens the search.
+- The page's Api lists only the commands a person may send (`ReportIssue`, `CommentOnIssue`) and serves every view, the process's among them. Leave out the commands only an agent sends; the recording command belongs to no Api.
+- Keep the Api you pass to `Verify` to the commands that change the business.
 
-Acting on a session is a command too: a policy passes it to the session through the model's `Domain.ExternalSystem`. A page never calls `send` or `steer`.
+Acting on a session is a command too: a policy passes it to the session with the process's client. A page never calls `send` or `steer`.
 
 More: [Serve what the front end may use](https://alchemy.run/ai/front-end#serve-what-the-front-end-may-use), [Act on the session with commands](https://alchemy.run/ai/front-end#act-on-the-session-with-commands).
 

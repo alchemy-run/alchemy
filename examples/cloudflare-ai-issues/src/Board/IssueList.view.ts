@@ -4,8 +4,8 @@ import * as Optic from "effect/Optic";
 import * as Schema from "effect/Schema";
 import { Issue } from "./Issue.aggregate.ts";
 import { IssueId } from "./Issue.id.ts";
-import { IssueSession } from "./IssueSession.aggregate.ts";
 import { Label } from "./LabelIssue.command.ts";
+import { Triage } from "./Triage.process.ts";
 
 /** The one key the list is kept under. */
 export const ALL = "all";
@@ -37,16 +37,17 @@ const without = (id: IssueId) => (ids: ReadonlyArray<IssueId>) => ids.filter((ea
 /**
  * Every issue of the board, newest first, with whether its agent is working:
  * what the page's sidebar shows. It is one entry, which suits a board of a
- * few hundred issues.
+ * few hundred issues. It follows Triage, whose prose mentions the board, so
+ * its definition is a thunk.
  */
-export class IssueList extends Domain.View("IssueList", {
-  from: [Issue, IssueSession],
+export class IssueList extends Domain.View("IssueList", () => ({
+  from: [Issue, Triage],
   key: Schema.String,
   keyOf: {
     IssueReported: () => ALL,
     IssueLabeled: () => ALL,
     IssueCommented: () => ALL,
-    ActivityRecorded: () => ALL,
+    TriageActivity: () => ALL,
   },
   state: State,
   initial: { order: [], issues: {}, working: [] },
@@ -65,11 +66,12 @@ export class IssueList extends Domain.View("IssueList", {
       issue(source.id)
         .key("replies")
         .modify((replies) => replies + 1)(state),
-    ActivityRecorded: (state, event, { source }) =>
+    // A Triage session's key is its issue.
+    TriageActivity: (state, event, { source }) =>
       working.modify((ids) =>
         event.status === "working"
-          ? [...without(source.id)(ids), source.id]
-          : without(source.id)(ids),
+          ? [...without(IssueId.make(source.id))(ids), IssueId.make(source.id)]
+          : without(IssueId.make(source.id))(ids),
       )(state),
   },
-}) {}
+})) {}

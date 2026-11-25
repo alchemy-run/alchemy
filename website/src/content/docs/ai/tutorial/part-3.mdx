@@ -1,13 +1,13 @@
 ---
 title: "Part 3: Events start the work"
-description: Let the board decide when a session starts. A Domain policy asks for each reported issue to be looked after, the issue's Durable Object answers, and GitHub's events become commands.
+description: Let the board decide when a session starts. A Domain policy hands each reported issue to its Triage session and passes replies on, and GitHub's events become commands.
 sidebar:
   order: 3
 ---
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-In [Part 2](/ai/tutorial/part-2) the Worker reported an issue and then started its session by hand. This part moves that decision into the board: a policy asks for an issue to be looked after whenever one is reported, and passes on every reply. The Worker then only turns GitHub's events into commands.
+In [Part 2](/ai/tutorial/part-2) the Worker reported an issue and then sent its session a message by hand. This part moves that decision into the board: a policy hands an issue to its session whenever one is reported, and passes on every reply. The Worker then only turns GitHub's events into commands.
 
 ## Install
 
@@ -73,26 +73,9 @@ import { Label } from "./LabelIssue.command.ts";
     },
 ```
 
-## Say what the board asks for
+## Hand a reported issue to its session
 
-The board should not know that a model does this work. It declares what it asks of whatever does: start on an issue, and pass on what was said about it.
-
-```typescript title="src/Board/Triager.external.ts"
-import * as Domain from "@alchemy.run/domain";
-import * as Schema from "effect/Schema";
-import { IssueId } from "./Issue.id.ts";
-
-export class Triager extends Domain.ExternalSystem("Triager", {
-  start: { args: { issue: IssueId } },
-  tell: { args: { issue: IssueId, text: Schema.String, id: Schema.String } },
-}) {}
-```
-
-See [External systems](/domain/external-system).
-
-## Ask for it when an issue is reported
-
-A policy reacts to events. `IssueWork` hands each reported issue to the triager:
+A policy reacts to events. Inside it, `yield* Triage` gives the process's client, the same one the Worker had, and `get` reaches the session of the issue:
 
 ```typescript title="src/Board/IssueWork.policy.ts"
 import * as Domain from "@alchemy.run/domain";
@@ -100,7 +83,7 @@ import * as Effect from "effect/Effect";
 import * as Match from "effect/Match";
 import { Issue } from "./Issue.aggregate.ts";
 import { IssueReported } from "./ReportIssue.command.ts";
-import { Triager } from "./Triager.external.ts";
+import { Triage } from "./Triage.process.ts";
 
 export class IssueWork extends Domain.Policy("IssueWork", {
   from: Issue,
@@ -109,15 +92,19 @@ export class IssueWork extends Domain.Policy("IssueWork", {
 
 export const IssueWorkLive = IssueWork.toLayer(
   Effect.gen(function* () {
-    const triager = yield* Triager;
+    const triage = yield* Triage;
     return Effect.fn(function* ({ source, event }) {
+      const session = triage.get(source.id);
       yield* Match.valueTags(event, {
-        IssueReported: () => triager.start({ issue: source.id }),
-      });
+        IssueReported: () =>
+          session.send(`The issue is ${source.id}.`, { requestId: "start" }),
+      }).pipe(Effect.orDie);
     });
   }),
 );
 ```
+
+`send` returns once the message is stored, so the policy never waits for a model. A policy can run more than once for one event, and `requestId` keeps the message from reaching the session twice.
 
 ## Pass replies on
 
@@ -129,14 +116,14 @@ import { Issue } from "./Issue.aggregate.ts";
 -  on: [IssueReported],
 +  on: [IssueReported, IssueCommented],
 
-        IssueReported: () => triager.start({ issue: source.id }),
+          session.send(`The issue is ${source.id}.`, { requestId: "start" }),
 +        IssueCommented: ({ body, commentId }) =>
-+          triager.tell({ issue: source.id, text: `A reply on the issue: ${body}`, id: commentId }),
++          session.send(`A reply on the issue: ${body}`, { requestId: commentId }),
 ```
 
-The reply's id goes with it, so the triager can tell a reply it has already seen.
+The reply's id is the message's, so a reply delivered twice is read once.
 
-## Add the policy to the model
+## Add the policy to the board
 
 ```diff lang="typescript" title="src/Board/Board.model.ts"
 import { IssueDetail } from "./IssueDetail.view.ts";
@@ -144,131 +131,37 @@ import { IssueDetail } from "./IssueDetail.view.ts";
 
   views: [IssueDetail],
 +  policies: [IssueWork],
+  processes: [Triage],
 ```
 
-## Say what an issue's object answers
+## Give the board its policy
 
-The triager will be the Durable Object of each issue. Write down what one answers, and what the objects are, as plain types:
+The policy's Layer goes beside the prose, in what `Board.layer` takes:
 
-```diff lang="typescript" title="src/Agents.ts"
-import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
-+import type { RuntimeContext } from "alchemy/RuntimeContext";
-import * as Effect from "effect/Effect";
-
-import { Triage } from "./Triage.process.ts";
-+
-+interface Agent {
-+  readonly start: (issue: IssueId) => Effect.Effect<void, never, RuntimeContext>;
-+  readonly tell: (
-+    issue: IssueId,
-+    text: string,
-+    id: string,
-+  ) => Effect.Effect<void, never, RuntimeContext>;
-+}
-+
-+interface Agents {
-+  readonly getByName: (issue: string) => Agent;
-+}
-```
-
-## Host the board over the objects
-
-The board is hosted in two places: in the Worker, and in each object, so a session can reach it. Both need a triager, and both have a handle on the objects. `boardOver` takes that handle. It replaces `src/Board.ts`, which you can delete.
-
-```diff lang="typescript" title="src/Agents.ts"
-import * as Cloudflare from "@alchemy.run/cloudflare";
-+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
-import * as Pi from "@alchemy.run/pi";
-
--import { BoardLive } from "./Board.ts";
-+import { Board } from "./Board/Board.model.ts";
-import type { IssueId } from "./Board/Issue.id.ts";
+```diff lang="typescript" title="src/Board.ts"
+import { Board } from "./Board/Board.model.ts";
 +import { IssueWorkLive } from "./Board/IssueWork.policy.ts";
-+import { Triager } from "./Board/Triager.external.ts";
+import { TriageLive } from "./Board/Triage.process.ts";
 
-interface Agents {
-  readonly getByName: (issue: string) => Agent;
-}
+-export const BoardLive = Board.layer(TriageLive.pipe(Layer.provide(Agents))).pipe(
++const Handlers = Layer.mergeAll(IssueWorkLive, TriageLive.pipe(Layer.provide(Agents)));
 +
-+const boardOver = <R>(agents: Effect.Effect<Agents, never, R>) =>
-+  Board.layer(IssueWorkLive).pipe(
-+    Layer.provide(
-+      Layer.mergeAll(
-+        DomainCloudflare.layerDurableObjects(),
-+        Triager.toLayer(
-+          Effect.map(agents, (agents) => ({
-+            start: ({ issue }) => agents.getByName(issue).start(issue),
-+            tell: ({ issue, text, id }) => agents.getByName(issue).tell(issue, text, id),
-+          })),
-+        ),
-+      ),
-+    ),
-+  );
-```
-
-`Triager.toLayer` is the adapter: each thing the board asks becomes a call to the object named after the issue.
-
-## Give an object the board
-
-Inside an object, the handle on the objects is its own namespace:
-
-```diff lang="typescript" title="src/Agents.ts"
-const HarnessLive = Pi.HarnessLive.pipe(Layer.provide(PiCloudflare.DurableObjectStorage));
-
--const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), BoardLive).pipe(
-+const own = Effect.map(
-+  Cloudflare.DurableObjectScope,
-+  (self) => self as Cloudflare.DurableObject<Agent>,
-+);
-+
-+const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), boardOver(own)).pipe(
-  Layer.provide(SmartLlama),
++export const BoardLive = Board.layer(Handlers).pipe(
+  Layer.provide(DomainCloudflare.layerDurableObjects()),
 );
 ```
 
-## Answer the board
-
-The object answers `start` and `tell`:
-
-```diff lang="typescript" title="src/Agents.ts"
-export default class IssueAgents extends Cloudflare.DurableObject<IssueAgents>()(
-    return Effect.succeed({
--      start: (issue: IssueId) =>
-+      start: (issue) =>
-        triage
-          .get(issue)
-          .send(`The issue is ${issue}.`, { requestId: "start" })
-          .pipe(Effect.orDie),
--    });
-+      tell: (issue, text, id) =>
-+        triage.get(issue).send(text, { requestId: id }).pipe(Effect.orDie),
-+    } satisfies Agent);
-```
-
-`send` returns once the message is stored, so the policy never waits for a model. `requestId` keeps a message from reaching the session twice: a policy can run more than once for one event.
-
-Using a session requires the runtime context, which is why `Agent` says so. A policy's handler and an external system's operations carry the same requirement, so the call type-checks all the way from the board to the session.
-
-## Export the board for the Worker
-
-Outside the objects, the handle on them is the class:
-
-```diff lang="typescript" title="src/Agents.ts"
-  }).pipe(Effect.provide(Live)),
-) {}
-+
-+export const BoardLive = boardOver(IssueAgents);
-```
+The policy and the session each run in an object of their own. The policy's call to `session.send` is a call from one to the other, and neither file says so.
 
 ## Tell the session about replies
 
-```diff lang="typescript" title="src/Triage.process.ts"
-  ${Board.LabelIssue}: bug when something is broken, feature when something
+```diff lang="typescript" title="src/Board/Triage.process.ts"
+  ${() => Board.LabelIssue}: bug when something is broken, feature when something
   new is asked for, question otherwise.
 +
-+  Later messages are replies on the issue. Send ${Board.LabelIssue} again
++  Later messages are replies on the issue. Send ${() => Board.LabelIssue} again
 +  when a reply changes what kind of issue it is.
-` {}
+`;
 ```
 
 ## Declare the repository
@@ -351,7 +244,7 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { BoardLive } from "./Agents.ts";
+import { BoardLive } from "./Board.ts";
 import { Issue } from "./Board/Issue.aggregate.ts";
 import { IssueId } from "./Board/Issue.id.ts";
 import { IssueDetail } from "./Board/IssueDetail.view.ts";
@@ -425,8 +318,8 @@ Reply on the issue that it was your own mistake, and the label changes to `quest
 
 ## What you have
 
-- A board that says what it asks for, and a policy that asks.
-- An object for each issue that answers, by starting its session or sending it a message.
+- A policy that hands each issue to its session, and passes replies on.
+- A board whose members reach each other by name: the policy holds the process's client.
 - GitHub's events as commands, with no knowledge of processes.
 
 The session labels an issue it has never read the code for. [Part 4](/ai/tutorial/part-4) gives it the repository and lets it answer.

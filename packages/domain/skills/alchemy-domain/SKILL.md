@@ -39,7 +39,7 @@ Read the requirements as a story of facts, and name each kind of thing you find:
 - A record with periods the business names (months, statements, matches): an instance per period, with the period in the id. No new block.
 - An instance's log grows without end and has no periods (a chat room, a device): a **Compaction**.
 - Something outside the model you call (fraud scoring, payments): an **External System**.
-- Work a language model does (triage an issue, answer a customer): an **External System** the model calls, implemented by an AI process. Use the **`alchemy-ai` skill** (`packages/ai/skills/alchemy-ai`, or https://alchemy.run/ai) for the process, its tools and where it runs. The model never imports a process.
+- Work a language model does (triage an issue, answer a customer): an **AI process**, listed in the model's `processes`. A policy or a saga hands one of its sessions work with `yield* Triage`, the model's platform hosts each session, and the model records each process as a view named after it, which other views follow by listing the process in `from`. Use the **`alchemy-ai` skill** (`packages/ai/skills/alchemy-ai`, or https://alchemy.run/ai) for the process itself.
 - Writes to a store outside the model (a ledger table): a **Projection**. An ordered, readable log per key (account cards): a **Stream** that a projection appends to.
 - A question across keys, answered from that store (an account's ledger, paged; large withdrawals across all accounts, largest first): a **Query**. Never a hand-written route.
 - Who can do and see what: an **Api** listing commands and reads, with **middleware** (sessions, MFA) and each block authorizing itself: a command in `decide`, a view or stream in its Layer's `validate`, a query in its handler.
@@ -58,6 +58,7 @@ More: [What is Domain-Driven Design?](https://alchemy.run/domain/what-is-ddd), [
 - **Folders are subdomains** (`Account/`, `Transfer/`). The model, Apis, middleware and request context sit at the package root.
 - **The domain package imports only `@alchemy.run/domain` and `effect`.** Cloudflare, Stripe, databases and HTTP session handling belong to the server package.
 - **One domain package per model (bounded context).** A second model is a second domain package; one server can host several.
+- **Props are given directly, and as a thunk only to break an import cycle.** When two files need each other's classes as they load (an AI process's prose mentions the model, and the model lists the process), give the props as `() => ({ ... })`: `Domain.Model`, `Domain.View`, `Domain.Aggregate`, `Domain.Projection`, `Domain.Stream`, `Domain.Policy`, `Domain.Saga`, `Domain.Query`, `Domain.Decision` and `Domain.Api` take one, with the same type. Events, commands and rejections are schemas and never do. More: [Break an import cycle](https://alchemy.run/domain/model#break-an-import-cycle).
 
 More: [Project layout](https://alchemy.run/domain/project-layout).
 

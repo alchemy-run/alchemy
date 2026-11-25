@@ -11,6 +11,7 @@ import * as Aggregate from "../../Aggregate.ts";
 import type * as Decision from "../../Decision.ts";
 import * as ExternalSystem from "../../ExternalSystem.ts";
 import * as Key from "../../Key.ts";
+import { HostedTypeId } from "../../Process.ts";
 import * as Check from "../../Prove/internal/Check.ts";
 import * as Decide from "../../Prove/internal/Decide.ts";
 import * as Induction from "../../Prove/internal/Induction.ts";
@@ -285,6 +286,8 @@ export interface Options {
 /** A model, as far as the explorer reads it. */
 export interface ModelLike {
   readonly modelName: string;
+  /** Its own aggregates: what it records of a process is left out. */
+  readonly aggregates?: ReadonlyArray<Aggregate.Any>;
   readonly definitions: {
     readonly aggregates: ReadonlyArray<Aggregate.Any>;
     readonly decisions?: ReadonlyArray<Decision.Any>;
@@ -669,6 +672,10 @@ const textOf = (value: V | undefined): string | undefined =>
       ? value.term.text
       : undefined;
 
+/** Whether a yielded service is a process a model hosts. */
+const isProcess = (host: unknown): host is { readonly processName: string } =>
+  typeof host === "function" && HostedTypeId in host;
+
 const walk = (node: unknown, visit: (node: Node) => void): void => {
   if (Array.isArray(node)) {
     for (const item of node) walk(item, visit);
@@ -715,6 +722,10 @@ export const locate = Effect.fn(function* (
   const missing: Array<string> = [];
   const unread: Array<string> = [];
   for (const cls of model.definitions.aggregates) {
+    // The aggregate a model keeps for a process's sessions is not among its
+    // own: only a session's object sends its command, and no Api reaches
+    // it, so the explorer leaves it as it starts.
+    if (model.aggregates !== undefined && !model.aggregates.includes(cls)) continue;
     const module = modules.find(
       (m) =>
         Object.values(m.exports).includes(cls) &&
@@ -1711,6 +1722,32 @@ export const search = Effect.fn(function* (
         ? Effect.succeed(value)
         : Effect.fail(new Value.Rejected({ rejection: value }));
     };
+    /**
+     * A process's client. What a session does with a message is the model's
+     * to say, not the caller's: the commands it may send are sent through the
+     * Apis like anyone's, so a call to a session changes nothing by itself.
+     */
+    const processes = new Map<unknown, V>();
+    const processOf = (cls: { readonly processName: string }): V => {
+      const told = (method: string) =>
+        native(`${cls.processName}.${method}`, () =>
+          Effect.succeed<V>({ _tag: "Effect", run: Effect.succeed<V>({ _tag: "Undef" }) }),
+        );
+      const session = Value.obj({
+        send: told("send"),
+        steer: told("steer"),
+        withdraw: told("withdraw"),
+        interrupt: { _tag: "Effect", run: Effect.succeed<V>({ _tag: "Undef" }) },
+      });
+      const made =
+        processes.get(cls) ??
+        Value.obj({
+          start: told("start"),
+          get: native(`${cls.processName}.get`, () => Effect.succeed(session)),
+        });
+      processes.set(cls, made);
+      return made;
+    };
     const systems = new Map<unknown, V>();
     const systemOf = (cls: SystemClass): V => {
       const made =
@@ -2402,6 +2439,7 @@ export const search = Effect.fn(function* (
         });
       const saga = sagaClients.get(host);
       if (saga) return saga;
+      if (isProcess(host)) return processOf(host);
       const kind =
         typeof host === "function" ? (host as { readonly kind?: unknown }).kind : undefined;
       return kind === "Saga"

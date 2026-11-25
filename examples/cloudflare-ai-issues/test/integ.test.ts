@@ -59,13 +59,7 @@ test(
     );
     const code = yield* client.get(`${app}${script}`).pipe(Effect.flatMap((r) => r.text));
     // The build is the page: it names the reads and the commands it uses.
-    for (const name of [
-      "IssueList",
-      "SessionStatus",
-      "Transcript",
-      "ReportIssue",
-      "CommentOnIssue",
-    ]) {
+    for (const name of ["IssueList", "Triage", "ReportIssue", "CommentOnIssue"]) {
       expect(code).toContain(name);
     }
   }).pipe(Effect.provide(FetchHttpClient.layer)),

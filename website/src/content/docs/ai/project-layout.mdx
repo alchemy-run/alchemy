@@ -71,11 +71,10 @@ A process declared by name alone keeps its `toLayer` in the same file, as `Triag
 
 ## Plain names for the rest
 
-Model names share one file, `Models.ts`, with the Layers behind them: they are a line each, and `.model.ts` already means a [Domain model](/domain/project-layout). The Durable Object that runs sessions, the Worker and the sandbox Layer keep plain names: `Agents.ts`, `Worker.ts`, `Sandbox.ts`.
+Model names share one file, `Models.ts`, with the Layers behind them: they are a line each, and `.model.ts` already means a [Domain model](/domain/project-layout). The Worker and the sandbox Layer keep plain names: `Worker.ts`, `Sandbox.ts`.
 
 ```text
 src/
-  Agents.ts
   Answering.process.ts
   Models.ts
   PostAnswer.tool.ts
@@ -87,7 +86,7 @@ src/
 
 ## With a Domain model
 
-A Domain model's files follow [its own layout](/domain/project-layout), in a folder or a package of their own. Processes and tools sit outside it: the model never imports one.
+A Domain model's files follow [its own layout](/domain/project-layout), in a folder or a package of their own. A process the model lists is one of them, its name and its prose in one `.process.ts`. The prose mentions the model and the model lists the process, so the mentions and the model's members are [thunks](/ai/domain#break-the-cycle-with-thunks). Tools, and processes a session only follows, sit outside: the model never imports one.
 
 ```text
 src/
@@ -96,27 +95,21 @@ src/
     Issue.aggregate.ts
     IssueWork.policy.ts
     LabelIssue.command.ts
-    Triager.external.ts
-  Agents.ts
+    Triage.process.ts           the name the model lists, and what a session is told
+  Answering.process.ts
   PostAnswer.tool.ts
-  Triage.process.ts
+  Worker.ts                     the Layers: harness, model, sandbox, platform
 ```
 
 ## With a front end
 
-A page reads sessions through the model, so what records a session sits with the model's files. The page is in `web/`, and imports only the model's Api, ids and value Schemas.
+A page reads sessions through the model's `Triage` view, which the model keeps for the process: there is no file to write for it. The page is in `web/`, and imports only the model's Api, ids and value Schemas.
 
 ```text
 src/
   Board/
     WebApi.api.ts               what a page may send and read
-    IssueSession.aggregate.ts   what was recorded of an issue's session
-    RecordActivity.command.ts
-    SessionStatus.view.ts
-    Transcript.stream.ts
-    Transcripts.projection.ts
-    IssueList.view.ts
-  Agents.ts                     runs the session, and records it
+    IssueList.view.ts           every issue, and whether its session is working
   Worker.ts
 web/
   src/
