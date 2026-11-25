@@ -12,6 +12,7 @@ const Guarded = Resource<Guarded>("Test.Guarded");
 
 const seen: Array<{ phase: "diff" | "reconcile"; protected: boolean | undefined }> = [];
 let failUnprotect = false;
+let failCreate = false;
 const { test } = Test.make({
   state: inMemoryState(),
   providers: Provider.succeed(Guarded, {
@@ -21,9 +22,15 @@ const { test } = Test.make({
         seen.push({ phase: "diff", protected: protectedFromDeletion });
         return { action: "update" as const };
       }),
-    reconcile: ({ news, protected: protectedFromDeletion }) =>
+    reconcile: ({ news, olds, protected: protectedFromDeletion }) =>
       Effect.gen(function* () {
         seen.push({ phase: "reconcile", protected: protectedFromDeletion });
+        if (failCreate && olds === undefined) {
+          return yield* Effect.fail({
+            _tag: "InjectedCreateFailure",
+            message: "injected failed create",
+          });
+        }
         if (failUnprotect && news.revision === 2) {
           return yield* Effect.fail({
             _tag: "InjectedUnprotectFailure",
@@ -81,6 +88,36 @@ test.provider(
       seen.length = 0;
       yield* stack.deploy(Guarded("Guard", { revision: 4 }));
       expect(seen.every((entry) => entry.protected === false)).toBe(true);
+      yield* stack.destroy();
+    }),
+  { tags: ["unit", "local"] },
+);
+
+test.provider(
+  "a create resumed after an interrupted protected create stays protected",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      seen.length = 0;
+      failUnprotect = false;
+
+      // The create fails after its row was written as `creating` + protect.
+      failCreate = true;
+      const failed = yield* Effect.exit(
+        stack.deploy(Guarded("Guard", { revision: 1 }).pipe(RemovalPolicy.protect())),
+      );
+      expect(Exit.isFailure(failed)).toBe(true);
+
+      // Retried without protect, the create still carries the stored policy.
+      failCreate = false;
+      seen.length = 0;
+      yield* stack.deploy(Guarded("Guard", { revision: 1 }));
+      expect(seen.filter((entry) => entry.phase === "reconcile")).toEqual([
+        { phase: "reconcile", protected: true },
+      ]);
+
+      // A protected row blocks destroy: release it first.
+      yield* stack.deploy(Guarded("Guard", { revision: 2 }));
       yield* stack.destroy();
     }),
   { tags: ["unit", "local"] },

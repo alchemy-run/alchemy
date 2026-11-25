@@ -1002,7 +1002,8 @@ const executeNode = (
           session: scopedSession,
           olds: undefined,
           output: attr,
-          protected: node.resource.RemovalPolicy === "protect",
+          protected:
+            node.resource.RemovalPolicy === "protect" || isProtectedResourceState(node.state),
         })
         .pipe(instrumentLifecycle("create", fqn, node.resource.Type, logicalId, instanceId));
 
@@ -1449,7 +1450,8 @@ const executeNode = (
           session: scopedSession,
           olds: undefined,
           output: attr,
-          protected: node.resource.RemovalPolicy === "protect",
+          protected:
+            node.resource.RemovalPolicy === "protect" || isProtectedResourceState(node.state),
         })
         .pipe(instrumentLifecycle("create", fqn, node.resource.Type, logicalId, instanceId));
 

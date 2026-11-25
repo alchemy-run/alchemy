@@ -3037,6 +3037,7 @@ export const LiveWorkerProvider = () =>
         bindings: ResourceBinding<Worker["Binding"]>[],
         session: ScopedPlanStatusSession,
         output: Worker["Attributes"] | undefined,
+        protectedFromDeletion = false,
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
         const preview = news.preview!;
@@ -3274,6 +3275,13 @@ export const LiveWorkerProvider = () =>
           } else {
             const added = classNames.filter((c) => !previous.includes(c));
             const deleted = previous.filter((c) => !classNames.includes(c));
+            // Classes are deleted only by the deployment below; refuse first.
+            if (protectedFromDeletion && deleted.length > 0) {
+              return yield* new ProtectedDurableObjectClassDeletion({
+                scriptName: previewResource.name ?? parentName,
+                classNames: [...deleted].sort(),
+              });
+            }
             if (added.length > 0 || deleted.length > 0) {
               migrations = {
                 old_tag: oldTag,
@@ -5626,7 +5634,15 @@ export const LiveWorkerProvider = () =>
             return yield* putWorkerVersion(id, fqn, news, bindings, session, output);
           }
           if (news.preview?.of != null) {
-            return yield* putWorkerPreview(id, fqn, news, bindings, session, output);
+            return yield* putWorkerPreview(
+              id,
+              fqn,
+              news,
+              bindings,
+              session,
+              output,
+              protectedFromDeletion,
+            );
           }
           const { accountId } = yield* yield* CloudflareEnvironment;
           const name = output?.workerName ?? (yield* createWorkerName(id, news.name));

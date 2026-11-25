@@ -1144,18 +1144,20 @@ export default { async fetch() { return new Response("v4"); } };
                 ...(classes.spare ? { Spare: Cloudflare.DurableObject("Spare") } : {}),
               },
             });
-          // The last shape that deployed. A failure mid-test would leave the
-          // Worker protected, and protection refuses the next run's destroy,
-          // so the finalizer redeploys that shape unprotected and destroys it.
-          let deployed: Parameters<typeof worker> | undefined = ["Counter", { spare: true }];
+          // The shape to clean up from: each step sets it before deploying a
+          // shape that is a valid redeploy from the step before, so it holds
+          // whether that deploy landed or not. A failure would leave the Worker
+          // protected, refusing the retry's destroy, so when the test exits
+          // (its own scope, not the file's) this shape is redeployed
+          // unprotected and destroyed.
+          let cleanup: Parameters<typeof worker> | undefined = ["Counter", { spare: true }];
           yield* Effect.addFinalizer(() =>
-            deployed === undefined
+            cleanup === undefined
               ? Effect.void
               : scratch
-                  .deploy(worker(...deployed))
+                  .deploy(worker(...cleanup))
                   .pipe(Effect.andThen(scratch.destroy()), Effect.ignore),
           );
-
           yield* scratch.destroy();
           const v1 = yield* scratch.deploy(
             worker("Counter", { spare: true }).pipe(RemovalPolicy.protect()),
@@ -1174,10 +1176,10 @@ export default { async fetch() { return new Response("v4"); } };
           expect((yield* readUntil(v1.url!, "Counter")).value).toBe(1);
 
           // A rename keeps the namespace, so it is allowed while protected.
+          cleanup = ["Meter", { spare: true }];
           const v2 = yield* scratch.deploy(
             worker("Meter", { spare: true }).pipe(RemovalPolicy.protect()),
           );
-          deployed = ["Meter", { spare: true }];
           expect(yield* namespacesOf(v2.workerName)).toEqual({
             Meter: before.Counter,
             Spare: before.Spare,
@@ -1199,15 +1201,15 @@ export default { async fetch() { return new Response("v4"); } };
 
           // Unprotect on its own, then remove the class.
           yield* scratch.deploy(worker("Meter", { spare: true }));
+          cleanup = ["Meter", { spare: false }];
           const v3 = yield* scratch.deploy(worker("Meter", { spare: false }));
-          deployed = ["Meter", { spare: false }];
           expect(yield* namespacesOf(v3.workerName)).toEqual({ Meter: before.Counter });
           expect((yield* readUntil(v3.url!, "Meter")).value).toBe(1);
 
           yield* scratch.destroy();
-          deployed = undefined;
+          cleanup = undefined;
           expect(yield* namespacesOf(v1.workerName)).toEqual({});
-        }).pipe(logLevel),
+        }).pipe(Effect.scoped, logLevel),
       { timeout: 240_000 },
     );
 
