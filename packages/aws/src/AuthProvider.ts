@@ -967,7 +967,11 @@ const loadLoginProfile = (loginProfile: string) =>
 const awsProfileCredentials = (awsProfile: string, region: string) =>
   Effect.service(Credentials).pipe(
     Effect.provide(fromIni({ profile: awsProfile })),
-    Effect.map(Effect.provide(Region.of(region))),
+    // An assumed-role or web-identity profile calls STS while resolving, and
+    // may run while AWSEnvironment is still being built (the account
+    // backfill). Provide Region and Endpoint directly, as `getAccountId`
+    // does: the ambient providers read AWSEnvironment and would deadlock.
+    Effect.map(Effect.provide(Layer.mergeAll(Region.of(region), Endpoint.none))),
   );
 
 const sharedConfigFiles = loadSharedConfigFiles.pipe(
