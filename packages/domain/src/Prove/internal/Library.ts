@@ -8,6 +8,7 @@ import * as Schema from "effect/Schema";
 import * as Brands from "./Brands.ts";
 import * as Compare from "./Compare.ts";
 import { numeric, promote } from "./Compare.ts";
+import * as Judged from "./Judged.ts";
 import type { Host, Model, Whole } from "./Kit.ts";
 import * as Kit from "./Kit.ts";
 import {
@@ -2743,12 +2744,11 @@ export const make = (host: Host) => {
       if (made) return Effect.succeed(made);
       // A schema is built, never run: what it describes is read where it is used.
       if (lib.module === "effect/Schema") return Effect.succeed(schemaOf(lib, args));
+      const named = [lib.module.replace(/^effect\//, ""), ...lib.path].join(".");
+      const judged = Judged.reasonOf(lib.module, lib.path);
+      if (judged) return Effect.fail(Value.notTranslated(site, `calls ${named}, which ${judged}`));
       return Effect.fail(
-        Value.notTranslated(
-          site,
-          `calls ${[lib.module.replace(/^effect\//, ""), ...lib.path].join(".")}, which the prover has no model for`,
-          true,
-        ),
+        Value.notTranslated(site, `calls ${named}, which the prover has no model for`, true),
       );
     },
   };

@@ -1,4 +1,5 @@
 import * as Interpreter from "./internal/Interpreter.ts";
+import * as Judged from "./internal/Judged.ts";
 import * as Known from "./internal/Known.ts";
 import type { Loader } from "./internal/Source.ts";
 import * as Syntax from "./internal/Syntax.ts";
@@ -14,6 +15,10 @@ export const surface = () => ({
   // Nothing is loaded to list the names: no file is read.
   ...Interpreter.make({} as Loader, new Value.Run([])).surface,
   computed: Known.modules,
+  /** The functions it reads and reports, each with why it is not run. */
+  judged: Object.fromEntries(Judged.JUDGED),
+  /** The names it reads another way: where a file declares a service or an enum. */
+  elsewhere: Object.fromEntries(Judged.ELSEWHERE),
   /** Every form of the language, by name: the ones the prover reads, and the ones it stops at. */
   syntax: {
     read: Syntax.FORMS.filter((form) => form.read).map((form) => form.name),

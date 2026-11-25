@@ -9,7 +9,6 @@ import * as Graph from "effect/Graph";
 import * as HashSet from "effect/HashSet";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
-import * as Pool from "effect/Pool";
 import * as Random from "effect/Random";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
@@ -116,20 +115,11 @@ export class Fog extends Domain.Aggregate("Fog", {
       const cache = yield* Cache.make({ capacity: 8, lookup: (n: number) => Effect.succeed(n) });
       return [new Seen({ n: yield* Cache.get(cache, command.n) })];
     }),
-    // A pool with a strategy of the code's own, which the prover has no model for.
+    // A duration the machine's clock measures, which is not the handler's.
     Borrow: Effect.fn(function* (_fog, command) {
-      const pool = yield* Pool.makeWithStrategy({
-        acquire: Effect.succeed(command.n),
-        min: 1,
-        max: 2,
-        strategy: {
-          run: () => Effect.void,
-          onAcquire: () => Effect.void,
-          reclaim: () => Effect.succeed(undefined),
-        },
-      });
-      return [new Seen({ n: yield* Pool.get(pool) })];
-    }, Effect.scoped),
+      const [, n] = yield* Effect.timed(Effect.succeed(command.n));
+      return [new Seen({ n })];
+    }),
     // A semaphore with too few permits free waits for another fiber, and a handler is one fiber.
     Guard: Effect.fn(function* (_fog, command) {
       const permits = yield* Semaphore.make(1);

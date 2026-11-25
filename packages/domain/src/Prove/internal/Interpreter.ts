@@ -6,6 +6,7 @@ import * as Queue from "effect/Queue";
 import * as Brands from "./Brands.ts";
 import * as Compare from "./Compare.ts";
 import { fromTruth, isQuotient, same, textual, truth } from "./Compare.ts";
+import * as Judged from "./Judged.ts";
 import * as Known from "./Known.ts";
 import * as Library from "./Library.ts";
 import * as Strings from "./Models/Strings.ts";
@@ -2607,6 +2608,16 @@ export const make = (given: Loader, run: Run): Interpreter => {
       return made_
         ? Effect.succeed(made_)
         : reaches(site, `yields ${value.name}, a service that nothing around it provides`);
+    }
+    if (value._tag === "Lib") {
+      const named = [value.module.replace(/^effect\//, ""), ...value.path].join(".");
+      const judged = Judged.reasonOf(value.module, value.path);
+      return reaches(
+        site,
+        judged
+          ? `yields ${named}, which ${judged}`
+          : `yields ${named}, which the prover has no model for`,
+      );
     }
     return reaches(site, "yields a value the prover has no model for");
   };

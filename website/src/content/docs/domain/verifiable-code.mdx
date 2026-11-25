@@ -3816,6 +3816,14 @@ import * as Stdio from "effect/Stdio";
 Effect.promise(() => fetch(url));
 Effect.tryPromise(() => fetch(url));
 RequestResolver.persisted(RequestResolver.fromEffect((entry) => Effect.succeed(entry.request.n)), { storeId: "prices" }); // keeps results in a Persistence store
+Effect.runPromise(effect); // runs an effect outside the handler, for a promise: so do runPromiseExit and their With forms
+Effect.runFork(effect); // on a fiber of its own: so do runForkWith, runCallback and runCallbackWith
+Effect.effectify((callback) => callback(null, a)); // a Node callback
+Effect.abortSignal; // the language's AbortSignal
+Effect.requestUnsafe(GetPrice({ item: "tea" }), { resolver: RequestResolver.never, onExit: () => undefined, context: Context.empty() }); // a request outside the handler's fibers
+Stream.toAsyncIterable(Stream.make(a)); // an async iterable, whose values come as promises: and Stream.fromAsyncIterable, Channel.fromAsyncIterable
+Stream.toReadableStream(Stream.make(a)); // a Web stream: and Stream.fromReadableStream, Channel.fromWritableStream, Sink.fromWritableStream
+// and Stream.fromEventListener, which listens to an EventTarget, and FiberSet.runtimePromise and the like, which run an effect for a promise
 ```
 
 A handler's sleeps, time limits, races, fibers, queues, transactions and requests are [supported](#time-and-fibers). A count an input decides is read where the input is held between 0 and 64: each count it can be is a path of its own. What is left is a wait that never ends, two waits that end at the same moment, a key an input decides, and the few modules below.
@@ -3841,6 +3849,11 @@ Stream.run(stream, Sink.never); // a sink that never ends
 
 Cron.next(cron); // next, prev and sequence use the clock when they are given no time
 Metric.value(orders); // reads a metric: what one holds is not what a handler decides by
+Effect.timed(effect); // measured with the machine's clock: so are Sink.timed and Sink.withDuration
+Clock.monotonicTimeNanos; // the machine's monotonic clock
+Effect.fiberId; // a fiber's id is a count over the whole process: and Effect.fiber, Effect.withFiber, Fiber.getCurrent, Cause.interruptors
+Hash.random(input); // a random hash for each object
+Layer.launch(Layer.empty); // a layer built, and never ended
 ```
 
 These say how a program is put together and watched, not what it decides. A [request context](#effects-and-failures) a handler yields is supported, and so is a service an effect is [provided with](#library-functions) by a layer or a context.
@@ -3854,6 +3867,11 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Logger from "effect/Logger";
 import * as Tracer from "effect/Tracer";
 import * as ErrorReporter from "effect/ErrorReporter";
+
+Effect.currentSpan; // the tracer's spans: and Effect.makeSpan, Effect.useSpan, Effect.linkSpans, Effect.withParentSpan, Effect.tracer, Layer.span
+Layer.makeMemoMap; // a MemoMap: and Layer.buildWithMemoMap, Layer.fromBuild, Layer.CurrentMemoMap
+Metric.snapshot; // the runtime's metrics: and Metric.dump, Metric.enableRuntimeMetrics, Metric.MetricRegistry
+// and Effect.withLogger, Effect.withTracer, Effect.withErrorReporting and Effect.withExecutionPlan, which take one of the modules above
 ```
 
 A schema is supported where it describes the state, a command or an event, and where a handler [checks a value with one](#library-functions). One that changes the value it reads, or that the prover does not read in full, is not: a record, a tuple, a class, a pattern.
@@ -3888,6 +3906,13 @@ import * as PlatformError from "effect/PlatformError";
 import * as Redactable from "effect/Redactable";
 import * as Version from "effect/Version";
 // and effect/Newtype and effect/Brand beyond Newtype.value, Newtype.makeCombiner, Newtype.makeReducer and Brand.nominal
+
+Cause.pretty(Cause.fail(a)); // a cause with its stack frames: and Cause.prettyErrors, Cause.annotations, Cause.annotate, Cause.StackTrace
+Effect.acquireDisposable(Effect.succeed(input)); // released by Symbol.dispose, a name the prover does not read
+Hash.symbol; // names a class's own hash method, which the prover does not call
+Request.RequestPrototype; // what Request.tagged, Request.of and Request.Class build a request on
+Effect.Transaction; // the library's record of a transaction: Effect.tx makes one
+// and Channel.hasUpstreamFailure and the like, Context.getOrUndefinedUnsafe and Context.hasSameCache, which the library's types do not export
 ```
 
 ## Effects and failures

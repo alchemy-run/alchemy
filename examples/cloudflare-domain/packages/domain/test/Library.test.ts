@@ -224,7 +224,7 @@ it.effect(
           ]),
         ),
       ).toEqual({
-        Race: "calls Stream.toAsyncIterable, which the prover has no model for",
+        Race: "calls Stream.toAsyncIterable, which gives or goes over an async iterable, whose values come as promises",
         Share:
           "BigDecimal.divide divides decimals an input holds, which BigDecimal rounds and the prover does not",
         Walk: "reads the 5 items of a HashSet in order, which is the order of their hashes: the prover reads up to 4 in every order",
@@ -235,7 +235,7 @@ it.effect(
         Turn: "calls Array.rotate, which the prover has no model for",
         // Each of these was checked against the package: none is a function of the command alone.
         Remember: "calls Cache.get with a key the prover cannot see",
-        Borrow: "calls Pool.makeWithStrategy, which the prover has no model for",
+        Borrow: "calls Effect.timed, which measures with the machine's clock, not the handler's",
         Guard:
           "waits for permits of a Semaphore that nothing releases: the handler would never end",
         Configure: "calls Config.Int, which the prover has no model for",

@@ -132,3 +132,28 @@ it.effect("every kind of node the interpreter and the loader name is a form on t
     ).toEqual([]);
   }).pipe(Effect.provide(NodeServices.layer)),
 );
+
+// Every function of a module the prover reads is one it has a model for,
+// one it reports with a reason, or one it reads another way. A function the
+// library adds is on none of these lists until the prover is taught it or
+// says why it does not run it. Schemas are built, never run: a schema's
+// functions are read where the schema is used.
+it("every function of a module the prover reads is modelled, or reported with a reason", async () => {
+  const { library, computed, judged, elsewhere } = surface();
+  const known = new Set([...library, ...Object.keys(judged), ...Object.keys(elsewhere)]);
+  const pure = new Set(computed);
+  const modules = [
+    ...new Set(library.map((key) => key.split(":")[0]!).filter((m) => m.startsWith("effect/"))),
+    // `effect/pipe` is the prover's name for `.pipe`, which no module exports.
+  ].filter((module) => !pure.has(module) && module !== "effect/Schema" && module !== "effect/pipe");
+  const missing: Array<string> = [];
+  for (const module of modules.sort()) {
+    const real = (await import(/* @vite-ignore */ module)) as Record<string, unknown>;
+    for (const name of Object.keys(real))
+      if (!/TypeId$/.test(name) && !known.has(`${module}:${name}`))
+        missing.push(`${module}:${name}`);
+  }
+  expect(missing).toEqual([]);
+  // A function is either run or reported, never both.
+  expect(library.filter((key) => key in judged)).toEqual([]);
+});
