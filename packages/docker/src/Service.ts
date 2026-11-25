@@ -91,10 +91,10 @@ export interface ServicePropsBase extends PlatformProps {
    */
   readOnlyRootFs?: boolean;
   /**
-   * Send the Docker CLI's registry credentials for the image to the swarm
-   * (`--with-registry-auth`), so its nodes can pull from a private registry.
-   * They are sent again on every update. Turning it off keeps the
-   * credentials the swarm already holds.
+   * Pass `--with-registry-auth`, so the swarm gets the Docker CLI's
+   * credentials for the image's registry and its nodes can pull from a
+   * private registry. Each `service update` sends them again. `false` keeps
+   * the credentials the swarm already holds.
    *
    * @default false
    */

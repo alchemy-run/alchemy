@@ -86,7 +86,7 @@ const web = yield* Docker.Service("web", {
 });
 ```
 
-The deploy passes `--with-registry-auth`, so the swarm stores the CLI's credentials for the image's registry and hands them to the nodes that run a task. They are sent again on each `docker service update`, which runs only when a prop changes, so a rotated password reaches the swarm on the next change. Setting it back to `false` keeps the credentials the swarm already holds.
+The deploy passes `--with-registry-auth`. The swarm stores the CLI's credentials for the image's registry and gives them to each node that runs a task. Each `docker service update` sends them again. An update runs only when a prop changes, so a rotated password reaches the swarm with the next change. Setting it back to `false` keeps the credentials the swarm already holds.
 
 ## Keep tasks healthy
 
