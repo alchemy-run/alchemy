@@ -1555,7 +1555,10 @@ export const make = (
         site,
         (timeline) =>
           Effect.succeed(
-            Effect.map(Effect.service(Random.Random), (random) => ({ random, timeline })),
+            Random.Random.pipe(
+              Effect.service,
+              Effect.map((random) => ({ random, timeline })),
+            ),
           ),
         ({ random, timeline }) => {
           const draw = (name: string, f: () => number): V =>

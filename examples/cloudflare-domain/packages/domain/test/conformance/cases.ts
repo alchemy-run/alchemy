@@ -1371,6 +1371,8 @@ const base: ReadonlyArray<Group> = [
       `Effect.fn(function* (n) { return yield* even(n); }, Effect.map((n) => n * 2), Effect.orElseSucceed(() => -1))(a)`,
       `Effect.fnUntraced(function* (n) { return n * 2; })(a)`,
       `Effect.succeed(a).pipe(Effect.withSpan("s"), Effect.annotateLogs("a", a), Effect.annotateSpans("b", b), Effect.withLogSpan("t"))`,
+      `Effect.scoped(Effect.succeed(a).pipe(Effect.withSpanScoped("s"), Effect.map((n) => n + b)))`,
+      `Effect.scoped(Effect.withSpanScoped(Effect.succeed(b), "s", { attributes: { n: 1 } }))`,
       `Effect.gen(function* () { yield* Effect.log("l"); yield* Effect.logDebug("d"); yield* Effect.logTrace("t"); yield* Effect.annotateCurrentSpan("a", a); yield* Effect.yieldNow; return a; })`,
       `Effect.gen(function* () { const cell = yield* Ref.make(a); yield* Ref.update(cell, (n) => n + b); const before = yield* cell.pipe(Ref.getAndUpdate((n) => n * 2)); const taken = yield* Ref.modify(cell, (n) => [n - 1, n + 1]); yield* Ref.set(cell, (yield* Ref.get(cell)) + 1); return [before, taken, yield* Ref.get(cell), yield* Ref.getAndSet(cell, 0), yield* Ref.setAndGet(cell, b), yield* Ref.updateAndGet(cell, (n) => n + 1)]; })`,
       `Effect.sync(() => Effect.runSync(Effect.succeed(a + b)))`,

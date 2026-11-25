@@ -1,6 +1,8 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Scope from "effect/Scope";
 import * as Brands from "../Brands.ts";
 import type { Kit, Model, Models } from "../Kit.ts";
 import {
@@ -532,6 +534,21 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
           )
         : wrongArguments(site, "Effect.runSync"),
     "effect/Effect:withSpan": transparent("Effect.withSpan"),
+    // A span the scope around ends: what the effect does is unchanged, and it needs that scope.
+    "effect/Effect:withSpanScoped": dualBy("Effect.withSpanScoped", isEffect, ([self], site) =>
+      self?._tag === "Effect"
+        ? Effect.succeed<V>({
+            _tag: "Effect",
+            run: Effect.flatMap(Effect.serviceOption(Scope.Scope), (scope) =>
+              Option.isSome(scope)
+                ? self.run
+                : Effect.fail(
+                    Value.notTranslated(site, "calls Effect.withSpanScoped outside Effect.scoped"),
+                  ),
+            ),
+          })
+        : wrongArguments(site, "Effect.withSpanScoped"),
+    ),
     "effect/Effect:annotateSpans": transparent("Effect.annotateSpans"),
     "effect/Effect:annotateLogs": transparent("Effect.annotateLogs"),
     "effect/Effect:withLogSpan": transparent("Effect.withLogSpan"),
