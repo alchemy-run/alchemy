@@ -1,3 +1,4 @@
+/** @effect-diagnostics anyUnknownInErrorContext:off */
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
@@ -19,7 +20,6 @@ import { captureEmit, emit, failureMessage } from "./Events.ts";
 import type { Apply, Plan } from "./Plan.ts";
 import { findProviderByType, Provider } from "./Provider.ts";
 import { stampedMode } from "./ProviderMode.ts";
-/** @effect-diagnostics anyUnknownInErrorContext:off */
 import { isProtectedResourceState } from "./RemovalPolicy.ts";
 import { resourceSession } from "./Report.ts";
 import type { ResourceLike } from "./Resource.ts";
