@@ -19,7 +19,7 @@ import { useCliEnvironment, useGlyphs, useKeyGlyphs } from "./Environment.tsx";
 import { KeyBar, Spinner } from "./Feedback.tsx";
 import { Box, overflowListWindow } from "./Layout.tsx";
 import { useAlchemyStatus } from "./ProgramStatus.ts";
-import { Text } from "./Typography.tsx";
+import { Link, Text } from "./Typography.tsx";
 
 export interface TerminalKey {
   readonly up: boolean;
@@ -846,6 +846,9 @@ export function BrowserLoginWait({
     <PromptFrame
       message={message}
       blocked="auth"
+      // Flush left and soft-wrapped, so selecting the URL copies it whole:
+      // the terminal wraps it itself instead of the frame breaking its rows.
+      unindented={<Link href={url} wrap="soft" />}
       keys={[
         ...(allowManualInput ? ([[keyGlyphs.enter, "enter code manually"]] as const) : []),
         ...(onOpen === undefined ? [] : ([["o", "open browser"]] as const)),
@@ -863,15 +866,11 @@ export function BrowserLoginWait({
             </Text>
           </Box>
         )}
-        {/* The URL itself is printed above the screen on one unpadded line
-            (Runtime's printUrl), where it copies cleanly. */}
         {browserFailed ? (
           <Text tone="warning">
-            {glyphs.warning} Could not open the browser. Open the URL above, or press c to copy it.
+            {glyphs.warning} Could not open the browser. Copy and open the URL manually.
           </Text>
-        ) : (
-          <Text tone="muted">Opened the URL above in your browser.</Text>
-        )}
+        ) : null}
       </Box>
     </PromptFrame>
   );
@@ -888,6 +887,11 @@ export type PromptFrameProps = {
   readonly description?: ReactNode;
   readonly children: JSX.Element;
   readonly layout?: "inline" | "stacked";
+  /**
+   * Content below the indented children, flush with the left edge: a URL or
+   * token people copy, where indentation would end up in the selection.
+   */
+  readonly unindented?: ReactNode;
   readonly error?: string;
   readonly keys?: ReadonlyArray<readonly [string, string]>;
 };
@@ -898,6 +902,7 @@ export function PromptFrame({
   description,
   children,
   layout = "stacked",
+  unindented,
   error,
   keys,
 }: PromptFrameProps) {
@@ -943,6 +948,7 @@ export function PromptFrame({
           </Box>
         </>
       )}
+      {unindented === undefined ? null : <Box marginTop={1}>{unindented}</Box>}
       {error === undefined ? null : (
         <Box marginTop={1} paddingLeft={2}>
           <Text color={theme.color.danger}>

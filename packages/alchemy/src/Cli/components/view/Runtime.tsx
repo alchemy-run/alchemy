@@ -1,7 +1,6 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import { AnsiText, Box, render, Static, useTitle } from "@alchemy.run/sigil";
-import { hyperlink } from "@alchemy.run/sigil/ansi";
 import { useSyncExternalStore } from "@alchemy.run/sigil/react";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -705,20 +704,6 @@ export const makeRuntime = (
     Effect.acquireRelease(makeProgress(initial), (handle) => handle.close);
 
   /**
-   * A URL the user may need to copy, on one line of its own with no padding,
-   * in scrollback rather than the live frame. The terminal soft-wraps it, so
-   * selecting it copies the URL alone, not the frame's indent or line breaks.
-   */
-  const printUrl = (url: string) =>
-    Effect.sync(() => {
-      // An OSC 8 link where the terminal supports it: the escapes are
-      // zero-width, so the line still copies as the bare URL.
-      const line = hyperlink(url, url, { fallback: false, stream: stdout });
-      if (mounted !== undefined) store.appendStatic(<AnsiText wrap="none">{line}</AnsiText>);
-      else stdout.write(`${line}\n`);
-    });
-
-  /**
    * The login screen races `waitFor`: the poll or callback normally wins,
    * the screen only settles first when the user cancels or pastes a code.
    */
@@ -730,7 +715,6 @@ export const makeRuntime = (
       // Invoked later by the screen's keyboard handler, outside this fiber.
       const reopen = () => Effect.runPromiseWith(services)(openUrl(login.url));
       const openFailed = yield* Effect.isFailure(openUrl(login.url));
-      yield* printUrl(login.url);
       const manual = login.manualCode;
       const screen = run(
         browserLoginScreen({
