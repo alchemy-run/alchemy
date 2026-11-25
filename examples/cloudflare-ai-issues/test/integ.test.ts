@@ -45,19 +45,20 @@ test(
   Effect.gen(function* () {
     const { app } = yield* stack;
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
-    const html = yield* client.get(`${app}/`).pipe(
-      Effect.flatMap((response) => response.text),
-      Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 8 }),
-    );
+    // A fresh deploy's page and assets reach the edge at different moments.
+    const text = (url: string) =>
+      client.get(url).pipe(
+        Effect.flatMap((response) => response.text),
+        Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 8 }),
+      );
+    const html = yield* text(`${app}/`);
     expect(html).toContain('<div id="root">');
     const script = /src="(\/assets\/[^"]+\.js)"/.exec(html)?.[1];
     expect(script).toBeDefined();
     const style = /href="(\/assets\/[^"]+\.css)"/.exec(html)?.[1];
     expect(style).toBeDefined();
-    expect(yield* client.get(`${app}${style}`).pipe(Effect.flatMap((r) => r.text))).toContain(
-      ".sidebar",
-    );
-    const code = yield* client.get(`${app}${script}`).pipe(Effect.flatMap((r) => r.text));
+    expect(yield* text(`${app}${style}`)).toContain(".sidebar");
+    const code = yield* text(`${app}${script}`);
     // The build is the page: it names the reads and the commands it uses.
     for (const name of ["IssueList", "Triage", "ReportIssue", "CommentOnIssue"]) {
       expect(code).toContain(name);
