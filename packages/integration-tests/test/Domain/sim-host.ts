@@ -138,6 +138,12 @@ export const simHost = (
     readonly inputGate?: boolean;
     /** Fail the puts it answers true for, inside or outside a transaction. */
     readonly failPut?: FailPut;
+    /**
+     * Drop the work that objects of the classes it answers true for hand to
+     * `waitUntil`, as Cloudflare loses it once an object that gets no more
+     * events is reset.
+     */
+    readonly loseBackground?: (cls: string) => boolean;
   } = {},
 ) => {
   const disk = options.disk ?? { objects: new Map() };
@@ -195,7 +201,10 @@ export const simHost = (
           state: {
             storage,
             exclusive: (effect) => gate.withPermits(1)(effect),
-            waitUntil: (effect) => Effect.asVoid(Effect.forkIn(effect, scope)),
+            waitUntil: (effect) =>
+              options.loseBackground?.(cls)
+                ? Effect.void
+                : Effect.asVoid(Effect.forkIn(effect, scope)),
           } satisfies DurableObjects.ObjectStateShape,
           runtime: {
             Type: "Sim",

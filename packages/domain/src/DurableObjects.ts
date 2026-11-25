@@ -1,4 +1,4 @@
-import { Callbacks, makeCallback } from "alchemy/Callback";
+import { type CallbackError, Callbacks, makeCallback } from "alchemy/Callback";
 /**
  * A domain model on Durable Objects, for any runtime that hosts them:
  * Cloudflare, Rivet, Effect Cluster. Every aggregate instance, view key,
@@ -2934,6 +2934,13 @@ const TAKEN = "taken:";
 
 /** How long a failed or interrupted run waits before it is retried. */
 const PROJECTION_RETRY_MS = 10_000;
+/** When a projection key's drain is armed for (see `arm` in `projectionObject`). */
+const DRAIN_DUE = "drain-due";
+/**
+ * How long one drain pass runs before it hands the rest of the log to a new
+ * pass: well inside its lease, and a pass cut short loses little.
+ */
+const PROJECTION_PASS_MS = 5_000;
 
 const projectionObject = Effect.fn(function* (
   kit: ProjectionKit,
@@ -3011,11 +3018,13 @@ const projectionObject = Effect.fn(function* (
   const waitMillis = kit.options.batch?.waitMillis ?? 0;
   const lease = "drain-lease";
   const acquire = exclusively(acquireLease(state, lease));
-  // Re-run the drain later: when a short batch has waited long enough, or after a failure.
+  // Re-run the drain later: after a failure, or once another drain's lease ends.
   let wake: (at: number) => Effect.Effect<void> = () => Effect.void;
-  // Each input's backstop advances this cursor: once an input arrives, a
-  // drain waiting for it from inside its own callback waits the batch
-  // wait, not that callback's retry backoff.
+  // Run the drain by `at`, as its callback (see `arm` below).
+  let arm: (at: number) => Effect.Effect<void, CallbackError> = () => Effect.void;
+  // Every `arm` advances this cursor, so the drain's callback starts a fresh
+  // retry budget: a drain waiting for a batch to fill, or handing on to its
+  // next pass, waits its time, not the callback's retry backoff.
   const advance = Effect.gen(function* () {
     const progress = ((yield* state.storage.get<number>("drain-progress")) ?? 0) + 1;
     yield* state.storage.put("drain-progress", progress);
@@ -3026,6 +3035,9 @@ const projectionObject = Effect.fn(function* (
     const held = yield* acquire;
     // Held by another drain, or by one whose instance died: look again once it expires.
     if (held !== undefined) return yield* wake(held);
+    const started = yield* Clock.currentTimeMillis;
+    // Inputs that arrive from here on arm the drain again.
+    yield* state.storage.delete(DRAIN_DUE);
     const exit = yield* Effect.exit(
       Effect.gen(function* () {
         while (true) {
@@ -3043,7 +3055,7 @@ const projectionObject = Effect.fn(function* (
             waitMillis > 0 &&
             (yield* Clock.currentTimeMillis) - run[0]!.at < waitMillis
           ) {
-            return yield* wake(run[0]!.at + waitMillis);
+            return yield* arm(run[0]!.at + waitMillis);
           }
           yield* kit.run(meta.key, run);
           // Read and written in one transaction: another copy of the instance
@@ -3091,6 +3103,9 @@ const projectionObject = Effect.fn(function* (
               }),
             ),
           );
+          // One pass at a time: the rest of the log runs as a new pass, an event of its own.
+          const now = yield* Clock.currentTimeMillis;
+          if (now - started >= PROJECTION_PASS_MS) return yield* arm(now);
         }
       }),
     );
@@ -3105,6 +3120,20 @@ const projectionObject = Effect.fn(function* (
     // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides RuntimeContext on every event
     callback.schedule("drain", { at, payload: {} }).pipe(Effect.ignore) as Effect.Effect<void>;
   /**
+   * The drain runs only as this callback, never as background work of the
+   * call that took an input: that work is lost once an object that gets no
+   * more events is reset. Armed by `at`, or earlier if it already is, so
+   * inputs that keep arriving never push it later.
+   */
+  arm = (at) =>
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides RuntimeContext on every event
+    Effect.gen(function* () {
+      const armed = yield* state.storage.get<number>(DRAIN_DUE);
+      const due = armed !== undefined && armed < at ? armed : at;
+      yield* callback.schedule("drain", { at: due, payload: {}, progress: yield* advance });
+      yield* state.storage.put(DRAIN_DUE, due);
+    }) as Effect.Effect<void, CallbackError>;
+  /**
    * Accept a delivery into the key's log, once. Callers hold the exclusive
    * section and its transaction; `true` when it was new.
    */
@@ -3116,17 +3145,14 @@ const projectionObject = Effect.fn(function* (
   /** Append a row to the key's log. Callers hold the exclusive section and its transaction. */
   const append = Effect.fn(function* (key: string, meta: ProjectionMeta, delivery: Delivery) {
     const position = meta.accepted + 1;
+    const now = yield* Clock.currentTimeMillis;
     yield* state.storage.put(`in:${pad(position)}`, {
       position,
       delivery,
-      at: yield* Clock.currentTimeMillis,
+      at: now,
     } satisfies Accepted);
-    // The backstop: handled even if this instance dies before the drain runs.
-    yield* callback.schedule("drain", {
-      after: `${Math.max(waitMillis, PROJECTION_RETRY_MS)} millis`,
-      payload: {},
-      progress: yield* advance,
-    });
+    // The drain, committed with the input: at once for a full batch, else once its wait is up.
+    yield* arm(position - meta.processed >= size ? now : now + waitMillis);
     return { ...meta, key, accepted: position } satisfies ProjectionMeta;
   });
   /**
@@ -3288,7 +3314,13 @@ const projectionObject = Effect.fn(function* (
         runtime.provide(
           Effect.orDie(Effect.forEach(deliveries, (d) => intake(key, d), { discard: true })),
         ),
-      after: runtime.provide(state.waitUntil(drain.pipe(Effect.ignoreCause))),
+      // Its intakes armed the drain inside the backfill's own callback run, whose
+      // retry budget a schedule there may carry: arm it again apart from that run.
+      after: runtime.provide(
+        state.waitUntil(
+          Effect.flatMap(Clock.currentTimeMillis, (now) => arm(now)).pipe(Effect.ignoreCause),
+        ),
+      ),
     }));
   const keep = (key: string) => state.storage.put(ID_KEY, key);
   return {
@@ -3303,8 +3335,8 @@ const projectionObject = Effect.fn(function* (
           ) {
             return;
           }
-          const accepted = yield* exclusively(state.storage.transaction(intake(key, delivery)));
-          if (accepted) yield* state.waitUntil(drain.pipe(Effect.ignoreCause));
+          // An input arms the drain's callback (`append`): nothing runs in the background.
+          yield* exclusively(state.storage.transaction(intake(key, delivery)));
         }),
       ),
     checkpoints: (sources?: ReadonlyArray<string>) => reportDefects(checkpointsOf(sources)),

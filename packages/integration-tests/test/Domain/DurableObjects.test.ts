@@ -883,6 +883,7 @@ const countingSim = (
     readonly inputGate?: boolean;
     /** Answers true for a call between objects that should fail, by its method. */
     readonly failCall?: (method: string) => boolean;
+    readonly loseBackground?: (cls: string) => boolean;
   } = {},
 ) => {
   const stats: Stats = { rowsRead: 0, bytesWritten: 0 };
@@ -899,18 +900,22 @@ const countingSim = (
     },
   });
   const handled: Array<string> = [];
-  const store = { failing: false, attempts: 0 };
-  const layer = (version = 0, size = 100) =>
+  const store = { failing: false, attempts: 0, millisPerBatch: 0 };
+  const layer = (version = 0, size = 100, wait?: Duration.Input) =>
     Counting.layer(
       AllCounts.toLayer(
         Effect.succeed(
           Effect.fn(function* (batch) {
             store.attempts += 1;
             if (store.failing) return yield* Effect.die(new Error("the store is down"));
+            if (store.millisPerBatch > 0) yield* Effect.sleep(store.millisPerBatch);
             for (const { envelope } of batch) handled.push(`${envelope.stream}#${envelope.seq}`);
           }),
         ),
-        { batch: { size }, ...(version > 0 ? { version } : {}) },
+        {
+          batch: { size, ...(wait === undefined ? {} : { wait }) },
+          ...(version > 0 ? { version } : {}),
+        },
       ),
     ).pipe(
       Layer.provideMerge(DurableObjects.makePlatform(sim.host)),
@@ -1357,6 +1362,91 @@ describe("a projection key fed by many sources", { tags: ["unit"] }, () => {
         yield* count("a");
         expect(ckpt()).toEqual({ "Counter/a": 3, "Counter/b": 1 });
       }).pipe(Effect.scoped, Effect.provide(layer));
+    },
+    { timeout: 60_000 },
+  );
+});
+
+describe("a projection key's drain", { tags: ["unit"] }, () => {
+  /** A sim host that loses the key's background work, as Cloudflare does once it is reset. */
+  const losing = () => countingSim({ loseBackground: (cls) => cls.startsWith(COUNTS) });
+
+  it.live(
+    "runs as the key's callback, so it isn't lost with the key's background work",
+    () => {
+      const t = losing();
+      return Effect.gen(function* () {
+        for (const id of ["a", "b", "a"]) {
+          const receipt = yield* (yield* Counter).send(new Count({ id }));
+          // Well before the 10 s backstop a lost drain would wait for.
+          yield* AllCounts.caughtUp(receipt, { timeout: "3 seconds" });
+        }
+        expect(t.handled).toEqual(["Counter/a#1", "Counter/b#1", "Counter/a#2"]);
+      }).pipe(Effect.scoped, Effect.provide(t.layer()));
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "goes through a backlog longer than one pass on its own, handling each input once",
+    () => {
+      const t = losing();
+      return Effect.gen(function* () {
+        yield* count("a");
+        // About 6.4 s of work: more than one 5 s pass.
+        t.store.millisPerBatch = 400;
+        const sources = Array.from({ length: 16 }, (_, i) => `s${i}`);
+        for (const id of sources) yield* t.receive(counted(id, 1));
+        // Each pass takes the key's lease anew.
+        const leases = new Set<unknown>();
+        yield* eventually(() => {
+          if (t.rows().has("drain-lease")) leases.add(t.rows().get("drain-lease"));
+          return t.handled.length === 1 + sources.length;
+        }, "12 seconds");
+        yield* Effect.sleep("100 millis");
+        expect(t.handled).toEqual(["Counter/a#1", ...sources.map((id) => `Counter/${id}#1`)]);
+        expect(leases.size).toBeGreaterThanOrEqual(2);
+        yield* t.released;
+      }).pipe(Effect.scoped, Effect.provide(t.layer(0, 1)));
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "runs a full batch at once, without waiting out the batch wait",
+    () => {
+      const t = losing();
+      return Effect.gen(function* () {
+        yield* count("a");
+        const start = yield* Clock.currentTimeMillis;
+        yield* t.receive(counted("b", 1));
+        yield* t.receive(counted("c", 1));
+        // Two inputs fill a batch of 2: they don't wait the 5 s.
+        yield* eventually(() => t.handled.length === 3, "2 seconds");
+        expect(t.handled).toEqual(["Counter/a#1", "Counter/b#1", "Counter/c#1"]);
+        expect((yield* Clock.currentTimeMillis) - start).toBeLessThan(2_000);
+      }).pipe(Effect.scoped, Effect.provide(t.layer(0, 2, "5 seconds")));
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "isn't pushed later by inputs that keep arriving during its batch wait",
+    () => {
+      const t = losing();
+      return Effect.gen(function* () {
+        yield* count("a");
+        const handled = t.handled.length;
+        const start = yield* Clock.currentTimeMillis;
+        // An input every 200 ms, until the key handles them.
+        for (let i = 0; t.handled.length === handled && i < 25; i++) {
+          yield* t.receive(counted(`s${i}`, 1));
+          yield* Effect.sleep("200 millis");
+        }
+        // The batch waits 1 s from its first input, not from its last.
+        expect(t.handled.length).toBeGreaterThan(handled);
+        expect((yield* Clock.currentTimeMillis) - start).toBeLessThan(3_000);
+      }).pipe(Effect.scoped, Effect.provide(t.layer(0, 100, "1 second")));
     },
     { timeout: 60_000 },
   );
