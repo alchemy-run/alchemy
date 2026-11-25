@@ -35,6 +35,7 @@ Read the requirements as a story of facts, and name each kind of thing you find:
 - A question someone asks (balance, statement, dashboard): a **View**, keyed by what it's about.
 - "Whenever X happens, do Y": a **Policy**.
 - A process with steps, waits and undo (move money: debit, credit, refund on failure): a **Saga**, started by a policy.
+- Events recorded by mistake (a deposit credited twice): a **Command** that records the fact reversing each one. Never a rewrite or a storage restore.
 - Events already recorded have to change (a person asks to be forgotten): a **Rewrite** per aggregate, run by a saga.
 - A record with periods the business names (months, statements, matches): an instance per period, with the period in the id. No new block.
 - An instance's log grows without end and has no periods (a chat room, a device): a **Compaction**.
