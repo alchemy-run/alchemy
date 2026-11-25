@@ -29,7 +29,7 @@ authentication method. The choice is saved to your **`default`**
 command; a deploy with nothing configured fails with that exact
 command to run. Authentication changes only through the `profile` command.
 
-Locally, pick **AWS CLI profile** and name a profile from `~/.aws/config`, or paste **access keys**. Alchemy reads what kind of profile it is and handles each one as below. If you don't have a profile yet, start with console login unless your organization already signs in through IAM Identity Center.
+Locally, pick **AWS CLI profile** and name a profile from `~/.aws/config`. Alchemy reads what kind of profile it is and handles each one as below. If you don't have a profile yet, start with console login unless your organization already signs in through IAM Identity Center.
 
 ```sh
 alchemy profile edit --add AWS --method aws-profile --set awsProfile=<name>
@@ -68,6 +68,8 @@ Paste an access key ID, secret access key, optional session
 token, and region into the interactive prompt. Alchemy verifies
 them against STS and saves them under
 `~/.alchemy/credentials/<profile>/` for future runs.
+
+IAM user access keys don't expire, so they stay usable until you rotate or delete them. Prefer an AWS CLI profile when you can: console login and SSO give you short-lived credentials, and a profile with keys in `~/.aws/credentials` keeps them in one place for the AWS CLI and Alchemy alike.
 
 ### CI environment credentials
 
