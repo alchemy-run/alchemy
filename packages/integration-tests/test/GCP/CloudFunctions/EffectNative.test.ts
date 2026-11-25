@@ -118,6 +118,12 @@ test.provider.skipIf(!!process.env.FAST)(
         .pipe(
           Effect.as("found" as const),
           Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+          // IAM reads a just-deleted account back for a few seconds.
+          Effect.repeat({
+            schedule: Schedule.spaced("3 seconds"),
+            until: (status) => status === "gone",
+            times: 10,
+          }),
         );
       expect(saGone).toEqual("gone");
     }).pipe(logLevel),
