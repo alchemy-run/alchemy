@@ -3024,6 +3024,10 @@ const rest: ReadonlyArray<Group> = [
         /calls RequestResolver.persisted, which keeps results in a Persistence store outside the handler/,
       ],
       [
+        `Effect.gen(function* () { const ask = Request.tagged("Double"); const kept = yield* RequestResolver.fromEffect((entry) => Effect.succeed(entry.request.n)).pipe(RequestResolver.persisted({ storeId: "prices" })); return yield* Effect.request(ask({ n: 1 }), kept); })`,
+        /calls RequestResolver.persisted, which keeps results in a Persistence store outside the handler/,
+      ],
+      [
         `Effect.gen(function* () { const ask = Request.tagged("Held"); const any = RequestResolver.fromEffect(() => Effect.succeed(1)); return yield* Effect.request(ask({ n: a }), any); })`,
         /a Held request of values the prover cannot see/,
       ],

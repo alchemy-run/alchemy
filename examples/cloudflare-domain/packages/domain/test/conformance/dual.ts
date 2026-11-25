@@ -49,6 +49,8 @@ const ONE_WAY: ReadonlySet<string> = new Set([
   ...["effect/Layer:succeed", "effect/Layer:sync", "effect/Layer:effect", "effect/Layer:mock"],
   // A key and a value, or a record of them: neither is given by `pipe`.
   "effect/Effect:annotateLogsScoped",
+  // Reported both ways, and never run: the `unread` lines of a table call it each way.
+  "effect/RequestResolver:persisted",
 ]);
 
 const declared = new Map<string, ReadonlySet<string>>();
