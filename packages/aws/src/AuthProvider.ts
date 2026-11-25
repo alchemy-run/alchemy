@@ -973,7 +973,8 @@ const awsProfileCredentials = (awsProfile: string, region: string) =>
     // AWS_REGION wins) is only the fallback. Provided directly, with no
     // custom endpoint: during the account backfill the ambient Region and
     // Endpoint read AWSEnvironment, which is still being built, and deadlock.
-    const stsRegion = files.configFile[awsProfile]?.region ?? region;
+    const stsRegion =
+      files.credentialsFile[awsProfile]?.region ?? files.configFile[awsProfile]?.region ?? region;
     const credentials = yield* Effect.service(Credentials).pipe(
       Effect.provide(fromIni({ profile: awsProfile })),
     );
