@@ -57,6 +57,15 @@ const shellQuote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
  */
 const startupScript = (options: { image: string }) => `#!/bin/bash
 set -euo pipefail
+# Mount the data disk first: Docker restarts a Postgres container on its own,
+# and it must never start on an empty, unmounted data directory.
+DEVICE=/dev/disk/by-id/google-${DISK_DEVICE}
+blkid "$DEVICE" >/dev/null || mkfs.ext4 -F "$DEVICE"
+mkdir -p ${MOUNT_PATH}
+mountpoint -q ${MOUNT_PATH} || mount "$DEVICE" ${MOUNT_PATH}
+# Container-Optimized OS drops inbound traffic except SSH: open Postgres,
+# before anything that can fail, so a restarted container stays reachable.
+iptables -C INPUT -p tcp --dport 5432 -j ACCEPT 2>/dev/null || iptables -A INPUT -p tcp --dport 5432 -j ACCEPT
 MD=http://metadata.google.internal/computeMetadata/v1
 read_password() {
   local TOKEN VERSION BODY
@@ -76,12 +85,6 @@ until read_password; do
   fi
   sleep 5
 done
-DEVICE=/dev/disk/by-id/google-${DISK_DEVICE}
-blkid "$DEVICE" >/dev/null || mkfs.ext4 -F "$DEVICE"
-mkdir -p ${MOUNT_PATH}
-mountpoint -q ${MOUNT_PATH} || mount "$DEVICE" ${MOUNT_PATH}
-# Container-Optimized OS drops inbound traffic except SSH: open Postgres.
-iptables -C INPUT -p tcp --dport 5432 -j ACCEPT 2>/dev/null || iptables -A INPUT -p tcp --dport 5432 -j ACCEPT
 docker rm -f postgres >/dev/null 2>&1 || true
 docker run -d --name postgres --restart always --network host \\
   -v ${MOUNT_PATH}:/var/lib/postgresql/data \\
