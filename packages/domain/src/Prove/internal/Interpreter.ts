@@ -443,13 +443,17 @@ export const make = (given: Loader, run: Run): Interpreter => {
   };
   const current: Interpreter["current"] = { run };
 
+  /** How many calls of the code the library is running at once, one inside another. */
+  let runningAtOnce = 0;
   const branch: Interpreter["branch"] = (condition) =>
     Effect.suspend(() => {
       const run = current.run;
       const known = run.sideOf(condition);
       if (known !== undefined) return Effect.succeed(known);
       const feasible = current.feasible;
-      if (!feasible) return Effect.succeed(run.branch(condition));
+      // Code the library runs at once cannot wait for the solver: both sides are taken, and
+      // a side no inputs reach is found when its path is checked.
+      if (!feasible || runningAtOnce > 0) return Effect.succeed(run.branch(condition));
       return feasible(run, condition).pipe(
         Effect.flatMap((holds) =>
           holds ? feasible(run, Smt.not(condition)) : Effect.succeed(undefined),
@@ -816,9 +820,14 @@ export const make = (given: Loader, run: Run): Interpreter => {
 
   /** A function of the code, run to its end where it stands: the library called it and waits for no one. */
   const ranAtOnce = (fn: V, args: ReadonlyArray<V>, site: Site): V => {
-    const exit = Effect.runSyncExit(call(fn, args, site));
-    if (exit._tag === "Success") return exit.value;
-    throw new Known.NotAtOnce();
+    runningAtOnce++;
+    try {
+      const exit = Effect.runSyncExit(call(fn, args, site));
+      if (exit._tag === "Success") return exit.value;
+      throw new Known.NotAtOnce();
+    } finally {
+      runningAtOnce--;
+    }
   };
 
   const library = Library.make({

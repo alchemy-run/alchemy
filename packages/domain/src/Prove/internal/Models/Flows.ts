@@ -143,16 +143,23 @@ export const make = (
   const atOnce =
     (timeline: Timeline.Timeline, fn: V, site: Site) =>
     (chunk: ReadonlyArray<V>): number => {
-      const exit = Effect.runSyncExit(
-        Effect.provideService(host.call(fn, [arr(chunk)], site), Timeline.Current, timeline),
-      );
-      if (exit._tag === "Success" && exit.value._tag === "Num") return exit.value.value;
+      const cost = ranNow(fn, [arr(chunk)], site);
+      if (cost?._tag === "Num") return cost.value;
       timeline.fatal ??= Value.notTranslated(
         site,
         "calls Stream.throttle with a cost the prover cannot work out at once",
       );
       return 0;
     };
+
+  /** What a function of the code gives, run at once: nothing where it cannot be. */
+  const ranNow = (fn: V, args: ReadonlyArray<V>, site: Site): V | undefined => {
+    try {
+      return host.atOnce(fn, args, site);
+    } catch {
+      return undefined;
+    }
+  };
 
   /** A stream made on the handler's timeline, when it is opened. */
   const timed = (
@@ -1218,6 +1225,32 @@ export const make = (
       ),
     ),
     "effect/Stream:partition": parted("Stream.partition", straight),
+    // A queue of what the filter passes on, and one of what it turns away.
+    "effect/Stream:partitionQueue": scoped_("Stream.partitionQueue", (to, self, [filter, given]) =>
+      !filter
+        ? to.wrong<V>()
+        : Effect.map(
+            Stream.partitionQueue(
+              self,
+              (item: V) => {
+                const made_ = ranNow(filter, [item], to.site);
+                const read = made_ ? Brands.resultOf(made_) : undefined;
+                if (read)
+                  return read._tag === "Success"
+                    ? Result.succeed(read.success)
+                    : Result.fail(read.failure);
+                to.timeline.fatal ??= Value.notTranslated(
+                  to.site,
+                  "calls Stream.partitionQueue with a filter the prover cannot run at once",
+                );
+                return Result.fail(item);
+              },
+              readOptions(given),
+            ),
+            ([passed, failed_]): V =>
+              arr([tools.wrap("Queue", passed), tools.wrap("Queue", failed_)]),
+          ),
+    ),
     "effect/Stream:partitionEffect": parted("Stream.partitionEffect", (to, filter) =>
       to.fn(filter),
     ),
@@ -1440,6 +1473,25 @@ export const make = (
     "effect/Stream:splitLines": lift("Stream.splitLines", (to, self) =>
       Stream.map(Stream.splitLines(Stream.mapEffect(self, (item) => textOf(to, item))), (line): V =>
         Value.str(line),
+      ),
+    ),
+    // The key and the value of each item, from an effect of the code: a stream for each key.
+    "effect/Stream:groupBy": lift("Stream.groupBy", (to, self, [f, given]) =>
+      Stream.map(
+        Stream.groupBy(
+          self,
+          (item) =>
+            Effect.flatMap(to.fn(f)(item), (pair) =>
+              Effect.flatMap(to.read(tools.items(to.name, pair, to.site)), ([key, value]) =>
+                Effect.map(
+                  keyOf(to, key ?? Value.undef),
+                  (read) => [read, value ?? Value.undef] as const,
+                ),
+              ),
+            ),
+          readOptions(given),
+        ),
+        ([key, group]): V => arr([keyed(key), flow(to.timeline, group, to.site, same)]),
       ),
     ),
     // A stream of each key, and a stream of the items that have it.

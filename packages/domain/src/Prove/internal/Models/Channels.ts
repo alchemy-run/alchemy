@@ -1125,6 +1125,17 @@ export const make = (kit: Kit, tools: Tools) => {
     tag?._tag === "Str" && tagOf(rejection) === tag.value && rejection._tag === "Obj"
       ? rejection.fields.reason
       : undefined;
+  const keptOfArrays = (to: Given, self: Real, filter: (item: V) => Effect.Effect<V, Held>): Real =>
+    Channel.filterMapEffect(self, (chunk: V) =>
+      Effect.gen(function* () {
+        const kept: Array<V> = [];
+        for (const item of yield* to.read(tools.items(to.name, chunk, to.site))) {
+          const made_ = yield* sorted(to, yield* filter(item));
+          if (Result.isSuccess(made_)) kept.push(made_.success);
+        }
+        return kept.length > 0 ? Result.succeed<V>(arr(kept)) : Result.fail(chunk);
+      }),
+    );
   /** A channel that goes on as another where its error holds a reason, and fails as it did where it does not. */
   const byReason = (
     name: string,
@@ -1139,6 +1150,14 @@ export const make = (kit: Kit, tools: Tools) => {
     );
 
   Object.assign(models, {
+    // Each array the channel gives, with the items the filter passes on: an array of none is dropped.
+    "effect/Channel:filterMapArray": over("Channel.filterMapArray", (to, self, [filter]) =>
+      keptOfArrays(to, self, (item) => straight(to, filter)(item)),
+    ),
+    "effect/Channel:filterMapArrayEffect": over(
+      "Channel.filterMapArrayEffect",
+      (to, self, [filter]) => keptOfArrays(to, self, (item) => to.fn(filter)(item)),
+    ),
     "effect/Channel:filterMap": over("Channel.filterMap", (to, self, [filter]) =>
       Channel.filterMapEffect(self, (item: V) =>
         Effect.flatMap(straight(to, filter)(item), (made_) => sorted(to, made_)),

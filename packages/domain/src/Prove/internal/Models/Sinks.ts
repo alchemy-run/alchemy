@@ -565,6 +565,10 @@ export const make = (
           : Stream.unwrap(Effect.as(to.wrong<never>(), Stream.empty));
       },
     ),
+    // What the sink leaves over, as a stream.
+    "effect/Stream:pipeThrough": flows.lift("Stream.pipeThrough", (to, self, [into]) =>
+      Stream.pipeThrough(self, built(to, into)),
+    ),
     "effect/Stream:tapSink": flows.lift("Stream.tapSink", (to, self, [into]) =>
       Stream.tapSink(self, built(to, into)),
     ),

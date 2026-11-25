@@ -2032,6 +2032,7 @@ permits.resize(3);
 Semaphore.withPermits(permits, 2)(Effect.succeed(a));
 Semaphore.withPermits(permits, 2, Effect.succeed(b));
 Semaphore.withPermit(permits, Effect.succeed(a));
+Semaphore.takeScoped(permits, 1); // in a scope: given back when it closes
 Semaphore.withPermit(permits)(Effect.succeed(b));
 Semaphore.withPermitsIfAvailable(permits, 4)(Effect.succeed(a));
 Semaphore.withPermitsIfAvailable(permits, 1, Effect.succeed(a));
@@ -2457,6 +2458,8 @@ Channel.mapDone((n) => n + b);
 Channel.mapDoneEffect((n) => Effect.succeed(n * 2));
 Channel.tap((n) => Effect.succeed(n));
 Channel.filter((n) => n > 0);
+Channel.filterMapArray((n) => (n > 2 ? Result.succeed(n * 2) : Result.fail(n))); // of a channel of arrays
+Channel.filterMapArrayEffect((n) => Effect.succeed(n > 1 ? Result.succeed(n) : Result.fail(n)));
 Channel.filterMap((n) => (n > 2 ? Result.succeed(n * 2) : Result.fail(n)));
 Channel.filterMapEffect((n) => Effect.succeed(n > 2 ? Result.succeed(n + 1) : Result.fail(n)));
 Channel.acquireUseRelease(Effect.as(log(seen, "open"), a), (n) => Channel.fromIterable([n, b]), (n, exit) => log(seen, [n, Exit.isSuccess(exit)]));
@@ -2970,6 +2973,9 @@ Stream.slidingSize(2, 2);
 Stream.accumulate;
 Stream.collect;
 Stream.splitLines; // of text the code can see
+Stream.groupBy((n) => Effect.succeed([n % 2 === 0 ? 0 : 1, n * 10])); // a key and a value of each item
+Stream.partitionQueue(Stream.make([a, true], [b, false]), ([n, keep]) => (keep ? Result.succeed(n) : Result.fail(-n))); // in a scope: a queue of each
+Stream.pipeThrough(Sink.take(1)); // what the sink leaves over
 Stream.groupByKey((n) => (n % 2 === 0 ? 0 : 1)); // by a key the code can see
 Stream.filterMapEffect((n) => Effect.succeed(n > 2 ? Result.succeed(n * 2) : Result.fail(n)));
 Stream.takeWhileFilter((n) => (n > 2 ? Result.succeed(n + 1) : Result.fail(n)));

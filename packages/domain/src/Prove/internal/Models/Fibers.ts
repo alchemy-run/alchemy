@@ -3690,6 +3690,26 @@ export const make = (
             ),
           )
         : wrongArguments(site, "Request.TaggedClass"),
+    // Permits taken in the scope it runs in: given back when the scope closes.
+    "effect/Semaphore:takeScoped": dual("Semaphore.takeScoped", 2, ([self, n], site) => {
+      const held = heldOf<Semaphore.Semaphore>("Semaphore", self);
+      return held
+        ? Effect.map(permits("Semaphore.takeScoped", n, site), (found) =>
+            scoped(
+              "Semaphore.takeScoped",
+              site,
+              (timeline) =>
+                Timeline.waiting(
+                  timeline,
+                  "waits for permits of a Semaphore that nothing releases",
+                  site,
+                  Semaphore.takeScoped(held, found),
+                ),
+              none,
+            ),
+          )
+        : wrongArguments(site, "Semaphore.takeScoped");
+    }),
     "effect/RequestResolver:isRequestResolver": ([value]: ReadonlyArray<V>) =>
       Effect.succeed(bool(kindOf(value) === "Resolver")),
     // A span says how the resolver is watched: it is the resolver it was.
