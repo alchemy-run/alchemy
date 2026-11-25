@@ -1120,6 +1120,45 @@ export const make = (
       2,
       false,
     ),
+    // The effect, where the permits are there now: nothing where they are not.
+    // The semaphore comes first either way: the effect is given now or after.
+    "effect/PartitionedSemaphore:withPermitsIfAvailable": (args, site) => {
+      const [self, n, given_] = args;
+      const held = heldOf<PartitionedSemaphore.PartitionedSemaphore<Key>>(
+        "PartitionedSemaphore",
+        self,
+      );
+      if (!held) return wrongArguments(site, "PartitionedSemaphore.withPermitsIfAvailable");
+      const run = (found: number, effect: V | undefined, at: Site): Eval<V> =>
+        effect?._tag === "Effect"
+          ? Effect.succeed(
+              timed(
+                "PartitionedSemaphore.withPermitsIfAvailable",
+                (timeline) =>
+                  Timeline.back(
+                    timeline,
+                    PartitionedSemaphore.withPermitsIfAvailable(
+                      held,
+                      found,
+                    )(Timeline.real(timeline, effect.run)),
+                    option,
+                  ),
+                at,
+              ),
+            )
+          : wrongArguments(at, "PartitionedSemaphore.withPermitsIfAvailable");
+      return Effect.flatMap(
+        permits("PartitionedSemaphore.withPermitsIfAvailable", n, site),
+        (found) =>
+          given_ !== undefined
+            ? run(found, given_, site)
+            : Effect.succeed(
+                native("PartitionedSemaphore.withPermitsIfAvailable", ([effect], at) =>
+                  run(found, effect, at),
+                ),
+              ),
+      );
+    },
     "effect/Semaphore:withPermit": (args, site) =>
       args.length === 1
         ? ofMember("Semaphore", "withPermit", 0, false)(args, site)
@@ -2474,7 +2513,95 @@ export const make = (
     });
   };
 
+  /**
+   * How long a cache keeps what a lookup gave, as a function of the code says:
+   * the library asks at once, given how the lookup ended and the key.
+   */
+  const keptFor =
+    (timeline: Timeline.Timeline, f: V, name: string, site: Site) =>
+    (exit: Exit.Exit<V, Held>, key: Key): Duration.Duration => {
+      const read = Effect.runSyncExit(
+        Effect.flatMap(Timeline.real(timeline, exitOf(timeline, exit)), (held) =>
+          Effect.suspend(() => {
+            try {
+              return Timeline.real(
+                timeline,
+                written(name, host.atOnce(f, [held, keyed(key)], site), site),
+              );
+            } catch {
+              return Timeline.real(
+                timeline,
+                unseen(site, `calls ${name} with a timeToLive the prover cannot run at once`),
+              );
+            }
+          }),
+        ),
+      );
+      if (read._tag === "Success") return read.value;
+      timeline.fatal ??= Value.notTranslated(
+        site,
+        `calls ${name} with a timeToLive the prover cannot work out at once`,
+      );
+      return Duration.zero;
+    };
+  const withOptions = (fields: Readonly<Record<string, V>>): boolean =>
+    Object.keys(fields).every((key) => ["capacity", "timeToLive", "lookup"].includes(key));
+
   const shared: Models = {
+    "effect/Cache:makeWith": ([lookup, given_], site) => {
+      const fields = given_?._tag === "Obj" && !given_.brand ? given_.fields : undefined;
+      if (!lookup || !fields || !withOptions(fields)) return wrongArguments(site, "Cache.makeWith");
+      return Effect.succeed(
+        timed(
+          "Cache.makeWith",
+          (timeline) =>
+            Effect.gen(function* () {
+              const size = yield* count("Cache.makeWith", fields.capacity, site);
+              const ttl = fields.timeToLive;
+              const held = yield* Cache.makeWith<Key, V, Held>(
+                (key) => called(timeline, lookup, site)(keyed(key)),
+                {
+                  capacity: size,
+                  timeToLive:
+                    ttl && ttl._tag !== "Undef"
+                      ? keptFor(timeline, ttl, "Cache.makeWith", site)
+                      : undefined,
+                },
+              );
+              return wrap("Cache", held);
+            }),
+          site,
+        ),
+      );
+    },
+    "effect/ScopedCache:makeWith": ([given_], site) => {
+      const fields = given_?._tag === "Obj" && !given_.brand ? given_.fields : undefined;
+      const lookup = fields?.lookup;
+      if (!fields || !lookup || !withOptions(fields))
+        return wrongArguments(site, "ScopedCache.makeWith");
+      return Effect.succeed(
+        scoped(
+          "ScopedCache.makeWith",
+          site,
+          (timeline) =>
+            Effect.flatMap(
+              Timeline.real(timeline, count("ScopedCache.makeWith", fields.capacity, site)),
+              (size) => {
+                const ttl = fields.timeToLive;
+                return ScopedCache.makeWith<Key, V, Held>({
+                  capacity: size,
+                  timeToLive:
+                    ttl && ttl._tag !== "Undef"
+                      ? keptFor(timeline, ttl, "ScopedCache.makeWith", site)
+                      : undefined,
+                  lookup: (key) => called(timeline, lookup, site)(keyed(key)),
+                });
+              },
+            ),
+          (held) => wrap("ScopedCache", held),
+        ),
+      );
+    },
     "effect/TxDeferred:make": made("TxDeferred", () => TxDeferred.make<V, Held>()),
     "effect/TxDeferred:succeed": on<TD, boolean>(
       "TxDeferred",

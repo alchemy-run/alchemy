@@ -3876,6 +3876,9 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const got = yield* four(a, b).pipe(Stream.tapSink(Sink.forEach((n) => log(seen, n))), Stream.runCollect); return [got, yield* Ref.get(seen)]; })`,
       `Effect.scoped(Effect.gen(function* () { const [first, rest] = yield* Stream.peel(four(a, b), Sink.take(1)); return [first, yield* Stream.runCollect(rest)]; }))`,
     ],
+    unread: [
+      [`Stream.run(four(a, b), Sink.never)`, /runs a stream into Sink.never, which never ends/],
+    ],
   },
   {
     // The last few of Fiber, Queue, Deferred, Scope, Cache and Pool.
@@ -3956,6 +3959,10 @@ const rest: ReadonlyArray<Group> = [
       `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.unbounded(); const sub = yield* PubSub.subscribe(hub); yield* PubSub.publish(hub, a); const ended = yield* PubSub.end(hub, b); const again = PubSub.endUnsafe(hub, 0); return [ended, again, yield* PubSub.take(sub), yield* PubSub.take(sub)]; }))`,
       `Effect.gen(function* () { const runs = yield* Ref.make(0); return yield* Effect.repeat(Ref.update(runs, (n) => n + a), Schedule.concatResult(Schedule.recurs(1), Schedule.recurs(1))); })`,
       `Effect.gen(function* () { const queue = yield* Queue.unbounded(); yield* Queue.offerAll(queue, [a, b]); Queue.flushUnsafe(queue); return yield* Queue.size(queue); })`,
+      `Effect.gen(function* () { const asked = yield* Ref.make(0); const prices = yield* Cache.makeWith((name) => Effect.as(Ref.update(asked, (n) => n + 1), name.length + a), { capacity: 4, timeToLive: (exit, key) => (Exit.isSuccess(exit) && key === "tea" ? "1 second" : "1 hour") }); yield* Cache.get(prices, "tea"); yield* Effect.sleep("2 seconds"); yield* Cache.get(prices, "tea"); return [yield* Ref.get(asked), yield* Cache.get(prices, "tea")]; })`,
+      `Effect.scoped(Effect.gen(function* () { const asked = yield* Ref.make(0); const files = yield* ScopedCache.makeWith({ capacity: 4, lookup: (name) => Effect.as(Ref.update(asked, (n) => n + 1), name.length + b), timeToLive: () => "1 second" }); yield* ScopedCache.get(files, "tea"); yield* ScopedCache.get(files, "tea"); return [yield* Ref.get(asked), yield* ScopedCache.get(files, "tea")]; }))`,
+      `Effect.gen(function* () { const permits = yield* PartitionedSemaphore.make({ permits: 1 }); const got = yield* PartitionedSemaphore.withPermitsIfAvailable(permits, 1)(Effect.succeed(a)); const none = yield* PartitionedSemaphore.withPermitsIfAvailable(permits, 2)(Effect.succeed(b)); const again = yield* PartitionedSemaphore.withPermitsIfAvailable(permits, 1, Effect.succeed(b)); return [got, none, again]; })`,
+      `Effect.scoped(Effect.gen(function* () { const cell = yield* TxSubscriptionRef.make(a); const fiber = yield* Effect.forkChild(Stream.runCollect(Stream.take(TxSubscriptionRef.changesStream(cell), 2))); yield* Effect.sleep(1); yield* TxSubscriptionRef.set(cell, b); return yield* Fiber.join(fiber); }))`,
     ],
   },
   {

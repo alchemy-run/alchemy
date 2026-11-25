@@ -595,6 +595,22 @@ export const make = (
         out: (state) => state,
       }),
     ),
+    // A sink that takes every item and never ends: what runs into it waits, and is reported.
+    "effect/Sink:never": sink(
+      "Sink.never",
+      (to) =>
+        Sink.fromEffect(
+          to.read(
+            Timeline.waiting(
+              to.timeline,
+              "runs a stream into Sink.never, which never ends",
+              to.site,
+              Effect.never,
+            ),
+          ),
+        ),
+      undefined,
+    ),
     "effect/Sink:drain": constant("effect/Sink:drain", "Sink.drain", () =>
       Sink.as(Sink.drain, Value.undef),
     ),

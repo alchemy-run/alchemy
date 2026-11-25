@@ -2154,6 +2154,7 @@ Cache.size(prices);
 Cache.getSuccess(prices, "tea");
 Cache.values(prices);
 Cache.keys(prices);
+Cache.makeWith((name) => Effect.as(Ref.update(asked, (n) => n + 1), name.length + a), { capacity: 4, timeToLive: (exit, key) => (Exit.isSuccess(exit) && key === "tea" ? "1 second" : "1 hour") }); // how long, as a function of how the lookup ended and the key
 Cache.entries(prices);
 Cache.invalidateWhen(prices, "tea", (n) => n > b);
 const jobs = yield* FiberMap.make(); // in a scope
@@ -2253,6 +2254,7 @@ TxSubscriptionRef.updateAndGet(cell, (n) => n * 2);
 TxSubscriptionRef.getAndUpdate(cell, (n) => n - 1);
 TxSubscriptionRef.modify(cell, (n) => [n + 1, n * b]); // what to give back, and the value after
 TxSubscriptionRef.isTxSubscriptionRef(cell);
+TxSubscriptionRef.changesStream(cell); // what it holds now, then each value it is given
 const lock = yield* TxReentrantLock.make();
 TxReentrantLock.acquireRead(lock);
 TxReentrantLock.acquireWrite(lock);
@@ -2276,6 +2278,7 @@ PartitionedSemaphore.release(permits, 1);
 PartitionedSemaphore.available(permits);
 PartitionedSemaphore.makeUnsafe({ permits: 2 });
 PartitionedSemaphore.capacity(permits);
+PartitionedSemaphore.withPermitsIfAvailable(permits, 1)(Effect.succeed(a)); // nothing, where the permits are not there
 PartitionedSemaphore.withPermit(permits, 3)(Effect.succeed(a));
 PartitionedSemaphore.withPermits(permits, "y", 1, Effect.succeed(b));
 const files = yield* ScopedCache.make({
@@ -2296,6 +2299,7 @@ ScopedCache.refresh(files, "tea");
 ScopedCache.values(files);
 ScopedCache.invalidateAll(files);
 ScopedCache.keys(files);
+ScopedCache.makeWith({ capacity: 4, lookup: (name) => Effect.as(Ref.update(asked, (n) => n + 1), name.length + b), timeToLive: () => "1 second" });
 ScopedCache.entries(files);
 ScopedCache.invalidateWhen(files, "tea", (n) => n > b);
 ```
@@ -3739,6 +3743,7 @@ Random.next.pipe(Random.withSeed(command.attempts)); // a seed an input decides
 Cache.get(prices, command.item); // a key an input decides: the library finds one by its hash
 Effect.request(GetPrice({ item: command.item }), prices); // a request of values an input decides
 Effect.request(GetPrice({ item: "tea" }), RequestResolver.never); // a resolver that never answers
+Stream.run(stream, Sink.never); // a sink that never ends
 
 Cron.next(cron); // next, prev and sequence use the clock when they are given no time
 Metric.value(orders); // reads a metric: what one holds is not what a handler decides by

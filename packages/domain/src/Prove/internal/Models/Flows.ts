@@ -10,6 +10,7 @@ import * as Result from "effect/Result";
 import type * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as TxSubscriptionRef from "effect/TxSubscriptionRef";
 import * as Brands from "../Brands.ts";
 import type { Kit, Model, Models } from "../Kit.ts";
 import { arr, callable, dualBy, native, tagOf, wrongArguments } from "../Kit.ts";
@@ -47,7 +48,7 @@ export interface Tools {
   ) => Effect.Effect<V, Held> | undefined;
   readonly scheduleOf: (v: V | undefined) => Schedule.Schedule<unknown, unknown> | undefined;
   readonly heldOf: <A>(
-    kind: "Queue" | "PubSub" | "Subscription",
+    kind: "Queue" | "PubSub" | "Subscription" | "TxSubscriptionRef",
     v: V | undefined,
   ) => A | undefined;
   readonly plainOf: (v: V | undefined) => unknown;
@@ -1470,6 +1471,17 @@ export const make = (
         : Value.bool(key);
 
   Object.assign(models, {
+    // What the cell holds now, then each value it is given.
+    "effect/TxSubscriptionRef:changesStream": ([cell]: ReadonlyArray<V>, site: Site) => {
+      const held = tools.heldOf<TxSubscriptionRef.TxSubscriptionRef<V>>("TxSubscriptionRef", cell);
+      return held
+        ? Effect.succeed(
+            timed("TxSubscriptionRef.changesStream", site, (timeline) =>
+              Effect.sync(() => flow(timeline, TxSubscriptionRef.changesStream(held), site, same)),
+            ),
+          )
+        : wrongArguments(site, "TxSubscriptionRef.changesStream");
+    },
     "effect/Stream:splitLines": lift("Stream.splitLines", (to, self) =>
       Stream.map(Stream.splitLines(Stream.mapEffect(self, (item) => textOf(to, item))), (line): V =>
         Value.str(line),
