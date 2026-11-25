@@ -37,6 +37,7 @@ const ONE_WAY: ReadonlySet<string> = new Set([
   "effect/PartitionedSemaphore:withPermitsIfAvailable",
   // Written with the channel or the stream first, and no other way.
   ...["effect/Channel:transformPull", "effect/Stream:transformPull"],
+  "effect/Stream:transformPullBracket",
   ...["effect/PartitionedSemaphore:withPermit", "effect/PartitionedSemaphore:withPermits"],
   // Two ways to write its options, with a capacity and without: neither takes a value from `pipe`.
   "effect/RcMap:make",

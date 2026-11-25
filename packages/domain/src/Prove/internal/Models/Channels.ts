@@ -1326,6 +1326,157 @@ export const make = (kit: Kit, tools: Tools) => {
       ),
   });
 
+  // ---- Channels pulled as a function of the code says, and the bracket forms of a transform.
+  const asPull = (upstream: unknown): Effect.Effect<V, unknown> =>
+    upstream as Effect.Effect<V, unknown>;
+  /** An effect of the code that ends a pull: a failure with `Cause.Done` is the library's own, with its value. */
+  const endingWith = <A>(self: Effect.Effect<A, Held>): Effect.Effect<A, Held | Cause.Done<V>> =>
+    Effect.catchIf(
+      self,
+      (failed): boolean => failed.defect !== true && isDone(failed.rejection),
+      (failed) =>
+        Cause.done(
+          isDone(failed.rejection) ? (failed.rejection.fields.value ?? Value.undef) : Value.undef,
+        ),
+    );
+  Object.assign(models, {
+    "effect/Channel:combine": (args: ReadonlyArray<V>, site: Site) => {
+      const build = (
+        self: V,
+        that: V,
+        initial: V | undefined,
+        f: V | undefined,
+        at: Site,
+      ): Eval<V> =>
+        isChannel(self) && isChannel(that) && initial && f
+          ? Effect.succeed(
+              made("Channel.combine", at, (to) =>
+                Channel.unwrap(
+                  Effect.map(
+                    Effect.suspend(() => to.read(host.call(initial, [], at))),
+                    (state) =>
+                      ours(
+                        Channel.combine(
+                          to.chan(self),
+                          to.chan(that),
+                          () => state,
+                          (s: V, pullLeft: unknown, pullRight: unknown) =>
+                            endingWith(
+                              Effect.flatMap(
+                                to.fn(f)(
+                                  s,
+                                  pull(to.timeline, at, asPull(pullLeft)),
+                                  pull(to.timeline, at, asPull(pullRight)),
+                                ),
+                                (pair) => stepOf(to, pair),
+                              ),
+                            ),
+                        ) as never,
+                      ),
+                  ),
+                ),
+              ),
+            )
+          : wrongArguments(at, "Channel.combine");
+      const [a, b, c, d] = args;
+      if (args.length === 4 && a && b) return build(a, b, c, d, site);
+      return a
+        ? Effect.succeed(
+            native("Channel.combine", ([self], at) =>
+              self ? build(self, a, b, c, at) : wrongArguments(at, "Channel.combine"),
+            ),
+          )
+        : wrongArguments(site, "Channel.combine");
+    },
+    "effect/Channel:fromTransformBracket": ([transform]: ReadonlyArray<V>, site: Site) =>
+      transform
+        ? Effect.succeed(
+            made("Channel.fromTransformBracket", site, (to) =>
+              ours(
+                Channel.fromTransformBracket((upstream, scope, forked) =>
+                  Effect.map(
+                    to.fn(transform)(
+                      pull(to.timeline, to.site, asPull(upstream)),
+                      tools.wrap("Scope", scope),
+                      tools.wrap("Scope", forked),
+                    ),
+                    (made_) => pulled(to.timeline, made_, to.site, to.name),
+                  ),
+                ),
+              ),
+            ),
+          )
+        : wrongArguments(site, "Channel.fromTransformBracket"),
+    // The stream comes first: the library has no form that is given it later.
+    "effect/Stream:transformPullBracket": ([self, f]: ReadonlyArray<V>, site: Site) =>
+      isFlow(self) && f
+        ? Effect.succeed(
+            streaming("Stream.transformPullBracket", site, (to) =>
+              Stream.transformPullBracket(
+                tools.real(to.timeline, self),
+                (upstream, scope, forked) =>
+                  Effect.map(
+                    to.fn(f)(
+                      pull(
+                        to.timeline,
+                        site,
+                        Effect.map(upstream, (chunk): V => arr(chunk)),
+                      ),
+                      tools.wrap("Scope", scope),
+                      tools.wrap("Scope", forked),
+                    ),
+                    (made_) =>
+                      Effect.flatMap(
+                        pulled(to.timeline, made_, site, to.name) as never,
+                        (chunk: V) =>
+                          Effect.flatMap(to.read(tools.items(to.name, chunk, site)), (items) =>
+                            items.length > 0
+                              ? Effect.succeed(items as readonly [V, ...Array<V>])
+                              : to.read(wrongArguments(site, to.name)),
+                          ),
+                      ),
+                  ),
+              ),
+            ),
+          )
+        : wrongArguments(site, "Stream.transformPullBracket"),
+    // A pull of the channel, open as long as the scope the code gives.
+    "effect/Channel:toPullScoped": ([self, scope]: ReadonlyArray<V>, site: Site) => {
+      const held = tools.heldOf<Scope.Scope>("Scope" as never, scope);
+      return isChannel(self) && held
+        ? Effect.succeed<V>({
+            _tag: "Effect",
+            run: Effect.flatMap(Timeline.current(site, "runs Channel.toPullScoped"), (timeline) => {
+              const to = given(timeline, "Channel.toPullScoped", site);
+              return Timeline.back(timeline, Channel.toPullScoped(to.chan(self), held), (made_) =>
+                pull(timeline, site, made_ as Effect.Effect<V, unknown>),
+              );
+            }),
+          })
+        : wrongArguments(site, "Channel.toPullScoped");
+    },
+    // Arrays of text cut into lines, of text the code can see.
+    "effect/Channel:splitLines": from(
+      "Channel.splitLines",
+      (to) =>
+        Channel.mapInput(
+          Channel.map(Channel.splitLines<unknown, V>(), (lines): V => arr(lines.map(Value.str))),
+          (chunk: V) =>
+            Effect.flatMap(to.read(tools.items(to.name, chunk, to.site)), (items) => {
+              const texts = items.map((item) => (item._tag === "Str" ? item.value : undefined));
+              return texts.length > 0 && texts.every((text) => text !== undefined)
+                ? Effect.succeed(texts as unknown as readonly [string, ...Array<string>])
+                : to.read(
+                    Value.notTranslated(
+                      to.site,
+                      "calls Channel.splitLines on text an input decides",
+                    ),
+                  );
+            }),
+        ) as unknown as Real,
+    ),
+  });
+
   // ---- A stream of what the code makes of the pull of another.
   Object.assign(models, {
     "effect/Stream:transformPull": (args: ReadonlyArray<V>, site: Site) => {
