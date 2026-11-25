@@ -15,7 +15,7 @@ const SHARED =
 export const CHANGES = "~changes";
 const REDACTED: Value.Brand = { kind: "Redacted", cls: undefined };
 /** What a console has: each writes something out, and gives nothing. */
-const CONSOLE =
+export const CONSOLE =
   "assert clear count countReset debug dir dirxml error group groupCollapsed groupEnd info log table time timeEnd timeLog trace warn".split(
     " ",
   );

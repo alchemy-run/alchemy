@@ -1541,6 +1541,48 @@ export const make = (
     // A resolver that never answers: a request of it waits, and is reported.
     "effect/RequestResolver:never": () =>
       resolving(() => RequestResolver.never as unknown as Answering),
+    "effect/Scope:Scope": (site) =>
+      scoped(
+        "Scope.Scope",
+        site,
+        () => Effect.scope,
+        (held) => wrap("Scope", held),
+      ),
+    // The random of the handler: a draw with no seed stops the prover, as Random.next does.
+    "effect/Random:Random": (site) =>
+      drawn(
+        "Random.Random",
+        site,
+        (timeline) =>
+          Effect.succeed(
+            Effect.map(Effect.service(Random.Random), (random) => ({ random, timeline })),
+          ),
+        ({ random, timeline }) => {
+          const draw = (name: string, f: () => number): V =>
+            native(`random.${name}`, () => {
+              const value = f();
+              return timeline.fatal ? Effect.fail(timeline.fatal) : Effect.succeed(num(value));
+            });
+          return Value.obj({
+            nextIntUnsafe: draw("nextIntUnsafe", () => random.nextIntUnsafe()),
+            nextDoubleUnsafe: draw("nextDoubleUnsafe", () => random.nextDoubleUnsafe()),
+          });
+        },
+      ),
+    // What the schedule a repeat or a retry runs on is told of the turn it is on.
+    "effect/Schedule:CurrentMetadata": (site) =>
+      timed(
+        "Schedule.CurrentMetadata",
+        (timeline) =>
+          Timeline.back(timeline, Effect.service(Schedule.CurrentMetadata), (meta) =>
+            Value.obj({
+              ...metadataOf(meta),
+              output: outputOf(meta.output),
+              duration: durationOf(meta.duration),
+            }),
+          ),
+        site,
+      ),
     "effect/Effect:scope": (site) =>
       scoped(
         "Effect.scope",

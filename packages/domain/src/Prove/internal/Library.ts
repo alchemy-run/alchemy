@@ -313,6 +313,22 @@ export const make = (host: Host) => {
       currentTimeNanosUnsafe: now(nanos, "clock.currentTimeNanosUnsafe"),
     });
   };
+  /** `yield* Clock.Clock`: the clock a handler is given. */
+  clocks["effect/Clock:Clock"] = (site) => Kit.lazy(() => Effect.succeed(clockObject(site)));
+  /** `yield* Console.Console`: a console whose every function writes out, and gives nothing. */
+  clocks["effect/Console:Console"] = () =>
+    Kit.lazy(() =>
+      Effect.succeed(
+        Value.obj(
+          Object.fromEntries(
+            Cells.CONSOLE.map((name): [string, V] => [
+              name,
+              native(`console.${name}`, () => Effect.succeed(Value.undef)),
+            ]),
+          ),
+        ),
+      ),
+    );
   /** `Clock.clockWith(f)`: the effect the function makes of the clock. */
   const clockWith: Model = ([f], site) =>
     f

@@ -3399,6 +3399,7 @@ const rest: ReadonlyArray<Group> = [
     both: [
       `Random.next.pipe(Random.withSeed("seed"))`,
       `Random.withSeed(Random.nextInt, 7)`,
+      `Random.withSeed(Effect.map(Random.Random, (random) => [random.nextIntUnsafe(), random.nextDoubleUnsafe()]), 7)`,
       `Random.nextBoolean.pipe(Random.withSeed("coin"))`,
       `Effect.all([Random.next, Random.next, Random.nextInt]).pipe(Random.withSeed(42))`,
       `Random.nextBetween(1, 5).pipe(Random.withSeed("between"))`,
@@ -3413,6 +3414,10 @@ const rest: ReadonlyArray<Group> = [
     unread: [
       // With no seed, no two runs draw the same number.
       [`Random.next`, /draws a random number with no seed: no two runs draw the same/],
+      [
+        `Effect.map(Random.Random, (random) => random.nextDoubleUnsafe())`,
+        /draws a random number with no seed: no two runs draw the same/,
+      ],
       [`Random.shuffle([a, b])`, /draws a random number with no seed/],
       [
         `Random.next.pipe(Random.withSeed(a))`,
@@ -4145,6 +4150,8 @@ const rest: ReadonlyArray<Group> = [
     ...numbers,
     effectful: true,
     prelude: [
+      `import * as Schedule from "effect/Schedule";`,
+      `import * as Scope from "effect/Scope";`,
       `export class Counter extends Domain.RequestContext<Counter>()("Bench/Counter", Schema.Struct({ start: Small })) {}`,
     ],
     both: [
@@ -4155,6 +4162,10 @@ const rest: ReadonlyArray<Group> = [
       `Effect.service(Counter).pipe(Effect.provideService(Counter, { start: a }), Effect.map((counter) => counter.start + b))`,
       `Effect.gen(function* () { yield* Console.log("l"); yield* Console.debug("d"); yield* Console.info("i"); yield* Console.warn("w"); yield* Console.error("e"); return a; })`,
       `Console.consoleWith((console) => Effect.sync(() => { console.log("x", a); console.error("y"); return a + b; }))`,
+      `Effect.gen(function* () { const clock = yield* Clock.Clock; const now = yield* clock.currentTimeMillis; return [now >= 0, clock.currentTimeMillisUnsafe() === now, a]; })`,
+      `Effect.gen(function* () { const console = yield* Console.Console; console.log("x", a); return a + b; })`,
+      `Effect.gen(function* () { const seen = []; yield* Effect.repeat(Effect.map(Schedule.CurrentMetadata, (meta) => { seen.push([meta.attempt, meta.input]); }), Schedule.recurs(2)); return [seen, a]; })`,
+      `Effect.gen(function* () { const seen = []; const out = yield* Effect.scoped(Effect.gen(function* () { const scope = yield* Scope.Scope; yield* Scope.addFinalizer(scope, Effect.sync(() => { seen.push(a); })); return seen.length; })); return [out, seen]; })`,
       `Effect.scoped(Effect.gen(function* () { yield* Console.assert(true, "fine"); yield* Console.count("n"); yield* Console.countReset("n"); yield* Console.dir({ n: 1 }); yield* Console.dirxml("x"); yield* Console.group({ label: "g" }); yield* Console.table([1]); yield* Console.time("t"); yield* Console.timeLog("t"); yield* Console.clear; yield* Console.trace("here"); return a; }))`,
       `Effect.succeed(b).pipe(Console.withGroup({ label: "g" }), Console.withTime("t"), Effect.map((n) => n + a))`,
       `Effect.gen(function* () { const ref = yield* Ref.make(a); yield* Ref.updateSome(ref, (n) => (n > 0 ? Option.some(n * 2) : Option.none())); const got = yield* Ref.updateSomeAndGet(ref, (n) => Option.some(n + 1)); const before = yield* Ref.getAndUpdateSome(ref, () => Option.none()); return [got, before, yield* Ref.get(ref)]; })`,
