@@ -2465,6 +2465,8 @@ Channel.provideServiceEffect(Rate, Effect.succeed({ percent: b }));
 Channel.provideContext(Context.make(Rate, { percent: a }));
 Channel.provide(Layer.succeed(Rate, { percent: b }));
 Channel.updateService(Rate, (rate) => ({ percent: rate.percent + 1 }));
+Channel.updateContext((context) => Context.add(context, Rate, { percent: Context.get(context, Rate).percent * 2 }));
+Channel.contextWith((context) => Channel.succeed(Context.get(context, Rate).percent + b));
 Stream.transformPullBracket(Stream.make(a, b), (pull) => Effect.succeed(Effect.map(pull, (chunk) => chunk.map((n) => n + 1))));
 Stream.transformPull(Stream.rechunk(Stream.make(a, b, 3), 1), (pull) => Effect.succeed(Effect.map(pull, (chunk) => chunk.map((n) => n * 2))));
 Channel.suspend(() => Channel.succeed(a));
@@ -3036,6 +3038,7 @@ Stream.provideServiceEffect(Rate, Effect.succeed({ percent: a }));
 Stream.provideContext(Context.make(Rate, { percent: a }));
 Stream.provide(Layer.succeed(Rate, { percent: b }));
 Stream.updateService(Rate, (rate) => ({ percent: rate.percent + 1 }));
+Stream.updateContext((context) => Context.add(context, Rate, { percent: Context.get(context, Rate).percent + b })); // these services and no others
 Stream.bindEffect("y", ({ x }) => Effect.succeed(x + 1));
 Stream.throttleEffect({ cost: (chunk) => Effect.succeed(chunk.length), units: 1, duration: "1 second" });
 Stream.transduce(Sink.take(3)); // the sink, run again and again over the stream

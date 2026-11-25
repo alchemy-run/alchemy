@@ -78,6 +78,13 @@ export const make = (
       provided: ReadonlyArray<readonly [service: unknown, value: V]>,
       self: Eval<A>,
     ) => Eval<A>;
+    /** An effect with only these services provided while it runs. */
+    readonly replacing: <A>(
+      provided: ReadonlyArray<readonly [service: unknown, value: V]>,
+      self: Eval<A>,
+    ) => Eval<A>;
+    /** Every service provided now, as a context of the code. */
+    readonly context: () => V;
     /** What a layer or a context the code gives provides, built now. */
     readonly provides: (
       name: string,
@@ -1431,6 +1438,25 @@ export const make = (
       unset(options)
         ? wiring.provides("Stream.provide", given, site)
         : wrongArguments(site, "Stream.provide"),
+    ),
+    // The stream runs with the services the function makes of the ones provided, and no others.
+    "effect/Stream:updateContext": dualBy("Stream.updateContext", isFlow, ([self, f], site) =>
+      isFlow(self) && f
+        ? Effect.succeed<V>({
+            _tag: "Stream",
+            open: Effect.flatMap(
+              Effect.flatMap(
+                Effect.suspend(() => host.call(f, [wiring.context()], site)),
+                (made_) => wiring.provides("Stream.updateContext", made_, site),
+              ),
+              (held) =>
+                wiring.replacing(
+                  held,
+                  Effect.map(self.open, (pull) => wiring.replacing(held, pull)),
+                ),
+            ),
+          })
+        : wrongArguments(site, "Stream.updateContext"),
     ),
     "effect/Stream:updateService": provided("Stream.updateService", ([tag, f], site) =>
       Effect.flatMap(serviceOf("Stream.updateService", tag, site), (service) => {

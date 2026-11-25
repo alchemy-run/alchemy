@@ -2250,7 +2250,13 @@ export const make = (host: Host) => {
   const fibers = Fibers.make(kit, { ...written }, asClass);
   Object.assign(written, fibers.models);
   Object.assign(clocks, fibers.sited);
-  const flows = Flows.make(kit, { ...written }, fibers.tools, { providing, provides: built });
+  const contextNow = (): V => contextOf([...host.provided.entries()]);
+  const flows = Flows.make(kit, { ...written }, fibers.tools, {
+    providing,
+    provides: built,
+    replacing,
+    context: contextNow,
+  });
   Object.assign(written, flows.models);
   Object.assign(clocks, flows.sited);
   const channels = Channels.make(kit, {
@@ -2258,6 +2264,7 @@ export const make = (host: Host) => {
     real: flows.real,
     flow: flows.flow,
     provides: built,
+    context: contextNow,
   });
   Object.assign(written, channels.models);
   Object.assign(clocks, channels.sited);

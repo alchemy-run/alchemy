@@ -40,6 +40,8 @@ export interface Tools extends Omit<Flows.Tools, "heldOf"> {
     given: V | undefined,
     site: Site,
   ) => Eval<ReadonlyArray<readonly [service: unknown, value: V]>>;
+  /** Every service provided now, as a context of the code. */
+  readonly context: () => V;
   readonly flow: <A>(
     timeline: Timeline.Timeline,
     made: Stream.Stream<A, unknown>,
@@ -1500,6 +1502,24 @@ export const make = (kit: Kit, tools: Tools) => {
           }),
         );
       });
+  /** Only these services, around each pull of the channel. */
+  const replacingChannel = (self: Real, held: Provided): Real =>
+    Channel.transformPull(self, (upstream) =>
+      Effect.succeed(
+        Effect.suspend(() => {
+          const before = [...host.provided.entries()];
+          host.provided.clear();
+          for (const [service, value] of held) host.provided.set(service, value);
+          return Effect.ensuring(
+            asPull(upstream),
+            Effect.sync(() => {
+              host.provided.clear();
+              for (const [service, value] of before) host.provided.set(service, value);
+            }),
+          );
+        }),
+      ),
+    ) as unknown as Real;
   const providing_ = (self: Real, held: Provided): Real =>
     Channel.transformPull(self, (upstream) =>
       Effect.succeed(upstream.pipe(asPull, withServices(held))),
@@ -1538,6 +1558,26 @@ export const make = (kit: Kit, tools: Tools) => {
             ),
           )
         : to.bad,
+    ),
+    // The channel the function makes of the services provided where it starts.
+    "effect/Channel:contextWith": from("Channel.contextWith", (to, [f]) =>
+      Channel.unwrap(Effect.suspend(() => Effect.map(to.fn(f)(tools.context()), to.chan))),
+    ),
+    // The channel runs with the services the function makes of the ones provided, and no others.
+    "effect/Channel:updateContext": over("Channel.updateContext", (to, self, [f]) =>
+      Channel.unwrap(
+        Effect.suspend(() =>
+          Effect.map(
+            Effect.flatMap(
+              to.read(
+                f ? host.call(f, [tools.context()], to.site) : wrongArguments(to.site, to.name),
+              ),
+              (made_) => to.read(tools.provides("Channel.updateContext", made_, to.site)),
+            ),
+            (held) => replacingChannel(self, held),
+          ),
+        ),
+      ),
     ),
     // The service is what the function makes of it while the channel runs.
     "effect/Channel:updateService": over("Channel.updateService", (to, self, [tag, f]) =>
