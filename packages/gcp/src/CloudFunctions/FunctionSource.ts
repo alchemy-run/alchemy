@@ -21,7 +21,7 @@ import { serviceAccountHostBundle } from "../GCPBindings.ts";
  */
 
 export const FUNCTION_ENTRY_POINT = "handler";
-export const DEFAULT_NODE_RUNTIME = "nodejs22";
+export const DEFAULT_NODE_RUNTIME = "nodejs26";
 
 export class FunctionSourceUploadFailed extends Data.TaggedError(
   "GCP.CloudFunctions.FunctionSourceUploadFailed",

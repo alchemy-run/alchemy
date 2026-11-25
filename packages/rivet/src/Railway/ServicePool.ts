@@ -52,8 +52,9 @@ export const ServicePool = (id: string, options: ServicePoolOptions = {}) =>
     id,
     settings: options,
     expected: "a reachable control plane",
-    // Railway services reach the control plane's public address.
-    network: (cluster) => cluster.network ?? { kind: "none" as const },
+    // The nodes join no network of the control plane's, so they connect to its
+    // public endpoint, never a private address they can't reach.
+    network: () => ({ kind: "none" as const }),
     // Every class the pool hosts is bundled into the node program;
     // RivetKit is installed beside it (it loads a native addon).
     nodes: Effect.fn(function* (nodes) {

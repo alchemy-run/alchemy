@@ -20,6 +20,7 @@ import * as Redacted from "effect/Redacted";
 import { Cluster } from "../../Cluster.ts";
 import { adminToken } from "../../internal/AdminToken.ts";
 import { Namespace } from "../../Namespace.ts";
+import { Network } from "../Network.ts";
 
 /** The engine release AWS control planes run by default. */
 export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.1.1";
@@ -430,12 +431,7 @@ export const makeControlPlane = <Req>(
         endpoint,
         // Nodes in the VPC skip CloudFront.
         nodeEndpoint: Output.interpolate`http://${loadBalancer.dnsName}`,
-        network: {
-          kind: "aws",
-          vpcId: network.vpcId,
-          subnetIds: network.publicSubnetIds,
-          securityGroupId: nodeGroup.groupId,
-        },
+        network: Network(network, nodeGroup),
         token: token.text,
         namespace: namespace.name,
       };

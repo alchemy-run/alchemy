@@ -49,7 +49,9 @@ export const ServicesPool = (id: string, options: ServicesPoolOptions = {}) =>
     id,
     settings: options,
     expected: "a reachable control plane",
-    network: (cluster) => cluster.network ?? { kind: "none" as const },
+    // The nodes join no network of the control plane's, so they connect to its
+    // public endpoint, never a private address they can't reach.
+    network: () => ({ kind: "none" as const }),
     nodes: Effect.fn(function* (nodes) {
       const app = yield* Fly.App(`${id}App`, {});
       // Fly gives every App secret to the App's Machines as env: the token

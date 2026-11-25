@@ -362,7 +362,9 @@ export const workloadImageHash = Effect.fn(function* (options: {
       runtime: options.runtime,
     });
   }
-  if (options.connection.registry !== undefined && imageSourceKind(options.source) === "main") {
+  // `resolveWorkloadImage` builds every non-`image` source through the
+  // connection registry and stores that hash, so the diff hashes there too.
+  if (options.connection.registry !== undefined && imageSourceKind(options.source) !== "image") {
     return yield* options.connectionRegistry.hash({
       source: options.source,
       platform: options.platform,

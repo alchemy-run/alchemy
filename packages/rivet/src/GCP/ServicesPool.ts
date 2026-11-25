@@ -56,13 +56,15 @@ export const ServicesPool = (id: string, options: ServicesPoolOptions = {}) =>
     id,
     settings: options,
     expected: "a reachable control plane",
-    network: (cluster) => cluster.network ?? { kind: "none" as const },
+    // The nodes join no network of the control plane's, so they connect to its
+    // public endpoint, never a private address they can't reach.
+    network: () => ({ kind: "none" as const }),
     nodes: (nodes) =>
       Effect.gen(function* () {
         const location =
           options.location ??
-          (nodes.network?.kind === "gcp"
-            ? nodes.network.region
+          (nodes.cluster.network?.kind === "gcp"
+            ? nodes.cluster.network.region
             : yield* GcpEnvironment.current.pipe(
                 Effect.map((env) => env.region),
                 Effect.orDie,
