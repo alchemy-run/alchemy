@@ -171,6 +171,8 @@ Each mention is a thunk, `() => Board.LabelIssue`, because this file and the boa
 The board reads `Triage` as it loads, so it takes its members as a thunk too:
 
 ```diff lang="typescript" title="src/Board/Board.model.ts"
+import { Triage } from "./Triage.process.ts";
+
 -export class Board extends Domain.Model("Board", {
 +export class Board extends Domain.Model("Board", () => ({
   aggregates: [Issue],
