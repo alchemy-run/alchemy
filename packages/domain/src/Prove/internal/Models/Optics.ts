@@ -239,6 +239,71 @@ export const make = (kit: Kit) => {
       }),
   };
 
+  // ---- A traversal: an optic onto an array, and one onto each of its items.
+
+  /**
+   * `optic.forEach((each) => inner)`: one Optional over the whole optic before
+   * it, onto the items `inner` finds. Putting them back needs as many as it found.
+   */
+  const traversal = (
+    outer: ReadonlyArray<OpticStep>,
+    inner: ReadonlyArray<OpticStep>,
+  ): OpticStep => ({
+    kind: "Optional",
+    get: (source, site) =>
+      Effect.gen(function* () {
+        const got = yield* found(outer, source, site);
+        if (!got.ok) return MISSED;
+        const kept: Array<V> = [];
+        for (const item of yield* itemsOf(got.value, site)) {
+          const each = yield* found(inner, item, site);
+          if (each.ok) kept.push(each.value);
+        }
+        return FOUND(arr(kept));
+      }),
+    set: (values, source, site) =>
+      Effect.gen(function* () {
+        const got = yield* found(outer, source, site);
+        if (!got.ok) return MISSED;
+        const items = yield* itemsOf(got.value, site);
+        const given = yield* itemsOf(values, site);
+        const at: Array<number> = [];
+        for (const [index, item] of items.entries())
+          if ((yield* found(inner, item, site)).ok) at.push(index);
+        if (given.length !== at.length) return MISSED;
+        const out = [...items];
+        for (const [k, index] of at.entries()) {
+          const put = yield* replaced(inner, given[k]!, items[index]!, site);
+          if (!put.ok) return MISSED;
+          out[index] = put.value;
+        }
+        return yield* replaced(outer, arr(out), source, site);
+      }),
+  });
+  const itemsOf = (v: V, site: Site): Eval<ReadonlyArray<V>> => {
+    const items = kit.itemsOf(v);
+    return items
+      ? Effect.succeed(items)
+      : unseen(
+          site,
+          "an optic goes over the items of a value that is not an array it knows the length of",
+        );
+  };
+  /** Every item a traversal finds: none where it finds nothing. */
+  const getAll = (path: ReadonlyArray<OpticStep>, source: V, site: Site): Eval<V> =>
+    Effect.map(found(path, source, site), (got) => (got.ok ? got.value : arr([])));
+  /** Each item a traversal finds, changed by the function. */
+  const modifyAll = (path: ReadonlyArray<OpticStep>, f: V, source: V, site: Site): Eval<V> =>
+    Effect.gen(function* () {
+      const got = yield* found(path, source, site);
+      if (!got.ok) return source;
+      const changed: Array<V> = [];
+      for (const item of yield* itemsOf(got.value, site))
+        changed.push(yield* host.call(f, [item], site));
+      const put = yield* replaced(path, arr(changed), source, site);
+      return put.ok ? put.value : source;
+    });
+
   // ---- The methods of an optic value.
 
   const member = (self: Optic, key: string): V | undefined => {
@@ -310,6 +375,26 @@ export const make = (kit: Kit) => {
               )
             : wrongArguments(site, "optic.modify"),
         );
+      case "forEach":
+        return native("optic.forEach", ([f], site) =>
+          f
+            ? Effect.flatMap(host.call(f, [optic([])], site), (inner) =>
+                isOptic(inner)
+                  ? Effect.succeed<V>(optic([traversal(path, inner.path)]))
+                  : wrongArguments(site, "optic.forEach"),
+              )
+            : wrongArguments(site, "optic.forEach"),
+        );
+      case "modifyAll":
+        return native("optic.modifyAll", ([f], site) =>
+          f
+            ? Effect.succeed(
+                native("optic.modifyAll", ([source], at) =>
+                  source ? modifyAll(path, f, source, at) : wrongArguments(at, "optic.modifyAll"),
+                ),
+              )
+            : wrongArguments(site, "optic.modifyAll"),
+        );
       case "set":
         return native("optic.set", ([value], site) =>
           value ? set(path, value, site) : wrongArguments(site, "optic.set"),
@@ -366,6 +451,8 @@ export const make = (kit: Kit) => {
     // `Optic.set(value, optic)`: the whole value a Prism or an Iso makes of a focus.
     "effect/Optic:set": reading("Optic.set", (path, value, site) => set(path, value, site)),
     "effect/Optic:replace": changing("Optic.replace", replace),
+    "effect/Optic:getAll": reading("Optic.getAll", getAll),
+    "effect/Optic:modifyAll": changing("Optic.modifyAll", modifyAll),
     "effect/Optic:replaceResult": changing("Optic.replaceResult", replaceResult),
     "effect/Optic:modify": changing("Optic.modify", modify),
     "effect/Optic:makeIso": ([getter, setter], site) =>

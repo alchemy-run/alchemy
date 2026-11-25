@@ -202,9 +202,13 @@ export const make = (
         ? durationOf(output)
         : Array.isArray(output)
           ? arr(output.map(outputOf))
-          : isValue(output)
-            ? output
-            : Value.undef;
+          : Result.isResult(output)
+            ? Result.isSuccess(output)
+              ? Brands.success(outputOf(output.success))
+              : Brands.failure(outputOf(output.failure))
+            : isValue(output)
+              ? output
+              : Value.undef;
 
   const isValue = (value: unknown): value is V =>
     typeof value === "object" && value !== null && "_tag" in value && !Effect.isEffect(value);
@@ -1488,6 +1492,17 @@ export const make = (
         ? Effect.succeed(Schedule.concat(self, that) as Schedule.Schedule<unknown, unknown>)
         : wrongArguments(site, "Schedule.concat");
     }),
+    // The first, then the second: what each gives, as a failure of the first and a success of the second.
+    "effect/Schedule:concatResult": onSchedule(
+      "Schedule.concatResult",
+      2,
+      (self, [other], site) => {
+        const that = scheduleOf(other);
+        return that
+          ? Effect.succeed(Schedule.concatResult(self, that) as Schedule.Schedule<unknown, unknown>)
+          : wrongArguments(site, "Schedule.concatResult");
+      },
+    ),
     // Each wait is drawn around the one the schedule gives: the seed decides it.
     "effect/Schedule:jittered": onSchedule("Schedule.jittered", 1, (self) =>
       Effect.sync(() => Schedule.jittered(self)),
@@ -3503,6 +3518,58 @@ export const make = (
       ),
     ),
     "effect/TxHashMap:map": derives("TxHashMap", "map", "effect/HashMap:map"),
+    // An effect of the code for each entry, one after another: it is not part of a transaction.
+    "effect/TxHashMap:forEach": dual("TxHashMap.forEach", 2, ([self, f], site) => {
+      const store = heldOf<Store>("TxHashMap", self);
+      return store && f
+        ? Effect.succeed(
+            timed(
+              "TxHashMap.forEach",
+              (timeline) =>
+                Effect.gen(function* () {
+                  const held = yield* Timeline.back(timeline, TxRef.get(store.ref), same);
+                  const all = yield* lib("effect/HashMap:toEntries", [held], site);
+                  for (const entry of itemsOf_(all)) {
+                    const [key, value] = itemsOf_(entry);
+                    yield* ran(f, [value ?? Value.undef, key ?? Value.undef], site);
+                  }
+                  return Value.undef;
+                }),
+              site,
+            ),
+          )
+        : wrongArguments(site, "TxHashMap.forEach");
+    }),
+    // A TxHashMap of every entry of the ones the code makes, one for each entry of this one.
+    "effect/TxHashMap:flatMap": dual("TxHashMap.flatMap", 2, ([self, f], site) => {
+      const store = heldOf<Store>("TxHashMap", self);
+      return store && f
+        ? Effect.succeed(
+            timed(
+              "TxHashMap.flatMap",
+              (timeline) =>
+                Effect.gen(function* () {
+                  const held = yield* Timeline.back(timeline, TxRef.get(store.ref), same);
+                  const all = yield* lib("effect/HashMap:toEntries", [held], site);
+                  let made_ = yield* lib("effect/HashMap:empty", [], site);
+                  for (const entry of itemsOf_(all)) {
+                    const [key, value] = itemsOf_(entry);
+                    const other = heldOf<Store>(
+                      "TxHashMap",
+                      yield* ran(f, [value ?? Value.undef, key ?? Value.undef], site),
+                    );
+                    if (!other) return yield* wrongArguments(site, "TxHashMap.flatMap");
+                    const more = yield* Timeline.back(timeline, TxRef.get(other.ref), same);
+                    made_ = yield* lib("effect/HashMap:union", [made_, more], site);
+                  }
+                  const ref = yield* Timeline.back(timeline, TxRef.make(made_), (r) => r);
+                  return wrap("TxHashMap", { ref });
+                }),
+              site,
+            ),
+          )
+        : wrongArguments(site, "TxHashMap.flatMap");
+    }),
     "effect/TxHashMap:filter": derives("TxHashMap", "filter", "effect/HashMap:filter"),
     "effect/TxHashSet:empty": (_, site) =>
       Effect.succeed(storing("TxHashSet", lib("effect/HashSet:empty", [], site))),
@@ -5436,6 +5503,21 @@ export const make = (
           min: num(stats.min),
           max: num(stats.max),
         }),
+    ),
+    // The last message, given to whoever reads after it: then the PubSub has ended.
+    "effect/PubSub:end": on<P, boolean>(
+      "PubSub",
+      "end",
+      2,
+      (held, [value]) => PubSub.end(held, value ?? Value.undef),
+      bool,
+    ),
+    "effect/PubSub:endUnsafe": now<P, boolean>(
+      "PubSub",
+      "endUnsafe",
+      2,
+      (held, [value]) => PubSub.endUnsafe(held, value ?? Value.undef),
+      bool,
     ),
     "effect/Queue:flush": on<Q, void>("Queue", "flush", 1, (held) => Queue.flush(held), none),
     "effect/Cache:keys": on<C, Iterable<Key>>(

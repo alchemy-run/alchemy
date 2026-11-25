@@ -810,6 +810,7 @@ Schedule.spaced("1 second").pipe(Schedule.upTo({ times: 2 }));
 Schedule.max([Schedule.recurs(2), Schedule.spaced("1 second")]);
 Schedule.min([Schedule.recurs(2), Schedule.recurs(4)]);
 Schedule.concat(Schedule.recurs(1), Schedule.recurs(2));
+Schedule.concatResult(Schedule.recurs(1), Schedule.recurs(1)); // what each gives, as a failure of the first and a success of the second
 Schedule.passthrough(Schedule.recurs(2));
 ```
 
@@ -2364,6 +2365,8 @@ TxHashMap.map(stock, (n) => n * 2); // a new one
 TxHashMap.filter(stock, (n) => n > 0);
 TxHashMap.filterMap(kept, (n) => (n > b ? Result.succeed(n * 2) : Result.fail(n)));
 TxHashMap.compact(stock);
+TxHashMap.forEach(stock, (n, key) => log(seen, [key, n])); // an effect for each entry
+TxHashMap.flatMap(stock, (n, key) => TxHashMap.make([key, n + 1], [key + "!", b]));
 TxHashMap.isTxHashMap(stock);
 TxHashMap.reduce(stock, 0, (total, n) => total + n);
 TxHashMap.some(stock, (n) => n > a);
@@ -3218,6 +3221,8 @@ PubSub.takeAll(two);
 PubSub.takeUpTo(one, 5);
 PubSub.remaining(one);
 PubSub.remainingUnsafe(sub);
+PubSub.end(hub, b); // the last message: then it has ended
+PubSub.endUnsafe(hub, 0);
 PubSub.size(hub);
 PubSub.isEmpty(hub);
 PubSub.isFull(hub);
@@ -3407,6 +3412,10 @@ Optic.entries().modify((all) => all.map(([key, value]) => [key, value + 1]))({ x
 Optic.id().key("n").notUndefined();
 Optic.id().refine((n) => n > b);
 Optic.id().tag("A");
+Optic.id().forEach((each) => each.key("n")); // a traversal: an optic onto each item of an array
+Optic.getAll([{ n: a }, { n: b }], Optic.id().forEach((each) => each.key("n")));
+Optic.modifyAll(Optic.id().forEach((each) => each.key("n")), (n) => n * 2);
+Optic.id().forEach((each) => each.key("n")).modifyAll((n) => n - b)([{ n: a }]);
 ```
 
 ```typescript title="effect/Stream"
