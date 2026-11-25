@@ -2454,6 +2454,10 @@ Channel.isChannel(a);
 Channel.Do;
 Channel.bind("x", () => Channel.fromArray([a, b]));
 Channel.bindTo("n");
+Channel.let("m", ({ n }) => n + b);
+Channel.runIntoQueueArray(Channel.fromIterable([[a, b], [3]]), queue); // each item of each array
+Channel.runIntoPubSubArray(Channel.fromIterable([[a, b]]), hub);
+Channel.toPubSubArray(Channel.fromEffect(Effect.as(Effect.sleep(2), [a, b])), { capacity: 4 });
 
 Channel.map((n) => n + 1);
 Channel.mapEffect((n) => even(n));

@@ -657,6 +657,20 @@ export const make = (kit: Kit, tools: Tools) => {
     "effect/Channel:mergeEffect": over("Channel.mergeEffect", (to, self, [effect]) =>
       Channel.mergeEffect(self, to.eff(effect)),
     ),
+    // A field each record gives is given, made of the record by a function of the code.
+    "effect/Channel:let": over("Channel.let", (to, self, [name, f]) =>
+      name?._tag === "Str"
+        ? Channel.mapEffect(self, (item) =>
+            Effect.flatMap(
+              to.read(f ? host.call(f, [item], to.site) : wrongArguments(to.site, to.name)),
+              (made_): Effect.Effect<V, Held> =>
+                item._tag === "Obj" && !item.brand
+                  ? Effect.succeed(Value.obj({ ...item.fields, [name.value]: made_ }))
+                  : to.read(wrongArguments(to.site, to.name)),
+            ),
+          )
+        : to.bad,
+    ),
     "effect/Channel:bindTo": over("Channel.bindTo", (to, self, [name]) =>
       name?._tag === "Str"
         ? Channel.map(self, (item): V => Value.obj({ [name.value]: item }))
@@ -933,6 +947,40 @@ export const make = (kit: Kit, tools: Tools) => {
         ? to.read(wrongArguments(to.site, to.name))
         : Effect.map(Channel.toPubSub(self, read as { readonly capacity: "unbounded" }), (hub) =>
             tools.wrap("PubSub", hub),
+          );
+    }),
+    // A channel of arrays, each item of each one into the queue or the PubSub.
+    "effect/Channel:runIntoQueueArray": runs("Channel.runIntoQueueArray", (to, self, [queue]) => {
+      const held = tools.heldOf<Queue.Queue<V, unknown>>("Queue", queue);
+      return held
+        ? Effect.as(Channel.runIntoQueueArray(filled(to, self), held), Value.undef)
+        : to.read(wrongArguments(to.site, to.name));
+    }),
+    "effect/Channel:runIntoPubSubArray": runs(
+      "Channel.runIntoPubSubArray",
+      (to, self, [pubsub, options]) => {
+        const held = tools.heldOf<PubSub.PubSub<V>>("PubSub", pubsub);
+        const read =
+          options === undefined || options._tag === "Undef" ? {} : tools.plainOf(options);
+        return held && read !== undefined
+          ? Effect.as(
+              Channel.runIntoPubSubArray(
+                filled(to, self),
+                held,
+                read as { readonly shutdownOnEnd?: boolean },
+              ),
+              Value.undef,
+            )
+          : to.read(wrongArguments(to.site, to.name));
+      },
+    ),
+    "effect/Channel:toPubSubArray": opens("Channel.toPubSubArray", (to, self, [options]) => {
+      const read = tools.plainOf(options);
+      return read === undefined || typeof read !== "object" || read === null
+        ? to.read(wrongArguments(to.site, to.name))
+        : Effect.map(
+            Channel.toPubSubArray(filled(to, self), read as { readonly capacity: "unbounded" }),
+            (hub) => tools.wrap("PubSub", hub),
           );
     }),
     "effect/Channel:toQueueArray": opens("Channel.toQueueArray", (to, self, [options]) => {
