@@ -91,6 +91,15 @@ export interface ServicePropsBase extends PlatformProps {
    */
   readOnlyRootFs?: boolean;
   /**
+   * Send the Docker CLI's registry credentials for the image to the swarm
+   * (`--with-registry-auth`), so its nodes can pull from a private registry.
+   * They are sent again on every update. Turning it off keeps the
+   * credentials the swarm already holds.
+   *
+   * @default false
+   */
+  withRegistryAuth?: boolean;
+  /**
    * Service labels. Alchemy's internal ownership labels are added
    * automatically.
    */
@@ -836,6 +845,7 @@ export const ServiceProvider = () =>
                   ),
                   "config-add": desired.configs.map(formatRef),
                   "read-only": desired.readOnlyRootFs || undefined,
+                  "with-registry-auth": desired.withRegistryAuth,
                   "publish-rm": portsToRemove,
                   "publish-add": desired.ports.map(formatPublish),
                   "label-add": allDesiredLabels,
@@ -931,6 +941,7 @@ export const ServiceProvider = () =>
             secret: desired.secrets.map(formatRef),
             config: desired.configs.map(formatRef),
             "read-only": desired.readOnlyRootFs || undefined,
+            "with-registry-auth": desired.withRegistryAuth,
             publish: desired.ports.map(formatPublish),
             label: allDesiredLabels,
             env: environment,
@@ -1014,6 +1025,7 @@ const normalizeDesired = (id: string, props: ServiceProps, instanceId: string) =
       secrets: props.secrets ?? [],
       configs: props.configs ?? [],
       readOnlyRootFs: props.readOnlyRootFs ?? false,
+      withRegistryAuth: props.withRegistryAuth ?? false,
       labels: props.labels ?? {},
     })),
   );
@@ -1043,6 +1055,7 @@ const inPlaceFields = new Set<keyof DesiredService>([
   "secrets",
   "configs",
   "ports",
+  "withRegistryAuth",
 ]);
 
 /**

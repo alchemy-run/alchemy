@@ -74,6 +74,20 @@ The deploy runs `docker service update`, and the swarm rolls the tasks over as `
 
 Image, replicas, environment, labels, networks, ports, mounts, secrets, configs, constraints, healthcheck and policies all roll out this way. Changing the name, context, `command`, `args`, `endpointMode`, placement preferences or `readOnlyRootFs` replaces the service, removing the old one first.
 
+## Pull from a private registry
+
+Each node pulls the image itself, with no credentials unless the service carries them. Log the Docker CLI in to the registry, then set `withRegistryAuth`:
+
+```typescript
+const web = yield* Docker.Service("web", {
+  context: swarm,
+  image: "registry.example.com/acme/web:1.0.0",
+  withRegistryAuth: true,
+});
+```
+
+The deploy passes `--with-registry-auth`, so the swarm stores the CLI's credentials for the image's registry and hands them to the nodes that run a task. They are sent again on each `docker service update`, which runs only when a prop changes, so a rotated password reaches the swarm on the next change. Setting it back to `false` keeps the credentials the swarm already holds.
+
 ## Keep tasks healthy
 
 ```typescript
