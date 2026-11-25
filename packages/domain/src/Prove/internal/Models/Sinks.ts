@@ -391,13 +391,12 @@ export const make = (
                 Channel.mapDone(Sink.toChannel(built(to, self)), endOf),
                 // A list the prover cannot see into stops it, and stops are defects here.
                 (chunk: V) =>
-                  Effect.catch(
+                  Effect.orDie(
                     Effect.flatMap(to.read(tools.items(to.name, chunk, site)), (items) =>
                       items.length > 0
                         ? Effect.succeed(items as unknown as Some)
                         : to.wrong<Some>(),
                     ),
-                    (held) => Effect.die(held),
                   ),
               ) as unknown as Channel.Channel<V, unknown, V>;
             }),
