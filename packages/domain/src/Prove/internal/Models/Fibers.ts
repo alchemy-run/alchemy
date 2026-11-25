@@ -1033,9 +1033,10 @@ export const make = (
 
   /** A member of a latch or a semaphore, as the code reads it: `latch.open`, `semaphore.take`. */
   const member = (value: V, key: string, site: Site): V | undefined => {
-    // What an entry of a batch asks for: `entry.request`.
+    // What an entry of a batch asks for, `entry.request`, and whether it is run uninterruptibly.
     const entry = heldOf<Request.Entry<Request.Request<V, Value.Rejected>>>("Entry", value);
     if (entry && key === "request") return asked(entry.request);
+    if (entry && key === "uninterruptible") return Value.bool(entry.uninterruptible);
     const latch = heldOf<Latch.Latch>("Latch", value);
     const semaphore = heldOf<Semaphore.Semaphore>("Semaphore", value);
     const members = latch
@@ -2784,7 +2785,7 @@ export const make = (
       "TxPubSub",
       "acquireSubscriber",
       1,
-      (held) => Effect.tx(TxPubSub.acquireSubscriber(held)),
+      (held) => held.pipe(TxPubSub.acquireSubscriber, Effect.tx),
       (queue) => wrap("TxQueue", queue),
     ),
     "effect/TxPubSub:releaseSubscriber": later<TP, void>(
@@ -2794,7 +2795,7 @@ export const make = (
       (held, [queue], site) => {
         const subscription = heldOf<TxQueue.TxQueue<V>>("TxQueue", queue);
         return subscription
-          ? Effect.succeed(Effect.tx(TxPubSub.releaseSubscriber(held, subscription)))
+          ? Effect.succeed(held.pipe(TxPubSub.releaseSubscriber(subscription), Effect.tx))
           : wrongArguments(site, "TxPubSub.releaseSubscriber");
       },
       () => Value.undef,
@@ -3082,6 +3083,76 @@ export const make = (
       (held) => ScopedCache.size(held),
       num,
     ),
+    // A strategy of the code: given the pool and its items as the library holds them, which it reads live.
+    "effect/Pool:makeWithStrategy": ([given_], site) => {
+      const fields = given_?._tag === "Obj" && !given_.brand ? given_.fields : undefined;
+      const acquire = fields?.acquire;
+      const strategy = fields?.strategy;
+      const parts = strategy?._tag === "Obj" && !strategy.brand ? strategy.fields : undefined;
+      if (
+        !fields ||
+        acquire?._tag !== "Effect" ||
+        !parts?.run ||
+        !parts.onAcquire ||
+        !parts.reclaim
+      )
+        return wrongArguments(site, "Pool.makeWithStrategy");
+      const { acquire: _, strategy: __, ...rest } = fields;
+      const item = (held: unknown): V => ({ _tag: "Host", value: held, name: "PoolItem" });
+      type Item = Pool.PoolItem<V, Value.Rejected>;
+      return Effect.succeed(
+        scoped(
+          "Pool.makeWithStrategy",
+          site,
+          (timeline) => {
+            const run = (fn: V, args: ReadonlyArray<V>): Effect.Effect<V> =>
+              sure(Timeline.real(timeline, ran(fn, args, site)));
+            return Effect.flatMap(
+              Timeline.real(
+                timeline,
+                options<{
+                  readonly min: number;
+                  readonly max: number;
+                  readonly concurrency?: number;
+                  readonly targetUtilization?: number;
+                }>("Pool.makeWithStrategy", Value.obj(rest), site),
+              ),
+              (read) => {
+                const made = new Set<unknown>();
+                return Pool.makeWithStrategy({
+                  ...read,
+                  acquire: Timeline.real(timeline, acquire.run),
+                  strategy: {
+                    run: (pool) => Effect.asVoid(run(parts.run!, [wrap("Pool", pool)])),
+                    onAcquire: (held) => {
+                      made.add(held);
+                      return Effect.asVoid(run(parts.onAcquire!, [item(held)]));
+                    },
+                    reclaim: (pool) =>
+                      Effect.flatMap(run(parts.reclaim!, [wrap("Pool", pool)]), (got) =>
+                        got._tag === "Undef"
+                          ? Effect.succeed(undefined)
+                          : got._tag === "Host" && made.has(got.value)
+                            ? Effect.succeed(got.value as Item)
+                            : Effect.as(
+                                sure(
+                                  Timeline.real(
+                                    timeline,
+                                    wrongArguments(site, "Pool.makeWithStrategy"),
+                                  ),
+                                ),
+                                undefined,
+                              ),
+                      ),
+                  },
+                });
+              },
+            );
+          },
+          (held) => wrap("Pool", held),
+        ),
+      );
+    },
     "effect/Pool:makeWithTTL": ([given_], site) => {
       const fields = given_?._tag === "Obj" && !given_.brand ? given_.fields : undefined;
       const acquire = fields?.acquire;

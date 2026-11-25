@@ -2,6 +2,8 @@ import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Request from "effect/Request";
 import * as Schema from "effect/Schema";
 import * as Brands from "./Brands.ts";
 import * as Compare from "./Compare.ts";
@@ -53,6 +55,7 @@ import * as Strings from "./Models/Strings.ts";
 import type { Term } from "./Smt.ts";
 import * as Smt from "./Smt.ts";
 import * as Symbolic from "./Symbolic.ts";
+import * as Timeline from "./Timeline.ts";
 import type { Eval, Site, V } from "./Value.ts";
 
 export type { Host, Model, Step } from "./Kit.ts";
@@ -2330,6 +2333,49 @@ export const make = (host: Host) => {
   Object.assign(written, wiring);
   const fibers = Fibers.make(kit, { ...written }, asClass);
   Object.assign(written, fibers.models);
+  // An entry of a request, as a resolver is given one: what completes it is a function of the code, called at once.
+  written["effect/Request:makeEntry"] = ([given_], site) => {
+    const fields = given_?._tag === "Obj" && !given_.brand ? given_.fields : undefined;
+    const request = fibers.tools.heldOf<Request.Request<unknown, unknown>>(
+      "Request",
+      fields?.request,
+    );
+    const provided = fields?.context ? contexts.get(fields.context) : undefined;
+    const uninterruptible = fields?.uninterruptible;
+    const complete = fields?.completeUnsafe;
+    if (
+      !request ||
+      !provided ||
+      uninterruptible?._tag !== "Bool" ||
+      !complete ||
+      !Kit.callable(complete)
+    )
+      return wrongArguments(site, "Request.makeEntry");
+    return Effect.map(Timeline.current(site, "calls Request.makeEntry"), (timeline) => {
+      const context = provided.reduce(
+        (all, [service, value]) => Context.add(all, service as Context.Key<unknown, V>, value),
+        Context.empty() as Context.Context<unknown>,
+      );
+      const entry = Request.makeEntry({
+        request,
+        context: context as Context.Context<never>,
+        uninterruptible: uninterruptible.value,
+        completeUnsafe: (exit) => {
+          const held = Effect.runSync(Effect.exit(fibers.tools.exitOf(timeline, exit)));
+          try {
+            if (Exit.isSuccess(held)) host.atOnce(complete, [held.value], site);
+            else throw held;
+          } catch {
+            timeline.fatal ??= Value.notTranslated(
+              site,
+              "completes a request with a function the prover cannot run at once",
+            );
+          }
+        },
+      });
+      return fibers.tools.wrap("Entry", entry);
+    });
+  };
   Object.assign(clocks, fibers.sited);
   const contextNow = (): V => contextOf([...host.provided.entries()]);
   const flows = Flows.make(kit, { ...written }, fibers.tools, {
