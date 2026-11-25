@@ -103,6 +103,11 @@ export interface Term {
   readonly bindings: ReadonlyArray<Permission>;
   /** The terms it uses. */
   readonly references: ReadonlyArray<Reference>;
+  /**
+   * The runtime's bindings that are this term's own resources, by name: the
+   * Durable Objects of a Domain model's aggregates, views and policies.
+   */
+  readonly resources?: ReadonlyArray<string>;
 }
 
 /** The kind of the frame around what a runtime hosts: a Durable Object. It is not a term. */
@@ -122,6 +127,8 @@ export interface CapabilityGraphShape {
   readonly label: (frame: Frame, name: string) => void;
   /** Every permission reachable from the frames of a named term. */
   readonly ofFrame: (kind: NamedFrameKind, name: string) => ReadonlyArray<Permission>;
+  /** Record that one of the runtime's bindings is a resource of a term. */
+  readonly owns: (kind: string, name: string, resource: string) => void;
   /** Mark a frame's term as having no host. */
   readonly unhosted: (frame: Frame) => void;
   /** Record that a frame's term uses another term. */
@@ -168,6 +175,8 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
   const acquisitions = new Map<Frame, Map<string, Acquisition>>();
   const references = new Map<Frame, Map<string, Reference>>();
   const loose = new Set<Frame>();
+  /** Term id → the bindings that are its resources. */
+  const owned = new Map<string, Set<string>>();
   /** key → frames whose build produced it (several when two Layers
    *  provide one tag). */
   const providersByKey = new Map<string, Set<Frame>>();
@@ -284,6 +293,12 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
       (frame as { name: string | undefined }).name = name;
     },
     ofFrame: (kind, name) => closure(frames.filter((f) => f.kind === kind && f.name === name)),
+    owns: (kind, name, resource) => {
+      const id = `${kind}:${name}`;
+      const set = owned.get(id);
+      if (set === undefined) owned.set(id, new Set([resource]));
+      else set.add(resource);
+    },
     unhosted: (frame) => {
       loose.add(frame);
     },
@@ -377,6 +392,18 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
           });
         }
       }
+      // A term known only by its resources (a Domain model) is a term too.
+      for (const [id, resources] of owned) {
+        const at = id.indexOf(":");
+        const known = terms.get(id) ?? {
+          id,
+          kind: id.slice(0, at),
+          name: id.slice(at + 1),
+          bindings: [],
+          references: [],
+        };
+        terms.set(id, { ...known, resources: [...resources].sort() });
+      }
       return [...terms.values()].sort((a, b) => (a.id < b.id ? -1 : 1));
     },
     ofService: (key) => closure(providersByKey.get(key) ?? []),
@@ -389,6 +416,7 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
       acquisitions.clear();
       references.clear();
       loose.clear();
+      owned.clear();
       providersByKey.clear();
     },
   };
@@ -446,6 +474,15 @@ export const refer = (relation: string, kind: string, name: string): Effect.Effe
         }
       }),
   );
+
+/**
+ * Record that one of the runtime's bindings is a resource of a term:
+ * `own("Model", "Board", "Board.IssueAggregate")`. Without a graph it does nothing.
+ */
+export const own = (kind: string, name: string, resource: string): Effect.Effect<void> =>
+  Effect.map(Effect.serviceOption(CapabilityGraph), (graph) => {
+    if (Option.isSome(graph)) graph.value.owns(kind, name, resource);
+  });
 
 /**
  * Every binding a term reaches: its own, and those of every term it

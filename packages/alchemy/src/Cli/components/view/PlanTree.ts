@@ -161,7 +161,7 @@ const buildRows = (plan: Plan, detailed: boolean): PlanRow[] => {
       return {
         key: getRowKey(item),
         type: "binding" as const,
-        id: item.bindingSid ?? item.id,
+        id: item.id,
         depth: item.depth,
         action: item.action as "create" | "update" | "delete" | "noop",
         hostKey: item.path.slice(0, -1).join("/"),

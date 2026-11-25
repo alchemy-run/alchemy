@@ -26,6 +26,7 @@ import {
   makeCapabilityGraph,
   observeLayerBuilds,
   observeLookups,
+  own,
   policyOf,
   reach,
   recordAcquisition,
@@ -408,6 +409,26 @@ describe("CapabilityGraph", { tags: ["unit"] }, () => {
       const holder = { run: (value: string) => store.put(value) };
       expect(yield* denied(holder.run("b"))).toBe(true);
     }).pipe(Effect.provide(Layer.mergeAll(StoreLive, SendLive))),
+  );
+
+  it.effect("a term owns the bindings recorded as its resources", () =>
+    Effect.gen(function* () {
+      const graph = makeCapabilityGraph();
+      yield* Effect.all([
+        own("Model", "Board", "Board.IssueView"),
+        own("Model", "Board", "Board.IssueAggregate"),
+      ]).pipe(Effect.provideService(CapabilityGraph, graph));
+      expect(graph.describe()).toEqual([
+        {
+          id: "Model:Board",
+          kind: "Model",
+          name: "Board",
+          bindings: [],
+          references: [],
+          resources: ["Board.IssueAggregate", "Board.IssueView"],
+        },
+      ]);
+    }),
   );
 
   it.effect("without a graph in context every recorder does nothing", () =>

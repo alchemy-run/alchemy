@@ -24,6 +24,7 @@ import {
   Workflow,
   type WorkflowImpl,
 } from "@alchemy.run/cloudflare/Workflows/Workflow";
+import { own } from "alchemy/CapabilityGraph";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeDurableObjectEngine, provideCallbacks } from "alchemy/Workers/DurableObjectEngine";
 import { StorageName } from "alchemy/Workflows";
@@ -309,13 +310,17 @@ const cloudflareHost = (
         // Every kind of object is declared through here, so none is left
         // outside the jurisdiction or the location hint.
         declare: ({ modelName, legacyData }, name, impl) =>
-          Effect.map(
-            declare(
-              named(modelName, name),
-              renamedFrom(version, legacyData, name),
-              onCloudflare(impl),
+          // For a plan: this object is a resource of the model.
+          Effect.andThen(
+            own("Model", modelName, named(modelName, name)),
+            Effect.map(
+              declare(
+                named(modelName, name),
+                renamedFrom(version, legacyData, name),
+                onCloudflare(impl),
+              ),
+              (namespace) => placed(namespace, placement),
             ),
-            (namespace) => placed(namespace, placement),
           ),
         lookup: ({ modelName }, name) => fromEnv(env, named(modelName, name)),
         // Each saga's runs live on a Durable Object class of the workflow

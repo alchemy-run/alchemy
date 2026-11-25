@@ -1,7 +1,7 @@
 import { toPath } from "../FQN.ts";
 import type { BindingAction, CRUD, ActionApply, ActionDelete, Plan } from "../Plan.ts";
 import type { ProviderMode } from "../ProviderMode.ts";
-import { capabilityGroups, type CapabilityGroup } from "./CapabilityRows.ts";
+import { capabilityGroups, resourceGroups, type CapabilityGroup } from "./CapabilityRows.ts";
 import {
   formatDeclaredPropertyYaml,
   formatDriftPropertyYaml,
@@ -250,11 +250,14 @@ const flattenNamespace = (
     const here = [...node.path, resource.resource.LogicalId];
     const groups = capabilityGroups(resource.capabilities ?? []);
     const hosted = new Set<string | undefined>();
-    for (const binding of [...resource.bindings].sort((a, b) => a.sid.localeCompare(b.sid))) {
+    const models = resourceGroups(resource.capabilities ?? []);
+    const modelOf = (sid: string) => models.find((model) => model.resources.includes(sid));
+    const bindings = [...resource.bindings].sort((a, b) => a.sid.localeCompare(b.sid));
+    const pushBinding = (binding: (typeof bindings)[number], at: number, label: string) => {
       result.push({
         type: "binding",
-        depth: depth + 1,
-        id: binding.sid,
+        depth: at,
+        id: label,
         path: [...here, binding.sid],
         action: binding.action,
         bindingSid: binding.sid,
@@ -262,7 +265,32 @@ const flattenNamespace = (
       // What a Durable Object runs is drawn under its row.
       for (const group of groups.filter((each) => each.host === binding.sid)) {
         hosted.add(group.host);
-        pushCapabilities(group, depth + 2, [...here, binding.sid], result);
+        pushCapabilities(group, at + 1, [...here, binding.sid], result);
+      }
+    };
+    for (const binding of bindings) {
+      if (modelOf(binding.sid) === undefined) pushBinding(binding, depth + 1, binding.sid);
+    }
+    // A Domain model's own resources are drawn together, under its name.
+    for (const model of models) {
+      const own = bindings.filter((binding) => model.resources.includes(binding.sid));
+      if (own.length === 0) continue;
+      result.push({
+        type: "capability",
+        depth: depth + 1,
+        id: model.term.name,
+        path: [...here, model.term.id],
+        action: "noop",
+        capabilityKind: "Term",
+        capabilityDetail: model.term.kind,
+      });
+      const prefix = `${model.term.name}.`;
+      for (const binding of own) {
+        pushBinding(
+          binding,
+          depth + 2,
+          binding.sid.startsWith(prefix) ? binding.sid.slice(prefix.length) : binding.sid,
+        );
       }
     }
     for (const group of groups.filter((each) => !hosted.has(each.host))) {

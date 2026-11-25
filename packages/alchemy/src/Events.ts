@@ -84,6 +84,7 @@ export const PlannedTerm = Schema.Struct({
   host: Schema.optionalKey(Schema.String),
   bindings: Schema.Array(PlannedPermission),
   references: Schema.Array(PlannedReference),
+  resources: Schema.String.pipe(Schema.Array, Schema.optionalKey),
 });
 
 /** Serializable view of one resource row in a plan. */

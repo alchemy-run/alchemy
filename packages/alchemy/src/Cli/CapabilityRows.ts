@@ -25,8 +25,15 @@ export interface CapabilityGroup {
 
 const rowOf = (permission: Permission) => `${permission.binding}|${permission.targets.join(",")}`;
 
-/** Terms that are defined by the model they belong to, and only pointed at here. */
+/** Terms that are not drawn as rows of their own: a model is drawn around its resources, a piece of one is only pointed at. */
 const isPiece = (term: Term) => term.kind === "Domain";
+const isModel = (term: Term) => term.resources !== undefined;
+
+/** The terms whose resources are bindings of the runtime: a Domain model, with the bindings that are its own. */
+export const resourceGroups = (
+  terms: ReadonlyArray<Term>,
+): ReadonlyArray<{ readonly term: Term; readonly resources: ReadonlyArray<string> }> =>
+  terms.filter(isModel).map((term) => ({ term, resources: term.resources ?? [] }));
 
 /**
  * A runtime's terms as a plan draws them, by what hosts them. Every term is
@@ -39,7 +46,7 @@ export const capabilityGroups = (terms: ReadonlyArray<Term>): ReadonlyArray<Capa
   const groups = new Map<string | undefined, Array<CapabilityRow>>();
   const drawn = [
     ...terms.filter((term) => term.kind === "Process"),
-    ...terms.filter((term) => term.kind !== "Process" && !isPiece(term)),
+    ...terms.filter((term) => term.kind !== "Process" && !isPiece(term) && !isModel(term)),
   ];
   for (const term of drawn) {
     let rows = groups.get(term.host);
