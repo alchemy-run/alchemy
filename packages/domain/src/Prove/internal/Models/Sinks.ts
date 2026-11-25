@@ -1,9 +1,11 @@
 import * as Cause from "effect/Cause";
+import * as Channel from "effect/Channel";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type * as PubSub from "effect/PubSub";
 import * as Pull from "effect/Pull";
 import type * as Queue from "effect/Queue";
+import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import type { Kit, Model, Models } from "../Kit.ts";
@@ -317,6 +319,61 @@ export const make = (
     }),
 
     // ---- Sinks made of what the code gives.
+    // A sink written as functions of a stream of its input, the last one giving an effect: what it gives is the sink's.
+    "effect/Sink:make": () =>
+      Effect.succeed(
+        native("Sink.make", (fns, at) =>
+          Effect.succeed(
+            sink(
+              "Sink.make",
+              (to) =>
+                Sink.fromTransform((upstream: Pull.Pull<Some, never, void>, scope) =>
+                  Effect.flatMap(
+                    to.read(
+                      Effect.gen(function* () {
+                        let made_: V = flows.flow(
+                          to.timeline,
+                          upstream.pipe(Effect.succeed, Channel.fromPull, Stream.fromChannel),
+                          at,
+                          (item) => item,
+                        );
+                        for (const fn of fns) made_ = yield* host.call(fn, [made_], at);
+                        return made_;
+                      }),
+                    ),
+                    (effect): Effect.Effect<End, Held> =>
+                      effect._tag === "Effect"
+                        ? Scope.provide(
+                            Effect.map(to.read(effect.run), (value): End => [value]),
+                            scope,
+                          )
+                        : to.wrong(),
+                  ),
+                ),
+              at,
+            ),
+          ),
+        ),
+      ),
+    // A sink written as what it does with the pull of its input: the effect gives what it ends with.
+    "effect/Sink:fromTransform": made("Sink.fromTransform", (to, [transform]) =>
+      Sink.fromTransform((upstream: Pull.Pull<Some, never, void>, scope) =>
+        Effect.flatMap(
+          to.fn(transform)(
+            {
+              _tag: "Effect",
+              run: Timeline.back(
+                to.timeline,
+                Effect.map(upstream, (chunk): V => arr(chunk)),
+                (v) => v,
+              ),
+            },
+            tools.wrap("Scope" as never, scope),
+          ),
+          (pair) => ended(to, pair),
+        ),
+      ),
+    ),
     "effect/Sink:failSync": made("Sink.failSync", (to, [f]) =>
       Sink.unwrap(Effect.map(straight(to, f)(), (error) => Sink.fail(rejected(error)))),
     ),

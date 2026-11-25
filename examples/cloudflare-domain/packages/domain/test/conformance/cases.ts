@@ -3848,6 +3848,10 @@ const rest: ReadonlyArray<Group> = [
     ],
     both: [
       `Stream.run(four(a, b), Sink.takeWhile((n) => n < 3))`,
+      `Stream.run(four(a, b), Sink.make()(Stream.map((n) => n * 2), Stream.runSum))`,
+      `Stream.run(four(a, b), Sink.make()(Stream.filter((n) => n > a), Stream.runCollect))`,
+      `Stream.run(four(a, b), Sink.fromTransform((upstream) => Effect.map(upstream, (chunk) => [chunk.length + a])))`,
+      `Stream.run(four(a, b), Sink.fromTransform((upstream) => Effect.map(upstream, (chunk) => [chunk[0], [chunk[1]]])).pipe(Sink.flatMap((first) => Sink.map(Sink.collect(), (rest) => [first, rest]))))`,
       `Stream.run(four(a, b), Sink.forEach((n) => Effect.map(Rate, (rate) => rate.percent + n)).pipe(Sink.provideService(Rate, { percent: a })))`,
       `Stream.run(four(a, b), Sink.reduceEffect(() => 0, (total, n) => Effect.map(Rate, (rate) => total + n * rate.percent)).pipe(Sink.provideContext(Context.make(Rate, { percent: b }))))`,
       `four(a, b).pipe(Stream.pipeThrough(Sink.take(1)), Stream.runCollect)`,

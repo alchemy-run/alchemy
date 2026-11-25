@@ -3078,6 +3078,8 @@ Sink.fromPubSub(hub);
 Sink.suspend(() => Sink.take(a > 1 ? 2 : 1));
 Sink.unwrap(Effect.succeed(Sink.head()));
 Sink.isSink(a);
+Sink.make()(Stream.map((n) => n * 2), Stream.runSum); // functions of a stream of what it takes, the last giving an effect
+Sink.fromTransform((upstream) => Effect.map(upstream, (chunk) => [chunk.length + a])); // what it does with the pull of its input
 
 // A function of a sink.
 Sink.as(Sink.take(1), b);
