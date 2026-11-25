@@ -2212,6 +2212,7 @@ TxChunk.modify(held, (chunk) => [Chunk.size(chunk), Chunk.drop(chunk, 1)]);
 TxChunk.size(held);
 TxChunk.isEmpty(held);
 TxChunk.isTxChunk(chunk);
+TxChunk.makeUnsafe(ref); // of a TxRef that holds a chunk: the two share what they hold
 TxChunk.isNonEmpty(held);
 const done = yield* TxDeferred.make();
 TxDeferred.succeed(done, a);
@@ -2338,6 +2339,8 @@ RequestResolver.fromFunctionBatched((entries) => entries.map((entry) => entry.re
 RequestResolver.withCache(RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n + a)), { capacity: 4 });
 RequestResolver.withSpan("doubled");
 RequestResolver.isRequestResolver(a);
+RequestResolver.asCache(RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n * 2 + a)), { capacity: 4 }); // a Cache found by the request
+RequestResolver.makeWith({ batchKey: (entry) => (entry.request.n > 2 ? "big" : "small"), delay: Effect.yieldNow, collectWhile: (requests) => requests.size < 3, runAll: (entries, key) => Effect.andThen(log(batches, [key, entries.length]), Effect.forEach(entries, (entry) => Request.succeed(entry, entry.request.n * 2 + a), { discard: true })) });
 RequestResolver.fromEffectTagged()({ Double: (requests) => Effect.succeed(requests.map((entry) => entry.request.n * 2 + a)), Half: (requests) => (requests.length > 1 ? Effect.fail(new Odd({ n: b })) : Effect.succeed(requests.map((entry) => entry.request.n / 2))) }); // a function for each tag of request
 Effect.request(GetPrice({ item }), prices);
 pipe(ask({ n }), Effect.request(answers));
@@ -2490,6 +2493,8 @@ Channel.let("m", ({ n }) => n + b);
 Channel.runIntoQueueArray(Channel.fromIterable([[a, b], [3]]), queue); // each item of each array
 Channel.runIntoPubSubArray(Channel.fromIterable([[a, b]]), hub);
 Channel.toPubSubArray(Channel.fromEffect(Effect.as(Effect.sleep(2), [a, b])), { capacity: 4 });
+Channel.toPubSubTake(Channel.fromEffect(Effect.as(Effect.sleep(2), [a, b])), { capacity: 4 }); // each array, then how it ended
+Channel.fromPubSubTake(hub);
 
 Channel.map((n) => n + 1);
 Channel.mapEffect((n) => even(n));
@@ -3023,6 +3028,7 @@ Stream.combineArray(Stream.make(10, 20), () => 0, (turn, pullLeft, pullRight) =>
 Stream.zipWithArray(Stream.make(a, b, 3), Stream.make(10, 20), (l, r) => [[l[0] + r[0]], l.slice(1), r.slice(1)]);
 Stream.flattenTake; // a stream of Takes, as the items they hold
 Stream.fromPubSubTake(hub);
+Stream.toPubSubTake(paced(2, a, b), { capacity: 4 }); // in a scope: each array, then how the stream ended
 Stream.groupByKey((n) => (n % 2 === 0 ? 0 : 1)); // by a key the code can see
 Stream.filterMapEffect((n) => Effect.succeed(n > 2 ? Result.succeed(n * 2) : Result.fail(n)));
 Stream.takeWhileFilter((n) => (n > 2 ? Result.succeed(n + 1) : Result.fail(n)));
@@ -3477,6 +3483,7 @@ Optic.entries().modify((all) => all.map(([key, value]) => [key, value + 1]))({ x
 Optic.id().key("n").notUndefined();
 Optic.id().refine((n) => n > b);
 Optic.id().tag("A");
+Optic.fromChecks(Schema.isGreaterThan(0), Schema.isLessThan(10)); // the value, where the checks hold
 Optic.id().forEach((each) => each.key("n")); // a traversal: an optic onto each item of an array
 Optic.getAll([{ n: a }, { n: b }], Optic.id().forEach((each) => each.key("n")));
 Optic.modifyAll(Optic.id().forEach((each) => each.key("n")), (n) => n * 2);
@@ -3767,6 +3774,7 @@ import * as Stdio from "effect/Stdio";
 
 Effect.promise(() => fetch(url));
 Effect.tryPromise(() => fetch(url));
+RequestResolver.persisted(RequestResolver.fromEffect((entry) => Effect.succeed(entry.request.n)), { storeId: "prices" }); // keeps results in a Persistence store
 ```
 
 A handler's sleeps, time limits, races, fibers, queues, transactions and requests are [supported](#time-and-fibers). A count an input decides is read where the input is held between 0 and 64: each count it can be is a path of its own. What is left is a wait that never ends, two waits that end at the same moment, a key an input decides, and the few modules below.

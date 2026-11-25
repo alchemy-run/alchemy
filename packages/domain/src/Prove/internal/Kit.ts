@@ -36,6 +36,8 @@ export interface Host {
   readonly atOnce: (fn: V, args: ReadonlyArray<V>, site: Site) => V;
   /** `value instanceof cls`, as the language has it. */
   readonly instanceOf: (value: V, cls: V, site: Site) => Eval<V>;
+  /** A `Set` of the language, of these items, as the code reads one. */
+  readonly setOf: (items: ReadonlyArray<V>) => V;
   /** A value the code being read has just made: it may change it, as it may what it wrote itself. */
   readonly fresh: <A extends V>(value: A) => A;
   /** An array's method that takes a function, such as `map`. */

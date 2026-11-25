@@ -3,7 +3,7 @@ import * as Channel from "effect/Channel";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
-import type * as PubSub from "effect/PubSub";
+import * as PubSub from "effect/PubSub";
 import type * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
@@ -269,6 +269,45 @@ export const make = (kit: Kit, tools: Tools) => {
         : wrongArguments(site, name),
     );
 
+  /**
+   * A PubSub of `Take`s, as the library makes one: each array of the channel, then how it ended,
+   * which ends the PubSub. The arrays and the end are values the code holds.
+   */
+  const takes = (
+    to: Given,
+    arrays: Channel.Channel<V, unknown>,
+    options: V | undefined,
+  ): Effect.Effect<V, unknown, Scope.Scope> => {
+    const read = tools.plainOf(options);
+    if (read === undefined || typeof read !== "object" || read === null)
+      return to.read(wrongArguments(to.site, to.name));
+    const given = read as {
+      readonly capacity: "unbounded" | number;
+      readonly strategy?: "dropping" | "sliding" | "suspend";
+    };
+    const make = (): Effect.Effect<PubSub.PubSub<V>> =>
+      given.capacity === "unbounded"
+        ? PubSub.unbounded<V>(given as { readonly replay?: number })
+        : given.strategy === "dropping"
+          ? PubSub.dropping<V>(given as { readonly capacity: number })
+          : given.strategy === "sliding"
+            ? PubSub.sliding<V>(given as { readonly capacity: number })
+            : PubSub.bounded<V>(given as { readonly capacity: number });
+    return Effect.gen(function* () {
+      const hub = yield* Effect.acquireRelease(make(), PubSub.shutdown);
+      yield* Channel.runForEach(arrays, (items) => PubSub.publish(hub, items)).pipe(
+        Effect.onExit((ended) =>
+          to.exit(ended).pipe(
+            Effect.flatMap((end) => PubSub.end(hub, end)),
+            Effect.ignore,
+          ),
+        ),
+        Effect.forkScoped,
+      );
+      return tools.wrap("PubSub", hub);
+    });
+  };
+
   /** A pull the library made, as an effect of the code. */
   const pull = (timeline: Timeline.Timeline, site: Site, self: Effect.Effect<V, unknown>): V => ({
     _tag: "Effect",
@@ -485,6 +524,23 @@ export const make = (kit: Kit, tools: Tools) => {
         Channel.map((items): V => arr(items)),
       ),
     ),
+    "effect/Channel:fromPubSubTake": from("Channel.fromPubSubTake", (to, [pubsub]) => {
+      const held = tools.heldOf<PubSub.PubSub<V>>("PubSub", pubsub);
+      return held
+        ? held.pipe(
+            PubSub.subscribe,
+            Effect.map((subscription) =>
+              subscription.pipe(
+                PubSub.take,
+                Effect.flatMap((given_) => take(to, given_)),
+                Channel.fromEffectTake,
+                Channel.map((items): V => arr(items)),
+              ),
+            ),
+            Channel.unwrap,
+          )
+        : to.bad;
+    }),
     "effect/Channel:fromPull": from("Channel.fromPull", (to, [effect]) =>
       to.eff(effect).pipe(
         Effect.map((made_) => pulled(to.timeline, made_, to.site, to.name)),
@@ -1048,6 +1104,34 @@ export const make = (kit: Kit, tools: Tools) => {
             (hub) => tools.wrap("PubSub", hub),
           );
     }),
+    "effect/Channel:toPubSubTake": opens("Channel.toPubSubTake", (to, self, [options]) =>
+      takes(to, self, options),
+    ),
+    "effect/Stream:toPubSubTake": dualBy("Stream.toPubSubTake", isFlow, ([self, options], site) =>
+      isFlow(self)
+        ? Effect.succeed<V>({
+            _tag: "Effect",
+            run: Effect.gen(function* () {
+              const timeline = yield* Timeline.current(site, "calls Stream.toPubSubTake");
+              const scope = yield* Effect.serviceOption(Scope.Scope);
+              if (Option.isNone(scope))
+                return yield* Value.notTranslated(
+                  site,
+                  "calls Stream.toPubSubTake outside Effect.scoped",
+                );
+              const to = given(timeline, "Stream.toPubSubTake", site);
+              const arrays = Channel.map(Stream.toChannel(tools.real(timeline, self)), (chunk) =>
+                arr(chunk),
+              );
+              return yield* Timeline.back(
+                timeline,
+                Effect.provideService(takes(to, arrays, options), Scope.Scope, scope.value),
+                (value) => value,
+              );
+            }),
+          })
+        : wrongArguments(site, "Stream.toPubSubTake"),
+    ),
     "effect/Channel:toQueueArray": opens("Channel.toQueueArray", (to, self, [options]) => {
       const read = tools.plainOf(options);
       return read === undefined || typeof read !== "object" || read === null

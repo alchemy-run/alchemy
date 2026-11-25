@@ -1,6 +1,5 @@
 import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
-import * as Chunk from "effect/Chunk";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -27,7 +26,6 @@ import * as Scope from "effect/Scope";
 import * as ScopedCache from "effect/ScopedCache";
 import * as ScopedRef from "effect/ScopedRef";
 import * as Semaphore from "effect/Semaphore";
-import * as TxChunk from "effect/TxChunk";
 import * as TxDeferred from "effect/TxDeferred";
 import * as TxPubSub from "effect/TxPubSub";
 import * as TxQueue from "effect/TxQueue";
@@ -2118,19 +2116,31 @@ export const make = (
 
   // ---- What is kept by a key: a `Cache` and a `FiberMap`. The key is one the code writes.
 
-  type Key = string | number | boolean;
+  /** A key the library finds by what it is: text, a number, a boolean, or a request. */
+  type Key = string | number | boolean | Asked;
   type FM = FiberMap.FiberMap<Key, V, Held>;
   type C = Cache.Cache<Key, V, Held>;
   type PL = Pool.Pool<V, Held>;
 
   /** The library finds a key by what it is, so the prover has to know what it is. */
-  const keyOf = (name: string, v: V | undefined, site: Site): Eval<Key> =>
-    v?._tag === "Num" || v?._tag === "Str" || v?._tag === "Bool"
-      ? Effect.succeed(v.value)
+  const keyOf = (name: string, v: V | undefined, site: Site): Eval<Key> => {
+    if (v?._tag === "Num" || v?._tag === "Str" || v?._tag === "Bool")
+      return Effect.succeed(v.value);
+    // A request is found by what it asks for, which the prover knows all of.
+    const asked = heldOf<Asked>("Request", v);
+    return asked
+      ? Effect.succeed(asked)
       : unseen(site, `calls ${name} with a key the prover cannot see`);
+  };
 
   const keyed = (key: Key): V =>
-    typeof key === "number" ? Value.num(key) : typeof key === "string" ? Value.str(key) : bool(key);
+    typeof key === "number"
+      ? Value.num(key)
+      : typeof key === "string"
+        ? Value.str(key)
+        : typeof key === "boolean"
+          ? bool(key)
+          : wrap("Request", key);
 
   /** A function of one of these and a key, which gives an effect. */
   const byKey = <H, A>(
@@ -3081,47 +3091,44 @@ export const make = (
     },
   };
 
-  // ---- A chunk in a transaction. The prover holds a chunk as a list, and the library is given one of its own.
+  // ---- A chunk in a transaction: a `TxRef` that holds the code's chunk, as a list, as the library's holds its own.
 
-  type TC = TxChunk.TxChunk<V>;
-
-  const chunkOf = (name: string, v: V | undefined, site: Site): Eval<Chunk.Chunk<V>> =>
-    Effect.map(items(name, v, site), (found) => Chunk.fromIterable(found));
-
-  const listed = (chunk: Chunk.Chunk<V>): V => chunk.pipe(Chunk.toReadonlyArray, arr);
-
-  /** What a function of the code makes of the chunk, in the transaction that reads it. */
-  const rechunked = (
+  /**
+   * A function of a TxChunk: what it gives of the list the ref holds, and the
+   * list it holds after, in one transaction. A TxChunk the code makes of a
+   * `TxRef` of its own is that ref.
+   */
+  const chunkStep = (
     name: string,
-    made_: (
-      chunk: ReadonlyArray<V>,
-      f: V,
+    arity: number,
+    step: (
+      before: ReadonlyArray<V>,
+      rest: ReadonlyArray<V>,
       site: Site,
-    ) => Eval<{ readonly next: V; readonly gives: V }>,
+      timeline: Timeline.Timeline,
+    ) => Effect.Effect<{ readonly next?: ReadonlyArray<V>; readonly gives: V }, Held>,
   ): Model =>
-    dual(`TxChunk.${name}`, 2, ([self, f], site) => {
-      const held = heldOf<TC>("TxChunk", self);
-      return held && f
+    dual(`TxChunk.${name}`, arity, ([self, ...rest], site) => {
+      const ref = heldOf<TR>("TxChunk", self);
+      return ref
         ? Effect.succeed(
             timed(
               `TxChunk.${name}`,
               (timeline) =>
                 Timeline.back(
                   timeline,
-                  held.pipe(
-                    TxChunk.get,
+                  TxRef.get(ref).pipe(
                     Effect.flatMap((before) =>
-                      Timeline.real(
-                        timeline,
-                        Effect.flatMap(made_(Chunk.toReadonlyArray(before), f, site), (read) =>
-                          Effect.map(chunkOf(`TxChunk.${name}`, read.next, site), (next) => ({
-                            next,
-                            gives: read.gives,
-                          })),
-                        ),
+                      Effect.flatMap(
+                        Timeline.real(timeline, items(`TxChunk.${name}`, before, site)),
+                        (list) => step(list, rest, site, timeline),
                       ),
                     ),
-                    Effect.flatMap((read) => Effect.as(TxChunk.set(held, read.next), read.gives)),
+                    Effect.flatMap((read) =>
+                      read.next
+                        ? Effect.as(TxRef.set(ref, arr(read.next)), read.gives)
+                        : Effect.succeed(read.gives),
+                    ),
                     Effect.tx,
                   ),
                   same,
@@ -3131,139 +3138,136 @@ export const make = (
           )
         : wrongArguments(site, `TxChunk.${name}`);
     });
-
-  /** A function of a chunk and a count the code writes. */
-  const cutting = (
+  const listOf = (timeline: Timeline.Timeline, name: string, v: V | undefined, site: Site) =>
+    Timeline.real(timeline, items(name, v, site));
+  const counted = (timeline: Timeline.Timeline, name: string, v: V | undefined, site: Site) =>
+    Timeline.real(timeline, count(name, v, site));
+  /** What the code's function makes of the list, in the transaction. */
+  const ofList = (
+    timeline: Timeline.Timeline,
+    f: V | undefined,
+    args: ReadonlyArray<V>,
+    site: Site,
     name: string,
-    cut: (held: TC, counts: ReadonlyArray<number>) => Effect.Effect<void>,
-    takes: number,
-  ): Model =>
-    later<TC, void>(
-      "TxChunk",
-      name,
-      takes + 1,
-      (held, rest, site) =>
-        Effect.map(
-          Effect.forEach(rest.slice(0, takes), (n) => count(`TxChunk.${name}`, n, site)),
-          (counts) => cut(held, counts),
-        ),
-      none,
-    );
+  ) => Timeline.real(timeline, f ? host.call(f, args, site) : wrongArguments(site, name));
 
   const chunks: Models = {
     "effect/TxChunk:make": made("TxChunk", ([chunk], site) =>
-      Effect.flatMap(chunkOf("TxChunk.make", chunk, site), (read) => TxChunk.make(read)),
+      Effect.flatMap(items("TxChunk.make", chunk, site), (read) => TxRef.make<V>(arr(read))),
     ),
     "effect/TxChunk:fromIterable": made("TxChunk", ([given_], site) =>
       Effect.flatMap(items("TxChunk.fromIterable", given_, site), (read) =>
-        TxChunk.fromIterable(read),
+        TxRef.make<V>(arr(read)),
       ),
     ),
-    "effect/TxChunk:empty": made("TxChunk", () => TxChunk.empty<V>()),
-    "effect/TxChunk:get": on<TC, Chunk.Chunk<V>>(
-      "TxChunk",
-      "get",
-      1,
-      (held) => TxChunk.get(held),
-      listed,
+    "effect/TxChunk:empty": made("TxChunk", () => TxRef.make<V>(arr([]))),
+    // A TxChunk of a `TxRef` that holds a chunk: they share what they hold.
+    "effect/TxChunk:makeUnsafe": ([ref], site) => {
+      const held = heldOf<TR>("TxRef", ref);
+      return held
+        ? Effect.succeed(wrap("TxChunk", held))
+        : wrongArguments(site, "TxChunk.makeUnsafe");
+    },
+    "effect/TxChunk:get": chunkStep("get", 1, (before) => Effect.succeed({ gives: arr(before) })),
+    "effect/TxChunk:set": chunkStep("set", 2, (_, [chunk], site, timeline) =>
+      Effect.map(listOf(timeline, "TxChunk.set", chunk, site), (next) => ({
+        next,
+        gives: Value.undef,
+      })),
     ),
-    "effect/TxChunk:set": later<TC, void>(
-      "TxChunk",
-      "set",
-      2,
-      (held, [chunk], site) =>
-        Effect.map(chunkOf("TxChunk.set", chunk, site), (read) => TxChunk.set(held, read)),
-      none,
+    "effect/TxChunk:append": chunkStep("append", 2, (before, [value]) =>
+      Effect.succeed({ next: [...before, value ?? Value.undef], gives: Value.undef }),
     ),
-    "effect/TxChunk:append": on<TC, void>(
-      "TxChunk",
-      "append",
-      2,
-      (held, [value]) => TxChunk.append(held, value ?? Value.undef),
-      none,
+    "effect/TxChunk:prepend": chunkStep("prepend", 2, (before, [value]) =>
+      Effect.succeed({ next: [value ?? Value.undef, ...before], gives: Value.undef }),
     ),
-    "effect/TxChunk:prepend": on<TC, void>(
-      "TxChunk",
-      "prepend",
-      2,
-      (held, [value]) => TxChunk.prepend(held, value ?? Value.undef),
-      none,
+    "effect/TxChunk:appendAll": chunkStep("appendAll", 2, (before, [chunk], site, timeline) =>
+      Effect.map(listOf(timeline, "TxChunk.appendAll", chunk, site), (more) => ({
+        next: [...before, ...more],
+        gives: Value.undef,
+      })),
     ),
-    "effect/TxChunk:appendAll": later<TC, void>(
-      "TxChunk",
-      "appendAll",
-      2,
-      (held, [chunk], site) =>
-        Effect.map(chunkOf("TxChunk.appendAll", chunk, site), (read) =>
-          TxChunk.appendAll(held, read),
-        ),
-      none,
+    "effect/TxChunk:prependAll": chunkStep("prependAll", 2, (before, [chunk], site, timeline) =>
+      Effect.map(listOf(timeline, "TxChunk.prependAll", chunk, site), (more) => ({
+        next: [...more, ...before],
+        gives: Value.undef,
+      })),
     ),
-    "effect/TxChunk:prependAll": later<TC, void>(
-      "TxChunk",
-      "prependAll",
-      2,
-      (held, [chunk], site) =>
-        Effect.map(chunkOf("TxChunk.prependAll", chunk, site), (read) =>
-          TxChunk.prependAll(held, read),
-        ),
-      none,
+    // What the other holds, after what this one holds: read in the same transaction.
+    "effect/TxChunk:concat": chunkStep("concat", 2, (before, [other], site, timeline) => {
+      const that = heldOf<TR>("TxChunk", other);
+      return that
+        ? Effect.flatMap(TxRef.get(that), (more) =>
+            Effect.map(listOf(timeline, "TxChunk.concat", more, site), (list) => ({
+              next: [...before, ...list],
+              gives: Value.undef,
+            })),
+          )
+        : Timeline.real(timeline, wrongArguments(site, "TxChunk.concat"));
+    }),
+    "effect/TxChunk:size": chunkStep("size", 1, (before) =>
+      Effect.succeed({ gives: num(before.length) }),
     ),
-    "effect/TxChunk:concat": later<TC, void>(
-      "TxChunk",
-      "concat",
-      2,
-      (held, [other], site) => {
-        const that = heldOf<TC>("TxChunk", other);
-        return that
-          ? Effect.succeed(TxChunk.concat(held, that))
-          : wrongArguments(site, "TxChunk.concat");
-      },
-      none,
+    "effect/TxChunk:isEmpty": chunkStep("isEmpty", 1, (before) =>
+      Effect.succeed({ gives: bool(before.length === 0) }),
     ),
-    "effect/TxChunk:size": on<TC, number>("TxChunk", "size", 1, (held) => TxChunk.size(held), num),
-    "effect/TxChunk:isEmpty": on<TC, boolean>(
-      "TxChunk",
-      "isEmpty",
-      1,
-      (held) => TxChunk.isEmpty(held),
-      bool,
+    "effect/TxChunk:isNonEmpty": chunkStep("isNonEmpty", 1, (before) =>
+      Effect.succeed({ gives: bool(before.length > 0) }),
     ),
-    "effect/TxChunk:isNonEmpty": on<TC, boolean>(
-      "TxChunk",
-      "isNonEmpty",
-      1,
-      (held) => TxChunk.isNonEmpty(held),
-      bool,
+    "effect/TxChunk:take": chunkStep("take", 2, (before, [n], site, timeline) =>
+      Effect.map(counted(timeline, "TxChunk.take", n, site), (k) => ({
+        next: before.slice(0, k),
+        gives: Value.undef,
+      })),
     ),
-    "effect/TxChunk:take": cutting("take", (held, [n]) => TxChunk.take(held, n!), 1),
-    "effect/TxChunk:drop": cutting("drop", (held, [n]) => TxChunk.drop(held, n!), 1),
-    "effect/TxChunk:slice": cutting(
-      "slice",
-      (held, [start, end]) => TxChunk.slice(held, start!, end!),
-      2,
+    "effect/TxChunk:drop": chunkStep("drop", 2, (before, [n], site, timeline) =>
+      Effect.map(counted(timeline, "TxChunk.drop", n, site), (k) => ({
+        next: before.slice(k),
+        gives: Value.undef,
+      })),
     ),
-    "effect/TxChunk:update": rechunked("update", (chunk, f, site) =>
-      Effect.map(host.call(f, [arr(chunk)], site), (next) => ({ next, gives: Value.undef })),
+    "effect/TxChunk:slice": chunkStep("slice", 3, (before, [start, end], site, timeline) =>
+      Effect.flatMap(counted(timeline, "TxChunk.slice", start, site), (from) =>
+        Effect.map(counted(timeline, "TxChunk.slice", end, site), (to) => ({
+          next: before.slice(from, to),
+          gives: Value.undef,
+        })),
+      ),
     ),
-    "effect/TxChunk:modify": rechunked("modify", (chunk, f, site) =>
-      Effect.flatMap(host.call(f, [arr(chunk)], site), (pair) => {
+    "effect/TxChunk:update": chunkStep("update", 2, (before, [f], site, timeline) =>
+      Effect.flatMap(ofList(timeline, f, [arr(before)], site, "TxChunk.update"), (made_) =>
+        Effect.map(listOf(timeline, "TxChunk.update", made_, site), (next) => ({
+          next,
+          gives: Value.undef,
+        })),
+      ),
+    ),
+    "effect/TxChunk:modify": chunkStep("modify", 2, (before, [f], site, timeline) =>
+      Effect.flatMap(ofList(timeline, f, [arr(before)], site, "TxChunk.modify"), (pair) => {
         const read = kit.itemsOf(pair);
         return read && read.length === 2
-          ? Effect.succeed({ gives: read[0]!, next: read[1]! })
-          : wrongArguments(site, "TxChunk.modify");
+          ? Effect.map(listOf(timeline, "TxChunk.modify", read[1], site), (next) => ({
+              next,
+              gives: read[0]!,
+            }))
+          : Timeline.real(timeline, wrongArguments(site, "TxChunk.modify"));
       }),
     ),
-    "effect/TxChunk:map": rechunked("map", (chunk, f, site) =>
+    "effect/TxChunk:map": chunkStep("map", 2, (before, [f], site, timeline) =>
       Effect.map(
-        Effect.forEach(chunk, (item) => host.call(f, [item], site)),
-        (next) => ({ next: arr(next), gives: Value.undef }),
+        Effect.forEach(before, (item) => ofList(timeline, f, [item], site, "TxChunk.map")),
+        (next) => ({ next, gives: Value.undef }),
       ),
     ),
-    "effect/TxChunk:filter": rechunked("filter", (chunk, f, site) =>
+    "effect/TxChunk:filter": chunkStep("filter", 2, (before, [f], site, timeline) =>
       Effect.map(
-        Effect.filter(chunk, (item) => kit.holds(f, [item], site)),
-        (next) => ({ next: arr(next), gives: Value.undef }),
+        Effect.filter(before, (item) =>
+          Timeline.real(
+            timeline,
+            f ? kit.holds(f, [item], site) : wrongArguments(site, "TxChunk.filter"),
+          ),
+        ),
+        (next) => ({ next, gives: Value.undef }),
       ),
     ),
   };
@@ -3308,6 +3312,16 @@ export const make = (
     );
     return undefined;
   };
+
+  /** A key of a batch, as the code wrote it. */
+  const keyedBatch = (key: unknown): V =>
+    typeof key === "number"
+      ? Value.num(key)
+      : typeof key === "string"
+        ? Value.str(key)
+        : typeof key === "boolean"
+          ? Value.bool(key)
+          : Value.undef;
 
   /** One resolver for each handler that uses it: it remembers the requests of that handler only. */
   const resolving = (make_: (timeline: Timeline.Timeline) => Answering): V => {
@@ -3983,6 +3997,101 @@ export const make = (
             : wrongArguments(site, "RequestResolver.fromEffectTagged"),
         ),
       ),
+    // A cache of what the resolver answers, found by the request: a request it has asked is not asked again.
+    // What it keeps is in a Persistence store, which is outside the handler.
+    "effect/RequestResolver:persisted": (_: ReadonlyArray<V>, site: Site) =>
+      Effect.fail(
+        Value.notTranslated(
+          site,
+          "calls RequestResolver.persisted, which keeps results in a Persistence store outside the handler",
+        ),
+      ),
+    "effect/RequestResolver:asCache": dual("RequestResolver.asCache", 2, ([self, given_], site) => {
+      const held = heldOf<Resolver>("Resolver", self);
+      const fields = given_?._tag === "Obj" && !given_.brand ? given_.fields : undefined;
+      if (
+        !held ||
+        !fields ||
+        !Object.keys(fields).every((key) => ["capacity", "timeToLive"].includes(key))
+      )
+        return wrongArguments(site, "RequestResolver.asCache");
+      return Effect.succeed(
+        timed(
+          "RequestResolver.asCache",
+          (timeline) =>
+            Effect.flatMap(count("RequestResolver.asCache", fields.capacity, site), (size) => {
+              const ttl = fields.timeToLive;
+              return Timeline.back(
+                timeline,
+                RequestResolver.asCache(held(timeline), {
+                  capacity: size,
+                  timeToLive:
+                    ttl && ttl._tag !== "Undef"
+                      ? (exit, request) =>
+                          keptFor(
+                            timeline,
+                            ttl,
+                            "RequestResolver.asCache",
+                            site,
+                          )(exit as Exit.Exit<V, Held>, request)
+                      : undefined,
+                }),
+                (cache) => wrap("Cache", cache),
+              );
+            }),
+          site,
+        ),
+      );
+    }),
+    // A resolver written as the library's own parts: how requests are grouped, when a batch is full, how it runs.
+    "effect/RequestResolver:makeWith": ([given_]: ReadonlyArray<V>, site: Site) => {
+      const fields = given_?._tag === "Obj" && !given_.brand ? given_.fields : undefined;
+      const [batch, check, delay, collect, runAll] = [
+        fields?.batchKey,
+        fields?.preCheck,
+        fields?.delay,
+        fields?.collectWhile,
+        fields?.runAll,
+      ];
+      if (!batch || delay?._tag !== "Effect" || !collect || !runAll)
+        return wrongArguments(site, "RequestResolver.makeWith");
+      const atOnce = (
+        timeline: Timeline.Timeline,
+        f: V,
+        args: ReadonlyArray<V>,
+        what: string,
+      ): boolean => {
+        try {
+          const made_ = host.force(host.atOnce(f, args, site));
+          if (made_._tag === "Bool") return made_.value;
+        } catch {
+          // Reported below.
+        }
+        timeline.fatal ??= Value.notTranslated(
+          site,
+          `calls RequestResolver.makeWith with a ${what} the prover cannot work out at once`,
+        );
+        return false;
+      };
+      return Effect.succeed(
+        resolving((timeline) =>
+          RequestResolver.makeWith<Asked>({
+            batchKey: (entry) => batchKey(timeline, batch, entry, site),
+            preCheck:
+              check && check._tag !== "Undef"
+                ? (entry) => atOnce(timeline, check, [entryOf(entry)], "preCheck")
+                : undefined,
+            delay: Timeline.real(timeline, delay.run).pipe(Effect.asVoid, sure),
+            collectWhile: (requests) =>
+              atOnce(timeline, collect, [host.setOf([...requests].map(entryOf))], "collectWhile"),
+            runAll: (entries, key) =>
+              Effect.asVoid(
+                called(timeline, runAll, site)(arr(entries.map(entryOf)), keyedBatch(key)),
+              ),
+          }),
+        ),
+      );
+    },
     "effect/RequestResolver:isRequestResolver": ([value]: ReadonlyArray<V>) =>
       Effect.succeed(bool(kindOf(value) === "Resolver")),
     // A span says how the resolver is watched: it is the resolver it was.

@@ -34,8 +34,13 @@ export const make = (kit: Kit) => {
           : undefined;
 
   /** The schema, when it is one the prover reads all of and that gives back the value it is given. */
-  const read = (name: string, given: V | undefined, site: Site): Eval<SchemaAST.AST> => {
-    const schema = schemaOf(given);
+  const read = (
+    name: string,
+    given: V | undefined,
+    site: Site,
+    known: unknown = schemaOf(given),
+  ): Eval<SchemaAST.AST> => {
+    const schema = known;
     if (!Schema.isSchema(schema)) return wrongArguments(site, name);
     const ast = schema.ast;
     if (SchemaAST.toEncoded(ast) !== ast || SchemaAST.toType(ast) !== ast)
@@ -167,7 +172,7 @@ export const make = (kit: Kit) => {
     ),
   });
 
-  const models: Models = {
+  const models: Record<string, Model> = {
     "effect/Schema:is": over("Schema.is", (fits) => Effect.succeed(Value.bool(fits))),
     // The schema and the value together: it throws where the value does not pass.
     "effect/Schema:asserts": ([given, value], site) =>
@@ -190,6 +195,49 @@ export const make = (kit: Kit) => {
     ...forms("decode"),
     ...forms("encodeUnknown"),
     ...forms("encode"),
+  };
+
+  // A Prism of the checks of a schema: the focus is the value itself, where every check holds.
+  const BASES: Readonly<Record<string, Schema.Top>> = {
+    number: Schema.Number,
+    string: Schema.String,
+    bigint: Schema.BigInt,
+  };
+  models["effect/Optic:fromChecks"] = (checks, site) => {
+    const real = checks.map(schemaOf);
+    if (real.length === 0 || real.some((check) => check !== undefined && Schema.isSchema(check)))
+      return wrongArguments(site, "Optic.fromChecks");
+    if (real.some((check) => check === undefined))
+      return Effect.fail(
+        Value.notTranslated(
+          site,
+          "calls Optic.fromChecks with a check of values the prover cannot see",
+        ),
+      );
+    const step: Value.OpticStep = {
+      kind: "Prism",
+      get: (source, at) => {
+        const kind = host.kind(source);
+        const base = kind === undefined ? undefined : BASES[kind];
+        if (!base)
+          return Effect.fail(
+            Value.notTranslated(
+              at,
+              "checks a value with Optic.fromChecks that the prover reads no checks of",
+            ),
+          );
+        const schema = (base as { check: (...given: ReadonlyArray<unknown>) => Schema.Top }).check(
+          ...real,
+        );
+        return Effect.flatMap(read("Optic.fromChecks", undefined, at, schema), (ast) =>
+          Effect.map(passes("Optic.fromChecks", source, ast, at), (holds) =>
+            holds ? { ok: true as const, value: source } : { ok: false as const },
+          ),
+        );
+      },
+      set: (value) => Effect.succeed({ ok: true, value }),
+    };
+    return Effect.succeed<V>({ _tag: "Optic", path: [step] });
   };
 
   return { models };

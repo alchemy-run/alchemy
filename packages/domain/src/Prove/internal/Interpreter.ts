@@ -882,6 +882,11 @@ export const make = (given: Loader, run: Run): Interpreter => {
     fresh: (value) => made(value),
     atOnce: (fn, args, site) => ranAtOnce(fn, args, site),
     instanceOf: (value, cls, site) => instanceOf(value, cls, site),
+    setOf: (items) => {
+      const self = made<V>({ _tag: "Obj", fields: {} });
+      kept.set(self, { kind: "Set", entries: items.map((item): [V, V] => [item, item]) });
+      return self;
+    },
     array: (name, items, fn, initial, site) => arrayMethods[name]!(items, fn, initial, site),
   });
 

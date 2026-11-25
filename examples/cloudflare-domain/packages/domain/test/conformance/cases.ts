@@ -454,6 +454,10 @@ const base: ReadonlyArray<Group> = [
       `Optic.id().key("n").get({ n: a, m: b })`,
       `Optic.get({ n: { deep: a } }, Optic.id().key("n").key("deep"))`,
       `pipe({ n: a }, Optic.get(Optic.id().key("n")))`,
+      `Result.isSuccess(Optic.fromChecks(Schema.isGreaterThan(0)).getResult(a))`,
+      `Optic.fromChecks(Schema.isGreaterThan(0), Schema.isLessThan(10)).modify((n) => n * 2)(a)`,
+      `Optic.id().key("n").compose(Optic.fromChecks(Schema.isGreaterThan(2))).modify((n) => n + 1)({ n: a })`,
+      `Optic.fromChecks(Schema.isMinLength(2)).modify((text) => text + "!")(a > 0 ? "abc" : "z")`,
       `Optic.getAll([{ n: a }, { n: b }], Optic.id().forEach((each) => each.key("n")))`,
       `Optic.modifyAll({ items: [Option.some(a), Option.none(), Option.some(b)] }, Optic.id().key("items").forEach((each) => each.compose(Optic.some())), (n) => n + 1)`,
       `pipe([{ n: a }, { n: b }], Optic.modifyAll(Optic.id().forEach((each) => each.key("n")), (n) => n * 2))`,
@@ -2963,6 +2967,7 @@ const rest: ReadonlyArray<Group> = [
     effectful: true,
     prelude: [
       `import * as Fiber from "effect/Fiber";`,
+      `import * as Cache from "effect/Cache";`,
       `import * as Request from "effect/Request";`,
       `import * as RequestResolver from "effect/RequestResolver";`,
       `import * as Pool from "effect/Pool";`,
@@ -3006,11 +3011,17 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const ask = Request.tagged("Double"); const doubled = RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n * 2 + a)).pipe(RequestResolver.setDelayEffect(Effect.sleep("1 second"))); return [yield* Effect.request(ask({ n: 1 }), doubled), yield* Ref.get(seen)]; })`,
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const ask = Request.tagged("Double"); const cached = yield* RequestResolver.withCache(RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n + a)), { capacity: 4 }); const first = yield* Effect.request(ask({ n: 1 }), cached); const again = yield* Effect.request(ask({ n: 1 }), cached); return [first, again, (yield* Ref.get(seen)).length]; })`,
       `Effect.gen(function* () { const Double = Request.tagged("Double"); const Half = Request.tagged("Half"); const answers = RequestResolver.fromEffectTagged()({ Double: (requests) => Effect.succeed(requests.map((entry) => entry.request.n * 2 + a)), Half: (requests) => (requests.length > 1 ? Effect.fail(new Odd({ n: b })) : Effect.succeed(requests.map((entry) => entry.request.n / 2))) }); return yield* Effect.all([Effect.request(Double({ n: 1 }), answers), Effect.result(Effect.request(Half({ n: 4 }), answers))], { concurrency: 2 }); })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const Double = Request.tagged("Double"); const cache = yield* RequestResolver.asCache(RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n * 2 + a)), { capacity: 4 }); const first = yield* Cache.get(cache, Double({ n: 1 })); const again = yield* Cache.get(cache, Double({ n: 1 })); return [first, again, (yield* Ref.get(seen)).length]; })`,
+      `Effect.gen(function* () { const batches = yield* Ref.make([]); const Double = Request.tagged("Double"); const doubled = RequestResolver.makeWith({ batchKey: (entry) => (entry.request.n > 2 ? "big" : "small"), delay: Effect.yieldNow, collectWhile: (requests) => requests.size < 3, runAll: (entries, key) => Effect.andThen(log(batches, [key, entries.length]), Effect.forEach(entries, (entry) => Request.succeed(entry, entry.request.n * 2 + a), { discard: true })) }); const made = yield* Effect.all([1, 2, 3].map((n) => Effect.request(Double({ n }), doubled)), { concurrency: 3 }); return [made, (yield* Ref.get(batches)).length]; })`,
     ],
     unread: [
       [
         `Effect.gen(function* () { const ask = Request.tagged("Double"); return yield* Effect.request(ask({ n: 1 }), RequestResolver.never); })`,
         /waits for a request that its resolver never answers/,
+      ],
+      [
+        `Effect.gen(function* () { const ask = Request.tagged("Double"); const kept = yield* RequestResolver.persisted(RequestResolver.fromEffect((entry) => Effect.succeed(entry.request.n)), { storeId: "prices" }); return yield* Effect.request(ask({ n: 1 }), kept); })`,
+        /calls RequestResolver.persisted, which keeps results in a Persistence store outside the handler/,
       ],
       [
         `Effect.gen(function* () { const ask = Request.tagged("Held"); const any = RequestResolver.fromEffect(() => Effect.succeed(1)); return yield* Effect.request(ask({ n: a }), any); })`,
@@ -3224,6 +3235,9 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const queue = yield* Queue.unbounded(); yield* Channel.runIntoQueueArray(Channel.fromIterable([[a, b], [3]]), queue); return [yield* Queue.take(queue), yield* Queue.take(queue), yield* Queue.take(queue)]; })`,
       `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.unbounded(); const subscription = yield* PubSub.subscribe(hub); yield* Channel.runIntoPubSubArray(Channel.fromIterable([[a, b]]), hub); return [yield* PubSub.take(subscription), yield* PubSub.take(subscription)]; }))`,
       `Effect.scoped(Effect.gen(function* () { const hub = yield* Channel.toPubSubArray(Channel.fromEffect(Effect.as(Effect.sleep(2), [a, b])), { capacity: 4 }); const subscription = yield* PubSub.subscribe(hub); return [yield* PubSub.take(subscription), yield* PubSub.take(subscription)]; }))`,
+      `Effect.scoped(Effect.gen(function* () { const hub = yield* Channel.toPubSubTake(Channel.fromEffect(Effect.as(Effect.sleep(2), [a, b])), { capacity: 4 }); const sub = yield* PubSub.subscribe(hub); const first = yield* PubSub.take(sub); const second = yield* PubSub.take(sub); return [first, Exit.isExit(second) && Exit.isSuccess(second)]; }))`,
+      `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.unbounded(); const fiber = yield* Effect.forkChild(Channel.runCollect(Channel.fromPubSubTake(hub))); yield* Effect.sleep(1); yield* PubSub.publish(hub, [a, b]); yield* PubSub.publish(hub, [b]); yield* PubSub.publish(hub, Exit.succeed(undefined)); return yield* Fiber.join(fiber); }))`,
+      `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.unbounded(); const fiber = yield* Effect.forkChild(Effect.exit(Channel.runCollect(Channel.fromPubSubTake(hub)))); yield* Effect.sleep(1); yield* PubSub.publish(hub, [a]); yield* PubSub.publish(hub, Exit.fail("no")); const ended = yield* Fiber.join(fiber); return Exit.isFailure(ended); }))`,
       `Channel.fromIterableArray([a, b, 3, 4], 2).pipe(Channel.filterArray((n) => n > 0), Channel.bufferArray({ capacity: 4 }), Channel.runCollect)`,
       `Channel.fromIterableArray([a, b, 3], 2).pipe(Channel.filterArrayEffect((n) => Effect.succeed(n !== b)), Channel.runCollect)`,
       `Channel.die("boom").pipe(Channel.catchDefect((defect) => Channel.succeed(defect)), Channel.runCollect)`,
@@ -3830,6 +3844,9 @@ const rest: ReadonlyArray<Group> = [
       `Effect.scoped(Effect.gen(function* () { const queue = yield* Stream.toQueue(Stream.make(a, b), { capacity: 4 }); return [yield* Queue.take(queue), yield* Queue.take(queue)]; }))`,
       `Effect.scoped(Effect.gen(function* () { const hub = yield* Stream.toPubSub(paced(2, a, b), { capacity: 4 }); const sub = yield* PubSub.subscribe(hub); return yield* PubSub.take(sub); }))`,
       `Effect.scoped(Effect.gen(function* () { const [one, two] = yield* Stream.broadcastN(paced(2, a, b), { n: 2, capacity: 4 }); return yield* Effect.all([Stream.runCollect(one), Stream.runCollect(two)], { concurrency: 2 }); }))`,
+      `Effect.scoped(Effect.gen(function* () { const hub = yield* Stream.toPubSubTake(paced(2, a, b), { capacity: 4 }); return yield* Stream.runCollect(Stream.fromPubSubTake(hub)); }))`,
+      `Effect.scoped(Effect.gen(function* () { const hub = yield* pipe(paced(2, a), Stream.concat(Stream.fail("no")), Stream.toPubSubTake({ capacity: "unbounded" })); return yield* Effect.flip(Stream.runCollect(Stream.fromPubSubTake(hub))); }))`,
+      `Effect.scoped(Effect.gen(function* () { const hub = yield* Stream.toPubSubTake(paced(2, a, b), { capacity: 4 }); const sub = yield* PubSub.subscribe(hub); const first = yield* PubSub.take(sub); const second = yield* PubSub.take(sub); const third = yield* PubSub.take(sub); return [first, second, Exit.isExit(third) && Exit.isSuccess(third)]; }))`,
     ],
     unread: [
       // A stream's time limit is worked out from the clock, which a handler's does not move: it never comes.
@@ -3937,6 +3954,7 @@ const rest: ReadonlyArray<Group> = [
       `import * as Semaphore from "effect/Semaphore";`,
       `import * as Schedule from "effect/Schedule";`,
       `import * as Hash from "effect/Hash";`,
+      `import * as TxRef from "effect/TxRef";`,
       `import * as Cache from "effect/Cache";`,
       `import * as TxDeferred from "effect/TxDeferred";`,
       `import * as TxSubscriptionRef from "effect/TxSubscriptionRef";`,
@@ -4012,6 +4030,7 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const scope = Scope.makeUnsafe(); yield* Scope.addFinalizer(scope, log(seen, a)); const closing = Scope.closeUnsafe(scope, Exit.void); yield* closing; const again = Scope.closeUnsafe(scope, Exit.void); return [yield* Ref.get(seen), again === undefined]; })`,
       `Effect.scoped(Effect.gen(function* () { const handle = yield* FiberHandle.make(); const none = yield* FiberHandle.get(handle); yield* FiberHandle.run(handle, Effect.as(Effect.sleep(1), a)); const some = yield* FiberHandle.get(handle); const unsafe = FiberHandle.getUnsafe(handle); return [Option.isNone(none), Option.isSome(some), Option.isSome(unsafe), yield* Fiber.join(some.value)]; }))`,
       `Effect.gen(function* () { const stock = yield* TxHashMap.make(["tea", a]); return [yield* TxHashMap.getHash(stock, "tea", Hash.hash("tea")), yield* TxHashMap.hasHash(stock, "milk", Hash.hash("milk"))]; })`,
+      `Effect.gen(function* () { const ref = yield* TxRef.make(Chunk.make(a, b)); const held = TxChunk.makeUnsafe(ref); yield* TxChunk.append(held, 3); const seen = yield* TxRef.get(ref); yield* TxRef.set(ref, Chunk.make(9)); return [Chunk.toReadonlyArray(seen), Chunk.toReadonlyArray(yield* TxChunk.get(held)), TxChunk.isTxChunk(held)]; })`,
     ],
   },
   {
