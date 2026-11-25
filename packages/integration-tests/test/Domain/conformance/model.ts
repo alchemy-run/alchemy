@@ -304,6 +304,45 @@ const TallyWriterV1Live = TallyWriterV1.toLayer(
   { version: 1 },
 );
 
+/** A backlog run's key, for a counter of the backlog case (`<run>.<n>`); other counters have none. */
+export const backlogKey = (counter: string): string | undefined =>
+  counter.startsWith("backlog-") && counter.includes(".") ? counter.split(".")[0] : undefined;
+
+export class BacklogHandled extends Domain.Event("BacklogHandled", { counter: Schema.String }) {}
+
+/** Which counters of a backlog run its key has handled, in the order it handled them. */
+export class Drained extends Domain.Stream("Drained", {
+  key: Schema.String,
+  entries: [BacklogHandled],
+}) {}
+
+/**
+ * Every counter of a backlog run feeds one key, which takes {@link BACKLOG_DELAY}
+ * over each input: a backlog that takes minutes to drain, with nothing else arriving.
+ */
+export class BacklogWriter extends Domain.Projection("BacklogWriter", {
+  from: [Counter],
+  key: Schema.String,
+  keyOf: { Incremented: ({ source }) => backlogKey(source.id) },
+  on: [Incremented],
+  writes: [Drained],
+}) {}
+
+/** How long the backlog's key takes over each input. */
+export const BACKLOG_DELAY = "1 second";
+
+const BacklogWriterLive = BacklogWriter.toLayer(
+  Effect.gen(function* () {
+    const drained = yield* Drained;
+    return Effect.fn(function* (batch) {
+      for (const input of batch) {
+        yield* Effect.sleep(BACKLOG_DELAY);
+        yield* drained.append(input, new BacklogHandled({ counter: input.source.id }));
+      }
+    });
+  }),
+);
+
 /**
  * Mirrors a counter's first increment onto its Echo; one run per counter.
  * Its step fails its first attempt after it sends, so the step runs again:
@@ -527,8 +566,8 @@ export class Conformance extends Domain.Model("Conformance", {
   aggregates: [Counter, Echo, Hold, Hop, Memo, ...latencyAggregates],
   decisions: [Giving],
   views: [CounterTotal, CounterTimes, HiddenTotal, TicketedTotal, MemoText, ...latencyViews],
-  projections: [TotalWriter, TallyWriter],
-  streams: [Recorded, Tallies],
+  projections: [TotalWriter, TallyWriter, BacklogWriter],
+  streams: [Recorded, Tallies, Drained],
   policies: [StartMirror, HoldDeadline, PassOn],
   sagas: [MirrorFirst],
   rewrites: [Redact],
@@ -551,8 +590,8 @@ export class ConformanceV1 extends Domain.Model("Conformance", {
     CounterReplay,
     ...latencyViews,
   ],
-  projections: [TotalWriter, TallyWriterV1],
-  streams: [Recorded, Tallies],
+  projections: [TotalWriter, TallyWriterV1, BacklogWriter],
+  streams: [Recorded, Tallies, Drained],
   policies: [StartMirror, HoldDeadline, PassOn],
   sagas: [MirrorFirst],
   rewrites: [Redact],
@@ -581,6 +620,7 @@ const handlers = Layer.mergeAll(
   HiddenTotalLive,
   TicketedTotalLive,
   TotalWriterLive,
+  BacklogWriterLive,
   MemoForwardLive,
 );
 
