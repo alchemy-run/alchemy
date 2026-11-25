@@ -223,18 +223,22 @@ to the underlying runtime binding.
 ### From an async Worker
 
 An [async Worker](/cloudflare/compute/workers#async-workers) or a
-[Vite website](/cloudflare/frontend/vite) takes the same descriptor in its
-`env` prop, and the handler calls Cloudflare's `send_email` binding
+[Vite website](/cloudflare/frontend/vite) takes a `SendEmail` descriptor in
+its `env` prop, and the handler calls Cloudflare's `send_email` binding
 directly:
 
 ```typescript
 // alchemy.run.ts
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { Email } from "./src/email.ts";
 
 export const Notifier = Cloudflare.Worker("Notifier", {
   main: "./src/worker.ts",
-  env: { Email },
+  env: {
+    Email: Cloudflare.Email.SendEmail("Email", {
+      allowedSenderAddresses: ["bot@example.com"],
+      destinationAddress: "you@personal.example",
+    }),
+  },
 });
 
 export type NotifierEnv = Cloudflare.InferEnv<typeof Notifier>;
