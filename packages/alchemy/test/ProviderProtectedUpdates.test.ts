@@ -7,20 +7,36 @@ import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { Resource } from "@/Resource.ts";
 import { inMemoryState } from "@/State/index.ts";
 
-interface Guarded extends Resource<"Test.Guarded", { revision: number }, { revision: number }> {}
+interface Guarded extends Resource<
+  "Test.Guarded",
+  {
+    revision: number;
+    /** A change replaces the resource. */
+    generation?: number;
+    /** Stands in for a destructive change a provider refuses while protected. */
+    destructive?: boolean;
+  },
+  { revision: number }
+> {}
 const Guarded = Resource<Guarded>("Test.Guarded");
 
 const seen: Array<{ phase: "diff" | "reconcile"; protected: boolean | undefined }> = [];
 let failUnprotect = false;
 let failCreate = false;
+let failDelete = false;
 const { test } = Test.make({
   state: inMemoryState(),
   providers: Provider.succeed(Guarded, {
     list: () => Effect.succeed([]),
-    diff: ({ protected: protectedFromDeletion }) =>
+    diff: ({ news, olds, protected: protectedFromDeletion }) =>
       Effect.sync(() => {
         seen.push({ phase: "diff", protected: protectedFromDeletion });
-        return { action: "update" as const };
+        return {
+          action:
+            olds !== undefined && (news as { generation?: number }).generation !== olds.generation
+              ? ("replace" as const)
+              : ("update" as const),
+        };
       }),
     reconcile: ({ news, olds, protected: protectedFromDeletion }) =>
       Effect.gen(function* () {
@@ -31,6 +47,12 @@ const { test } = Test.make({
             message: "injected failed create",
           });
         }
+        if (news.destructive && protectedFromDeletion) {
+          return yield* Effect.fail({
+            _tag: "RefusedWhileProtected",
+            message: "refused a destructive change while protected",
+          });
+        }
         if (failUnprotect && news.revision === 2) {
           return yield* Effect.fail({
             _tag: "InjectedUnprotectFailure",
@@ -39,7 +61,10 @@ const { test } = Test.make({
         }
         return { revision: news.revision };
       }),
-    delete: () => Effect.void,
+    delete: () =>
+      failDelete
+        ? Effect.fail({ _tag: "InjectedDeleteFailure", message: "injected failed delete" })
+        : Effect.void,
   }),
 });
 
@@ -116,8 +141,70 @@ test.provider(
         { phase: "reconcile", protected: true },
       ]);
 
-      // A protected row blocks destroy: release it first.
       yield* stack.deploy(Guarded("Guard", { revision: 2 }));
+      yield* stack.destroy();
+    }),
+  { tags: ["unit", "local"] },
+);
+
+const reconciles = () =>
+  seen.filter((entry) => entry.phase === "reconcile").map((entry) => entry.protected);
+
+test.provider(
+  "a refused change keeps a resumed create protected on every retry",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      failCreate = true;
+      yield* Effect.exit(
+        stack.deploy(Guarded("Guard", { revision: 1 }).pipe(RemovalPolicy.protect())),
+      );
+      failCreate = false;
+
+      // Dropping protect() together with a destructive change is refused, and
+      // the refused attempt must not checkpoint the row as unprotected.
+      seen.length = 0;
+      for (const _ of [1, 2]) {
+        const retry = yield* Effect.exit(
+          stack.deploy(Guarded("Guard", { revision: 1, destructive: true })),
+        );
+        expect(Exit.isFailure(retry)).toBe(true);
+      }
+      expect(reconciles()).toEqual([true, true]);
+
+      yield* stack.deploy(Guarded("Guard", { revision: 1 }));
+      yield* stack.destroy();
+    }),
+  { tags: ["unit", "local"] },
+);
+
+test.provider(
+  "a refused change keeps a draining replaced row protected on every retry",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      yield* stack.deploy(Guarded("Guard", { revision: 1, generation: 1 }));
+      // Replace while the old generation can't be deleted: the row stays
+      // `replaced`, draining it. Then protect the current generation.
+      failDelete = true;
+      yield* Effect.exit(stack.deploy(Guarded("Guard", { revision: 1, generation: 2 })));
+      yield* Effect.exit(
+        stack.deploy(
+          Guarded("Guard", { revision: 1, generation: 2 }).pipe(RemovalPolicy.protect()),
+        ),
+      );
+
+      seen.length = 0;
+      for (const _ of [1, 2]) {
+        const retry = yield* Effect.exit(
+          stack.deploy(Guarded("Guard", { revision: 2, generation: 2, destructive: true })),
+        );
+        expect(Exit.isFailure(retry)).toBe(true);
+      }
+      expect(reconciles()).toEqual([true, true]);
+
+      failDelete = false;
+      yield* stack.deploy(Guarded("Guard", { revision: 2, generation: 2 }));
       yield* stack.destroy();
     }),
   { tags: ["unit", "local"] },

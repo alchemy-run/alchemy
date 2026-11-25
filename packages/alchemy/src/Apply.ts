@@ -580,6 +580,17 @@ interface LifecycleFailure {
   cause: Cause.Cause<unknown>;
 }
 
+/**
+ * The removal policy to checkpoint before a change is reconciled. A stored
+ * `protect` stays until the change succeeds, so a failed deploy that also
+ * drops `protect()` can't leave the row unprotected for its retry.
+ */
+const pendingRemovalPolicy = (node: {
+  readonly state?: ResourceState | undefined;
+  readonly resource: { readonly RemovalPolicy: ResourceState["removalPolicy"] };
+}): ResourceState["removalPolicy"] =>
+  isProtectedResourceState(node.state) ? "protect" : node.resource.RemovalPolicy;
+
 const executeNode = (
   fqn: string,
   node: Apply,
@@ -878,7 +889,7 @@ const executeNode = (
           providerVersion: node.provider.version ?? 0,
           bindings: excludeDeletedBindings(node.bindings),
           downstream: node.downstream,
-          removalPolicy: node.resource.RemovalPolicy,
+          removalPolicy: pendingRemovalPolicy(node),
           providerMode: node.mode,
           adoptionBlocked: node.adoptionBlocked,
         });
@@ -930,7 +941,7 @@ const executeNode = (
           providerVersion: node.provider.version ?? 0,
           bindings: excludeDeletedBindings(node.bindings),
           downstream: node.downstream,
-          removalPolicy: node.resource.RemovalPolicy,
+          removalPolicy: pendingRemovalPolicy(node),
           providerMode: node.mode,
           adoptionBlocked: node.adoptionBlocked,
         });
@@ -965,7 +976,7 @@ const executeNode = (
             providerVersion: node.provider.version ?? 0,
             bindings: bindingOutputs,
             downstream: node.downstream,
-            removalPolicy: node.resource.RemovalPolicy,
+            removalPolicy: pendingRemovalPolicy(node),
             providerMode: node.mode,
             adoptionBlocked: node.adoptionBlocked,
           });
@@ -1082,7 +1093,7 @@ const executeNode = (
             ...node.state,
             attr: node.state.attr,
             props: news,
-            removalPolicy: node.resource.RemovalPolicy,
+            removalPolicy: pendingRemovalPolicy(node),
             providerMode: node.mode,
           })
         : commit<UpdatingReourceState>({
