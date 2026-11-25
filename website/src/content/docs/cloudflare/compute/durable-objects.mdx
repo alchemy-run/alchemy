@@ -727,10 +727,10 @@ classes renamed from the same one fail the deploy with
 
 ## Protect stored objects from accidental class deletion
 
-A Worker can update without being replaced, but removing a hosted Durable
-Object class during that update may delete its namespace and stored data.
-Protect the Worker to refuse those deletions during both planning and
-deployment:
+Removing a hosted Durable Object class deletes its namespace and every
+object stored in it, even though the Worker itself is only updated, not
+replaced. Protect the Worker to refuse that deletion. The deploy fails with
+`ProtectedDurableObjectClassDeletion` before anything is uploaded:
 
 ```typescript
 import * as Cloudflare from "@alchemy.run/cloudflare";
@@ -746,10 +746,9 @@ To remove the `Counter` class intentionally, first deploy the unchanged
 Worker **without** `RemovalPolicy.protect()` and let that deployment
 succeed. Remove the class in a **subsequent** deployment. Removing the
 protection and the class in the same deploy is refused, including after an
-interrupted unprotect update. Explicit `renamedFrom` migrations keep the
-existing namespace and are permitted while protected. For transfers between
-Workers, Alchemy separately verifies that the namespace reaches its new host
-before deleting it from the former host.
+interrupted unprotect update. Renaming a class with `renamedFrom`, or moving
+it to another Worker with `transferredFrom`, keeps its namespace and is
+allowed while protected.
 
 ## Adopt a Worker deployed by Wrangler
 

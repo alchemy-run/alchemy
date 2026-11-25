@@ -4779,16 +4779,7 @@ export const LiveWorkerProvider = () =>
               ),
             );
           }),
-        diff: Effect.fn(function* ({
-          id,
-          fqn,
-          news: desired,
-          olds,
-          output,
-          oldBindings,
-          newBindings,
-          protected: protectedFromDeletion,
-        }) {
+        diff: Effect.fn(function* ({ id, fqn, news: desired, olds, output, newBindings }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           // Effect-valued `env` entries (tagged Worker classes / resource
           // Effects — the circular-bindings pattern) never resolve at plan
@@ -4800,33 +4791,6 @@ export const LiveWorkerProvider = () =>
           // form against the stripped stored props and re-plans an update
           // forever (#874).
           const news = stripEffects(desired);
-          // Run the data-loss guard before unrelated unresolved props can
-          // defer the normal diff. Do not require the entire Worker to resolve
-          // to inspect its literal Durable Object declarations.
-          if (
-            protectedFromDeletion &&
-            olds !== undefined &&
-            output !== undefined &&
-            Array.isArray(newBindings) &&
-            // stripEffects removes unresolved exports, which is not proof
-            // their classes were deleted. Reconcile checks after resolution.
-            isResolved((desired as WorkerProps).exports)
-          ) {
-            const removed = removedDeclaredDurableObjectClasses({
-              workerName: output.workerName,
-              olds,
-              news: news as WorkerProps,
-              oldBindings,
-              newBindings: newBindings as ResourceBinding<Worker["Binding"]>[],
-              output,
-            });
-            if (removed.length > 0) {
-              return yield* new ProtectedDurableObjectClassDeletion({
-                scriptName: output.workerName,
-                classNames: removed,
-              });
-            }
-          }
           if (!isResolved(news)) return undefined;
           if ((output?.accountId ?? accountId) !== accountId) {
             return { action: "replace" };
@@ -6382,98 +6346,6 @@ function getDurableObjectBindings(bindings: ReadonlyArray<ResourceBinding>, work
     }),
   );
 }
-
-/**
- * Conservatively detect a protected Worker's loss of previously declared
- * locally hosted Durable Object classes during planning.
- *
- * Use previous ownership tags and binding records, not only live namespace
- * ids. Both Effect-native `exports` and env-registered classes are counted.
- * A declared rename keeps the same namespace, while a cross-script binding
- * hands off safety verification to the reconciler's namespace-transfer check.
- *
- * If a binding is itself unresolved, defer the decision to reconciliation:
- * absence from a partial input does not prove that a class was removed.
- */
-const removedDeclaredDurableObjectClasses = ({
-  workerName,
-  olds,
-  news,
-  oldBindings,
-  newBindings,
-  output,
-}: {
-  workerName: string;
-  olds: WorkerProps;
-  news: WorkerProps;
-  oldBindings: ReadonlyArray<ResourceBinding>;
-  newBindings: ReadonlyArray<ResourceBinding>;
-  output: Worker["Attributes"];
-}): string[] => {
-  if (
-    newBindings.some(
-      (binding) =>
-        typeof binding !== "object" ||
-        binding === null ||
-        !("data" in binding) ||
-        typeof binding.data !== "object" ||
-        binding.data === null ||
-        !isResolved(binding.data),
-    )
-  ) {
-    return [];
-  }
-  const exported = (props: WorkerProps) =>
-    Object.entries(props.exports ?? {})
-      .filter(([, value]) => isDurableObjectExport(value))
-      .map(([name]) => name);
-  const priorClassesByLogicalId = new Map(
-    Object.entries(getDurableObjectTagMap(output.tags ?? [])),
-  );
-  const oldHosted = getDurableObjectBindings(oldBindings, workerName);
-  for (const binding of oldHosted) {
-    if (!priorClassesByLogicalId.has(binding.logicalId)) {
-      priorClassesByLogicalId.set(binding.logicalId, binding.className);
-    }
-  }
-  const previous = new Set([
-    ...priorClassesByLogicalId.values(),
-    ...oldHosted.map((binding) => binding.className),
-    ...exported(olds),
-  ]);
-  const current = getDurableObjectBindings(newBindings, workerName);
-  const retained = new Set([
-    ...current.map((binding) => binding.className),
-    // An unchanged logical binding id carries its namespace through an
-    // implicit class-name rename; the reconciler emits renamed_classes.
-    ...current.flatMap((binding) => {
-      const former = priorClassesByLogicalId.get(binding.logicalId);
-      return former === undefined ? [] : [former];
-    }),
-    ...current.flatMap((binding) =>
-      typeof binding.renamedFrom === "string" ? [binding.renamedFrom] : [],
-    ),
-    ...exported(news),
-  ]);
-  // Rebinding a class to another script is not, by itself, proof of data loss.
-  // Reconcile verifies the actual namespace was transferred before deleting.
-  for (const binding of newBindings) {
-    for (const entry of binding.data.bindings ?? []) {
-      if (
-        entry.type === "durable_object_namespace" &&
-        "className" in entry &&
-        typeof entry.className === "string" &&
-        entry.scriptName !== undefined &&
-        entry.scriptName !== workerName
-      ) {
-        retained.add(entry.className);
-      }
-    }
-  }
-  return [...previous]
-    .filter((className) => !retained.has(className))
-    .sort((a, b) => a.localeCompare(b));
-};
 
 /**
  * Cloudflare Worker script-tag limits, verified empirically against the live

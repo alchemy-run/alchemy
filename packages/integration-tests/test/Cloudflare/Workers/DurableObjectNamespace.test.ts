@@ -7,6 +7,7 @@ import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Output from "alchemy/Output";
+import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import { State } from "alchemy/State";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -1104,6 +1105,110 @@ export default { async fetch() { return new Response("v4"); } };
           expect(yield* namespacesOf(v1.workerName)).toEqual({});
         }).pipe(logLevel),
       { timeout: 180_000 },
+    );
+
+    // #3408: removing a hosted class deletes its namespace and every object
+    // in it, though the Worker is only updated. `RemovalPolicy.protect()` on
+    // the Worker refuses that before upload; a rename keeps the namespace and
+    // stays allowed. Deleting a class takes an unprotect deploy that succeeds
+    // first, even when the same deploy also drops the protection.
+    test.provider(
+      "a protected Worker refuses to delete a hosted Durable Object class",
+      (scratch) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const namespacesOf = (scriptName: string) =>
+            durableObjects.listNamespaces.items({ accountId }).pipe(
+              Stream.filter((ns) => ns.script === scriptName),
+              Stream.runCollect,
+              Effect.map((namespaces) =>
+                Object.fromEntries(Array.from(namespaces).map((ns) => [ns.class, ns.id])),
+              ),
+            );
+          const readUntil = (url: string, className: string) =>
+            fetchJsonReady<{ value: number; className: string }>(`${url}/get`).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("2 seconds"),
+                until: (body) => body.className === className,
+                times: 30,
+              }),
+            );
+          const worker = (primary: "Counter" | "Meter", classes: { spare: boolean }) =>
+            Cloudflare.Worker("worker", {
+              script: counterClassesScript(primary, ...(classes.spare ? ["Spare"] : [])),
+              env: {
+                [primary]: Cloudflare.DurableObject(
+                  primary,
+                  primary === "Meter" ? { renamedFrom: "Counter" } : {},
+                ),
+                ...(classes.spare ? { Spare: Cloudflare.DurableObject("Spare") } : {}),
+              },
+            });
+          // The last shape that deployed. A failure mid-test would leave the
+          // Worker protected, and protection refuses the next run's destroy,
+          // so the finalizer redeploys that shape unprotected and destroys it.
+          let deployed: Parameters<typeof worker> | undefined = ["Counter", { spare: true }];
+          yield* Effect.addFinalizer(() =>
+            deployed === undefined
+              ? Effect.void
+              : scratch
+                  .deploy(worker(...deployed))
+                  .pipe(Effect.andThen(scratch.destroy()), Effect.ignore),
+          );
+
+          yield* scratch.destroy();
+          const v1 = yield* scratch.deploy(
+            worker("Counter", { spare: true }).pipe(RemovalPolicy.protect()),
+          );
+          expect((yield* fetchJsonReady<{ value: number }>(`${v1.url}/increment`)).value).toBe(1);
+          const before = yield* namespacesOf(v1.workerName);
+          expect(Object.keys(before).sort()).toEqual(["Counter", "Spare"]);
+
+          // Dropping `Spare` from the protected Worker is refused before upload.
+          const removed = yield* scratch
+            .deploy(worker("Counter", { spare: false }).pipe(RemovalPolicy.protect()))
+            .pipe(Effect.exit);
+          expect(Exit.isFailure(removed)).toBe(true);
+          expect(String(removed)).toContain("ProtectedDurableObjectClassDeletion");
+          expect(yield* namespacesOf(v1.workerName)).toEqual(before);
+          expect((yield* readUntil(v1.url!, "Counter")).value).toBe(1);
+
+          // A rename keeps the namespace, so it is allowed while protected.
+          const v2 = yield* scratch.deploy(
+            worker("Meter", { spare: true }).pipe(RemovalPolicy.protect()),
+          );
+          deployed = ["Meter", { spare: true }];
+          expect(yield* namespacesOf(v2.workerName)).toEqual({
+            Meter: before.Counter,
+            Spare: before.Spare,
+          });
+          expect((yield* readUntil(v2.url!, "Meter")).value).toBe(1);
+
+          // Dropping the protection in the deploy that removes the class is
+          // still refused: the stored policy is `protect` until a deploy
+          // without it succeeds.
+          const unprotectAndRemove = yield* scratch
+            .deploy(worker("Meter", { spare: false }))
+            .pipe(Effect.exit);
+          expect(Exit.isFailure(unprotectAndRemove)).toBe(true);
+          expect(String(unprotectAndRemove)).toContain("ProtectedDurableObjectClassDeletion");
+          expect(Object.keys(yield* namespacesOf(v2.workerName)).sort()).toEqual([
+            "Meter",
+            "Spare",
+          ]);
+
+          // Unprotect on its own, then remove the class.
+          yield* scratch.deploy(worker("Meter", { spare: true }));
+          const v3 = yield* scratch.deploy(worker("Meter", { spare: false }));
+          deployed = ["Meter", { spare: false }];
+          expect(yield* namespacesOf(v3.workerName)).toEqual({ Meter: before.Counter });
+          expect((yield* readUntil(v3.url!, "Meter")).value).toBe(1);
+
+          yield* scratch.destroy();
+          deployed = undefined;
+          expect(yield* namespacesOf(v1.workerName)).toEqual({});
+        }).pipe(logLevel),
+      { timeout: 240_000 },
     );
 
     // One class's objects can move to one class only: a deploy where two
