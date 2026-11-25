@@ -46,6 +46,13 @@ export const make = (
   flows: Flows.Lifts & {
     /** A sink the prover reads itself. */
     readonly read: (v: V) => boolean;
+    /** A channel of the library's, made for the handler that runs it, as one the code holds. */
+    readonly channel: (made: (timeline: Timeline.Timeline) => Channel.Channel<V, unknown, V>) => V;
+    /** The library's channel a channel of the code is, for a handler. */
+    readonly chanOf: (
+      v: V | undefined,
+      timeline: Timeline.Timeline,
+    ) => Channel.Channel<V, unknown, V> | undefined;
   },
 ) => {
   const { host } = kit;
@@ -370,10 +377,47 @@ export const make = (
             },
             tools.wrap("Scope" as never, scope),
           ),
-          (pair) => ended(to, pair),
+          (pair) => ended(to, pair as V),
         ),
       ),
     ),
+    // The sink as a channel: given lists of items, it gives nothing and ends with its value and what it left.
+    "effect/Sink:toChannel": ([self], site) =>
+      isSink(self)
+        ? Effect.succeed(
+            flows.channel((timeline) => {
+              const to = handing(timeline, "Sink.toChannel", site);
+              return Channel.mapInput(
+                Channel.mapDone(Sink.toChannel(built(to, self)), endOf),
+                // A list the prover cannot see into stops it, and stops are defects here.
+                (chunk: V) =>
+                  Effect.catch(
+                    Effect.flatMap(to.read(tools.items(to.name, chunk, site)), (items) =>
+                      items.length > 0
+                        ? Effect.succeed(items as unknown as Some)
+                        : to.wrong<Some>(),
+                    ),
+                    (held) => Effect.die(held),
+                  ),
+              ) as unknown as Channel.Channel<V, unknown, V>;
+            }),
+          )
+        : wrongArguments(site, "Sink.toChannel"),
+    // A channel given lists of items as a sink: what it ends with is the sink's value and what it left.
+    "effect/Sink:fromChannel": made("Sink.fromChannel", (to, [given_]) => {
+      const chan = flows.chanOf(given_, to.timeline);
+      return chan
+        ? Sink.fromChannel(
+            Channel.mapDoneEffect(
+              Channel.mapInput(
+                chan as unknown as Channel.Channel<never, unknown, V, V>,
+                (chunk: Some) => Effect.succeed<V>(arr(chunk)),
+              ),
+              (pair) => ended(to, pair as V),
+            ) as never,
+          )
+        : wrongSink(to);
+    }),
     "effect/Sink:failSync": made("Sink.failSync", (to, [f]) =>
       Sink.unwrap(Effect.map(straight(to, f)(), (error) => Sink.fail(rejected(error)))),
     ),

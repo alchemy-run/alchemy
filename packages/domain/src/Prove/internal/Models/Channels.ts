@@ -542,6 +542,17 @@ export const make = (kit: Kit, tools: Tools) => {
         ours(Channel.callback<V, Held>((queue) => to.fn(f)(tools.wrap("Queue", queue)), read)),
       ),
     ),
+    // The same, giving what is in the queue a chunk at a time, as a list.
+    "effect/Channel:callbackArray": from("Channel.callbackArray", (to, [f, options]) =>
+      to.plain<{ readonly bufferSize?: number }>(options, (read) =>
+        ours(
+          Channel.map(
+            Channel.callbackArray<V, Held>((queue) => to.fn(f)(tools.wrap("Queue", queue)), read),
+            (chunk): V => arr(chunk),
+          ),
+        ),
+      ),
+    ),
     "effect/Channel:fromSchedule": from("Channel.fromSchedule", (to, [schedule]) => {
       const held = tools.scheduleOf(schedule);
       return held ? held.pipe(Channel.fromSchedule, ours) : to.bad;
@@ -1872,5 +1883,13 @@ export const make = (kit: Kit, tools: Tools) => {
     "effect/Channel:never": (site) => made("Channel.never", site, () => Channel.never),
   };
 
-  return { models, sited };
+  return {
+    models,
+    sited,
+    /** A channel of the library's, made for the handler that runs it, as one the code holds. */
+    channel,
+    /** The library's channel a channel of the code is, for a handler. */
+    chanOf: (v: V | undefined, timeline: Timeline.Timeline): Real | undefined =>
+      madeOf(v)?.(timeline),
+  };
 };

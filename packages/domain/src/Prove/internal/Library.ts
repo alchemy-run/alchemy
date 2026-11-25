@@ -2293,6 +2293,8 @@ export const make = (host: Host) => {
     {
       ...flows.lifts,
       read: streams.isSink,
+      channel: channels.channel,
+      chanOf: channels.chanOf,
     },
   );
   Object.assign(written, sinks.models);

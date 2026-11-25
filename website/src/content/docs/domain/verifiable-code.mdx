@@ -2454,6 +2454,7 @@ Channel.fromPubSubArray(hub);
 Channel.fromSubscription(subscription);
 Channel.fromSubscriptionArray(subscription);
 Channel.callback((queue) => Effect.andThen(Queue.offerAll(queue, [a, b]), Queue.end(queue)));
+Channel.callbackArray((queue) => Effect.andThen(Queue.offerAll(queue, [a, b]), Queue.end(queue))); // what is in the queue, a chunk at a time
 Channel.fromSchedule(Schedule.recurs(2));
 Channel.fromPull(Effect.succeed(Cause.done(a)));
 Channel.transformPull(Channel.fromIterable([a, b]), (pull) => Effect.succeed(Effect.map(pull, (n) => n + 1))); // given the pull of the channel, and gives one back
@@ -3087,6 +3088,8 @@ Sink.fromPubSub(hub);
 Sink.suspend(() => Sink.take(a > 1 ? 2 : 1));
 Sink.unwrap(Effect.succeed(Sink.head()));
 Sink.isSink(a);
+Sink.toChannel(Sink.take(3)); // a channel given lists, which ends with the value and what is left
+Sink.fromChannel(Sink.toChannel(Sink.take(1)));
 Sink.make()(Stream.map((n) => n * 2), Stream.runSum); // functions of a stream of what it takes, the last giving an effect
 Sink.fromTransform((upstream) => Effect.map(upstream, (chunk) => [chunk.length + a])); // what it does with the pull of its input
 

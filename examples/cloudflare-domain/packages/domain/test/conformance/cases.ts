@@ -3209,6 +3209,7 @@ const rest: ReadonlyArray<Group> = [
       `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.unbounded(); const subscription = yield* PubSub.subscribe(hub); yield* PubSub.publishAll(hub, [a, b]); return [yield* Channel.runHead(Channel.fromSubscription(subscription)), yield* Channel.runHead(Channel.fromSubscriptionArray(subscription))]; }))`,
       `Channel.runCollect(Channel.callback((queue) => Effect.andThen(Queue.offerAll(queue, [a, b]), Queue.end(queue))))`,
       `Channel.runCollect(Channel.callback((queue) => Effect.andThen(Queue.offer(queue, b), Queue.end(queue)), { bufferSize: 2 }))`,
+      `Channel.runCollect(Channel.callbackArray((queue) => Effect.andThen(Queue.offerAll(queue, [a, b]), Queue.end(queue))))`,
       `Stream.runCollect(Stream.callback((queue) => Effect.andThen(Queue.offerAll(queue, [a, b]), Queue.end(queue))))`,
       `Stream.make(a, b).pipe(Stream.pipeThroughChannel(Channel.identity().pipe(Channel.map((chunk) => chunk.map((n) => n + 1)))), Stream.runCollect)`,
       `Stream.runCollect(Stream.pipeThroughChannel(Stream.make(a, b, 3), Channel.identity()))`,
@@ -3845,6 +3846,7 @@ const rest: ReadonlyArray<Group> = [
     ...numbers,
     effectful: true,
     prelude: [
+      `import * as Channel from "effect/Channel";`,
       `import * as Context from "effect/Context";`,
       `import * as Layer from "effect/Layer";`,
       `export class Rate extends Context.Service<Rate, { readonly percent: number }>()("test/Rate") {}`,
@@ -3856,6 +3858,9 @@ const rest: ReadonlyArray<Group> = [
     ],
     both: [
       `Stream.run(four(a, b), Sink.takeWhile((n) => n < 3))`,
+      `Channel.fromIterable([[a, b], [3, 4]]).pipe(Channel.pipeTo(Sink.toChannel(Sink.take(3))), Channel.runDrain)`,
+      `Stream.run(four(a, b), Sink.fromChannel(Sink.toChannel(Sink.take(1))))`,
+      `Stream.run(four(a, b), Sink.fromChannel(Sink.toChannel(Sink.sum)))`,
       `Stream.run(four(a, b), Sink.make()(Stream.map((n) => n * 2), Stream.runSum))`,
       `Stream.run(four(a, b), Sink.make()(Stream.filter((n) => n > a), Stream.runCollect))`,
       `Stream.run(four(a, b), Sink.fromTransform((upstream) => Effect.map(upstream, (chunk) => [chunk.length + a])))`,
