@@ -43,6 +43,7 @@ export const DOCS_CATEGORIES = [
   "Auth",
   "Payments",
   "Observability",
+  "Video",
   "Source & CI",
   "Certificates",
 ] as const;
@@ -105,6 +106,7 @@ export const DOCS_TABS: DocsTab[] = [
   ]),
   hub("Stripe", "stripe", "Payments", "products · prices · webhooks", ["/providers/stripe"]),
   hub("Axiom", "axiom", "Observability", "logs · traces · alerts", ["/providers/axiom"]),
+  hub("Mux", "mux", "Video", "assets · live streams · signed playback", ["/providers/mux"]),
   hub("GitHub", "github", "Source & CI", "repos · secrets · events", ["/providers/github"]),
   hub("ACME", "acme", "Certificates", "accounts · DNS-01 · certificate issuance", [
     "/providers/acme",

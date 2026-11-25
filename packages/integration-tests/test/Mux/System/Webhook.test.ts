@@ -15,6 +15,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 const ADDRESS = "https://alchemy-test.example.com/mux/webhook";
 const MOVED = "https://alchemy-test.example.com/mux/webhook-moved";
+const TAKEN = "https://alchemy-test.example.com/mux/webhook-taken";
 
 const waitUntilGone = (id: string) =>
   System.getWebhook({ WEBHOOK_ID: id }).pipe(
@@ -84,6 +85,24 @@ test.provider(
 
       yield* stack.destroy();
       expect(yield* waitUntilGone(second.id)).toEqual("gone");
+    }).pipe(logLevel),
+  { tags: ["provider:mux", "provider:mux:webhook", "live"], timeout: 120_000 },
+);
+
+test.provider(
+  "a second webhook for an address already in use fails with WebhookAddressInUse",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { data: existing } = yield* System.createWebhook({ address: TAKEN });
+      const error = yield* stack
+        .deploy(Mux.System.Webhook("Events", { address: TAKEN }))
+        .pipe(
+          Effect.flip,
+          Effect.ensuring(System.deleteWebhook({ WEBHOOK_ID: existing.id }).pipe(Effect.ignore)),
+        );
+      expect(JSON.stringify(error)).toContain("WebhookAddressInUse");
+      yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:mux", "provider:mux:webhook", "live"], timeout: 120_000 },
 );
