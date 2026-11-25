@@ -54,7 +54,7 @@ import {
 } from "./FunctionSource.ts";
 
 const DEFAULT_ENVIRONMENT = "GEN_2";
-const DEFAULT_RUNTIME = "nodejs20";
+const DEFAULT_RUNTIME = "nodejs26";
 const MAX_NAME_LENGTH = 63;
 
 export type StorageSource = {
@@ -94,9 +94,9 @@ export type Source = {
 
 export type BuildConfig = {
   /**
-   * Runtime to build and run (e.g. `nodejs20`, `python312`). Required on
+   * Runtime to build and run (e.g. `nodejs26`, `python312`). Required on
    * create.
-   * @default "nodejs20"
+   * @default "nodejs26"
    */
   runtime?: string;
   /**
@@ -294,7 +294,7 @@ export type FunctionProps = PlatformProps & {
    * event-source listeners) through the Functions Framework. Bindings
    * attach env + IAM onto the runtime service account. Replaces
    * `buildConfig.source` / `entryPoint`; `buildConfig.runtime` defaults to
-   * `nodejs22`.
+   * `nodejs26`.
    */
   main?: string;
   /**
@@ -339,7 +339,7 @@ export type Function = Resource<
     state: string | undefined;
     /** KMS key used for encryption, if any. */
     kmsKeyName: string | undefined;
-    /** Runtime (e.g. `nodejs20`). */
+    /** Runtime (e.g. `nodejs26`). */
     runtime: string | undefined;
     /** Source entry point. */
     entryPoint: string | undefined;
@@ -426,7 +426,7 @@ export type FunctionShape = Main<FunctionServices>;
  * ```typescript
  * const hello = yield* GCP.CloudFunctions.Function("Hello", {
  *   buildConfig: {
- *     runtime: "nodejs20",
+ *     runtime: "nodejs26",
  *     entryPoint: "helloHttp",
  *     source: {
  *       storageSource: {
@@ -446,7 +446,7 @@ export type FunctionShape = Main<FunctionServices>;
  *   description: "HTTP handler",
  *   labels: { env: "prod" },
  *   buildConfig: {
- *     runtime: "nodejs20",
+ *     runtime: "nodejs26",
  *     entryPoint: "helloHttp",
  *     source: {
  *       storageSource: { bucket: "my-source", object: "hello.zip" },
@@ -465,7 +465,7 @@ export type FunctionShape = Main<FunctionServices>;
  * ```typescript
  * const consumer = yield* GCP.CloudFunctions.Function("Consume", {
  *   buildConfig: {
- *     runtime: "nodejs20",
+ *     runtime: "nodejs26",
  *     entryPoint: "onMessage",
  *     source: {
  *       storageSource: { bucket: "my-source", object: "consumer.zip" },
@@ -520,7 +520,7 @@ export type FunctionShape = Main<FunctionServices>;
  * // …provided with Effect.provide(GCP.CloudFunctions.TopicEventSource)
  * ```
  *
- * With `main`, Alchemy bundles the program for Node.js (`nodejs22` by
+ * With `main`, Alchemy bundles the program for Node.js (`nodejs26` by
  * default), uploads it, and serves it through the Functions Framework;
  * `buildConfig.source` and `entryPoint` are managed for you. The runtime
  * authenticates to GCP as the function's service account.
