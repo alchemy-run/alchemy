@@ -57,7 +57,14 @@ await Effect.runPromise(
         return yield* Console.log(JSON.stringify(result.value));
       }
       if (Cause.hasInterruptsOnly(result.cause)) return;
-      return yield* Console.log(JSON.stringify({ error: Cause.pretty(result.cause) }));
+      // `message` is what `profile edit` shows; `error` adds the cause chain.
+      const failure = Cause.squash(result.cause);
+      return yield* Console.log(
+        JSON.stringify({
+          error: Cause.pretty(result.cause),
+          message: failure instanceof Error ? failure.message : String(failure),
+        }),
+      );
     }
     if (action === "refresh") {
       const result = yield* auth.login("testing", config).pipe(Effect.exit);

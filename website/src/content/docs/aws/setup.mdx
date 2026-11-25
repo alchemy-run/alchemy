@@ -60,7 +60,7 @@ region = us-east-1
 
 Alchemy can't sign these profiles in for you, so `alchemy profile refresh` only checks that the profile still resolves. When it doesn't, fix the profile itself; `aws sts get-caller-identity --profile <name>` shows the same error. Profiles with `mfa_serial` aren't supported, since there's no prompt for the MFA code.
 
-The region comes from the profile, then `AWS_REGION`, then `AWS_DEFAULT_REGION`, the same as for console login and SSO. A set `AWS_REGION` overrides the profile's region on every method.
+The region is `AWS_REGION` when it's set, otherwise the profile's own region, otherwise `AWS_DEFAULT_REGION`. A set `AWS_REGION` overrides the profile's region on every method.
 
 ### Stored access keys
 

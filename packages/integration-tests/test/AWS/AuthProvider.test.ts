@@ -144,7 +144,10 @@ describe(
   "aws-profile detects the profile kind",
   { tags: ["unit", "provider:aws", "local"] },
   () => {
-    const configure = (config: string) =>
+    const configure = (
+      config: string,
+      { credentials = "", env = {} }: { credentials?: string; env?: Record<string, string> } = {},
+    ) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
@@ -154,7 +157,7 @@ describe(
           helper,
           `printf '%s' '{"Version":1,"AccessKeyId":"process-key","SecretAccessKey":"process-secret"}'\n`,
         );
-        yield* fs.writeFileString(path.join(dir, "credentials"), "");
+        yield* fs.writeFileString(path.join(dir, "credentials"), credentials);
         yield* fs.writeFileString(path.join(dir, "config"), config.replace("$HELPER", helper));
         const executable = yield* Effect.sync(() => process.execPath);
         const result = yield* exec(
@@ -169,6 +172,7 @@ describe(
                 AWS_CONFIG_FILE: path.join(dir, "config"),
                 AWS_SHARED_CREDENTIALS_FILE: path.join(dir, "credentials"),
                 AWS_PROFILE_TEST_ACTION: "configure",
+                ...env,
               },
             },
           ),
@@ -218,6 +222,65 @@ describe(
         ).toEqual({ hostname: "sts.us-west-2.amazonaws.com" });
       }),
     );
+
+    it.effect("reports why a profile's credentials failed", () =>
+      Effect.gen(function* () {
+        const { message } = yield* configure(
+          "[profile sandbox]\ncredential_process = /bin/sh -c 'exit 3'\nregion = us-west-2\n",
+        );
+        expect(message).toContain("AWS profile 'sandbox' did not resolve credentials");
+        // distilled's own message is generic; the failing command is the reason.
+        expect(message).toContain("Command failed: /bin/sh -c 'exit 3'");
+      }),
+    );
+
+    it.effect("verifies through STS in AWS_REGION when it is set", () =>
+      Effect.gen(function* () {
+        expect(
+          yield* configure(
+            '[profile sandbox]\ncredential_process = /bin/sh "$HELPER"\nregion = us-west-2\n',
+            { env: { AWS_REGION: "eu-central-1" } },
+          ),
+        ).toEqual({ hostname: "sts.eu-central-1.amazonaws.com" });
+      }),
+    );
+
+    // fromIni resolves an assumed role or static keys before SSO, so the
+    // stored method must too, or Alchemy would sign in as a different identity.
+    for (const { name, config, credentials } of [
+      {
+        name: "an SSO profile that assumes a role",
+        config: [
+          "[profile sandbox]",
+          "sso_session = corp",
+          "sso_account_id = 111111111111",
+          "sso_role_name = Admin",
+          "role_arn = arn:aws:iam::222222222222:role/deploy",
+          "source_profile = base",
+          "region = us-west-2",
+          "[sso-session corp]",
+          "sso_start_url = https://corp.awsapps.com/start",
+          "sso_region = us-east-1",
+          "",
+        ].join("\n"),
+        credentials: "[base]\naws_access_key_id = AKIDEXAMPLE\naws_secret_access_key = secret\n",
+      },
+      {
+        name: "an SSO profile with keys in ~/.aws/credentials",
+        config:
+          "[profile sandbox]\nsso_session = corp\nregion = us-west-2\n[sso-session corp]\nsso_start_url = https://corp.awsapps.com/start\nsso_region = us-east-1\n",
+        credentials: "[sandbox]\naws_access_key_id = AKIDEXAMPLE\naws_secret_access_key = secret\n",
+      },
+    ]) {
+      it.effect(`stores ${name} as aws-profile`, () =>
+        Effect.gen(function* () {
+          // The fixture's HTTP client reports the STS request, then interrupts it.
+          expect(yield* configure(config, { credentials })).toEqual({
+            hostname: "sts.us-west-2.amazonaws.com",
+          });
+        }),
+      );
+    }
 
     for (const { name, config } of [
       { name: "a profile that does not exist", config: "[profile other]\nregion = us-west-2\n" },

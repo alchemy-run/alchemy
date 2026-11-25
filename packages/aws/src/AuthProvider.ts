@@ -46,6 +46,7 @@ import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import { ChildProcess } from "effect/process";
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
@@ -342,7 +343,15 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
           })) ?? "default";
         const method = yield* detectProfileMethod(awsProfile);
         if (method === "sso") return yield* configureSsoInteractive(awsProfile);
-        // `aws login` creates a profile that has no credentials yet.
+        // `aws login` creates a profile that has no credentials yet; confirm
+        // first so a mistyped name doesn't write a new profile.
+        if (method === "new") {
+          const create = yield* Interaction.confirm({
+            message: `AWS profile '${awsProfile}' has no credentials. Sign in with \`aws login\` to create it?`,
+            initialValue: true,
+          });
+          if (!create) return yield* profileHasNoCredentials(awsProfile);
+        }
         if (method === "console-login" || method === "new") {
           const config = { method: "console-login" as const, loginProfile: awsProfile };
           yield* loginConsole(config);
@@ -660,7 +669,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
                 Effect.mapError(
                   (error) =>
                     new AwsCredentialProviderError({
-                      message: `AWS profile '${config.awsProfile}' did not resolve credentials: ${error.message} Check it with \`aws sts get-caller-identity --profile ${config.awsProfile}\`.`,
+                      message: `AWS profile '${config.awsProfile}' did not resolve credentials: ${credentialErrorText(error)} Check it with \`aws sts get-caller-identity --profile ${config.awsProfile}\`.`,
                       provider: "aws-profile",
                       cause: error,
                     }),
@@ -970,34 +979,35 @@ const sharedConfigFiles = loadSharedConfigFiles.pipe(
   ),
 );
 
-/** Keys that give a profile credentials of its own, besides SSO and `aws login`. */
+/**
+ * Keys `fromIni` resolves before an `aws login` or SSO session: assumed
+ * roles, static keys, web identity and `credential_process`.
+ */
 const credentialKeys = [
-  "aws_access_key_id",
-  "credential_process",
   "role_arn",
+  "credential_source",
+  "aws_access_key_id",
   "web_identity_token_file",
+  "credential_process",
 ] as const;
 
 /**
- * Which stored method serves an AWS CLI profile. SSO and `aws login`
- * profiles keep their own methods, which Alchemy can log in, refresh and log
- * out; every other kind resolves through `fromIni` as `aws-profile`. A
- * profile with no credentials yet (missing, or only a region) is `new`: the
- * interactive picker signs it in with `aws login`, as main's "Console login"
- * entry did.
+ * Which stored method serves an AWS CLI profile, in `fromIni`'s precedence,
+ * so the stored method uses the credentials the AWS CLI would. SSO and
+ * `aws login` profiles keep their own methods, which Alchemy can log in,
+ * refresh and log out; every other kind resolves through `fromIni` as
+ * `aws-profile`. A profile with no credentials yet (missing, or only a
+ * region) is `new`: the interactive picker signs it in with `aws login`, as
+ * main's "Console login" entry did.
  */
 const detectProfileMethod = (awsProfile: string) =>
   Effect.gen(function* () {
     const files = yield* sharedConfigFiles;
-    const profile = files.configFile[awsProfile];
-    if (profile?.sso_session || profile?.sso_start_url) return "sso" as const;
-    if (profile?.login_session) return "console-login" as const;
-    if (
-      files.credentialsFile[awsProfile] !== undefined ||
-      credentialKeys.some((key) => profile?.[key])
-    ) {
-      return "aws-profile" as const;
-    }
+    // ~/.aws/credentials overrides ~/.aws/config for the same profile.
+    const profile = { ...files.configFile[awsProfile], ...files.credentialsFile[awsProfile] };
+    if (credentialKeys.some((key) => profile[key])) return "aws-profile" as const;
+    if (profile.login_session) return "console-login" as const;
+    if (profile.sso_session || profile.sso_start_url) return "sso" as const;
     return "new" as const;
   });
 
@@ -1007,16 +1017,17 @@ const profileHasNoCredentials = (awsProfile: string) =>
   });
 
 /**
- * The profile's region, as the `sso` and `console-login` methods read it:
- * the profile's own region, else `AWS_REGION`, else `AWS_DEFAULT_REGION`.
- * `applyEnvRegionOverride` then lets `AWS_REGION` win on every method.
+ * The region the profile's credentials, and the STS call behind its account,
+ * use: `AWS_REGION`, else the profile's own region, else
+ * `AWS_DEFAULT_REGION`. This is the region `applyEnvRegionOverride` settles
+ * on, applied before any request so setup and refresh call STS there too.
  */
 const awsProfileRegion = (awsProfile: string) =>
   Effect.gen(function* () {
     const files = yield* sharedConfigFiles;
     const region =
-      files.configFile[awsProfile]?.region ??
       (yield* getEnv("AWS_REGION")) ??
+      files.configFile[awsProfile]?.region ??
       (yield* getEnv("AWS_DEFAULT_REGION"));
     if (!region) {
       return yield* AuthError.make({
@@ -1034,12 +1045,31 @@ const verifyAwsProfile = (awsProfile: string) =>
     return yield* getAccountId({ ...credentials, region });
   }).pipe(
     Effect.mapError((cause) =>
-      AuthError.make({
-        message: `AWS profile '${awsProfile}' did not resolve credentials: ${cause.message}`,
-        cause,
-      }),
+      // The region lookup already says what to fix; rewrap only credential
+      // and STS failures.
+      Schema.is(AuthError)(cause)
+        ? cause
+        : AuthError.make({
+            message: `AWS profile '${awsProfile}' did not resolve credentials: ${credentialErrorText(cause)}`,
+            cause,
+          }),
     ),
   );
+
+/**
+ * A credential error's message plus its cause's. distilled's `fromIni` fails
+ * with a generic "Failed to resolve credentials from ini." and keeps the
+ * reason (an expired SSO session, a failing `credential_process`) in `cause`.
+ */
+const credentialErrorText = (error: { readonly message: string; readonly cause?: unknown }) => {
+  const cause =
+    Predicate.hasProperty(error.cause, "message") && Predicate.isString(error.cause.message)
+      ? error.cause.message
+      : undefined;
+  return cause !== undefined && cause !== "" && !error.message.includes(cause)
+    ? `${error.message} ${cause}`
+    : error.message;
+};
 
 const AwsSsoLoginOutput = Schema.Struct({
   url: Schema.optional(Schema.String),
