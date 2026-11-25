@@ -674,6 +674,20 @@ export const make = (
     "effect/Hash:optimize": hashed("Hash.optimize", Hash.optimize, true),
     "effect/Hash:array": hashed("Hash.array", Hash.array, false),
     "effect/Hash:structure": hashed("Hash.structure", Hash.structure, false),
+    // The hash of the fields the code names, of a record the prover knows all of.
+    "effect/Hash:structureKeys": ([value, keys], site) => {
+      const real = value?._tag === "Obj" && !value.brand ? Known.real(value) : undefined;
+      const named = keys ? Known.real(keys) : undefined;
+      return real && named && Array.isArray(named.value)
+        ? Effect.sync(() =>
+            Value.num(
+              Hash.structureKeys(real.value as object, named.value as ReadonlyArray<never>),
+            ),
+          )
+        : Effect.fail(
+            Value.notTranslated(site, "calls Hash.structureKeys on a value the prover cannot hash"),
+          );
+    },
     "effect/Hash:combine": dual("Hash.combine", 2, ([self, that], site) =>
       self?._tag === "Num" && that?._tag === "Num"
         ? Effect.sync(() => Value.num(Hash.combine(self.value, that.value)))

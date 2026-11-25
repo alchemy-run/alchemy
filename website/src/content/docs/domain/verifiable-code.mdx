@@ -1063,6 +1063,8 @@ Match.literals({ on: () => 1 });
 Match.literalsExhaustive({ 1: () => "one", 2: (n) => "two" + n });
 Match.record({ n: a }); // an object that is not an array
 Match.date(a);
+Match.instanceOf(Odd); // as instanceof is
+Match.instanceOfUnsafe(Odd);
 Match.fn((x, y) => x - y).pipe(Match.when((n) => n > 0, (n, x, y) => [n, x, y]), Match.orElse((n, x) => [-n, x]))(a, b); // a matcher of the arguments: each handler is given them too
 Match.value(shape.kind).pipe(
   Match.tag("Gift", () => 1),
@@ -3235,6 +3237,7 @@ Hash.optimize(12345);
 Hash.combine(1, 2);
 Hash.array([1, "a", true]);
 Hash.structure({ n: 1, s: "x" });
+Hash.structureKeys({ n: 1, s: "x" }, ["n"]); // of the fields named
 Hash.isHash(7);
 ```
 

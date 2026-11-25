@@ -372,6 +372,8 @@ const base: ReadonlyArray<Group> = [
       `Match.value(a).pipe(Match.when((n) => n > b, (n) => n * 2), Match.result)`,
       `Match.fn((x, y) => x - y).pipe(Match.when((n) => n > 0, (n, x, y) => [n, x, y]), Match.orElse((n, x) => [-n, x]))(a, b)`,
       `Match.fn((x) => x).pipe(Match.when(1, () => "one"), Match.option)(a)`,
+      `Match.value(a > 1 ? new Odd({ n: a }) : { n: b }).pipe(Match.when(Match.instanceOf(Odd), (error) => error.n + 1), Match.orElse(() => -1))`,
+      `Match.value(new Odd({ n: a })).pipe(Match.when(Match.instanceOfUnsafe(Odd), (error) => error._tag), Match.orElse(() => "other"))`,
       `[Match.record({ n: a }), Match.record([a]), Match.record(null), Match.record(a), Match.date(a), Match.date({ n: a })]`,
       `Match.type().pipe(Match.when((n) => n > b, (n) => n * 2), Match.result)(a)`,
       `Match.value({ _tag: a > 0 ? "UpFast" : "Down", n: a }).pipe(Match.tagStartsWith("Up", ({ n }) => n), Match.orElse(() => -1))`,
@@ -3513,7 +3515,7 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { yield* Metric.update(Metric.frequency("kinds"), "gift"); yield* Metric.update(Metric.summary("s", { maxAge: "1 minute", maxSize: 10, quantiles: [0.5] }), a); yield* Metric.update(Metric.timer("t"), Duration.millis(5)); yield* pipe(Metric.gauge("g"), Metric.modify(a)); return flag; })`,
       `Effect.succeed([Metric.linearBoundaries({ start: 0, width: 10, count: 3 }), Metric.exponentialBoundaries({ start: 1, factor: 2, count: 3 }), Metric.boundariesFromIterable([3, 1, 2])])`,
       `Effect.succeed([Hash.hash("text"), Hash.hash(7), Hash.hash(true), Hash.string("s"), Hash.number(42), Hash.optimize(12345), Hash.combine(1, 2), pipe(1, Hash.combine(2))])`,
-      `Effect.succeed([Hash.array([1, "a", true]), Hash.structure({ n: 1, s: "x" }), Hash.isHash(7), Hash.hash("a") === Hash.hash("a")])`,
+      `Effect.succeed([Hash.array([1, "a", true]), Hash.structure({ n: 1, s: "x" }), Hash.structureKeys({ n: 1, s: "x" }, ["n"]), Hash.isHash(7), Hash.hash("a") === Hash.hash("a")])`,
     ],
     unread: [
       [`Metric.value(orders)`, /calls Metric\.value, which reads a metric/],

@@ -819,6 +819,35 @@ export const make = (given: Loader, run: Run): Interpreter => {
   });
 
   /** A function of the code, run to its end where it stands: the library called it and waits for no one. */
+  /** `value instanceof cls`, as the language has it, of a value and a class the prover can see. */
+  const instanceOf = (left: V, right: V, site: Site): Eval<V> =>
+    Effect.gen(function* () {
+      const value = forced(left);
+      if (value._tag === "Opaque" || value._tag === "Applied" || value._tag === "Pending")
+        return yield* fail(
+          site,
+          inside("uses instanceof on", value) ?? "uses instanceof on a value it cannot see",
+        );
+      // An array of the language, whatever name the file gives `Array`.
+      if (right._tag === "Lib" && right.module === "Array" && right.path.length === 0)
+        return Value.bool(value._tag === "Arr");
+      if (classes.has(right)) return Value.bool(isInstance(value, right));
+      if (right._tag === "Native" && ERROR_CLASSES.has(right)) {
+        const named = value._tag === "Obj" ? errorNames.get(value) : undefined;
+        return Value.bool(named !== undefined && (right.name === "Error" || right.name === named));
+      }
+      if (right._tag === "Host" && typeof right.value === "function") {
+        const cls: unknown =
+          value._tag === "Obj" && value.brand && "cls" in value.brand ? value.brand.cls : undefined;
+        return Value.bool(
+          typeof cls === "function" &&
+            (cls === right.value ||
+              Object.prototype.isPrototypeOf.call(right.value.prototype, cls.prototype)),
+        );
+      }
+      return yield* fail(site, "uses instanceof with a class the prover cannot see");
+    });
+
   const ranAtOnce = (fn: V, args: ReadonlyArray<V>, site: Site): V => {
     runningAtOnce++;
     try {
@@ -852,6 +881,7 @@ export const make = (given: Loader, run: Run): Interpreter => {
     force: (value) => forced(value),
     fresh: (value) => made(value),
     atOnce: (fn, args, site) => ranAtOnce(fn, args, site),
+    instanceOf: (value, cls, site) => instanceOf(value, cls, site),
     array: (name, items, fn, initial, site) => arrayMethods[name]!(items, fn, initial, site),
   });
 
@@ -3069,36 +3099,7 @@ export const make = (given: Loader, run: Run): Interpreter => {
             Object.hasOwn((forced(right) as typeof right).fields, String(left.value)),
           );
         }
-        if (node.operator === "instanceof") {
-          const value = forced(left);
-          if (value._tag === "Opaque" || value._tag === "Applied" || value._tag === "Pending")
-            return yield* fail(
-              site,
-              inside("uses instanceof on", value) ?? "uses instanceof on a value it cannot see",
-            );
-          // An array of the language, whatever name the file gives `Array`.
-          if (right._tag === "Lib" && right.module === "Array" && right.path.length === 0)
-            return Value.bool(value._tag === "Arr");
-          if (classes.has(right)) return Value.bool(isInstance(value, right));
-          if (right._tag === "Native" && ERROR_CLASSES.has(right)) {
-            const named = value._tag === "Obj" ? errorNames.get(value) : undefined;
-            return Value.bool(
-              named !== undefined && (right.name === "Error" || right.name === named),
-            );
-          }
-          if (right._tag === "Host" && typeof right.value === "function") {
-            const cls: unknown =
-              value._tag === "Obj" && value.brand && "cls" in value.brand
-                ? value.brand.cls
-                : undefined;
-            return Value.bool(
-              typeof cls === "function" &&
-                (cls === right.value ||
-                  Object.prototype.isPrototypeOf.call(right.value.prototype, cls.prototype)),
-            );
-          }
-          return yield* fail(site, "uses instanceof with a class the prover cannot see");
-        }
+        if (node.operator === "instanceof") return yield* instanceOf(left, right, site);
         return yield* fail(site, `uses ${node.operator}, which the prover does not translate`);
       }
       case "TaggedTemplateExpression": {

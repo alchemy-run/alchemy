@@ -743,6 +743,23 @@ export const make = (host: Host) => {
           }),
         ),
       ),
+    // `input instanceof cls`, as a predicate of a matcher.
+    "effect/Match:instanceOf": ([cls], site) =>
+      cls
+        ? Effect.succeed(
+            native("Match.instanceOf", ([input], at) =>
+              host.instanceOf(input ?? Value.undef, cls, at),
+            ),
+          )
+        : wrongArguments(site, "Match.instanceOf"),
+    "effect/Match:instanceOfUnsafe": ([cls], site) =>
+      cls
+        ? Effect.succeed(
+            native("Match.instanceOfUnsafe", ([input], at) =>
+              host.instanceOf(input ?? Value.undef, cls, at),
+            ),
+          )
+        : wrongArguments(site, "Match.instanceOfUnsafe"),
     // An object that is not an array: what `Predicate.isObject` holds of.
     "effect/Match:record": ([input], site) => {
       const is = input ? host.kind(input) : undefined;
