@@ -79,6 +79,12 @@ export type Model = (args: ReadonlyArray<V>, site: Site) => Eval<V>;
 export type Models = Readonly<Record<string, Model>>;
 
 export const native = (name: string, call: Model): V => ({ _tag: "Native", name, call });
+
+/** Bytes, as the language holds them: `new Uint8Array(...)`, and what the library gives of one. */
+export const bytes = (value: Uint8Array): V => ({ _tag: "Host", value, name: "bytes" });
+/** The bytes a value holds, when it holds bytes. */
+export const bytesOf = (v: V | undefined): Uint8Array | undefined =>
+  v?._tag === "Host" && v.value instanceof Uint8Array ? v.value : undefined;
 export const effect = (run: Eval<V>): V => ({ _tag: "Effect", run });
 export const done: V = effect(Effect.succeed(Value.undef));
 

@@ -13,7 +13,7 @@ import * as Stream from "effect/Stream";
 import * as TxSubscriptionRef from "effect/TxSubscriptionRef";
 import * as Brands from "../Brands.ts";
 import type { Kit, Model, Models } from "../Kit.ts";
-import { arr, callable, dualBy, native, tagOf, wrongArguments } from "../Kit.ts";
+import { arr, bytes, bytesOf, callable, dualBy, native, tagOf, wrongArguments } from "../Kit.ts";
 import * as Timeline from "../Timeline.ts";
 import type { Eval, Site, V } from "../Value.ts";
 import * as Value from "../Value.ts";
@@ -1482,6 +1482,12 @@ export const make = (
       ? Effect.succeed(forced.value)
       : to.read(Value.notTranslated(to.site, `calls ${to.name} on text an input decides`));
   };
+  const bytesIn = (to: Handing, v: V): Effect.Effect<Uint8Array, Held> => {
+    const held = bytesOf(v);
+    return held
+      ? Effect.succeed(held)
+      : to.read(Value.notTranslated(to.site, `calls ${to.name} on bytes the prover cannot see`));
+  };
   type Keyed = string | number | boolean;
   const keyOf = (to: Handing, v: V): Effect.Effect<Keyed, Held> => {
     const forced = host.force(v);
@@ -1508,6 +1514,42 @@ export const make = (
           )
         : wrongArguments(site, "TxSubscriptionRef.changesStream");
     },
+    // Text as bytes, and bytes as text, as the library's own encoder and decoder make them.
+    "effect/Stream:encodeText": lift("Stream.encodeText", (to, self) =>
+      Stream.map(Stream.encodeText(Stream.mapEffect(self, (item) => textOf(to, item))), bytes),
+    ),
+    "effect/Stream:decodeText": lift("Stream.decodeText", (to, self, [given]) => {
+      const options = readOptions<{ readonly encoding?: string }>(given);
+      return Stream.map(
+        Stream.decodeText(
+          Stream.mapEffect(self, (item) => bytesIn(to, item)),
+          options,
+        ),
+        (text): V => Value.str(text),
+      );
+    }),
+    "effect/Stream:limitBytes": lift("Stream.limitBytes", (to, self, [size, onLimit]) => {
+      const limit = tools.plainOf(size);
+      return typeof limit === "number" || typeof limit === "bigint" || typeof limit === "string"
+        ? Stream.map(
+            Stream.limitBytes(
+              Stream.mapEffect(self, (item) => bytesIn(to, item)),
+              limit as number,
+              () => Stream.mapEffect(to.inner(onLimit)(), (item) => bytesIn(to, item)),
+            ),
+            bytes,
+          )
+        : Stream.unwrap(Effect.as(to.wrong<never>(), Stream.empty));
+    }),
+    "effect/Stream:mkUint8Array": ran_("Stream.mkUint8Array", (to, self) =>
+      Effect.map(Stream.mkUint8Array(Stream.mapEffect(self, (item) => bytesIn(to, item))), bytes),
+    ),
+    "effect/Stream:mkArrayBuffer": ran_("Stream.mkArrayBuffer", (to, self) =>
+      Effect.map(
+        Stream.mkArrayBuffer(Stream.mapEffect(self, (item) => bytesIn(to, item))),
+        (buffer): V => ({ _tag: "Host", value: buffer, name: "ArrayBuffer" }),
+      ),
+    ),
     "effect/Stream:splitLines": lift("Stream.splitLines", (to, self) =>
       Stream.map(Stream.splitLines(Stream.mapEffect(self, (item) => textOf(to, item))), (line): V =>
         Value.str(line),

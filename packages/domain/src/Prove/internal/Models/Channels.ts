@@ -10,7 +10,17 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Brands from "../Brands.ts";
 import type { Kit, Model, Models } from "../Kit.ts";
-import { arr, callable, dualBy, native, onEffect, tagOf, wrongArguments } from "../Kit.ts";
+import {
+  arr,
+  bytes,
+  bytesOf,
+  callable,
+  dualBy,
+  native,
+  onEffect,
+  tagOf,
+  wrongArguments,
+} from "../Kit.ts";
 import * as Timeline from "../Timeline.ts";
 import type { Eval, Site, V } from "../Value.ts";
 import * as Value from "../Value.ts";
@@ -1039,6 +1049,25 @@ export const make = (kit: Kit, tools: Tools) => {
       Effect.map(Channel.runCount(self), Value.num),
     ),
     "effect/Channel:runDrain": runs("Channel.runDrain", (_, self) => Channel.runDrain(self)),
+    "effect/Channel:mkUint8Array": runs("Channel.mkUint8Array", (to, self) =>
+      self.pipe(
+        Channel.mapEffect((chunk) =>
+          Effect.flatMap(to.read(tools.items(to.name, chunk, to.site)), (items) => {
+            const held = items.map(bytesOf);
+            return held.length > 0 && held.every((each) => each !== undefined)
+              ? Effect.succeed(held as unknown as readonly [Uint8Array, ...Array<Uint8Array>])
+              : to.read(
+                  Value.notTranslated(
+                    to.site,
+                    "calls Channel.mkUint8Array on bytes the prover cannot see",
+                  ),
+                );
+          }),
+        ),
+        Channel.mkUint8Array,
+        Effect.map(bytes),
+      ),
+    ),
     "effect/Channel:runCollect": runs("Channel.runCollect", (_, self) =>
       Effect.map(Channel.runCollect(self), arr),
     ),
@@ -1628,6 +1657,49 @@ export const make = (kit: Kit, tools: Tools) => {
         : wrongArguments(site, "Channel.toPullScoped");
     },
     // Arrays of text cut into lines, of text the code can see.
+    // Arrays of text as arrays of bytes, and back, as the library's own encoder and decoder make them.
+    "effect/Channel:encodeText": from(
+      "Channel.encodeText",
+      (to) =>
+        Channel.mapInput(
+          Channel.map(Channel.encodeText<unknown, V>(), (chunk): V => arr(chunk.map(bytes))),
+          (chunk: V) =>
+            Effect.flatMap(to.read(tools.items(to.name, chunk, to.site)), (items) => {
+              const texts = items.map((item) => (item._tag === "Str" ? item.value : undefined));
+              return texts.length > 0 && texts.every((text) => text !== undefined)
+                ? Effect.succeed(texts as unknown as readonly [string, ...Array<string>])
+                : to.read(
+                    Value.notTranslated(
+                      to.site,
+                      "calls Channel.encodeText on text an input decides",
+                    ),
+                  );
+            }),
+        ) as unknown as Real,
+    ),
+    "effect/Channel:decodeText": from("Channel.decodeText", (to, [encoding, options]) => {
+      const named = encoding === undefined || encoding._tag === "Undef" ? undefined : encoding;
+      const read = options === undefined || options._tag === "Undef" ? {} : tools.plainOf(options);
+      if ((named !== undefined && named._tag !== "Str") || read === undefined) return to.bad;
+      return Channel.mapInput(
+        Channel.map(
+          Channel.decodeText<unknown, V>(named?.value, read as TextDecoderOptions),
+          (texts): V => arr(texts.map(Value.str)),
+        ),
+        (chunk: V) =>
+          Effect.flatMap(to.read(tools.items(to.name, chunk, to.site)), (items) => {
+            const held = items.map(bytesOf);
+            return held.length > 0 && held.every((each) => each !== undefined)
+              ? Effect.succeed(held as unknown as readonly [Uint8Array, ...Array<Uint8Array>])
+              : to.read(
+                  Value.notTranslated(
+                    to.site,
+                    "calls Channel.decodeText on bytes the prover cannot see",
+                  ),
+                );
+          }),
+      ) as unknown as Real;
+    }),
     "effect/Channel:splitLines": from(
       "Channel.splitLines",
       (to) =>

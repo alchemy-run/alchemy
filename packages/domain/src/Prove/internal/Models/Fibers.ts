@@ -2779,6 +2779,26 @@ export const make = (
           )
         : wrongArguments(site, "TxPubSub.subscribe");
     },
+    // The subscription itself, made and ended inside a transaction: no scope ends it.
+    "effect/TxPubSub:acquireSubscriber": on<TP, TxQueue.TxQueue<V>>(
+      "TxPubSub",
+      "acquireSubscriber",
+      1,
+      (held) => Effect.tx(TxPubSub.acquireSubscriber(held)),
+      (queue) => wrap("TxQueue", queue),
+    ),
+    "effect/TxPubSub:releaseSubscriber": later<TP, void>(
+      "TxPubSub",
+      "releaseSubscriber",
+      2,
+      (held, [queue], site) => {
+        const subscription = heldOf<TxQueue.TxQueue<V>>("TxQueue", queue);
+        return subscription
+          ? Effect.succeed(Effect.tx(TxPubSub.releaseSubscriber(held, subscription)))
+          : wrongArguments(site, "TxPubSub.releaseSubscriber");
+      },
+      () => Value.undef,
+    ),
     "effect/TxPubSub:size": on<TP, number>(
       "TxPubSub",
       "size",
