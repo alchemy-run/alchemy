@@ -11,6 +11,12 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 export const HOST_PROBE_PORT = 42117;
 
 /**
+ * Port only passed at `start({ env })` (#3319): never in a declared env, so
+ * the dev runtime learns it from the container's create request alone.
+ */
+export const HOST_START_PROBE_PORT = 42118;
+
+/**
  * A literal local Prisma Postgres URL shape (`@prisma/dev` hands these out
  * in dev). Prisma's client only speaks plain HTTP to `prisma+postgres://`
  * hosts that look local (`localhost`/`127.0.0.1`/`[::1]`), so whatever the
@@ -69,6 +75,40 @@ export class HostReachContainerObject extends Cloudflare.DurableObject<HostReach
       return {
         getEnv: () => get("/env"),
         getProbe: () => get("/probe"),
+      };
+    });
+  }),
+) {}
+
+/**
+ * A Durable Object-scheduled Container can't declare `env`: its per-instance
+ * settings, a loopback URL included, arrive at `start({ env })` (#3319).
+ */
+class StartEnvContainer extends Cloudflare.Container<StartEnvContainer>()("StartEnvContainer", {
+  schedulingPolicy: "durable_object",
+  context: `${import.meta.dirname}/context`,
+  observability: { logs: { enabled: true } },
+}) {}
+
+export class StartEnvContainerObject extends Cloudflare.DurableObject<StartEnvContainerObject>()(
+  "StartEnvContainerObject",
+  Effect.gen(function* () {
+    const container = yield* StartEnvContainer;
+
+    return Effect.gen(function* () {
+      const start = container.start({
+        enableInternet: true,
+        env: { TARGET_URL: `http://localhost:${HOST_START_PROBE_PORT}/hello` },
+      });
+      const { fetch } = yield* container.getTcpPort(8080);
+
+      return {
+        getProbe: () =>
+          Effect.gen(function* () {
+            yield* start;
+            const response = yield* fetch(HttpClientRequest.get("http://container/probe"));
+            return yield* response.text;
+          }),
       };
     });
   }),

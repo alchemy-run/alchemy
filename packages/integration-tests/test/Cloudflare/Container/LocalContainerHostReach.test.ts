@@ -8,6 +8,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import {
   HOST_PROBE_PORT,
+  HOST_START_PROBE_PORT,
   NEON_URL,
   PLANETSCALE_MYSQL_URL,
   PLANETSCALE_PG_URL,
@@ -38,24 +39,25 @@ const readinessSchedule = Schedule.min([
  * developer machine's loopback, exactly like `@prisma/dev`'s direct Postgres
  * endpoint. The container's env points at it via `http://localhost:<port>`.
  */
-const hostServer = Effect.acquireRelease(
-  Effect.callback<NodeHttp.Server>((resume) => {
-    const server = NodeHttp.createServer((_req, res) => {
-      res.setHeader("content-type", "text/plain");
-      res.end("hello-from-host");
-    });
-    // Bind loopback only, like `@prisma/dev`. Docker Desktop's
-    // host-gateway reaches 127.0.0.1. Native Linux cannot SYN the
-    // bridge IP (UFW INPUT); the sidecar unix-socket-tunnels this
-    // port into the container netns instead.
-    server.listen(HOST_PROBE_PORT, "127.0.0.1", () => resume(Effect.succeed(server)));
-    server.on("error", (err) => resume(Effect.die(err)));
-  }),
-  (server) =>
-    Effect.callback<void>((resume) => {
-      server.close(() => resume(Effect.void));
+const hostServerOn = (port: number) =>
+  Effect.acquireRelease(
+    Effect.callback<NodeHttp.Server>((resume) => {
+      const server = NodeHttp.createServer((_req, res) => {
+        res.setHeader("content-type", "text/plain");
+        res.end("hello-from-host");
+      });
+      // Bind loopback only, like `@prisma/dev`. Docker Desktop's
+      // host-gateway reaches 127.0.0.1. Native Linux cannot SYN the
+      // bridge IP (UFW INPUT); the sidecar unix-socket-tunnels this
+      // port into the container netns instead.
+      server.listen(port, "127.0.0.1", () => resume(Effect.succeed(server)));
+      server.on("error", (err) => resume(Effect.die(err)));
     }),
-);
+    (server) =>
+      Effect.callback<void>((resume) => {
+        server.close(() => resume(Effect.void));
+      }),
+  );
 
 /**
  * Regression test for alchemy-run/alchemy#1334: under `alchemy dev`, a
@@ -76,7 +78,7 @@ describe(
       Effect.gen(function* () {
         const { url } = yield* stack;
         const client = yield* HttpClient.HttpClient;
-        yield* hostServer;
+        yield* hostServerOn(HOST_PROBE_PORT);
 
         const get = (path: string) =>
           client.get(new URL(path, url)).pipe(
@@ -121,6 +123,32 @@ describe(
           body?: string;
           error?: string;
         };
+        expect(probe.error).toBeUndefined();
+        expect(probe.status).toBe(200);
+        expect(probe.body).toBe("hello-from-host");
+      }).pipe(Effect.scoped, logLevel),
+      { tags: ["local"], timeout: TEST_TIMEOUT },
+    );
+
+    // #3319: a Durable Object-scheduled Container can't declare env, so its
+    // loopback URL arrives only at `start({ env })`. On native Linux the
+    // forwarder must still carry that port into the container's netns.
+    test(
+      "a loopback URL passed to start({ env }) reaches the host",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const client = yield* HttpClient.HttpClient;
+        yield* hostServerOn(HOST_START_PROBE_PORT);
+
+        const probe = JSON.parse(
+          yield* client.get(new URL("/start-env-probe", url)).pipe(
+            Effect.flatMap((r) =>
+              r.status !== 200 ? Effect.fail(new Error(`not ready: ${r.status}`)) : r.text,
+            ),
+            Effect.timeout("30 seconds"),
+            Effect.retry({ schedule: readinessSchedule, times: 30 }),
+          ),
+        ) as { status?: number; body?: string; error?: string };
         expect(probe.error).toBeUndefined();
         expect(probe.status).toBe(200);
         expect(probe.body).toBe("hello-from-host");

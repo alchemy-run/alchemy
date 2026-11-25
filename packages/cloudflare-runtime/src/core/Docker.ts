@@ -259,6 +259,13 @@ export const DockerLive = Layer.effect(
       }
       return [...ports];
     };
+    // Loopback ports from the env a container was started with
+    // (`start({ env })`), by the networking sidecar it joins. They arrive in
+    // the user container's create request, after the sidecar started.
+    const startEnvPorts = new Map<string, Set<number>>();
+    const sidecarLoopbackPorts = (sidecar: string) => [
+      ...new Set([...registeredLoopbackPorts(), ...(startEnvPorts.get(sidecar) ?? [])]),
+    ];
 
     const getSocketPathFromContext = () =>
       ChildProcess.make(bin, ["context", "ls", "--format", "json"], {
@@ -336,8 +343,28 @@ export const DockerLive = Layer.effect(
               Image: string;
               Env: Array<string>;
               Labels?: Record<string, string>;
+              HostConfig?: { NetworkMode?: string };
             }>(req);
             const image = registeredImages.get(original.Image);
+            // A loopback URL passed to `start({ env })` needs its port
+            // forwarded too: widen the sidecar's forwarder before the
+            // container starts dialing out (#3319).
+            const sidecar = original.HostConfig?.NetworkMode?.startsWith("container:")
+              ? original.HostConfig.NetworkMode.slice("container:".length)
+              : undefined;
+            const startPorts = loopbackPortsFromEnv(original.Env);
+            if (sidecar !== undefined && startPorts.length > 0) {
+              const known = startEnvPorts.get(sidecar) ?? new Set<number>();
+              for (const port of startPorts) known.add(port);
+              startEnvPorts.set(sidecar, known);
+              ensureLoopbackUnixSockets(startPorts);
+              const attached = yield* Effect.exit(
+                forwarders.attach(sidecar, sidecarLoopbackPorts(sidecar)),
+              );
+              if (Exit.isFailure(attached)) {
+                return sendError(res, 500, Cause.pretty(attached.cause));
+              }
+            }
             // A native `start({ image })` can name an image that was never
             // prepared (e.g. a managed `cloudflare/*` image): pull it on demand.
             // Images registered with env were built or pulled for the
@@ -395,10 +422,11 @@ export const DockerLive = Layer.effect(
           const id = containerIdFromPath(req.url);
           if (req.method === "POST" && isContainerStartPath(req.url) && id !== undefined) {
             return yield* forward(req, res, {
-              afterStart: forwarders.attach(id, registeredLoopbackPorts()),
+              afterStart: forwarders.attach(id, sidecarLoopbackPorts(id)),
             });
           }
           if (req.method === "DELETE" && id !== undefined) {
+            startEnvPorts.delete(id);
             yield* forwarders.detach(id);
           }
           return yield* forward(req, res);
