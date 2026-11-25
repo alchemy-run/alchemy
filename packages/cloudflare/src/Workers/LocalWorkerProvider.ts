@@ -530,6 +530,7 @@ export const LocalWorkerProvider = () =>
               )
             : undefined,
           viteEnvironments: props.vite?.viteEnvironments,
+          viteMode: props.vite?.mode,
           viteRootDir: props.vite?.rootDir,
           bundleOptions: workerBundleOptions({
             id,
@@ -1306,6 +1307,7 @@ export const LocalWorkerProvider = () =>
                         compatibility: worker.compatibility,
                         main: worker.viteMain,
                         viteEnvironments: worker.viteEnvironments,
+                        viteMode: worker.viteMode,
                         hasAssets: worker.hasAssets,
                         bindingDescriptors: worker.bindingDescriptors,
                         devRemote: worker.devRemote,
