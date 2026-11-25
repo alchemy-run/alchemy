@@ -1,0 +1,105 @@
+{
+  "name": "@alchemy.run/mux",
+  "version": "2.0.0-beta.87",
+  "description": "Mux video, live streaming, webhooks, signing keys and playback signing for Alchemy.",
+  "keywords": [
+    "alchemy",
+    "effect",
+    "infrastructure-as-code",
+    "live-streaming",
+    "mux",
+    "video"
+  ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/mux"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./Data": "./src/Data/index.ts",
+    "./Robots": "./src/Robots/index.ts",
+    "./System": "./src/System/index.ts",
+    "./Video": "./src/Video/index.ts",
+    "./*": "./src/*.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "worker": "./src/index.ts",
+        "default": "./lib/index.js"
+      },
+      "./Data": {
+        "types": "./lib/Data/index.d.ts",
+        "bun": "./src/Data/index.ts",
+        "worker": "./src/Data/index.ts",
+        "default": "./lib/Data/index.js"
+      },
+      "./Robots": {
+        "types": "./lib/Robots/index.d.ts",
+        "bun": "./src/Robots/index.ts",
+        "worker": "./src/Robots/index.ts",
+        "default": "./lib/Robots/index.js"
+      },
+      "./System": {
+        "types": "./lib/System/index.d.ts",
+        "bun": "./src/System/index.ts",
+        "worker": "./src/System/index.ts",
+        "default": "./lib/System/index.js"
+      },
+      "./Video": {
+        "types": "./lib/Video/index.d.ts",
+        "bun": "./src/Video/index.ts",
+        "worker": "./src/Video/index.ts",
+        "default": "./lib/Video/index.js"
+      },
+      "./internal/*": null,
+      "./*": {
+        "types": "./lib/*.d.ts",
+        "bun": "./src/*.ts",
+        "worker": "./src/*.ts",
+        "default": "./lib/*.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts"
+  },
+  "dependencies": {
+    "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/mux": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  },
+  "alchemy": {
+    "contributes": [
+      "@alchemy.run/mux/Contributions"
+    ]
+  }
+}

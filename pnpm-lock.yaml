@@ -11274,6 +11274,9 @@ importers:
       '@alchemy.run/modal':
         specifier: workspace:*
         version: link:../modal
+      '@alchemy.run/mux':
+        specifier: workspace:*
+        version: link:../mux
       '@alchemy.run/neon':
         specifier: workspace:*
         version: link:../neon
@@ -11370,6 +11373,9 @@ importers:
       '@distilled.cloud/modal':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/modal
+      '@distilled.cloud/mux':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/mux
       '@distilled.cloud/neon':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/neon
@@ -11723,6 +11729,28 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.1.4(effect@4.1.4)(redis@6.2.1(@opentelemetry/api@1.10.0))
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.1.0-beta
+
+  packages/mux:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/mux':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/mux
+    devDependencies:
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3

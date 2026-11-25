@@ -51,6 +51,9 @@
       "path": "./submodules/distilled/packages/axiom/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/mux/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/neon/tsconfig.json"
     },
     {
@@ -125,6 +128,9 @@
     },
     {
       "path": "./packages/axiom/tsconfig.json"
+    },
+    {
+      "path": "./packages/mux/tsconfig.json"
     },
     {
       "path": "./packages/doppler/tsconfig.json"

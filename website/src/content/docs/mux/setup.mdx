@@ -1,0 +1,29 @@
+---
+title: Setup
+description: Connect alchemy to Mux — an environment, an access token, and profiles.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+Sign up at [mux.com](https://www.mux.com). In the [Mux dashboard](https://dashboard.mux.com), open **Settings > Access Tokens** and create a token for the environment you'll deploy to. Give it the permissions for the resources you use: Mux Video write for assets and live streams, System write for webhooks and signing keys, Mux Data write for annotations, and Robots write for directives. Install `@alchemy.run/mux`:
+
+<PackageManagers add="@alchemy.run/mux" />
+
+Register the provider next to your cloud's:
+
+```typescript
+// alchemy.run.ts
+import * as Mux from "@alchemy.run/mux";
+
+providers: Layer.mergeAll(Cloudflare.providers(), Mux.providers()),
+```
+
+Run `alchemy profile edit --add Mux` and enter the token ID and secret. They are entered interactively and saved under `~/.alchemy/credentials/<profile>/`.
+
+In CI (`CI=true`), profiles are bypassed. Set `MUX_TOKEN_ID` and `MUX_TOKEN_SECRET`; `MUX_BASE_URL` is optional.
+
+See [Profiles](/environments/profiles) for how credentials are stored and switched.
+
+## Next steps
+
+- [Mux overview](/mux) — resources and bindings.

@@ -982,6 +982,12 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Mux",
+    intro:
+      "Video as Stack resources — assets, live streams, captions, webhooks and signing keys, with bindings for signed playback and webhook verification.",
+    pages: { slugs: ["mux/index", "mux/setup"] },
+  },
+  {
     heading: "GitHub",
     intro:
       "Repos, secrets, variables, and repository event sources as Stack resources; the CI/CD guides live under Guides and each cloud's tutorial part 5.",

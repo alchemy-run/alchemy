@@ -1,0 +1,98 @@
+---
+title: Mux
+description: Video infrastructure as resources — assets, live streams, captions, webhooks, and signed playback declared next to the code that serves them.
+---
+
+Mux is an API for video. You upload or stream video to it, and it encodes, stores and delivers it, with captions, thumbnails and analytics.
+
+**New to Mux?** Read [Mux's introduction](https://www.mux.com/docs) first.
+
+## A quick example
+
+An Asset is one video. Mux ingests it from a URL, and the asset exposes its playback IDs:
+
+```typescript
+const intro = yield* Mux.Video.Asset("Intro", {
+  inputs: [{ url: "https://muxed.s3.amazonaws.com/leds.mp4" }],
+  playback_policies: ["public"],
+  meta: { title: "Intro" },
+});
+// https://stream.mux.com/${intro.public_playback_id}.m3u8
+```
+
+Captions and extra audio tracks are inputs too, and changing them doesn't re-encode the video:
+
+```typescript
+const hero = yield* Mux.Video.Asset("Hero", {
+  inputs: [
+    {
+      url: "https://example.com/hero.mp4",
+      generated_subtitles: [{ language_code: "en", name: "English (generated)" }],
+    },
+    {
+      url: "https://example.com/hero-fr.vtt",
+      type: "text",
+      text_type: "subtitles",
+      language_code: "fr",
+      name: "Français",
+    },
+  ],
+  playback_policies: ["public"],
+});
+```
+
+A LiveStream gives your encoder an ingest URL and stream key, and records each broadcast as a new asset:
+
+```typescript
+const stream = yield* Mux.Video.LiveStream("MainStage", {
+  playback_policies: ["public"],
+  latency_mode: "low",
+  reconnect_window: 15,
+});
+```
+
+A SigningKey and the `PlaybackSigner` binding let a runtime hand out signed playback URLs:
+
+```typescript
+const key = yield* Mux.System.SigningKey("Playback");
+const signer = yield* Mux.Video.PlaybackSigner(key);
+// in a request handler, for a signed playback ID:
+const token = yield* signer.sign("PLAYBACK_ID", { expiresIn: 600 });
+```
+
+A Webhook sends Mux's events to your API, and the `WebhookVerifier` binding checks their signatures:
+
+```typescript
+const hook = yield* Mux.System.Webhook("Events", {
+  address: "https://api.example.com/mux/events",
+});
+```
+
+## Failed deploys and drift
+
+Updates compare your props with what Mux reports, not with the props of the last deploy. A deploy that fails partway through an update is finished, or undone, by the next one. A setting you remove from the props returns to Mux's default. `alchemy deploy --detect-drift` puts back settings changed in the Mux dashboard and recreates objects deleted there.
+
+## Resources
+
+| Resource | Updates in place | Replaced when |
+| --- | --- | --- |
+| `Mux.Video.Asset` | passthrough, meta, thumbnail time, master access, static renditions, playback policies, directives, text and audio tracks | the video input, a watermark, video quality or other ingest settings change |
+| `Mux.Video.LiveStream` | latency, reconnect window and slate, max duration, passthrough, title, `enabled`, captions, recording settings | playback policies, `audio_only`, `test` or other recording settings change |
+| `Mux.Video.SimulcastTarget` | nothing | anything changes |
+| `Mux.Video.TranscriptionVocabulary` | name, phrases, passthrough | never |
+| `Mux.Video.PlaybackRestriction` | referrer and user-agent rules | never |
+| `Mux.System.Webhook` | address, `enabled` | never |
+| `Mux.System.SigningKey` | nothing to configure | never |
+| `Mux.Data.Annotation` | nothing | the note or date changes |
+| `Mux.Robots.Directive` | nothing | anything changes |
+
+Every resource is in the generated [API reference](/providers).
+
+## Things to know
+
+- Mux objects can't carry tags, so `alchemy nuke` lists and deletes every Mux object in the environment, not only ones Alchemy created. Point it only at a test environment.
+- An access token belongs to one Mux environment. Use a separate environment, and token, per stage.
+
+## Out of scope
+
+- `GET /system/v1/whoami`. Alchemy resolves and checks credentials through its own auth provider.
