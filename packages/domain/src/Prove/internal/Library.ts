@@ -313,16 +313,12 @@ export const make = (host: Host) => {
   /** `Clock.clockWith(f)`: the effect the function makes of the clock. */
   const clockWith: Model = ([f], site) =>
     f
-      ? Effect.succeed(
-          effect(
-            host
-              .call(f, [clockObject(site)], site)
-              .pipe(
-                Effect.flatMap((made) =>
-                  made._tag === "Effect" ? made.run : wrongArguments(site, "Clock.clockWith"),
-                ),
-              ),
+      ? host.call(f, [clockObject(site)], site).pipe(
+          Effect.flatMap((made) =>
+            made._tag === "Effect" ? made.run : wrongArguments(site, "Clock.clockWith"),
           ),
+          effect,
+          Effect.succeed,
         )
       : wrongArguments(site, "Clock.clockWith");
 
