@@ -743,6 +743,7 @@ Effect.reduce(
 );
 Effect.result(even(a));
 Effect.sync(() => Effect.runSync(Effect.succeed(a + b)));
+Effect.withSpanScoped("s"); // in a scope
 Effect.succeed(a);
 Effect.succeedNone;
 Effect.succeedSome(a);
@@ -811,6 +812,13 @@ Schedule.max([Schedule.recurs(2), Schedule.spaced("1 second")]);
 Schedule.min([Schedule.recurs(2), Schedule.recurs(4)]);
 Schedule.concat(Schedule.recurs(1), Schedule.recurs(2));
 Schedule.concatResult(Schedule.recurs(1), Schedule.recurs(1)); // what each gives, as a failure of the first and a success of the second
+Schedule.toStep(Schedule.recurs(2)); // the library's step: what it gives at a time, of an input
+Schedule.toStepWithSleep(Schedule.spaced("5 millis")); // one that waits on the handler's clock
+Schedule.toStepWithMetadata(Schedule.recurs(3));
+Schedule.fromStep(Effect.sync(() => (now, input) => (count >= 2 ? Cause.done(count + a) : Effect.succeed([count++, Duration.millis(1)])))); // a step of the code
+Schedule.fromStepWithMetadata(Effect.succeed((meta) => (meta.attempt > 2 ? Cause.done(meta.attempt * a) : Effect.succeed([meta.attempt, Duration.millis(2)]))));
+Schedule.cron("*/5 * * * *", "UTC"); // in a time zone it names
+Schedule.CurrentMetadata; // what a repeat's schedule is told of the turn it is on
 Schedule.passthrough(Schedule.recurs(2));
 ```
 
@@ -2080,6 +2088,8 @@ Queue.isFullUnsafe(line);
 // A set of fibers, and a place for one. Each is stopped when its scope closes.
 const set = yield* FiberSet.make(); // in a scope
 FiberSet.run(set, Effect.sleep(1));
+FiberSet.runtime(set)(); // a function that starts a fiber at once, into the set
+FiberSet.makeRuntime(); // in a scope, with a set of its own
 FiberSet.run(set)(Effect.onInterrupt(Effect.sleep(20), () => log(seen, "stopped")));
 FiberSet.add(set, fiber);
 FiberSet.join(set); // fails when one of its fibers does
@@ -2090,6 +2100,8 @@ FiberSet.addUnsafe(set, one);
 FiberSet.isFiberSet(set);
 const handle = yield* FiberHandle.make();
 FiberHandle.run(handle, Effect.andThen(Effect.sleep(1), even(a))); // stops the fiber it held
+FiberHandle.runtime(handle)();
+FiberHandle.makeRuntime();
 FiberHandle.join(handle);
 FiberHandle.awaitEmpty(handle);
 FiberHandle.clear(handle);
@@ -2164,6 +2176,8 @@ Cache.entries(prices);
 Cache.invalidateWhen(prices, "tea", (n) => n > b);
 const jobs = yield* FiberMap.make(); // in a scope
 FiberMap.run(jobs, "one", Effect.andThen(Effect.sleep(3), log(seen, "one again"))); // stops the fiber the key had
+FiberMap.runtime(map)(); // a function of a key and an effect
+FiberMap.makeRuntime();
 FiberMap.get(jobs, "one");
 FiberMap.has(jobs, "two");
 FiberMap.remove(jobs, 4);
@@ -2182,6 +2196,7 @@ Pool.isPool(pool);
 Pool.use(pool, (item) => Effect.succeed(item + b)); // an item for as long as the effect runs
 Pool.reserve(pool, item);
 Pool.stats(pool);
+Pool.makeWithStrategy({ acquire: Ref.updateAndGet(made, (n) => n + a), min: 1, max: 2, strategy: { run: () => Effect.void, onAcquire: (item) => Effect.sync(() => { seen.push(item.refCount); }), reclaim: () => Effect.succeed(undefined) } }); // the pool and its items, as the library holds them
 Pool.makeWithTTL({
   acquire: Ref.updateAndGet(made, (n) => n + 1),
   min: 1,
@@ -2239,6 +2254,8 @@ TxPubSub.bounded(2);
 TxPubSub.dropping(1);
 TxPubSub.sliding(1);
 const one = yield* TxPubSub.subscribe(hub); // in a scope: a TxQueue
+TxPubSub.acquireSubscriber(hub); // inside a transaction: no scope ends it
+TxPubSub.releaseSubscriber(hub, queue);
 TxPubSub.publish(hub, a);
 TxPubSub.publishAll(hub, [b, 1]);
 TxPubSub.size(hub);
@@ -2341,6 +2358,7 @@ RequestResolver.withSpan("doubled");
 RequestResolver.isRequestResolver(a);
 RequestResolver.asCache(RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n * 2 + a)), { capacity: 4 }); // a Cache found by the request
 RequestResolver.makeWith({ batchKey: (entry) => (entry.request.n > 2 ? "big" : "small"), delay: Effect.yieldNow, collectWhile: (requests) => requests.size < 3, runAll: (entries, key) => Effect.andThen(log(batches, [key, entries.length]), Effect.forEach(entries, (entry) => Request.succeed(entry, entry.request.n * 2 + a), { discard: true })) });
+Request.makeEntry({ request: Double({ n: 2 }), context: Context.empty(), uninterruptible: false, completeUnsafe: (exit) => { seen.push(Exit.isSuccess(exit) ? exit.value : "failed"); } }); // completed at once by the function
 RequestResolver.fromEffectTagged()({ Double: (requests) => Effect.succeed(requests.map((entry) => entry.request.n * 2 + a)), Half: (requests) => (requests.length > 1 ? Effect.fail(new Odd({ n: b })) : Effect.succeed(requests.map((entry) => entry.request.n / 2))) }); // a function for each tag of request
 Effect.request(GetPrice({ item }), prices);
 pipe(ask({ n }), Effect.request(answers));
@@ -2494,6 +2512,11 @@ Channel.runIntoQueueArray(Channel.fromIterable([[a, b], [3]]), queue); // each i
 Channel.runIntoPubSubArray(Channel.fromIterable([[a, b]]), hub);
 Channel.toPubSubArray(Channel.fromEffect(Effect.as(Effect.sleep(2), [a, b])), { capacity: 4 });
 Channel.toPubSubTake(Channel.fromEffect(Effect.as(Effect.sleep(2), [a, b])), { capacity: 4 }); // each array, then how it ended
+Channel.fromIterator(() => (function* () { yield a; yield b; })()); // a step of the generator each time one is pulled
+Channel.fromIteratorArray(() => (function* () { yield a; yield b; yield 3; })(), 2);
+Channel.encodeText(); // arrays of text as arrays of bytes
+Channel.decodeText();
+Channel.mkUint8Array(Channel.fromIterable([[new Uint8Array([1, 2]), new Uint8Array([a > 1 ? 3 : 4])]])); // all the bytes, together
 Channel.fromPubSubTake(hub);
 
 Channel.map((n) => n + 1);
@@ -2613,6 +2636,7 @@ A channel that reads what another gives starts from `Channel.identity()`. One wr
 const scope = yield* Scope.make();
 Scope.make("parallel");
 Effect.scope; // the scope around: inside Effect.scoped
+Scope.Scope;
 Scope.fork(scope, "sequential");
 Scope.makeUnsafe();
 Scope.forkUnsafe(scope, "sequential");
@@ -3029,6 +3053,12 @@ Stream.zipWithArray(Stream.make(a, b, 3), Stream.make(10, 20), (l, r) => [[l[0] 
 Stream.flattenTake; // a stream of Takes, as the items they hold
 Stream.fromPubSubTake(hub);
 Stream.toPubSubTake(paced(2, a, b), { capacity: 4 }); // in a scope: each array, then how the stream ended
+Stream.fromIteratorSucceed((function* () { yield a; yield b; yield 3; })());
+Stream.encodeText(Stream.make(a > 1 ? "hé" : "x", "y")); // text as bytes
+Stream.decodeText(Stream.make(new Uint8Array([104, a > 1 ? 105 : 106])));
+Stream.mkUint8Array(Stream.make(new Uint8Array([1, 2]), new Uint8Array([a > 1 ? 3 : 4])));
+Stream.mkArrayBuffer(Stream.make(new Uint8Array([1, 2]), new Uint8Array([3])));
+Stream.limitBytes(2, () => Stream.fail("too big")); // the bytes up to a limit, then the stream the function gives
 Stream.groupByKey((n) => (n % 2 === 0 ? 0 : 1)); // by a key the code can see
 Stream.filterMapEffect((n) => Effect.succeed(n > 2 ? Result.succeed(n * 2) : Result.fail(n)));
 Stream.takeWhileFilter((n) => (n > 2 ? Result.succeed(n + 1) : Result.fail(n)));
@@ -3175,6 +3205,10 @@ Context.getUnsafe(Context.make(Fee, { flat: b }), Fee);
 Context.getOrUndefined(Context.empty(), Rate);
 Context.getOrElse(Context.empty(), Fee, () => a);
 Context.addOrOmit(Context.empty(), Fee, Option.some({ flat: b }));
+Context.addUnsafe(Context.empty(), Rate.key, { percent: a }); // by the key of a service the code has read
+Context.makeUnsafe(new Map([[Rate.key, { percent: a }], [Fee.key, { flat: b }]]));
+Effect.runSyncWith(Context.make(Rate, { percent: a })); // run at once, with only the services of the context
+Effect.runSyncExitWith(Context.empty());
 Context.mergeAll(Context.make(Rate, { percent: a }), Context.make(Fee, { flat: b }));
 Context.omit(Rate)(Context.make(Rate, { percent: a }));
 Context.pick(Rate);
@@ -3258,6 +3292,7 @@ Hash.isHash(7);
 // A seed the code writes decides every draw, so a seeded draw is the one the deployed handler makes.
 Random.next.pipe(Random.withSeed("seed"));
 Random.withSeed(Random.nextInt, 7);
+Random.Random; // drawn from with a seed, as Random.next is
 Random.nextBoolean.pipe(Random.withSeed("coin"));
 Random.nextBetween(1, 5);
 Random.nextIntBetween(1, 10);
@@ -3274,6 +3309,10 @@ PubSub.unbounded({ replay: 1 });
 PubSub.bounded(2);
 PubSub.dropping(1);
 PubSub.sliding(1);
+PubSub.make({ atomicPubSub: () => PubSub.makeAtomicBounded(1), strategy: () => new PubSub.DroppingStrategy() }); // a PubSub of its parts
+PubSub.makeAtomicUnbounded({ replay: 1 });
+new PubSub.SlidingStrategy();
+new PubSub.BackPressureStrategy();
 const one = yield* PubSub.subscribe(hub); // in a scope
 PubSub.publish(hub, a);
 PubSub.publishAll(hub, [b, 1]);
@@ -3360,6 +3399,8 @@ Effect.gen(function* () {
   return [(yield* Clock.currentTimeMillis) >= 0, (yield* Clock.currentTimeNanos) >= 0n];
 });
 Clock.clockWith((clock) => Effect.map(clock.currentTimeMillis, (now) => [now >= 0, clock.currentTimeMillisUnsafe() >= 0])); // the clock the handler is given
+Clock.Clock; // the clock a handler is given, yielded as a service
+Console.Console; // a console whose every function writes out, and gives nothing
 Effect.clockWith((clock) => Effect.map(clock.currentTimeNanos, (now) => now >= 0n));
 ```
 

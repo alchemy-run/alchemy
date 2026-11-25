@@ -2295,30 +2295,30 @@ export const make = (
       name,
       (timeline) =>
         Effect.flatMap(Effect.serviceOption(Scope.Scope), (scope) =>
-          Timeline.back(
-            timeline,
-            Option.isSome(scope)
-              ? Effect.provideService(made(), Scope.Scope, scope.value)
-              : (made() as Effect.Effect<unknown>),
-            (given_) =>
-              native(`${name} run`, (args, here) => {
-                const run = given_ as (...all: ReadonlyArray<unknown>) => Fiber.Fiber<V, Held>;
-                const [key, effect, options] = keyed ? args : [undefined, ...args];
-                if (effect?._tag !== "Effect") return wrongArguments(here, name);
-                const start = (read: unknown): V =>
-                  wrap(
-                    "Fiber",
-                    run(
-                      ...(keyed ? [read] : []),
-                      Timeline.real(timeline, effect.run),
-                      optionsOf(options),
-                    ),
-                  );
-                return keyed
-                  ? Effect.map(keyOf(name, key, here), start)
-                  : Effect.sync(() => start(undefined));
-              }),
-          ),
+          Option.isNone(scope)
+            ? Effect.fail(Value.notTranslated(at, `calls ${name} outside Effect.scoped`))
+            : Timeline.back(
+                timeline,
+                Effect.provideService(made(), Scope.Scope, scope.value),
+                (given_) =>
+                  native(`${name} run`, (args, here) => {
+                    const run = given_ as (...all: ReadonlyArray<unknown>) => Fiber.Fiber<V, Held>;
+                    const [key, effect, options] = keyed ? args : [undefined, ...args];
+                    if (effect?._tag !== "Effect") return wrongArguments(here, name);
+                    const start = (read: unknown): V =>
+                      wrap(
+                        "Fiber",
+                        run(
+                          ...(keyed ? [read] : []),
+                          Timeline.real(timeline, effect.run),
+                          optionsOf(options),
+                        ),
+                      );
+                    return keyed
+                      ? Effect.map(keyOf(name, key, here), start)
+                      : Effect.sync(() => start(undefined));
+                  }),
+              ),
         ),
       at,
     );
