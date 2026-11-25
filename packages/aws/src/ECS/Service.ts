@@ -682,6 +682,15 @@ export interface ServicePropsBase extends PlatformProps {
   deploymentStabilizationTimeout?: Duration.Input;
 
   /**
+   * Wait for the ECS deployment to reach `COMPLETED` (and target health to
+   * converge) before create and update return. Set `false` to return as soon
+   * as ECS accepts the create or update; the rollout continues on its own.
+   * Deletes still wait for the service to drain.
+   * @default true
+   */
+  waitForStableDeployment?: boolean;
+
+  /**
    * Deployment controller (`ECS`, `CODE_DEPLOY`, `EXTERNAL`). The controller
    * type is immutable — changing it replaces the service.
    */
@@ -3530,18 +3539,21 @@ export const ServiceProvider = () =>
             if (!service?.serviceArn) {
               return yield* Effect.die(new Error("createService returned no service"));
             }
-            yield* session.note(`Waiting for ECS service ${serviceName} to stabilize`);
-            const stable = yield* waitForServiceConvergence({
-              clusterArn,
-              serviceName,
-              expectedTaskDefinitionArn: task.taskDefinitionArn,
-              expectedDeploymentId: service.deployments?.find(
-                (deployment) => deployment.status === "PRIMARY",
-              )?.id,
-              mode: "stable",
-              timeout: news.deploymentStabilizationTimeout,
-            });
-            const stableService = stable.service!;
+            let stableService = service;
+            if (news.waitForStableDeployment !== false) {
+              yield* session.note(`Waiting for ECS service ${serviceName} to stabilize`);
+              const stable = yield* waitForServiceConvergence({
+                clusterArn,
+                serviceName,
+                expectedTaskDefinitionArn: task.taskDefinitionArn,
+                expectedDeploymentId: service.deployments?.find(
+                  (deployment) => deployment.status === "PRIMARY",
+                )?.id,
+                mode: "stable",
+                timeout: news.deploymentStabilizationTimeout,
+              });
+              stableService = stable.service!;
+            }
             // Legacy inline ingress recorded in prior attrs (service itself
             // was missing — e.g. recreated) is stale now: reap it.
             yield* reapLegacyIngress({ output, session });
@@ -3607,18 +3619,21 @@ export const ServiceProvider = () =>
                 schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
               }),
             );
-          yield* session.note(`Waiting for ECS service ${serviceName} to stabilize`);
-          const stable = yield* waitForServiceConvergence({
-            clusterArn,
-            serviceName,
-            expectedTaskDefinitionArn: task.taskDefinitionArn,
-            expectedDeploymentId: updated.service?.deployments?.find(
-              (deployment) => deployment.status === "PRIMARY",
-            )?.id,
-            mode: "stable",
-            timeout: news.deploymentStabilizationTimeout,
-          });
-          const stableService = stable.service!;
+          let stableService = updated.service ?? observed;
+          if (news.waitForStableDeployment !== false) {
+            yield* session.note(`Waiting for ECS service ${serviceName} to stabilize`);
+            const stable = yield* waitForServiceConvergence({
+              clusterArn,
+              serviceName,
+              expectedTaskDefinitionArn: task.taskDefinitionArn,
+              expectedDeploymentId: updated.service?.deployments?.find(
+                (deployment) => deployment.status === "PRIMARY",
+              )?.id,
+              mode: "stable",
+              timeout: news.deploymentStabilizationTimeout,
+            });
+            stableService = stable.service!;
+          }
 
           // Sync tags — diff observed service tags against desired.
           const observedTags = Object.fromEntries(
