@@ -695,15 +695,27 @@ export const make = <
 
 /**
  * Trace one projection batch. A batch merges events from many commits, so it
- * starts its own trace and links to each event's.
+ * starts its own trace and links to each event's. Each link names its event's
+ * flow, and `domain.correlation_ids` lists every flow in the batch.
  */
 const observeProjection =
   (name: string, key: string, batch: ReadonlyArray<Accepted>) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) => {
     const tags = { "domain.kind": "projection", "domain.consumer": name };
+    // Each link says which flow and event it stands for, so a batch that merges flows stays findable.
     const links = batch.flatMap(({ delivery }) =>
       delivery.envelope.trace
-        ? [{ span: Telemetry.spanOf(delivery.envelope.trace), attributes: {} }]
+        ? [
+            {
+              span: Telemetry.spanOf(delivery.envelope.trace),
+              attributes: {
+                "domain.correlation_id":
+                  delivery.envelope.correlationId ?? delivery.envelope.commandId,
+                "domain.stream": delivery.envelope.stream,
+                "domain.seq": delivery.envelope.seq,
+              },
+            },
+          ]
         : [],
     );
     const correlations = [
@@ -734,6 +746,8 @@ const observeProjection =
           "domain.key": key,
           "domain.batch": batch.length,
           ...(correlations.length === 1 ? { "domain.correlation_id": correlations[0] } : {}),
+          // Every flow in the batch, also when it merges several.
+          "domain.correlation_ids": correlations,
         },
       }),
     );

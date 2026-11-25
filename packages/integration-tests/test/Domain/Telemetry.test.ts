@@ -1,4 +1,5 @@
 import * as Domain from "@alchemy.run/domain";
+import * as InMemory from "@alchemy.run/domain/InMemory";
 import { Story } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
@@ -160,6 +161,24 @@ class Reviewed extends Domain.Model("TelemetryReviews", {
   policies: [ReviewDebits],
   projections: [Movements],
   sagas: [Review],
+}) {}
+
+/** Every wallet's debits under one key, so debits from different flows share a batch. */
+class AllMovements extends Domain.Projection("AllMovements", {
+  from: [Wallet],
+  key: Schema.String,
+  keyOf: { Debited: () => "all" },
+  on: [Debited],
+}) {}
+const AllMovementsLive = AllMovements.toLayer(
+  Effect.succeed(() => Effect.void),
+  {
+    batch: { size: 10 },
+  },
+);
+class AllWallets extends Domain.Model("TelemetryAllWallets", {
+  aggregates: [Wallet],
+  projections: [AllMovements],
 }) {}
 
 const reviewStory = Story.make(Reviewed, {
@@ -349,6 +368,49 @@ describe("Domain telemetry", { tags: ["unit", "local"] }, () => {
       expect(batch.traceId).not.toBe(debit.traceId);
       expect(batch.links.map((l) => l.span.spanId)).toEqual([debit.spanId]);
       expect(batch.attributes.get("domain.batch")).toBe(1);
+      // One flow: the scalar, the list of one, and the link naming its event.
+      const correlation = debit.attributes.get("domain.correlation_id");
+      expect(batch.attributes.get("domain.correlation_id")).toBe(correlation);
+      expect(batch.attributes.get("domain.correlation_ids")).toEqual([correlation]);
+      expect(batch.links.map((l) => l.attributes)).toEqual([
+        { "domain.correlation_id": correlation, "domain.stream": "Wallet/alice", "domain.seq": 2 },
+      ]);
+    }),
+  );
+
+  it.live("a projection batch that merges flows names every one, on the span and its links", () =>
+    Effect.gen(function* () {
+      const { tracer, one, named } = recording();
+      const hosted = InMemory.make({ manual: true });
+      yield* Effect.gen(function* () {
+        const wallets = yield* Wallet;
+        yield* wallets.send(new Open({ id: "alice", balance: 100 }));
+        yield* wallets.send(new Open({ id: "bob", balance: 100 }));
+        // Each send is its own flow: its correlation id is its command id.
+        yield* wallets.send(new Debit({ id: "alice", amount: 1, note: Redacted.make("a") }), {
+          commandId: "flow-a",
+        });
+        yield* wallets.send(new Debit({ id: "bob", amount: 2, note: Redacted.make("b") }), {
+          commandId: "flow-b",
+        });
+        // Nothing was delivered yet: both debits reach the key in one batch.
+        yield* hosted.control.drain;
+      }).pipe(
+        Effect.provide(AllWallets.layer(AllMovementsLive).pipe(Layer.provide(hosted.layer))),
+        Effect.withTracer(tracer),
+      );
+
+      const batch = one("Domain.projection AllMovements");
+      expect(batch.attributes.get("domain.batch")).toBe(2);
+      // No single flow to name.
+      expect(batch.attributes.has("domain.correlation_id")).toBe(false);
+      expect(batch.attributes.get("domain.correlation_ids")).toEqual(["flow-a", "flow-b"]);
+      const debits = named("Domain.decide Wallet.Debit");
+      expect(batch.links.map((l) => l.span.spanId)).toEqual(debits.map((d) => d.spanId));
+      expect(batch.links.map((l) => l.attributes)).toEqual([
+        { "domain.correlation_id": "flow-a", "domain.stream": "Wallet/alice", "domain.seq": 2 },
+        { "domain.correlation_id": "flow-b", "domain.stream": "Wallet/bob", "domain.seq": 2 },
+      ]);
     }),
   );
 

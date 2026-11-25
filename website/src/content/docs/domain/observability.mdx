@@ -78,6 +78,8 @@ Some work starts later, or has many causes. A saga can run for days, a projectio
 
 Every span carries `domain.correlation_id`, the id of the first command in the flow. One query on it finds a whole business flow, across every trace it took.
 
+A projection batch can hold events from several flows. Its span lists them all in `domain.correlation_ids`, and keeps `domain.correlation_id` only when there is one. Each of its links carries the `domain.correlation_id`, `domain.stream` and `domain.seq` of the event it stands for.
+
 ## Record what matters to you
 
 Nothing from a command, an event or a query's input is recorded unless a handler asks for it. Every handler runs inside the engine's span for it, already named (`Domain.decide Account.WithdrawMoney`, `Domain.query AccountLedger`, `Domain.projection Ledger`), so plain Effect annotates that span:
