@@ -25,7 +25,7 @@ type Flow = V & { readonly _tag: "Stream" };
 
 /** What `Fibers` and `Flows` give to hand the code's values to the library and read its own back. */
 export interface Tools extends Omit<Flows.Tools, "heldOf"> {
-  readonly wrap: (kind: "Channel" | "Queue" | "PubSub", held: unknown) => V;
+  readonly wrap: (kind: "Channel" | "Queue" | "PubSub" | "Scope", held: unknown) => V;
   readonly heldOf: <A>(
     kind: "Channel" | "Queue" | "PubSub" | "Subscription",
     v: V | undefined,
@@ -485,6 +485,20 @@ export const make = (kit: Kit, tools: Tools) => {
       ),
     ),
     "effect/Channel:suspend": from("Channel.suspend", (to, [f]) => to.inner(f)()),
+    // A channel written as what it makes of the pull of its input.
+    "effect/Channel:fromTransform": from("Channel.fromTransform", (to, [transform]) =>
+      ours(
+        Channel.fromTransform((upstream, scope: Scope.Scope) =>
+          Effect.map(
+            to.fn(transform)(
+              pull(to.timeline, to.site, upstream as Effect.Effect<V, unknown>),
+              tools.wrap("Scope", scope),
+            ),
+            (made_) => pulled(to.timeline, made_, to.site, to.name),
+          ),
+        ),
+      ),
+    ),
     "effect/Channel:unwrap": from("Channel.unwrap", (to, [effect]) =>
       Channel.unwrap(Effect.map(to.eff(effect), to.chan)),
     ),
@@ -922,6 +936,38 @@ export const make = (kit: Kit, tools: Tools) => {
         ),
       ),
     ),
+    // ---- What the code makes of a pull: it is given one, and gives one back.
+    // The channel comes first: the library has no form that is given it later.
+    "effect/Channel:transformPull": ([given_, f]: ReadonlyArray<V>, site: Site) =>
+      isChannel(given_)
+        ? Effect.succeed(
+            made("Channel.transformPull", site, (to) => {
+              const self = to.chan(given_);
+              return ours(
+                Channel.transformPull(self, (upstream, scope) =>
+                  Effect.map(
+                    to.fn(f)(
+                      pull(to.timeline, to.site, upstream as Effect.Effect<V, unknown>),
+                      tools.wrap("Scope", scope),
+                    ),
+                    (made_) => pulled(to.timeline, made_, to.site, to.name),
+                  ),
+                ),
+              );
+            }),
+          )
+        : wrongArguments(site, "Channel.transformPull"),
+    "effect/Channel:embedInput": over(
+      "Channel.embedInput",
+      (to, self, [input]) =>
+        Channel.embedInput(self as Channel.Channel<V, unknown, V>, (upstream) =>
+          Effect.asVoid(
+            tools.sure(
+              to.fn(input)(pull(to.timeline, to.site, upstream as Effect.Effect<V, unknown>)),
+            ),
+          ),
+        ) as unknown as Real,
+    ),
     "effect/Channel:toPull": opens("Channel.toPull", (to, self) =>
       Effect.map(Channel.toPull(self), (made_) => pull(to.timeline, to.site, made_)),
     ),
@@ -1278,6 +1324,68 @@ export const make = (kit: Kit, tools: Tools) => {
           ? first!
           : native("Channel.withSpan", ([self]) => Effect.succeed(self ?? Value.undef)),
       ),
+  });
+
+  // ---- A stream of what the code makes of the pull of another.
+  Object.assign(models, {
+    "effect/Stream:transformPull": (args: ReadonlyArray<V>, site: Site) => {
+      const build = (self: V, f: V, at: Site): V =>
+        streaming("Stream.transformPull", at, (to) =>
+          Stream.transformPull(tools.real(to.timeline, self as never), (upstream, scope) =>
+            Effect.map(
+              to.fn(f)(
+                pull(
+                  to.timeline,
+                  at,
+                  Effect.map(upstream, (chunk): V => arr(chunk)),
+                ),
+                tools.wrap("Scope", scope),
+              ),
+              (made_) =>
+                Effect.flatMap(pulled(to.timeline, made_, at, to.name) as never, (chunk: V) =>
+                  Effect.flatMap(to.read(tools.items(to.name, chunk, at)), (items) =>
+                    items.length > 0
+                      ? Effect.succeed(items as readonly [V, ...Array<V>])
+                      : to.read(wrongArguments(at, to.name)),
+                  ),
+                ),
+            ),
+          ),
+        );
+      // The stream comes first: the library has no form that is given it later.
+      const [a, b] = args;
+      return isFlow(a) && b
+        ? Effect.succeed(build(a, b, site))
+        : wrongArguments(site, "Stream.transformPull");
+    },
+    // The channel as a function of a pull of its input: it gives an effect of the pull it makes.
+    "effect/Channel:toTransform": ([self]: ReadonlyArray<V>, site: Site) =>
+      isChannel(self)
+        ? Effect.succeed(
+            native("Channel.toTransform", ([upstream, scope], at) => {
+              const held = tools.heldOf<Scope.Scope>("Scope" as never, scope);
+              return held && upstream
+                ? Effect.succeed<V>({
+                    _tag: "Effect",
+                    run: Effect.flatMap(
+                      Timeline.current(at, "runs Channel.toTransform"),
+                      (timeline) => {
+                        const to = given(timeline, "Channel.toTransform", at);
+                        return Timeline.back(
+                          timeline,
+                          Channel.toTransform(to.chan(self))(
+                            pulled(timeline, upstream, at, to.name) as never,
+                            held,
+                          ),
+                          (made_) => pull(timeline, at, made_ as Effect.Effect<V, unknown>),
+                        );
+                      },
+                    ),
+                  })
+                : wrongArguments(at, "Channel.toTransform");
+            }),
+          )
+        : wrongArguments(site, "Channel.toTransform"),
   });
 
   // ---- Streams that pull two others as a function of the code says, and streams of `Take`s.

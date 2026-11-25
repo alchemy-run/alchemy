@@ -3101,6 +3101,11 @@ const rest: ReadonlyArray<Group> = [
       `Channel.fromEffect(positive(a)).pipe(Channel.catchIf((error) => error.n < -2, () => Channel.succeed(0)), Channel.runCollect, Effect.result)`,
       `Channel.fail(new Odd({ n: a })).pipe(Channel.catchCause((cause) => Channel.succeed(Cause.hasFails(cause))), Channel.runCollect)`,
       `Channel.fromIterable([a, b, 3]).pipe(Channel.filter((n) => n > 0), Channel.runCollect)`,
+      `Stream.runCollect(Stream.transformPull(Stream.rechunk(Stream.make(a, b, 3), 1), (pull) => Effect.succeed(Effect.map(pull, (chunk) => chunk.map((n) => n * 2)))))`,
+      `Channel.runCollect(Channel.transformPull(Channel.fromIterable([a, b]), (pull) => Effect.succeed(Effect.map(pull, (n) => n + 1))))`,
+      `Channel.fromIterable([a, b]).pipe(Channel.pipeTo(Channel.fromTransform((upstream) => Effect.succeed(Effect.map(upstream, (n) => n * 10)))), Channel.runCollect)`,
+      `Effect.scoped(Effect.gen(function* () { const scope = yield* Effect.scope; const next = yield* Channel.toTransform(Channel.fromIterable([a, b]))(Cause.done(), scope); return [yield* next, yield* next, yield* Effect.flip(next).pipe(Effect.map(Cause.isDone))]; }))`,
+      `Channel.fromIterable([a, b]).pipe(Channel.embedInput(() => Effect.void), Channel.runCollect)`,
       `Stream.runCollect(Stream.combine(Stream.make(a, b), Stream.make(10, 20, 30), () => true, (left, pullLeft, pullRight) => Effect.map(left ? pullLeft : pullRight, (n) => [n, !left])))`,
       `Stream.make(a, b, 3).pipe(Stream.rechunk(1), Stream.combineArray(Stream.make(10, 20), () => 0, (turn, pullLeft, pullRight) => Effect.map(turn % 2 === 0 ? pullLeft : pullRight, (items) => [items, turn + 1])), Stream.runCollect)`,
       `Stream.runCollect(Stream.zipWithArray(Stream.make(a, b, 3), Stream.make(10, 20), (l, r) => [[l[0] + r[0]], l.slice(1), r.slice(1)]))`,
@@ -3212,6 +3217,10 @@ const rest: ReadonlyArray<Group> = [
       `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.unbounded(); const got = yield* Effect.forkChild(Channel.fromPubSub(hub).pipe(Channel.pipeTo(Channel.identity()), Channel.runHead)); yield* Effect.sleep(1); yield* PubSub.publish(hub, a); return yield* Fiber.join(got); }))`,
     ],
     unread: [
+      [
+        `Channel.fromIterable([a]).pipe(Channel.transformPull((pull) => Effect.succeed(pull)), Channel.runCollect)`,
+        /Channel.transformPull is called in a way the prover has no model for/,
+      ],
       // The effect is run again for each pull, and it never gives an end.
       [
         `Channel.runCollect(Channel.fromEffectTake(Effect.succeed([a, b])))`,
