@@ -51,7 +51,7 @@ test.provider.skipIf(!!process.env.FAST)(
         }),
       );
 
-      expect(out.runtime).toEqual("nodejs22");
+      expect(out.runtime).toEqual("nodejs26");
       expect(out.entryPoint).toEqual("handler");
       expect(out.managed).toEqual(true);
 
@@ -71,7 +71,7 @@ test.provider.skipIf(!!process.env.FAST)(
       );
       const body = (yield* response.json) as { read: string; node: string };
       expect(body.read).toEqual("from-function");
-      expect(body.node).toMatch(/^22\./);
+      expect(body.node).toMatch(/^26\./);
 
       // `env` strings that parse as JSON deploy and read back unchanged
       // (#2269, #2847, #3497).
@@ -118,6 +118,12 @@ test.provider.skipIf(!!process.env.FAST)(
         .pipe(
           Effect.as("found" as const),
           Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+          // IAM reads a just-deleted account back for a few seconds.
+          Effect.repeat({
+            schedule: Schedule.spaced("3 seconds"),
+            until: (status) => status === "gone",
+            times: 10,
+          }),
         );
       expect(saGone).toEqual("gone");
     }).pipe(logLevel),
