@@ -337,6 +337,7 @@ const base: ReadonlyArray<Group> = [
     both: [
       `identity(a)`,
       `constant(a)()`,
+      `SK(a, b)`,
       `constTrue()`,
       `constFalse()`,
       `constNull()`,
@@ -448,6 +449,25 @@ const base: ReadonlyArray<Group> = [
       `Optic.id().key("n").get({ n: a, m: b })`,
       `Optic.get({ n: { deep: a } }, Optic.id().key("n").key("deep"))`,
       `pipe({ n: a }, Optic.get(Optic.id().key("n")))`,
+      `Optic.id().key("n").optionalKey("m").replace(undefined, { n: { m: a, k: b } })`,
+      `[Optic.id().at("n").replace(b, { n: a }), Optic.id().at("m").replace(b, { n: a })]`,
+      `Result.isSuccess(Optic.getResult({ n: a }, Optic.id().at("m")))`,
+      `Optic.getResult({ n: a }, Optic.id().at("n"))`,
+      `Optic.replaceResult({ n: a }, Optic.id().at("n"), b)`,
+      `Result.isFailure(Optic.replaceResult({ n: a }, Optic.id().at("m"), b))`,
+      `[Optic.some().replace(b, Option.none()), Optic.some().modify((n) => n + 1)(Option.none()), Optic.some().modify((n) => n + 1)(Option.some(a))]`,
+      `[Optic.set(a, Optic.some()), Optic.set(b, Optic.success()), Optic.set(a, Optic.failure()), Optic.set(undefined, Optic.none())]`,
+      `Optic.id().key("n").compose(Optic.some()).modify((n) => n * 2)({ n: Option.some(a) })`,
+      `Optic.id().key("n").compose(Optic.some()).replace(b, { n: Option.none() })`,
+      `Optic.makeLens((s) => s.n, (n, s) => ({ ...s, n })).modify((n) => n + b)({ n: a, m: 1 })`,
+      `Optic.makeIso((n) => n * 2, (m) => m / 2).replace(a + a, 0)`,
+      `Optic.makePrism((n) => (n > 1 ? Result.succeed(n) : Result.fail("small")), (n) => n).modify((n) => n + 10)(a)`,
+      `Optic.makeOptional((s) => (s.n > b ? Result.succeed(s.n) : Result.fail("no")), (n, s) => Result.succeed({ ...s, n })).replace(0, { n: a })`,
+      `Optic.entries().modify((all) => all.map(([key, value]) => [key, value + 1]))({ x: a, y: b })`,
+      `[Optic.id().key("n").notUndefined().modify((n) => n + 1)({ n: a }), Optic.id().key("n").notUndefined().modify((n) => n + 1)({ n: undefined })]`,
+      `Optic.id().refine((n) => n > b).modify((n) => n - 1)(a)`,
+      `Optic.id().tag("A").replace({ _tag: "B", n: b }, { _tag: "C", n: a })`,
+      `Optic.success().compose(Optic.id().key("n")).getResult(Result.succeed({ n: a }))`,
     ],
   },
   {
@@ -2425,6 +2445,7 @@ const rest: ReadonlyArray<Group> = [
     // `absurd` is what code calls where it cannot be: reaching it is reported.
     unread: [
       [`absurd(a)`, /reaches absurd/],
+      [`hole()`, /reaches hole/],
       // Bytes are not a value the prover holds.
       [
         `Bytes.Equivalence(new Uint8Array([a]), new Uint8Array([b]))`,
@@ -2966,8 +2987,19 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const ask = Request.of(); const answers = RequestResolver.make((entries) => Effect.forEach(entries, (entry) => (entry.request.n > 1 ? Request.complete(entry, Exit.succeed(entry.request.n + b)) : Request.failCause(entry, Cause.fail(new Odd({ n: entry.request.n + a })))), { discard: true })); const got = yield* Effect.all([Effect.result(Effect.request(ask({ n: 2 }), answers)), Effect.result(Effect.request(ask({ n: 1 }), answers))], { concurrency: 2 }); return [got, Request.isRequest(ask({ n: 1 })), Request.isRequest(a)]; })`,
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const ask = Request.tagged("Double"); const doubled = RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n * 2 + a)).pipe(RequestResolver.setDelay("1 second")); const made = yield* Effect.all([Effect.request(ask({ n: 1 }), doubled), Effect.andThen(Effect.sleep(5), Effect.request(ask({ n: 2 }), doubled))], { concurrency: 2 }); return [made, yield* Ref.get(seen)]; })`,
       `Effect.gen(function* () { const ask = Request.tagged("Checked"); const checked = RequestResolver.make((entries) => Effect.forEach(entries, (entry) => Request.completeEffect(entry, even(entry.request.n + a)), { discard: true })); return yield* Effect.all([Effect.result(Effect.request(ask({ n: 0 }), checked)), Effect.result(Effect.request(ask({ n: 1 }), checked))], { concurrency: 2 }); })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const ask = Request.tagged("Double"); const doubled = RequestResolver.make((entries) => Effect.forEach(entries, (entry) => Request.succeed(entry, entry.request.n * 2 + a), { discard: true })).pipe(RequestResolver.around((entries) => Effect.as(log(seen, ["before", entries.length]), b), (entries, given) => log(seen, ["after", given])), RequestResolver.withSpan("doubled")); const made = yield* Effect.all([Effect.request(ask({ n: 1 }), doubled), Effect.request(ask({ n: 2 }), doubled)], { concurrency: 2 }); return [made, yield* Ref.get(seen), RequestResolver.isRequestResolver(doubled), RequestResolver.isRequestResolver(a)]; })`,
+      `Effect.gen(function* () { const batches = yield* Ref.make([]); const ask = Request.tagged("Double"); const doubled = RequestResolver.make((entries) => Effect.andThen(log(batches, entries.map((entry) => entry.request.n)), Effect.forEach(entries, (entry) => Request.succeed(entry, entry.request.n * 2 + a), { discard: true }))).pipe(RequestResolver.grouped((entry) => entry.request.n % 2)); const made = yield* Effect.all([1, 2, 3, 4].map((n) => Effect.request(ask({ n }), doubled)), { concurrency: 4 }); return [made, (yield* Ref.get(batches)).length]; })`,
+      `Effect.gen(function* () { const batches = yield* Ref.make([]); const ask = Request.tagged("Double"); const doubled = RequestResolver.makeGrouped({ key: (entry) => (entry.request.n > 2 ? "big" : "small"), resolver: (entries, key) => Effect.andThen(log(batches, key), Effect.forEach(entries, (entry) => Request.succeed(entry, entry.request.n + b), { discard: true })) }); const made = yield* Effect.all([1, 2, 3].map((n) => Effect.request(ask({ n }), doubled)), { concurrency: 3 }); return [made, (yield* Ref.get(batches)).length]; })`,
+      `Effect.gen(function* () { const ask = Request.tagged("Double"); const slow = RequestResolver.fromEffect((entry) => Effect.as(Effect.sleep(5), entry.request.n + a)); const quick = RequestResolver.fromEffect((entry) => Effect.as(Effect.sleep(1), entry.request.n + b)); return yield* Effect.request(ask({ n: 1 }), RequestResolver.race(slow, quick)); })`,
+      `Effect.gen(function* () { const ask = Request.tagged("Double"); const doubled = RequestResolver.fromFunctionBatched((entries) => entries.map((entry) => entry.request.n * 2 + a)); return yield* Effect.all([Effect.request(ask({ n: 1 }), doubled), Effect.request(ask({ n: 3 }), doubled)], { concurrency: 2 }); })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const ask = Request.tagged("Double"); const doubled = RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n * 2 + a)).pipe(RequestResolver.setDelayEffect(Effect.sleep("1 second"))); return [yield* Effect.request(ask({ n: 1 }), doubled), yield* Ref.get(seen)]; })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const ask = Request.tagged("Double"); const cached = yield* RequestResolver.withCache(RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n + a)), { capacity: 4 }); const first = yield* Effect.request(ask({ n: 1 }), cached); const again = yield* Effect.request(ask({ n: 1 }), cached); return [first, again, (yield* Ref.get(seen)).length]; })`,
     ],
     unread: [
+      [
+        `Effect.gen(function* () { const ask = Request.tagged("Double"); return yield* Effect.request(ask({ n: 1 }), RequestResolver.never); })`,
+        /waits for a request that its resolver never answers/,
+      ],
       [
         `Effect.gen(function* () { const ask = Request.tagged("Held"); const any = RequestResolver.fromEffect(() => Effect.succeed(1)); return yield* Effect.request(ask({ n: a }), any); })`,
         /a Held request of values the prover cannot see/,

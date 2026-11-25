@@ -99,9 +99,17 @@ export interface Brand {
   readonly cls: unknown;
 }
 
-export type OpticStep =
-  | { readonly _tag: "Tag"; readonly tag: string }
-  | { readonly _tag: "Key"; readonly key: string };
+/** The kinds of the library's optics: what each finds, and how it puts a value back. */
+export type OpticKind = "Iso" | "Lens" | "Prism" | "Optional";
+/** What a step of an optic finds: nothing, where a Prism or an Optional misses. */
+export type OpticGot = { readonly ok: true; readonly value: V } | { readonly ok: false };
+/** A step of an optic: an Iso, a Lens, a Prism or an Optional. */
+export interface OpticStep {
+  readonly kind: OpticKind;
+  readonly get: (source: V, site: Site) => Eval<OpticGot>;
+  /** The value with the focus put back; an Iso and a Prism are given no source. */
+  readonly set: (value: V, source: V, site: Site) => Eval<OpticGot>;
+}
 
 /**
  * A value while the prover runs the code. Concrete values are computed as

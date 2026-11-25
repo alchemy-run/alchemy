@@ -43,6 +43,7 @@ import * as Flows from "./Models/Flows.ts";
 import * as Folds from "./Models/Folds.ts";
 import * as Hashes from "./Models/Hashes.ts";
 import * as Numbers from "./Models/Numbers.ts";
+import * as Optics from "./Models/Optics.ts";
 import * as Rationals from "./Models/Rationals.ts";
 import * as Results from "./Models/Results.ts";
 import * as Schemas from "./Models/Schemas.ts";
@@ -52,7 +53,7 @@ import * as Strings from "./Models/Strings.ts";
 import type { Term } from "./Smt.ts";
 import * as Smt from "./Smt.ts";
 import * as Symbolic from "./Symbolic.ts";
-import type { Eval, OpticStep, Site, V } from "./Value.ts";
+import type { Eval, Site, V } from "./Value.ts";
 
 export type { Host, Model } from "./Kit.ts";
 import * as Value from "./Value.ts";
@@ -79,107 +80,6 @@ export const make = (host: Host) => {
   const kit = Kit.make(host);
   const { onArray, after: then } = kit;
   const duration = (millis: Whole): V => Brands.duration(valueOfWhole(millis));
-
-  /** Change the part of `source` an optic focuses on; a focus that misses leaves it as it is. */
-  const through = (
-    path: ReadonlyArray<OpticStep>,
-    source: V,
-    change: (focus: V) => Eval<V>,
-    site: Site,
-  ): Eval<V> => {
-    const [step, ...rest] = path;
-    if (step === undefined) return change(source);
-    if (source._tag !== "Obj")
-      return Effect.fail(Value.notTranslated(site, `an optic focuses into a ${source._tag}`));
-    if (step._tag === "Tag") {
-      const tag = source.fields._tag;
-      if (tag?._tag !== "Str")
-        return Effect.fail(
-          Value.notTranslated(site, "an optic matches a tag the prover cannot see"),
-        );
-      return tag.value === step.tag ? through(rest, source, change, site) : Effect.succeed(source);
-    }
-    return Effect.flatMap(host.member(source, step.key, site), (focus) =>
-      through(rest, focus, change, site),
-    ).pipe(
-      Effect.map((changed) => Value.obj({ ...source.fields, [step.key]: changed }, source.brand)),
-    );
-  };
-
-  /** What an optic focuses on, where every step is a key. */
-  const focused = (path: ReadonlyArray<OpticStep>, source: V, site: Site): Eval<V> => {
-    const [step, ...rest] = path;
-    if (step === undefined) return Effect.succeed(source);
-    return step._tag === "Key"
-      ? Effect.flatMap(host.member(source, step.key, site), (focus) => focused(rest, focus, site))
-      : Effect.fail(
-          Value.notTranslated(site, "reads Optic.get of an optic that may not find its focus"),
-        );
-  };
-  /** `Optic.get(source, optic)`, or `Optic.get(optic)` then the source. */
-  const got: Model = (args, site) => {
-    const [a, b] = args;
-    if (args.length === 2 && a && b?._tag === "Optic") return focused(b.path, a, site);
-    if (args.length === 1 && a?._tag === "Optic")
-      return Effect.succeed(
-        native("Optic.get", ([source], at) =>
-          source ? focused(a.path, source, at) : wrongArguments(at, "Optic.get"),
-        ),
-      );
-    return wrongArguments(site, "Optic.get");
-  };
-
-  /** `modify` and `replace`, data-first (`source, optic, x`) or data-last (`optic, x` then `source`). */
-  const update =
-    (name: string, change: (x: V, site: Site) => (focus: V) => Eval<V>): Model =>
-    (args, site) => {
-      const [a, b, c] = args;
-      if (args.length === 3 && a && b?._tag === "Optic" && c)
-        return through(b.path, a, change(c, site), site);
-      if (args.length === 2 && a?._tag === "Optic" && b)
-        return Effect.succeed(
-          native(name, ([source], at) =>
-            source ? through(a.path, source, change(b, at), at) : wrongArguments(at, name),
-          ),
-        );
-      return wrongArguments(site, name);
-    };
-
-  const modify = update("Optic.modify", (f, site) => (focus) => host.call(f, [focus], site));
-  const replace = update("Optic.replace", (value) => () => Effect.succeed(value));
-
-  /** The methods of an optic value. */
-  const opticMember = (optic: V & { readonly _tag: "Optic" }, key: string): V | undefined => {
-    const extend = (make: (name: string) => OpticStep) =>
-      native(`optic.${key}`, ([name], site) => {
-        const value = str(name);
-        return value === undefined
-          ? wrongArguments(site, `optic.${key}`)
-          : Effect.succeed<V>({ _tag: "Optic", path: [...optic.path, make(value)] });
-      });
-    switch (key) {
-      case "tag":
-        return extend((tag) => ({ _tag: "Tag", tag }));
-      case "key":
-        return extend((key) => ({ _tag: "Key", key }));
-      case "get":
-        return native("optic.get", ([source], site) =>
-          source ? focused(optic.path, source, site) : wrongArguments(site, "optic.get"),
-        );
-      case "modify":
-        return native("optic.modify", ([f], site) =>
-          f ? modify([optic, f], site) : wrongArguments(site, "optic.modify"),
-        );
-      case "replace":
-        return native("optic.replace", ([value, source], site) =>
-          value && source
-            ? through(optic.path, source, () => Effect.succeed(value), site)
-            : wrongArguments(site, "optic.replace"),
-        );
-      default:
-        return undefined;
-    }
-  };
 
   /**
    * `Effect.fn(body)`, `Effect.fn("name")(body)` and `Effect.fn(options)(body)`.
@@ -1481,10 +1381,6 @@ export const make = (host: Host) => {
     "effect/Effect:logInfo": ignored,
     "effect/Effect:logWarning": ignored,
     "effect/Effect:logError": ignored,
-    "effect/Optic:id": () => Effect.succeed<V>({ _tag: "Optic", path: [] }),
-    "effect/Optic:get": got,
-    "effect/Optic:modify": modify,
-    "effect/Optic:replace": replace,
     "effect/DateTime:formatIsoDate": isoDate,
     "effect/DateTime:formatIsoDateUtc": isoDate,
     "effect/DateTime:toEpochMillis": ([time], site) =>
@@ -1744,6 +1640,7 @@ export const make = (host: Host) => {
   const streams = Streams.make(kit);
   const cells = Cells.make(kit, (key, args, site) => models[key]!(args, site));
   const exits = Exits.make(kit);
+  const optics = Optics.make(kit);
   const folds = Folds.make(
     kit,
     (key, args, site) => models[key]!(args, site),
@@ -2292,6 +2189,7 @@ export const make = (host: Host) => {
     ...streams.models,
     ...cells.models,
     ...exits.models,
+    ...optics.models,
     ...rationals.models,
     ...folds.models,
     ...Schemas.make(kit).models,
@@ -2544,7 +2442,7 @@ export const make = (host: Host) => {
       library: [...Object.keys(models), ...Object.keys(values), ...Object.keys(clocks)].sort(),
       strings: [...strings.names].sort(),
     },
-    opticMember,
+    opticMember: optics.member,
     /** A member of a latch or a semaphore: `latch.open`, `semaphore.withPermits`. */
     waitMember: (value: V, key: string, site: Site): V | undefined =>
       fibers.member(value, key, site) ?? folds.member(value, key),

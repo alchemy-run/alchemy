@@ -476,6 +476,10 @@ export const make = (kit: Kit) => {
       Effect.fail(
         Value.notTranslated(site, "reaches absurd, which the code says cannot be reached"),
       ),
+    "effect/Function:hole": (_, site) =>
+      Effect.fail(Value.notTranslated(site, "reaches hole, which the code says cannot be reached")),
+    // The second of two values.
+    "effect/Function:SK": ([, second]) => Effect.succeed(second ?? Value.undef),
     // A brand is a name for a type: the value is what it was.
     "effect/Brand:nominal": () =>
       Effect.succeed(native("Brand.nominal", ([value]) => Effect.succeed(value ?? Value.undef))),

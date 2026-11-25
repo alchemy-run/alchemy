@@ -267,6 +267,7 @@ parseInt("1" + a); // of text an input decides: so are parseFloat and Number
 a.toFixed(2); // a number an input holds, rounded as text
 
 absurd(a); // what code calls where it cannot be: reaching it is reported
+hole(); // the same, where a value is wanted
 ```
 
 ## Numbers
@@ -2315,6 +2316,15 @@ const prices = RequestResolver.make((entries) =>
 RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n * 2 + a));
 RequestResolver.batchN(2);
 RequestResolver.setDelay("1 second");
+RequestResolver.setDelayEffect(Effect.sleep("1 second"));
+RequestResolver.around((entries) => Effect.as(log(seen, ["before", entries.length]), b), (entries, given) => log(seen, ["after", given]));
+RequestResolver.grouped((entry) => entry.request.n % 2); // one batch for each key the code writes
+RequestResolver.makeGrouped({ key: (entry) => (entry.request.n > 2 ? "big" : "small"), resolver: (entries, key) => Effect.andThen(log(batches, key), Effect.forEach(entries, (entry) => Request.succeed(entry, entry.request.n + b), { discard: true })) });
+RequestResolver.race(slow, quick);
+RequestResolver.fromFunctionBatched((entries) => entries.map((entry) => entry.request.n * 2 + a));
+RequestResolver.withCache(RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n + a)), { capacity: 4 });
+RequestResolver.withSpan("doubled");
+RequestResolver.isRequestResolver(a);
 Effect.request(GetPrice({ item }), prices);
 pipe(ask({ n }), Effect.request(answers));
 Request.succeed(entry, entry.request.n + b);
@@ -3349,6 +3359,7 @@ constTrue();
 constUndefined() ?? "undefined";
 constVoid() ?? "void";
 constant(a)();
+SK(a, b); // the second of two values
 dual(2, (x, y) => x - y)(a, b);
 flip((x) => (y) => x - y)(a)(b);
 flow(Number.increment, Number.multiply(2))(a);
@@ -3372,6 +3383,24 @@ pipe({ n: a, m: b }, Optic.replace(Optic.id().key("m"), a));
 pipe({ n: a, m: b }, Optic.replace(Optic.id().key("m"), a));
 Optic.id().key("n").get({ n: a, m: b });
 Optic.get({ n: { deep: a } }, Optic.id().key("n").key("deep"));
+Optic.getResult({ n: a }, Optic.id().at("n")); // a Result: the focus, or that there is none
+Optic.replaceResult({ n: a }, Optic.id().at("n"), b);
+Optic.id().key("n").optionalKey("m").replace(undefined, { n: { m: a, k: b } }); // undefined takes the key out
+Optic.id().at("m").replace(b, { n: a }); // nothing to replace: it is as it was
+Optic.some().replace(b, Option.none()); // a Prism makes the whole value, whatever it was
+Optic.set(a, Optic.some());
+Optic.set(b, Optic.success());
+Optic.set(a, Optic.failure());
+Optic.set(undefined, Optic.none());
+Optic.id().key("n").compose(Optic.some()).modify((n) => n * 2)({ n: Option.some(a) });
+Optic.makeLens((s) => s.n, (n, s) => ({ ...s, n }));
+Optic.makeIso((n) => n * 2, (m) => m / 2);
+Optic.makePrism((n) => (n > 1 ? Result.succeed(n) : Result.fail("small")), (n) => n);
+Optic.makeOptional((s) => (s.n > b ? Result.succeed(s.n) : Result.fail("no")), (n, s) => Result.succeed({ ...s, n }));
+Optic.entries().modify((all) => all.map(([key, value]) => [key, value + 1]))({ x: a, y: b });
+Optic.id().key("n").notUndefined();
+Optic.id().refine((n) => n > b);
+Optic.id().tag("A");
 ```
 
 ```typescript title="effect/Stream"
@@ -3678,6 +3707,7 @@ Random.next; // a random number drawn with no seed: so is a wait of Schedule.jit
 Random.next.pipe(Random.withSeed(command.attempts)); // a seed an input decides
 Cache.get(prices, command.item); // a key an input decides: the library finds one by its hash
 Effect.request(GetPrice({ item: command.item }), prices); // a request of values an input decides
+Effect.request(GetPrice({ item: "tea" }), RequestResolver.never); // a resolver that never answers
 
 Cron.next(cron); // next, prev and sequence use the clock when they are given no time
 Metric.value(orders); // reads a metric: what one holds is not what a handler decides by

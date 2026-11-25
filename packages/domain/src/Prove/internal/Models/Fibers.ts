@@ -1389,6 +1389,9 @@ export const make = (
 
   /** Values of the library that are read where the code names them. */
   const sited: Readonly<Record<string, (site: Site) => V>> = {
+    // A resolver that never answers: a request of it waits, and is reported.
+    "effect/RequestResolver:never": () =>
+      resolving(() => RequestResolver.never as unknown as Answering),
     "effect/Effect:scope": (site) =>
       scoped(
         "Effect.scope",
@@ -3141,6 +3144,29 @@ export const make = (
 
   const entryOf = (entry: Request.Entry<Asked>): V => wrap("Entry", entry);
 
+  /**
+   * The key of a batch, which the library compares as it is: a function of
+   * the code, called at once, that gives text, a number or a boolean.
+   */
+  const batchKey = (
+    timeline: Timeline.Timeline,
+    f: V,
+    entry: Request.Entry<Asked>,
+    site: Site,
+  ): unknown => {
+    try {
+      const made_ = host.force(host.atOnce(f, [entryOf(entry)], site));
+      if (made_._tag === "Str" || made_._tag === "Num" || made_._tag === "Bool") return made_.value;
+    } catch {
+      // Reported below, as any key the prover cannot see.
+    }
+    timeline.fatal ??= Value.notTranslated(
+      site,
+      "groups requests by a key the prover cannot work out at once",
+    );
+    return undefined;
+  };
+
   /** One resolver for each handler that uses it: it remembers the requests of that handler only. */
   const resolving = (make_: (timeline: Timeline.Timeline) => Answering): V => {
     const made_ = new WeakMap<Timeline.Timeline, Answering>();
@@ -3664,6 +3690,146 @@ export const make = (
             ),
           )
         : wrongArguments(site, "Request.TaggedClass"),
+    "effect/RequestResolver:isRequestResolver": ([value]: ReadonlyArray<V>) =>
+      Effect.succeed(bool(kindOf(value) === "Resolver")),
+    // A span says how the resolver is watched: it is the resolver it was.
+    "effect/RequestResolver:withSpan": ([self]: ReadonlyArray<V>) =>
+      Effect.succeed(
+        kindOf(self) === "Resolver"
+          ? self!
+          : native("RequestResolver.withSpan", ([given_]) => Effect.succeed(given_ ?? Value.undef)),
+      ),
+    "effect/RequestResolver:race": dual("RequestResolver.race", 2, ([self, that], site) => {
+      const [one, two] = [heldOf<Resolver>("Resolver", self), heldOf<Resolver>("Resolver", that)];
+      return one && two
+        ? Effect.succeed(
+            resolving(
+              (timeline) => RequestResolver.race(one(timeline), two(timeline)) as Answering,
+            ),
+          )
+        : wrongArguments(site, "RequestResolver.race");
+    }),
+    // An effect before each batch, and one after it given what the first gave.
+    "effect/RequestResolver:around": dual(
+      "RequestResolver.around",
+      3,
+      ([self, before, after], site) => {
+        const held = heldOf<Resolver>("Resolver", self);
+        return held && before && after
+          ? Effect.succeed(
+              resolving((timeline) =>
+                RequestResolver.around(
+                  held(timeline),
+                  (entries) => called(timeline, before, site)(arr(entries.map(entryOf))),
+                  (entries, given_) =>
+                    called(timeline, after, site)(arr(entries.map(entryOf)), given_),
+                ),
+              ),
+            )
+          : wrongArguments(site, "RequestResolver.around");
+      },
+    ),
+    "effect/RequestResolver:setDelayEffect": dual(
+      "RequestResolver.setDelayEffect",
+      2,
+      ([self, delay], site) => {
+        const held = heldOf<Resolver>("Resolver", self);
+        return held && delay?._tag === "Effect"
+          ? Effect.succeed(
+              resolving((timeline) =>
+                RequestResolver.setDelayEffect(
+                  held(timeline),
+                  Timeline.real(timeline, delay.run).pipe(Effect.asVoid, sure),
+                ),
+              ),
+            )
+          : wrongArguments(site, "RequestResolver.setDelayEffect");
+      },
+    ),
+    // Requests with the same key go in one batch: the key is one the code writes.
+    "effect/RequestResolver:grouped": dual("RequestResolver.grouped", 2, ([self, f], site) => {
+      const held = heldOf<Resolver>("Resolver", self);
+      return held && f
+        ? Effect.succeed(
+            resolving((timeline) =>
+              RequestResolver.grouped(held(timeline), (entry) =>
+                batchKey(timeline, f, entry, site),
+              ),
+            ),
+          )
+        : wrongArguments(site, "RequestResolver.grouped");
+    }),
+    "effect/RequestResolver:makeGrouped": ([given_]: ReadonlyArray<V>, site: Site) => {
+      const fields = given_?._tag === "Obj" && !given_.brand ? given_.fields : undefined;
+      const [key, resolver] = [fields?.key, fields?.resolver];
+      return key && resolver
+        ? Effect.succeed(
+            resolving((timeline) =>
+              RequestResolver.makeGrouped<Asked, unknown>({
+                key: (entry) => batchKey(timeline, key, entry, site),
+                resolver: (entries, read) =>
+                  Effect.asVoid(
+                    called(timeline, resolver, site)(arr(entries.map(entryOf)), keyed(read as Key)),
+                  ),
+              }),
+            ),
+          )
+        : wrongArguments(site, "RequestResolver.makeGrouped");
+    },
+    // What the function gives for a batch answers its requests, in order.
+    "effect/RequestResolver:fromFunctionBatched": ([f]: ReadonlyArray<V>, site: Site) =>
+      f && callable(f)
+        ? Effect.succeed(
+            resolving((timeline) =>
+              RequestResolver.make<Asked>((entries) =>
+                Effect.flatMap(
+                  Timeline.real(
+                    timeline,
+                    Effect.flatMap(host.call(f, [arr(entries.map(entryOf))], site), (made_) =>
+                      items("RequestResolver.fromFunctionBatched", made_, site),
+                    ),
+                  ),
+                  (answers) =>
+                    Effect.forEach(
+                      answers.slice(0, entries.length),
+                      (answer, index) => Request.succeed(entries[index]!, answer),
+                      { discard: true },
+                    ),
+                ),
+              ),
+            ),
+          )
+        : wrongArguments(site, "RequestResolver.fromFunctionBatched"),
+    // A resolver that remembers what it answered: made once, for the handler that runs this.
+    "effect/RequestResolver:withCache": dual(
+      "RequestResolver.withCache",
+      2,
+      ([self, given_], site) => {
+        const held = heldOf<Resolver>("Resolver", self);
+        return held
+          ? Effect.succeed(
+              timed(
+                "RequestResolver.withCache",
+                (timeline) =>
+                  Effect.flatMap(
+                    options<{ capacity: number; strategy?: "lru" | "fifo" }>(
+                      "RequestResolver.withCache",
+                      given_,
+                      site,
+                    ),
+                    (read) =>
+                      Timeline.back(
+                        timeline,
+                        RequestResolver.withCache(held(timeline), read),
+                        (cached) => resolving(() => cached),
+                      ),
+                  ),
+                site,
+              ),
+            )
+          : wrongArguments(site, "RequestResolver.withCache");
+      },
+    ),
     "effect/RequestResolver:fromFunction": ([f]: ReadonlyArray<V>, site: Site) =>
       f && callable(f)
         ? Effect.succeed(
