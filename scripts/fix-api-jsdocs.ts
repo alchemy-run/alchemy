@@ -21,6 +21,7 @@ const packages = [
   "drizzle",
   "acme",
   "axiom",
+  "mux",
   "doppler",
   "infisical",
   "1password",

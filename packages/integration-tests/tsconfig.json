@@ -106,6 +106,7 @@
     { "path": "../acme/tsconfig.json" },
     { "path": "../drizzle/tsconfig.json" },
     { "path": "../axiom/tsconfig.json" },
+    { "path": "../mux/tsconfig.json" },
     { "path": "../convex/tsconfig.json" },
     { "path": "../rivet/tsconfig.json" },
     {

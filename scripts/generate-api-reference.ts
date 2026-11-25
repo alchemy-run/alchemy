@@ -64,6 +64,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/axiom/src",
   },
   {
+    srcRoot: "packages/mux/src",
+    providerPrefix: "Mux",
+    sourceDisplayPrefix: "packages/mux/src",
+  },
+  {
     srcRoot: "packages/e2b/src",
     providerPrefix: "E2B",
     sourceDisplayPrefix: "packages/e2b/src",

@@ -97,6 +97,7 @@ build:*
 !packages/github/src/globals.d.ts
 !packages/stripe/src/globals.d.ts
 !packages/hetzner/src/globals.d.ts
+!packages/mux/src/globals.d.ts
 !packages/convex/src/globals.d.ts
 !packages/digitalocean/src/globals.d.ts
 !packages/archil/src/globals.d.ts
