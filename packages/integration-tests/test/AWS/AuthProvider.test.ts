@@ -202,6 +202,29 @@ describe(
       }),
     );
 
+    it.effect("keeps an SSO profile with a role_arn fromIni ignores as sso", () =>
+      Effect.gen(function* () {
+        // `role_arn` without a source isn't an assumed role to fromIni, which
+        // falls through to SSO, so the stored method does too.
+        expect(
+          yield* configure(
+            [
+              "[profile sandbox]",
+              "sso_session = corp",
+              "sso_account_id = 123456789012",
+              "sso_role_name = Admin",
+              "role_arn = arn:aws:iam::222222222222:role/deploy",
+              "region = us-west-2",
+              "[sso-session corp]",
+              "sso_start_url = https://corp.awsapps.com/start",
+              "sso_region = us-east-1",
+              "",
+            ].join("\n"),
+          ),
+        ).toEqual({ method: "sso", ssoProfile: "sandbox" });
+      }),
+    );
+
     it.effect("stores an aws login profile as console-login", () =>
       Effect.gen(function* () {
         expect(

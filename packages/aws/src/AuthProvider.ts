@@ -980,16 +980,16 @@ const sharedConfigFiles = loadSharedConfigFiles.pipe(
 );
 
 /**
- * Keys `fromIni` resolves before an `aws login` or SSO session: assumed
- * roles, static keys, web identity and `credential_process`.
+ * Whether `fromIni` resolves the profile before an `aws login` or SSO
+ * session, with the same shape checks: an assumed role (`role_arn` with
+ * exactly one of `source_profile` / `credential_source`), static keys (id and
+ * secret), web identity (token file with `role_arn`), or `credential_process`.
  */
-const credentialKeys = [
-  "role_arn",
-  "credential_source",
-  "aws_access_key_id",
-  "web_identity_token_file",
-  "credential_process",
-] as const;
+const resolvesBeforeSessions = (profile: Readonly<Record<string, string | undefined>>) =>
+  (!!profile.role_arn && !!profile.source_profile !== !!profile.credential_source) ||
+  (!!profile.aws_access_key_id && !!profile.aws_secret_access_key) ||
+  (!!profile.web_identity_token_file && !!profile.role_arn) ||
+  !!profile.credential_process;
 
 /**
  * Which stored method serves an AWS CLI profile, in `fromIni`'s precedence,
@@ -1005,7 +1005,7 @@ const detectProfileMethod = (awsProfile: string) =>
     const files = yield* sharedConfigFiles;
     // ~/.aws/credentials overrides ~/.aws/config for the same profile.
     const profile = { ...files.configFile[awsProfile], ...files.credentialsFile[awsProfile] };
-    if (credentialKeys.some((key) => profile[key])) return "aws-profile" as const;
+    if (resolvesBeforeSessions(profile)) return "aws-profile" as const;
     if (profile.login_session) return "console-login" as const;
     if (profile.sso_session || profile.sso_start_url) return "sso" as const;
     return "new" as const;
