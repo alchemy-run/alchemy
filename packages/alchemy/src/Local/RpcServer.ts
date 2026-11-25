@@ -13,7 +13,7 @@ import type { ProviderService } from "../Provider.ts";
 import type { ResourceLike } from "../Resource.ts";
 import { childJsonLogLayer, LOG_FORMAT_ENV, LogProcess } from "../Util/LogRecord.ts";
 import { platformLayer, PlatformServices, runMain } from "../Util/PlatformServices.ts";
-import { logShutdown } from "../Util/Shutdown.ts";
+import { ignoreClosedStdio, logShutdown } from "../Util/Shutdown.ts";
 import { processTrace, withTraceParent } from "../Util/TraceParent.ts";
 import * as RpcSerialization from "./RpcSerialization.ts";
 import * as RpcServerEnvironment from "./RpcServerEnvironment.ts";
@@ -335,6 +335,10 @@ export const launch = (providers: ProviderLayer | ProviderGroupLoader) =>
     ),
     Layer.provide(Layer.mergeAll(PlatformServices, FetchHttpClient.layer)),
     Layer.launch,
+    // The parent reads this process's stdout: when it is SIGKILLed, the
+    // shutdown's first log line hits a closed pipe. Without this, that EPIPE
+    // ends the process before its finalizers stop workerd (#3369).
+    (launched) => Effect.andThen(ignoreClosedStdio, launched),
     logShutdown("sidecar"),
     // Spans outside RPC calls join the `alchemy dev` trace, like its records.
     withTraceParent(processTrace),

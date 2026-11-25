@@ -26,7 +26,7 @@ import { TelemetryLive } from "../Telemetry/Layer.ts";
 import { LogProcess, parentLogLayer } from "../Util/LogRecord.ts";
 import { initialCwd } from "../Util/Node.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
-import { logShutdown } from "../Util/Shutdown.ts";
+import { logShutdown, parentExited } from "../Util/Shutdown.ts";
 import { processTrace, withTraceParent } from "../Util/TraceParent.ts";
 import { handleCliErrors, installShutdownFeedback } from "./commands/errors.ts";
 import { renderPlanning } from "./commands/render.ts";
@@ -256,11 +256,17 @@ const makeExec = () => {
     yield* forwardSidecarLogs;
     // Single-pass runs park nothing. Otherwise Node reloads the stack graph in
     // this process; Bun exits for the supervisor to respawn (see above).
-    return yield* (yield* devOnce)
+    const run = (yield* devOnce)
       ? devKeepAlive(runDev(options))
       : process.versions.bun !== undefined
         ? runBunDevWatcher(options)
         : runNodeDevWatcher(options);
+    // `alchemy dev` supervises this process. If it is SIGKILLed, nothing
+    // signals this one, so stop (finalizers included) once it is gone (#3369).
+    return yield* Effect.raceFirst(
+      run,
+      parentExited.pipe(Effect.andThen(Effect.logInfo("alchemy dev exited; shutting down"))),
+    );
   }).pipe(
     JsonConsole.captureStdoutAround,
     logShutdown("exec"),
