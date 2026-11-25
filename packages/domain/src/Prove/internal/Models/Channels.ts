@@ -1056,6 +1056,40 @@ export const make = (kit: Kit, tools: Tools) => {
     }),
   };
 
+  /** A stream through a channel: given each chunk of it as a list, and giving lists. */
+  const throughChannel = (name: string, orFail: boolean): Model =>
+    dualBy(name, isFlow, ([self, through], site) => {
+      const made_ = madeOf(through);
+      return isFlow(self) && made_
+        ? Effect.succeed<V>({
+            _tag: "Stream",
+            open: Effect.flatMap(Timeline.current(site, `runs ${name}`), (timeline) => {
+              const to = given(timeline, name, site);
+              // The channel is given each chunk of the stream as a list, and gives lists.
+              const lists_ = Channel.mapInput(
+                made_(timeline) as Channel.Channel<V, unknown, V, V>,
+                (chunk: readonly [V, ...Array<V>]) => Effect.succeed(arr(chunk)),
+              );
+              return tools.flow(
+                timeline,
+                (orFail ? Stream.pipeThroughChannelOrFail : Stream.pipeThroughChannel)(
+                  tools.real(timeline, self),
+                  filled(to, lists_ as unknown as Real) as unknown as Channel.Channel<
+                    readonly [V, ...Array<V>],
+                    Held,
+                    unknown,
+                    readonly [V, ...Array<V>],
+                    Held
+                  >,
+                ),
+                site,
+                (item) => item,
+              ).open;
+            }),
+          })
+        : wrongArguments(site, name);
+    });
+
   /** A stream and the channel it is made of. */
   const streams: Models = {
     "effect/Stream:fromChannel": ([given_], site) => {
@@ -1107,43 +1141,11 @@ export const make = (kit: Kit, tools: Tools) => {
             }),
           });
     },
-    "effect/Stream:pipeThroughChannel": dualBy(
-      "Stream.pipeThroughChannel",
-      isFlow,
-      ([self, through], site) => {
-        const made_ = madeOf(through);
-        return isFlow(self) && made_
-          ? Effect.succeed<V>({
-              _tag: "Stream",
-              open: Effect.flatMap(
-                Timeline.current(site, "runs Stream.pipeThroughChannel"),
-                (timeline) => {
-                  const to = given(timeline, "Stream.pipeThroughChannel", site);
-                  // The channel is given each chunk of the stream as a list, and gives lists.
-                  const lists_ = Channel.mapInput(
-                    made_(timeline) as Channel.Channel<V, unknown, V, V>,
-                    (chunk: readonly [V, ...Array<V>]) => Effect.succeed(arr(chunk)),
-                  );
-                  return tools.flow(
-                    timeline,
-                    Stream.pipeThroughChannel(
-                      tools.real(timeline, self),
-                      filled(to, lists_ as unknown as Real) as unknown as Channel.Channel<
-                        readonly [V, ...Array<V>],
-                        Held,
-                        unknown,
-                        readonly [V, ...Array<V>],
-                        Held
-                      >,
-                    ),
-                    site,
-                    (item) => item,
-                  ).open;
-                },
-              ),
-            })
-          : wrongArguments(site, "Stream.pipeThroughChannel");
-      },
+    "effect/Stream:pipeThroughChannel": throughChannel("Stream.pipeThroughChannel", false),
+    // The stream's error goes on through the channel: the channel may fail with it.
+    "effect/Stream:pipeThroughChannelOrFail": throughChannel(
+      "Stream.pipeThroughChannelOrFail",
+      true,
     ),
     "effect/Stream:fromPull": ([effect], site) =>
       Effect.succeed<V>({

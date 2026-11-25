@@ -3904,6 +3904,59 @@ export const make = (
           )
         : wrongArguments(site, "Semaphore.takeScoped");
     }),
+    // One function for each tag of request: it gives what each of its requests is answered with, in order.
+    "effect/RequestResolver:fromEffectTagged": () =>
+      Effect.succeed(
+        native("RequestResolver.fromEffectTagged", ([fns], site) =>
+          fns?._tag === "Obj"
+            ? Effect.succeed(
+                resolving((timeline) =>
+                  RequestResolver.make<Asked>((entries) => {
+                    const grouped = new Map<string, Array<Request.Entry<Asked>>>();
+                    for (const entry of entries) {
+                      const tag = String((entry.request as { readonly _tag?: unknown })._tag);
+                      grouped.set(tag, [...(grouped.get(tag) ?? []), entry]);
+                    }
+                    return Effect.forEach(
+                      grouped,
+                      ([tag, requests]) => {
+                        const f = fns.fields[tag];
+                        if (!f)
+                          return Timeline.real(
+                            timeline,
+                            wrongArguments(site, "RequestResolver.fromEffectTagged"),
+                          );
+                        return Effect.matchCauseEffect(
+                          Effect.flatMap(
+                            called(timeline, f, site)(arr(requests.map(entryOf))),
+                            (made_) =>
+                              Timeline.real(
+                                timeline,
+                                items("RequestResolver.fromEffectTagged", made_, site),
+                              ),
+                          ),
+                          {
+                            onFailure: (cause) =>
+                              Effect.forEach(requests, (entry) => Request.failCause(entry, cause), {
+                                discard: true,
+                              }),
+                            onSuccess: (results) =>
+                              Effect.forEach(
+                                results.slice(0, requests.length),
+                                (result, index) => Request.succeed(requests[index]!, result),
+                                { discard: true },
+                              ),
+                          },
+                        );
+                      },
+                      { concurrency: "unbounded", discard: true },
+                    );
+                  }),
+                ),
+              )
+            : wrongArguments(site, "RequestResolver.fromEffectTagged"),
+        ),
+      ),
     "effect/RequestResolver:isRequestResolver": ([value]: ReadonlyArray<V>) =>
       Effect.succeed(bool(kindOf(value) === "Resolver")),
     // A span says how the resolver is watched: it is the resolver it was.
@@ -5709,6 +5762,28 @@ export const make = (
       (held, [value]) => PubSub.endUnsafe(held, value ?? Value.undef),
       bool,
     ),
+    // What is in the queue now, how it ended, or nothing.
+    "effect/Queue:takeUnsafe": dual("Queue.takeUnsafe", 1, ([self], site) => {
+      const held = heldOf<Q>("Queue", self);
+      return held
+        ? Effect.flatMap(Timeline.current(site, "calls Queue.takeUnsafe"), (timeline) => {
+            const got = Queue.takeUnsafe(held);
+            return got === undefined ? Effect.succeed(Value.undef) : exitOf(timeline, got);
+          })
+        : wrongArguments(site, "Queue.takeUnsafe");
+    }),
+    // The effect that runs the scope's finalizers: nothing where it is closed already.
+    "effect/Scope:closeUnsafe": ([scope, exit], site) => {
+      const held = heldOf<Scope.Closeable>("Scope", scope);
+      const real = ended(exit);
+      if (!held || !real) return wrongArguments(site, "Scope.closeUnsafe");
+      const closing = Scope.closeUnsafe(held, real);
+      return Effect.succeed(
+        closing === undefined
+          ? Value.undef
+          : timed("Scope.closeUnsafe", (timeline) => Timeline.back(timeline, closing, none), site),
+      );
+    },
     "effect/Queue:flushUnsafe": now<Q, void>(
       "Queue",
       "flushUnsafe",

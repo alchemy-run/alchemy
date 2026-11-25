@@ -2060,6 +2060,7 @@ Queue.end(line);
 Queue.await(queue); // until the queue has ended
 Queue.flush(queue);
 Queue.flushUnsafe(queue);
+Queue.takeUnsafe(queue); // what is there now, how it ended, or nothing
 Queue.failCauseUnsafe(queue, Cause.fail(a));
 Queue.shutdown(line);
 Queue.takeAll(line);
@@ -2333,6 +2334,7 @@ RequestResolver.fromFunctionBatched((entries) => entries.map((entry) => entry.re
 RequestResolver.withCache(RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n + a)), { capacity: 4 });
 RequestResolver.withSpan("doubled");
 RequestResolver.isRequestResolver(a);
+RequestResolver.fromEffectTagged()({ Double: (requests) => Effect.succeed(requests.map((entry) => entry.request.n * 2 + a)), Half: (requests) => (requests.length > 1 ? Effect.fail(new Odd({ n: b })) : Effect.succeed(requests.map((entry) => entry.request.n / 2))) }); // a function for each tag of request
 Effect.request(GetPrice({ item }), prices);
 pipe(ask({ n }), Effect.request(answers));
 Request.succeed(entry, entry.request.n + b);
@@ -2588,6 +2590,7 @@ Stream.toChannel(Stream.make(a, b));
 Stream.toPull(Stream.make(a, b)); // inside Effect.scoped
 Stream.fromPull(Effect.succeed(Cause.done()));
 Stream.pipeThroughChannel(Stream.make(a, b, 3), Channel.identity());
+Stream.pipeThroughChannelOrFail(Channel.identity()); // the stream's error goes on through the channel
 Stream.callback((queue) => Effect.andThen(Queue.offerAll(queue, [a, b]), Queue.end(queue)));
 ```
 
@@ -2601,6 +2604,7 @@ Effect.scope; // the scope around: inside Effect.scoped
 Scope.fork(scope, "sequential");
 Scope.makeUnsafe();
 Scope.forkUnsafe(scope, "sequential");
+Scope.closeUnsafe(scope, Exit.void); // the effect that closes it, or nothing where it is closed
 Scope.addFinalizer(scope, log(seen, a));
 Scope.addFinalizerExit(scope, (exit) => log(seen, Exit.isSuccess(exit)));
 Scope.provide(opened(seen, "x"), scope);

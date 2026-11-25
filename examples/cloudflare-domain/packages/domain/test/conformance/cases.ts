@@ -3003,6 +3003,7 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const ask = Request.tagged("Double"); const doubled = RequestResolver.fromFunctionBatched((entries) => entries.map((entry) => entry.request.n * 2 + a)); return yield* Effect.all([Effect.request(ask({ n: 1 }), doubled), Effect.request(ask({ n: 3 }), doubled)], { concurrency: 2 }); })`,
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const ask = Request.tagged("Double"); const doubled = RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n * 2 + a)).pipe(RequestResolver.setDelayEffect(Effect.sleep("1 second"))); return [yield* Effect.request(ask({ n: 1 }), doubled), yield* Ref.get(seen)]; })`,
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const ask = Request.tagged("Double"); const cached = yield* RequestResolver.withCache(RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n + a)), { capacity: 4 }); const first = yield* Effect.request(ask({ n: 1 }), cached); const again = yield* Effect.request(ask({ n: 1 }), cached); return [first, again, (yield* Ref.get(seen)).length]; })`,
+      `Effect.gen(function* () { const Double = Request.tagged("Double"); const Half = Request.tagged("Half"); const answers = RequestResolver.fromEffectTagged()({ Double: (requests) => Effect.succeed(requests.map((entry) => entry.request.n * 2 + a)), Half: (requests) => (requests.length > 1 ? Effect.fail(new Odd({ n: b })) : Effect.succeed(requests.map((entry) => entry.request.n / 2))) }); return yield* Effect.all([Effect.request(Double({ n: 1 }), answers), Effect.result(Effect.request(Half({ n: 4 }), answers))], { concurrency: 2 }); })`,
     ],
     unread: [
       [
@@ -3209,6 +3210,8 @@ const rest: ReadonlyArray<Group> = [
       `Stream.runCollect(Stream.callback((queue) => Effect.andThen(Queue.offerAll(queue, [a, b]), Queue.end(queue))))`,
       `Stream.make(a, b).pipe(Stream.pipeThroughChannel(Channel.identity().pipe(Channel.map((chunk) => chunk.map((n) => n + 1)))), Stream.runCollect)`,
       `Stream.runCollect(Stream.pipeThroughChannel(Stream.make(a, b, 3), Channel.identity()))`,
+      `Stream.make(a, b).pipe(Stream.pipeThroughChannelOrFail(Channel.identity().pipe(Channel.map((chunk) => chunk.map((n) => n * 2)))), Stream.runCollect)`,
+      `Stream.fail(new Odd({ n: a })).pipe(Stream.pipeThroughChannelOrFail(Channel.identity()), Stream.runCollect, Effect.catch((error) => Effect.succeed(error.n)))`,
       `Channel.fromIterable([a, b]).pipe(Channel.pipeToOrFail(Channel.identity()), Channel.runCollect)`,
       `Channel.fromIterable([a, b]).pipe(Channel.pipeTo(Channel.identity().pipe(Channel.mapInput((n) => Effect.succeed(n * 2)))), Channel.runCollect)`,
       `Channel.fromEffect(even(a)).pipe(Channel.mapInputError((error) => error), Channel.mergeEffect(Effect.sleep(1)), Channel.runCollect, Effect.result)`,
@@ -3997,6 +4000,8 @@ const rest: ReadonlyArray<Group> = [
       `Effect.scoped(Effect.gen(function* () { const asked = yield* Ref.make(0); const files = yield* ScopedCache.makeWith({ capacity: 4, lookup: (name) => Effect.as(Ref.update(asked, (n) => n + 1), name.length + b), timeToLive: () => "1 second" }); yield* ScopedCache.get(files, "tea"); yield* ScopedCache.get(files, "tea"); return [yield* Ref.get(asked), yield* ScopedCache.get(files, "tea")]; }))`,
       `Effect.gen(function* () { const permits = yield* PartitionedSemaphore.make({ permits: 1 }); const got = yield* PartitionedSemaphore.withPermitsIfAvailable(permits, 1)(Effect.succeed(a)); const none = yield* PartitionedSemaphore.withPermitsIfAvailable(permits, 2)(Effect.succeed(b)); const again = yield* PartitionedSemaphore.withPermitsIfAvailable(permits, 1, Effect.succeed(b)); return [got, none, again]; })`,
       `Effect.scoped(Effect.gen(function* () { const cell = yield* TxSubscriptionRef.make(a); const fiber = yield* Effect.forkChild(Stream.runCollect(Stream.take(TxSubscriptionRef.changesStream(cell), 2))); yield* Effect.sleep(1); yield* TxSubscriptionRef.set(cell, b); return yield* Fiber.join(fiber); }))`,
+      `Effect.gen(function* () { const queue = yield* Queue.unbounded(); yield* Queue.offer(queue, a); const first = Queue.takeUnsafe(queue); const none = Queue.takeUnsafe(queue); yield* Queue.end(queue); const after = Queue.takeUnsafe(queue); return [Exit.isSuccess(first) ? first.value : -1, none === undefined, Exit.isFailure(after)]; })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const scope = Scope.makeUnsafe(); yield* Scope.addFinalizer(scope, log(seen, a)); const closing = Scope.closeUnsafe(scope, Exit.void); yield* closing; const again = Scope.closeUnsafe(scope, Exit.void); return [yield* Ref.get(seen), again === undefined]; })`,
     ],
   },
   {
