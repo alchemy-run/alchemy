@@ -34,3 +34,30 @@ export const metaWrite = (
   const body = Object.fromEntries(keys.map((key) => [key, want?.[key] ?? ""]));
   return keys.some((key) => body[key] !== (have?.[key] ?? "")) ? body : undefined;
 };
+
+interface PlaybackIdLike {
+  readonly id?: string;
+  readonly policy?: string;
+  readonly drm_configuration_id?: string;
+}
+
+const playbackSignature = (p: PlaybackIdLike) => `${p.policy}:${p.drm_configuration_id ?? ""}`;
+
+/**
+ * Pairs wanted playback IDs with live ones by policy and DRM configuration,
+ * one live ID per wanted entry. Wanted entries left unpaired are created;
+ * live IDs left unpaired are deleted.
+ */
+export const playbackIdChanges = <W extends PlaybackIdLike, L extends PlaybackIdLike>(
+  wanted: ReadonlyArray<W>,
+  live: ReadonlyArray<L>,
+) => {
+  const unclaimed = [...live];
+  const create: W[] = [];
+  for (const want of wanted) {
+    const i = unclaimed.findIndex((p) => playbackSignature(p) === playbackSignature(want));
+    if (i === -1) create.push(want);
+    else unclaimed.splice(i, 1);
+  }
+  return { create, remove: unclaimed };
+};

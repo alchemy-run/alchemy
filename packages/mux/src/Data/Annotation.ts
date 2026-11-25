@@ -154,7 +154,7 @@ export const AnnotationProvider = () =>
           const date = news.date ?? unixSeconds(observed.date);
           if (
             observed.note === news.note &&
-            observed.sub_property_id === news.sub_property_id &&
+            (observed.sub_property_id ?? undefined) === news.sub_property_id &&
             unixSeconds(observed.date) === date
           ) {
             return observed;
@@ -163,7 +163,8 @@ export const AnnotationProvider = () =>
             ANNOTATION_ID: observed.id,
             note: news.note,
             date,
-            sub_property_id: news.sub_property_id,
+            // Mux clears a sub-property sent as "", so one added on Mux goes.
+            sub_property_id: news.sub_property_id ?? "",
           });
           return toAttrs(data);
         }),

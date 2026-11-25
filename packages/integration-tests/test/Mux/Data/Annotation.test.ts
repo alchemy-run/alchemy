@@ -89,6 +89,7 @@ test.provider(
           ANNOTATION_ID: annotation.id,
           note: "changed outside alchemy",
           date: unixSeconds(annotation.date) - 3600,
+          sub_property_id: "added-outside-alchemy",
         });
       }
       const drift = yield* Drift.detect(stack).pipe(Effect.provide(stack.state));
@@ -96,9 +97,13 @@ test.provider(
       expect(drift.resources.Pinned?.action).toBe("drifted");
       expect(drift.resources.Kept?.action).toBe("unchanged");
       yield* Drift.repair(stack).pipe(Effect.provide(stack.state));
+      const settled = yield* Drift.detect(stack).pipe(Effect.provide(stack.state));
+      expect(settled.resources.Marker?.action).toBe("unchanged");
+      expect(settled.resources.Pinned?.action).toBe("unchanged");
 
       const repairedMarker = yield* live(renoted.marker.id);
       expect(repairedMarker.note).toEqual(`${tag} v2`);
+      expect(repairedMarker.sub_property_id ?? undefined).toBeUndefined();
       // With no `date` prop, the date is Mux's to keep once the marker exists.
       expect(unixSeconds(repairedMarker.date)).toEqual(unixSeconds(renoted.marker.date) - 3600);
       const repairedPinned = yield* live(renoted.pinned.id);

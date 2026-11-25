@@ -9,7 +9,7 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { metaWrite } from "../internal/converge.ts";
+import { metaWrite, playbackIdChanges } from "../internal/converge.ts";
 import {
   playbackIdsByPolicy,
   type PlaybackIdsByPolicy,
@@ -644,13 +644,11 @@ export const AssetProvider = () =>
             ...(news.playback_policies ?? []).map((policy) => ({ policy })),
             ...(news.advanced_playback_policies ?? []),
           ];
-          const current = asset.playback_ids ?? [];
-          for (const want of wanted) {
-            if (!current.some((p) => p.policy === want.policy)) {
-              yield* createPlaybackId({ ASSET_ID, ...want }).pipe(MuxRetry.throttling);
-            }
+          const { create, remove } = playbackIdChanges(wanted, asset.playback_ids ?? []);
+          for (const want of create) {
+            yield* createPlaybackId({ ASSET_ID, ...want }).pipe(MuxRetry.throttling);
           }
-          for (const stale of current.filter((p) => !wanted.some((w) => w.policy === p.policy))) {
+          for (const stale of remove) {
             yield* deletePlaybackId({ ASSET_ID, PLAYBACK_ID: stale.id }).pipe(
               Effect.catchTag("NotFound", () => Effect.void),
             );
