@@ -33,7 +33,14 @@ export const make = (
   kit: Kit,
   base: Models,
   constants: Readonly<Record<string, V>>,
-  tools: Flows.Tools,
+  tools: Flows.Tools & {
+    /** What a layer or a context the code gives provides, built now. */
+    readonly provides: (
+      name: string,
+      given: V | undefined,
+      site: Site,
+    ) => Eval<ReadonlyArray<readonly [service: unknown, value: V]>>;
+  },
   flows: Flows.Lifts & {
     /** A sink the prover reads itself. */
     readonly read: (v: V) => boolean;
@@ -63,6 +70,25 @@ export const make = (
     return build ? build(to.timeline, to.site) : wrongSink(to);
   };
   const rejected = (rejection: V): Held => new Value.Rejected({ rejection });
+  /** A sink with services provided while it runs. */
+  const providedSink = (
+    self: RealSink,
+    held: ReadonlyArray<readonly [service: unknown, value: V]>,
+  ): RealSink =>
+    Sink.fromTransform((upstream: Pull.Pull<Some, never, void>, scope) =>
+      Effect.suspend(() => {
+        const before = held.map(([service]) => [service, host.provided.get(service)] as const);
+        for (const [service, value] of held) host.provided.set(service, value);
+        return Effect.ensuring(
+          self.transform(upstream, scope),
+          Effect.sync(() => {
+            for (const [service, value] of before.toReversed())
+              if (value) host.provided.set(service, value);
+              else host.provided.delete(service);
+          }),
+        );
+      }),
+    );
   const option = (value: Option.Option<V>): V =>
     Option.isSome(value) ? Value.some(value.value) : Value.none;
   const unset = (v: V | undefined): boolean => v === undefined || v._tag === "Undef";
@@ -516,6 +542,18 @@ export const make = (
     "effect/Sink:catch": on("Sink.catch", (to, self, [f]) => Sink.catch(self, failed(to.fn(f)))),
     "effect/Sink:catchCause": on("Sink.catchCause", (to, self, [f]) =>
       Sink.catchCause(self, (cause) => Effect.flatMap(to.cause(cause), (held) => to.fn(f)(held))),
+    ),
+    "effect/Sink:provideService": on("Sink.provideService", (to, self, [tag, value]) =>
+      tag?._tag === "Host"
+        ? providedSink(self, [[tag.value, value ?? Value.undef]])
+        : wrongSink(to),
+    ),
+    "effect/Sink:provideContext": on("Sink.provideContext", (to, self, [given_]) =>
+      Sink.unwrap(
+        Effect.map(to.read(tools.provides("Sink.provideContext", given_, to.site)), (held) =>
+          providedSink(self, held),
+        ),
+      ),
     ),
     "effect/Sink:ensuring": on("Sink.ensuring", (to, self, [effect]) =>
       Sink.ensuring(self, tools.sure(to.eff(effect))),

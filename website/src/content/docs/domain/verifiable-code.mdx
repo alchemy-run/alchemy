@@ -2460,6 +2460,11 @@ Channel.combine(Channel.fromIterable([a, b]), Channel.fromIterable([10, 20, 30])
 Channel.fromTransformBracket((upstream) => Effect.succeed(Effect.map(upstream, (n) => n * 10)));
 Channel.toPullScoped(Channel.fromIterable([a, b]), scope);
 Channel.splitLines(); // of text the code can see
+Channel.provideService(Rate, { percent: a }); // while the channel runs, as are the next four
+Channel.provideServiceEffect(Rate, Effect.succeed({ percent: b }));
+Channel.provideContext(Context.make(Rate, { percent: a }));
+Channel.provide(Layer.succeed(Rate, { percent: b }));
+Channel.updateService(Rate, (rate) => ({ percent: rate.percent + 1 }));
 Stream.transformPullBracket(Stream.make(a, b), (pull) => Effect.succeed(Effect.map(pull, (chunk) => chunk.map((n) => n + 1))));
 Stream.transformPull(Stream.rechunk(Stream.make(a, b, 3), 1), (pull) => Effect.succeed(Effect.map(pull, (chunk) => chunk.map((n) => n * 2))));
 Channel.suspend(() => Channel.succeed(a));
@@ -3093,6 +3098,8 @@ Sink.catchCause((cause) => Effect.succeed(Cause.hasFails(cause)));
 Sink.ensuring(log(seen, "ended"));
 Sink.onExit((exit) => log(seen, Exit.isSuccess(exit)));
 Sink.summarized(Sink.forEach(() => Ref.update(turns, (n) => n + 1)), Ref.get(turns), (start, end) => end - start);
+Sink.provideService(Rate, { percent: a });
+Sink.provideContext(Context.make(Rate, { percent: b }));
 ```
 
 ```typescript title="effect/Layer, effect/Context and services"

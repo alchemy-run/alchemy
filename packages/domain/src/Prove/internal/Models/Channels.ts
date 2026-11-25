@@ -34,6 +34,12 @@ export interface Tools extends Omit<Flows.Tools, "heldOf"> {
   readonly outputOf: (output: unknown) => V;
   readonly sure: <A>(self: Effect.Effect<A, Held>) => Effect.Effect<A>;
   readonly real: (timeline: Timeline.Timeline, self: Flow) => Stream.Stream<V, Held>;
+  /** What a layer or a context the code gives provides, built now. */
+  readonly provides: (
+    name: string,
+    given: V | undefined,
+    site: Site,
+  ) => Eval<ReadonlyArray<readonly [service: unknown, value: V]>>;
   readonly flow: <A>(
     timeline: Timeline.Timeline,
     made: Stream.Stream<A, unknown>,
@@ -1474,6 +1480,83 @@ export const make = (kit: Kit, tools: Tools) => {
                   );
             }),
         ) as unknown as Real,
+    ),
+  });
+
+  // ---- Services provided to a channel: around its start and around each pull of it.
+  type Provided = ReadonlyArray<readonly [service: unknown, value: V]>;
+  const withServices =
+    (held: Provided) =>
+    <A, E>(self: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+      Effect.suspend(() => {
+        const before = held.map(([service]) => [service, host.provided.get(service)] as const);
+        for (const [service, value] of held) host.provided.set(service, value);
+        return Effect.ensuring(
+          self,
+          Effect.sync(() => {
+            for (const [service, value] of before.toReversed())
+              if (value) host.provided.set(service, value);
+              else host.provided.delete(service);
+          }),
+        );
+      });
+  const providing_ = (self: Real, held: Provided): Real =>
+    Channel.transformPull(self, (upstream) =>
+      Effect.succeed(upstream.pipe(asPull, withServices(held))),
+    ) as unknown as Real;
+  const serviceOf = (to: Given, tag: V | undefined): Effect.Effect<unknown, Held> =>
+    tag?._tag === "Host" ? Effect.succeed(tag.value) : to.read(wrongArguments(to.site, to.name));
+  Object.assign(models, {
+    "effect/Channel:provideService": over("Channel.provideService", (to, self, [tag, value]) =>
+      Channel.unwrap(
+        Effect.map(serviceOf(to, tag), (service) =>
+          providing_(self, [[service, value ?? Value.undef]]),
+        ),
+      ),
+    ),
+    "effect/Channel:provideServiceEffect": over(
+      "Channel.provideServiceEffect",
+      (to, self, [tag, effect]) =>
+        Channel.unwrap(
+          Effect.flatMap(serviceOf(to, tag), (service) =>
+            Effect.map(to.eff(effect), (value) => providing_(self, [[service, value]])),
+          ),
+        ),
+    ),
+    "effect/Channel:provideContext": over("Channel.provideContext", (to, self, [given_]) =>
+      Channel.unwrap(
+        Effect.map(to.read(tools.provides("Channel.provideContext", given_, to.site)), (held) =>
+          providing_(self, held),
+        ),
+      ),
+    ),
+    "effect/Channel:provide": over("Channel.provide", (to, self, [given_, options]) =>
+      options === undefined || options._tag === "Undef"
+        ? Channel.unwrap(
+            Effect.map(to.read(tools.provides("Channel.provide", given_, to.site)), (held) =>
+              providing_(self, held),
+            ),
+          )
+        : to.bad,
+    ),
+    // The service is what the function makes of it while the channel runs.
+    "effect/Channel:updateService": over("Channel.updateService", (to, self, [tag, f]) =>
+      Channel.unwrap(
+        Effect.flatMap(serviceOf(to, tag), (service) => {
+          const before = host.provided.get(service);
+          if (!before)
+            return to.read(
+              Value.notTranslated(
+                to.site,
+                "calls Channel.updateService of a service that nothing provides",
+              ),
+            );
+          return Effect.map(
+            to.read(f ? host.call(f, [before], to.site) : wrongArguments(to.site, to.name)),
+            (next) => providing_(self, [[service, next]]),
+          );
+        }),
+      ),
     ),
   });
 

@@ -2253,13 +2253,24 @@ export const make = (host: Host) => {
   const flows = Flows.make(kit, { ...written }, fibers.tools, { providing, provides: built });
   Object.assign(written, flows.models);
   Object.assign(clocks, flows.sited);
-  const channels = Channels.make(kit, { ...fibers.tools, real: flows.real, flow: flows.flow });
+  const channels = Channels.make(kit, {
+    ...fibers.tools,
+    real: flows.real,
+    flow: flows.flow,
+    provides: built,
+  });
   Object.assign(written, channels.models);
   Object.assign(clocks, channels.sited);
-  const sinks = Sinks.make(kit, { ...written }, streams.values, fibers.tools, {
-    ...flows.lifts,
-    read: streams.isSink,
-  });
+  const sinks = Sinks.make(
+    kit,
+    { ...written },
+    streams.values,
+    { ...fibers.tools, provides: built },
+    {
+      ...flows.lifts,
+      read: streams.isSink,
+    },
+  );
   Object.assign(written, sinks.models);
 
   // A `Chunk` and an `Iterable` are read as the array of their items: the
