@@ -4144,6 +4144,15 @@ export const make = (
     ),
   };
 
+  /** A part of a PubSub the library makes: the store of what is published, or a strategy. */
+  const parted = (kind: "Atomic" | "Strategy", value: unknown): V => ({
+    _tag: "Host",
+    value,
+    name: `PubSub.${kind}`,
+  });
+  const partOf = (kind: "Atomic" | "Strategy", v: V): unknown =>
+    v._tag === "Host" && v.name === `PubSub.${kind}` ? v.value : undefined;
+
   /** An instance of a request class a file exports: the class is the one the runtime loaded. */
   const constructs = (cls: unknown, args: ReadonlyArray<V>, site: Site): Eval<V> | undefined => {
     if (typeof cls !== "function" || !Request.isRequest(cls.prototype)) return undefined;
@@ -6175,6 +6184,49 @@ export const make = (
         }),
     ),
     // The last message, given to whoever reads after it: then the PubSub has ended.
+    // A PubSub made of its parts: where it keeps what is published, and what it does when that is full.
+    "effect/PubSub:makeAtomicBounded": ([given_], site) => {
+      const read = plainOf(given_);
+      return typeof read === "number" || (typeof read === "object" && read !== null)
+        ? Effect.succeed(parted("Atomic", PubSub.makeAtomicBounded(read as number)))
+        : wrongArguments(site, "PubSub.makeAtomicBounded");
+    },
+    "effect/PubSub:makeAtomicUnbounded": ([given_], site) => {
+      const read = given_ === undefined || given_._tag === "Undef" ? undefined : plainOf(given_);
+      return read === NOT_PLAIN ||
+        (read !== undefined && (typeof read !== "object" || read === null))
+        ? wrongArguments(site, "PubSub.makeAtomicUnbounded")
+        : Effect.succeed(
+            parted("Atomic", PubSub.makeAtomicUnbounded(read as { readonly replay?: number })),
+          );
+    },
+    "effect/PubSub:BackPressureStrategy": () =>
+      Effect.sync(() => parted("Strategy", new PubSub.BackPressureStrategy())),
+    "effect/PubSub:DroppingStrategy": () =>
+      Effect.sync(() => parted("Strategy", new PubSub.DroppingStrategy())),
+    "effect/PubSub:SlidingStrategy": () =>
+      Effect.sync(() => parted("Strategy", new PubSub.SlidingStrategy())),
+    "effect/PubSub:make": ([given_], site) => {
+      const fields = given_?._tag === "Obj" && !given_.brand ? given_.fields : undefined;
+      const atomic = fields?.atomicPubSub;
+      const strategy = fields?.strategy;
+      if (!atomic || !strategy || !callable(atomic) || !callable(strategy))
+        return wrongArguments(site, "PubSub.make");
+      return Effect.succeed(
+        lazy(() =>
+          Effect.gen(function* () {
+            const held = partOf("Atomic", yield* host.call(atomic, [], site));
+            const handles = partOf("Strategy", yield* host.call(strategy, [], site));
+            if (!held || !handles) return yield* wrongArguments(site, "PubSub.make");
+            const made_ = yield* PubSub.make<V>({
+              atomicPubSub: () => held as PubSub.PubSub.Atomic<V>,
+              strategy: () => handles as PubSub.PubSub.Strategy<V>,
+            });
+            return wrap("PubSub", made_);
+          }),
+        ),
+      );
+    },
     "effect/PubSub:end": on<P, boolean>(
       "PubSub",
       "end",

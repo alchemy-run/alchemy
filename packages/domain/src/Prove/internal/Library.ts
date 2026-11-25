@@ -2670,7 +2670,8 @@ export const make = (host: Host) => {
     isClass: (value: V): boolean => classes.has(value),
     /** A class of the library the code makes an instance of with `new`: its model is what makes it. */
     constructed: (module: string, path: ReadonlyArray<string>): boolean =>
-      module === "effect/Cause" && path.length === 1 && path[0]!.endsWith("Error"),
+      (module === "effect/Cause" && path.length === 1 && path[0]!.endsWith("Error")) ||
+      (module === "effect/PubSub" && path.length === 1 && path[0]!.endsWith("Strategy")),
     /** A class a file declares by extending one of `effect/Data`'s: its own class, with the same fields. */
     subclass: (base: V, name: string): V | undefined => {
       const extended = extending.get(base);
