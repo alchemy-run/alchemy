@@ -52,7 +52,7 @@ const jsonWhenReady = (url: string) =>
     return JSON.parse(body) as unknown;
   }).pipe(
     Effect.retry({
-      while: (e): e is NotReady => e instanceof NotReady,
+      while: (e) => e._tag === "NotReady",
       schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(30)]),
     }),
   );

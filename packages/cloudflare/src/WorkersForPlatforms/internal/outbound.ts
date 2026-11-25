@@ -1,11 +1,20 @@
 import * as Output from "alchemy/Output";
 import { sanitizeKey } from "alchemy/RuntimeContext";
 import { isYieldableEffectLike, yieldDeclared } from "alchemy/Util/effect";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { isWorker, type Worker } from "../../Workers/Worker.ts";
 import { isWorkerEntrypoint } from "../../Workers/WorkerEntrypoint.ts";
 import { type DispatchNamespace, isDispatchNamespace } from "../DispatchNamespace.ts";
 import type { DispatchNamespaceInput, DispatchOutbound } from "../Get.ts";
+
+/**
+ * An outbound target that isn't a Worker. It is a defect, not a failure: the
+ * type already refuses it, and nothing can recover from it at deploy time.
+ */
+export class InvalidOutboundWorker extends Data.TaggedError("InvalidOutboundWorker")<{
+  readonly message: string;
+}> {}
 
 /** An outbound target with its Worker resolved. */
 export interface ResolvedOutbound {
@@ -32,9 +41,10 @@ export const resolveOutbound = (outbound: DispatchOutbound<any>) =>
     // entrypoint on the outbound Worker but doesn't store it.
     if (isWorkerEntrypoint(target)) {
       return yield* Effect.die(
-        new Error(
-          "An outbound Worker is a Worker, not an entrypoint: Cloudflare accepts an entrypoint on a dispatch binding's outbound Worker but doesn't keep it, and calls its default export. Pass the Worker, and route inside its default export.",
-        ),
+        new InvalidOutboundWorker({
+          message:
+            "An outbound Worker is a Worker, not an entrypoint: Cloudflare accepts an entrypoint on a dispatch binding's outbound Worker but doesn't keep it, and calls its default export. Pass the Worker, and route inside its default export.",
+        }),
       );
     }
     // A `Worker.ref(...)` is typed as a Worker but is a ref expression, not a
