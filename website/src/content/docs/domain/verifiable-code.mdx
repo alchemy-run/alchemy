@@ -2096,6 +2096,8 @@ FiberHandle.clear(handle);
 FiberHandle.set(handle, one); // the fiber it held is interrupted
 FiberHandle.setUnsafe(handle, two);
 FiberHandle.isFiberHandle(handle);
+FiberHandle.get(handle);
+FiberHandle.getUnsafe(handle);
 ```
 
 ```typescript title="effect/TxRef, effect/TxQueue and Effect.tx"
@@ -2378,6 +2380,8 @@ TxHashMap.compact(stock);
 TxHashMap.forEach(stock, (n, key) => log(seen, [key, n])); // an effect for each entry
 TxHashMap.flatMap(stock, (n, key) => TxHashMap.make([key, n + 1], [key + "!", b]));
 TxHashMap.isTxHashMap(stock);
+TxHashMap.getHash(stock, "tea", Hash.hash("tea")); // the hash has to be the key's
+TxHashMap.hasHash(stock, "milk", Hash.hash("milk"));
 TxHashMap.reduce(stock, 0, (total, n) => total + n);
 TxHashMap.some(stock, (n) => n > a);
 TxHashMap.every(stock, (n) => n >= a);
@@ -3336,12 +3340,21 @@ Effect.gen(function* () {
   yield* Console.error("e");
   return a;
 });
+Console.consoleWith((console) =>
+  Effect.sync(() => {
+    console.log("x", a);
+    console.error("y");
+    return a + b;
+  }),
+);
 ```
 
 ```typescript title="effect/Clock"
 Effect.gen(function* () {
   return [(yield* Clock.currentTimeMillis) >= 0, (yield* Clock.currentTimeNanos) >= 0n];
 });
+Clock.clockWith((clock) => Effect.map(clock.currentTimeMillis, (now) => [now >= 0, clock.currentTimeMillisUnsafe() >= 0])); // the clock the handler is given
+Effect.clockWith((clock) => Effect.map(clock.currentTimeNanos, (now) => now >= 0n));
 ```
 
 ```typescript title="effect/DateTime"

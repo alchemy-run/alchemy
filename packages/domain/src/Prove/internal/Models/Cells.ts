@@ -14,6 +14,11 @@ const SHARED =
 /** The field of a `SubscriptionRef` that holds how its readers are told of a value. */
 export const CHANGES = "~changes";
 const REDACTED: Value.Brand = { kind: "Redacted", cls: undefined };
+/** What a console has: each writes something out, and gives nothing. */
+const CONSOLE =
+  "assert clear count countReset debug dir dirxml error group groupCollapsed groupEnd info log table time timeEnd timeLog trace warn".split(
+    " ",
+  );
 
 /**
  * `Ref` and the `Mutable` cells, `Redacted`, `Filter`, `Ordering`,
@@ -496,6 +501,31 @@ export const make = (
       callable(self) ? Effect.succeed(self) : wrongArguments(site, "Filter.toResult"),
     // Output: nothing a handler decides depends on it.
     "effect/Console:log": () => Effect.succeed(done),
+    // The console a handler is given: what is written to it decides nothing.
+    "effect/Console:consoleWith": ([f], site) =>
+      f
+        ? Effect.succeed<V>({
+            _tag: "Effect",
+            run: Effect.flatMap(
+              host.call(
+                f,
+                [
+                  Value.obj(
+                    Object.fromEntries(
+                      CONSOLE.map((name): [string, V] => [
+                        name,
+                        native(`console.${name}`, () => Effect.succeed(Value.undef)),
+                      ]),
+                    ),
+                  ),
+                ],
+                site,
+              ),
+              (made) =>
+                made._tag === "Effect" ? made.run : wrongArguments(site, "Console.consoleWith"),
+            ),
+          })
+        : wrongArguments(site, "Console.consoleWith"),
     "effect/Console:error": () => Effect.succeed(done),
     "effect/Console:warn": () => Effect.succeed(done),
     "effect/Console:info": () => Effect.succeed(done),

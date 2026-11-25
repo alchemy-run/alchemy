@@ -294,6 +294,38 @@ export const make = (host: Host) => {
     "effect/DateTime:now": (site) => clock("DateTime.now", site, time),
   };
 
+  /**
+   * The clock a handler is given: what it reads is the time the command is
+   * handled at. A monotonic clock is the machine's, and is not on it.
+   */
+  const clockObject = (site: Site): V => {
+    const millis = clocks["effect/Clock:currentTimeMillis"]!(site);
+    const nanos = clocks["effect/Clock:currentTimeNanos"]!(site);
+    const now = (read: V, name: string): V =>
+      native(name, () => (read._tag === "Effect" ? read.run : wrongArguments(site, name)));
+    return Value.obj({
+      currentTimeMillis: millis,
+      currentTimeNanos: nanos,
+      currentTimeMillisUnsafe: now(millis, "clock.currentTimeMillisUnsafe"),
+      currentTimeNanosUnsafe: now(nanos, "clock.currentTimeNanosUnsafe"),
+    });
+  };
+  /** `Clock.clockWith(f)`: the effect the function makes of the clock. */
+  const clockWith: Model = ([f], site) =>
+    f
+      ? Effect.succeed(
+          effect(
+            host
+              .call(f, [clockObject(site)], site)
+              .pipe(
+                Effect.flatMap((made) =>
+                  made._tag === "Effect" ? made.run : wrongArguments(site, "Clock.clockWith"),
+                ),
+              ),
+          ),
+        )
+      : wrongArguments(site, "Clock.clockWith");
+
   /** `DateTime.isPast` and `DateTime.isFuture`: a time against what the clock reads. */
   const against =
     (name: string, order: "<" | ">"): Model =>
@@ -2238,6 +2270,8 @@ export const make = (host: Host) => {
       : Effect.fail(Value.notTranslated(site, `calls ${name} on text the prover cannot see`));
 
   const written: Record<string, Model> = {
+    "effect/Clock:clockWith": clockWith,
+    "effect/Effect:clockWith": clockWith,
     ...own,
     ...timeModels,
     ...dataModels,

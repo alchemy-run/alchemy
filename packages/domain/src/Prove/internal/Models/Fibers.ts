@@ -3568,6 +3568,17 @@ export const make = (
       arity,
     );
 
+  const sameHash = (
+    name: string,
+    key: V | undefined,
+    hash: V | undefined,
+    site: Site,
+  ): Eval<void> =>
+    Effect.flatMap(lib("effect/Hash:hash", [key ?? Value.undef], site), (real) =>
+      real._tag === "Num" && hash?._tag === "Num" && real.value === hash.value
+        ? Effect.void
+        : unseen(site, `calls ${name} with a hash that is not the key's own`),
+    );
   const not = (v: V, site: Site): Eval<V> =>
     Effect.map(host.decide(v, site), (held) => bool(!held));
 
@@ -3600,6 +3611,21 @@ export const make = (
     "effect/TxHashMap:has": reads("TxHashMap", "has", "effect/HashMap:has"),
     "effect/TxHashMap:size": reads("TxHashMap", "size", "effect/HashMap:size"),
     "effect/TxHashMap:isEmpty": reads("TxHashMap", "isEmpty", "effect/HashMap:isEmpty"),
+    // By a key and its hash: the prover finds a key by what it is, so the hash has to be the key's.
+    "effect/TxHashMap:getHash": stored("TxHashMap", "getHash", (before, [key, hash], site) =>
+      Effect.flatMap(sameHash("TxHashMap.getHash", key, hash, site), () =>
+        Effect.map(lib("effect/HashMap:get", [before, key ?? Value.undef], site), (gives) => ({
+          gives,
+        })),
+      ),
+    ),
+    "effect/TxHashMap:hasHash": stored("TxHashMap", "hasHash", (before, [key, hash], site) =>
+      Effect.flatMap(sameHash("TxHashMap.hasHash", key, hash, site), () =>
+        Effect.map(lib("effect/HashMap:has", [before, key ?? Value.undef], site), (gives) => ({
+          gives,
+        })),
+      ),
+    ),
     "effect/TxHashMap:isNonEmpty": stored("TxHashMap", "isNonEmpty", (before, _, site) =>
       Effect.flatMap(lib("effect/HashMap:isEmpty", [before], site), (empty) =>
         Effect.map(not(empty, site), (gives) => ({ gives })),
@@ -6005,6 +6031,20 @@ export const make = (
           )
         : wrongArguments(site, "TxSubscriptionRef.modify");
     }),
+    "effect/FiberHandle:get": on<FH, Option.Option<F>>(
+      "FiberHandle",
+      "get",
+      1,
+      (held) => FiberHandle.get(held),
+      (found) => (Option.isSome(found) ? Value.some(wrap("Fiber", found.value)) : Value.none),
+    ),
+    "effect/FiberHandle:getUnsafe": now<FH, Option.Option<F>>(
+      "FiberHandle",
+      "getUnsafe",
+      1,
+      (held) => FiberHandle.getUnsafe(held),
+      (found) => (Option.isSome(found) ? Value.some(wrap("Fiber", found.value)) : Value.none),
+    ),
     "effect/FiberHandle:set": later<FH, void>(
       "FiberHandle",
       "set",
