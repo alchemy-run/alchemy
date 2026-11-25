@@ -220,6 +220,47 @@ in the error channel until you handle it — here with
 `EmailMessage` from `cloudflare:email`, and `raw` for direct access
 to the underlying runtime binding.
 
+### From an async Worker
+
+An [async Worker](/cloudflare/compute/workers#async-workers) or a
+[Vite website](/cloudflare/frontend/vite) takes the same descriptor in its
+`env` prop, and the handler calls Cloudflare's `send_email` binding
+directly:
+
+```typescript
+// alchemy.run.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { Email } from "./src/email.ts";
+
+export const Notifier = Cloudflare.Worker("Notifier", {
+  main: "./src/worker.ts",
+  env: { Email },
+});
+
+export type NotifierEnv = Cloudflare.InferEnv<typeof Notifier>;
+```
+
+```typescript
+// src/worker.ts
+import type { NotifierEnv } from "../alchemy.run.ts";
+
+export default {
+  async fetch(request: Request, env: NotifierEnv) {
+    await env.Email.send({
+      from: "bot@example.com",
+      to: "you@personal.example",
+      subject: "Hello from a Worker",
+      text: "Sent via the send_email binding.",
+    });
+    return Response.json({ ok: true });
+  },
+};
+```
+
+Declare the binding here, in Alchemy. Alchemy builds Vite apps with its
+own Cloudflare plugin, so a `bindings.sendEmail(...)` in the
+`@cloudflare/vite-plugin` config never reaches the deployed Worker.
+
 ## Add the Worker to the Stack
 
 ```typescript
