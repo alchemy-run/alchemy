@@ -2349,6 +2349,26 @@ export const make = (host: Host) => {
   Object.assign(written, wiring);
   const fibers = Fibers.make(kit, { ...written }, asClass);
   Object.assign(written, fibers.models);
+  // An effect run at once with only the services of a context, as `runSync` and `runSyncExit` run one.
+  const runningWith =
+    (name: string, run: string): Model =>
+    ([context], site) => {
+      const provided = context ? contexts.get(context) : undefined;
+      return provided
+        ? Effect.succeed(
+            native(name, ([self], at) =>
+              self?._tag === "Effect"
+                ? written[run]!([Kit.effect(replacing(provided, self.run))], at)
+                : wrongArguments(at, name),
+            ),
+          )
+        : wrongArguments(site, name);
+    };
+  written["effect/Effect:runSyncWith"] = runningWith("Effect.runSyncWith", "effect/Effect:runSync");
+  written["effect/Effect:runSyncExitWith"] = runningWith(
+    "Effect.runSyncExitWith",
+    "effect/Effect:runSyncExit",
+  );
   // An entry of a request, as a resolver is given one: what completes it is a function of the code, called at once.
   written["effect/Request:makeEntry"] = ([given_], site) => {
     const fields = given_?._tag === "Obj" && !given_.brand ? given_.fields : undefined;

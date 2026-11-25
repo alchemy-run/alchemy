@@ -2811,6 +2811,12 @@ const rest: ReadonlyArray<Group> = [
       // A set of fibers, and a place for one: each is stopped when its scope closes.
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const sizes = yield* Effect.scoped(Effect.gen(function* () { const set = yield* FiberSet.make(); yield* FiberSet.run(set, Effect.andThen(Effect.sleep(2), log(seen, "two"))); yield* FiberSet.run(set)(Effect.onInterrupt(Effect.sleep(20), () => log(seen, "stopped"))); const before = yield* FiberSet.size(set); yield* Effect.sleep(5); return [before, yield* FiberSet.size(set)]; })); return [sizes, yield* Ref.get(seen)]; })`,
       `Effect.scoped(Effect.gen(function* () { const set = yield* FiberSet.make(); const fiber = yield* Effect.forkChild(Effect.as(Effect.sleep(3), a)); yield* FiberSet.add(set, fiber); yield* FiberSet.run(set, Effect.sleep(1)); yield* FiberSet.awaitEmpty(set); return [yield* FiberSet.size(set), yield* Fiber.join(fiber)]; }))`,
+      `Effect.scoped(Effect.gen(function* () { const set = yield* FiberSet.make(); const run = yield* FiberSet.runtime(set)(); const one = run(Effect.as(Effect.sleep(5), a)); const two = run(Effect.as(Effect.sleep(2), b)); const size = yield* FiberSet.size(set); return [size, yield* Fiber.join(one), yield* Fiber.join(two)]; }))`,
+      `Effect.scoped(Effect.gen(function* () { const run = yield* FiberSet.makeRuntime(); return yield* Fiber.join(run(Effect.as(Effect.sleep(1), a + b))); }))`,
+      `Effect.scoped(Effect.gen(function* () { const map = yield* FiberMap.make(); const run = yield* FiberMap.runtime(map)(); run("one", Effect.as(Effect.sleep(5), a)); const replaced = run("one", Effect.as(Effect.sleep(2), b)); return [yield* FiberMap.size(map), yield* Fiber.join(replaced)]; }))`,
+      `Effect.scoped(Effect.gen(function* () { const run = yield* FiberMap.makeRuntime(); return yield* Fiber.join(run(2, Effect.succeed(a))); }))`,
+      `Effect.scoped(Effect.gen(function* () { const handle = yield* FiberHandle.make(); const run = yield* FiberHandle.runtime(handle)(); const first = run(Effect.as(Effect.sleep(5), a)); const second = run(Effect.as(Effect.sleep(2), b)); return [yield* Fiber.join(second), Option.isSome(yield* FiberHandle.get(handle))]; }))`,
+      `Effect.scoped(Effect.gen(function* () { const run = yield* FiberHandle.makeRuntime(); return yield* Fiber.join(run(Effect.succeed(a * 2))); }))`,
       `Effect.scoped(Effect.gen(function* () { const set = yield* FiberSet.make(); yield* FiberSet.run(set, Effect.andThen(Effect.sleep(1), even(a))); yield* FiberSet.run(set, Effect.sleep(9)); const failed = yield* Effect.result(Effect.timeoutOption(FiberSet.join(set), 5)); yield* FiberSet.clear(set); return [failed, yield* FiberSet.size(set)]; }))`,
       `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.scoped(Effect.gen(function* () { const handle = yield* FiberHandle.make(); yield* FiberHandle.run(handle, Effect.onInterrupt(Effect.sleep(20), () => log(seen, "first stopped"))); yield* Effect.sleep(1); yield* FiberHandle.run(handle)(Effect.andThen(Effect.sleep(2), log(seen, "second done"))); yield* FiberHandle.awaitEmpty(handle); yield* FiberHandle.run(handle, Effect.onInterrupt(Effect.sleep(20), () => log(seen, "third stopped"))); yield* Effect.sleep(1); yield* FiberHandle.clear(handle); })); return yield* Ref.get(seen); })`,
       `Effect.scoped(Effect.gen(function* () { const handle = yield* FiberHandle.make(); yield* FiberHandle.run(handle, Effect.andThen(Effect.sleep(1), even(a))); return yield* Effect.result(Effect.timeoutOption(FiberHandle.join(handle), 5)); }))`,
@@ -3617,6 +3623,8 @@ const rest: ReadonlyArray<Group> = [
       `Effect.succeed([Context.get(Context.addUnsafe(Context.empty(), Rate.key, { percent: a }), Rate).percent, Context.get(Context.addUnsafe(Context.make(Rate, { percent: 1 }), Rate.key, { percent: b }), Rate).percent])`,
       `Effect.succeed([Context.get(Context.makeUnsafe(new Map([[Rate.key, { percent: a }], [Fee.key, { flat: b }]])), Fee).flat, Context.getOption(Context.makeUnsafe(new Map([[Fee.key, { flat: b }]])), Rate)])`,
       `Effect.map(Rate, (rate) => rate.percent + a).pipe(Effect.provide(Context.addUnsafe(Context.empty(), Rate.key, { percent: b })))`,
+      `Effect.sync(() => Effect.runSyncWith(Context.make(Rate, { percent: a }))(Effect.map(Rate, (rate) => rate.percent + b)))`,
+      `Effect.sync(() => { const ok = Effect.runSyncExitWith(Context.make(Rate, { percent: a }))(Effect.map(Rate, (rate) => rate.percent)); const failed = Effect.runSyncExitWith(Context.empty())(Effect.fail(b)); return [Exit.isSuccess(ok) ? ok.value : -1, Exit.isFailure(failed)]; })`,
       `priced.pipe(Effect.provide(Context.mergeAll(Context.make(Rate, { percent: a }), Context.make(Fee, { flat: b }))))`,
       `Effect.succeed([Context.getOption(Context.omit(Rate)(Context.make(Rate, { percent: a })), Rate), Context.getOption(Context.pick(Rate)(Context.make(Rate, { percent: a }).pipe(Context.add(Fee, { flat: b }))), Fee), Context.isKey(Rate), Context.isKey(a), Context.isReference(Step), Context.isReference(Rate)])`,
       `priced.pipe(Effect.provide(Layer.suspend(() => Layer.mergeAll(Layer.succeed(Rate, { percent: a }), Layer.succeed(Fee, { flat: b })))))`,
@@ -4065,6 +4073,7 @@ const rest: ReadonlyArray<Group> = [
       `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.unbounded(); const sub = yield* PubSub.subscribe(hub); yield* PubSub.publish(hub, a); const ended = yield* PubSub.end(hub, b); const again = PubSub.endUnsafe(hub, 0); return [ended, again, yield* PubSub.take(sub), yield* PubSub.take(sub)]; }))`,
       `Effect.gen(function* () { const runs = yield* Ref.make(0); return yield* Effect.repeat(Ref.update(runs, (n) => n + a), Schedule.concatResult(Schedule.recurs(1), Schedule.recurs(1))); })`,
       `Effect.gen(function* () { const step = yield* Schedule.toStep(Schedule.recurs(2)); const first = yield* step(0, a); const second = yield* step(10, a); const third = yield* Pull.catchDone(step(20, a), (out) => Effect.succeed(["done", out])); return [first[0], Duration.toMillis(first[1]), second[0], third]; })`,
+      `Effect.gen(function* () { const step = yield* Schedule.toStep(Schedule.cron("*/5 * * * *", "UTC")); const [first] = yield* step(1000, b); const [second] = yield* step(600000, b); return [Duration.toMillis(first), Duration.toMillis(second), a]; })`,
       `Effect.gen(function* () { const step = yield* Schedule.toStepWithSleep(Schedule.spaced("5 millis")); const before = yield* Clock.currentTimeMillis; const out = yield* step(a); const after = yield* Clock.currentTimeMillis; return [out, after - before]; })`,
       `Effect.gen(function* () { const step = yield* Schedule.toStepWithMetadata(Schedule.recurs(3)); yield* step(a); const meta = yield* step(b); return [meta.output, meta.attempt, meta.input, Duration.toMillis(meta.duration)]; })`,
       `Effect.gen(function* () { const runs = yield* Ref.make(0); let count = 0; const schedule = Schedule.fromStep(Effect.sync(() => (now, input) => (count >= 2 ? Cause.done(count + a) : Effect.succeed([count++, Duration.millis(1)])))); const out = yield* Effect.repeat(Ref.update(runs, (n) => n + 1), schedule); return [out, yield* Ref.get(runs)]; })`,
@@ -4079,6 +4088,12 @@ const rest: ReadonlyArray<Group> = [
       `Effect.scoped(Effect.gen(function* () { const handle = yield* FiberHandle.make(); const none = yield* FiberHandle.get(handle); yield* FiberHandle.run(handle, Effect.as(Effect.sleep(1), a)); const some = yield* FiberHandle.get(handle); const unsafe = FiberHandle.getUnsafe(handle); return [Option.isNone(none), Option.isSome(some), Option.isSome(unsafe), yield* Fiber.join(some.value)]; }))`,
       `Effect.gen(function* () { const stock = yield* TxHashMap.make(["tea", a]); return [yield* TxHashMap.getHash(stock, "tea", Hash.hash("tea")), yield* TxHashMap.hasHash(stock, "milk", Hash.hash("milk"))]; })`,
       `Effect.gen(function* () { const ref = yield* TxRef.make(Chunk.make(a, b)); const held = TxChunk.makeUnsafe(ref); yield* TxChunk.append(held, 3); const seen = yield* TxRef.get(ref); yield* TxRef.set(ref, Chunk.make(9)); return [Chunk.toReadonlyArray(seen), Chunk.toReadonlyArray(yield* TxChunk.get(held)), TxChunk.isTxChunk(held)]; })`,
+    ],
+    unread: [
+      [
+        `Effect.repeat(Effect.succeed(a), Schedule.cron("0 0 * * *"))`,
+        /calls Schedule.cron without a time zone: it is read in the machine's own/,
+      ],
     ],
   },
   {

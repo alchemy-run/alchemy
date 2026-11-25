@@ -1,5 +1,6 @@
 import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
+import * as Cron from "effect/Cron";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -2272,6 +2273,56 @@ export const make = (
   /** A key the library finds by what it is: text, a number, a boolean, or a request. */
   type Key = string | number | boolean | Asked;
   type FM = FiberMap.FiberMap<Key, V, Held>;
+  /**
+   * What `runtime` and `makeRuntime` give: a function the code calls, not an
+   * effect it yields, that starts a fiber of an effect of the code at once.
+   * The library starts it with the services of the fiber that asked for the
+   * function, so it runs on the handler's timeline.
+   */
+  const starting = (
+    name: string,
+    site: Site,
+    made: () => Effect.Effect<unknown, never, Scope.Scope>,
+    keyed: boolean,
+  ): V => native(name, (_, at) => Effect.succeed(started(name, at, made, keyed)));
+  const started = (
+    name: string,
+    at: Site,
+    made: () => Effect.Effect<unknown, never, Scope.Scope>,
+    keyed: boolean,
+  ): V =>
+    timed(
+      name,
+      (timeline) =>
+        Effect.flatMap(Effect.serviceOption(Scope.Scope), (scope) =>
+          Timeline.back(
+            timeline,
+            Option.isSome(scope)
+              ? Effect.provideService(made(), Scope.Scope, scope.value)
+              : (made() as Effect.Effect<unknown>),
+            (given_) =>
+              native(`${name} run`, (args, here) => {
+                const run = given_ as (...all: ReadonlyArray<unknown>) => Fiber.Fiber<V, Held>;
+                const [key, effect, options] = keyed ? args : [undefined, ...args];
+                if (effect?._tag !== "Effect") return wrongArguments(here, name);
+                const start = (read: unknown): V =>
+                  wrap(
+                    "Fiber",
+                    run(
+                      ...(keyed ? [read] : []),
+                      Timeline.real(timeline, effect.run),
+                      optionsOf(options),
+                    ),
+                  );
+                return keyed
+                  ? Effect.map(keyOf(name, key, here), start)
+                  : Effect.sync(() => start(undefined));
+              }),
+          ),
+        ),
+      at,
+    );
+
   type C = Cache.Cache<Key, V, Held>;
   type PL = Pool.Pool<V, Held>;
 
@@ -2327,6 +2378,49 @@ export const make = (
           site,
           () => FiberMap.make<Key, V, Held>(),
           (held) => wrap("FiberMap", held),
+        ),
+      ),
+    // A function that starts a fiber at once, into the set, the map or the handle, with the services around it.
+    "effect/FiberSet:runtime": ([self], site) => {
+      const held = heldOf<FS>("FiberSet", self);
+      return held
+        ? Effect.succeed(starting("FiberSet.runtime", site, () => FiberSet.runtime(held)(), false))
+        : wrongArguments(site, "FiberSet.runtime");
+    },
+    "effect/FiberSet:makeRuntime": (_, site) =>
+      Effect.succeed(
+        started("FiberSet.makeRuntime", site, () => FiberSet.makeRuntime<never, V, Held>(), false),
+      ),
+    "effect/FiberHandle:runtime": ([self], site) => {
+      const held = heldOf<FH>("FiberHandle", self);
+      return held
+        ? Effect.succeed(
+            starting("FiberHandle.runtime", site, () => FiberHandle.runtime(held)(), false),
+          )
+        : wrongArguments(site, "FiberHandle.runtime");
+    },
+    "effect/FiberHandle:makeRuntime": (_, site) =>
+      Effect.succeed(
+        started(
+          "FiberHandle.makeRuntime",
+          site,
+          () => FiberHandle.makeRuntime<never, V, Held>(),
+          false,
+        ),
+      ),
+    "effect/FiberMap:runtime": ([self], site) => {
+      const held = heldOf<FM>("FiberMap", self);
+      return held
+        ? Effect.succeed(starting("FiberMap.runtime", site, () => FiberMap.runtime(held)(), true))
+        : wrongArguments(site, "FiberMap.runtime");
+    },
+    "effect/FiberMap:makeRuntime": (_, site) =>
+      Effect.succeed(
+        started(
+          "FiberMap.makeRuntime",
+          site,
+          () => FiberMap.makeRuntime<never, Key, V, Held>(),
+          true,
         ),
       ),
     "effect/FiberMap:run": ([self, key, third, fourth], site) => {
@@ -5610,6 +5704,35 @@ export const make = (
         native("Schedule.setInputType", ([self]) => Effect.succeed(self ?? Value.undef)),
       ),
     // What the schedule gives each turn, as the function makes it.
+    // The times of a cron expression, worked out from the time of each step: the handler's time.
+    "effect/Schedule:cron": (args, site) => {
+      const [expression, zone] = [args[0], args[1]].map((given_) =>
+        given_ === undefined || given_._tag === "Undef"
+          ? { value: undefined }
+          : given_._tag === "Str"
+            ? { value: given_.value }
+            : given_._tag === "Host"
+              ? { value: given_.value }
+              : undefined,
+      );
+      if (!expression || expression.value === undefined || !zone || args.length > 2)
+        return wrongArguments(site, "Schedule.cron");
+      // A cron with no time zone of its own is read in the machine's, which the deployed handler may not share.
+      const own = Cron.isCron(expression.value)
+        ? Option.isSome(expression.value.tz)
+        : zone.value !== undefined;
+      if (!own)
+        return unseen(
+          site,
+          "calls Schedule.cron without a time zone: it is read in the machine's own",
+        );
+      return Effect.sync(() =>
+        wrap(
+          "Schedule",
+          Schedule.cron(expression.value as string, zone.value as string | undefined),
+        ),
+      );
+    },
     // The step of a schedule, as the library makes it, and a schedule made of a step of the code.
     "effect/Schedule:toStep": stepping("Schedule.toStep", (held) =>
       Effect.map(
