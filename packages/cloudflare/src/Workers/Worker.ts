@@ -1268,6 +1268,22 @@ export interface ViteOptions {
    */
   rootDir?: string;
   /**
+   * Vite [mode](https://vite.dev/guide/env-and-mode#modes), as passed to
+   * `vite build --mode`. It selects which `.env.[mode]` files load and
+   * sets `import.meta.env.MODE`. Changing it rebuilds the Worker, or
+   * restarts the dev server in `alchemy dev`.
+   *
+   * Edits to a gitignored `.env.[mode]` file don't trigger a rebuild on
+   * their own. Add the file to `memo.include` if they should.
+   *
+   * @default "production" on deploy, "development" in `alchemy dev`
+   * @example
+   * ```typescript
+   * vite: { mode: "staging" }
+   * ```
+   */
+  mode?: string;
+  /**
    * Controls which files are hashed to decide whether a rebuild is needed.
    * By default every non-gitignored file in `cwd` is hashed, plus the nearest
    * lockfile. Provide explicit globs to narrow the scope.
