@@ -8,6 +8,7 @@ import {
   type DispatchNamespaceClient,
   DispatchNamespaceError,
   Get,
+  dispatchOutboundOf,
   type GetOptions,
 } from "./Get.ts";
 import { maybeDispatchShim } from "./internal/DispatchShim.ts";
@@ -28,7 +29,8 @@ export const GetBinding = Layer.effect(
     const context = yield* Effect.context<never>();
 
     return Effect.fn(function* (namespace: DispatchNamespaceResource, options?: GetOptions<any>) {
-      const outbound = options?.outbound ? yield* resolveOutbound(options.outbound) : undefined;
+      const declared = dispatchOutboundOf(options);
+      const outbound = declared ? yield* resolveOutbound(declared) : undefined;
       // A binding with an outbound Worker is named after its target, so it
       // stays apart from a plain binding, or another outbound one, on the
       // same namespace.

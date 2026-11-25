@@ -33,9 +33,9 @@ export const resolveDispatchNamespace = (
  * Resolve the outbound Worker of a dispatch binding: a Worker or a ref as
  * given, a declaration by yielding it; an entrypoint is refused.
  */
-export const resolveOutbound = (outbound: DispatchOutbound<any>) =>
+export const resolveOutbound = (outbound: DispatchOutbound) =>
   Effect.gen(function* () {
-    const parameters: ReadonlyArray<string> = outbound.parameters ?? [];
+    const parameters = outbound.parameters;
     const target = outbound.worker;
     // An untyped `Cloudflare.WorkerEntrypoint`: Cloudflare accepts an
     // entrypoint on the outbound Worker but doesn't store it.

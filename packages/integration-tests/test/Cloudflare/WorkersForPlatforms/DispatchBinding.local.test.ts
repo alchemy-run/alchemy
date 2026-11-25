@@ -80,7 +80,8 @@ test.provider.skipIf(!WFP_ENABLED)(
             env: {
               DISPATCH: namespace,
               DISPATCH_OUTBOUND: Cloudflare.WorkersForPlatforms.Get<OutboundParams>(namespace, {
-                outbound: { worker: outbound, parameters: ["tenant"] },
+                outbound: outbound,
+                parameters: ["tenant"],
               }),
             },
           });
@@ -217,7 +218,8 @@ test.provider.skipIf(!WFP_ENABLED)(
               env: {
                 DISPATCH: namespace,
                 DISPATCH_OUTBOUND: Cloudflare.WorkersForPlatforms.Get<OutboundParams>(namespace, {
-                  outbound: { worker: outbound, parameters: ["tenant"] },
+                  outbound: outbound,
+                  parameters: ["tenant"],
                 }),
               },
             });

@@ -58,7 +58,8 @@ export const RefOutboundWorker = Cloudflare.Worker("WfpRefOutboundWorker", {
  * by the Effect-native one.
  */
 export const OutboundDispatch = Cloudflare.WorkersForPlatforms.Get<OutboundParams>(DispatchNs, {
-  outbound: { worker: OutboundWorker, parameters: ["tenant"] },
+  outbound: OutboundWorker,
+  parameters: ["tenant"],
 });
 
 /**

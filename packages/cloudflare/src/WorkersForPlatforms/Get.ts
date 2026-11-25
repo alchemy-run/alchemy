@@ -29,14 +29,21 @@ export type OutboundWorker = Worker | Effect.Effect<Worker, never, any>;
 
 /**
  * The outbound Worker of a dispatch binding and the names of the values the
- * dispatcher passes it, typed by the params type `P` given to {@link Get}.
+ * dispatcher passes it, as a {@link DispatchBinding} carries them.
  */
-export type DispatchOutbound<P extends object = {}> = {
+export interface DispatchOutbound {
+  readonly worker: OutboundWorker;
+  readonly parameters: ReadonlyArray<string>;
+}
+
+/** Options of a {@link Get} dispatch binding. */
+export type GetOptions<P extends object = {}> = {
   /**
    * The Worker that receives every `fetch()` a dispatched user Worker makes,
-   * in place of the internet.
+   * in place of the internet: a `Cloudflare.Worker`, or a
+   * `Cloudflare.Worker.ref(...)` to one another stack deploys.
    */
-  readonly worker: OutboundWorker;
+  readonly outbound?: OutboundWorker;
 } & ([keyof P] extends [never]
   ? {
       /** No values: the params type declares none. */
@@ -44,28 +51,27 @@ export type DispatchOutbound<P extends object = {}> = {
     }
   : {
       /**
-       * The names of the values the dispatcher passes on each dispatch, as
-       * `get(name, args, { outbound: { … } })`. Each arrives on the outbound
-       * Worker as `env.<name>`. List every key of the params type: Cloudflare
-       * forwards only the names declared here, and the value of a key left
-       * out never arrives.
+       * The names of the values the dispatcher passes the outbound Worker on
+       * each dispatch, as `get(name, args, { outbound: { … } })`. Each
+       * arrives on the outbound Worker as `env.<name>`. List every key of the
+       * params type: Cloudflare forwards only the names declared here, and
+       * the value of a key left out never arrives.
        */
       readonly parameters: ReadonlyArray<keyof P & string>;
     });
 
-/** Options of a {@link Get} dispatch binding. */
-export interface GetOptions<P extends object = {}> {
-  /**
-   * Route every `fetch()` a dispatched user Worker makes through an outbound
-   * Worker, with per-dispatch values typed by `P`.
-   */
-  readonly outbound?: DispatchOutbound<P>;
-}
-
 /** {@link Get}'s options: required, with `outbound`, once `P` declares a value. */
 type GetArgs<P extends object> = [keyof P] extends [never]
   ? [options?: GetOptions<P>]
-  : [options: GetOptions<P> & { readonly outbound: DispatchOutbound<P> }];
+  : [options: GetOptions<P> & { readonly outbound: OutboundWorker }];
+
+/** The outbound Worker and parameter names of {@link Get}'s options, if any. */
+export const dispatchOutboundOf = (
+  options: GetOptions<any> | undefined,
+): DispatchOutbound | undefined =>
+  options?.outbound === undefined
+    ? undefined
+    : { worker: options.outbound, parameters: options.parameters ?? [] };
 
 /**
  * The values of one dispatch: one per declared parameter, each a JSON value.
@@ -129,7 +135,7 @@ export interface DispatchBinding<P extends object = {}> extends Effect.Effect<
   /** The bound namespace. */
   readonly namespace: DispatchNamespaceInput;
   /** The outbound Worker and the names of its values, if any. */
-  readonly outbound: DispatchOutbound<any> | undefined;
+  readonly outbound: DispatchOutbound | undefined;
   /** @internal phantom */
   readonly "~params"?: P;
 }
@@ -192,7 +198,8 @@ type GetShape = (
  * export const Dispatch = Cloudflare.WorkersForPlatforms.Get<{
  *   requestContext: RequestContext;
  * }>(Namespace, {
- *   outbound: { worker: Egress, parameters: ["requestContext"] },
+ *   outbound: Egress,
+ *   parameters: ["requestContext"],
  * });
  * ```
  *
@@ -244,7 +251,8 @@ export interface Get extends Context.Service<Get, GetShape>, Binding.ServiceLike
   readonly key: "Cloudflare.WorkersForPlatforms.Get";
   /**
    * @param namespace The dispatch namespace to bind.
-   * @param options An outbound Worker for the dispatched user Workers.
+   * @param options An outbound Worker for the dispatched user Workers, and
+   *   the names of the values it receives.
    */
   <P extends object = {}>(
     namespace: DispatchNamespaceInput,
@@ -267,7 +275,7 @@ export const Get: Get = taggedFunction(
     Object.assign(bindGet(namespace, options), {
       "~alchemy/Kind": DispatchBindingKind,
       namespace,
-      outbound: options?.outbound,
+      outbound: dispatchOutboundOf(options),
     }),
 ) as unknown as Get;
 

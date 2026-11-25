@@ -124,7 +124,8 @@ export const maybeDispatchShim = Effect.fn(function* (
     script: DISPATCH_SHIM_SCRIPT,
     env: {
       DISPATCH: Get<Record<string, unknown>>(namespace, {
-        outbound: { worker: outbound.worker, parameters: outbound.parameters },
+        outbound: outbound.worker,
+        parameters: outbound.parameters,
       }),
       SHIM_TOKEN: token.text,
     },

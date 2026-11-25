@@ -14,11 +14,13 @@ import {
 const outboundTypeChecks = (env: AsyncPlatformWorkerEnv, target: Cloudflare.Worker) => {
   Cloudflare.WorkersForPlatforms.Get<OutboundParams>(DispatchNs, {
     // @ts-expect-error an entrypoint target: Cloudflare calls the default export
-    outbound: { worker: Cloudflare.WorkerEntrypoint(target, "Egress"), parameters: ["tenant"] },
+    outbound: Cloudflare.WorkerEntrypoint(target, "Egress"),
+    parameters: ["tenant"],
   });
   Cloudflare.WorkersForPlatforms.Get<OutboundParams>(DispatchNs, {
+    outbound: OutboundWorker,
     // @ts-expect-error a parameter name the params type doesn't declare
-    outbound: { worker: OutboundWorker, parameters: ["tenantt"] },
+    parameters: ["tenantt"],
   });
   // @ts-expect-error a params type with no outbound declared
   Cloudflare.WorkersForPlatforms.Get<OutboundParams>(DispatchNs);
@@ -60,14 +62,15 @@ const inlinePlain = Cloudflare.Worker("InlinePlain", {
 const inlineNoParams = Cloudflare.Worker("InlineNoParams", {
   main: "./worker.ts",
   env: {
-    NS: Cloudflare.WorkersForPlatforms.Get(DispatchNs, { outbound: { worker: OutboundWorker } }),
+    NS: Cloudflare.WorkersForPlatforms.Get(DispatchNs, { outbound: OutboundWorker }),
   },
 });
 const inlineParams = Cloudflare.Worker("InlineParams", {
   main: "./worker.ts",
   env: {
     NS: Cloudflare.WorkersForPlatforms.Get<OutboundParams>(DispatchNs, {
-      outbound: { worker: OutboundWorker, parameters: ["tenant"] },
+      outbound: OutboundWorker,
+      parameters: ["tenant"],
     }),
   },
 });
@@ -75,7 +78,8 @@ const inlineUntyped = Cloudflare.Worker("InlineUntyped", {
   main: "./worker.ts",
   env: {
     NS: Cloudflare.WorkersForPlatforms.Get(DispatchNs, {
-      outbound: { worker: OutboundWorker, parameters: ["tenant"] },
+      outbound: OutboundWorker,
+      parameters: ["tenant"],
     }),
   },
 });

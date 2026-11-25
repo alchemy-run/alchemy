@@ -271,13 +271,11 @@ test.provider.skipIf(!WFP_ENABLED)(
           script: `export default { fetch: () => new Response("ok") };`,
           env: {
             DISPATCH: Cloudflare.WorkersForPlatforms.Get<OutboundParams>(namespace, {
-              outbound: {
-                worker: Cloudflare.WorkerEntrypoint(
-                  Cloudflare.Worker.ref("WfpOutboundWorker") as unknown as Cloudflare.Worker,
-                  "Egress",
-                ) as unknown as Cloudflare.Worker,
-                parameters: ["tenant"],
-              },
+              outbound: Cloudflare.WorkerEntrypoint(
+                Cloudflare.Worker.ref("WfpOutboundWorker") as unknown as Cloudflare.Worker,
+                "Egress",
+              ) as unknown as Cloudflare.Worker,
+              parameters: ["tenant"],
             }),
           },
         });

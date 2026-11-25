@@ -34,10 +34,8 @@ export default class WfpPlatformWorker extends Cloudflare.Worker<WfpPlatformWork
     const dispatch = yield* Cloudflare.WorkersForPlatforms.Get(DispatchNs);
     const dispatchOutbound = yield* OutboundDispatch;
     const dispatchRef = yield* Cloudflare.WorkersForPlatforms.Get<OutboundParams>(DispatchNs, {
-      outbound: {
-        worker: Cloudflare.Worker.ref("WfpRefOutboundWorker", { stack: OUTBOUND_REF_STACK }),
-        parameters: ["tenant"],
-      },
+      outbound: Cloudflare.Worker.ref("WfpRefOutboundWorker", { stack: OUTBOUND_REF_STACK }),
+      parameters: ["tenant"],
     });
     const bindings = {
       outbound: dispatchOutbound,
